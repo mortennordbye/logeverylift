@@ -16,6 +16,38 @@ Built with Next.js 16 (App Router) and React Server Components. Runs in Docker c
 
 ---
 
+## Screenshots
+
+<table>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/home.png" alt="Workout home screen — active training block, today's session, and weekly progress" width="240" /><br />
+      <sub><b>Home</b> — active block & today's session</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/exercise-detail.png" alt="Exercise detail — per-set targets, last-session history, progression hints, and rest timers" width="240" /><br />
+      <sub><b>Exercise</b> — per-set targets & rest timers</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/calendar.png" alt="Calendar — scheduled and completed sessions across training cycles" width="240" /><br />
+      <sub><b>Calendar</b> — scheduled vs completed</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/metrics.png" alt="Metrics — top lifts and per-exercise progression charts" width="240" /><br />
+      <sub><b>Metrics</b> — top lifts & progression</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/ai-setup.png" alt="AI Setup — generate programs and training schedule from a prompt" width="240" /><br />
+      <sub><b>AI Setup</b> — generate programs from a prompt</sub>
+    </td>
+    <td width="33%"></td>
+  </tr>
+</table>
+
+---
+
 ## Quick Start
 
 ### Prerequisites
