@@ -42,7 +42,10 @@ Built with Next.js 16 (App Router) and React Server Components. Runs in Docker c
       <img src="docs/screenshots/ai-setup.png" alt="AI Setup — generate programs and training schedule from a prompt" width="240" /><br />
       <sub><b>AI Setup</b> — generate programs from a prompt</sub>
     </td>
-    <td width="33%"></td>
+    <td align="center" width="33%">
+      <img src="docs/screenshots/exercises.png" alt="Exercise library — browse by body area, muscle, equipment, and type, or add your own" width="240" /><br />
+      <sub><b>Exercises</b> — browse the library or add your own</sub>
+    </td>
   </tr>
 </table>
 
