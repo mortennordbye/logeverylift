@@ -1,7 +1,18 @@
-# LogEveryLift
+<div align="center">
 
-**A mobile-first Workout Tracking PWA built with Next.js 16 (App Router).**
-Designed to feel like a native iOS app. Runs in Docker containers for environment consistency.
+# 🏋️ LogEveryLift
+
+### A mobile-first workout tracking PWA that feels like a native iOS app.
+
+[![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org) [![Drizzle](https://img.shields.io/badge/Drizzle-C5F74F?logo=drizzle&logoColor=black)](https://orm.drizzle.team) [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+
+[![CI](https://github.com/mortennordbye/logeverylift/actions/workflows/ci.yml/badge.svg)](https://github.com/mortennordbye/logeverylift/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mortennordbye/logeverylift/badge)](https://securityscorecards.dev/viewer/?uri=github.com/mortennordbye/logeverylift)
+
+[![License](https://img.shields.io/github/license/mortennordbye/logeverylift?style=flat-square)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/logeverylift?style=flat-square)](https://github.com/mortennordbye/logeverylift/commits/main) [![Stars](https://img.shields.io/github/stars/mortennordbye/logeverylift?style=flat-square)](https://github.com/mortennordbye/logeverylift/stargazers)
+
+Built with Next.js 16 (App Router) and React Server Components. Runs in Docker containers for environment consistency.
+
+</div>
 
 ---
 
@@ -175,8 +186,53 @@ docker run -p 3000:3000 -e DATABASE_URL=... logeverylift-pwa:latest
 
 ---
 
+## Repository structure
+
+```text
+logeverylift/
+├── src/               # Application code (see Directory Structure above)
+├── drizzle/           # Committed SQL migrations + meta snapshots
+├── scripts/           # Dev, DB, and migration scripts (dev.sh, migrate.ts, seed.ts)
+├── e2e/               # Playwright end-to-end specs
+├── public/            # Static assets and PWA icons
+├── docs/              # Project documentation
+└── .github/
+    └── workflows/     # CI and security pipelines
+```
+
+---
+
+## Workflows
+
+| Workflow | Trigger | Purpose |
+| -------- | ------- | ------- |
+| CI | push, PR | typecheck, tests, build & push Docker image |
+| Dependency Review | PR | block PRs that introduce known-vulnerable dependencies |
+| Scorecard | push, weekly | OpenSSF supply-chain grade → Security tab + badge |
+| Container Scan | push, weekly | Trivy image scan → Security tab |
+
+---
+
 ## 🧩 Troubleshooting
 
 - **Port 3000 in use:** `lsof -i :3000`
 - **DB connection failed:** `docker-compose ps` / `docker-compose logs postgres`
 - **Type errors after schema change:** `docker-compose exec app pnpm db:generate`
+
+---
+
+<div align="center">
+
+### ⭐ Star this repo if you find it useful ⭐
+
+<a href="https://www.star-history.com/#mortennordbye/logeverylift&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=mortennordbye/logeverylift&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=mortennordbye/logeverylift&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=mortennordbye/logeverylift&type=Date" width="600" />
+  </picture>
+</a>
+
+Made by [Morten Nordbye](https://github.com/mortennordbye)
+
+</div>
