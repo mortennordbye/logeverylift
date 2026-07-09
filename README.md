@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🏋️ LogEveryLift
+# LogEveryLift
 
 ### A mobile-first workout tracking PWA that feels like a native iOS app.
 
@@ -16,7 +16,7 @@ Built with Next.js 16 (App Router) and React Server Components. Runs in Docker c
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Docker Desktop
@@ -79,7 +79,7 @@ docker-compose exec app pnpm db:reset-user
 
 ---
 
-## 🛠 Tech Stack
+## Tech Stack
 
 | Concern | Tool |
 | --- | --- |
@@ -96,7 +96,7 @@ docker-compose exec app pnpm db:reset-user
 
 ---
 
-## 📐 Development Guidelines
+## Development Guidelines
 
 ### Data & State
 - **Server Components** for all data fetching — never fetch in Client Components unless required for interactivity
@@ -137,7 +137,7 @@ src/
 
 ---
 
-## 🗄 Database Schema
+## Database Schema
 
 | Table | Purpose |
 |---|---|
@@ -154,7 +154,7 @@ type ProgramSet = typeof programSets.$inferSelect;
 
 ---
 
-## 🤖 MCP Server
+## MCP Server
 
 The app exposes a **Model Context Protocol** endpoint so MCP clients (Claude Desktop/Code, etc.) can read and write your programs, training cycles, and profile/weight on your behalf.
 
@@ -171,7 +171,7 @@ claude mcp add --transport http logeverylift http://localhost:3000/api/mcp
 
 > **Adding npm deps for the dev container:** `node_modules` is an anonymous Docker volume baked from the image, so a host-only `pnpm add` won't reach the running container. After changing dependencies, rebuild: `docker-compose build app && docker-compose up -d --force-recreate --renew-anon-volumes app` (or `./scripts/dev.sh --clean`).
 
-## 📦 Deployment
+## Deployment
 
 ### Production
 ```bash
@@ -213,7 +213,7 @@ logeverylift/
 
 ---
 
-## 🧩 Troubleshooting
+## Troubleshooting
 
 - **Port 3000 in use:** `lsof -i :3000`
 - **DB connection failed:** `docker-compose ps` / `docker-compose logs postgres`
