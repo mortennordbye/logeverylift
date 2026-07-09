@@ -85,14 +85,16 @@ These guidelines are working if: fewer unnecessary changes in diffs, fewer rewri
 
 ## Development
 
-All development runs in Docker. **Do not use `npm run dev` directly.**
+All development runs in Docker, driven through the `Makefile`. **Do not use `npm run dev` directly.**
 
 ```bash
-./scripts/dev.sh              # Start dev environment (app at localhost:3000)
-./scripts/dev.sh --test       # Run tests before starting
-./scripts/dev.sh --skip-build # Skip Docker image rebuild
-./scripts/dev.sh --clean      # Force clean build
+make dev              # Start dev environment (app at localhost:3000)
+make dev TEST=1       # Run tests before starting
+make dev SKIP_BUILD=1 # Skip Docker image rebuild
+make dev CLEAN=1      # Force clean build
 ```
+
+Run `make help` for the full target list (db tasks, verify, clean, logs).
 
 **Tests run locally** (no Docker needed):
 ```bash
@@ -119,7 +121,7 @@ Before suggesting `git push` for any change that touches a **critical flow** —
 **Skip if:** the change is doc-only (CLAUDE.md, BACKLOG.md, comments), test-only, dependency bump with no code touch, or a `chore:` purely about formatting / lint silencing. Say "skipping smoke — change is X" so the skip is visible.
 
 **Prereqs (verify before starting):**
-- Dev server reachable at `http://localhost:3000`. If not, ask the user to run `./scripts/dev.sh` first; do not start it autonomously.
+- Dev server reachable at `http://localhost:3000`. If not, ask the user to run `make dev` first; do not start it autonomously.
 - `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` — the test-account credentials live in `.env.local` (gitignored) under those keys. Read them from there (e.g. `set -a; . ./.env.local; set +a`) rather than asking the user. Only ask if `.env.local` is absent or the keys are missing.
 
 **Tools:** `mcp__playwright__browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill_form`, `browser_wait_for`, `browser_take_screenshot`, `browser_console_messages`. Save any failure screenshot to `.playwright-mcp/<flow>-fail.png` (folder is gitignored).

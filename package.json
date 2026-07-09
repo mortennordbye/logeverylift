@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "setup": "bash scripts/ai-bootstrap.sh",
-    "dev": "echo 'ERROR: Use ./scripts/docker-dev.sh instead. This project runs in containers only.' && exit 1",
+    "dev": "echo 'ERROR: Use make dev instead. This project runs in containers only.' && exit 1",
     "build": "next build",
     "start": "next start",
     "start:migrate": "tsx scripts/migrate.ts && next start",

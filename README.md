@@ -23,7 +23,7 @@ Built with Next.js 16 (App Router) and React Server Components. Runs in Docker c
 
 ### Start Development
 ```bash
-./scripts/dev.sh
+make dev
 ```
 - App: [http://localhost:3000](http://localhost:3000)
 - Health: [http://localhost:3000/api/health](http://localhost:3000/api/health)
@@ -32,21 +32,24 @@ Built with Next.js 16 (App Router) and React Server Components. Runs in Docker c
 
 ```bash
 # Database
-docker-compose exec app pnpm db:push       # Push schema changes
-docker-compose exec app pnpm db:seed       # Seed exercise library + demo user
-docker-compose exec app pnpm db:seed-fake  # Populate demo user with realistic test data
-docker-compose exec app pnpm db:reset-user # Wipe all user data (keeps exercises + user record)
-docker-compose exec app pnpm db:studio     # Open Drizzle Studio
-docker-compose exec app pnpm db:migrate    # Run migrations (prod)
+make db-push       # Push schema changes
+make db-seed       # Seed exercise library + demo user
+make db-seed-fake  # Populate demo user with realistic test data
+make db-reset-user # Wipe all user data (keeps exercises + user record)
+make db-studio     # Open Drizzle Studio
+make db-migrate    # Run migrations
 
 # Quality
-docker-compose exec app pnpm lint          # ESLint
-docker-compose exec app pnpm build         # Production build check
+make lint          # ESLint
+make build         # Production build check
+make verify        # typecheck + lint + tests (run before pushing)
 
 # Tests (run locally — no Docker needed)
-pnpm test                                  # Run all tests once
-pnpm test:watch                            # Watch mode
+make test          # Run all tests once
+make test-watch    # Watch mode
 ```
+
+Run `make` (or `make help`) to list every target.
 
 ### Test data
 
@@ -66,15 +69,15 @@ docker-compose exec app pnpm db:seed-fake --force
 docker-compose exec app pnpm db:reset-user
 ```
 
-### Dev Script Options
+### Dev environment
 
 ```bash
-./scripts/dev.sh              # Start dev environment
-./scripts/dev.sh --test       # Run tests before starting
-./scripts/dev.sh --prod       # Build and run production image
-./scripts/dev.sh --skip-build # Skip Docker image rebuild
-./scripts/dev.sh --clean      # Force clean build (no cache)
-./scripts/dev.sh --logs       # Attach to logs only
+make dev              # Start dev environment
+make dev TEST=1       # Run tests before starting
+make dev PROD=1       # Build and run production image
+make dev SKIP_BUILD=1 # Skip Docker image rebuild
+make dev CLEAN=1      # Force clean build (no cache)
+make logs             # Attach to logs only
 ```
 
 ---
@@ -169,7 +172,7 @@ claude mcp add --transport http logeverylift http://localhost:3000/api/mcp
 
 **Tools** (~13): `list_programs`, `get_program`, `create_program`, `update_program`, `delete_program`, `edit_program_exercise`; `list_training_cycles`, `get_training_cycle`, `manage_training_cycle`, `edit_cycle_slot`; `get_profile`, `update_profile`, `manage_weight`. Tool code lives in `src/lib/mcp/tools/`; the route is `src/app/api/[transport]/route.ts`.
 
-> **Adding npm deps for the dev container:** `node_modules` is an anonymous Docker volume baked from the image, so a host-only `pnpm add` won't reach the running container. After changing dependencies, rebuild: `docker-compose build app && docker-compose up -d --force-recreate --renew-anon-volumes app` (or `./scripts/dev.sh --clean`).
+> **Adding npm deps for the dev container:** `node_modules` is an anonymous Docker volume baked from the image, so a host-only `pnpm add` won't reach the running container. After changing dependencies, rebuild: `docker-compose build app && docker-compose up -d --force-recreate --renew-anon-volumes app` (or `make dev CLEAN=1`).
 
 ## Deployment
 

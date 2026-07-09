@@ -9,7 +9,7 @@ Last full run: **2026-04-12** · App: `http://localhost:3000`
 
 ## How to use this document
 
-Start the app with `./scripts/dev.sh`, then work through each section top to bottom.
+Start the app with `make dev`, then work through each section top to bottom.
 Mark each item `[x]` as you verify it, or note the failure inline.
 
 ---

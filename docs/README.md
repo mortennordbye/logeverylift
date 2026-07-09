@@ -23,4 +23,4 @@ Living maps of the codebase, so you (or an AI) can find "where does X live / how
 - **Server Components fetch, Server Actions mutate.** Every action starts with `requireSession()`/`requireAdmin()` and filters by `userId` (or `assertOwner`). Never accept `userId` as a param.
 - **Types are inferred from Drizzle** (`typeof table.$inferSelect`) — never hand-written.
 - **Migrations are committed SQL** in `drizzle/`; never generated at build time. Schema change → `pnpm db:generate` → commit the `.sql` + `meta/` snapshot together.
-- **Dev runs in Docker** (`./scripts/dev.sh`); tests run locally (`pnpm test`); gate with `pnpm verify` before calling a task done.
+- **Dev runs in Docker** (`make dev`); tests run locally (`make test`); gate with `make verify` before calling a task done.

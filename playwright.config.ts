@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
  * Playwright config for end-to-end tests of LogEveryLift.
  *
  * Tests assume the dev server is already running at http://localhost:3000.
- * Start it with `./scripts/dev.sh` before running `pnpm verify:full` or
+ * Start it with `make dev` before running `pnpm verify:full` or
  * `pnpm exec playwright test`.
  *
  * Auth credentials must be provided via environment variables:
