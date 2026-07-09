@@ -1,0 +1,12 @@
+# Pre-push only — keeps `git commit` fast for AI-driven loops.
+# Run `pnpm lefthook install` once to register the hook in .git/hooks.
+pre-push:
+  parallel: true
+  commands:
+    verify:
+      run: pnpm verify
+    schema-migration:
+      # Fails if src/db/schema/ changed but no drizzle/NNNN_*.sql was added
+      # in the same push range. Prevents shipping a schema TS change without
+      # the matching migration — prod's db:migrate runs only committed SQL.
+      run: bash scripts/check-schema-migrations.sh

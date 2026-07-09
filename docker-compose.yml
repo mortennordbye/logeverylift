@@ -1,0 +1,66 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: logeverylift-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: logeverylift_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - logeverylift-network
+
+  # Next.js Application
+  app:
+    # Use the image built by the script, default to dev if variable is missing
+    image: ${IMAGE_NAME:-logeverylift-pwa:dev}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      # This allows the script to switch between 'dev' and 'runner' stages
+      target: ${TARGET_STAGE:-dev}
+    container_name: logeverylift-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - path: .env.local
+        required: false
+    environment:
+      # These variables will adapt based on the script flags
+      NODE_ENV: ${NODE_ENV:-development}
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/logeverylift_db
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-change-me-in-production-use-openssl-rand-base64-32}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
+      HOSTNAME: "0.0.0.0"
+      WATCHPACK_POLLING: "true"
+      NEXT_TELEMETRY_DISABLED: 1
+    volumes:
+      # Only use these volumes in development to allow hot-reloading
+      - .:/app                      
+      - /app/node_modules           
+      - /app/.next                  
+    depends_on:
+      postgres:
+        condition: service_healthy
+    tty: true 
+    networks:
+      - logeverylift-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  logeverylift-network:
+    driver: bridge

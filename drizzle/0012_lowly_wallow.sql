@@ -1,0 +1,1 @@
+CREATE INDEX "idx_tc_user_status" ON "training_cycles" USING btree ("user_id","status");

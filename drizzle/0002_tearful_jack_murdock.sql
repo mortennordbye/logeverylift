@@ -1,0 +1,1 @@
+ALTER TABLE "program_sets" ADD COLUMN "type" text DEFAULT 'work' NOT NULL;

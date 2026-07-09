@@ -1,0 +1,1 @@
+ALTER TABLE "program_exercises" ALTER COLUMN "progression_mode" SET DEFAULT 'manual';

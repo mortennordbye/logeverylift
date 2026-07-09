@@ -1,0 +1,1 @@
+ALTER TABLE "program_sets" ADD COLUMN "start_delay_seconds" integer;

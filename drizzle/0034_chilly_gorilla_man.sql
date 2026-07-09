@@ -1,0 +1,1 @@
+ALTER TABLE "training_cycles" ADD COLUMN "athlete_level" text;

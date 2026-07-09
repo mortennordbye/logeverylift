@@ -1,0 +1,1 @@
+ALTER TABLE "ai_model_configs" ADD COLUMN IF NOT EXISTS "provider" text DEFAULT 'openrouter' NOT NULL;

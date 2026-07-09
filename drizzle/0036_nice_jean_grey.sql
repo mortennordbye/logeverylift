@@ -1,0 +1,2 @@
+ALTER TABLE "programs" ADD COLUMN "created_by_cycle_id" integer;--> statement-breakpoint
+ALTER TABLE "programs" ADD CONSTRAINT "programs_created_by_cycle_id_training_cycles_id_fk" FOREIGN KEY ("created_by_cycle_id") REFERENCES "public"."training_cycles"("id") ON DELETE cascade ON UPDATE no action;

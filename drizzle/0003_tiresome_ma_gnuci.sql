@@ -1,0 +1,1 @@
+ALTER TABLE "user" ADD COLUMN "tutorial_dismissed_at" timestamp;

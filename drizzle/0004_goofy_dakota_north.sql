@@ -1,0 +1,1 @@
+ALTER TABLE "exercises" ADD COLUMN "is_timed" boolean DEFAULT false NOT NULL;

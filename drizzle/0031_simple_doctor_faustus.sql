@@ -1,0 +1,1 @@
+ALTER TABLE "program_sets" ADD COLUMN "peak_duration_seconds" integer;
