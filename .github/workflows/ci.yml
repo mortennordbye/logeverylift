@@ -68,10 +68,17 @@ jobs:
     permissions:
       contents: read
       packages: write
+    outputs:
+      short_sha: ${{ steps.vars.outputs.short_sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      # 7-char short SHA, matching docker/metadata-action's type=sha,format=short.
+      - name: Compute short SHA
+        id: vars
+        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       # Buildx with a docker-container driver is required for the GHA cache
       # backend below — the default docker driver can't export cache.
@@ -110,3 +117,19 @@ jobs:
           # caches intermediate stages (deps/builder), not just the final image.
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # Open a PR against the homelab repo bumping the deployment image tag to the
+  # SHA we just pushed. Merging that PR is what deploys (ArgoCD syncs from Git).
+  deploy:
+    name: Bump homelab image tag
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    uses: mortennordbye/homelab/.github/workflows/bump-image.yml@main
+    with:
+      app_dir: k8s/talos/apps/logeverylift
+      image: ghcr.io/mortennordbye/logeverylift
+      manifest: app.yaml
+      new_tag: sha-${{ needs.build.outputs.short_sha }}
+    secrets:
+      app-id: ${{ secrets.HOMELAB_DEPLOYER_APP_ID }}
+      app-private-key: ${{ secrets.HOMELAB_DEPLOYER_PRIVATE_KEY }}
