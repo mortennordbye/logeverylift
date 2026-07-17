@@ -62,23 +62,16 @@ jobs:
   build:
     name: Build & push Docker image
     runs-on: ubuntu-latest
-    # Image only builds (and deploys) when tests pass — a red verify must
-    # never ship a `latest` tag for ArgoCD to pick up.
+    # Image only builds when tests pass — a red verify must never ship a `latest`
+    # tag. Kargo (not this workflow) promotes the pushed image via a homelab PR.
     needs: verify
     permissions:
       contents: read
       packages: write
-    outputs:
-      short_sha: ${{ steps.vars.outputs.short_sha }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      # 7-char short SHA, matching docker/metadata-action's type=sha,format=short.
-      - name: Compute short SHA
-        id: vars
-        run: echo "short_sha=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
 
       # Buildx with a docker-container driver is required for the GHA cache
       # backend below — the default docker driver can't export cache.
@@ -102,6 +95,8 @@ jobs:
             type=ref,event=tag
             type=sha,prefix=sha-,format=short
             type=raw,value=latest,enable={{is_default_branch}}
+            # Monotonic SemVer tag the Kargo Warehouse selects (like portfolio/blog).
+            type=raw,value=0.0.${{ github.run_number }},enable={{is_default_branch}}
 
       - name: Build and push
         uses: docker/build-push-action@v7
@@ -117,18 +112,3 @@ jobs:
           # caches intermediate stages (deps/builder), not just the final image.
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  # Open a homelab PR bumping the deployment image to the SHA we just pushed.
-  deploy:
-    name: Bump homelab image tag
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    uses: mortennordbye/homelab/.github/workflows/bump-image.yml@main
-    with:
-      app_dir: k8s/talos/apps/logeverylift
-      image: ghcr.io/mortennordbye/logeverylift
-      manifest: app.yaml
-      new_tag: sha-${{ needs.build.outputs.short_sha }}
-    secrets:
-      app-id: ${{ secrets.HOMELAB_DEPLOYER_APP_ID }}
-      app-private-key: ${{ secrets.HOMELAB_DEPLOYER_PRIVATE_KEY }}
