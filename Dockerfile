@@ -3,7 +3,7 @@
 # ==================================
 
 # Stage 1: Install dependencies
-FROM node:20-alpine AS deps
+FROM node:26-alpine AS deps
 RUN npm install -g pnpm
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
@@ -13,7 +13,7 @@ RUN pnpm install
 # ============================================================
 # NEW Stage 2: Development (Fast Local Building)
 # ============================================================
-FROM node:20-alpine AS dev
+FROM node:26-alpine AS dev
 RUN npm install -g pnpm tsx
 WORKDIR /app
 
@@ -34,7 +34,7 @@ CMD ["pnpm", "next", "dev", "--turbo", "-H", "0.0.0.0"]
 # ============================================================
 # Stage 3: Build application (Production only)
 # ============================================================
-FROM node:20-alpine AS builder
+FROM node:26-alpine AS builder
 RUN npm install -g pnpm
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -53,7 +53,7 @@ RUN pnpm build
 # the tsx entrypoint scripts (drizzle-orm, pg, zod are all prod deps). A
 # prod-only install keeps typescript/eslint/vitest/playwright/drizzle-kit
 # out of the image — smaller push to ghcr and faster pulls on deploy.
-FROM node:20-alpine AS prod-deps
+FROM node:26-alpine AS prod-deps
 RUN npm install -g pnpm
 WORKDIR /app
 COPY package.json pnpm-lock.yaml* ./
@@ -62,7 +62,7 @@ RUN pnpm install --prod --frozen-lockfile
 # ============================================================
 # Stage 5: Production runner
 # ============================================================
-FROM node:20-alpine AS runner
+FROM node:26-alpine AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
