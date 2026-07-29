@@ -201,3 +201,102 @@ select {
 .animate-confetti {
   animation: confetti-burst 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
+
+/* Touch behaviour for interactive controls.
+   `touch-action: manipulation` drops the 300ms double-tap-to-zoom wait, so a
+   rapid double tap on a stepper or a set row registers as two taps instead of
+   a zoom gesture. `user-select: none` stops a fast repeat tap from selecting
+   the label text. Both matter most in browser-tab usage — standalone PWA mode
+   already suppresses some of it. Inputs are excluded: text selection inside a
+   field must keep working.
+
+   MUST stay inside `@layer base`. Tailwind v4 puts utilities in
+   `@layer utilities`, and an UNLAYERED rule beats any layered one whatever the
+   specificity — so at the top level this would override the `touch-none` class
+   on every @dnd-kit drag handle (set/exercise/cycle-slot reordering) and the
+   browser would pan the list instead of starting a drag. */
+@layer base {
+  button,
+  [role="button"],
+  a,
+  label,
+  summary {
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  select,
+  [contenteditable] {
+    -webkit-user-select: auto;
+    user-select: auto;
+  }
+}
+
+/* Invisible hit-slop. Keeps a control's visual size but grows its touch target
+   to the 44x44 minimum, centred on the control. Apply to anything that has to
+   look small — the alternative, enlarging the control itself, moves the layout.
+   Adjacent slop regions may overlap; the later sibling in DOM order wins,
+   which is the usual behaviour for toolbars of small buttons. */
+.tap-44 {
+  position: relative;
+}
+
+.tap-44::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: max(100%, 44px);
+  height: max(100%, 44px);
+  transform: translate(-50%, -50%);
+}
+
+/* Placeholder → content crossfade.
+   When a route's loading.tsx resolves, React swaps the skeleton element for the
+   real page element. The geometry matches (each loading.tsx mirrors its
+   destination), but the swap itself is instant, and on a production build it
+   lands ~55ms AFTER the page-transition slide has come to rest — the most
+   visible moment possible. This softens it into a resolve.
+
+   Scoped to the direct child of the page-transition layer, so it applies to
+   whatever route mounts without every page having to opt in. It does not re-run
+   on router.refresh(): React reconciles the same component to the same DOM
+   node, and CSS animations only fire on insertion.
+
+   Starts at 0.35, not 0, deliberately — the skeleton has already unmounted by
+   this point, so fading from zero would show one or two frames of bare
+   background between the two, which is a worse artifact than the snap. */
+@keyframes content-in {
+  from { opacity: 0.35; }
+  to   { opacity: 1; }
+}
+
+/* `backwards`, never `forwards`/`both`. A forwards fill keeps opacity under
+   animation control after the animation ends, which leaves a permanent
+   stacking context on the page root — and that traps every `z-50` bottom
+   sheet inside it, so the z-index-less BottomNav (a later DOM sibling) paints
+   on top of the sheet. The `to` state here is opacity 1, i.e. the default, so
+   there is nothing to hold forwards anyway. */
+.page-layer > * {
+  animation: content-in 140ms ease-out backwards;
+}
+
+/* Reduced motion.
+   Covers the CSS-driven motion (PR pop, confetti, skeleton shimmer, the
+   width-animated rest bar). Framer-motion is handled separately by
+   <MotionConfig reducedMotion="user"> in PageTransition.
+   Durations are near-zero rather than `none` so animation/transition end
+   events still fire for anything that listens. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

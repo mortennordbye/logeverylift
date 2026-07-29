@@ -5,8 +5,6 @@ import { requireSession } from "@/lib/utils/session";
 import { ChevronLeftIcon, Trophy } from "lucide-react";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
-
 const PR_TYPE_LABEL: Record<string, string> = {
   weight: "Heaviest set",
   estimated_1rm: "Estimated 1RM",

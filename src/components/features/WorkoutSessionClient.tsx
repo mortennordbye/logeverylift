@@ -1,6 +1,7 @@
 "use client";
 
 import { WorkoutExerciseList } from "@/components/features/WorkoutExerciseList";
+import { IdlePrefetch } from "@/components/features/IdlePrefetch";
 import { ReadinessSheet } from "@/components/features/ReadinessSheet";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
@@ -125,6 +126,14 @@ export function WorkoutSessionClient({
 
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
+      {/* Warm the per-exercise routes. From this screen the next tap is almost
+          always one of these rows, and nothing prefetched them before — the
+          dashboard CTA only prefetched the workout route itself. */}
+      <IdlePrefetch
+        paths={exercises.map(
+          (e) => `/programs/${programId}/workout/exercises/${e.id}`,
+        )}
+      />
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
         {isEditing ? (

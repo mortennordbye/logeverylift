@@ -9,7 +9,12 @@ SHELL := /bin/bash
 STAGE := $(if $(PROD),runner,dev)
 IMAGE := logeverylift-pwa:$(if $(PROD),prod,dev)
 CACHE_FLAG := $(if $(CLEAN),--no-cache,)
-COMPOSE := docker-compose
+# The dev overlay carries the source bind mounts. Applying it to the prod
+# (runner) stage shadows /app and the container cannot find its entrypoint, so
+# PROD=1 deliberately leaves it out.
+COMPOSE_FILES := -f docker-compose.yml $(if $(PROD),,-f docker-compose.dev.yml)
+COMPOSE := docker-compose $(COMPOSE_FILES)
+RUN_ENV := NODE_ENV=$(if $(PROD),production,development)
 
 .DEFAULT_GOAL := help
 
@@ -34,7 +39,7 @@ dev: ## Build the image and start the containers (health-checked)
 	@$(COMPOSE) down 2>/dev/null || true
 	@if [ -z "$(SKIP_BUILD)" ]; then echo "Building stage [$(STAGE)]..."; docker build $(CACHE_FLAG) --target $(STAGE) -t $(IMAGE) .; fi
 	@echo "Launching containers..."
-	@IMAGE_NAME=$(IMAGE) $(COMPOSE) up -d
+	@IMAGE_NAME=$(IMAGE) TARGET_STAGE=$(STAGE) $(RUN_ENV) $(COMPOSE) up -d
 	@echo "Waiting for application health check..."
 	@for i in $$(seq 1 40); do if curl -sf http://localhost:3000/api/health >/dev/null 2>&1; then echo "Application is LIVE."; break; fi; printf '.'; sleep 1; done; echo ""
 	@echo "Mode: $(STAGE)   Local: http://localhost:3000"

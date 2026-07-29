@@ -1,12 +1,11 @@
 "use client";
 
 import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { isAiGenerating, subscribeAiGenerating } from "@/lib/utils/ai-generating";
 import { Dumbbell, MoreHorizontal, RefreshCw, LayoutList } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-
-const AI_GENERATING_KEY = "ai_generating";
 
 const staticNavItems = [
   {
@@ -50,11 +49,13 @@ export function BottomNav() {
     }
   }, [pathname, isWorkoutRoute, workoutSession]);
 
+  // Event-driven, not polled. This used to run setInterval(500ms) for the
+  // lifetime of the app to watch a localStorage key that changes a handful of
+  // times ever — a permanent wakeup on a phone. See lib/utils/ai-generating.
   useEffect(() => {
-    const check = () => setIsGenerating(!!localStorage.getItem(AI_GENERATING_KEY));
+    const check = () => setIsGenerating(isAiGenerating());
     check();
-    const interval = setInterval(check, 500);
-    return () => clearInterval(interval);
+    return subscribeAiGenerating(check);
   }, []);
 
   if (pathname === "/login" || pathname === "/signup") return null;
@@ -107,14 +108,24 @@ export function BottomNav() {
                 }
               `}
             >
+              {/* Both dots are always in the DOM, hidden by class rather than
+                  conditionally rendered. They derive from client-only state
+                  (the active-workout pointer and the AI-generating flag, both
+                  localStorage), and this nav hydrates inside a Suspense
+                  boundary, which React may hydrate *after* those effects have
+                  run — so a conditional render made the client tree differ
+                  structurally from the server HTML. A differing attribute is
+                  suppressible; a missing child is not. */}
               <div className="relative">
                 <Icon className="w-5 h-5" />
-                {showDot && (
-                  <span className="absolute -top-0.5 -right-1 w-1.5 h-1.5 bg-primary rounded-full" />
-                )}
-                {showGeneratingDot && (
-                  <span className="absolute -top-0.5 -right-1 w-1.5 h-1.5 bg-primary rounded-full animate-pulse" />
-                )}
+                <span
+                  suppressHydrationWarning
+                  className={`absolute -top-0.5 -right-1 w-1.5 h-1.5 bg-primary rounded-full${showDot ? "" : " hidden"}`}
+                />
+                <span
+                  suppressHydrationWarning
+                  className={`absolute -top-0.5 -right-1 w-1.5 h-1.5 bg-primary rounded-full animate-pulse${showGeneratingDot ? "" : " hidden"}`}
+                />
               </div>
               <span className="text-xs font-medium">{item.label}</span>
             </Link>

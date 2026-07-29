@@ -21,9 +21,11 @@ type Props = {
  * Auto-dismisses after 4 seconds with a neutral (3) score if ignored.
  * Disappears immediately when the user taps a level.
  */
+const AUTO_SKIP_SECONDS = 4;
+
 export function ReadinessSheet({ onConfirm }: Props) {
   const [visible, setVisible] = useState(false);
-  const [countdown, setCountdown] = useState(4);
+  const [countdown, setCountdown] = useState(AUTO_SKIP_SECONDS);
 
   // Slide in after a short delay so the page renders first
   useEffect(() => {
@@ -47,7 +49,7 @@ export function ReadinessSheet({ onConfirm }: Props) {
     onConfirm(level);
   };
 
-  if (!visible && countdown === 4) return null; // not yet shown
+  if (!visible && countdown === AUTO_SKIP_SECONDS) return null; // not yet shown
 
   return (
     <div
@@ -96,9 +98,10 @@ export function ReadinessSheet({ onConfirm }: Props) {
 
         {/* Progress bar showing auto-dismiss countdown */}
         <div className="mt-4 h-0.5 bg-border rounded-full overflow-hidden">
+          {/* scaleX, not width — see the rest bar in WorkoutSetsList. */}
           <div
-            className="h-full bg-primary/40 rounded-full transition-all duration-1000"
-            style={{ width: `${(countdown / 4) * 100}%` }}
+            className="h-full w-full origin-left bg-primary/40 rounded-full transition-transform duration-1000"
+            style={{ transform: `scaleX(${countdown / AUTO_SKIP_SECONDS})` }}
           />
         </div>
       </div>

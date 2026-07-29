@@ -147,14 +147,18 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     endDate.setDate(endDate.getDate() + cycle.durationWeeks * 7);
     const endDateStr = endDate.toISOString().split("T")[0];
 
-    // Auto-complete if past end date
+    // Auto-complete if past end date.
+    //
+    // No revalidatePath here: this is a read, and it is called from Server
+    // Components during render, where revalidatePath is not allowed. It was
+    // also pointless — the caller is rendering right now and already sees the
+    // post-update result returned below, and every route that shows cycle
+    // state resolves its data per request.
     if (today > endDate) {
       await db
         .update(trainingCycles)
         .set({ status: "completed" })
         .where(eq(trainingCycles.id, cycle.id));
-      revalidatePath("/cycles");
-      revalidatePath("/");
       return { success: true, data: null };
     }
 

@@ -6,8 +6,6 @@ import { requireSession } from "@/lib/utils/session";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
-
 export default async function CalendarPage() {
   await requireSession();
   const oneYearAgo = new Date();

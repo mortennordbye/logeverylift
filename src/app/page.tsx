@@ -7,8 +7,6 @@ import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/
 import { requireSession } from "@/lib/utils/session";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
-
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 const DAY_LABELS_FULL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 

@@ -10,8 +10,6 @@ import { ProgramListClient } from "@/components/features/ProgramListClient";
 import { getPrograms } from "@/lib/actions/programs";
 import { requireSession } from "@/lib/utils/session";
 
-export const dynamic = "force-dynamic";
-
 export default async function ProgramsPage() {
   await requireSession();
   const programResult = await getPrograms();

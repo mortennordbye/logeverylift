@@ -3,8 +3,6 @@ import { requireSession } from "@/lib/utils/session";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
-
 export default async function FriendSearchPage() {
   await requireSession();
 

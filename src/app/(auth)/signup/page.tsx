@@ -2,8 +2,6 @@ import { SignupForm } from "@/components/features/SignupForm";
 import { getOptionalSession } from "@/lib/utils/session";
 import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
 export default async function SignupPage() {
   const session = await getOptionalSession();
   if (session) redirect("/");
