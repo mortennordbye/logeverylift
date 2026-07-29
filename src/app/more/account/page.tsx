@@ -7,8 +7,6 @@ import { eq } from "drizzle-orm";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
-
 export default async function AccountPage() {
   const session = await requireSession();
   const user = await db.query.users.findFirst({ where: eq(users.id, session.user.id) });

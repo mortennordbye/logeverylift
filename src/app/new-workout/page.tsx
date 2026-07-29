@@ -12,8 +12,6 @@ import NewWorkoutClient from "@/components/features/NewWorkoutClient";
 import { requireSession } from "@/lib/utils/session";
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
-
 export default async function NewWorkoutPage() {
   await requireSession();
   const [cycleResult, programsResult] = await Promise.all([

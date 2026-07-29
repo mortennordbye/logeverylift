@@ -160,7 +160,7 @@ export async function logWorkoutSet(
 
     // Verify the session belongs to the authenticated user
     const [session] = await db
-      .select({ userId: workoutSessions.userId })
+      .select({ userId: workoutSessions.userId, programId: workoutSessions.programId })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, sessionId))
       .limit(1);
@@ -238,7 +238,13 @@ export async function logWorkoutSet(
       newPRs.push(...endurancePRs);
     }
 
-    revalidatePath(`/workout/${sessionId}`);
+    // `/workout/[sessionId]` is not a route; the screen this write affects is
+    // /programs/[id]/workout (and its exercise subtree, covered by the layout
+    // segment). Without this the router cache served up-to-30s-stale insight
+    // and suggestions after logging a set.
+    if (session.programId != null) {
+      revalidatePath(`/programs/${session.programId}/workout`, "layout");
+    }
     revalidatePath("/history");
 
     return {

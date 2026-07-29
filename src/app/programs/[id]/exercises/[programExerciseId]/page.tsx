@@ -9,8 +9,6 @@ import { WorkoutSetsClient } from "@/components/features/WorkoutSetsClient";
 import { getProgramWithExercises } from "@/lib/actions/programs";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
 type Props = {
   params: Promise<{ id: string; programExerciseId: string }>;
   searchParams: Promise<{ edit?: string }>;

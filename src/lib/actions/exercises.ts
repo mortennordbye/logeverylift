@@ -2,10 +2,12 @@
 
 import { db } from "@/db";
 import { exercises } from "@/db/schema";
+import { getSystemExercises } from "@/lib/data/exercises";
 import { requireSession } from "@/lib/utils/session";
 import { createExerciseSchema } from "@/lib/validators/workout";
 import type { ActionResult, Exercise } from "@/types/workout";
-import { asc, eq, isNull, or, and } from "drizzle-orm";
+import { asc, eq, and } from "drizzle-orm";
+import { revalidatePath } from "next/cache";
 
 /**
  * Get exercises visible to the current user:
@@ -14,11 +16,19 @@ import { asc, eq, isNull, or, and } from "drizzle-orm";
 export async function getAllExercises(): Promise<ActionResult<Exercise[]>> {
   const auth = await requireSession();
   try {
-    const rows = await db
-      .select()
-      .from(exercises)
-      .where(or(isNull(exercises.userId), eq(exercises.userId, auth.user.id)))
-      .orderBy(asc(exercises.name));
+    // The system half is identical for every user and comes from the `use
+    // cache` loader; only the caller's own custom rows hit the DB per request.
+    const [system, custom] = await Promise.all([
+      getSystemExercises(),
+      db
+        .select()
+        .from(exercises)
+        .where(eq(exercises.userId, auth.user.id))
+        .orderBy(asc(exercises.name)),
+    ]);
+    const rows = [...system, ...custom].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
     return { success: true, data: rows };
   } catch (error) {
     console.error("[getAllExercises] failed", error);
@@ -76,6 +86,9 @@ export async function createCustomExercise(
       })
       .returning();
 
+    // The picker routes render this list server-side. Callers also call
+    // router.refresh(), but invalidation should not depend on them doing so.
+    revalidatePath("/exercises");
     return { success: true, data: exercise };
   } catch (error) {
     console.error("[createCustomExercise] failed", error);
@@ -107,6 +120,7 @@ export async function deleteCustomExercise(id: number): Promise<ActionResult<und
         eq(exercises.userId, auth.user.id),
       ),
     );
+    revalidatePath("/exercises");
     return { success: true, data: undefined };
   } catch (error) {
     console.error("[deleteCustomExercise] failed", error);
@@ -163,6 +177,7 @@ export async function updateCustomExercise(
       .where(and(eq(exercises.id, id), eq(exercises.userId, auth.user.id)))
       .returning();
 
+    revalidatePath("/exercises");
     return { success: true, data: updated };
   } catch (error) {
     console.error("[updateCustomExercise] failed", error);

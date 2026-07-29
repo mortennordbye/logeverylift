@@ -4,6 +4,7 @@ import { McpConnectCard } from "@/components/features/McpConnectCard";
 import { generateWorkoutPlan } from "@/lib/actions/ai-generate";
 import { importProgram } from "@/lib/actions/programs";
 import { importCycle } from "@/lib/actions/training-cycles";
+import { aiGeneratingStartedAt, isAiGenerating, setAiGenerating } from "@/lib/utils/ai-generating";
 import { buildManualClipboardPrompt, type PrData, type PromptOptions } from "@/lib/utils/ai-prompt";
 import type { Exercise } from "@/types/workout";
 import { Check, ChevronDown, Clipboard, Copy, Dumbbell, RefreshCw, Sparkles } from "lucide-react";
@@ -12,7 +13,6 @@ import { useEffect, useRef, useState } from "react";
 
 const AI_PENDING_KEY = "ai_pending_result";
 const AI_PENDING_ERROR_KEY = "ai_pending_error";
-const AI_GENERATING_KEY = "ai_generating";
 
 type UserProfile = {
   gender: string | null;
@@ -153,7 +153,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     const storedError = localStorage.getItem(AI_PENDING_ERROR_KEY);
     if (stored) {
       localStorage.removeItem(AI_PENDING_KEY);
-      localStorage.removeItem(AI_GENERATING_KEY);
+      setAiGenerating(false);
       try {
         const parsed = JSON.parse(stored) as Record<string, unknown>;
         // eslint-disable-next-line react-hooks/set-state-in-effect -- syncing from localStorage on mount
@@ -162,14 +162,14 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
       } catch {}
     } else if (storedError) {
       localStorage.removeItem(AI_PENDING_ERROR_KEY);
-      localStorage.removeItem(AI_GENERATING_KEY);
+      setAiGenerating(false);
       setReturnError(storedError);
-    } else if (localStorage.getItem(AI_GENERATING_KEY)) {
-      const startedAt = parseInt(localStorage.getItem(AI_GENERATING_KEY) ?? "0");
+    } else if (isAiGenerating()) {
+      const startedAt = aiGeneratingStartedAt();
       if (Date.now() - startedAt < 10 * 60 * 1000) {
         setAutoStatus("waiting");
       } else {
-        localStorage.removeItem(AI_GENERATING_KEY);
+        setAiGenerating(false);
       }
     }
   }, []);
@@ -183,7 +183,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
       const storedError = localStorage.getItem(AI_PENDING_ERROR_KEY);
       if (stored) {
         localStorage.removeItem(AI_PENDING_KEY);
-        localStorage.removeItem(AI_GENERATING_KEY);
+        setAiGenerating(false);
         try {
           const parsed = JSON.parse(stored) as Record<string, unknown>;
           setPendingJson(parsed);
@@ -194,14 +194,14 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
         }
       } else if (storedError) {
         localStorage.removeItem(AI_PENDING_ERROR_KEY);
-        localStorage.removeItem(AI_GENERATING_KEY);
+        setAiGenerating(false);
         setReturnError(storedError);
         setAutoStatus("idle");
       } else {
         // Auto-clear stale key (e.g. if the server was restarted mid-generation)
-        const startedAt = parseInt(localStorage.getItem(AI_GENERATING_KEY) ?? "0");
+        const startedAt = aiGeneratingStartedAt();
         if (Date.now() - startedAt > TIMEOUT_MS) {
-          localStorage.removeItem(AI_GENERATING_KEY);
+          setAiGenerating(false);
           setAutoStatus("idle");
         }
       }
@@ -327,7 +327,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     generationPromise.current = promise;
 
     // Set key immediately so bottom nav knows generation is active
-    localStorage.setItem(AI_GENERATING_KEY, Date.now().toString());
+    setAiGenerating(true);
 
     // Attach background completion handler before awaiting
     // isMounted.current will be false if the user navigated away before this resolves
@@ -353,11 +353,11 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
           });
         }
       }
-      localStorage.removeItem(AI_GENERATING_KEY);
+      setAiGenerating(false);
     }).catch(() => {
       // Network error while away (e.g. server restarted) — clear the key so user isn't stuck
       if (!isMounted.current) {
-        localStorage.removeItem(AI_GENERATING_KEY);
+        setAiGenerating(false);
       }
     });
 
@@ -368,7 +368,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
       // If the component unmounted while waiting, the .then() above already handled everything
       if (!isMounted.current) return;
 
-      localStorage.removeItem(AI_GENERATING_KEY);
+      setAiGenerating(false);
 
       if (!result.success) {
         setAutoStatus("error");
@@ -390,7 +390,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     } catch {
       generationPromise.current = null;
       if (!isMounted.current) return;
-      localStorage.removeItem(AI_GENERATING_KEY);
+      setAiGenerating(false);
       setAutoStatus("error");
       setAutoError("Connection lost. Please try again.");
     }
@@ -493,7 +493,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
           <button
             type="button"
             onClick={() => {
-              localStorage.removeItem(AI_GENERATING_KEY);
+              setAiGenerating(false);
               setAutoStatus("idle");
             }}
             className="text-sm text-muted-foreground active:opacity-70"

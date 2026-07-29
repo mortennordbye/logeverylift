@@ -8,8 +8,6 @@ import { getProgressiveSuggestions } from "@/lib/actions/workout-sets";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
 type Props = {
   params: Promise<{ id: string; programExerciseId: string }>;
 };

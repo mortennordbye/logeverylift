@@ -80,6 +80,24 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Codebase hygiene (deferred long-term)
 
+### `PageTransition` depends on a Next internal (`LayoutRouterContext`)
+- **What:** The paired page-push/pop animation needs the outgoing page to keep rendering its *own* content while it slides away. `children` here is the router's children slot — one element whose identity is stable across navigations — so the element AnimatePresence keeps mounted for the exit otherwise re-renders with the destination's content, and the parallax animates two copies of the same screen. `FrozenRouter` pins the router context for a page that is leaving, using `LayoutRouterContext` imported from `next/dist/shared/lib/app-router-context.shared-runtime`.
+- **Why deferred:** There is no public equivalent; this is the standard workaround for App Router exit animations. It compiles and runs correctly on Next 16.1.6 (verified on a production build).
+- **Unblocked by:** Next removing or relocating the export — check this import on any Next major upgrade. If it disappears, the fallback is to drop the exit animation rather than ship the double-render; the rest of the transition (skeletons, curve, crossfade) does not depend on it.
+- **Touchpoints:** `src/components/features/PageTransition.tsx` (`FrozenRouter`).
+
+### Prefetch does not remove the in-workout loading boundary
+- **What:** The workout screen now idle-prefetches its per-exercise routes (`IdlePrefetch`), and `cacheComponents` is on so every route is partially prerendered. Measured on a production build, that still does **not** make the real exercise content slide in: prefetch under PPR warms the *static shell* only, and every byte on these screens is user data, so the skeleton still covers the full 240ms slide and the content swaps in ~50ms after it settles. The crossfade softens that swap; it does not remove it.
+- **Why deferred:** Removing it means giving these routes something real to prerender, which is a data-model change, not a config one — e.g. caching the program blueprint per user with `use cache` + a per-user `cacheTag`, invalidated on program edit. That is the same class of change as caching mutable set state, which is explicitly blocked below.
+- **Unblocked by:** The write-path fixes (un-log/re-log divergence, replay-queue retry loop). Until the UI and DB agree about logged sets, adding a per-user server cache over program/session data turns a visible bug into an intermittent one.
+- **Touchpoints:** `src/components/features/IdlePrefetch.tsx`, `src/lib/data/exercises.ts` (the `use cache` pattern to copy), `src/app/programs/[id]/workout/exercises/[programExerciseId]/page.tsx`.
+
+### Caching mutable in-workout state is still off the table
+- **What:** Logged sets, the active session, and completed-set flags remain uncached and should stay that way for now. `getAllExercises` is the only cached read (`src/lib/data/exercises.ts`, system rows only).
+- **Why deferred:** Deliberate. The audit's ordering constraint: the UI and the database already disagree about logged sets (un-log never touches the DB, re-log returns the stale row). A client or server cache over that makes it a three-way disagreement and the resulting reports nearly undiagnosable.
+- **Unblocked by:** Making `logWorkoutSet` an upsert and adding an un-log action, plus backoff on the replay queue.
+- **Touchpoints:** `src/lib/actions/workout-sets.ts`, `src/contexts/pending-queue-context.tsx`, `src/components/features/WorkoutSetsList.tsx`.
+
 ### Out-of-app push notifications via Service Worker
 - **What:** Today the app uses the browser Notification API (in-app only). Real out-of-app push needs a Service Worker registration + `pushManager.subscribe()` + server-side delivery.
 - **Why deferred:** Not blocking any current flow.

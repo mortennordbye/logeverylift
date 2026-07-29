@@ -1546,9 +1546,11 @@ function SortableRestRow({
               : formatTime(seconds)}
           </div>
           <div className="mt-1 h-1 bg-primary/20 rounded-full overflow-hidden">
+            {/* scaleX, not width — width animates on the layout thread and
+                relayouts every tick; transform is GPU-composited. */}
             <div
-              className="h-full bg-primary rounded-full transition-[width] duration-1000 ease-linear"
-              style={{ width: `${restProgress}%` }}
+              className="h-full w-full origin-left bg-primary rounded-full transition-transform duration-1000 ease-linear"
+              style={{ transform: `scaleX(${restProgress / 100})` }}
             />
           </div>
         </div>

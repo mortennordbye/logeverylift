@@ -1,0 +1,17 @@
+# Development-only overlay, applied by `make dev` and omitted by
+# `make dev PROD=1`.
+#
+# These bind mounts are what give hot-reload: the working tree replaces /app in
+# the image, with anonymous volumes masking node_modules and .next so the
+# container keeps its own copies. That is exactly why they must not reach the
+# prod (runner) stage — mounting the source over /app hides the built
+# standalone server and the entrypoint, and the container exits immediately.
+services:
+  app:
+    volumes:
+      - .:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      # Polling file-watcher: inotify events do not cross the macOS bind mount.
+      WATCHPACK_POLLING: "true"

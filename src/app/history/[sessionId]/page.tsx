@@ -2,8 +2,6 @@ import { SessionDetailClient } from "@/components/features/SessionDetailClient";
 import { getSessionDetail } from "@/lib/actions/workout-sets";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
 export default async function SessionDetailPage({
   params,
 }: {
