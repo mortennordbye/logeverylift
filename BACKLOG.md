@@ -80,6 +80,24 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Codebase hygiene (deferred long-term)
 
+### Exercise-level checkmark: log side still bypasses the queue and overrides
+- **What:** `toggleExercise` in `WorkoutExerciseList.tsx` now removes the `workout_sets` rows when the exercise is un-checked (added alongside the un-log fix). The **log** side was left as it was: it calls `logWorkoutSet` directly rather than the queue-backed `useWorkoutSetWriter().logWithRetry`, ignores every result, and logs the program's planned values without applying the session overrides that the set list displays. So a checkmark tap can silently fail (or write pre-override values) while the UI shows the exercise complete, and offline it produces an unhandled rejection with nothing queued.
+- **Why deferred:** The un-log half was needed to close the UI/DB divergence that the un-log fix targeted. The log half is a distinct defect (it is P1-5 in the pre-release audit) with its own payload-construction work, and was out of the scope of the P0 pass.
+- **Unblocked by:** Doing the P1 batch. Switch the `logWorkoutSet` calls to `useWorkoutSetWriter().logWithRetry`, read `workoutSession.overrides[set.id]` when building each payload the way `WorkoutSetsList.toggleSet` does, and check the results.
+- **Touchpoints:** `src/components/features/WorkoutExerciseList.tsx` (`toggleExercise`), `src/contexts/pending-queue-context.tsx` (`useWorkoutSetWriter`), `src/components/features/WorkoutSetsList.tsx` (the payload shape to mirror).
+
+### No automated test for the offline replay queue
+- **What:** `pending-queue-context.tsx` now carries real logic — per-item backoff (`BACKOFF_MS`), a due-time filter, drop-after-`MAX_ATTEMPTS`, and the mount/hydration ordering that decides whether a queued workout replays on cold open. All of it was verified by hand (fake `navigator.onLine` + a rejecting `window.fetch`, then a cold reload) and none of it is covered by a test. It is the mechanism that prevents mid-workout data loss, so a silent regression here is expensive.
+- **Why deferred:** The Vitest suite is pure-function only — no jsdom, no React Testing Library — so testing a provider means adding a browser-ish test environment and the deps that go with it, which is a bigger change than the fix it would guard.
+- **Unblocked by:** Adding `jsdom` + `@testing-library/react` to the Vitest config. Then: assert that five rapid failures span the full backoff rather than draining instantly, that an item past `MAX_ATTEMPTS` is dropped exactly once, and that a queue hydrated from localStorage replays on mount without an `online` event. Alternatively extract the scheduling decision into a pure helper (`nextDue(queue, now)`) and unit-test that alone — cheaper, covers most of the risk.
+- **Touchpoints:** `src/contexts/pending-queue-context.tsx`, `vitest.config.ts`.
+
+### PR rollback on un-log restores by most-recent supersession
+- **What:** `rollbackPRsForSet` in `workout-sets.ts` deletes the PR rows a un-logged set earned and un-supersedes the record each one displaced, picking that record as the most recently superseded row of the same `prType` for that exercise (plus the ±0.5 kg bracket for `reps_at_weight`). That is exact for the normal case, because a PR only ever supersedes the current record. It could restore the wrong row if two PRs of the same type for one exercise were superseded at the identical timestamp — reachable only via the concurrent-write race already noted as a separate audit item (PR detection is select-then-insert with no transaction).
+- **Why deferred:** Closing it properly means making PR detection transactional and/or storing an explicit `supersededByPrId` link, which is a schema change beyond the un-log fix.
+- **Unblocked by:** Doing the PR-transaction item. Add `superseded_by_pr_id` to `exercise_prs` (+ migration), set it when superseding, and roll back by following that link instead of ordering on `superseded_at`.
+- **Touchpoints:** `src/lib/actions/workout-sets.ts` (`rollbackPRsForSet`, `detectAndRecordPRs`, `detectAndRecordEndurancePRs`), `src/db/schema/exercise-prs.ts`.
+
 ### Out-of-app push notifications via Service Worker
 - **What:** Today the app uses the browser Notification API (in-app only). Real out-of-app push needs a Service Worker registration + `pushManager.subscribe()` + server-side delivery.
 - **Why deferred:** Not blocking any current flow.

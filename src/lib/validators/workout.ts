@@ -105,6 +105,22 @@ export const logWorkoutSetSchema = z.object({
 });
 
 /**
+ * Un-log Workout Set Schema
+ *
+ * Validates the identity of a logged set the user is un-completing. The set is
+ * addressed the same way logWorkoutSet writes it: by (session, exercise,
+ * setNumber), which is the table's unique key.
+ */
+export const unlogWorkoutSetSchema = z.object({
+  sessionId: z.number().int().positive("Session ID must be a positive integer"),
+  exerciseId: z
+    .number()
+    .int()
+    .positive("Exercise ID must be a positive integer"),
+  setNumber: z.number().int().positive("Set number must be a positive integer"),
+});
+
+/**
  * Workout History Query Schema
  *
  * Validates parameters for fetching workout history.
