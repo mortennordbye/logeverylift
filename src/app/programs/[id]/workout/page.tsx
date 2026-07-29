@@ -14,8 +14,6 @@ import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { requireSession } from "@/lib/utils/session";
 import { notFound, redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
 type Props = {
   params: Promise<{ id: string }>;
 };

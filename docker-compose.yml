@@ -43,17 +43,16 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-change-me-in-production-use-openssl-rand-base64-32}
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3000}
       HOSTNAME: "0.0.0.0"
-      WATCHPACK_POLLING: "true"
       NEXT_TELEMETRY_DISABLED: 1
-    volumes:
-      # Only use these volumes in development to allow hot-reloading
-      - .:/app                      
-      - /app/node_modules           
-      - /app/.next                  
+    # NOTE: the source bind mounts that make hot-reload work live in
+    # docker-compose.dev.yml, NOT here. They shadow /app in the image, so with
+    # them applied to the prod (runner) stage the container dies with
+    # `exec: "/app/entrypoint.sh": no such file or directory`. `make dev` adds
+    # that overlay; `make dev PROD=1` does not.
     depends_on:
       postgres:
         condition: service_healthy
-    tty: true 
+    tty: true
     networks:
       - logeverylift-network
 

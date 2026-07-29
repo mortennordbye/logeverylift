@@ -18,8 +18,6 @@ import { users } from "@/db/schema/users";
 import { requireSession } from "@/lib/utils/session";
 import { eq } from "drizzle-orm";
 
-export const dynamic = "force-dynamic";
-
 export default async function MetricsPage() {
   const session = await requireSession();
   const userId = session.user.id;

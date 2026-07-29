@@ -20,6 +20,17 @@ const nextConfig: NextConfig = {
   // Empty config silences the webpack/turbopack conflict warning
   turbopack: {},
 
+  // Partial prerendering plus the `use cache` directive.
+  //
+  // Every route in this app calls requireSession(), which reads cookies and
+  // makes the route dynamic regardless — the 37 `export const dynamic =
+  // "force-dynamic"` lines this replaces were redundant for correctness while
+  // opting every page out of having a static shell. With cacheComponents the
+  // shell (header, title, layout chrome) is prerendered at build time and only
+  // the cookie-dependent part streams per request, so a navigation renders
+  // real chrome immediately instead of a loading boundary.
+  cacheComponents: true,
+
   // Cache dynamic page payloads in the client-side router cache for 30 seconds.
   // Navigating back to a recently visited tab shows data instantly without
   // hitting the server again.

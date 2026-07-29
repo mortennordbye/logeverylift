@@ -75,8 +75,20 @@ export default function RootLayout({
           <ToastProvider>
             <PendingQueueProvider>
               <WorkoutSessionProvider>
-                <PageTransition>{children}</PageTransition>
-                <BottomNav />
+                {/* PageTransition and BottomNav both read usePathname(),
+                    which on a dynamic-param route is request data. Under
+                    cacheComponents that has to sit inside Suspense or the
+                    whole route is excluded from the prerendered shell.
+                    Static routes resolve the pathname at build time and are
+                    unaffected; param routes stream this part in. The fallback
+                    is a bare background rather than null so the shell paints
+                    the right colour instead of flashing white. */}
+                <Suspense fallback={<div className="h-[100dvh] bg-background" />}>
+                  <PageTransition>{children}</PageTransition>
+                </Suspense>
+                <Suspense fallback={null}>
+                  <BottomNav />
+                </Suspense>
                 <Suspense fallback={null}>
                   <OnboardingTutorialLoader />
                 </Suspense>

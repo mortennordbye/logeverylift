@@ -2,8 +2,6 @@ import { ProgramAddExerciseWrapper } from "@/components/features/ProgramAddExerc
 import { getAllExercises } from "@/lib/actions/exercises";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
 type Props = {
   params: Promise<{ id: string }>;
 };

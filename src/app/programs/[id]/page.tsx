@@ -5,8 +5,6 @@ import { getLastCompletedSession } from "@/lib/actions/workout-sessions";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
 type Props = {
   params: Promise<{ id: string }>;
   searchParams: Promise<{ editing?: string }>;

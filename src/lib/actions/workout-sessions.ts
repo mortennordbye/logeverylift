@@ -57,8 +57,12 @@ export async function createWorkoutSession(
       })
       .returning();
 
-    revalidatePath("/workout");
-    revalidatePath(`/workout/${session.id}`);
+    // There is no `/workout` route — the workout screen lives at
+    // /programs/[id]/workout. Revalidating the old path invalidated nothing,
+    // which is why callers had to fall back to router.refresh().
+    if (programId != null) {
+      revalidatePath(`/programs/${programId}/workout`);
+    }
     return { success: true, data: session };
   } catch (error) {
     console.error("[createWorkoutSession] failed", error);
@@ -100,8 +104,8 @@ export async function completeWorkoutSession(
       .where(eq(workoutSessions.id, sessionId))
       .returning();
 
-    revalidatePath("/workout");
-    revalidatePath(`/workout/${sessionId}`);
+    // Session detail lives at /history/[sessionId]; `/workout` does not exist.
+    revalidatePath(`/history/${sessionId}`);
     revalidatePath("/history");
     return { success: true, data: session };
   } catch (e) {

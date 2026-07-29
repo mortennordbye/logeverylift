@@ -74,6 +74,15 @@ export function WorkoutExerciseList({
     return exercise.sets.every((s) => workoutSession.completedSetIds.has(s.id));
   }
 
+  /** Some sets logged, but not all — the exercise is in progress. */
+  function isExercisePartial(exercise: Exercise): boolean {
+    if (!workoutSession || exercise.sets.length === 0) return false;
+    const done = exercise.sets.filter((s) =>
+      workoutSession.completedSetIds.has(s.id),
+    ).length;
+    return done > 0 && done < exercise.sets.length;
+  }
+
   async function toggleExercise(exercise: Exercise) {
     if (!workoutSession) return;
     if (isExerciseCompleted(exercise)) {
@@ -160,6 +169,7 @@ export function WorkoutExerciseList({
             programId={programId}
             isEditing={isEditing}
             isCompleted={isExerciseCompleted(exercise)}
+            isPartial={isExercisePartial(exercise)}
             summary={
               exercise.isRunning
                 ? buildRunSetSummary(exercise.sets, exercise.discipline)
@@ -184,11 +194,45 @@ export function WorkoutExerciseList({
   );
 }
 
+/**
+ * The three completion states of an exercise, in one place so the tappable and
+ * the read-only (running) variants cannot drift apart.
+ *
+ *   none    — hollow, muted ring
+ *   partial — hollow ring in the accent colour with a dash: started, not done
+ *   done    — filled accent with a tick
+ *
+ * Partial deliberately stays hollow. Filling it would read as "done" at a
+ * glance, which is the thing it exists to distinguish.
+ */
+function CompletionCircle({
+  isCompleted,
+  isPartial,
+}: {
+  isCompleted: boolean;
+  isPartial: boolean;
+}) {
+  if (isCompleted) {
+    return <Check className="w-4 h-4 text-primary-foreground" />;
+  }
+  if (isPartial) {
+    return <Minus className="w-4 h-4 text-primary" />;
+  }
+  return null;
+}
+
+function completionCircleClass(isCompleted: boolean, isPartial: boolean) {
+  if (isCompleted) return "bg-primary";
+  if (isPartial) return "border-2 border-primary";
+  return "border-2 border-muted-foreground/30";
+}
+
 function SortableExerciseRow({
   exercise,
   programId,
   isEditing,
   isCompleted,
+  isPartial,
   summary,
   onToggle,
   onDelete,
@@ -197,6 +241,7 @@ function SortableExerciseRow({
   programId: number;
   isEditing: boolean;
   isCompleted: boolean;
+  isPartial: boolean;
   summary: string;
   onToggle: () => void;
   onDelete: () => void;
@@ -234,19 +279,24 @@ function SortableExerciseRow({
         <div className="w-7 h-7 rounded-full border-2 border-muted-foreground/30 shrink-0" />
       ) : exercise.isRunning ? (
         // Running exercises: non-interactive circle — must log per-set via LogRunModal
-        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-          isCompleted ? "bg-primary" : "border-2 border-muted-foreground/30"
-        }`}>
-          {isCompleted && <Check className="w-4 h-4 text-primary-foreground" />}
+        <div
+          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${completionCircleClass(isCompleted, isPartial)}`}
+        >
+          <CompletionCircle isCompleted={isCompleted} isPartial={isPartial} />
         </div>
       ) : (
         <button
           onClick={onToggle}
-          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-            isCompleted ? "bg-primary" : "border-2 border-muted-foreground/30"
-          }`}
+          aria-label={
+            isCompleted
+              ? `Mark ${exercise.name} as not done`
+              : isPartial
+                ? `Finish remaining sets of ${exercise.name}`
+                : `Mark ${exercise.name} as done`
+          }
+          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${completionCircleClass(isCompleted, isPartial)}`}
         >
-          {isCompleted && <Check className="w-4 h-4 text-primary-foreground" />}
+          <CompletionCircle isCompleted={isCompleted} isPartial={isPartial} />
         </button>
       )}
 

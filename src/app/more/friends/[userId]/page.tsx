@@ -8,8 +8,6 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
 export default async function PublicProfilePage({
   params,
 }: {
