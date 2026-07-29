@@ -12,6 +12,7 @@ import {
   removeExerciseFromProgramSchema,
   reorderProgramExercisesSchema,
   reorderProgramSetsSchema,
+  unlogWorkoutSetSchema,
   updateProgramSetSchema,
   workoutHistoryQuerySchema,
 } from "@/lib/validators/workout";
@@ -250,6 +251,26 @@ describe("reorderProgramSetsSchema", () => {
 
   it("rejects empty orderedIds array", () => {
     expect(reorderProgramSetsSchema.safeParse({ programExerciseId: 1, orderedIds: [] }).success).toBe(false);
+  });
+});
+
+// ─── unlogWorkoutSetSchema ────────────────────────────────────────────────────
+
+describe("unlogWorkoutSetSchema", () => {
+  const valid = { sessionId: 1, exerciseId: 2, setNumber: 3 };
+
+  it("accepts valid input", () => {
+    expect(unlogWorkoutSetSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("rejects non-positive identifiers", () => {
+    expect(unlogWorkoutSetSchema.safeParse({ ...valid, sessionId: 0 }).success).toBe(false);
+    expect(unlogWorkoutSetSchema.safeParse({ ...valid, exerciseId: -1 }).success).toBe(false);
+    expect(unlogWorkoutSetSchema.safeParse({ ...valid, setNumber: 0 }).success).toBe(false);
+  });
+
+  it("rejects missing fields", () => {
+    expect(unlogWorkoutSetSchema.safeParse({ sessionId: 1 }).success).toBe(false);
   });
 });
 

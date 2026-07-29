@@ -47,42 +47,85 @@ function FinishContent() {
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
   const saveSession = async () => {
-    // Flush any per-set overrides (edited weight/reps during workout) back to the program template
-    const overrides = workoutSession?.overrides ?? {};
-    await Promise.all(
-      Object.entries(overrides).map(([setId, ov]) =>
-        updateProgramSet({ id: Number(setId), targetReps: ov.targetReps, weightKg: ov.weightKg, ...(ov.durationSeconds != null ? { durationSeconds: ov.durationSeconds } : {}) }),
-      ),
-    );
-
     const existingSessionId = workoutSession?.sessionId;
     const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
+    // Per-set overrides (weight/reps edited during the workout) are flushed
+    // back to the program template so the next session starts from them.
+    const overrideWrites = Object.entries(workoutSession?.overrides ?? {}).map(
+      ([setId, ov]) => ({
+        id: Number(setId),
+        targetReps: ov.targetReps,
+        weightKg: ov.weightKg,
+        ...(ov.durationSeconds != null ? { durationSeconds: ov.durationSeconds } : {}),
+      }),
+    );
+    // The client's end time, not the server's clock at write time: a queued
+    // finish that replays hours later must still record when the workout
+    // actually ended, or the session's duration is wrong.
+    const endTime = new Date().toISOString();
+    const trimmedNotes = notes.trim() || undefined;
 
-    if (existingSessionId) {
-      if (isOffline) {
-        enqueuePending({
-          kind: "completeWorkoutSession",
-          payload: { sessionId: existingSessionId, feeling, notes: notes.trim() || undefined },
-        });
-        showToast({ message: "Offline — workout saved locally, will sync when online", durationMs: 4000 });
-      } else {
-        await completeWorkoutSession({ sessionId: existingSessionId, feeling, notes: notes.trim() || undefined });
-      }
-    } else {
-      // Fallback if session wasn't pre-created (e.g. direct navigation).
-      // We can't queue a "create + complete" pair safely (the second depends
-      // on the first's response), so this path requires the network.
-      if (isOffline) {
+    // Offline is checked BEFORE anything is awaited. These are Server Action
+    // fetches — offline they reject, and this function used to blow up on the
+    // override flush above, which left "Saving…" on screen forever and made
+    // the queueing branch below unreachable.
+    if (isOffline) {
+      // A create+complete pair can't be queued safely (the second call needs
+      // the first's response), so a session that was never created needs the
+      // network.
+      if (!existingSessionId) {
         showToast({ variant: "error", message: "Can't finish without a session — reconnect first" });
         return false;
       }
+      overrideWrites.forEach((payload) =>
+        enqueuePending({ kind: "updateProgramSet", payload }),
+      );
+      enqueuePending({
+        kind: "completeWorkoutSession",
+        payload: { sessionId: existingSessionId, endTime, feeling, notes: trimmedNotes },
+      });
+      showToast({ message: "Offline — workout saved locally, will sync when online", durationMs: 4000 });
+      workoutSession?.clearActiveWorkout();
+      router.replace("/");
+      return true;
+    }
+
+    // Best-effort: a failed template flush costs the user next session's
+    // starting weights, not this session's data, so it must not block the
+    // save. The session write below is the one that matters.
+    try {
+      await Promise.all(overrideWrites.map((payload) => updateProgramSet(payload)));
+    } catch (err) {
+      console.error("[finish] override flush failed", err);
+    }
+
+    let sessionId = existingSessionId;
+    if (sessionId == null) {
+      // Fallback if the session wasn't pre-created (e.g. direct navigation).
       const created = await createWorkoutSession({
         date: toDateString(startTime),
         startTime: startTime.toISOString(),
       });
-      if (!created.success) return false;
-      await completeWorkoutSession({ sessionId: created.data.id, feeling, notes: notes.trim() || undefined });
+      if (!created.success) {
+        showToast({ variant: "error", message: "Couldn't save workout — tap Save to retry" });
+        return false;
+      }
+      sessionId = created.data.id;
     }
+
+    const completed = await completeWorkoutSession({
+      sessionId,
+      endTime,
+      feeling,
+      notes: trimmedNotes,
+    });
+    // Keep the workout context and stay on the page when this fails — clearing
+    // it would discard the feeling, notes and end time with no way back.
+    if (!completed.success) {
+      showToast({ variant: "error", message: "Couldn't save workout — tap Save to retry" });
+      return false;
+    }
+
     workoutSession?.clearActiveWorkout();
     router.replace("/");
     return true;
@@ -90,17 +133,37 @@ function FinishContent() {
 
   const handleSave = async () => {
     setSaving(true);
-    await saveSession();
-    setSaving(false);
+    try {
+      await saveSession();
+    } catch (err) {
+      console.error("[finish] save failed", err);
+      showToast({ variant: "error", message: "Couldn't save workout — tap Save to retry" });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDiscard = async () => {
     setSaving(true);
-    if (workoutSession?.sessionId) {
-      await deleteWorkoutSession(workoutSession.sessionId);
+    try {
+      if (workoutSession?.sessionId) {
+        const deleted = await deleteWorkoutSession(workoutSession.sessionId);
+        // Don't clear the context on failure: the session and its logged sets
+        // still exist server-side, so pretending it's discarded would leave an
+        // open session the user thinks they got rid of.
+        if (!deleted.success) {
+          showToast({ variant: "error", message: "Couldn't discard workout — try again" });
+          return;
+        }
+      }
+      workoutSession?.clearActiveWorkout();
+      router.replace("/");
+    } catch (err) {
+      console.error("[finish] discard failed", err);
+      showToast({ variant: "error", message: "Couldn't discard workout — try again" });
+    } finally {
+      setSaving(false);
     }
-    workoutSession?.clearActiveWorkout();
-    router.replace("/");
   };
 
   return (

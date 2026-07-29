@@ -3,11 +3,8 @@
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { LogRunModal } from "@/components/features/LogRunModal";
 import { reorderProgramSets, updateProgramSet } from "@/lib/actions/programs";
-import { logWorkoutSet } from "@/lib/actions/workout-sets";
-import { isStaleBundleError, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
 import type { SetSuggestionDisplay } from "@/components/features/WorkoutSetsClient";
-import { usePendingQueue } from "@/contexts/pending-queue-context";
-import { useToast } from "@/contexts/toast-context";
+import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import { formatEnduranceDistance, formatEndurancePace, formatTime } from "@/lib/utils/format";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
@@ -99,57 +96,14 @@ export function WorkoutSetsList({
   onApplyRepSuggestion,
 }: WorkoutSetsListProps) {
   const router = useRouter();
-  const { showToast } = useToast();
-  const { enqueue: enqueuePending } = usePendingQueue();
   const workoutSession = useWorkoutSession();
 
-  // Wrap logWorkoutSet with: (a) offline detection — if the browser is
-  // offline, queue immediately and tell the user we'll sync on reconnect;
-  // (b) failure handling — on a transient server error, show a Retry toast
-  // and also queue so an `online` event will retry automatically.
-  const logWithRetry = async (
-    payload: Parameters<typeof logWorkoutSet>[0],
-  ): ReturnType<typeof logWorkoutSet> => {
-    if (typeof navigator !== "undefined" && navigator.onLine === false) {
-      enqueuePending({ kind: "logWorkoutSet", payload });
-      showToast({
-        message: "Offline — saved locally, will sync when online",
-        durationMs: 4000,
-      });
-      return { success: true, data: { set: null as never, newPRs: [] } };
-    }
-    try {
-      const r = await logWorkoutSet(payload);
-      if (!r.success) {
-        enqueuePending({ kind: "logWorkoutSet", payload });
-        showToast({
-          variant: "error",
-          message: "Set didn't save — tap Retry",
-          onRetry: () => void logWithRetry(payload),
-        });
-      }
-      return r;
-    } catch (err) {
-      // Stale bundle: cached client calling an action ID the new server
-      // doesn't know. Don't enqueue (replay would loop and drop) — reload
-      // so the user gets fresh chunks. They'll re-tap when they're back.
-      if (isStaleBundleError(err)) {
-        showToast({
-          message: "App updating — refreshing…",
-          durationMs: 3000,
-        });
-        void reloadForFreshBundle();
-        throw err;
-      }
-      enqueuePending({ kind: "logWorkoutSet", payload });
-      showToast({
-        variant: "error",
-        message: "Set didn't save — tap Retry",
-        onRetry: () => void logWithRetry(payload),
-      });
-      throw err;
-    }
-  };
+  // Queue-backed set writes (offline queue + retry toast + stale-bundle
+  // reload). unlogWithRetry removes the row a set toggle-off orphans — without
+  // it the un-log was client-state only, so history/volume/PRs kept the value
+  // the user had just corrected away.
+  const { logWithRetry, unlogWithRetry } = useWorkoutSetWriter();
+
   const workoutSessionRef = useRef(workoutSession);
   useEffect(() => { workoutSessionRef.current = workoutSession; }, [workoutSession]);
   const [flatItems, setFlatItems] = useState<FlatItem[]>(() =>
@@ -292,6 +246,11 @@ export function WorkoutSetsList({
       });
       setPrSetIds((prev) => { const s = new Set(prev); s.delete(setId); return s; });
       if (isWorkout && workoutSession) workoutSession.clearRestTimerEnd(setId);
+      // Remove the row server-side too, using the same set identity the log
+      // path writes with (setIndex + 1).
+      if (isWorkout && sessionId != null && exerciseId != null && setIndex >= 0) {
+        void unlogWithRetry({ sessionId, exerciseId, setNumber: setIndex + 1 });
+      }
     } else {
       haptics.tap();
       // Collect all preceding sets that aren't already completed (catch-up)

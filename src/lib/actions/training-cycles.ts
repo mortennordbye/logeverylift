@@ -910,7 +910,12 @@ export async function removeCycleSlot(
     }
     await db
       .delete(trainingCycleSlots)
-      .where(eq(trainingCycleSlots.id, slotId));
+      .where(
+        and(
+          eq(trainingCycleSlots.id, slotId),
+          eq(trainingCycleSlots.trainingCycleId, cycleId),
+        ),
+      );
     revalidatePath(`/cycles/${cycleId}`);
     return { success: true, data: undefined };
   } catch (err) {
@@ -939,7 +944,12 @@ export async function reorderCycleSlots(
         db
           .update(trainingCycleSlots)
           .set({ orderIndex: index + 1 })
-          .where(eq(trainingCycleSlots.id, id)),
+          .where(
+            and(
+              eq(trainingCycleSlots.id, id),
+              eq(trainingCycleSlots.trainingCycleId, validation.data.cycleId),
+            ),
+          ),
       ),
     );
     revalidatePath(`/cycles/${cycleId}`);

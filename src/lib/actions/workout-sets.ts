@@ -37,6 +37,7 @@ import { rpeFromRir } from "@/lib/utils/rir";
 import { requireSession } from "@/lib/utils/session";
 import {
     logWorkoutSetSchema,
+    unlogWorkoutSetSchema,
     workoutHistoryQuerySchema,
 } from "@/lib/validators/workout";
 import {
@@ -189,26 +190,58 @@ export async function logWorkoutSet(
       }
     }
 
-    // Insert set into database
+    // Upsert on the (session, exercise, set_number) unique key. A plain insert
+    // would throw on the second write for the same set, which the caller then
+    // had to treat as success — silently discarding the user's corrected
+    // weight/reps/RIR. Re-logging a set must overwrite it.
+    //
+    // Replays from the offline queue land here too and are idempotent: the row
+    // is rewritten with the same values, and PR detection below only inserts
+    // when a value strictly beats the current record.
+    const setValues = {
+      sessionId,
+      exerciseId,
+      setNumber,
+      targetReps,
+      actualReps,
+      weightKg: weightKg.toString(),
+      durationSeconds,
+      distanceMeters,
+      inclinePercent,
+      heartRateZone,
+      rir,
+      rpe: effectiveRpe,
+      restTimeSeconds,
+      notes,
+      isCompleted,
+      isFailed,
+    };
     const [set] = await db
       .insert(workoutSets)
-      .values({
-        sessionId,
-        exerciseId,
-        setNumber,
-        targetReps,
-        actualReps,
-        weightKg: weightKg.toString(),
-        durationSeconds,
-        distanceMeters,
-        inclinePercent,
-        heartRateZone,
-        rir,
-        rpe: effectiveRpe,
-        restTimeSeconds,
-        notes,
-        isCompleted,
-        isFailed,
+      .values(setValues)
+      .onConflictDoUpdate({
+        target: [
+          workoutSets.sessionId,
+          workoutSets.exerciseId,
+          workoutSets.setNumber,
+        ],
+        // createdAt is deliberately not updated — it stays the time the set was
+        // first logged.
+        set: {
+          targetReps: setValues.targetReps ?? null,
+          actualReps: setValues.actualReps,
+          weightKg: setValues.weightKg,
+          durationSeconds: setValues.durationSeconds ?? null,
+          distanceMeters: setValues.distanceMeters ?? null,
+          inclinePercent: setValues.inclinePercent ?? null,
+          heartRateZone: setValues.heartRateZone ?? null,
+          rir: setValues.rir ?? null,
+          rpe: setValues.rpe,
+          restTimeSeconds: setValues.restTimeSeconds,
+          notes: setValues.notes ?? null,
+          isCompleted: setValues.isCompleted,
+          isFailed: setValues.isFailed,
+        },
       })
       .returning();
 
@@ -252,35 +285,6 @@ export async function logWorkoutSet(
       data: { set, newPRs },
     };
   } catch (error) {
-    // Unique-violation on (session_id, exercise_id, set_number) means the row
-    // already exists — typically a retry replay after a flaky network. Treat
-    // as success and return the existing row so client-side retry queues stop
-    // looping. Without this, a single failed-then-succeeded request becomes
-    // an infinite retry storm.
-    if (isUniqueViolation(error)) {
-      try {
-        const parsedAgain = logWorkoutSetSchema.safeParse(data);
-        if (parsedAgain.success) {
-          const { sessionId, exerciseId, setNumber } = parsedAgain.data;
-          const [existing] = await db
-            .select()
-            .from(workoutSets)
-            .where(
-              and(
-                eq(workoutSets.sessionId, sessionId),
-                eq(workoutSets.exerciseId, exerciseId),
-                eq(workoutSets.setNumber, setNumber),
-              ),
-            )
-            .limit(1);
-          if (existing) {
-            return { success: true, data: { set: existing, newPRs: [] } };
-          }
-        }
-      } catch (lookupErr) {
-        console.error("[logWorkoutSet] dupe lookup failed", lookupErr);
-      }
-    }
     console.error("[logWorkoutSet] failed", error);
     return {
       success: false,
@@ -289,12 +293,121 @@ export async function logWorkoutSet(
   }
 }
 
-function isUniqueViolation(error: unknown): boolean {
-  if (!error || typeof error !== "object") return false;
-  const e = error as { code?: unknown; cause?: { code?: unknown } };
-  if (e.code === "23505") return true;
-  if (e.cause && typeof e.cause === "object" && e.cause.code === "23505") return true;
-  return false;
+/**
+ * Un-log a workout set
+ *
+ * Removes the row written by logWorkoutSet for (session, exercise, setNumber).
+ * The row is deleted rather than flagged is_completed = false because the
+ * metrics aggregates filter on workout_sessions.isCompleted, not on the set
+ * flag — a lingering row would keep counting toward volume.
+ *
+ * Any PRs the set earned are rolled back, otherwise un-logging a mistyped
+ * 200 kg set would leave a permanent phantom record that suppresses every
+ * genuine PR below it.
+ */
+export async function unlogWorkoutSet(
+  data: unknown,
+): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+
+  const validation = unlogWorkoutSetSchema.safeParse(data);
+  if (!validation.success) {
+    return {
+      success: false,
+      error: "Invalid input data",
+      fieldErrors: validation.error.flatten().fieldErrors,
+    };
+  }
+  const { sessionId, exerciseId, setNumber } = validation.data;
+
+  try {
+    const [session] = await db
+      .select({ userId: workoutSessions.userId })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.id, sessionId))
+      .limit(1);
+    if (!session || session.userId !== auth.user.id) {
+      return { success: false, error: "Unauthorized" };
+    }
+
+    const [existing] = await db
+      .select({ id: workoutSets.id })
+      .from(workoutSets)
+      .where(
+        and(
+          eq(workoutSets.sessionId, sessionId),
+          eq(workoutSets.exerciseId, exerciseId),
+          eq(workoutSets.setNumber, setNumber),
+        ),
+      )
+      .limit(1);
+
+    // Already absent — the user un-logged a set that never reached the server
+    // (offline queue, failed write). Nothing to do, and reporting success keeps
+    // the replay queue from looping.
+    if (!existing) return { success: true, data: undefined };
+
+    await rollbackPRsForSet(auth.user.id, existing.id);
+
+    await db.delete(workoutSets).where(eq(workoutSets.id, existing.id));
+
+    revalidatePath("/history");
+
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error("[unlogWorkoutSet] failed", error);
+    return {
+      success: false,
+      error: "Failed to remove workout set. Please try again.",
+    };
+  }
+}
+
+/**
+ * Undo the PR rows a single set produced.
+ *
+ * For each PR the set earned: delete it, then un-supersede the record it beat
+ * (the most recently superseded row of the same type for that exercise — which
+ * is the one this PR displaced, since a PR only supersedes the current record).
+ */
+async function rollbackPRsForSet(userId: string, setId: number): Promise<void> {
+  const earned = await db
+    .select()
+    .from(exercisePrs)
+    .where(and(eq(exercisePrs.userId, userId), eq(exercisePrs.setId, setId)));
+
+  for (const pr of earned) {
+    await db.delete(exercisePrs).where(eq(exercisePrs.id, pr.id));
+
+    // reps_at_weight PRs are per-load, so the displaced record must match the
+    // same ±0.5 kg bracket used when the PR was detected.
+    const sameBracket =
+      pr.prType === "reps_at_weight" && pr.weightKg != null
+        ? [sql`ABS(CAST(${exercisePrs.weightKg} AS numeric) - ${Number(pr.weightKg)}) <= 0.5`]
+        : [];
+
+    const [displaced] = await db
+      .select({ id: exercisePrs.id })
+      .from(exercisePrs)
+      .where(
+        and(
+          eq(exercisePrs.userId, userId),
+          eq(exercisePrs.exerciseId, pr.exerciseId),
+          eq(exercisePrs.prType, pr.prType),
+          isNotNull(exercisePrs.supersededAt),
+          ...sameBracket,
+        ),
+      )
+      .orderBy(desc(exercisePrs.supersededAt))
+      .limit(1);
+
+    if (displaced) {
+      await db
+        .update(exercisePrs)
+        .set({ supersededAt: null })
+        .where(eq(exercisePrs.id, displaced.id));
+    }
+  }
 }
 
 // ─── PR Detection ─────────────────────────────────────────────────────────────

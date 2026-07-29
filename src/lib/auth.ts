@@ -28,6 +28,10 @@ export const auth = betterAuth({
   }),
   emailAndPassword: {
     enabled: true,
+    // Closes the public POST /api/auth/sign-up/email endpoint. Accounts are
+    // created only through registerWithToken (invite-tokens.ts), which calls
+    // the admin plugin's createUser server-side after checking the token.
+    disableSignUp: true,
   },
   session: {
     // 30 days — refreshed on each request so active users stay logged in

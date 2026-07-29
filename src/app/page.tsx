@@ -288,29 +288,101 @@ export default async function Home() {
           </div>
         )}
 
-        {/* ── No cycle: progress ring ───────────────────── */}
+        {/* ── No cycle: preview of the cycle layout ─────── */}
+        {/* Mirrors the shape of the real today card above so the screen shows
+            what a cycle gives you instead of sitting empty. The cycle name,
+            week counter and program line are placeholders — aria-hidden keeps
+            that invented text out of the accessibility tree, and the prompt
+            below it carries the actual meaning. */}
         {!info && (
-          <div className="flex-1 flex flex-col items-center justify-center min-h-0">
-            <WeeklyGoalProgress thisWeekWorkouts={stats.thisWeekWorkouts} size="lg" />
+          <div className="rounded-2xl bg-muted p-4 shrink-0">
+            <div aria-hidden="true" className="opacity-40 select-none">
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-sm font-semibold">Your training cycle</span>
+                <span className="text-xs text-muted-foreground">Week 1/8</span>
+              </div>
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 h-1 bg-border rounded-full overflow-hidden">
+                  <div className="h-full bg-primary rounded-full" style={{ width: "12%" }} />
+                </div>
+                <span className="text-xs text-muted-foreground shrink-0">ends —</span>
+              </div>
+              <p className="text-xl font-bold">Today&apos;s program</p>
+            </div>
+
+            <div className="mt-3 border-t border-border/40 pt-3">
+              <p className="text-sm text-muted-foreground">
+                Set up a training cycle to fill this in — it schedules which program
+                you run each day and tracks the weeks as you go.
+              </p>
+              <Link
+                href="/cycles"
+                className="mt-3 inline-flex items-center gap-2 rounded-xl bg-primary/10 px-4 py-2.5 text-sm font-semibold text-primary active:opacity-70"
+              >
+                Set up a Cycle →
+              </Link>
+            </div>
+          </div>
+        )}
+
+        {/* ── No cycle: week strip with unfilled days ───── */}
+        {/* Days a cycle would schedule are dashed placeholders, but a day the
+            user has actually trained still reads as completed — real progress
+            must not disappear behind the preview. */}
+        {!info && (
+          <div className="rounded-2xl bg-muted px-4 pt-3 pb-5 flex-1 flex flex-col gap-3 overflow-hidden">
+            <div>
+              <Link href="/more/calendar" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1 active:opacity-60">
+                This Week ›
+              </Link>
+              <div className="grid grid-cols-7 gap-0.5">
+                {weekDates.map((dateStr, i) => {
+                  const isToday = dateStr === todayStr;
+                  const isPast = dateStr < todayStr;
+                  const isCompleted = completedDates.has(dateStr);
+
+                  return (
+                    <div key={dateStr} className="flex flex-col items-center gap-1">
+                      <span className={`text-[10px] font-bold ${isToday ? "text-primary" : "text-muted-foreground"}`}>
+                        {DAY_LETTERS[i]}
+                      </span>
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center
+                        ${isToday ? "ring-2 ring-primary ring-offset-1 ring-offset-muted" : ""}
+                        ${isCompleted ? "bg-primary" : "border-2 border-dashed border-border/50"}`}
+                      >
+                        {isCompleted && (
+                          <svg className="w-3.5 h-3.5 text-primary-foreground" viewBox="0 0 14 14" fill="none">
+                            <path d="M2.5 7l3 3 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        )}
+                      </div>
+                      <span className={`text-[9px] ${isToday ? "text-primary font-semibold" : isPast ? "text-muted-foreground/40" : "text-muted-foreground"}`}>
+                        {DAY_LABELS_FULL[i]}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {/* Centred in the leftover space: without a cycle this card has
+                less to show, so a top-aligned ring leaves a void beneath it. */}
+            <div className="border-t border-border/30 pt-3 flex-1 flex flex-col justify-center min-h-0">
+              <WeeklyGoalProgress thisWeekWorkouts={stats.thisWeekWorkouts} />
+            </div>
           </div>
         )}
 
       </div>
 
-      {/* No-cycle actions — pinned above nav bar */}
+      {/* No-cycle action — pinned above nav bar. The cycle CTA lives in the
+          preview card above, so only the train-now action is pinned here. */}
       {!info && (
-        <div className="px-6 pb-4 space-y-3 shrink-0">
+        <div className="px-6 pb-4 shrink-0">
           <Link
             href="/new-workout"
             className="flex items-center justify-center w-full rounded-2xl bg-primary py-4 text-base font-semibold text-primary-foreground active:opacity-80"
           >
             Start a Workout
-          </Link>
-          <Link
-            href="/cycles"
-            className="flex items-center justify-center w-full rounded-2xl bg-muted py-4 text-sm font-medium text-foreground active:opacity-70"
-          >
-            Set up a Training Cycle
           </Link>
         </div>
       )}

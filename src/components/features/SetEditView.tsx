@@ -3,6 +3,7 @@
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { setProgramExerciseType, updateProgramSet } from "@/lib/actions/programs";
 import { updateWorkoutSetNotes } from "@/lib/actions/workout-sets";
+import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import {
   EXERCISE_TYPES,
@@ -79,6 +80,7 @@ export function SetEditView({
   exerciseTypeOverride = null,
 }: Props) {
   const router = useRouter();
+  const { logWithRetry } = useWorkoutSetWriter();
   const cfg = disciplineConfig(discipline);
   // Convert between the editor's distance input (m for swim, km otherwise) and stored meters.
   const metersToInput = (m: number) => (cfg.inputUnit === "m" ? String(m) : String(m / 1000));
@@ -197,6 +199,9 @@ export function SetEditView({
     setSaving(true);
     const trimmedNote = notes.trim();
     const noteValue = trimmedNote.length > 0 ? trimmedNote : null;
+    // A failed set keeps the program target as the goal and records the lower
+    // achieved reps; an ordinary set targets what was entered.
+    const targetRepsValue = failed ? (set.targetReps ?? reps) : reps;
 
     if (isRunning) {
       // A periodized set carries a peak anchor the active cycle ramps weekly.
@@ -236,12 +241,36 @@ export function SetEditView({
       await updateProgramSet({ id: set.id, targetReps: reps, weightKg: weight, setType, restTimeSeconds: restSeconds, targetRir: prescribedRir });
     }
 
-    // If this set has already been logged in the active session, persist the
-    // note directly to its workout_sets row. For not-yet-logged sets, the
-    // override above carries the note forward to the next logWorkoutSet call.
     const activeSessionId = workoutSession?.sessionId ?? null;
     if (isWorkout && activeSessionId != null && exerciseId != null && setNumber != null) {
-      void updateWorkoutSetNotes({ sessionId: activeSessionId, exerciseId, setNumber, notes: noteValue });
+      if (workoutSession?.completedSetIds.has(set.id)) {
+        // The set is already logged, so the override alone would leave the
+        // workout_sets row on the old numbers while the list shows the new
+        // ones. Rewrite the row (logWorkoutSet upserts) with the corrected
+        // values — otherwise history, volume and PRs keep what the user has
+        // just corrected away.
+        void logWithRetry({
+          sessionId: activeSessionId,
+          exerciseId,
+          setNumber,
+          targetReps: !isRunning && targetRepsValue > 0 ? targetRepsValue : undefined,
+          actualReps: isRunning ? 0 : reps,
+          weightKg: isRunning ? 0 : weight,
+          durationSeconds: duration > 0 ? duration : undefined,
+          distanceMeters: isRunning ? (distanceMeters ?? undefined) : undefined,
+          rir: failed ? 0 : (rir ?? undefined),
+          rpe: 7,
+          restTimeSeconds: restSeconds,
+          notes: noteValue,
+          isCompleted: true,
+          isFailed: failed,
+        });
+      } else {
+        // Not yet logged: the override carries the values (and the note)
+        // forward to the next logWorkoutSet call. The note still goes through
+        // in case a row exists from an earlier session state.
+        void updateWorkoutSetNotes({ sessionId: activeSessionId, exerciseId, setNumber, notes: noteValue });
+      }
     }
 
     router.back();

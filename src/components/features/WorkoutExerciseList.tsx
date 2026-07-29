@@ -1,7 +1,7 @@
 "use client";
 
 import { useWorkoutSession } from "@/contexts/workout-session-context";
-import { logWorkoutSet } from "@/lib/actions/workout-sets";
+import { logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import type { Discipline } from "@/lib/utils/discipline";
 import type { ProgramSet } from "@/types/workout";
@@ -86,7 +86,21 @@ export function WorkoutExerciseList({
   async function toggleExercise(exercise: Exercise) {
     if (!workoutSession) return;
     if (isExerciseCompleted(exercise)) {
+      const { sessionId } = workoutSession;
       exercise.sets.forEach((s) => workoutSession.removeCompletedSet(s.id));
+      // Un-checking the exercise must remove the rows too, or the DB keeps
+      // every set the checkmark logged.
+      if (sessionId != null) {
+        await Promise.all(
+          exercise.sets.map((s) =>
+            unlogWorkoutSet({
+              sessionId,
+              exerciseId: exercise.exerciseId,
+              setNumber: exercise.sets.indexOf(s) + 1,
+            }),
+          ),
+        );
+      }
     } else {
       const { sessionId } = workoutSession;
       const setsToLog = exercise.sets.filter(
