@@ -100,8 +100,12 @@ export async function registerWithToken(
       return { success: false, error: "This invite token has already been used" };
     }
 
-    // Create the user via better-auth's public sign-up endpoint
-    const result = await auth.api.signUpEmail({
+    // Create the user via the admin plugin. Public sign-up is disabled
+    // (auth.ts), so this is the only account-creation path. Called without
+    // headers/request, createUser skips its admin-session check — the invite
+    // token is the gate. It does not create a session; SignupForm signs in
+    // afterwards with authClient.signIn.email.
+    const result = await auth.api.createUser({
       body: {
         name: parsed.data.name,
         email: parsed.data.email,

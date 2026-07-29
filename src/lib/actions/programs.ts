@@ -264,7 +264,12 @@ export async function removeExerciseFromProgram(
     }
     await db
       .delete(programExercises)
-      .where(eq(programExercises.id, validation.data.programExerciseId));
+      .where(
+        and(
+          eq(programExercises.id, validation.data.programExerciseId),
+          eq(programExercises.programId, validation.data.programId),
+        ),
+      );
     revalidatePath(`/programs/${validation.data.programId}`);
     return { success: true, data: undefined };
   } catch (err) {
@@ -442,7 +447,12 @@ export async function reorderProgramExercises(
         db
           .update(programExercises)
           .set({ orderIndex: index })
-          .where(eq(programExercises.id, id)),
+          .where(
+            and(
+              eq(programExercises.id, id),
+              eq(programExercises.programId, validation.data.programId),
+            ),
+          ),
       ),
     );
     revalidatePath(`/programs/${validation.data.programId}`);
@@ -552,12 +562,17 @@ export async function deleteProgramSet(
   const validation = deleteProgramSetSchema.safeParse({ programSetId });
   if (!validation.success) return { success: false, error: "Invalid input" };
   try {
-    const [prog] = await db
+    // Verify ownership of the set itself via programSet → programExercise →
+    // program. Checking only the caller-supplied programId would let a caller
+    // name their own program and delete any other user's set.
+    const [check] = await db
       .select({ userId: programs.userId })
-      .from(programs)
-      .where(eq(programs.id, programId))
+      .from(programSets)
+      .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programSets.id, validation.data.programSetId))
       .limit(1);
-    if (!prog || prog.userId !== auth.user.id) {
+    if (!check || check.userId !== auth.user.id) {
       return { success: false, error: "Program not found" };
     }
     await db
@@ -597,7 +612,12 @@ export async function reorderProgramSets(
         db
           .update(programSets)
           .set({ setNumber: index + 1 })
-          .where(eq(programSets.id, id)),
+          .where(
+            and(
+              eq(programSets.id, id),
+              eq(programSets.programExerciseId, validation.data.programExerciseId),
+            ),
+          ),
       ),
     );
     const [pe] = await db
