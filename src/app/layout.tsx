@@ -62,6 +62,23 @@ export default function RootLayout({
             __html: `(function(){var s=localStorage.getItem('theme');if(s!=='light'){document.documentElement.classList.add('dark')}})()`,
           }}
         />
+        {/* Records that a route change came from the history stack — the iOS
+            edge swipe or a Back button — so PageTransition can stand down and
+            let the system's own gesture animation own the motion.
+
+            This has to be a pre-hydration script, not a useEffect. The App
+            Router registers its own popstate listener during hydration, and
+            listeners fire in registration order, so a listener added later can
+            run *after* React has already re-rendered with the new pathname.
+            Whether that render is flushed synchronously varies with load, so
+            the effect version misclassified swipes as pushes intermittently.
+            Registering here, while the document is still parsing, is always
+            first. Read and cleared in `PageTransition`. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){window.__lelHistoryNav=false;window.addEventListener('popstate',function(){window.__lelHistoryNav=true},true)})()`,
+          }}
+        />
       </head>
       <body
         className={`${inter.variable} ${geistMono.variable} antialiased pb-nav-safe`}

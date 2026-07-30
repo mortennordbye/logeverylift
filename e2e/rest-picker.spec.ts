@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { openWorkout } from "./helpers";
+import { openFirstExercise, openWorkout } from "./helpers";
 
 /**
  * Rest-time picker flow.
@@ -23,8 +23,7 @@ test("rest-time picker saves the selected preset", async ({ page }) => {
   await openWorkout(page);
 
   // Tap the first exercise in the workout list.
-  const firstExercise = page.locator('a[href*="/exercises/"]').first();
-  await firstExercise.click();
+  await openFirstExercise(page);
 
   // The exercise page has REST rows between sets. Tap the first one.
   const restRow = page.getByText(/^REST \d{2}:\d{2}$/).first();
@@ -56,16 +55,31 @@ test("rest-time picker saves the selected preset", async ({ page }) => {
   await expect(restRow).toHaveText("REST 05:00");
 
   // Restore original to keep the test idempotent across runs.
-  await restRow.click();
+  //
+  // Retried, because losing this particular race is not a local failure: the
+  // rest time lives on the shared program, so a restore that silently does not
+  // persist leaves 05:00 behind and every later run then fails on the sanity
+  // check above, until someone edits the database by hand. Observed on both
+  // this branch and main. One retry is enough in practice; the assertion after
+  // the loop still fails the run if the value really did not stick.
   const originalSeconds = parseRestLabel(originalLabel);
   const originalButton = preserveLabelToButton(originalSeconds);
-  await page.getByRole("button", { name: originalButton }).click();
-  await page.getByRole("button", { name: "Done" }).click();
-  await expect(restRow).toHaveText(originalLabel);
-  // Same deal for the restore write: let it land, then prove it persisted.
-  await page.waitForLoadState("networkidle");
-  await page.reload();
-  await expect(restRow).toHaveText(originalLabel);
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await restRow.click();
+    await page.getByRole("button", { name: originalButton }).click();
+    await page.getByRole("button", { name: "Done" }).click();
+    await expect(restRow).toHaveText(originalLabel);
+    // Let the write land, then re-read from the server to prove it persisted.
+    await page.waitForLoadState("networkidle");
+    await page.reload();
+    if ((await restRow.textContent())?.trim() === originalLabel) break;
+  }
+
+  await expect(
+    restRow,
+    "rest time must be restored, or it leaks into every later run",
+  ).toHaveText(originalLabel);
 });
 
 function parseRestLabel(label: string): number {

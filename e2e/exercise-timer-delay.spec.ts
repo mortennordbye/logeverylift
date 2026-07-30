@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { openTimedExercise } from "./helpers";
+import { openFirstSetEditor, openTimedExercise } from "./helpers";
 
 /**
  * Opt-in start delay on a timed set: the countdown runs a "Get ready" prep
@@ -20,7 +20,7 @@ test("timed set with start delay runs Get ready phase then work countdown", asyn
   await openTimedExercise(page);
 
   // Open the first set's edit view.
-  await page.locator("p.text-lg.font-medium").first().click();
+  await openFirstSetEditor(page);
 
   // Set duration to the 15s preset (scoped to the bottom sheet so the
   // locator can't match the "15s" start-delay chip in the edit view).
@@ -78,7 +78,7 @@ test("timed set with start delay runs Get ready phase then work countdown", asyn
   // idempotent and doesn't leak state into other specs.
   await playBtn.click();
   await expect(playBtn).toHaveClass(/bg-transparent/);
-  await page.locator("p.text-lg.font-medium").first().click();
+  await openFirstSetEditor(page);
   await page.getByRole("button", { name: /^None$/ }).click();
   await page.getByRole("button", { name: /^Save$/ }).click();
   await expect(page.getByText("+3s")).toHaveCount(0);

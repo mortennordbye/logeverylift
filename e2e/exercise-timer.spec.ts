@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { openTimedExercise } from "./helpers";
+import { openFirstSetEditor, openTimedExercise } from "./helpers";
 
 /**
  * Exercise timer countdown completes visibly.
@@ -32,7 +32,7 @@ test("exercise timer countdown shows 00:00 before completing", async ({ page }) 
   await expect(firstSetRow).toBeVisible();
   // The set row container is the parent that's clickable. Click on the
   // duration text to open the edit view.
-  await page.locator("p.text-lg.font-medium").first().click();
+  await openFirstSetEditor(page);
 
   // In the edit view, the duration is shown as a tappable row. Tap it
   // to open the picker. Different builds use sheet vs. inline pickers;

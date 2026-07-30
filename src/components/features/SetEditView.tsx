@@ -13,6 +13,7 @@ import {
 } from "@/lib/utils/exercise-type";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
+import { markProgrammaticBack } from "@/lib/utils/nav-intent";
 import type { SetType } from "@/lib/validators/workout";
 import type { ProgramSet } from "@/types/workout";
 import { Loader2 } from "lucide-react";
@@ -170,28 +171,48 @@ export function SetEditView({
   const BASE_REPS = Array.from({ length: 20 }, (_, i) => i + 1);
   const repOptions = reps > 20 ? [...BASE_REPS, reps] : BASE_REPS;
 
-  // Scroll reps circles to current value when picker opens or reps change
+  /**
+   * Bring the selected circle to the middle of a picker row.
+   *
+   * Called when a picker opens and when a typed value is committed on blur —
+   * never on keystroke. The two pickers used to disagree: the reps effect
+   * depended on `reps`, so every character retargeted the row and it lurched
+   * ~1160px sideways and back while typing "25"; the weight effect depended
+   * only on the open flag, so typing moved nothing and the highlighted circle
+   * ended up off-screen where the user could not see it. Committing on blur
+   * gives both the same behaviour and keeps the row still while typing.
+   */
+  const centerOption = (
+    el: HTMLDivElement | null,
+    index: number,
+    itemWidth: number,
+    smooth = false,
+  ) => {
+    if (!el || index < 0) return;
+    el.scrollTo({
+      left: Math.max(0, index * itemWidth - el.clientWidth / 2 + itemWidth / 2),
+      behavior: smooth ? "smooth" : "auto",
+    });
+  };
+
+  const centerReps = (value: number, smooth = false) =>
+    centerOption(repsScrollRef.current, repOptions.indexOf(value), 72, smooth);
+  const centerWeight = (value: number, smooth = false) => {
+    const nearest = WEIGHT_OPTIONS.reduce((prev, curr) =>
+      Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev,
+    );
+    centerOption(weightScrollRef.current, WEIGHT_OPTIONS.indexOf(nearest), 88, smooth);
+  };
+
   useEffect(() => {
     if (!showRepsPicker) return;
-    requestAnimationFrame(() => {
-      const el = repsScrollRef.current;
-      if (!el) return;
-      const index = repOptions.indexOf(reps);
-      const itemWidth = 72; // w-16 (64px) + gap-2 (8px)
-      el.scrollLeft = Math.max(0, index * itemWidth - el.clientWidth / 2 + 32);
-    });
+    requestAnimationFrame(() => centerReps(reps));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showRepsPicker, reps]);
+  }, [showRepsPicker]);
 
   useEffect(() => {
     if (!showWeightPicker) return;
-    requestAnimationFrame(() => {
-      const el = weightScrollRef.current;
-      if (!el) return;
-      const index = WEIGHT_OPTIONS.indexOf(closestWeight);
-      const itemWidth = 88; // w-20 (80px) + gap-2 (8px)
-      el.scrollLeft = Math.max(0, index * itemWidth - el.clientWidth / 2 + 40);
-    });
+    requestAnimationFrame(() => centerWeight(weight));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showWeightPicker]);
 
@@ -273,12 +294,19 @@ export function SetEditView({
       }
     }
 
+    // Marks this as our own back, not an edge swipe. Both arrive as popstate;
+    // only the swipe is already being animated by the system.
+    markProgrammaticBack();
     router.back();
   };
 
   return (
     <>
-      <div className="flex-1 px-4 animate-in fade-in duration-150">
+      {/* min-h-0 is load-bearing: a flex child defaults to min-height:auto and
+          refuses to shrink below its content, so without it this never scrolls
+          and the Save button below is clipped off-screen on short phones
+          (iPhone SE and smaller) with no way to reach it. */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 animate-in fade-in duration-150">
         {/* Set-type toggle: warmup sets are excluded from auto-progression. Hidden during workout — setType is a program-level field. */}
         {!isWorkout && (
           <div className="flex rounded-xl overflow-hidden border border-border mb-4 mt-2">
@@ -550,10 +578,40 @@ export function SetEditView({
             >
               <span className="text-base font-medium">Type</span>
               <span className="flex items-center gap-2 text-base text-muted-foreground">
-                {savingType && <Loader2 className="h-4 w-4 animate-spin" />}
+                {/* Slot is always present: mounting the spinner into the row
+                    shoved the label 16px sideways for the duration of the save. */}
+                <span className="w-4 h-4 shrink-0">
+                  {savingType && <Loader2 className="h-4 w-4 animate-spin" />}
+                </span>
                 {resolvedType ? EXERCISE_TYPE_LABELS[resolvedType] : "—"}
               </span>
             </button>
+
+            {/* Mark-as-failed — workout mode only. Keeps the target as the goal
+                and logs the (lower) reps actually achieved.
+                Deliberately sits ABOVE "Reps in reserve": toggling it unmounts
+                that block, and when this button sat below it the collapse threw
+                the button itself 113px up the screen, so an immediate second tap
+                to undo landed on whatever had slid into its place. Above it, the
+                reflow happens entirely below the control being tapped. */}
+            {isWorkout && (
+              <button
+                onClick={() => {
+                  const next = !failed;
+                  setFailed(next);
+                  // Entering failed mode: default achieved reps to 0 so a wiped
+                  // set is the common one-tap case; leaving it restores the target.
+                  if (next) { setReps(0); setRepsStr("0"); }
+                  else { const t = set.targetReps ?? 10; setReps(t); setRepsStr(String(t)); }
+                }}
+                className={`w-full flex items-center justify-between py-4 border-b border-border transition-colors active:bg-muted/70 ${failed ? "text-destructive" : "hover:bg-muted/50"}`}
+              >
+                <span className="text-base font-medium">Mark set as failed</span>
+                <span className={`flex items-center justify-center w-6 h-6 rounded-full border-2 ${failed ? "bg-destructive border-destructive text-destructive-foreground" : "border-muted-foreground/40"}`}>
+                  {failed && <span className="text-xs leading-none">✕</span>}
+                </span>
+              </button>
+            )}
 
             {/* Reps in reserve — workout mode only. The effort signal that feeds
                 progression/adaptation (rpe is derived as 10 − rir). Hidden when the
@@ -587,27 +645,6 @@ export function SetEditView({
                   ))}
                 </div>
               </div>
-            )}
-
-            {/* Mark-as-failed — workout mode only. Keeps the target as the goal
-                and logs the (lower) reps actually achieved. */}
-            {isWorkout && (
-              <button
-                onClick={() => {
-                  const next = !failed;
-                  setFailed(next);
-                  // Entering failed mode: default achieved reps to 0 so a wiped
-                  // set is the common one-tap case; leaving it restores the target.
-                  if (next) { setReps(0); setRepsStr("0"); }
-                  else { const t = set.targetReps ?? 10; setReps(t); setRepsStr(String(t)); }
-                }}
-                className={`w-full flex items-center justify-between py-4 border-b border-border transition-colors active:bg-muted/70 ${failed ? "text-destructive" : "hover:bg-muted/50"}`}
-              >
-                <span className="text-base font-medium">Mark set as failed</span>
-                <span className={`flex items-center justify-center w-6 h-6 rounded-full border-2 ${failed ? "bg-destructive border-destructive text-destructive-foreground" : "border-muted-foreground/40"}`}>
-                  {failed && <span className="text-xs leading-none">✕</span>}
-                </span>
-              </button>
             )}
           </>
         )}
@@ -718,7 +755,7 @@ export function SetEditView({
             </div>
 
             {/* Number picker */}
-            <div ref={repsScrollRef} className="flex gap-2 overflow-x-auto pb-4">
+            <div ref={repsScrollRef} className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
               {repOptions.map((num) => (
                 <button
                   key={num}
@@ -746,9 +783,19 @@ export function SetEditView({
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "");
                   setRepsStr(val);
-                  setReps(Math.max(repsMin, parseInt(val) || repsMin));
+                  // Only commit a real number. Clearing the field to type a new
+                  // value used to write repsMin straight through — in workout
+                  // mode that is 0, so a half-finished edit left the set at
+                  // "Reps 0" and kept it if the sheet was dismissed. onBlur
+                  // still normalises whatever is left behind.
+                  if (val !== "") setReps(Math.max(repsMin, parseInt(val)));
                 }}
-                onBlur={() => { const n = Math.max(repsMin, parseInt(repsStr) || repsMin); setReps(n); setRepsStr(String(n)); }}
+                onBlur={() => {
+                  const n = Math.max(repsMin, parseInt(repsStr) || repsMin);
+                  setReps(n);
+                  setRepsStr(String(n));
+                  requestAnimationFrame(() => centerReps(n, true));
+                }}
                 className="w-full rounded-xl bg-background px-4 py-3 text-center text-2xl font-bold outline-none focus:ring-2 ring-primary"
               />
             </div>
@@ -769,7 +816,7 @@ export function SetEditView({
                 Done
               </button>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-4">
+            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
               {(isRunning && runMode === "time" ? RUNNING_DURATION_PRESETS_S : DURATION_OPTIONS).map((seconds) => (
                 <button
                   key={seconds}
@@ -815,7 +862,9 @@ export function SetEditView({
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, "");
                     setDurationMinStr(val);
-                    const mins = Math.max(0, Math.min(59, parseInt(val) || 0));
+                    // Empty field = mid-edit, not "zero minutes" — see the reps input.
+                    if (val === "") return;
+                    const mins = Math.max(0, Math.min(59, parseInt(val)));
                     setDuration(mins * 60 + (duration % 60));
                   }}
                   onBlur={() => setDurationMinStr(String(Math.floor(duration / 60)))}
@@ -832,7 +881,9 @@ export function SetEditView({
                   onChange={(e) => {
                     const val = e.target.value.replace(/\D/g, "");
                     setDurationSecStr(val);
-                    const secs = Math.max(0, Math.min(59, parseInt(val) || 0));
+                    // Empty field = mid-edit, not "zero seconds" — see the reps input.
+                    if (val === "") return;
+                    const secs = Math.max(0, Math.min(59, parseInt(val)));
                     setDuration(Math.floor(duration / 60) * 60 + secs);
                   }}
                   onBlur={() => setDurationSecStr(String(duration % 60).padStart(2, "0"))}
@@ -860,7 +911,7 @@ export function SetEditView({
             </div>
 
             {/* Weight picker */}
-            <div ref={weightScrollRef} className="flex gap-2 overflow-x-auto pb-4">
+            <div ref={weightScrollRef} className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
               {WEIGHT_OPTIONS.map((num) => (
                 <button
                   key={num}
@@ -892,7 +943,12 @@ export function SetEditView({
                   const n = parseFloat(val);
                   if (!isNaN(n)) setWeight(n);
                 }}
-                onBlur={() => { const n = parseFloat(weightStr) || 0; setWeight(n); setWeightStr(String(n)); }}
+                onBlur={() => {
+                  const n = parseFloat(weightStr) || 0;
+                  setWeight(n);
+                  setWeightStr(String(n));
+                  requestAnimationFrame(() => centerWeight(n, true));
+                }}
                 className="w-full rounded-xl bg-background px-4 py-3 text-center text-2xl font-bold outline-none focus:ring-2 ring-primary"
               />
             </div>
@@ -959,7 +1015,7 @@ export function SetEditView({
                 Done
               </button>
             </div>
-            <div className="flex gap-2 overflow-x-auto pb-4">
+            <div className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
               {REST_OPTIONS.map((seconds) => (
                 <button
                   key={seconds}

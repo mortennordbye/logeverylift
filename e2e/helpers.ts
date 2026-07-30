@@ -12,12 +12,28 @@ import { expect, type Page } from "@playwright/test";
  * regardless of the day, so it is the stable entry point.
  */
 
-/** The readiness check-in sheet auto-dismisses after ~4s; race it. */
+/**
+ * Dismiss the readiness check-in sheet and wait until it is really gone.
+ *
+ * The sheet does not mount on load: `WorkoutSessionClient` decides to show it
+ * from client session state, and `ReadinessSheet` then waits a further 300ms
+ * before sliding in. A short probe therefore runs *before the sheet exists*,
+ * finds no Skip button and returns, and the sheet arrives afterwards over its
+ * `fixed inset-0 z-50` backdrop — swallowing the caller's next tap. That is
+ * what made `rest-picker` fail on WebKit while passing on Chromium: the two
+ * engines hydrate the dev build on different schedules, and rest-picker is the
+ * only spec that *clicks* a link here instead of using `page.goto`.
+ *
+ * So: probe past the auto-skip deadline, then assert absence. The sheet
+ * unmounts on confirm (`showReadiness && <ReadinessSheet/>`), so "hidden" is a
+ * real detach and not an opacity-0 element Playwright would still call visible.
+ */
 async function dismissReadinessSheet(page: Page) {
   const skipBtn = page.getByRole("button", { name: "Skip" });
-  if (await skipBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
+  if (await skipBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await skipBtn.click();
   }
+  await expect(skipBtn).toBeHidden({ timeout: 10_000 });
 }
 
 /** Every program's workout href, in picker order. */
@@ -37,10 +53,64 @@ async function programWorkoutHrefs(page: Page): Promise<string[]> {
 export async function openWorkout(page: Page): Promise<void> {
   const [href] = await programWorkoutHrefs(page);
   await page.goto(href);
-  await dismissReadinessSheet(page);
+  // Wait for the page before probing for the sheet: the sheet is mounted from
+  // client state, so probing straight after goto can beat it into existence.
   await expect(page.locator('a[href*="/exercises/"]').first()).toBeVisible({
     timeout: 10_000,
   });
+  await dismissReadinessSheet(page);
+}
+
+/**
+ * Tap the first exercise on the workout page and wait for its set list.
+ *
+ * Why this isn't just `.click()`: dismissing the readiness sheet calls
+ * `confirmReadiness`, which runs a Server Action and a `router.refresh()`. A
+ * tap that lands while that refresh is re-rendering the list is accepted by the
+ * anchor — `defaultPrevented` is true, so React had hydrated — but the App
+ * Router navigation never commits and the user stays on the workout page.
+ *
+ * Verified with a throwaway diagnostic: clicking immediately after
+ * `openWorkout` left `page.url()` unchanged, while inserting a single
+ * `getAttribute` round trip beforehand made it navigate 3/3. So the retry below
+ * is covering a real dropped tap, not a slow one — the first click is not
+ * "still in flight", it is gone.
+ *
+ * This only reproduces on WebKit; Chromium never dropped the tap, which is why
+ * the suite looked green when it was run there.
+ */
+export async function openFirstExercise(page: Page): Promise<void> {
+  const link = page.locator('a[href*="/exercises/"]').first();
+  const href = await link.getAttribute("href");
+  if (!href) throw new Error("No exercise link on the workout page");
+
+  await link.click();
+  try {
+    await page.waitForURL(`**${href}`, { timeout: 5_000 });
+  } catch {
+    await link.click();
+    await page.waitForURL(`**${href}`, { timeout: 10_000 });
+  }
+}
+
+/**
+ * Tap the first set row to open its edit view, and wait for the route.
+ *
+ * Same dropped-tap window as `openFirstExercise`, one level deeper: the set
+ * row navigates to `.../sets/<id>`, and a tap that lands while the set list is
+ * still settling is accepted and then lost. Both timer specs open the editor
+ * this way to shorten a duration before playing it.
+ */
+export async function openFirstSetEditor(page: Page): Promise<void> {
+  const row = page.locator("p.text-lg.font-medium").first();
+  await expect(row).toBeVisible({ timeout: 10_000 });
+  await row.click();
+  try {
+    await page.waitForURL(/\/sets\/\d+$/, { timeout: 5_000 });
+  } catch {
+    await row.click();
+    await page.waitForURL(/\/sets\/\d+$/, { timeout: 10_000 });
+  }
 }
 
 /**
@@ -65,9 +135,9 @@ export async function openWorkout(page: Page): Promise<void> {
 export async function openTimedExercise(page: Page): Promise<void> {
   for (const href of await programWorkoutHrefs(page)) {
     await page.goto(href);
-    await dismissReadinessSheet(page);
     const exerciseLinks = page.locator('a[href*="/exercises/"]');
     await expect(exerciseLinks.first()).toBeVisible({ timeout: 10_000 });
+    await dismissReadinessSheet(page);
     const timedHref = await exerciseLinks.evaluateAll((els) => {
       const timed = els.find((el) =>
         /^\d{2}:\d{2}\b/m.test((el as HTMLElement).innerText),

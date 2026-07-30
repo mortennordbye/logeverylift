@@ -8,7 +8,7 @@ import {
   updateProgramExerciseIncrementReps,
   updateProgramExerciseProgressionMode,
 } from "@/lib/actions/programs";
-import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
 import {
   EXERCISE_TYPES,
   EXERCISE_TYPE_LABELS,
@@ -98,6 +98,9 @@ export function WorkoutSetsClient({
     return initialMode;
   });
   const workoutSession = useWorkoutSession();
+  // Rendered output only — applySuggestion et al. still write through
+  // workoutSession.setOverride.
+  const renderedOverrides = useRenderedOverrides();
 
   useEffect(() => {
     setSets(initial);
@@ -117,7 +120,7 @@ export function WorkoutSetsClient({
   }, [suggestions, sets]);
 
   const displaySets = sets.map((s) => {
-    const ov = workoutSession?.overrides[s.id];
+    const ov = renderedOverrides[s.id];
     if (!ov) return s;
     return {
       ...s,
@@ -127,6 +130,21 @@ export function WorkoutSetsClient({
   });
 
   const isRunning = (exerciseCategory === "cardio" && !exerciseIsTimed) || exerciseDiscipline != null;
+
+  // Increment sections this exercise can ever reach, mirroring the mode filter
+  // in the progression sheet. They all render into a single grid cell, so that
+  // area is permanently as tall as the tallest one it could show and picking a
+  // mode only swaps which is visible.
+  //
+  // The sheet is bottom-anchored (`items-end`), so anything that changes its
+  // height moves every row upward — including the one the user just tapped.
+  // Measured at 141px before this: tapping "Weight" mounted the increment
+  // block and threw that row up under the user's finger onto "Smart weight".
+  // Reserving per-exercise rather than fixing the sheet to 80vh keeps the
+  // timed/running sheets (one reachable section) from becoming a mostly-empty
+  // full-height card.
+  const incrementSections: ("weight" | "reps" | "time" | "distance")[] =
+    isRunning ? ["distance"] : exerciseIsTimed ? ["time"] : ["weight", "reps"];
 
   function applySuggestion(setId: number, suggestedWeightKg: number, adjustedReps?: number, durationSeconds?: number, distanceMeters?: number) {
     if (!workoutSession) return;
@@ -397,9 +415,12 @@ export function WorkoutSetsClient({
                   </div>
                 )}
 
+                {/* Increment sections — stacked in one grid cell so this area's
+                    height never changes when the mode does. See incrementSections. */}
+                <div className="grid">
                 {/* Kg increment — shown for weight and smart modes */}
-                {(mode === "weight" || mode === "smart") && (
-                  <div className="border-t border-border">
+                {incrementSections.includes("weight") && (
+                  <div className={`col-start-1 row-start-1 border-t border-border ${mode === "weight" || mode === "smart" ? "" : "invisible pointer-events-none"}`}>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
                       Weight increment
                     </p>
@@ -443,8 +464,8 @@ export function WorkoutSetsClient({
                 )}
 
                 {/* Rep increment — shown for reps mode */}
-                {mode === "reps" && (
-                  <div className="border-t border-border">
+                {incrementSections.includes("reps") && (
+                  <div className={`col-start-1 row-start-1 border-t border-border ${mode === "reps" ? "" : "invisible pointer-events-none"}`}>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
                       Rep increment
                     </p>
@@ -488,8 +509,8 @@ export function WorkoutSetsClient({
                 )}
 
                 {/* Duration increment — shown for time mode */}
-                {mode === "time" && (
-                  <div className="border-t border-border">
+                {incrementSections.includes("time") && (
+                  <div className={`col-start-1 row-start-1 border-t border-border ${mode === "time" ? "" : "invisible pointer-events-none"}`}>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
                       Duration increment
                     </p>
@@ -512,8 +533,8 @@ export function WorkoutSetsClient({
                 )}
 
                 {/* Distance increment — shown for distance mode (running) */}
-                {mode === "distance" && (
-                  <div className="border-t border-border">
+                {incrementSections.includes("distance") && (
+                  <div className={`col-start-1 row-start-1 border-t border-border ${mode === "distance" ? "" : "invisible pointer-events-none"}`}>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
                       Distance increment
                     </p>
@@ -534,6 +555,7 @@ export function WorkoutSetsClient({
                     </div>
                   </div>
                 )}
+                </div>
                 {/* Scroll room so custom inputs stay above the keyboard */}
                 <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
               </div>

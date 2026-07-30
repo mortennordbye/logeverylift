@@ -42,16 +42,20 @@ export default async function SetEditPage({ params }: Props) {
   return (
     <div className="h-[100dvh] bg-background flex flex-col pb-nav-safe overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-6 pb-4">
-        <Link
-          href={`/programs/${programId}/workout/exercises/${peId}`}
-          className="flex items-center gap-1 text-primary"
-        >
-          <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Sets</span>
-        </Link>
-        <div className="text-lg font-bold">Edit Set</div>
-        <div className="w-16" /> {/* Spacer for centering */}
+      {/* Matched fixed-width side slots. The right spacer was w-16 against a
+          variable-width back link, so the title was never actually centred. */}
+      <div className="flex items-center px-4 pt-6 pb-4">
+        <div className="w-16 shrink-0">
+          <Link
+            href={`/programs/${programId}/workout/exercises/${peId}`}
+            className="flex items-center gap-1 text-primary"
+          >
+            <ChevronLeftIcon className="h-5 w-5" />
+            <span className="text-sm font-medium">Sets</span>
+          </Link>
+        </div>
+        <div className="flex-1 text-center text-lg font-bold">Edit Set</div>
+        <div className="w-16 shrink-0" />
       </div>
 
       {/* Set indicator */}

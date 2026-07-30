@@ -1,7 +1,7 @@
 "use client";
 import { setSessionReadiness } from "@/lib/actions/workout-sessions";
 import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 type SetOverride = {
   targetReps: number;
@@ -265,4 +265,37 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
 // Returns null if used outside of a workout context (safe for shared components)
 export function useWorkoutSession() {
   return useContext(WorkoutSessionContext);
+}
+
+const subscribeNever = () => () => {};
+
+/**
+ * Overrides for *rendering*: empty during the hydration pass, real afterwards.
+ *
+ * `overrides` is restored from localStorage in a mount effect, so the server
+ * HTML never contains it. React hydrates Suspense boundaries selectively, and
+ * the provider sits above the boundary the exercise/set lists render inside —
+ * so its effect can populate `overrides` *before* those lists hydrate. The
+ * hydration render then produced adjusted numbers ("8x85kg") against server
+ * HTML holding program numbers ("8x80kg"), which React reports as a mismatch
+ * and repairs by throwing away and re-rendering the whole subtree. Visibly,
+ * every exercise row's numbers changed a beat after the screen appeared.
+ *
+ * `getServerSnapshot` is what makes this reliable: React is required to use it
+ * for both the SSR render and the hydration render, so the first client paint
+ * always matches the HTML, and the overrides land in a normal post-hydration
+ * re-render. This is the same hazard `bottom-nav.tsx` documents for its dots.
+ *
+ * Only for rendered output. Anything writing to the database (logging a set,
+ * flushing a note) must read `useWorkoutSession().overrides` directly — those
+ * run on user interaction, long after hydration, and must never see `{}`.
+ */
+export function useRenderedOverrides(): Record<number, SetOverride> {
+  const session = useWorkoutSession();
+  const hydrated = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+  return hydrated ? (session?.overrides ?? {}) : {};
 }

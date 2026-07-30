@@ -181,7 +181,10 @@ export function NewSetView({
 
   return (
     <>
-      <div className="flex-1 px-4 animate-in fade-in duration-150">
+      {/* min-h-0 is load-bearing — see the same wrapper in SetEditView. Without
+          it this flex child won't shrink below its content, so the Save button
+          below is clipped off-screen on short phones with no way to reach it. */}
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 animate-in fade-in duration-150">
         {/* Set-type toggle: warmup sets are excluded from auto-progression. */}
         <div className="flex rounded-xl overflow-hidden border border-border mb-4 mt-2">
           <button
