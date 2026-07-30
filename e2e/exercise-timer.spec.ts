@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openTimedExercise } from "./helpers";
 
 /**
  * Exercise timer countdown completes visibly.
@@ -22,36 +23,7 @@ test("exercise timer countdown shows 00:00 before completing", async ({ page }) 
   // Navigation + edit + the 15s countdown doesn't reliably fit Playwright's
   // default 30s budget.
   test.setTimeout(90_000);
-  await page.goto("/");
-
-  const startWorkout = page.getByRole("link", { name: /Start Today's Workout/i });
-  await expect(startWorkout).toBeVisible({ timeout: 10_000 });
-  await startWorkout.click();
-
-  const skipBtn = page.getByRole("button", { name: "Skip" });
-  if (await skipBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await skipBtn.click();
-  }
-
-  // Find the first timed exercise. Heuristic: its set list shows mm:ss
-  // (e.g. "05:00") instead of "Nx Wkg". Walk the exercise tiles and pick
-  // the first one whose set summary matches that shape. Wait for the list
-  // to render — count() doesn't wait, and on a cold compile it returns 0
-  // and silently skips the spec.
-  const exerciseLinks = page.locator('a[href*="/exercises/"]');
-  await expect(exerciseLinks.first()).toBeVisible({ timeout: 10_000 });
-  const count = await exerciseLinks.count();
-  let timedHref: string | null = null;
-  for (let i = 0; i < count; i++) {
-    const link = exerciseLinks.nth(i);
-    const text = await link.innerText();
-    if (/\b\d{2}:\d{2}\b/.test(text) && !/kg/i.test(text)) {
-      timedHref = await link.getAttribute("href");
-      if (timedHref) break;
-    }
-  }
-  test.skip(timedHref === null, "Test user has no timed exercise — seed one to enable this spec");
-  await page.goto(timedHref!);
+  await openTimedExercise(page);
 
   // Open the first set's edit view to override duration to 3 seconds for
   // the test. The set row is tappable; the edit view exposes a duration

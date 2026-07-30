@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openWorkout } from "./helpers";
 
 /**
  * Rest-time picker flow.
@@ -19,23 +20,10 @@ import { test, expect } from "@playwright/test";
  * that tapping any preset always saves correctly, even ones off-screen.
  */
 test("rest-time picker saves the selected preset", async ({ page }) => {
-  await page.goto("/");
-
-  // Home → workout. Falls back gracefully if no active program is set up.
-  const startWorkout = page.getByRole("link", { name: /Start Today's Workout/i });
-  await expect(startWorkout).toBeVisible({ timeout: 10_000 });
-  await startWorkout.click();
-
-  // Skip the readiness check-in sheet if it shows. Auto-dismisses after ~4s
-  // anyway, so just race the auto-dismiss.
-  const skipBtn = page.getByRole("button", { name: "Skip" });
-  if (await skipBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await skipBtn.click();
-  }
+  await openWorkout(page);
 
   // Tap the first exercise in the workout list.
   const firstExercise = page.locator('a[href*="/exercises/"]').first();
-  await expect(firstExercise).toBeVisible();
   await firstExercise.click();
 
   // The exercise page has REST rows between sets. Tap the first one.

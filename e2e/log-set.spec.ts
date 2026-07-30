@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { openWorkout } from "./helpers";
 
 /**
  * Log-a-set flow.
@@ -16,22 +17,10 @@ import { test, expect } from "@playwright/test";
  *   - logged:   `bg-primary` + Check icon
  */
 test("logging a set toggles its completion state", async ({ page }) => {
-  await page.goto("/");
-
-  // Home → workout.
-  const startWorkout = page.getByRole("link", { name: /Start Today's Workout/i });
-  await expect(startWorkout).toBeVisible({ timeout: 10_000 });
-  await startWorkout.click();
-
-  // Dismiss the readiness check-in sheet if it appears.
-  const skipBtn = page.getByRole("button", { name: "Skip" });
-  if (await skipBtn.isVisible({ timeout: 1_000 }).catch(() => false)) {
-    await skipBtn.click();
-  }
+  await openWorkout(page);
 
   // Tap the first exercise to open its set list.
   const firstExercise = page.locator('a[href*="/exercises/"]').first();
-  await expect(firstExercise).toBeVisible();
   await firstExercise.click();
 
   // Find the first set's toggle button. The set toggle is the small round
