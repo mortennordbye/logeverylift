@@ -1359,8 +1359,14 @@ function SortableSetRow({
 
           return (
             <div className="mt-0.5">
-              {/* First line: last set info + PR badge + progress dots + manual badge */}
-              <div className="flex items-center gap-2 flex-wrap">
+              {/* First line: last set info + PR badge + progress dots + manual badge.
+                  min-h-5 is load-bearing: the PR badge is 20px (py-0.5 + text-xs)
+                  while the label beside it is a 16px text line, so a set that earns
+                  a PR grew this line 16 -> 20px on the tap that logged it and pushed
+                  every row below it down 4px. Reserving the taller of the two means
+                  the badge lands in space that already exists. Same reasoning as the
+                  suggestion chip below, which stays mounted instead of unmounting. */}
+              <div className="flex items-center gap-2 flex-wrap min-h-5">
                 <span className="text-xs text-muted-foreground">{lastLabel}</span>
                 {hasPR && (
                   <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-600 text-xs font-semibold">
