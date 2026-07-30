@@ -1,6 +1,6 @@
 "use client";
 
-import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
 import { logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import type { Discipline } from "@/lib/utils/discipline";
@@ -52,6 +52,9 @@ export function WorkoutExerciseList({
   onReorderExercises,
 }: Props) {
   const workoutSession = useWorkoutSession();
+  // Rendered output only — the toggle handlers below still read
+  // workoutSession.overrides directly, since those write to the database.
+  const renderedOverrides = useRenderedOverrides();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -175,7 +178,7 @@ export function WorkoutExerciseList({
                 ? buildRunSetSummary(exercise.sets, exercise.discipline)
                 : buildSetSummary(
                     exercise.sets.map((s) => {
-                      const ov = workoutSession?.overrides[s.id];
+                      const ov = renderedOverrides[s.id];
                       if (!ov) return s;
                       const hasDuration = exercise.isTimed || s.durationSeconds != null;
                       return hasDuration

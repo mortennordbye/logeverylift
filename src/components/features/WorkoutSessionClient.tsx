@@ -135,26 +135,32 @@ export function WorkoutSessionClient({
         )}
       />
       {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
-        {isEditing ? (
-          <button
-            type="button"
-            onClick={() => setIsEditing(false)}
-            className="text-primary text-sm font-medium"
-          >
-            Done
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setShowFinishConfirm(true)}
-            className="text-primary text-sm font-medium"
-          >
-            Finished
-          </button>
-        )}
-        <h1 className="text-3xl font-bold tracking-tight">Workout</h1>
-        <div className="flex items-center gap-3">
+      {/* Fixed-width side slots. With justify-between the title was positioned
+          by whatever the sides happened to measure, so it sat 4px off centre and
+          slid 8px sideways every time Edit was toggled (Finished⇄Done on the
+          left, Edit+＋⇄＋ on the right). Same structure as WorkoutSetsClient. */}
+      <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
+        <div className="w-24 shrink-0 flex items-center">
+          {isEditing ? (
+            <button
+              type="button"
+              onClick={() => setIsEditing(false)}
+              className="text-primary text-sm font-medium"
+            >
+              Done
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowFinishConfirm(true)}
+              className="text-primary text-sm font-medium"
+            >
+              Finished
+            </button>
+          )}
+        </div>
+        <h1 className="flex-1 text-center text-3xl font-bold tracking-tight">Workout</h1>
+        <div className="w-24 shrink-0 flex items-center justify-end gap-3">
           {!isEditing && (
             <button
               type="button"
@@ -167,7 +173,7 @@ export function WorkoutSessionClient({
           <button
             type="button"
             onClick={() => setShowActionSheet(true)}
-            className="w-7 h-7 rounded-full border-2 border-primary flex items-center justify-center"
+            className="tap-slop w-7 h-7 rounded-full border-2 border-primary flex items-center justify-center shrink-0"
           >
             <Plus className="w-4 h-4 text-primary" />
           </button>

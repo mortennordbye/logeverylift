@@ -80,6 +80,30 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Codebase hygiene (deferred long-term)
 
+### Remaining findings from the UI layout-shift audit
+- **What:** `docs/ui-polish-audit.md` records 22 findings from a measured pass over the app (layout shift, skeleton fidelity, phone ergonomics). The in-workout cluster is fixed and marked `[x]`; the rest is still open — mainly the non-workout skeleton mismatches (`/exercises` loads an "Add Exercise" skeleton, the dashboard skeleton is a bare header, metrics puts the tab bar in the wrong scroll layer), the three coexisting volume formats, and the activity heatmap opening on the oldest weeks.
+- **Why deferred:** The brief was the in-workout feel. Each remaining item is independent and carries its own measurement and proposed fix, so they can be picked up singly.
+- **Unblocked by:** Nothing — pick an item off the doc. It lists a suggested order at the end.
+- **Touchpoints:** see the file:line references per finding in `docs/ui-polish-audit.md`.
+
+### Auto-carried weight still lands as a delayed text change (audit W6)
+- **What:** `WorkoutSetsList.toggleSet` awaits `updateProgramSet` then calls `router.refresh()` when the next set has no weight configured, so that row's text flips from "8 reps" to "8 x 80kg" a few hundred ms after the tap.
+- **Why deferred:** The *shift* half of this is gone — the suggestion-block fix made row heights stable, so this is now a delayed text change rather than the list jumping. Fixing the lag properly means writing the value through `workoutSession.setOverride` in the same frame, and the current code deliberately writes to the **program** (so the carried weight persists to the next workout). Changing that is a semantics decision, not a UI one, and it wasn't asked for.
+- **Unblocked by:** Deciding whether the carry should persist to the program or only to the session. If program: keep the write, add an optimistic override alongside it and drop the `router.refresh()`. If session-only: replace the write with `setOverride`.
+- **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (`toggleSet`, the auto-carry block), `src/components/features/WorkoutSetsClient.tsx` (`applySuggestion` — the optimistic pattern to copy).
+
+### `create-admin` / `create-e2e-user` scripts cannot create an account
+- **What:** Both scripts call `auth.api.signUpEmail`, which `src/lib/auth.ts` disables via `emailAndPassword.disableSignUp: true` (accounts are meant to come from `registerWithToken`). Both fail with *"Email and password sign up is not enabled"*, so a fresh database cannot be bootstrapped with a login by the documented route — which blocks the `verify:full` / smoke-pass prerequisites on any new environment. Worked around locally by creating the user through `auth.$context.internalAdapter` (create user + credential account with `ctx.password.hash`).
+- **Why deferred:** Found while setting up an environment for the UI audit; unrelated to that work and it needs a decision on which path these scripts should use.
+- **Unblocked by:** Deciding the intended bootstrap path — either switch both scripts to the admin plugin's `createUser` / the internal adapter, or have them mint an invite token and go through `registerWithToken` like a real signup.
+- **Touchpoints:** `scripts/create-admin.ts:20`, `scripts/create-e2e-user.ts:30`, `src/lib/auth.ts` (`disableSignUp`), `src/lib/actions/invite-tokens.ts` (`registerWithToken`).
+
+### SetEditView seeds its fields from overrides via `useState` initialisers
+- **What:** `SetEditView` reads `workoutSession.overrides[set.id]` in `useState(...)` initialisers (reps, weight, duration, notes, failed, rir). Those run once. Overrides are restored from localStorage in a mount effect on a provider above, so on a **cold load of the set-edit URL** the initialisers may run before the overrides exist, leaving the editor showing program values while the set list shows adjusted ones. Not observed in the audit — the case wasn't exercised — but the ordering that caused the hydration mismatch fixed in this pass (see `useRenderedOverrides`) is the same ordering that would cause it.
+- **Why deferred:** Unverified, and it is a correctness question about override initialisation rather than the layout-shift brief.
+- **Unblocked by:** Reproduce first: apply a suggestion to a set, then hard-reload that set's `/sets/[setId]` URL and check whether the editor shows the adjusted or the program value. If adjusted, there is nothing to fix.
+- **Touchpoints:** `src/components/features/SetEditView.tsx` (the `useState` block, ~lines 125–160), `src/contexts/workout-session-context.tsx` (`useRenderedOverrides` and the restore effect).
+
 ### Exercise-level checkmark: log side still bypasses the queue and overrides
 - **What:** `toggleExercise` in `WorkoutExerciseList.tsx` now removes the `workout_sets` rows when the exercise is un-checked (added alongside the un-log fix). The **log** side was left as it was: it calls `logWorkoutSet` directly rather than the queue-backed `useWorkoutSetWriter().logWithRetry`, ignores every result, and logs the program's planned values without applying the session overrides that the set list displays. So a checkmark tap can silently fail (or write pre-override values) while the UI shows the exercise complete, and offline it produces an unhandled rejection with nothing queued.
 - **Why deferred:** The un-log half was needed to close the UI/DB divergence that the un-log fix targeted. The log half is a distinct defect (it is P1-5 in the pre-release audit) with its own payload-construction work, and was out of the scope of the P0 pass.

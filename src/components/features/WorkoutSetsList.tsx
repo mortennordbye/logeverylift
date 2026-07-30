@@ -5,7 +5,7 @@ import { LogRunModal } from "@/components/features/LogRunModal";
 import { reorderProgramSets, updateProgramSet } from "@/lib/actions/programs";
 import type { SetSuggestionDisplay } from "@/components/features/WorkoutSetsClient";
 import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
-import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
 import { formatEnduranceDistance, formatEndurancePace, formatTime } from "@/lib/utils/format";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { haptics } from "@/lib/utils/haptics";
@@ -97,6 +97,9 @@ export function WorkoutSetsList({
 }: WorkoutSetsListProps) {
   const router = useRouter();
   const workoutSession = useWorkoutSession();
+  // Rendered output only — toggleSet/confirmRunLog below read
+  // workoutSession.overrides directly, because they write to the database.
+  const renderedOverrides = useRenderedOverrides();
 
   // Queue-backed set writes (offline queue + retry toast + stale-bundle
   // reload). unlogWithRetry removes the row a set toggle-off orphans — without
@@ -723,10 +726,10 @@ export function WorkoutSetsList({
                     suggestion={suggestions?.[item.set.id]}
                     onApplySuggestion={handleApplySuggestion}
                     onApplyRepSuggestion={handleApplyRepSuggestion}
-                    overrideDurationSeconds={isWorkout ? workoutSession?.overrides[item.set.id]?.durationSeconds : undefined}
-                    overrideStartDelaySeconds={isWorkout ? workoutSession?.overrides[item.set.id]?.startDelaySeconds : undefined}
-                    overrideNotes={isWorkout ? workoutSession?.overrides[item.set.id]?.notes ?? null : null}
-                    failed={isWorkout ? (workoutSession?.overrides[item.set.id]?.isFailed ?? false) : false}
+                    overrideDurationSeconds={isWorkout ? renderedOverrides[item.set.id]?.durationSeconds : undefined}
+                    overrideStartDelaySeconds={isWorkout ? renderedOverrides[item.set.id]?.startDelaySeconds : undefined}
+                    overrideNotes={isWorkout ? renderedOverrides[item.set.id]?.notes ?? null : null}
+                    failed={isWorkout ? (renderedOverrides[item.set.id]?.isFailed ?? false) : false}
                     hasPR={prSetIds.has(item.set.id)}
                   />
                   {isEditing && flatItems[index + 1]?.type !== "rest" && (
@@ -945,7 +948,7 @@ export function WorkoutSetsList({
               Done
             </button>
           </div>
-          <div ref={restRowRef} className="flex gap-2 overflow-x-auto pb-4">
+          <div ref={restRowRef} className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
             {REST_OPTIONS.map((seconds) => (
               <button
                 key={seconds}
@@ -1044,6 +1047,55 @@ function InsertRestButton({ onClick }: { onClick: () => void }) {
         REST
       </span>
       <div className="flex-1 border-t border-dashed border-border group-hover:border-primary/40 transition-colors" />
+    </button>
+  );
+}
+
+// ─── Suggestion chip ──────────────────────────────────────────────────────────
+
+const CHIP_TONES = {
+  primary: "bg-primary/15 text-primary",
+  orange: "bg-orange-500/15 text-orange-600",
+  amber: "bg-amber-500/15 text-amber-600",
+} as const;
+
+/**
+ * A progression suggestion the user can apply, e.g. "↑ 85kg".
+ *
+ * Stays mounted after it is applied, switching to a settled "✓ 85kg" of the
+ * same size instead of unmounting. Removing it used to shrink the row on the
+ * very tap that applied it — with sibling propagation that collapsed two rows
+ * at once and lifted the rest of the list 40px, so the next set slid up under
+ * the finger that had just tapped. Holding the space also gives the tap the
+ * only confirmation it has ever had.
+ *
+ * Never `disabled`: a disabled button swallows the click without running the
+ * handler, so the row's own onClick would fire and navigate to the set editor.
+ * The handler always stops propagation and only acts when there is something
+ * to apply.
+ */
+function SuggestionChip({
+  tone,
+  applied,
+  onApply,
+  children,
+}: {
+  tone: keyof typeof CHIP_TONES;
+  applied: boolean;
+  onApply: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      aria-disabled={applied}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (applied) return;
+        onApply();
+      }}
+      className={`flex items-center gap-0.5 px-2 py-0.5 rounded-full text-xs font-semibold transition-opacity ${CHIP_TONES[tone]} ${applied ? "opacity-50" : "active:opacity-60"}`}
+    >
+      {children}
     </button>
   );
 }
@@ -1247,7 +1299,13 @@ function SortableSetRow({
             {overrideNotes}
           </p>
         )}
-        {isWorkout && suggestion && !isCompleted && (() => {
+        {/* Kept mounted after the set is completed. Unmounting it removed two
+            lines from the row at the instant of the tap — up to 86px of jump
+            when one tap catch-up-logs several sets — and threw away the "last
+            time" context exactly when the user wants to compare against it.
+            The row already dims via opacity-50 when completed, so it reads as
+            history without extra work; the chips below simply stop acting. */}
+        {isWorkout && suggestion && (() => {
           const currentWeight = Number(set.weightKg ?? 0);
           const currentReps = set.targetReps ?? 0;
           const hasSmartAdjustment = suggestion.adjustedRepsForWeight !== undefined;
@@ -1286,7 +1344,13 @@ function SortableSetRow({
             ? `${suggestion.basedOnReps} reps`
             : "";
           const showRpe = !isRunning && !isTimed && suggestion.basedOnRpe != null;
-          const lastLabel = `Last: ${lastValue ? lastValue + " " : ""}(${suggestion.basedOnFeeling}${showRpe ? `, RPE ${suggestion.basedOnRpe}` : ""})`;
+          // Parenthesise the qualifier only when there is a value in front of
+          // it. Timed sets routinely have no basedOn* value, which rendered a
+          // bare "Last: (OK)" that reads as a broken template.
+          const lastQualifier = `${suggestion.basedOnFeeling}${showRpe ? `, RPE ${suggestion.basedOnRpe}` : ""}`;
+          const lastLabel = lastValue
+            ? `Last: ${lastValue} (${lastQualifier})`
+            : `Last: ${lastQualifier}`;
 
           // Progress dots: show when held and not yet at required hits
           const showProgressDots =
@@ -1325,84 +1389,71 @@ function SortableSetRow({
               </div>
               {/* Second line: action buttons + readiness label */}
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {weightPending && suggestion.reason === "progressed" && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, hasSmartAdjustment ? suggestion.adjustedRepsForWeight : undefined);
-                    }}
-                    className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-primary/15 text-primary text-xs font-semibold active:opacity-60 transition-opacity"
+                {suggestion.reason === "progressed" && (
+                  <SuggestionChip
+                    tone="primary"
+                    applied={!weightPending || isCompleted}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, hasSmartAdjustment ? suggestion.adjustedRepsForWeight : undefined)}
                   >
+                    {weightPending ? "↑" : "✓"}{" "}
                     {hasSmartAdjustment
-                      ? `↑ ${suggestion.suggestedWeightKg}kg — ${suggestion.adjustedRepsForWeight} reps`
-                      : `↑ ${suggestion.suggestedWeightKg}kg`}
-                  </button>
+                      ? `${suggestion.suggestedWeightKg}kg — ${suggestion.adjustedRepsForWeight} reps`
+                      : `${suggestion.suggestedWeightKg}kg`}
+                  </SuggestionChip>
                 )}
-                {weightPending && suggestion.reason === "deload" && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onApplySuggestion?.(set.id, suggestion.suggestedWeightKg);
-                    }}
-                    className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-orange-500/15 text-orange-600 text-xs font-semibold active:opacity-60 transition-opacity"
+                {suggestion.reason === "deload" && (
+                  <SuggestionChip
+                    tone="orange"
+                    applied={!weightPending || isCompleted}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
-                    ↓ {suggestion.suggestedWeightKg}kg — deload
-                  </button>
+                    {weightPending ? "↓" : "✓"} {suggestion.suggestedWeightKg}kg — deload
+                  </SuggestionChip>
                 )}
-                {retryWeightPending && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onApplySuggestion?.(set.id, suggestion.suggestedWeightKg);
-                    }}
-                    className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 text-xs font-semibold active:opacity-60 transition-opacity"
+                {suggestion.reason === "retry" && suggestion.suggestedReps === undefined && (
+                  <SuggestionChip
+                    tone="amber"
+                    applied={!retryWeightPending || isCompleted}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
-                    ↑ {suggestion.suggestedWeightKg}kg — retry
-                  </button>
+                    {retryWeightPending ? "↑" : "✓"} {suggestion.suggestedWeightKg}kg — retry
+                  </SuggestionChip>
                 )}
                 {retryRepsPending && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, suggestion.suggestedReps);
-                    }}
-                    className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-600 text-xs font-semibold active:opacity-60 transition-opacity"
+                  <SuggestionChip
+                    tone="amber"
+                    applied={isCompleted}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, suggestion.suggestedReps)}
                   >
                     ↑ {suggestion.suggestedReps} reps — retry
-                  </button>
+                  </SuggestionChip>
                 )}
-                {repsPending && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onApplyRepSuggestion?.(set.id, suggestion.suggestedReps!);
-                    }}
-                    className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-primary/15 text-primary text-xs font-semibold active:opacity-60 transition-opacity"
+                {suggestion.reason === "progressed-reps" && !hasSmartAdjustment && suggestion.suggestedReps !== undefined && (
+                  <SuggestionChip
+                    tone="primary"
+                    applied={!repsPending || isCompleted}
+                    onApply={() => onApplyRepSuggestion?.(set.id, suggestion.suggestedReps!)}
                   >
-                    ↑ {suggestion.suggestedReps} reps
-                  </button>
+                    {repsPending ? "↑" : "✓"} {suggestion.suggestedReps} reps
+                  </SuggestionChip>
                 )}
                 {timePending && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, suggestion.suggestedDurationSeconds);
-                    }}
-                    className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-primary/15 text-primary text-xs font-semibold active:opacity-60 transition-opacity"
+                  <SuggestionChip
+                    tone="primary"
+                    applied={isCompleted}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, suggestion.suggestedDurationSeconds)}
                   >
                     ↑ {formatTime(suggestion.suggestedDurationSeconds!)} duration
-                  </button>
+                  </SuggestionChip>
                 )}
                 {distancePending && (
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, undefined, suggestion.suggestedDistanceMeters);
-                    }}
-                    className="flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-primary/15 text-primary text-xs font-semibold active:opacity-60 transition-opacity"
+                  <SuggestionChip
+                    tone="primary"
+                    applied={isCompleted}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, undefined, suggestion.suggestedDistanceMeters)}
                   >
                     ↑ {formatEnduranceDistance(cfg.inputUnit, suggestion.suggestedDistanceMeters!)}
-                  </button>
+                  </SuggestionChip>
                 )}
                 {suggestion.readinessModulated && (
                   <span className="text-[10px] text-muted-foreground/60">
@@ -1473,7 +1524,7 @@ function SortableRestRow({
           <button
             type="button"
             onClick={onDelete}
-            className="w-7 h-7 rounded-full bg-destructive flex items-center justify-center shrink-0"
+            className="tap-slop w-7 h-7 rounded-full bg-destructive flex items-center justify-center shrink-0"
           >
             <Minus className="w-4 h-4 text-white" />
           </button>
@@ -1498,7 +1549,9 @@ function SortableRestRow({
         </div>
       ) : (
         <div onClick={isWorkout ? onEdit : undefined} className={isWorkout ? "cursor-pointer active:opacity-60 transition-opacity" : ""}>
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">
+          {/* tabular-nums: this re-renders every second, and proportional
+              digits made the label breathe as the numbers changed. */}
+          <div className="text-xs text-muted-foreground uppercase tracking-wider tabular-nums">
             REST{" "}
             {restRemaining !== undefined && restRemaining > 0
               ? formatTime(restRemaining)
