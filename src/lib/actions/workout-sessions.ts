@@ -6,6 +6,7 @@ import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session
 import {
   completeWorkoutSessionSchema,
   createWorkoutSessionSchema,
+  isSessionResumableSchema,
 } from "@/lib/validators/workout";
 import type { ActionResult, ExportedSessions, WorkoutSession } from "@/types/workout";
 import { and, asc, desc, eq, inArray, lt } from "drizzle-orm";
@@ -67,6 +68,50 @@ export async function createWorkoutSession(
   } catch (error) {
     console.error("[createWorkoutSession] failed", error);
     return { success: false, error: "Failed to create workout session." };
+  }
+}
+
+/**
+ * Confirms a session id restored from localStorage still points at a live
+ * session the caller owns for this program.
+ *
+ * The client keeps `activeWorkout.sessionId` across reloads and restores it
+ * without asking the server. If that row is gone — deleted from history, or the
+ * database restored underneath a running client — every later set write fails
+ * its ownership check and the user is stuck on "Set didn't save" with no way
+ * out but clearing site data.
+ *
+ * `data: false` means "definitely dead, replace it". A failed result means the
+ * check itself didn't complete (offline, server down) and the caller must keep
+ * the session it has.
+ */
+export async function isSessionResumable(
+  data: unknown,
+): Promise<ActionResult<boolean>> {
+  const auth = await requireSession();
+
+  const validation = isSessionResumableSchema.safeParse(data);
+  if (!validation.success) {
+    return { success: false, error: "Invalid input data" };
+  }
+
+  try {
+    const [row] = await db
+      .select({ id: workoutSessions.id })
+      .from(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.id, validation.data.sessionId),
+          eq(workoutSessions.userId, auth.user.id),
+          eq(workoutSessions.programId, validation.data.programId),
+          eq(workoutSessions.isCompleted, false),
+        ),
+      )
+      .limit(1);
+    return { success: true, data: row != null };
+  } catch (error) {
+    console.error("[isSessionResumable] failed", error);
+    return { success: false, error: "Failed to verify workout session" };
   }
 }
 

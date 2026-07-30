@@ -269,7 +269,7 @@ function SortableExerciseRow({
         <button
           type="button"
           onClick={onDelete}
-          className="w-7 h-7 rounded-full bg-destructive flex items-center justify-center shrink-0"
+          className="tap-slop w-7 h-7 rounded-full bg-destructive flex items-center justify-center shrink-0"
         >
           <Minus className="w-4 h-4 text-white" />
         </button>
@@ -294,7 +294,7 @@ function SortableExerciseRow({
                 ? `Finish remaining sets of ${exercise.name}`
                 : `Mark ${exercise.name} as done`
           }
-          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${completionCircleClass(isCompleted, isPartial)}`}
+          className={`tap-slop w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${completionCircleClass(isCompleted, isPartial)}`}
         >
           <CompletionCircle isCompleted={isCompleted} isPartial={isPartial} />
         </button>

@@ -33,10 +33,11 @@ import {
   formatEndurancePace,
   formatDuration,
   sanitizeDecimalInput,
+  toDateString,
 } from "@/lib/utils/format";
 import { Activity, ChevronLeft, ChevronRight, Plus, TrendingUp, Trash2, Zap } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useState, useSyncExternalStore, useTransition } from "react";
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 
@@ -1034,11 +1035,40 @@ function TriathlonSection({ data }: { data: TriathlonMetrics }) {
 
 // ── Year Heatmap ───────────────────────────────────────────────────────────
 
+/** The day never changes underneath us — only the initial client read matters. */
+const subscribeToNothing = () => () => {};
+
+function utcDayString(): string {
+  const n = new Date();
+  const mo = String(n.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(n.getUTCDate()).padStart(2, "0");
+  return `${n.getUTCFullYear()}-${mo}-${day}`;
+}
+
+function localDayString(): string {
+  return toDateString(new Date());
+}
+
+function startOfDay(dayString: string): Date {
+  const [y, m, d] = dayString.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
 function YearHeatmapSection({ data }: { data: HeatmapDay[] }) {
   const byDate = new Map(data.map((d) => [d.date, d]));
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // The grid is anchored on "today", and the UTC server and the viewer's browser
+  // disagree about which day that is between local midnight and the UTC offset.
+  // Render the UTC day for SSR and hydration so the markup matches, then swap to
+  // the viewer's local day — session dates are keyed local, so that is the
+  // correct anchor. The two differ by at most one column.
+  const todayString = useSyncExternalStore(
+    subscribeToNothing,
+    localDayString,
+    utcDayString,
+  );
+  const today = startOfDay(todayString);
+
   const dayOfWeek = today.getDay();
   const diff = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
   const thisMonday = new Date(today);
@@ -1054,7 +1084,10 @@ function YearHeatmapSection({ data }: { data: HeatmapDay[] }) {
       const date = new Date(startMonday);
       date.setDate(startMonday.getDate() + w * 7 + d);
       if (date <= today) {
-        week.push(date.toISOString().split("T")[0]);
+        // Local date, not toISOString: the latter converts local midnight to UTC,
+        // so a browser east of UTC keys every cell to the previous day while the
+        // UTC server keys it correctly — the grid hydrates one day out of step.
+        week.push(toDateString(date));
       } else {
         week.push("");
       }

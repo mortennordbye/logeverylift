@@ -58,3 +58,5 @@ Thumbs.db
 /e2e/.auth/
 /playwright-report/
 /test-results/
+# Local audit reports (not committed)
+/audit/

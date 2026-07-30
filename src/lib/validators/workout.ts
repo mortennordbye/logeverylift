@@ -141,6 +141,11 @@ export const workoutHistoryQuerySchema = z.object({
  *
  * Validates data when marking a session as complete.
  */
+export const isSessionResumableSchema = z.object({
+  sessionId: z.number().int().positive("Session ID must be a positive integer"),
+  programId: z.number().int().positive("Program ID must be a positive integer"),
+});
+
 export const completeWorkoutSessionSchema = z.object({
   sessionId: z.number().int().positive("Session ID must be a positive integer"),
   endTime: z.string().optional(), // ISO timestamp, defaults to now

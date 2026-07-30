@@ -30,9 +30,13 @@ const FORCE = process.argv.includes("--force");
 
 type SetBlueprint = {
   setNumber: number;
-  targetReps: number;
-  weightKg: number;
   restTimeSeconds: number;
+  // Rep-based sets carry targetReps + weightKg; timed sets (Plank and friends)
+  // carry durationSeconds instead and leave both null, which is what the set
+  // summary keys off to render mm:ss rather than "8 x 70kg".
+  targetReps?: number;
+  weightKg?: number;
+  durationSeconds?: number;
 };
 
 type ExerciseBlueprint = {
@@ -102,6 +106,16 @@ const PROGRAMS: ProgramBlueprint[] = [
           { setNumber: 1, targetReps: 8, weightKg: 50, restTimeSeconds: 90 },
           { setNumber: 2, targetReps: 8, weightKg: 50, restTimeSeconds: 90 },
           { setNumber: 3, targetReps: 8, weightKg: 50, restTimeSeconds: 90 },
+        ],
+      },
+      {
+        // Timed exercise: keeps the countdown/auto-complete path represented in
+        // seeded data. Without one, the timed-set flow has nothing to walk.
+        name: "Plank",
+        sets: [
+          { setNumber: 1, durationSeconds: 45, restTimeSeconds: 60 },
+          { setNumber: 2, durationSeconds: 45, restTimeSeconds: 60 },
+          { setNumber: 3, durationSeconds: 60, restTimeSeconds: 60 },
         ],
       },
     ],
@@ -223,8 +237,9 @@ async function seedFake() {
         exBlueprint.sets.map((s) => ({
           programExerciseId: pe.id,
           setNumber: s.setNumber,
-          targetReps: s.targetReps,
-          weightKg: s.weightKg.toString(),
+          targetReps: s.targetReps ?? null,
+          weightKg: s.weightKg?.toString() ?? null,
+          durationSeconds: s.durationSeconds ?? null,
           restTimeSeconds: s.restTimeSeconds,
         }))
       );
@@ -320,20 +335,26 @@ async function seedFake() {
         if (!exerciseId) continue;
 
         for (const setBlueprint of exBlueprint.sets) {
-          const actualReps = Math.max(
-            1,
-            setBlueprint.targetReps + Math.round(Math.random() * 2 - 1)
-          );
-          const weightKg = jitter(setBlueprint.weightKg, 2.5);
           const rpe = 6 + Math.floor(Math.random() * 3); // 6, 7, or 8
+
+          // A timed set has no reps or load to vary — jitter the hold instead.
+          // actualReps and weightKg are NOT NULL, so they record 1 x 0kg.
+          const isTimedSet = setBlueprint.durationSeconds != null;
+          const actualReps = isTimedSet
+            ? 1
+            : Math.max(1, (setBlueprint.targetReps ?? 1) + Math.round(Math.random() * 2 - 1));
+          const weightKg = isTimedSet ? 0 : jitter(setBlueprint.weightKg ?? 0, 2.5);
 
           await db.insert(workoutSets).values({
             sessionId: session.id,
             exerciseId,
             setNumber: setBlueprint.setNumber,
-            targetReps: setBlueprint.targetReps,
+            targetReps: setBlueprint.targetReps ?? null,
             actualReps,
             weightKg: weightKg.toString(),
+            durationSeconds: isTimedSet
+              ? Math.max(10, Math.round(jitter(setBlueprint.durationSeconds!, 5)))
+              : null,
             rpe,
             restTimeSeconds: setBlueprint.restTimeSeconds,
             isCompleted: true,

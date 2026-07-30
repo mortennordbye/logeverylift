@@ -181,6 +181,22 @@ select {
   }
 }
 
+/* Grows a small control's touch area to the 44px minimum without changing how it
+   looks or how the row lays out. The slop belongs to the control, so a tap that
+   lands in it also stops the event before any row-level onClick sees it. */
+@utility tap-slop {
+  position: relative;
+  &::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    translate: -50% -50%;
+    width: max(100%, 44px);
+    height: max(100%, 44px);
+  }
+}
+
 /* PR Celebration animations */
 @keyframes pr-pop {
   0%   { opacity: 0; transform: scale(0.6) translateY(20px); }

@@ -1150,7 +1150,7 @@ function SortableSetRow({
         <button
           type="button"
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="w-7 h-7 rounded-full bg-destructive flex items-center justify-center shrink-0"
+          className="tap-slop w-7 h-7 rounded-full bg-destructive flex items-center justify-center shrink-0"
         >
           <Minus className="w-4 h-4 text-white" />
         </button>
@@ -1159,7 +1159,7 @@ function SortableSetRow({
       {isWorkout && (
         <button
           onClick={handlePlayClick}
-          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-150 border-2 active:scale-90 ${
+          className={`tap-slop w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-150 border-2 active:scale-90 ${
             isCompleted
               ? failed
                 ? "bg-destructive border-destructive"

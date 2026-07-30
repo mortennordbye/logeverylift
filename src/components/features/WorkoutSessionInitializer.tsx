@@ -3,7 +3,7 @@
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
-import { createWorkoutSession } from "@/lib/actions/workout-sessions";
+import { createWorkoutSession, isSessionResumable } from "@/lib/actions/workout-sessions";
 import { getActiveSessionCompletedProgramSetIds } from "@/lib/actions/workout-sets";
 import { toDateString } from "@/lib/utils/format";
 
@@ -91,27 +91,8 @@ export function WorkoutSessionInitializer({ programId }: { programId: number }) 
       storedSessionId = null;
     }
 
-    // Same program as last time — restore without a new DB session.
-    if (
-      storedProgramId === programId &&
-      storedSessionId != null &&
-      storedStart != null
-    ) {
-      workoutSession?.setActiveWorkout(programId, storedStart, storedSessionId);
-      return;
-    }
-
-    // Already initialized for this program in-memory.
-    if (
-      workoutSession?.sessionId != null &&
-      workoutSession.programId === programId
-    ) {
-      return;
-    }
-
-    // Different program (or none) — start a fresh session.
-    const startTime = new Date();
-    void (async () => {
+    const startFreshSession = async () => {
+      const startTime = new Date();
       const result = await createWorkoutSession({
         date: toDateString(startTime),
         startTime: startTime.toISOString(),
@@ -125,7 +106,39 @@ export function WorkoutSessionInitializer({ programId }: { programId: number }) 
           result.data.id,
         );
       }
-    })();
+    };
+
+    // Same program as last time — restore without a new DB session.
+    if (
+      storedProgramId === programId &&
+      storedSessionId != null &&
+      storedStart != null
+    ) {
+      // Restore first so the next tap isn't gated on a round trip, then confirm
+      // the row is actually still there. A stored id can outlive its session
+      // (deleted from history, database restored), and a dead one makes every
+      // set write fail its ownership check with no way for the user to recover.
+      // Only a definite `false` replaces it — a failed check means offline or
+      // server down, where the session we have is the best we've got.
+      const sessionId = storedSessionId;
+      workoutSession?.setActiveWorkout(programId, storedStart, sessionId);
+      void (async () => {
+        const check = await isSessionResumable({ sessionId, programId });
+        if (check.success && !check.data) await startFreshSession();
+      })();
+      return;
+    }
+
+    // Already initialized for this program in-memory.
+    if (
+      workoutSession?.sessionId != null &&
+      workoutSession.programId === programId
+    ) {
+      return;
+    }
+
+    // Different program (or none) — start a fresh session.
+    void startFreshSession();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [programId]);
 
