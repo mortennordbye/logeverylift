@@ -60,3 +60,8 @@ Thumbs.db
 /test-results/
 # Local audit reports (not committed)
 /audit/
+# Scratch notes and screenshots dropped at the repo root. Root-anchored, so
+# public/ images and anything committed deliberately are unaffected. These got
+# swept into commits twice by `git add -A` before this existed.
+/fable.md
+/*.png
