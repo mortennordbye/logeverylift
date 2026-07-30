@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { openWorkout } from "./helpers";
+import { openFirstExercise, openWorkout } from "./helpers";
 
 /**
  * Log-a-set flow.
@@ -19,9 +19,11 @@ import { openWorkout } from "./helpers";
 test("logging a set toggles its completion state", async ({ page }) => {
   await openWorkout(page);
 
-  // Tap the first exercise to open its set list.
-  const firstExercise = page.locator('a[href*="/exercises/"]').first();
-  await firstExercise.click();
+  // Tap the first exercise to open its set list. Via the helper because a tap
+  // dropped here does not fail loudly: `button.w-7.h-7.rounded-full` also
+  // matches the *exercise* toggle on the workout page, so the spec carries on
+  // asserting against the wrong control.
+  await openFirstExercise(page);
 
   // Find the first set's toggle button. The set toggle is the small round
   // button at the start of each set row — `w-7 h-7 rounded-full`.

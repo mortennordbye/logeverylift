@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { openWorkout } from "./helpers";
+import { openFirstExercise, openWorkout } from "./helpers";
 
 /**
  * Rest-time picker flow.
@@ -23,8 +23,7 @@ test("rest-time picker saves the selected preset", async ({ page }) => {
   await openWorkout(page);
 
   // Tap the first exercise in the workout list.
-  const firstExercise = page.locator('a[href*="/exercises/"]').first();
-  await firstExercise.click();
+  await openFirstExercise(page);
 
   // The exercise page has REST rows between sets. Tap the first one.
   const restRow = page.getByText(/^REST \d{2}:\d{2}$/).first();
