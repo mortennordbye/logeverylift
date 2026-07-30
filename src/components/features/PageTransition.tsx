@@ -3,23 +3,12 @@ import { AnimatePresence, MotionConfig, motion, useIsPresent } from "framer-moti
 import { LayoutRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { usePathname } from "next/navigation";
 import { useContext, useRef } from "react";
-
-type Direction = "forward" | "back" | "none";
-
-function getDepth(path: string): number {
-  return path.split("/").filter(Boolean).length;
-}
-
-function getDirection(from: string, to: string): Direction {
-  if (from === to) return "none";
-  const d1 = getDepth(from);
-  const d2 = getDepth(to);
-  // Both at tab level (depth 0 or 1) → instant switch, no animation
-  if (d1 <= 1 && d2 <= 1) return "none";
-  if (d2 > d1) return "forward";
-  if (d2 < d1) return "back";
-  return "none";
-}
+import { consumeHistoryNav, consumeProgrammaticBack } from "@/lib/utils/nav-intent";
+import {
+  type Direction,
+  type NavSource,
+  resolveDirection,
+} from "@/lib/utils/page-transition";
 
 // Decisive ease-out: arrives and stops. The previous curve (0.16, 1, 0.3, 1)
 // spent 57% of its duration covering the last 5% of the distance, which reads
@@ -106,7 +95,18 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   // the new direction can be picked up.
   /* eslint-disable react-hooks/refs */
   if (prevPathRef.current !== pathname) {
-    dirRef.current = getDirection(prevPathRef.current, pathname);
+    // Set by the pre-hydration listener in the root layout, which is
+    // guaranteed to have run before the router's own.
+    const popped = consumeHistoryNav();
+    // Consume unconditionally so a marked call that never navigated cannot
+    // survive to colour the next gesture. (It also self-clears on a timer.)
+    const wasProgrammatic = consumeProgrammaticBack();
+    const source: NavSource = popped
+      ? wasProgrammatic
+        ? "programmatic-back"
+        : "history"
+      : "push";
+    dirRef.current = resolveDirection(prevPathRef.current, pathname, source);
     prevPathRef.current = pathname;
   }
 

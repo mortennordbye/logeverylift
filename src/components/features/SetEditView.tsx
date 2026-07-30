@@ -13,6 +13,7 @@ import {
 } from "@/lib/utils/exercise-type";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
+import { markProgrammaticBack } from "@/lib/utils/nav-intent";
 import type { SetType } from "@/lib/validators/workout";
 import type { ProgramSet } from "@/types/workout";
 import { Loader2 } from "lucide-react";
@@ -293,6 +294,9 @@ export function SetEditView({
       }
     }
 
+    // Marks this as our own back, not an edge swipe. Both arrive as popstate;
+    // only the swipe is already being animated by the system.
+    markProgrammaticBack();
     router.back();
   };
 

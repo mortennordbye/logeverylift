@@ -2,6 +2,7 @@
 
 import { addExerciseToProgram } from "@/lib/actions/programs";
 import type { Exercise } from "@/types/workout";
+import { markProgrammaticBack } from "@/lib/utils/nav-intent";
 import { ChevronLeft, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -34,7 +35,12 @@ export function WorkoutAddExerciseClient({ programId, exercises }: Props) {
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => {
+            // Our own Back control: keep the slide. An edge swipe would not
+            // be marked, and the system animates that one itself.
+            markProgrammaticBack();
+            router.back();
+          }}
           className="flex items-center gap-0.5 text-primary text-sm font-medium min-h-[44px] -ml-1 active:opacity-70"
         >
           <ChevronLeft className="w-5 h-5" />
