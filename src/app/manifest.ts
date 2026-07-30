@@ -69,7 +69,7 @@ export default function manifest(): MetadataRoute.Manifest {
         name: "Start Workout",
         short_name: "Workout",
         description: "Begin a new workout session",
-        url: "/workout",
+        url: "/new-workout",
         icons: [
           {
             src: "/icon-192x192.png",
