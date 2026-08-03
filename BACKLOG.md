@@ -80,6 +80,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Codebase hygiene (deferred long-term)
 
+### React Compiler lint rules demoted to warnings
+- **What:** `eslint-config-next` 16.2 turned on the React Compiler rules. They report 14 problems across 8 files — 13 `react-hooks/set-state-in-effect` and 1 `react-hooks/purity`. Both are set to `"warn"` in `eslint.config.mjs` so the dependency bump that introduced them didn't have to carry a 14-site refactor. `pnpm lint` is clean of errors; the warnings still print.
+- **Why deferred:** Most hits are the deliberate hydrate-from-localStorage-in-an-effect pattern (theme, pending queue, session overrides), which needs SSR-safe restructuring rather than a mechanical fix. The one `purity` hit (`WorkoutSetsList.tsx:417`, `Date.now()` in `setRestTimerEnd`) is a false positive — the call is inside an async event handler, not render.
+- **Unblocked by:** Deciding to do the effects pass. Per site: move the read into a `useSyncExternalStore` or a lazy `useState` initialiser guarded for SSR, then flip each rule back to `"error"`. The purity one can be silenced with a targeted disable comment once the rest are addressed.
+- **Touchpoints:** `eslint.config.mjs` (the override block), `src/components/ui/theme-provider.tsx:83`, `src/contexts/pending-queue-context.tsx:85`, `src/components/features/WorkoutSetsList.tsx:157,173,181,417`, `WorkoutSetsClient.tsx:106`, `WorkoutSessionClient.tsx:89,101`, `ProgramDetailClient.tsx:175,182`, `ProgramListClient.tsx:25`, `CyclesListClient.tsx:105`, `LogRunModal.tsx:75`.
+
 ### Remaining findings from the UI layout-shift audit
 - **What:** `docs/ui-polish-audit.md` records 22 findings from a measured pass over the app (layout shift, skeleton fidelity, phone ergonomics). The in-workout cluster is fixed and marked `[x]`; the rest is still open — mainly the non-workout skeleton mismatches (`/exercises` loads an "Add Exercise" skeleton, the dashboard skeleton is a bare header, metrics puts the tab bar in the wrong scroll layer), the three coexisting volume formats, and the activity heatmap opening on the oldest weeks.
 - **Why deferred:** The brief was the in-workout feel. Each remaining item is independent and carries its own measurement and proposed fix, so they can be picked up singly.

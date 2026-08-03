@@ -1,0 +1,40 @@
+name: Dependabot auto-merge
+
+# Turns the low-risk half of the dependency stream into something that lands
+# without a human. Auto-merge only arms the PR — GitHub still waits for the
+# required status checks on main (Typecheck + tests, Lint, Docker build,
+# dependency-review) before merging. If any of them go red the PR just sits
+# there, which is the intended failure mode.
+#
+# Deliberately NOT auto-merged: major bumps of runtime dependencies, and the
+# docker base image. Those get read by a human.
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'mortennordbye/logeverylift'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # For a grouped PR the action reports the highest semver change in the
+      # group, so a group containing one major is treated as a major.
+      - name: Enable auto-merge
+        if: >
+          steps.metadata.outputs.package-ecosystem != 'docker' &&
+          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+           steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+           steps.metadata.outputs.dependency-type == 'direct:development')
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
