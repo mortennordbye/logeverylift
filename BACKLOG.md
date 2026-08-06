@@ -146,6 +146,18 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Product decision that out-of-app push is needed.
 - **Touchpoints:** `src/lib/notifications.ts`.
 
+### Custom-weight picker shipped without a browser smoke pass
+- **What:** The custom-weight circle (`withCustomOption` in the weight sheets) and the `custom_weight_usage` telemetry shipped on `pnpm verify` alone — tsc, eslint and unit tests, no rendered UI. Unverified in a real browser: the circle's behaviour *while typing* (the options list reflows as each digit lands, since the list is derived from the `weight` state), the blur-time re-centre landing on the new circle, and the Insights "Custom Weights" section rendering against real rows.
+- **Why deferred:** Explicitly skipped by the user after the local environment couldn't produce a running app — see the entry below. The logic is unit-tested (`src/__tests__/picker-options.test.ts`); what's untested is how it feels under a thumb.
+- **Unblocked by:** Any environment where the app runs. Then walk steps 1–6 of the smoke protocol in CLAUDE.md, typing a non-preset weight (e.g. 18) and confirming an 18 circle lights instead of 17.5, plus a row landing in `custom_weight_usage`.
+- **Touchpoints:** `src/lib/utils/picker-options.ts`, `src/components/features/SetEditView.tsx` (weight sheet ~line 921), `src/components/features/NewSetView.tsx` (weight sheet ~line 619), `src/components/features/AdminInsightsClient.tsx`.
+
+### `make dev` cannot work against a remote Docker daemon
+- **What:** `docker-compose.dev.yml` bind-mounts `.:/app` for hot-reload. That path is resolved on the *daemon's* filesystem, so when `DOCKER_HOST` points at a remote/DinD daemon (e.g. `tcp://localhost:2375`) the mount lands empty and `logeverylift-app` crash-loops on `ERR_PNPM_NO_IMPORTER_MANIFEST_FOUND`. `make dev PROD=1` is unaffected — the runner stage ships the source in the image via the build context — but it's a production build, so it's a poor everyday dev loop. The Makefile also calls the `docker-compose` v1 binary, absent where only the `docker compose` v2 plugin is installed.
+- **Why deferred:** Hit while setting up a smoke pass; unrelated to the change in flight, and the fix is an environment decision rather than a code one.
+- **Unblocked by:** Deciding how remote-daemon setups should develop — document `make dev PROD=1` as the fallback, or sync the tree to the daemon host (`docker context`, mutagen, or a named volume seeded from the build context). Separately: switch the Makefile's `COMPOSE` to `docker compose` with a v1 fallback.
+- **Touchpoints:** `docker-compose.dev.yml` (the `.:/app` mount), `Makefile` (`COMPOSE`, `dev` target), `CLAUDE.md` (Development + smoke-pass prereqs).
+
 ## MCP server
 
 ### Redis-backed SSE stream resumption for the MCP server

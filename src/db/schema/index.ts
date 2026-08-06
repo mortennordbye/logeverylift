@@ -14,6 +14,7 @@
 export * from "./ai-generations";
 export * from "./ai-model-configs";
 export * from "./auth";
+export * from "./custom-weight-usage";
 export * from "./dismissed-makeups";
 export * from "./exercise-prs";
 export * from "./feedback";

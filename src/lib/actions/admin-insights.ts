@@ -3,6 +3,7 @@
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import {
+  customWeightUsage,
   exercises,
   programs,
   trainingCycles,
@@ -42,10 +43,24 @@ export type InsightsFunnel = {
   usersWithCustomExercise: number;
 };
 
+/**
+ * Weights people typed in by hand because the 2.5 kg preset ladder didn't
+ * offer them. `values` is ordered by how often each weight was typed, so the
+ * top entries are the circles a given exercise is missing.
+ */
+export type CustomWeightRow = {
+  exerciseId: number;
+  exerciseName: string;
+  uses: number;
+  userCount: number;
+  values: { weightKg: number; uses: number }[];
+};
+
 export type AdminInsightsData = {
   summary: InsightsSummary;
   funnel: InsightsFunnel;
   users: InsightUserRow[];
+  customWeights: CustomWeightRow[];
 };
 
 export async function getAdminInsights(): Promise<ActionResult<AdminInsightsData>> {
@@ -64,6 +79,8 @@ export async function getAdminInsights(): Promise<ActionResult<AdminInsightsData
       [{ count: usersWithSession }],
       [{ count: usersWithCustom }],
       userRows,
+      customWeightExercises,
+      customWeightValues,
     ] = await Promise.all([
       // Summary scalars
       db.select({ count: sql<number>`COUNT(*)` }).from(users),
@@ -140,7 +157,39 @@ export async function getAdminInsights(): Promise<ActionResult<AdminInsightsData
             sql`MAX(CASE WHEN ${workoutSessions.isCompleted} = true THEN ${workoutSessions.startTime} END)`,
           ),
         ),
+
+      // Custom weights — which exercises drive manual entry...
+      db
+        .select({
+          exerciseId: customWeightUsage.exerciseId,
+          exerciseName: exercises.name,
+          uses: sql<number>`COUNT(*)`,
+          userCount: sql<number>`COUNT(DISTINCT ${customWeightUsage.userId})`,
+        })
+        .from(customWeightUsage)
+        .innerJoin(exercises, eq(exercises.id, customWeightUsage.exerciseId))
+        .groupBy(customWeightUsage.exerciseId, exercises.name)
+        .orderBy(desc(sql`COUNT(*)`))
+        .limit(30),
+
+      // ...and which weights they reach for.
+      db
+        .select({
+          exerciseId: customWeightUsage.exerciseId,
+          weightKg: customWeightUsage.weightKg,
+          uses: sql<number>`COUNT(*)`,
+        })
+        .from(customWeightUsage)
+        .groupBy(customWeightUsage.exerciseId, customWeightUsage.weightKg)
+        .orderBy(desc(sql`COUNT(*)`)),
     ]);
+
+    const valuesByExercise = new Map<number, { weightKg: number; uses: number }[]>();
+    for (const row of customWeightValues) {
+      const list = valuesByExercise.get(row.exerciseId) ?? [];
+      list.push({ weightKg: row.weightKg, uses: Number(row.uses ?? 0) });
+      valuesByExercise.set(row.exerciseId, list);
+    }
 
     return {
       success: true,
@@ -171,6 +220,13 @@ export async function getAdminInsights(): Promise<ActionResult<AdminInsightsData
           completedSessionCount: Number(row.completedSessionCount ?? 0),
           customExerciseCount: Number(row.customExerciseCount ?? 0),
           lastActiveDate: row.lastActiveDate ?? null,
+        })),
+        customWeights: customWeightExercises.map((row) => ({
+          exerciseId: row.exerciseId,
+          exerciseName: row.exerciseName,
+          uses: Number(row.uses ?? 0),
+          userCount: Number(row.userCount ?? 0),
+          values: valuesByExercise.get(row.exerciseId) ?? [],
         })),
       },
     };
