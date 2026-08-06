@@ -14,7 +14,7 @@ const SORT_OPTIONS = [
 type SortKey = (typeof SORT_OPTIONS)[number]["key"];
 
 export function AdminInsightsClient({ data }: { data: AdminInsightsData }) {
-  const { summary, funnel, users } = data;
+  const { summary, funnel, users, customWeights } = data;
   const [sort, setSort] = useState<SortKey>("lastActive");
 
   const sortedUsers = useMemo(() => {
@@ -139,6 +139,43 @@ export function AdminInsightsClient({ data }: { data: AdminInsightsData }) {
               );
             })}
           </div>
+        </section>
+
+        {/* Custom weights — where the 2.5 kg preset ladder is failing people */}
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">
+            Custom Weights
+          </h2>
+          {customWeights.length === 0 ? (
+            <div className="rounded-xl border border-border px-4 py-6 text-sm text-muted-foreground text-center">
+              No manually typed weights logged yet.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
+              {customWeights.map((row) => (
+                <div key={row.exerciseId} className="px-4 py-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium truncate">{row.exerciseName}</span>
+                    <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
+                      {row.uses} use{row.uses !== 1 ? "s" : ""} · {row.userCount} user
+                      {row.userCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {row.values.slice(0, 8).map((v) => (
+                      <span
+                        key={v.weightKg}
+                        className="px-2 py-0.5 rounded-full bg-muted text-xs tabular-nums"
+                      >
+                        {v.weightKg} kg
+                        <span className="text-muted-foreground"> ×{v.uses}</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         {/* Per-user breakdown */}

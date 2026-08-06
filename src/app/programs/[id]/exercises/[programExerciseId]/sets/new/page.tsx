@@ -65,6 +65,7 @@ export default async function NewSetPage({ params }: Props) {
       <NewSetView
         programId={programId}
         programExerciseId={peId}
+        exerciseId={pe.exercise.id}
         nextSetNumber={nextSetNumber}
         lastSet={lastSet}
         isTimed={pe.exercise.isTimed}
