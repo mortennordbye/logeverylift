@@ -12,6 +12,8 @@ import {
   type ExerciseType,
 } from "@/lib/utils/exercise-type";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
+import { withCustomOption } from "@/lib/utils/picker-options";
+import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { markProgrammaticBack } from "@/lib/utils/nav-intent";
 import type { SetType } from "@/lib/validators/workout";
@@ -27,7 +29,7 @@ type Props = {
   isRunning?: boolean;
   /** Triathlon discipline of the exercise. Null → generic run-mode behavior. */
   discipline?: Discipline | null;
-  /** Exercise id — required to resolve the workout_sets row for note updates. */
+  /** Exercise id — resolves the workout_sets row for note updates, and tags custom-weight telemetry. */
   exerciseId?: number | null;
   /** 1-based position of this set within the exercise — used as the workout_sets key. */
   setNumber?: number;
@@ -164,9 +166,9 @@ export function SetEditView({
   const repsScrollRef = useRef<HTMLDivElement>(null);
 
   const WEIGHT_OPTIONS = [0, ...Array.from({ length: 40 }, (_, i) => (i + 1) * 2.5)];
-  const closestWeight = WEIGHT_OPTIONS.reduce((prev, curr) =>
-    Math.abs(curr - weight) < Math.abs(prev - weight) ? curr : prev
-  );
+  // A typed-in weight gets its own circle rather than lighting up the nearest
+  // preset — see withCustomOption.
+  const weightOptions = withCustomOption(WEIGHT_OPTIONS, weight);
 
   const BASE_REPS = Array.from({ length: 20 }, (_, i) => i + 1);
   const repOptions = reps > 20 ? [...BASE_REPS, reps] : BASE_REPS;
@@ -197,12 +199,13 @@ export function SetEditView({
 
   const centerReps = (value: number, smooth = false) =>
     centerOption(repsScrollRef.current, repOptions.indexOf(value), 72, smooth);
-  const centerWeight = (value: number, smooth = false) => {
-    const nearest = WEIGHT_OPTIONS.reduce((prev, curr) =>
-      Math.abs(curr - value) < Math.abs(prev - value) ? curr : prev,
+  const centerWeight = (value: number, smooth = false) =>
+    centerOption(
+      weightScrollRef.current,
+      withCustomOption(WEIGHT_OPTIONS, value).indexOf(value),
+      88,
+      smooth,
     );
-    centerOption(weightScrollRef.current, WEIGHT_OPTIONS.indexOf(nearest), 88, smooth);
-  };
 
   useEffect(() => {
     if (!showRepsPicker) return;
@@ -223,6 +226,12 @@ export function SetEditView({
     // A failed set keeps the program target as the goal and records the lower
     // achieved reps; an ordinary set targets what was entered.
     const targetRepsValue = failed ? (set.targetReps ?? reps) : reps;
+
+    // Telemetry for tuning the weight presets: record the weights people have
+    // to type in because no circle offers them. Fire-and-forget.
+    if (!isRunning && !isTimed && exerciseId != null && !WEIGHT_OPTIONS.includes(weight) && weight > 0) {
+      void logCustomWeight({ exerciseId, weightKg: weight });
+    }
 
     if (isRunning) {
       // A periodized set carries a peak anchor the active cycle ramps weekly.
@@ -912,15 +921,16 @@ export function SetEditView({
 
             {/* Weight picker */}
             <div ref={weightScrollRef} className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
-              {WEIGHT_OPTIONS.map((num) => (
+              {weightOptions.map((num) => (
                 <button
                   key={num}
                   onClick={() => {
                     setWeight(num);
+                    setWeightStr(String(num));
                     setShowWeightPicker(false);
                   }}
                   className={`flex-shrink-0 w-20 h-20 rounded-full flex flex-col items-center justify-center font-bold transition-all hover:scale-105 active:scale-95 ${
-                    num === closestWeight
+                    num === weight
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-foreground hover:bg-muted/80 active:bg-muted"
                   }`}

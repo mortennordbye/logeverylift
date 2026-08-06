@@ -3,6 +3,8 @@
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { addProgramSet } from "@/lib/actions/programs";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
+import { withCustomOption } from "@/lib/utils/picker-options";
+import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import type { SetType } from "@/lib/validators/workout";
 import type { ProgramSet } from "@/types/workout";
@@ -35,6 +37,8 @@ const HR_ZONES = [
 type Props = {
   programId: number;
   programExerciseId: number;
+  /** Exercise id — tags custom-weight telemetry. */
+  exerciseId: number;
   nextSetNumber: number;
   lastSet?: ProgramSet;
   isTimed?: boolean;
@@ -47,6 +51,7 @@ type Props = {
 export function NewSetView({
   programId,
   programExerciseId,
+  exerciseId,
   nextSetNumber,
   lastSet,
   isTimed = false,
@@ -98,9 +103,9 @@ export function NewSetView({
   const repsScrollRef = useRef<HTMLDivElement>(null);
 
   const WEIGHT_OPTIONS = [0, ...Array.from({ length: 60 }, (_, i) => (i + 1) * 2.5)];
-  const closestWeight = WEIGHT_OPTIONS.reduce((prev, curr) =>
-    Math.abs(curr - weight) < Math.abs(prev - weight) ? curr : prev
-  );
+  // A typed-in weight gets its own circle rather than lighting up the nearest
+  // preset — see withCustomOption.
+  const weightOptions = withCustomOption(WEIGHT_OPTIONS, weight);
 
   const BASE_REPS = Array.from({ length: 30 }, (_, i) => i + 1);
   const repOptions = reps > 30 ? [...BASE_REPS, reps] : BASE_REPS;
@@ -122,7 +127,7 @@ export function NewSetView({
     requestAnimationFrame(() => {
       const el = weightScrollRef.current;
       if (!el) return;
-      const index = WEIGHT_OPTIONS.indexOf(closestWeight);
+      const index = weightOptions.indexOf(weight);
       const itemWidth = 52; // w-11 (44px) + gap-2 (8px)
       el.scrollLeft = Math.max(0, index * itemWidth - el.clientWidth / 2 + 22);
     });
@@ -163,6 +168,11 @@ export function NewSetView({
         setType,
       });
     } else {
+      // Telemetry for tuning the weight presets: record the weights people have
+      // to type in because no circle offers them. Fire-and-forget.
+      if (!WEIGHT_OPTIONS.includes(weight) && weight > 0) {
+        void logCustomWeight({ exerciseId, weightKg: weight });
+      }
       await addProgramSet({
         programExerciseId,
         setNumber: nextSetNumber,
@@ -609,14 +619,13 @@ export function NewSetView({
 
             {/* Scroll wheel */}
             <div ref={weightScrollRef} className="flex gap-2 overflow-x-auto px-5 pb-3 no-scrollbar cursor-grab active:cursor-grabbing">
-              {WEIGHT_OPTIONS.map((num, idx) => {
-                  const total = 61;
-                  const color = gradientColor(idx, total);
-                  const selected = num === closestWeight;
+              {weightOptions.map((num, idx) => {
+                  const color = gradientColor(idx, weightOptions.length);
+                  const selected = num === weight;
                   return (
                     <button
                       key={num}
-                      onClick={() => setWeight(num)}
+                      onClick={() => { setWeight(num); setWeightStr(String(num)); }}
                       style={
                         selected
                           ? { backgroundColor: color, borderColor: color }
