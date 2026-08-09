@@ -1,0 +1,1 @@
+ALTER TABLE "workout_sets" ADD COLUMN "was_easy" boolean DEFAULT false NOT NULL;

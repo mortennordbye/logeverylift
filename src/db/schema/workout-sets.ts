@@ -72,6 +72,11 @@ export const workoutSets = pgTable("workout_sets", {
   // Set was attempted but the target reps weren't reached (an explicit failure,
   // distinct from actualReps < targetReps which can also mean a planned back-off).
   isFailed: boolean("is_failed").default(false).notNull(),
+  // Set was hit at the target and felt easy. An explicit "bump me next time"
+  // from the lifter: it satisfies the progression consensus gate on its own, so
+  // the next session suggests the increment even though the usual two confident
+  // hits haven't accumulated. Read by buildSuggestion.
+  wasEasy: boolean("was_easy").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   index("idx_wsets_session").on(t.sessionId),

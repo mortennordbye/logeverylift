@@ -140,6 +140,10 @@ export function SetEditView({
   // then captures the reps actually achieved (0 is allowed), while the program
   // target is preserved so the set logs actualReps < targetReps.
   const [failed, setFailed] = useState<boolean>(override?.isFailed ?? false);
+  // Workout-mode only: the opposite signal to `failed` — the target was hit and
+  // there was plenty left. Next session's suggestion progresses the load off
+  // this one set instead of waiting for the usual two confident hits.
+  const [easy, setEasy] = useState<boolean>(override?.wasEasy ?? false);
   // Reps In Reserve (workout strength mode). Null until the user picks one.
   const [rir, setRir] = useState<number | null>(override?.rir ?? null);
   const repsMin = isWorkout ? 0 : 1;
@@ -263,7 +267,7 @@ export function SetEditView({
         // A failed set was taken to failure, so RIR is 0 regardless of the picker.
         workoutSession?.setOverride(set.id, { targetReps: set.targetReps ?? reps, weightKg: weight, notes: noteValue, isFailed: true, actualReps: reps, rir: 0 });
       } else {
-        workoutSession?.setOverride(set.id, { targetReps: reps, weightKg: weight, notes: noteValue, rir: rir ?? undefined });
+        workoutSession?.setOverride(set.id, { targetReps: reps, weightKg: weight, notes: noteValue, rir: rir ?? undefined, wasEasy: easy });
       }
     } else if (isTimed) {
       await updateProgramSet({ id: set.id, durationSeconds: duration, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null });
@@ -294,6 +298,7 @@ export function SetEditView({
           notes: noteValue,
           isCompleted: true,
           isFailed: failed,
+          wasEasy: easy,
         });
       } else {
         // Not yet logged: the override carries the values (and the note)
@@ -608,6 +613,8 @@ export function SetEditView({
                 onClick={() => {
                   const next = !failed;
                   setFailed(next);
+                  // Failed and easy are opposite verdicts on the same set.
+                  if (next) setEasy(false);
                   // Entering failed mode: default achieved reps to 0 so a wiped
                   // set is the common one-tap case; leaving it restores the target.
                   if (next) { setReps(0); setRepsStr("0"); }
@@ -618,6 +625,40 @@ export function SetEditView({
                 <span className="text-base font-medium">Mark set as failed</span>
                 <span className={`flex items-center justify-center w-6 h-6 rounded-full border-2 ${failed ? "bg-destructive border-destructive text-destructive-foreground" : "border-muted-foreground/40"}`}>
                   {failed && <span className="text-xs leading-none">✕</span>}
+                </span>
+              </button>
+            )}
+
+            {/* Mark-as-easy — the counterpart to mark-as-failed. Progression
+                normally waits for two confident hits in the last five sessions;
+                this says "there was plenty left, bump it" and carries that to
+                the next session's suggestion on its own. Stays mounted while
+                failed is on (it just reads as off) so toggling failed never
+                moves this row under the user's finger. */}
+            {isWorkout && (
+              <button
+                onClick={() => {
+                  const next = !easy;
+                  setEasy(next);
+                  if (next && failed) {
+                    // Coming from failed: restore the target as the reps done,
+                    // since an easy set is by definition a completed one.
+                    setFailed(false);
+                    const t = set.targetReps ?? 10;
+                    setReps(t);
+                    setRepsStr(String(t));
+                  }
+                }}
+                className={`w-full flex items-center justify-between py-4 border-b border-border transition-colors active:bg-muted/70 ${easy ? "text-primary" : "hover:bg-muted/50"}`}
+              >
+                <span className="text-left">
+                  <span className="block text-base font-medium">Mark set as easy</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Suggests going heavier next session
+                  </span>
+                </span>
+                <span className={`flex items-center justify-center w-6 h-6 rounded-full border-2 ${easy ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
+                  {easy && <span className="text-xs leading-none">↑</span>}
                 </span>
               </button>
             )}
@@ -921,24 +962,34 @@ export function SetEditView({
 
             {/* Weight picker */}
             <div ref={weightScrollRef} className="flex gap-2 overflow-x-auto pb-4 no-scrollbar">
-              {weightOptions.map((num) => (
-                <button
-                  key={num}
-                  onClick={() => {
-                    setWeight(num);
-                    setWeightStr(String(num));
-                    setShowWeightPicker(false);
-                  }}
-                  className={`flex-shrink-0 w-20 h-20 rounded-full flex flex-col items-center justify-center font-bold transition-all hover:scale-105 active:scale-95 ${
-                    num === weight
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground hover:bg-muted/80 active:bg-muted"
-                  }`}
-                >
-                  <span className="text-lg">{num}</span>
-                  <span className="text-xs opacity-70">kg</span>
-                </button>
-              ))}
+              {weightOptions.map((num) => {
+                // The typed-in value sits in the ladder at its sorted position
+                // (withCustomOption). A dashed ring and a "custom" caption keep
+                // it distinguishable from the 2.5 kg presets around it.
+                const isCustom = !WEIGHT_OPTIONS.includes(num);
+                return (
+                  <button
+                    key={num}
+                    onClick={() => {
+                      setWeight(num);
+                      setWeightStr(String(num));
+                      setShowWeightPicker(false);
+                    }}
+                    className={`flex-shrink-0 w-20 h-20 rounded-full flex flex-col items-center justify-center font-bold transition-all hover:scale-105 active:scale-95 ${
+                      num === weight
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground hover:bg-muted/80 active:bg-muted"
+                    } ${
+                      isCustom
+                        ? `border-2 border-dashed ${num === weight ? "border-primary-foreground/60" : "border-primary/60"}`
+                        : ""
+                    }`}
+                  >
+                    <span className="text-lg">{num}</span>
+                    <span className="text-xs opacity-70">{isCustom ? "custom" : "kg"}</span>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Manual input */}

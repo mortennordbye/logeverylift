@@ -102,6 +102,9 @@ export const logWorkoutSetSchema = z.object({
     .optional(),
   isCompleted: z.boolean().default(true),
   isFailed: z.boolean().default(false),
+  // Hit the target and it felt easy — an explicit request to progress next
+  // session even if the consensus gate hasn't been met.
+  wasEasy: z.boolean().default(false),
 });
 
 /**

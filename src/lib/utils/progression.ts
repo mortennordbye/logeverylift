@@ -52,6 +52,8 @@ export type HistoryRow = {
   feeling: string | null;
   date: string;
   rpe: number;
+  /** Lifter marked the set easy — see easyOverride in buildSuggestion. */
+  wasEasy?: boolean | null;
 };
 
 /**
@@ -164,6 +166,19 @@ export function adaptiveIncrementKg(
 // ─── RPE confidence gate ────────────────────────────────────────────────────
 
 /**
+ * Did the set reach its rep target, ignoring how hard it felt?
+ *
+ * The confidence gate below layers RPE on top of this; the "easy" override in
+ * buildSuggestion needs the bare target check on its own, since a set the
+ * lifter marked easy must still have been completed to earn a load bump.
+ */
+export function metTargetReps(row: HistoryRow, programTargetReps: number | null): boolean {
+  const target = row.targetReps ?? programTargetReps;
+  if (target == null) return row.actualReps > 0;
+  return row.actualReps >= target;
+}
+
+/**
  * Returns true when a logged set qualifies as a "confident hit" —
  * the lifter both hit the target rep count AND had sufficient reserve.
  *
@@ -254,25 +269,37 @@ export function buildSuggestion(
       ? Math.round(estimate1RM(baseWeight, latest.actualReps) * 10) / 10
       : null;
 
+  // Did a logged set reach the target this mode measures?
+  const metTarget = (r: HistoryRow): boolean => {
+    if (mode === "time") {
+      const target = ps.durationSeconds ?? r.durationSeconds;
+      return target != null && (r.durationSeconds ?? 0) >= target;
+    }
+    if (mode === "distance") {
+      const target = ps.distanceMeters ?? r.distanceMeters;
+      return target != null && (r.distanceMeters ?? 0) >= target;
+    }
+    return metTargetReps(r, ps.targetReps);
+  };
+
   // ── Consensus: count confident hits across the window ──
-  const hitsWithConfidence = mode === "time"
-    ? rows.filter((r) => {
-        const target = ps.durationSeconds ?? r.durationSeconds;
-        if (target == null || (r.durationSeconds ?? 0) < target) return false;
-        const rpe = r.rpe ?? 7;
-        return rpe <= 8; // RPE 9–10 = not confident (near-max effort)
-      })
-    : mode === "distance"
-    ? rows.filter((r) => {
-        const target = ps.distanceMeters ?? r.distanceMeters;
-        if (target == null || (r.distanceMeters ?? 0) < target) return false;
-        const rpe = r.rpe ?? 7;
-        return rpe <= 8;
-      })
-    : rows.filter((r) => isConfidentHit(r, ps.targetReps));
+  const hitsWithConfidence =
+    mode === "time" || mode === "distance"
+      ? // RPE 9–10 = not confident (near-max effort)
+        rows.filter((r) => metTarget(r) && (r.rpe ?? 7) <= 8)
+      : rows.filter((r) => isConfidentHit(r, ps.targetReps));
 
   const hitsAchieved = hitsWithConfidence.length;
-  const shouldProgress = hitsAchieved >= REQUIRED_HITS;
+  const hasConsensus = hitsAchieved >= REQUIRED_HITS;
+
+  // ── "Felt easy" override ──
+  // The lifter marked the last set easy: an explicit "there was plenty left,
+  // bump it". It stands in for the confident hits the consensus window hasn't
+  // accumulated yet, so the increment is offered next session instead of one or
+  // two sessions later. Gated on the set having actually met its target — an
+  // easy verdict on a missed set must never push the load up.
+  const easyOverride = !hasConsensus && latest.wasEasy === true && metTarget(latest);
+  const shouldProgress = hasConsensus || easyOverride;
 
   // ── Deload detection: last DELOAD_THRESHOLD sessions all missed ──
   // Only applies to weight-bearing modes (not manual, not time).
@@ -528,6 +555,13 @@ export function buildSuggestion(
       suggestedDistanceMeters: undefined,
       readinessModulated: true,
     };
+  }
+
+  // Flag the bump the easy verdict earned, so the UI can say why it fired
+  // without two hits behind it. Deliberately after readiness modulation: a
+  // low-readiness day still holds the load, easy verdict or not.
+  if (easyOverride && suggestion.reason.startsWith("progressed")) {
+    suggestion = { ...suggestion, easyOverride: true };
   }
 
   return suggestion;

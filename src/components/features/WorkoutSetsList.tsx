@@ -351,6 +351,8 @@ export function WorkoutSetsList({
             notes: ov?.notes ?? null,
             isCompleted: true,
             isFailed: failed,
+            // A failed set can't also have been easy.
+            wasEasy: !failed && (ov?.wasEasy ?? false),
           });
           // Only celebrate when an existing record was beaten (previousValue defined).
           // First-time baselines are stored silently — no celebration.
@@ -1405,6 +1407,7 @@ function SortableSetRow({
                     {hasSmartAdjustment
                       ? `${suggestion.suggestedWeightKg}kg — ${suggestion.adjustedRepsForWeight} reps`
                       : `${suggestion.suggestedWeightKg}kg`}
+                    {suggestion.easyOverride && " — felt easy"}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "deload" && (
@@ -1441,6 +1444,7 @@ function SortableSetRow({
                     onApply={() => onApplyRepSuggestion?.(set.id, suggestion.suggestedReps!)}
                   >
                     {repsPending ? "↑" : "✓"} {suggestion.suggestedReps} reps
+                    {suggestion.easyOverride && " — felt easy"}
                   </SuggestionChip>
                 )}
                 {timePending && (

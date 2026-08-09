@@ -19,6 +19,7 @@ What each mode exposes (parity rule: program-edit configures the prescription; w
 | **Rest after set** | ✓ | — (auto via rest timer) | `program_sets.restTimeSeconds` |
 | **Reps-in-reserve** (logged) | — | ✓ | session override → `workout_sets.rir` |
 | **Mark failed** | — | ✓ | override `isFailed` → `workout_sets.isFailed` |
+| **Mark easy** | — | ✓ | override `wasEasy` → `workout_sets.wasEasy` (feeds next session's progression) |
 | **Note** | — | ✓ | `workout_sets.notes` |
 | Duration (timed) / Distance·Incline·HR (running) | ✓ | ✓ | respective `program_sets` / override fields |
 
@@ -28,6 +29,7 @@ Pickers are the shared idiom: a tappable row opens a `BottomSheet` with preset c
 
 - **Logged RIR** (`workout_sets.rir`) is the primary effort input. `rpe` is **derived**: `rpeFromRir(rir) = clamp(10 − rir, 1, 10)`, computed in `logWorkoutSet` (`src/lib/actions/workout-sets.ts`). A failed set ⇒ RIR 0 ⇒ RPE 10.
 - **Target RIR** (`program_sets.targetRir`) is the prescription. Shown as guidance on the workout set screen; set in program-edit mode.
+- **Felt easy** (`workout_sets.wasEasy`) is a coarser, explicit signal alongside RIR: it satisfies `buildSuggestion`'s consensus gate (normally `REQUIRED_HITS` confident hits in the last `CONSENSUS_WINDOW` sessions) on its own, so the increment is offered the next session instead of one or two later. Only counts when the set met its target; a deload and low readiness both still outrank it. Surfaced as `easyOverride` on the suggestion → "— felt easy" on the chip.
 - Because rpe is derived from rir, **every existing RPE consumer became RIR-aware for free** — `isConfidentHit` and the deload gate (`src/lib/utils/progression.ts`) and `computeCycleAdaptation`'s `avgRpe` (`src/lib/actions/training-cycles.ts`). No separate rir plumbing was needed in those.
 
 ## Exercise type — `src/lib/utils/exercise-type.ts`

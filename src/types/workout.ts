@@ -196,6 +196,12 @@ export type SetSuggestion = {
   estimated1RM: number | null;
   /** True when the suggestion was held or adjusted down due to low pre-workout readiness. */
   readinessModulated: boolean;
+  /**
+   * True when the progression fired off an explicit "felt easy" verdict on the
+   * last set rather than the usual two confident hits. Only ever set on a
+   * "progressed*" reason.
+   */
+  easyOverride?: boolean;
   /** Exercise name — populated by getProgressiveSuggestions for insight bucketing. */
   exerciseName?: string;
 };

@@ -152,6 +152,7 @@ export async function logWorkoutSet(
       notes,
       isCompleted,
       isFailed,
+      wasEasy,
     } = validation.data;
 
     // RIR is the primary effort input; derive RPE from it so all downstream
@@ -215,6 +216,7 @@ export async function logWorkoutSet(
       notes,
       isCompleted,
       isFailed,
+      wasEasy,
     };
     const [set] = await db
       .insert(workoutSets)
@@ -241,6 +243,7 @@ export async function logWorkoutSet(
           notes: setValues.notes ?? null,
           isCompleted: setValues.isCompleted,
           isFailed: setValues.isFailed,
+          wasEasy: setValues.wasEasy,
         },
       })
       .returning();
@@ -1213,6 +1216,7 @@ export async function getProgressiveSuggestions(
         durationSeconds: workoutSets.durationSeconds,
         distanceMeters: workoutSets.distanceMeters,
         rpe: workoutSets.rpe,
+        wasEasy: workoutSets.wasEasy,
         feeling: workoutSessions.feeling,
         date: workoutSessions.date,
       })
