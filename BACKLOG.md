@@ -1,6 +1,6 @@
 # BACKLOG
 
-Anything Claude (or anyone) leaves unfinished, partially implemented, or explicitly defers goes here. Each entry: what, why deferred, what would unblock it, where the relevant code lives.
+Anything left unfinished, partially implemented, or explicitly deferred goes here. Each entry: what, why deferred, what would unblock it, where the relevant code lives.
 
 Don't put work-in-progress here. WIP belongs on a branch. This is for *known* gaps the team has agreed to leave for later.
 
@@ -203,7 +203,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/lib/auth.ts`, `src/db/schema/auth.ts` (`oauth_application`).
 
 ### Run an independent security-review pass over the MCP + auth changes
-- **What:** A multi-agent audit (Jun 2026) fixed the critical/high auth + MCP data-integrity findings (cross-user `getProgressiveSuggestions`/`upsertCycleSlot` leaks, `ai-model-configs` admin gating, login open-redirect, placeholder-secret boot guard, non-atomic MCP writes, validation gaps, rate-limit eviction). A fresh, independent pass was offered but deferred for time.
+- **What:** A security audit (Jun 2026) fixed the critical/high auth + MCP data-integrity findings (cross-user `getProgressiveSuggestions`/`upsertCycleSlot` leaks, `ai-model-configs` admin gating, login open-redirect, placeholder-secret boot guard, non-atomic MCP writes, validation gaps, rate-limit eviction). A fresh, independent pass was offered but deferred for time.
 - **Why deferred:** No time right now; the verified high-severity items are already fixed and `pnpm verify` is green.
 - **Unblocked by:** Running `/security-review` (or `/code-review high`) over the current branch diff before/after merge, and optionally addressing the lower-severity residuals captured in the entries above (cookieCache revocation lag, weight float dedup, reaction privacy flag).
 - **Touchpoints:** whole MCP + auth surface — `src/lib/mcp/`, `src/app/api/[transport]/`, `src/lib/actions/`, `src/lib/auth.ts`, `src/middleware.ts`, `src/lib/env.ts`.

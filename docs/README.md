@@ -1,6 +1,6 @@
 # Developer docs
 
-Living maps of the codebase, so you (or an AI) can find "where does X live / how does Y flow" without re-reading the whole tree. These are **reference maps**, not rules — for working conventions (dev loop, Server Action template, migration workflow, smoke protocol) see [`CLAUDE.md`](../CLAUDE.md).
+Living maps of the codebase, so you can find "where does X live / how does Y flow" without re-reading the whole tree. These are **reference maps**, not rules — for working conventions (dev loop, Server Action template, migration workflow, smoke protocol) see [`CLAUDE.md`](../CLAUDE.md).
 
 ## How to use these
 

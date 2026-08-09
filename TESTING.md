@@ -96,7 +96,7 @@ This is the primary way to catch integration bugs — UI state, server action er
 
 1. Dev server running: `make dev`
 2. App seeded with data: `docker-compose exec app pnpm db:seed`
-3. A Claude Code session with the Playwright MCP tools available
+3. A client with the Playwright MCP tools available
 
 ### Screenshot convention
 
