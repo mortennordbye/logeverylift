@@ -622,6 +622,8 @@ export function NewSetView({
               {weightOptions.map((num, idx) => {
                   const color = gradientColor(idx, weightOptions.length);
                   const selected = num === weight;
+                  // Typed-in value: dashed ring marks it as off-ladder.
+                  const isCustom = !WEIGHT_OPTIONS.includes(num);
                   return (
                     <button
                       key={num}
@@ -633,7 +635,7 @@ export function NewSetView({
                       }
                       className={`flex-shrink-0 w-11 h-11 rounded-full border-2 flex items-center justify-center text-xs font-semibold transition-all ${
                         selected ? "text-black scale-110" : "bg-transparent"
-                      }`}
+                      } ${isCustom ? "border-dashed" : ""}`}
                     >
                       {num % 1 === 0 ? num : num.toFixed(1)}
                     </button>

@@ -183,6 +183,67 @@ describe("buildSuggestion — consensus gate", () => {
   });
 });
 
+describe("buildSuggestion — felt-easy override", () => {
+  it("progresses off a single easy set that would otherwise hold", () => {
+    const rows = [makeRow({ rpe: 6, wasEasy: true })]; // 1 hit, need 2
+    const result = buildSuggestion(rows, makePs(), null);
+    expect(result?.reason).toBe("progressed");
+    expect(result?.suggestedWeightKg).toBeCloseTo(82.5); // 80 + 2.5
+    expect(result?.easyOverride).toBe(true);
+  });
+
+  it("ignores an easy verdict on a set that missed its target", () => {
+    const rows = [makeRow({ rpe: 6, actualReps: 5, targetReps: 8, wasEasy: true })];
+    const result = buildSuggestion(rows, makePs(), null);
+    expect(result?.reason).toBe("held");
+    expect(result?.easyOverride).toBeUndefined();
+  });
+
+  it("only reads the most recent session's easy verdict", () => {
+    const rows = [
+      makeRow({ rpe: 6, date: "2024-01-02" }),
+      makeRow({ rpe: 6, date: "2024-01-01", wasEasy: true }),
+    ];
+    // Two confident hits — progresses on consensus, so the stale verdict is moot.
+    const result = buildSuggestion(rows, makePs(), null);
+    expect(result?.reason).toBe("progressed");
+    expect(result?.easyOverride).toBeUndefined();
+  });
+
+  it("does not flag a progression the consensus gate earned on its own", () => {
+    const rows = makeRows(REQUIRED_HITS, { rpe: 6, wasEasy: true });
+    const result = buildSuggestion(rows, makePs(), null);
+    expect(result?.reason).toBe("progressed");
+    expect(result?.easyOverride).toBeUndefined();
+  });
+
+  it("progresses reps instead of weight for a bodyweight set", () => {
+    const rows = [makeRow({ rpe: 6, weightKg: "0.00", wasEasy: true })];
+    const result = buildSuggestion(
+      rows,
+      makePs({ overloadIncrementReps: 2 }),
+      null,
+    );
+    expect(result?.reason).toBe("progressed-reps");
+    expect(result?.suggestedReps).toBe(10); // target 8 + 2
+    expect(result?.easyOverride).toBe(true);
+  });
+
+  it("yields to low readiness — an easy verdict does not force a bump today", () => {
+    const rows = [makeRow({ rpe: 6, wasEasy: true })];
+    const result = buildSuggestion(rows, makePs(), null, 2);
+    expect(result?.reason).toBe("held-readiness");
+    expect(result?.easyOverride).toBeUndefined();
+  });
+
+  it("yields to a deload — three misses outrank an easy verdict", () => {
+    const rows = makeRows(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8, rpe: 9 });
+    rows[0].wasEasy = true;
+    const result = buildSuggestion(rows, makePs(), null);
+    expect(result?.reason).toBe("deload");
+  });
+});
+
 describe("buildSuggestion — deload detection", () => {
   it("suggests deload after DELOAD_THRESHOLD consecutive failures", () => {
     const rows = makeRows(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8, rpe: 9 });
