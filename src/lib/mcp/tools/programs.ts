@@ -9,7 +9,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 

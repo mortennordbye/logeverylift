@@ -2,29 +2,53 @@
 # Multi-stage Dockerfile for Next.js
 # ==================================
 
-# Stage 1: Install dependencies
-FROM node:20-alpine AS deps
-RUN npm install -g pnpm
-WORKDIR /app
-COPY package.json pnpm-lock.yaml* ./
-# In dev, we don't use --frozen-lockfile to allow adding packages easily
-RUN pnpm install
-
 # ============================================================
-# NEW Stage 2: Development (Fast Local Building)
+# Stage 0: Pinned base
 # ============================================================
-FROM node:20-alpine AS dev
-RUN npm install -g pnpm tsx
+# The Node version and its digest are declared once here; every other stage
+# derives from this or from `toolchain`. Dependabot's docker ecosystem bumps
+# both the tag and the digest on this single line.
+#
+# node:26 is the Current line, not LTS — Node 26 enters LTS in October 2026.
+# Until then it still gets security releases; the tradeoff is deliberate.
+FROM node:26-alpine@sha256:aadf416b2cdce311a8811ba3f0608a61b77dbf997500e2eafe781b51f6a0b019 AS base
 WORKDIR /app
 
-# Copy node_modules from deps stage
+# ============================================================
+# Stage 1: Toolchain (base + pnpm)
+# ============================================================
+# pnpm is pinned to the same version as package.json's `packageManager`. They
+# must not drift: pnpm 11 reads `overrides` and `allowBuilds` from
+# pnpm-workspace.yaml, which pnpm 10 silently ignores — the install then either
+# resolves the vulnerable transitive versions the overrides exist to prevent, or
+# dies on ERR_PNPM_IGNORED_BUILDS.
+FROM base AS toolchain
+RUN npm install -g pnpm@11.21.0
+
+# ============================================================
+# Stage 2: Install dependencies
+# ============================================================
+FROM toolchain AS deps
+# pnpm-workspace.yaml carries the security overrides and the build-script
+# allowlist. Omitting it does not fail loudly — it produces a quietly different
+# dependency tree from the one `pnpm audit` was run against.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# --frozen-lockfile everywhere, including the tree the production image is built
+# from. Without it a stale lockfile is silently "fixed" during the build and the
+# image ships dependencies nobody verified.
+RUN pnpm install --frozen-lockfile
+
+# ============================================================
+# Stage 3: Development (fast local building)
+# ============================================================
+FROM toolchain AS dev
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NODE_ENV=development
 ENV NEXT_TELEMETRY_DISABLED=1
 # Force bind to 0.0.0.0 for iPhone access
-ENV HOSTNAME="0.0.0.0" 
+ENV HOSTNAME="0.0.0.0"
 
 EXPOSE 3000
 
@@ -32,11 +56,9 @@ EXPOSE 3000
 CMD ["pnpm", "next", "dev", "--turbo", "-H", "0.0.0.0"]
 
 # ============================================================
-# Stage 3: Build application (Production only)
+# Stage 4: Build application (production only)
 # ============================================================
-FROM node:20-alpine AS builder
-RUN npm install -g pnpm
-WORKDIR /app
+FROM toolchain AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
@@ -47,28 +69,26 @@ ENV SERWIST_SUPPRESS_TURBOPACK_WARNING=1
 RUN pnpm build
 
 # ============================================================
-# Stage 4: Production-only dependencies (for migrate/seed at boot)
+# Stage 5: Production-only dependencies (for migrate/seed at boot)
 # ============================================================
-# The standalone server bundles its own runtime deps; this tree only serves
-# the tsx entrypoint scripts (drizzle-orm, pg, zod are all prod deps). A
-# prod-only install keeps typescript/eslint/vitest/playwright/drizzle-kit
-# out of the image — smaller push to ghcr and faster pulls on deploy.
-FROM node:20-alpine AS prod-deps
-RUN npm install -g pnpm
-WORKDIR /app
-COPY package.json pnpm-lock.yaml* ./
+# The standalone server bundles its own runtime deps; this tree only serves the
+# tsx entrypoint scripts (tsx, drizzle-orm, pg and zod are all prod deps). A
+# prod-only install keeps typescript/eslint/vitest/playwright/drizzle-kit out of
+# the image — smaller push to ghcr and faster pulls on deploy.
+FROM toolchain AS prod-deps
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 
 # ============================================================
-# Stage 5: Production runner
+# Stage 6: Production runner
 # ============================================================
-FROM node:20-alpine AS runner
-WORKDIR /app
+# Derives from `base`, not `toolchain` — pnpm has no job at runtime and would
+# just be dead weight in the shipped image.
+FROM base AS runner
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npm install -g tsx
 
 # --chown at copy time: a later `RUN chown -R` would re-write every file into
 # a new layer and double the image size.
@@ -80,22 +100,18 @@ COPY --chown=nextjs:nodejs --from=prod-deps /app/node_modules ./node_modules
 COPY --chown=nextjs:nodejs --from=builder /app/drizzle ./drizzle
 COPY --chown=nextjs:nodejs --from=builder /app/scripts ./scripts
 COPY --chown=nextjs:nodejs --from=builder /app/src/db ./src/db
+COPY --chown=nextjs:nodejs --from=builder /app/src/lib ./src/lib
 
 # Entrypoint script
 # Seed only runs when SEED_ON_BOOT=true. The production image must NOT seed by
 # default — re-running seed against a populated DB risks duplicating data.
 # Seed once into a fresh environment via `SEED_ON_BOOT=true` then unset it.
-RUN echo '#!/bin/sh' > /app/entrypoint.sh && \
-    echo 'set -e' >> /app/entrypoint.sh && \
-    echo 'echo "🔄 Running database migrations..."' >> /app/entrypoint.sh && \
-    echo 'tsx /app/scripts/migrate.ts' >> /app/entrypoint.sh && \
-    echo 'if [ "$SEED_ON_BOOT" = "true" ]; then' >> /app/entrypoint.sh && \
-    echo '  echo "🌱 Seeding database..."' >> /app/entrypoint.sh && \
-    echo '  tsx /app/scripts/seed.ts' >> /app/entrypoint.sh && \
-    echo 'fi' >> /app/entrypoint.sh && \
-    echo 'echo "🚀 Starting application..."' >> /app/entrypoint.sh && \
-    echo 'exec node server.js' >> /app/entrypoint.sh && \
-    chmod +x /app/entrypoint.sh
+#
+# tsx comes from the prod node_modules rather than a global `npm install -g`:
+# one pinned version resolved by the lockfile, one fewer network fetch at build
+# time, and no drift between the image and package.json.
+COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 
 USER nextjs
 EXPOSE 3000

@@ -80,6 +80,36 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Codebase hygiene (deferred long-term)
 
+### ESLint 10 blocked by `eslint-plugin-react`
+- **What:** `eslint` is held at 9.x. 10.8.1 is the current release and closes four transitive advisories in one go (`flatted`, `js-yaml`, two in `brace-expansion`), which are presently closed by other means. Upgrading fails immediately: `eslint-plugin-react@7.37.5`, pulled in by `eslint-config-next` 16.3.0, calls `context.getFilename()` inside `resolveBasedir`, and ESLint 10 removed it. Every file errors with `TypeError: contextOrFilename.getFilename is not a function`.
+- **Why deferred:** Nothing in this repo can fix it — the broken call is in a transitive dependency of `eslint-config-next`. Pinning an override of `eslint-plugin-react` would mean guessing at a version Next has not validated against its own config.
+- **Unblocked by:** `eslint-config-next` shipping an `eslint-plugin-react` that supports ESLint 10 (watch its peer range widening past `eslint: >=9.0.0`). Then `pnpm add -D eslint@10` and run `pnpm lint`; if it is clean, drop the note in `.github/dependabot.yml`.
+- **Touchpoints:** `package.json` (`eslint`, `eslint-config-next`), `eslint.config.mjs`.
+
+### TypeScript 7 blocked — no public compiler API
+- **What:** `typescript` is held at 5.9.3 while 7.0.2 is current (the Go port; 8–12x faster builds). TypeScript 7.0 ships **no public programmatic compiler API** — 7.1 is slated to introduce a new one — and `typescript-eslint`, which `eslint-config-next/typescript` is built on, embeds that API. Upgrading would leave `tsc --noEmit` working and `pnpm lint` unable to run at all, breaking the second leg of `pnpm verify`.
+- **Why deferred:** Hard upstream blocker, not a config problem. TypeScript 6.0 is also available and carries the stricter defaults 7.0 turns into hard errors, so it is the natural staging step once tooling catches up.
+- **Unblocked by:** TypeScript 7.1 shipping the new compiler API *and* `typescript-eslint` releasing against it. Stage via 6.0.3 first to absorb the changed compiler-option defaults, keeping `pnpm verify` green at each step.
+- **Touchpoints:** `package.json` (`typescript`), `tsconfig.json`, `eslint.config.mjs`.
+
+### Production image is 857MB; ~700MB of it is a redundant dependency overlay
+- **What:** The `runner` stage copies `.next/standalone` (40MB, exactly the modules Next traced for the server) and then copies the entire `prod-deps` `node_modules` (730MB) on top of it. That overlay exists for one reason: `docker-entrypoint.sh` runs `scripts/migrate.ts` through `tsx`, which needs `tsx`, `drizzle-orm` and `pg` resolvable from `/app`. `pnpm install --prod` cannot express "only those three", so it drags in `next` (198MB), `@next/swc-linux-arm64-musl` (83MB), `lucide-react` (40MB), `date-fns` (26MB), and even `typescript` (23MB), `playwright-core` (13MB) and `drizzle-kit` (10MB) — the last three arrive as real (not dev) dependencies of `better-auth`. The overlay also shadows the standalone tree it lands on.
+- **Why deferred:** Every route to a minimal tree changes how production migrations resolve their dependencies, which is the highest-risk path in the repo — a mistake here means the container boots, fails `db:migrate`, and the deploy is down. It deserves its own change with its own verification, not a ride-along on a dependency bump. `pnpm deploy` was tried and is not the answer: it deploys the same full production set, just flattened.
+- **Unblocked by:** Picking one of — (a) bundle `scripts/migrate.ts` with esbuild in the `builder` stage into a single self-contained file so the runner needs no overlay at all (watch `pg`'s dynamic requires); (b) a dedicated minimal manifest for the entrypoint scripts, accepting a second lockfile; or (c) copy the overlay to a path that only the scripts resolve from, which fixes the shadowing but not the size. Verify by booting the image against a real database and confirming migrations apply.
+- **Touchpoints:** `Dockerfile` (`prod-deps` and `runner` stages), `docker-entrypoint.sh`, `scripts/migrate.ts`, `scripts/seed.ts`.
+
+### `@next/next/no-location-assign-relative-destination` warnings
+- **What:** `eslint-config-next` 16.3 added this rule; it fires at 5 sites, all deliberate full-page reloads after an auth state change (`window.location.href = "/login"` and similar). Every destination is a hardcoded literal with no user input, so none is an open redirect — the rule is about relative destinations resolving against the current document rather than the origin.
+- **Why deferred:** The reloads are intentional: they exist to drop the RSC cache and re-fetch the session, so `router.push` is not a drop-in replacement. Rewriting them was out of scope for a dependency audit.
+- **Unblocked by:** Deciding the reloads should go through `window.location.assign(new URL(path, window.location.origin))`, which satisfies the rule while keeping the full reload.
+- **Touchpoints:** `src/components/features/AccountClient.tsx:197`, `AdminPanelClient.tsx:39`, `MoreClient.tsx:106`, `SignupForm.tsx:66,70`.
+
+### React Compiler lint rules demoted to warnings
+- **What:** `eslint-config-next` 16.2 turned on the React Compiler rules. They report 14 problems across 8 files — 13 `react-hooks/set-state-in-effect` and 1 `react-hooks/purity`. Both are set to `"warn"` in `eslint.config.mjs` so the dependency bump that introduced them didn't have to carry a 14-site refactor. `pnpm lint` is clean of errors; the warnings still print.
+- **Why deferred:** Most hits are the deliberate hydrate-from-localStorage-in-an-effect pattern (theme, pending queue, session overrides), which needs SSR-safe restructuring rather than a mechanical fix. The one `purity` hit (`WorkoutSetsList.tsx:417`, `Date.now()` in `setRestTimerEnd`) is a false positive — the call is inside an async event handler, not render.
+- **Unblocked by:** Deciding to do the effects pass. Per site: move the read into a `useSyncExternalStore` or a lazy `useState` initialiser guarded for SSR, then flip each rule back to `"error"`. The purity one can be silenced with a targeted disable comment once the rest are addressed.
+- **Touchpoints:** `eslint.config.mjs` (the override block), `src/components/ui/theme-provider.tsx:83`, `src/contexts/pending-queue-context.tsx:85`, `src/components/features/WorkoutSetsList.tsx:157,173,181,417`, `WorkoutSetsClient.tsx:106`, `WorkoutSessionClient.tsx:89,101`, `ProgramDetailClient.tsx:175,182`, `ProgramListClient.tsx:25`, `CyclesListClient.tsx:105`, `LogRunModal.tsx:75`.
+
 ### Remaining findings from the UI layout-shift audit
 - **What:** `docs/ui-polish-audit.md` records 22 findings from a measured pass over the app (layout shift, skeleton fidelity, phone ergonomics). The in-workout cluster is fixed and marked `[x]`; the rest is still open — mainly the non-workout skeleton mismatches (`/exercises` loads an "Add Exercise" skeleton, the dashboard skeleton is a bare header, metrics puts the tab bar in the wrong scroll layer), the three coexisting volume formats, and the activity heatmap opening on the oldest weeks.
 - **Why deferred:** The brief was the in-workout feel. Each remaining item is independent and carries its own measurement and proposed fix, so they can be picked up singly.

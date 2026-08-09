@@ -1,0 +1,85 @@
+name: Dependabot auto-merge
+
+# Turns the dependency stream into something that lands without a human.
+#
+# Two tiers:
+#
+#   1. Security updates — merged regardless of ecosystem or semver level,
+#      including the docker base image and majors. A known-exploitable version
+#      sitting in main waiting for a review window is worse than an unplanned
+#      major, and CI still has to go green either way.
+#   2. Everything else — only patch, minor, or devDependency updates. A runtime
+#      major that carries no advisory gets read by a human.
+#
+# Auto-merge only *arms* the PR. The protect-default-branch ruleset requires the
+# CI checks (Typecheck + tests, Build & push Docker image, dependency-review), so
+# a red run leaves the PR sitting there unmerged. That is the intended failure
+# mode — do not remove those required checks without also revisiting this file.
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Required by fetch-metadata's `alert-lookup`, which reads the repository's
+  # Dependabot alerts to resolve the advisory behind the PR.
+  security-events: read
+
+jobs:
+  automerge:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'mortennordbye/logeverylift'
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          # Populates ghsa-id / cvss / alert-state so the step below can tell a
+          # security update from a routine version bump.
+          alert-lookup: true
+
+      # Two independent signals, because missing a security fix is the failure
+      # we care about:
+      #   - ghsa-id, from the alert lookup above.
+      #   - the dependency group name. dependabot.yml declares an
+      #     `applies-to: security-updates` group per ecosystem, each suffixed
+      #     `-security`, so every security PR lands in one of them even if the
+      #     alert lookup returns nothing.
+      - name: Classify
+        id: classify
+        run: |
+          set -eu
+          security=false
+          if [ -n "${GHSA_ID:-}" ]; then
+            security=true
+          fi
+          case "${GROUP:-}" in
+            *-security) security=true ;;
+          esac
+
+          echo "security=$security" >> "$GITHUB_OUTPUT"
+          if [ "$security" = "true" ]; then
+            echo "Security update (ghsa='$GHSA_ID' group='$GROUP') — auto-merging."
+          else
+            echo "Routine update (type='$UPDATE_TYPE' dep='$DEP_TYPE')."
+          fi
+        env:
+          GHSA_ID: ${{ steps.metadata.outputs.ghsa-id }}
+          GROUP: ${{ steps.metadata.outputs.dependency-group }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          DEP_TYPE: ${{ steps.metadata.outputs.dependency-type }}
+
+      # For a grouped PR the metadata action reports the highest semver change in
+      # the group, so a group containing one major is treated as a major.
+      - name: Enable auto-merge
+        if: >
+          steps.classify.outputs.security == 'true' ||
+          (steps.metadata.outputs.package-ecosystem != 'docker' &&
+           (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+            steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+            steps.metadata.outputs.dependency-type == 'direct:development'))
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
