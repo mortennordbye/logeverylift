@@ -49,15 +49,14 @@ const handler = withMcpAuth(auth, (req, session) => {
     );
   }
 
-  return createMcpHandler(
-    (server) => {
-      registerProfileTools(server, userId);
-      registerProgramTools(server, userId);
-      registerCycleTools(server, userId);
-    },
-    {},
-    { basePath: "/api" },
-  )(req);
+  // mcp-handler 2 dropped the third `{ basePath }` argument: the handler now
+  // serves every request it is given and leaves routing to the framework, which
+  // for us is this route's own `[transport]` segment (/api/mcp).
+  return createMcpHandler((server) => {
+    registerProfileTools(server, userId);
+    registerProgramTools(server, userId);
+    registerCycleTools(server, userId);
+  })(req);
 });
 
 export { handler as DELETE, handler as GET, handler as POST };

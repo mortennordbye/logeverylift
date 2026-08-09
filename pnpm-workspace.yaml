@@ -1,0 +1,31 @@
+# Transitive-only security fixes. Nothing here is a direct dependency — each one
+# is a package we can't reach by bumping what we actually depend on, so the
+# version is forced. Drop an entry as soon as the parent ships the fix itself.
+overrides:
+  # GHSA-v2wj-q39q-566r, GHSA-p9ff-h696-f583, GHSA-fx2h-pf6j-xcff and the
+  # launch-editor UNC disclosure. vitest 4.1 accepts vite ^8 but resolved 8.0.0.
+  vite: ^8.2.1
+  # GHSA-67mh-4wv8-2f99 (dev-server request forgery) and the --servedir file
+  # read. Reaches drizzle-kit's deprecated @esbuild-kit shim, which still pins
+  # esbuild ^0.18, and @sentry/webpack-plugin.
+  esbuild: ^0.28.1
+
+# pnpm blocks dependency build scripts by default and fails the install with
+# ERR_PNPM_IGNORED_BUILDS until every one is answered. Each entry below is a
+# deliberate yes/no, not a default.
+allowBuilds:
+  # Downloads the sentry-cli binary. Needed by @sentry/nextjs to upload source
+  # maps during `next build` (only fires when SENTRY_AUTH_TOKEN is set).
+  '@sentry/cli': true
+  # Fetches the platform esbuild binary. Without it drizzle-kit and vite fail.
+  esbuild: true
+  # Downloads the lefthook binary that the `prepare` script then installs as the
+  # pre-push hook.
+  lefthook: true
+  # Service-worker mocking, pulled in transitively by @vitest/mocker. This repo
+  # mocks nothing over the network, so the postinstall is dead weight.
+  msw: false
+  # Native libvips bindings for next/image optimization at runtime.
+  sharp: true
+  # Native resolver binding for eslint-import-resolver-typescript.
+  unrs-resolver: true

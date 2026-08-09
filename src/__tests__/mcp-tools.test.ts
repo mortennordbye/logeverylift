@@ -10,7 +10,7 @@
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { describe, expect, it, vi } from "vitest";
 
 // The tool modules import `@/db`, which validates DB env vars at import time.

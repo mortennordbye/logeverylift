@@ -31,10 +31,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
 
+      # No `version:` on purpose — action-setup reads package.json's
+      # `packageManager` field, so CI, the Dockerfile and local dev cannot drift
+      # onto different pnpm majors. pnpm 11 reads `overrides` and `allowBuilds`
+      # from pnpm-workspace.yaml; pnpm 10 ignores both silently.
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v7

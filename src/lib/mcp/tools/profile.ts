@@ -12,7 +12,7 @@ import { users } from "@/db/schema/users";
 import { userWeightEntries } from "@/db/schema/weight-history";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { GOAL_VALUES, parseUserGoals } from "@/lib/utils/goals";
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
