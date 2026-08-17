@@ -435,7 +435,9 @@ export function WorkoutSetsClient({
             onClick={applyAllPending}
             className="ml-auto min-h-[44px] px-3.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold active:scale-95 transition-all"
           >
-            ↑ {pendingWeight != null ? `${pendingWeight}kg · all ${pending.length}` : `Apply all ${pending.length}`}
+            ↑ {pendingWeight != null
+              ? `${pendingWeight}kg · ${pending.length} sets`
+              : `Apply ${pending.length} sets`}
           </button>
         )}
       </div>

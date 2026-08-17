@@ -210,9 +210,22 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   const confirmReadiness = (level: number) => {
     setReadinessState(level);
     localStorage.setItem(READINESS_KEY, String(level));
-    // Persist to DB asynchronously (non-blocking)
+    // Persist to DB asynchronously (non-blocking).
+    //
+    // Retried once, and never left unhandled: confirming readiness is followed
+    // immediately by moving into the workout, and a reload or app-close in that
+    // window cancels the in-flight request. The rejection surfaced as an
+    // unhandled "TypeError: Load failed" (Sentry sees it as a page error), and
+    // the value was lost server-side while localStorage still had it — so the
+    // session looked answered but progression's readiness modulation, which
+    // reads workout_sessions.readiness, silently stopped applying for it.
     if (sessionId != null) {
-      void setSessionReadiness(sessionId, level);
+      const persist = () => setSessionReadiness(sessionId, level);
+      void persist()
+        .catch(persist)
+        .catch(() => {
+          console.warn("[confirmReadiness] readiness not persisted", { sessionId });
+        });
     }
   };
 
