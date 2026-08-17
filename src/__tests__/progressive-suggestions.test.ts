@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   buildSuggestion,
+  describeProgressionRule,
   estimate1RM,
   estimateRepsAt,
   isConfidentHit,
+  pendingProgressions,
   roundToNearest,
+  CONSENSUS_WINDOW,
   DELOAD_THRESHOLD,
   REQUIRED_HITS,
 } from "@/lib/utils/progression";
-import type { HistoryRow, ProgramSetData, UserProfile } from "@/lib/utils/progression";
+import type {
+  HistoryRow,
+  PendingSetInput,
+  ProgramSetData,
+  UserProfile,
+} from "@/lib/utils/progression";
+import type { SetSuggestion } from "@/types/workout";
 
 // ─── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -626,5 +635,349 @@ describe("buildSuggestion — distance mode RPE confidence", () => {
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-distance");
     expect(result?.suggestedDistanceMeters).toBe(5500);
+  });
+});
+
+// ─── Per-exercise hit gate ────────────────────────────────────────────────────
+
+describe("buildSuggestion — requiredHits override", () => {
+  it("progresses after a single hit when the gate is 1", () => {
+    const rows = [makeRow({ actualReps: 8, targetReps: 8, rpe: 7 })];
+    const result = buildSuggestion(rows, makePs({ requiredHits: 1 }), null);
+    expect(result?.reason).toBe("progressed");
+    expect(result?.hitsRequired).toBe(1);
+  });
+
+  it("holds at two hits when the gate is 3", () => {
+    const rows = makeRows(2, { actualReps: 8, targetReps: 8, rpe: 7 });
+    const result = buildSuggestion(rows, makePs({ requiredHits: 3 }), null);
+    expect(result?.reason).toBe("held");
+    expect(result?.hitsAchieved).toBe(2);
+    expect(result?.hitsRequired).toBe(3);
+  });
+
+  it("progresses at three hits when the gate is 3", () => {
+    const rows = makeRows(3, { actualReps: 8, targetReps: 8, rpe: 7 });
+    const result = buildSuggestion(rows, makePs({ requiredHits: 3 }), null);
+    expect(result?.reason).toBe("progressed");
+  });
+
+  it("falls back to REQUIRED_HITS when the override is null", () => {
+    const rows = makeRows(REQUIRED_HITS, { actualReps: 8, targetReps: 8, rpe: 7 });
+    const result = buildSuggestion(rows, makePs({ requiredHits: null }), null);
+    expect(result?.reason).toBe("progressed");
+    expect(result?.hitsRequired).toBe(REQUIRED_HITS);
+  });
+});
+
+// ─── Hits are counted at the current load ─────────────────────────────────────
+
+describe("buildSuggestion — hits must be at the current weight", () => {
+  it("does not stack another bump on a weight that was just missed", () => {
+    // Two clean sessions at 80kg earned a bump to 82.5kg, which was then missed.
+    // Counting the 80kg hits again would suggest 85kg off the back of a failure.
+    const rows: HistoryRow[] = [
+      makeRow({ weightKg: "82.50", actualReps: 6, targetReps: 8, date: "2024-01-03" }),
+      makeRow({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
+      makeRow({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-01" }),
+    ];
+    const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "2.50" }), null);
+    expect(result?.reason).toBe("held");
+    expect(result?.suggestedWeightKg).toBe(82.5);
+    expect(result?.hitsAchieved).toBe(0);
+  });
+
+  it("progresses once the target is hit twice at the new weight", () => {
+    const rows: HistoryRow[] = [
+      makeRow({ weightKg: "82.50", actualReps: 8, targetReps: 8, date: "2024-01-04" }),
+      makeRow({ weightKg: "82.50", actualReps: 8, targetReps: 8, date: "2024-01-03" }),
+      makeRow({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
+    ];
+    const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "2.50" }), null);
+    expect(result?.reason).toBe("progressed");
+    expect(result?.suggestedWeightKg).toBe(85);
+  });
+
+  it("still counts hits logged above the current weight", () => {
+    const rows: HistoryRow[] = [
+      makeRow({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
+      makeRow({ weightKg: "85.00", actualReps: 8, targetReps: 8, date: "2024-01-01" }),
+    ];
+    const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "2.50" }), null);
+    expect(result?.hitsAchieved).toBe(2);
+  });
+
+  it("leaves bodyweight sets unaffected (every row is 0kg)", () => {
+    const rows = makeRows(REQUIRED_HITS, {
+      weightKg: "0.00",
+      actualReps: 8,
+      targetReps: 8,
+      rpe: 7,
+    });
+    const result = buildSuggestion(
+      rows,
+      makePs({ progressionMode: "weight", overloadIncrementReps: 1 }),
+      null,
+    );
+    expect(result?.reason).toBe("progressed-reps");
+    expect(result?.suggestedReps).toBe(9);
+  });
+});
+
+// ─── describeProgressionRule ──────────────────────────────────────────────────
+
+describe("describeProgressionRule", () => {
+  const base = {
+    mode: "weight",
+    incrementKg: 2.5,
+    incrementReps: 0,
+    targetReps: 10,
+    requiredHits: 2,
+  };
+
+  it("quotes the increment, rep target, gate and window", () => {
+    const text = describeProgressionRule(base)!;
+    expect(text).toContain("+2.5kg");
+    expect(text).toContain("10 reps");
+    expect(text).toContain(`2 of the last ${CONSENSUS_WINDOW} sessions`);
+  });
+
+  it("spells out the RPE gate for rep-based modes", () => {
+    expect(describeProgressionRule(base)).toContain("RPE 9+");
+    expect(describeProgressionRule(base)).toContain("RPE 8");
+  });
+
+  it("tracks a changed gate", () => {
+    expect(describeProgressionRule({ ...base, requiredHits: 1 })).toContain(
+      `1 of the last ${CONSENSUS_WINDOW} sessions`,
+    );
+  });
+
+  it("says the weight is auto-sized when no increment is set", () => {
+    const text = describeProgressionRule({ ...base, incrementKg: null })!;
+    expect(text).toContain("More weight");
+    expect(text).not.toContain("+null");
+  });
+
+  it("falls back to a generic target when no rep target exists", () => {
+    expect(describeProgressionRule({ ...base, targetReps: null })).toContain(
+      "the target reps",
+    );
+  });
+
+  it("describes reps mode in reps, singular and plural", () => {
+    expect(
+      describeProgressionRule({ ...base, mode: "reps", incrementReps: 1 }),
+    ).toContain("+1 rep ");
+    expect(
+      describeProgressionRule({ ...base, mode: "reps", incrementReps: 2 }),
+    ).toContain("+2 reps");
+  });
+
+  it("describes time and distance modes in their own units", () => {
+    expect(
+      describeProgressionRule({ ...base, mode: "time", incrementReps: 30 }),
+    ).toContain("+30s");
+    expect(
+      describeProgressionRule({ ...base, mode: "distance", incrementReps: 500 }),
+    ).toContain("+0.5km");
+  });
+
+  it("returns null for modes that never suggest anything", () => {
+    expect(describeProgressionRule({ ...base, mode: "manual" })).toBeNull();
+    expect(describeProgressionRule({ ...base, mode: "none" })).toBeNull();
+    expect(describeProgressionRule({ ...base, mode: null })).toBeNull();
+  });
+});
+
+// ─── pendingProgressions ──────────────────────────────────────────────────────
+
+function makeSuggestion(overrides: Partial<SetSuggestion> = {}): SetSuggestion {
+  return {
+    suggestedWeightKg: 82.5,
+    basedOnWeightKg: 80,
+    basedOnReps: 8,
+    basedOnFeeling: "Good",
+    basedOnDate: "2024-01-02",
+    reason: "progressed",
+    hitsAchieved: 2,
+    hitsRequired: 2,
+    sessionsUntilDeload: null,
+    estimated1RM: 100,
+    readinessModulated: false,
+    ...overrides,
+  };
+}
+
+function makeSet(overrides: Partial<PendingSetInput> = {}): PendingSetInput {
+  return {
+    id: 1,
+    weightKg: "80.00",
+    targetReps: 8,
+    durationSeconds: null,
+    distanceMeters: null,
+    setType: "working",
+    ...overrides,
+  };
+}
+
+const NONE = new Set<number>();
+
+describe("pendingProgressions", () => {
+  it("returns the weight a progressed set would move to", () => {
+    const result = pendingProgressions([makeSet()], { 1: makeSuggestion() }, NONE);
+    expect(result).toEqual([{ setId: 1, weightKg: 82.5 }]);
+  });
+
+  it("drops a set that already sits at the suggested weight", () => {
+    const result = pendingProgressions(
+      [makeSet({ weightKg: "82.50" })],
+      { 1: makeSuggestion() },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("skips completed sets — the number they were logged at is history", () => {
+    const result = pendingProgressions(
+      [makeSet()],
+      { 1: makeSuggestion() },
+      new Set([1]),
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("skips warm-up sets", () => {
+    const result = pendingProgressions(
+      [makeSet({ setType: "warmup" })],
+      { 1: makeSuggestion() },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("ignores held, held-readiness and manual suggestions", () => {
+    for (const reason of ["held", "held-readiness", "manual"] as const) {
+      expect(
+        pendingProgressions([makeSet()], { 1: makeSuggestion({ reason }) }, NONE),
+      ).toEqual([]);
+    }
+  });
+
+  it("carries a smart-mode rep adjustment alongside the weight", () => {
+    const result = pendingProgressions(
+      [makeSet()],
+      { 1: makeSuggestion({ adjustedRepsForWeight: 6 }) },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, weightKg: 82.5, targetReps: 6 }]);
+  });
+
+  it("includes deloads — a downward move is still a move", () => {
+    const result = pendingProgressions(
+      [makeSet()],
+      { 1: makeSuggestion({ reason: "deload", suggestedWeightKg: 72.5 }) },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, weightKg: 72.5 }]);
+  });
+
+  it("returns reps for a rep progression and leaves the weight alone", () => {
+    const result = pendingProgressions(
+      [makeSet()],
+      {
+        1: makeSuggestion({
+          reason: "progressed-reps",
+          suggestedReps: 9,
+          suggestedWeightKg: 80,
+        }),
+      },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, targetReps: 9 }]);
+  });
+
+  it("does not lower a rep target that is already higher", () => {
+    const result = pendingProgressions(
+      [makeSet({ targetReps: 12 })],
+      { 1: makeSuggestion({ reason: "progressed-reps", suggestedReps: 9 }) },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("returns only the duration for a timed progression", () => {
+    const result = pendingProgressions(
+      [makeSet({ durationSeconds: 60 })],
+      {
+        1: makeSuggestion({
+          reason: "progressed-time",
+          suggestedDurationSeconds: 70,
+          suggestedWeightKg: 80,
+        }),
+      },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, durationSeconds: 70 }]);
+  });
+
+  it("returns only the distance for a distance progression", () => {
+    const result = pendingProgressions(
+      [makeSet({ distanceMeters: 5000, weightKg: null })],
+      {
+        1: makeSuggestion({
+          reason: "progressed-distance",
+          suggestedDistanceMeters: 5500,
+          suggestedWeightKg: 0,
+        }),
+      },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, distanceMeters: 5500 }]);
+  });
+
+  it("handles a retry as weight or reps depending on the suggestion", () => {
+    expect(
+      pendingProgressions(
+        [makeSet()],
+        { 1: makeSuggestion({ reason: "retry", suggestedWeightKg: 85 }) },
+        NONE,
+      ),
+    ).toEqual([{ setId: 1, weightKg: 85 }]);
+    expect(
+      pendingProgressions(
+        [makeSet()],
+        {
+          1: makeSuggestion({
+            reason: "retry",
+            suggestedWeightKg: 80,
+            suggestedReps: 10,
+          }),
+        },
+        NONE,
+      ),
+    ).toEqual([{ setId: 1, targetReps: 10 }]);
+  });
+
+  it("collects several sets at once and skips the ones already applied", () => {
+    const sets = [
+      makeSet({ id: 1 }),
+      makeSet({ id: 2, weightKg: "82.50" }),
+      makeSet({ id: 3 }),
+    ];
+    const suggestions = {
+      1: makeSuggestion(),
+      2: makeSuggestion(),
+      3: makeSuggestion(),
+    };
+    expect(pendingProgressions(sets, suggestions, NONE)).toEqual([
+      { setId: 1, weightKg: 82.5 },
+      { setId: 3, weightKg: 82.5 },
+    ]);
+  });
+
+  it("returns nothing when there are no suggestions at all", () => {
+    expect(pendingProgressions([makeSet()], undefined, NONE)).toEqual([]);
+    expect(pendingProgressions([makeSet()], {}, NONE)).toEqual([]);
   });
 });

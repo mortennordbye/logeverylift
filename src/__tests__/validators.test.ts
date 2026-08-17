@@ -610,3 +610,53 @@ describe("importProgramSchema exercise.type", () => {
     }
   });
 });
+
+// ─── importProgramSchema (progression gate + plan opt-in) ─────────────────────
+
+describe("importProgramSchema progression settings", () => {
+  const payload = (extra: Record<string, unknown>) => ({
+    program: {
+      name: "P",
+      exercises: [
+        {
+          idx: 0,
+          incKg: 2.5,
+          incReps: 0,
+          mode: "weight",
+          ...extra,
+          exercise: { name: "Bench Press", category: "strength" },
+          sets: [{ n: 1, reps: 5, kg: 60, rest: 90, type: "working" }],
+        },
+      ],
+    },
+  });
+
+  function parsed(extra: Record<string, unknown>) {
+    const r = importProgramSchema.safeParse(payload(extra));
+    if (!r.success) return undefined;
+    const entry = "program" in r.data ? r.data.program : r.data.programs[0];
+    return entry.exercises[0];
+  }
+
+  it("round-trips the gate and the opt-in", () => {
+    const e = parsed({ hits: 3, applyToPlan: true });
+    expect(e?.hits).toBe(3);
+    expect(e?.applyToPlan).toBe(true);
+  });
+
+  it("accepts payloads exported before these fields existed", () => {
+    const e = parsed({});
+    expect(e).toBeDefined();
+    expect(e?.hits).toBeUndefined();
+    expect(e?.applyToPlan).toBeUndefined();
+  });
+
+  it("coerces an out-of-range gate to null rather than rejecting the import", () => {
+    expect(parsed({ hits: 99 })?.hits).toBeNull();
+    expect(parsed({ hits: 0 })?.hits).toBeNull();
+  });
+
+  it("keeps null as an explicit 'use the default'", () => {
+    expect(parsed({ hits: null })?.hits).toBeNull();
+  });
+});

@@ -183,7 +183,10 @@ export type SetSuggestion = {
   // ─── Enriched fields (populated by getProgressiveSuggestions) ───────────────
   /** How many confident hits have been recorded in the current consensus window. */
   hitsAchieved: number;
-  /** Hits required to trigger progression (always REQUIRED_HITS). */
+  /**
+   * Hits required to trigger progression — the exercise's
+   * progressionRequiredHits, or REQUIRED_HITS when it has none.
+   */
   hitsRequired: number;
   /**
    * Sessions remaining before a deload is triggered.
@@ -404,6 +407,10 @@ export type ExportedProgram = {
       incKg: number;
       incReps: number;
       mode: string;
+      /** Sessions at target before a bump. Null = the shared default. */
+      hits?: number | null;
+      /** Whether accepting a bump rewrites the planned sets. */
+      applyToPlan?: boolean;
       exercise: {
         name: string;
         category: string;

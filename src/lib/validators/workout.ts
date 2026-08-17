@@ -20,6 +20,7 @@
  * ```
  */
 
+import { MAX_REQUIRED_HITS, MIN_REQUIRED_HITS } from "@/lib/utils/progression";
 import { z } from "zod";
 
 export const WORKOUT_FEELINGS = ["Tired", "OK", "Good", "Awesome"] as const;
@@ -208,6 +209,53 @@ export const setProgramExerciseTypeSchema = z.object({
     .nullable(),
 });
 
+// How many qualifying sessions this exercise needs before a bump is suggested.
+// null restores the shared REQUIRED_HITS default. The ceiling is the consensus
+// window — asking for more hits than the window holds is unsatisfiable.
+export const setProgramExerciseRequiredHitsSchema = z.object({
+  programExerciseId: z.number().int().positive(),
+  requiredHits: z
+    .number()
+    .int()
+    .min(MIN_REQUIRED_HITS)
+    .max(MAX_REQUIRED_HITS)
+    .nullable(),
+});
+
+// Opt-in: accepted suggestions also rewrite the planned sets.
+export const setProgramExerciseApplyToPlanSchema = z.object({
+  programExerciseId: z.number().int().positive(),
+  applyToPlan: z.boolean(),
+});
+
+// Batch-apply accepted suggestions to a slot's planned sets. Every entry must
+// carry at least one value, otherwise it is a no-op row that would only widen
+// the write surface.
+export const applyProgressionToPlanSchema = z.object({
+  programExerciseId: z.number().int().positive(),
+  updates: z
+    .array(
+      z
+        .object({
+          programSetId: z.number().int().positive(),
+          weightKg: z.number().min(0).max(1000).optional(),
+          targetReps: z.number().int().min(0).max(1000).optional(),
+          durationSeconds: z.number().int().min(0).max(86400).optional(),
+          distanceMeters: z.number().int().min(0).max(1000000).optional(),
+        })
+        .refine(
+          (u) =>
+            u.weightKg !== undefined ||
+            u.targetReps !== undefined ||
+            u.durationSeconds !== undefined ||
+            u.distanceMeters !== undefined,
+          { message: "Each update needs at least one value" },
+        ),
+    )
+    .min(1)
+    .max(50),
+});
+
 export const SET_TYPES = ["working", "warmup"] as const;
 export type SetType = (typeof SET_TYPES)[number];
 
@@ -291,6 +339,16 @@ const importProgramEntrySchema = z.object({
           mode: z
             .enum(["none", "manual", "weight", "smart", "reps", "time", "distance"])
             .catch("manual"),
+          // Added after v1 payloads existed — absent means "use the defaults".
+          hits: z
+            .number()
+            .int()
+            .min(MIN_REQUIRED_HITS)
+            .max(MAX_REQUIRED_HITS)
+            .nullable()
+            .optional()
+            .catch(null),
+          applyToPlan: z.boolean().optional().catch(false),
           exercise: z.object({
             name: z.string().min(1).max(100),
             category: z.enum(["strength", "cardio", "flexibility"]).catch("strength"),

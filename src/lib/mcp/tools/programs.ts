@@ -9,6 +9,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
+import { MAX_REQUIRED_HITS, MIN_REQUIRED_HITS } from "@/lib/utils/progression";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
@@ -188,7 +189,7 @@ export function registerProgramTools(server: McpServer, userId: string) {
     {
       description: [
         "Add, update, or remove an exercise slot within a program (including its planned sets).",
-        "operation='add': requires programId and exerciseId; optional orderIndex (defaults to end), notes, progressionMode, overloadIncrementKg, overloadIncrementReps, and sets[].",
+        "operation='add': requires programId and exerciseId; optional orderIndex (defaults to end), notes, progressionMode, overloadIncrementKg, overloadIncrementReps, progressionRequiredHits, progressionApplyToPlan, and sets[].",
         "operation='update': requires programExerciseId; any provided slot fields are updated. If sets[] is provided it REPLACES all existing sets for the slot.",
         "operation='remove': requires programExerciseId.",
       ].join(" "),
@@ -204,6 +205,16 @@ export function registerProgramTools(server: McpServer, userId: string) {
         // decimal(4,2) column: max is 99.99 — 100 would overflow and throw.
         overloadIncrementKg: z.number().min(0).max(99.99).nullable().optional(),
         overloadIncrementReps: z.number().int().min(0).max(100).optional(),
+        // Sessions at target before a bump is suggested; null = shared default.
+        progressionRequiredHits: z
+          .number()
+          .int()
+          .min(MIN_REQUIRED_HITS)
+          .max(MAX_REQUIRED_HITS)
+          .nullable()
+          .optional(),
+        // When true, accepting a bump also rewrites this slot's planned sets.
+        progressionApplyToPlan: z.boolean().optional(),
         sets: z
           .array(setShape)
           .max(50)
@@ -267,6 +278,8 @@ export function registerProgramTools(server: McpServer, userId: string) {
                     ? args.overloadIncrementKg.toString()
                     : null,
                 overloadIncrementReps: args.overloadIncrementReps ?? 0,
+                progressionRequiredHits: args.progressionRequiredHits ?? null,
+                progressionApplyToPlan: args.progressionApplyToPlan ?? false,
               })
               .returning();
             if (args.sets && args.sets.length > 0) {
@@ -300,6 +313,10 @@ export function registerProgramTools(server: McpServer, userId: string) {
                 : null;
           if (args.overloadIncrementReps !== undefined)
             peUpdates.overloadIncrementReps = args.overloadIncrementReps;
+          if (args.progressionRequiredHits !== undefined)
+            peUpdates.progressionRequiredHits = args.progressionRequiredHits;
+          if (args.progressionApplyToPlan !== undefined)
+            peUpdates.progressionApplyToPlan = args.progressionApplyToPlan;
 
           // Apply the slot edits and the wholesale set-replace in one
           // transaction: deleting the old sets must roll back if the re-insert

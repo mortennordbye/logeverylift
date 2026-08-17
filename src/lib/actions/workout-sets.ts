@@ -1147,6 +1147,7 @@ export async function getProgressiveSuggestions(
         overloadIncrementKg: programExercises.overloadIncrementKg,
         overloadIncrementReps: programExercises.overloadIncrementReps,
         progressionMode: programExercises.progressionMode,
+        progressionRequiredHits: programExercises.progressionRequiredHits,
         movementPattern: exercises.movementPattern,
         // Resolve override ?? default in JS below (Drizzle returns both columns).
         exerciseTypeOverride: programExercises.exerciseType,
@@ -1265,6 +1266,7 @@ export async function getProgressiveSuggestions(
         overloadIncrementKg: ps.overloadIncrementKg,
         overloadIncrementReps: ps.overloadIncrementReps,
         progressionMode: ps.progressionMode,
+        requiredHits: ps.progressionRequiredHits,
         movementPattern: ps.movementPattern,
         exerciseType: ps.exerciseTypeOverride ?? ps.exerciseTypeDefault,
         exerciseName: ps.exerciseName,

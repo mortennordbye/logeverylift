@@ -1354,10 +1354,12 @@ function SortableSetRow({
             ? `Last: ${lastValue} (${lastQualifier})`
             : `Last: ${lastQualifier}`;
 
-          // Progress dots: show when held and not yet at required hits
+          // Progress dots: how many qualifying sessions are banked toward the
+          // next bump. Shown for every progression-driven suggestion, not just
+          // held ones — they used to vanish on the session the bump arrived,
+          // which is exactly when "2 of 2" explains where the bump came from.
           const showProgressDots =
-            (suggestion.reason === "held" || suggestion.reason === "held-readiness") &&
-            suggestion.hitsAchieved < suggestion.hitsRequired;
+            suggestion.reason !== "manual" && suggestion.hitsRequired > 0;
 
           return (
             <div className="mt-0.5">

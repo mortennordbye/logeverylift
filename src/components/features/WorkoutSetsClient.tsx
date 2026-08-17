@@ -2,7 +2,10 @@
 
 import { WorkoutSetsList } from "@/components/features/WorkoutSetsList";
 import {
+  applyProgressionToPlan,
   deleteProgramSet,
+  setProgramExerciseApplyToPlan,
+  setProgramExerciseRequiredHits,
   setProgramExerciseType,
   updateProgramExerciseIncrement,
   updateProgramExerciseIncrementReps,
@@ -16,6 +19,12 @@ import {
   type ExerciseType,
 } from "@/lib/utils/exercise-type";
 import { sanitizeDecimalInput } from "@/lib/utils/format";
+import {
+  REQUIRED_HITS,
+  describeProgressionRule,
+  pendingProgressions,
+  type PendingProgression,
+} from "@/lib/utils/progression";
 import type { Discipline } from "@/lib/utils/discipline";
 import type { ProgramSet } from "@/types/workout";
 import { ChevronLeftIcon, Plus } from "lucide-react";
@@ -30,6 +39,10 @@ import type { SetSuggestion } from "@/types/workout";
 type ProgressionMode = "none" | "manual" | "weight" | "smart" | "reps" | "time" | "distance";
 
 const KG_INCREMENT_PRESETS = [0.5, 1, 2.5, 5, 10] as const;
+/** Sessions-at-target presets. Beyond 3 the gate is slower than most cycles. */
+const REQUIRED_HITS_PRESETS = [1, 2, 3] as const;
+/** Stable identity so the pending-suggestion memo doesn't rerun every render. */
+const EMPTY_SET_IDS: ReadonlySet<number> = new Set<number>();
 const REP_INCREMENT_PRESETS = [1, 2, 3] as const;
 const DISTANCE_INCREMENT_PRESETS_M = [500, 1000, 2000] as const;
 
@@ -57,6 +70,10 @@ type Props = {
   overloadIncrementKg?: number | null;
   overloadIncrementReps?: number;
   progressionMode?: ProgressionMode;
+  /** Sessions at target before a bump. Null = the shared REQUIRED_HITS default. */
+  progressionRequiredHits?: number | null;
+  /** Opt-in: accepting a bump also rewrites the planned sets. */
+  progressionApplyToPlan?: boolean;
   /** Exercise's intrinsic type (the default shown when there's no override). */
   exerciseTypeDefault?: string | null;
   /** Per-program override of the exercise type; null = inherit the default. */
@@ -78,6 +95,8 @@ export function WorkoutSetsClient({
   overloadIncrementKg: initialIncrement = null,
   overloadIncrementReps: initialIncrementReps = 0,
   progressionMode: initialMode = "manual",
+  progressionRequiredHits: initialRequiredHits = null,
+  progressionApplyToPlan: initialApplyToPlan = false,
   exerciseTypeDefault = null,
   exerciseTypeOverride: initialTypeOverride = null,
   initialEditing = false,
@@ -91,6 +110,8 @@ export function WorkoutSetsClient({
   const [increment, setIncrement] = useState(initialIncrement);
   const [incrementReps, setIncrementReps] = useState(initialIncrementReps);
   const [typeOverride, setTypeOverride] = useState<string | null>(initialTypeOverride);
+  const [requiredHits, setRequiredHits] = useState<number | null>(initialRequiredHits);
+  const [applyToPlan, setApplyToPlan] = useState(initialApplyToPlan);
   const [mode, setMode] = useState<ProgressionMode>(() => {
     // Snap stale modes to sensible defaults for the exercise type
     if (exerciseIsTimed && initialMode !== "manual" && initialMode !== "time") return "time";
@@ -131,6 +152,12 @@ export function WorkoutSetsClient({
 
   const isRunning = (exerciseCategory === "cardio" && !exerciseIsTimed) || exerciseDiscipline != null;
 
+  // The rule sentence quotes a rep target; the first working set is the one the
+  // lifter thinks of as "the" target. Null when there is nothing to quote yet.
+  const firstWorkingTargetReps =
+    sets.find((s) => (s.setType ?? "working") === "working" && s.targetReps != null)
+      ?.targetReps ?? null;
+
   // Increment sections this exercise can ever reach, mirroring the mode filter
   // in the progression sheet. They all render into a single grid cell, so that
   // area is permanently as tall as the tallest one it could show and picking a
@@ -146,6 +173,56 @@ export function WorkoutSetsClient({
   const incrementSections: ("weight" | "reps" | "time" | "distance")[] =
     isRunning ? ["distance"] : exerciseIsTimed ? ["time"] : ["weight", "reps"];
 
+  // Suggestions the lifter hasn't taken yet, in the values applying them would
+  // write. Reads the override-folded sets so a set drops out the moment it is
+  // already at the suggested numbers.
+  const pending = isWorkout
+    ? pendingProgressions(
+        displaySets,
+        suggestions,
+        workoutSession?.completedSetIds ?? EMPTY_SET_IDS,
+      )
+    : [];
+
+  // Only label the chip with a weight when every pending set lands on the same
+  // one — sets progress independently, so they can legitimately disagree.
+  const pendingWeights = pending.map((p) => p.weightKg);
+  const pendingWeight =
+    pendingWeights.length > 0 &&
+    !pendingWeights.some((w) => w === undefined) &&
+    new Set(pendingWeights).size === 1
+      ? (pendingWeights[0] as number)
+      : null;
+
+  /**
+   * Write accepted values into the plan, when this exercise has opted in.
+   *
+   * Best-effort by design: the session override has already landed, so the
+   * lifter's current set is unaffected if this never reaches the server. A lost
+   * write costs nothing permanent either — the next suggestion is recomputed
+   * from logged history, so it comes back on its own.
+   */
+  function persistToPlan(updates: PendingProgression[]) {
+    if (!applyToPlan || updates.length === 0) return;
+    void applyProgressionToPlan({
+      programExerciseId,
+      updates: updates.map((u) => ({
+        programSetId: u.setId,
+        ...(u.weightKg !== undefined ? { weightKg: u.weightKg } : {}),
+        ...(u.targetReps !== undefined ? { targetReps: u.targetReps } : {}),
+        ...(u.durationSeconds !== undefined
+          ? { durationSeconds: u.durationSeconds }
+          : {}),
+        ...(u.distanceMeters !== undefined
+          ? { distanceMeters: u.distanceMeters }
+          : {}),
+      })),
+    }).catch(() => {
+      // Offline or a dropped request. Swallowed on purpose — surfacing an error
+      // mid-set would interrupt a lift over a plan edit that self-heals.
+    });
+  }
+
   function applySuggestion(setId: number, suggestedWeightKg: number, adjustedReps?: number, durationSeconds?: number, distanceMeters?: number) {
     if (!workoutSession) return;
     const set = sets.find((s) => s.id === setId);
@@ -155,16 +232,52 @@ export function WorkoutSetsClient({
       ...(durationSeconds != null ? { durationSeconds } : {}),
       ...(distanceMeters != null ? { distanceMeters } : {}),
     });
+    // Persist only what this mode actually progressed. A duration bump carries
+    // the unchanged weight along for the override; writing that back would
+    // overwrite the planned weight with whatever was last lifted.
+    persistToPlan([
+      durationSeconds != null
+        ? { setId, durationSeconds }
+        : distanceMeters != null
+        ? { setId, distanceMeters }
+        : {
+            setId,
+            weightKg: suggestedWeightKg,
+            ...(adjustedReps != null ? { targetReps: adjustedReps } : {}),
+          },
+    ]);
   }
 
   function applyRepSuggestion(setId: number, suggestedReps: number) {
     if (!workoutSession) return;
     const set = sets.find((s) => s.id === setId);
     const currentReps = workoutSession.overrides[setId]?.targetReps ?? set?.targetReps ?? 0;
+    const targetReps = Math.max(suggestedReps, currentReps);
     workoutSession.setOverride(setId, {
       weightKg: workoutSession.overrides[setId]?.weightKg ?? Number(set?.weightKg ?? 0),
-      targetReps: Math.max(suggestedReps, currentReps),
+      targetReps,
     });
+    persistToPlan([{ setId, targetReps }]);
+  }
+
+  /** Take every outstanding suggestion for this exercise in one tap. */
+  function applyAllPending() {
+    if (!workoutSession || pending.length === 0) return;
+    for (const entry of pending) {
+      const set = sets.find((s) => s.id === entry.setId);
+      const current = workoutSession.overrides[entry.setId];
+      workoutSession.setOverride(entry.setId, {
+        weightKg: entry.weightKg ?? current?.weightKg ?? Number(set?.weightKg ?? 0),
+        targetReps: entry.targetReps ?? current?.targetReps ?? set?.targetReps ?? 0,
+        ...(entry.durationSeconds != null
+          ? { durationSeconds: entry.durationSeconds }
+          : {}),
+        ...(entry.distanceMeters != null
+          ? { distanceMeters: entry.distanceMeters }
+          : {}),
+      });
+    }
+    persistToPlan(pending);
   }
 
   async function handleModeChange(newMode: ProgressionMode) {
@@ -184,6 +297,33 @@ export function WorkoutSetsClient({
     setIncrement(newIncrement);
     setCustomKgInput("");
     await updateProgramExerciseIncrement(programExerciseId, newIncrement);
+    router.refresh();
+  }
+
+  async function handleRequiredHitsChange(hits: number) {
+    const previous = requiredHits;
+    setRequiredHits(hits);
+    const result = await setProgramExerciseRequiredHits({
+      programExerciseId,
+      requiredHits: hits,
+    });
+    if (!result.success) {
+      setRequiredHits(previous); // revert — the gate never actually moved
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleApplyToPlanChange(next: boolean) {
+    setApplyToPlan(next);
+    const result = await setProgramExerciseApplyToPlan({
+      programExerciseId,
+      applyToPlan: next,
+    });
+    if (!result.success) {
+      setApplyToPlan(!next);
+      return;
+    }
     router.refresh();
   }
 
@@ -270,9 +410,14 @@ export function WorkoutSetsClient({
         <h1 className="text-3xl font-bold tracking-tight">{exerciseName}</h1>
       </div>
 
-      {/* Progression badge + 1RM badge */}
-      <div className="px-4 pb-4 shrink-0 flex items-center gap-2">
+      {/* Progression badge + 1RM badge + apply-to-all.
+          min-h is load-bearing: the apply-all chip is a 44px touch target that
+          comes and goes with the pending count, and without a floor under the
+          row its arrival and departure would shove the set list up and down
+          mid-workout. */}
+      <div className="px-4 pb-4 shrink-0 flex items-center gap-2 min-h-[44px]">
         <button
+          aria-label="Progression settings"
           onClick={() => setShowProgressionPicker(true)}
           className={`flex items-center gap-1 px-3 py-1.5 rounded-full bg-muted text-xs font-semibold active:scale-95 transition-all ${mode === "none" ? "text-muted-foreground/40" : "text-muted-foreground"}`}
         >
@@ -282,6 +427,16 @@ export function WorkoutSetsClient({
           <span className="px-3 py-1.5 rounded-full bg-primary/10 text-xs font-semibold text-primary">
             1RM ~{Math.round(bestEstimated1RM)}kg
           </span>
+        )}
+        {/* One tap instead of one per set. Only worth showing when there is
+            more than one set to take, otherwise the set's own chip is closer. */}
+        {pending.length > 1 && (
+          <button
+            onClick={applyAllPending}
+            className="ml-auto min-h-[44px] px-3.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold active:scale-95 transition-all"
+          >
+            ↑ {pendingWeight != null ? `${pendingWeight}kg · all ${pending.length}` : `Apply all ${pending.length}`}
+          </button>
         )}
       </div>
 
@@ -555,6 +710,79 @@ export function WorkoutSetsClient({
                     </div>
                   </div>
                 )}
+                </div>
+
+                {/* Gate + plan opt-in. Always mounted, and greyed rather than
+                    unmounted for the two modes that never suggest anything, so
+                    switching modes can't change the sheet's height and slide
+                    the row under the user's finger. */}
+                <div
+                  className={`border-t border-border ${
+                    mode === "none" || mode === "manual"
+                      ? "invisible pointer-events-none"
+                      : ""
+                  }`}
+                >
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
+                    Sessions at target
+                  </p>
+                  <div
+                    role="group"
+                    aria-label="Sessions at target"
+                    className="flex gap-2 px-4 pb-2"
+                  >
+                    {REQUIRED_HITS_PRESETS.map((preset) => (
+                      <button
+                        key={preset}
+                        onClick={() => handleRequiredHitsChange(preset)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                          (requiredHits ?? REQUIRED_HITS) === preset
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Reserved height: the sentence runs one to three lines
+                      depending on mode, and the sheet grows upward. */}
+                  <p className="text-xs text-muted-foreground px-4 pb-3 min-h-[48px]">
+                    {describeProgressionRule({
+                      mode,
+                      incrementKg: increment,
+                      incrementReps,
+                      targetReps: firstWorkingTargetReps,
+                      requiredHits: requiredHits ?? REQUIRED_HITS,
+                    })}
+                  </p>
+                  <button
+                    role="switch"
+                    aria-checked={applyToPlan}
+                    onClick={() => handleApplyToPlanChange(!applyToPlan)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 min-h-[44px] border-t border-border text-left active:bg-muted/50 transition-colors"
+                  >
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-base font-medium">
+                        Apply bumps to the plan
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        Taking a suggestion rewrites these planned sets, so next
+                        session starts at the new numbers
+                      </span>
+                    </span>
+                    <span
+                      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                        applyToPlan ? "bg-primary" : "bg-border"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                          applyToPlan ? "translate-x-[22px]" : "translate-x-0.5"
+                        }`}
+                      />
+                    </span>
+                  </button>
                 </div>
                 {/* Scroll room so custom inputs stay above the keyboard */}
                 <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
