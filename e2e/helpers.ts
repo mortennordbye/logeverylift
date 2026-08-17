@@ -39,6 +39,15 @@ async function dismissReadinessSheet(page: Page) {
 /** Every program's workout href, in picker order. */
 async function programWorkoutHrefs(page: Page): Promise<string[]> {
   await page.goto("/new-workout");
+  // On a day the active cycle schedules a program, the picker leads with that
+  // cycle card and collapses the full list behind "Different program"
+  // (NewWorkoutClient). The seed schedules Mon/Wed/Fri, so without this the
+  // whole suite finds no links three days a week and reports it as "element(s)
+  // not found" — a missing prerequisite dressed up as a regression.
+  const showAll = page.getByRole("button", { name: "Different program" });
+  if (await showAll.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await showAll.click();
+  }
   const links = page.locator('a[href^="/programs/"][href$="/workout"]');
   await expect(links.first()).toBeVisible({ timeout: 10_000 });
   // Read every href in one DOM pass. Resolving them one locator at a time
