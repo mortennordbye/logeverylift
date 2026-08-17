@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { openFirstExercise, openWorkout } from "./helpers";
+import { openFirstExercise, openWorkout, tapAndSave } from "./helpers";
 
 /**
  * Rest-time picker flow.
@@ -38,7 +38,11 @@ test("rest-time picker saves the selected preset", async ({ page }) => {
   // pick "5 m" because it's at the far right and requires the row to
   // scroll — that's the position where the original bean bug appeared.
   await page.getByRole("button", { name: "5 m" }).click();
-  await page.getByRole("button", { name: "Done" }).click();
+  // tapAndSave, not click + networkidle: Done fans out into a reorder and a
+  // write per changed set, and networkidle resolved while they were still in
+  // flight — the reload below then cancelled the write and the spec failed as
+  // if the picker had saved nothing.
+  await tapAndSave(page, page.getByRole("button", { name: "Done" }));
 
   // Picker should be gone, label should now show 05:00.
   await expect(page.getByText("Select Rest Time")).not.toBeVisible();
@@ -50,32 +54,23 @@ test("rest-time picker saves the selected preset", async ({ page }) => {
   // writes rests that differ from the last-fetched DB values, so restoring
   // before router.refresh() lands is silently skipped and leaks 05:00 into
   // the shared program (which then breaks every later run's sanity check).
-  await page.waitForLoadState("networkidle");
   await page.reload();
   await expect(restRow).toHaveText("REST 05:00");
 
-  // Restore original to keep the test idempotent across runs.
-  //
-  // Retried, because losing this particular race is not a local failure: the
-  // rest time lives on the shared program, so a restore that silently does not
-  // persist leaves 05:00 behind and every later run then fails on the sanity
-  // check above, until someone edits the database by hand. Observed on both
-  // this branch and main. One retry is enough in practice; the assertion after
-  // the loop still fails the run if the value really did not stick.
+  // Restore original to keep the test idempotent across runs. Losing this is
+  // not a local failure: the rest time lives on the shared program, so a
+  // restore that does not persist leaves 05:00 behind and every later run
+  // fails the sanity check above until someone edits the database by hand.
   const originalSeconds = parseRestLabel(originalLabel);
   const originalButton = preserveLabelToButton(originalSeconds);
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    await restRow.click();
-    await page.getByRole("button", { name: originalButton }).click();
-    await page.getByRole("button", { name: "Done" }).click();
-    await expect(restRow).toHaveText(originalLabel);
-    // Let the write land, then re-read from the server to prove it persisted.
-    await page.waitForLoadState("networkidle");
-    await page.reload();
-    if ((await restRow.textContent())?.trim() === originalLabel) break;
-  }
+  await restRow.click();
+  await page.getByRole("button", { name: originalButton }).click();
+  await tapAndSave(page, page.getByRole("button", { name: "Done" }));
+  await expect(restRow).toHaveText(originalLabel);
 
+  // Re-read from the server to prove the restore persisted, not just rendered.
+  await page.reload();
   await expect(
     restRow,
     "rest time must be restored, or it leaks into every later run",
