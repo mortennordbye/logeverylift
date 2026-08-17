@@ -1318,9 +1318,15 @@ function SortableSetRow({
             suggestion.reason === "retry" &&
             suggestion.suggestedReps === undefined &&
             currentWeight !== suggestion.suggestedWeightKg;
+          // The three below compare against the set's current value like the
+          // weight chips above, rather than just asking whether the suggestion
+          // exists. Without that they were pending forever: taking the bump
+          // never turned the chip's arrow into a tick, so a timed or endurance
+          // set gave no sign the tap had registered.
           const retryRepsPending =
             suggestion.reason === "retry" &&
-            suggestion.suggestedReps !== undefined;
+            suggestion.suggestedReps !== undefined &&
+            suggestion.suggestedReps !== currentReps;
           const repsPending =
             suggestion.reason === "progressed-reps" &&
             !hasSmartAdjustment &&
@@ -1328,10 +1334,12 @@ function SortableSetRow({
             suggestion.suggestedReps > currentReps;
           const timePending =
             suggestion.reason === "progressed-time" &&
-            suggestion.suggestedDurationSeconds !== undefined;
+            suggestion.suggestedDurationSeconds !== undefined &&
+            suggestion.suggestedDurationSeconds !== (set.durationSeconds ?? 0);
           const distancePending =
             suggestion.reason === "progressed-distance" &&
-            suggestion.suggestedDistanceMeters !== undefined;
+            suggestion.suggestedDistanceMeters !== undefined &&
+            suggestion.suggestedDistanceMeters !== (set.distanceMeters ?? 0);
           const lastValue = isRunning
             ? suggestion.basedOnDistanceMeters != null
               ? formatEnduranceDistance(cfg.inputUnit, suggestion.basedOnDistanceMeters)
@@ -1430,13 +1438,13 @@ function SortableSetRow({
                     {retryWeightPending ? "↑" : "✓"} {suggestion.suggestedWeightKg}kg — retry
                   </SuggestionChip>
                 )}
-                {retryRepsPending && (
+                {suggestion.reason === "retry" && suggestion.suggestedReps !== undefined && (
                   <SuggestionChip
                     tone="amber"
-                    applied={isCompleted}
+                    applied={!retryRepsPending || isCompleted}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, suggestion.suggestedReps)}
                   >
-                    ↑ {suggestion.suggestedReps} reps — retry
+                    {retryRepsPending ? "↑" : "✓"} {suggestion.suggestedReps} reps — retry
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "progressed-reps" && !hasSmartAdjustment && suggestion.suggestedReps !== undefined && (
@@ -1449,22 +1457,22 @@ function SortableSetRow({
                     {suggestion.easyOverride && " — felt easy"}
                   </SuggestionChip>
                 )}
-                {timePending && (
+                {suggestion.reason === "progressed-time" && suggestion.suggestedDurationSeconds !== undefined && (
                   <SuggestionChip
                     tone="primary"
-                    applied={isCompleted}
+                    applied={!timePending || isCompleted}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, suggestion.suggestedDurationSeconds)}
                   >
-                    ↑ {formatTime(suggestion.suggestedDurationSeconds!)} duration
+                    {timePending ? "↑" : "✓"} {formatTime(suggestion.suggestedDurationSeconds)} duration
                   </SuggestionChip>
                 )}
-                {distancePending && (
+                {suggestion.reason === "progressed-distance" && suggestion.suggestedDistanceMeters !== undefined && (
                   <SuggestionChip
                     tone="primary"
-                    applied={isCompleted}
+                    applied={!distancePending || isCompleted}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, undefined, suggestion.suggestedDistanceMeters)}
                   >
-                    ↑ {formatEnduranceDistance(cfg.inputUnit, suggestion.suggestedDistanceMeters!)}
+                    {distancePending ? "↑" : "✓"} {formatEnduranceDistance(cfg.inputUnit, suggestion.suggestedDistanceMeters)}
                   </SuggestionChip>
                 )}
                 {suggestion.readinessModulated && (
