@@ -26,7 +26,15 @@ function LoginFormContent() {
     });
 
     if (result.error) {
-      setError("Invalid email or password.");
+      // A throttled attempt is not a wrong password. Reporting it as one sends
+      // the user round the same failing loop — retyping a password that was
+      // right all along, each retry extending the block — with nothing telling
+      // them to simply wait.
+      setError(
+        result.error.status === 429
+          ? "Too many attempts. Wait a minute, then try again."
+          : "Invalid email or password.",
+      );
       setLoading(false);
       return;
     }

@@ -17,7 +17,12 @@ async function main() {
   console.log(`Creating admin user: ${DEFAULT_ADMIN_EMAIL}`);
 
   try {
-    const result = await auth.api.signUpEmail({
+    // Public sign-up is closed (auth.ts sets disableSignUp), so signUpEmail
+    // fails with "Email and password sign up is not enabled" — which, for the
+    // one script you run on a fresh deployment, leaves no way in at all.
+    // Called without headers, the admin plugin's createUser skips its
+    // admin-session check, the same path registerWithToken uses.
+    const result = await auth.api.createUser({
       body: {
         name: DEFAULT_ADMIN_NAME,
         email: DEFAULT_ADMIN_EMAIL,

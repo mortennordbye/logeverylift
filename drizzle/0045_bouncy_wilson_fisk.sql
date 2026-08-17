@@ -1,0 +1,2 @@
+ALTER TABLE "program_exercises" ADD COLUMN "progression_required_hits" integer;--> statement-breakpoint
+ALTER TABLE "program_exercises" ADD COLUMN "progression_apply_to_plan" boolean DEFAULT false NOT NULL;

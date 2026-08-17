@@ -13,12 +13,15 @@ import { requireSession } from "@/lib/utils/session";
 import {
   addExerciseToProgramSchema,
   addProgramSetSchema,
+  applyProgressionToPlanSchema,
   createProgramSchema,
   deleteProgramSetSchema,
   importProgramSchema,
   removeExerciseFromProgramSchema,
   reorderProgramExercisesSchema,
   reorderProgramSetsSchema,
+  setProgramExerciseApplyToPlanSchema,
+  setProgramExerciseRequiredHitsSchema,
   setProgramExerciseTypeSchema,
   updateProgramSchema,
   updateProgramSetSchema,
@@ -354,6 +357,192 @@ export async function setProgramExerciseType(
   }
 }
 
+/**
+ * How many qualifying sessions this exercise needs before a bump is suggested.
+ * Pass null to fall back to the shared REQUIRED_HITS default.
+ */
+export async function setProgramExerciseRequiredHits(
+  data: unknown,
+): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+  const validation = setProgramExerciseRequiredHitsSchema.safeParse(data);
+  if (!validation.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: validation.error.flatten().fieldErrors,
+    };
+  }
+  const { programExerciseId, requiredHits } = validation.data;
+  try {
+    const [check] = await db
+      .select({ userId: programs.userId })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programExercises.id, programExerciseId))
+      .limit(1);
+    if (!check || check.userId !== auth.user.id) {
+      return { success: false, error: "Not found" };
+    }
+    const [pe] = await db
+      .update(programExercises)
+      .set({ progressionRequiredHits: requiredHits })
+      .where(eq(programExercises.id, programExerciseId))
+      .returning({ programId: programExercises.programId });
+    if (pe) {
+      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
+      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
+    }
+    return { success: true, data: undefined };
+  } catch (err) {
+    console.error("[setProgramExerciseRequiredHits] failed", err);
+    return { success: false, error: "Failed to update progression gate" };
+  }
+}
+
+/**
+ * Opt in (or out of) rewriting the planned sets when a suggestion is accepted.
+ */
+export async function setProgramExerciseApplyToPlan(
+  data: unknown,
+): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+  const validation = setProgramExerciseApplyToPlanSchema.safeParse(data);
+  if (!validation.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: validation.error.flatten().fieldErrors,
+    };
+  }
+  const { programExerciseId, applyToPlan } = validation.data;
+  try {
+    const [check] = await db
+      .select({ userId: programs.userId })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programExercises.id, programExerciseId))
+      .limit(1);
+    if (!check || check.userId !== auth.user.id) {
+      return { success: false, error: "Not found" };
+    }
+    const [pe] = await db
+      .update(programExercises)
+      .set({ progressionApplyToPlan: applyToPlan })
+      .where(eq(programExercises.id, programExerciseId))
+      .returning({ programId: programExercises.programId });
+    if (pe) {
+      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
+      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
+    }
+    return { success: true, data: undefined };
+  } catch (err) {
+    console.error("[setProgramExerciseApplyToPlan] failed", err);
+    return { success: false, error: "Failed to update plan setting" };
+  }
+}
+
+/**
+ * Write accepted progression suggestions into the planned sets, so the next
+ * session opens at the new numbers.
+ *
+ * Only runs when the slot has opted in — the client gates on the same flag, but
+ * a stale tab must not be able to move someone's plan after they switched it
+ * off. Warm-up sets are filtered out server-side for the same reason: they
+ * never carry a suggestion, so a request naming one is not something the UI
+ * could have produced.
+ */
+export async function applyProgressionToPlan(
+  data: unknown,
+): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+  const validation = applyProgressionToPlanSchema.safeParse(data);
+  if (!validation.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: validation.error.flatten().fieldErrors,
+    };
+  }
+  const { programExerciseId, updates } = validation.data;
+
+  try {
+    const [slot] = await db
+      .select({
+        userId: programs.userId,
+        programId: programs.id,
+        applyToPlan: programExercises.progressionApplyToPlan,
+      })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programExercises.id, programExerciseId))
+      .limit(1);
+    if (!slot || slot.userId !== auth.user.id) {
+      return { success: false, error: "Not found" };
+    }
+    // Opted out since the page rendered — leaving the plan alone *is* the
+    // requested state, so this is a success, not an error the user must act on.
+    if (!slot.applyToPlan) return { success: true, data: undefined };
+
+    // Every id must be a working set of this slot. Anything else is dropped
+    // rather than trusted, so a tampered payload can't reach another program.
+    const owned = await db
+      .select({ id: programSets.id })
+      .from(programSets)
+      .where(
+        and(
+          eq(programSets.programExerciseId, programExerciseId),
+          inArray(
+            programSets.id,
+            updates.map((u) => u.programSetId),
+          ),
+          eq(programSets.setType, "working"),
+        ),
+      );
+    const ownedIds = new Set(owned.map((r) => r.id));
+    const applicable = updates.filter((u) => ownedIds.has(u.programSetId));
+    if (applicable.length === 0) {
+      console.error("[applyProgressionToPlan] no applicable sets", {
+        programExerciseId,
+      });
+      return { success: false, error: "Nothing to apply" };
+    }
+
+    await db.transaction(async (tx) => {
+      for (const u of applicable) {
+        await tx
+          .update(programSets)
+          .set({
+            // decimal(6,2): fix the scale here so float noise from the
+            // increment rounding (32.500000000000004) never reaches the column.
+            ...(u.weightKg !== undefined
+              ? { weightKg: u.weightKg.toFixed(2) }
+              : {}),
+            ...(u.targetReps !== undefined ? { targetReps: u.targetReps } : {}),
+            ...(u.durationSeconds !== undefined
+              ? { durationSeconds: u.durationSeconds }
+              : {}),
+            ...(u.distanceMeters !== undefined
+              ? { distanceMeters: u.distanceMeters }
+              : {}),
+          })
+          .where(eq(programSets.id, u.programSetId));
+      }
+    });
+
+    // Deliberately not revalidating the live workout route: the caller already
+    // holds the same values as a session override, so refreshing it mid-set
+    // would re-render the list the lifter is touching for no visible change.
+    // The plan views are what need to be correct next time they are opened.
+    revalidatePath(`/programs/${slot.programId}/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${slot.programId}`);
+    return { success: true, data: undefined };
+  } catch (err) {
+    console.error("[applyProgressionToPlan] failed", { programExerciseId }, err);
+    return { success: false, error: "Failed to update the plan" };
+  }
+}
+
 export async function updateProgramExerciseIncrementReps(
   programExerciseId: number,
   incrementReps: number,
@@ -667,6 +856,8 @@ export async function exportProgram(
         incKg: Number(pe.overloadIncrementKg ?? 2.5),
         incReps: pe.overloadIncrementReps ?? 0,
         mode: pe.progressionMode ?? "manual",
+        hits: pe.progressionRequiredHits ?? null,
+        applyToPlan: pe.progressionApplyToPlan ?? false,
         exercise: {
           name: pe.exercise.name,
           category: pe.exercise.category,
@@ -726,6 +917,8 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
             incKg: Number(pe.overloadIncrementKg ?? 2.5),
             incReps: pe.overloadIncrementReps ?? 0,
             mode: pe.progressionMode ?? "manual",
+            hits: pe.progressionRequiredHits ?? null,
+            applyToPlan: pe.progressionApplyToPlan ?? false,
             exercise: {
               name: pe.exercise.name,
               category: pe.exercise.category,
@@ -877,6 +1070,8 @@ export async function importProgram(
               overloadIncrementKg: slot.incKg.toString(),
               overloadIncrementReps: slot.incReps,
               progressionMode: slot.mode,
+              progressionRequiredHits: slot.hits ?? null,
+              progressionApplyToPlan: slot.applyToPlan ?? false,
               exerciseType: overrideType,
             })
             .returning({ id: programExercises.id });

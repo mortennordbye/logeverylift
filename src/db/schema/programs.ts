@@ -12,6 +12,7 @@
  */
 
 import {
+    boolean,
     decimal,
     integer,
     pgTable,
@@ -60,6 +61,17 @@ export const programExercises = pgTable("program_exercises", {
   overloadIncrementReps: integer("overload_increment_reps").default(0),
   // "none" | "manual" | "weight" | "smart" | "reps" | "time" | "distance"
   progressionMode: text("progression_mode").default("manual"),
+  // How many qualifying sessions inside the consensus window are needed before
+  // a bump is suggested. Null = inherit REQUIRED_HITS from progression.ts, so
+  // the shared default stays in one place instead of being copied per row.
+  progressionRequiredHits: integer("progression_required_hits"),
+  // Opt-in: accepting a suggestion also rewrites this slot's planned sets, so
+  // the next session opens at the new numbers instead of the old ones. Off
+  // keeps the historical behaviour — a suggestion only overrides the live
+  // session and the plan never moves.
+  progressionApplyToPlan: boolean("progression_apply_to_plan")
+    .notNull()
+    .default(false),
   // Per-program override of the exercise's intrinsic type — e.g. a compound
   // bench press used as accessory work in this program. Null = inherit the
   // exercise's default (resolved type = this ?? exercise.exerciseType).

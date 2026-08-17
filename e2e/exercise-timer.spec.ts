@@ -45,7 +45,6 @@ test("exercise timer countdown shows 00:00 before completing", async ({ page }) 
   // Hard wait — the tolerant isVisible() check raced the edit view's render
   // and silently skipped opening the picker.
   await expect(durationButton).toBeVisible({ timeout: 10_000 });
-  await durationButton.click();
 
   // Most direct approach — set duration via the picker presets. The 15-second
   // preset is the shortest stock value; close enough to 3s for the spec to be
@@ -54,10 +53,16 @@ test("exercise timer countdown shows 00:00 before completing", async ({ page }) 
   const fifteenSecondPreset = page
     .locator("div.rounded-t-3xl")
     .getByRole("button", { name: /^15\s?s?$/ });
-  // Hard assert instead of a tolerant isVisible race: if the preset isn't
-  // applied the timer runs its full stock duration and the spec fails late
-  // and confusingly.
-  await expect(fifteenSecondPreset).toBeVisible({ timeout: 2_000 });
+
+  // Retry the open, and assert the outcome rather than the tap. A bare click()
+  // burned the whole 90s budget once: the edit view arrives behind a page
+  // transition, so the row can be replaced between Playwright deciding it is
+  // stable and dispatching, and every retry hit the same window
+  // ("element was detached from the DOM, retrying") with nothing ever opening.
+  await expect(async () => {
+    await durationButton.click({ timeout: 5_000 });
+    await expect(fifteenSecondPreset).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 30_000 });
   await fifteenSecondPreset.click();
 
   await page.getByRole("button", { name: /^Save$/ }).click();

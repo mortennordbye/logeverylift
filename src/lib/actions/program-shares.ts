@@ -205,6 +205,8 @@ export async function copySharedProgram(
             overloadIncrementKg: pe.overloadIncrementKg ?? undefined,
             overloadIncrementReps: pe.overloadIncrementReps ?? 0,
             progressionMode: pe.progressionMode ?? "manual",
+            progressionRequiredHits: pe.progressionRequiredHits ?? null,
+            progressionApplyToPlan: pe.progressionApplyToPlan ?? false,
           })
           .returning({ id: programExercises.id });
 

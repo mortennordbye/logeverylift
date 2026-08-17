@@ -1,4 +1,99 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page, type Request } from "@playwright/test";
+
+/**
+ * Tap a control that saves through Server Actions, and wait for every write it
+ * starts to finish.
+ *
+ * The app saves optimistically everywhere — the UI shows the new value while
+ * the request is still going. A spec that reloads on the strength of that
+ * cancels the write mid-flight and then fails on the reloaded value, which
+ * reads exactly like the action rejecting the input. Two different specs lost
+ * time to it, on this branch and on main.
+ *
+ * Waiting on a single response is not enough either: one tap can fan out into
+ * several actions (a rest change reorders the sets, then writes each set whose
+ * rest moved), and they run in sequence, so "nothing in flight" is briefly true
+ * between them. Hence the quiet period rather than a single await. Requests are
+ * matched on the next-action header so ordinary RSC traffic doesn't count.
+ */
+export async function tapAndSave(
+  page: Page,
+  control: Locator,
+  {
+    bodyIncludes,
+    quietMs = 500,
+    startTimeoutMs = 5_000,
+    timeoutMs = 20_000,
+    attempts = 2,
+  }: {
+    /**
+     * Fragment of the action's serialised arguments, e.g. `'"requiredHits":2'`.
+     * Without it any action counts — including the background ones this page
+     * fires on its own, which is enough to mask a tap that never landed.
+     */
+    bodyIncludes?: string;
+    quietMs?: number;
+    startTimeoutMs?: number;
+    timeoutMs?: number;
+    attempts?: number;
+  } = {},
+): Promise<void> {
+  const isAction = (r: Request) =>
+    r.method() === "POST" &&
+    Boolean(r.headers()["next-action"]) &&
+    (bodyIncludes === undefined || (r.postData() ?? "").includes(bodyIncludes));
+
+  let inFlight = 0;
+  let started = 0;
+  let lastActivity = Date.now();
+  const onRequest = (r: Request) => {
+    if (!isAction(r)) return;
+    inFlight++;
+    started++;
+    lastActivity = Date.now();
+  };
+  const onSettled = (r: Request) => {
+    if (!isAction(r)) return;
+    inFlight--;
+    lastActivity = Date.now();
+  };
+
+  page.on("request", onRequest);
+  page.on("requestfinished", onSettled);
+  page.on("requestfailed", onSettled);
+
+  try {
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      started = 0;
+      inFlight = 0;
+      await control.click();
+
+      // A tap that lands while the route is re-rendering is accepted and then
+      // lost — the repo hits this on WebKit throughout. Retrying the tap is the
+      // only reliable answer; the alternative is a spec that reports a write
+      // failure the app never made.
+      const startBy = Date.now() + startTimeoutMs;
+      while (started === 0 && Date.now() < startBy) {
+        await page.waitForTimeout(100);
+      }
+      if (started === 0) continue;
+
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (inFlight === 0 && Date.now() - lastActivity >= quietMs) return;
+        await page.waitForTimeout(100);
+      }
+      throw new Error("Server Actions never finished");
+    }
+    throw new Error(
+      `tap never produced a Server Action request${bodyIncludes ? ` matching ${bodyIncludes}` : ""}`,
+    );
+  } finally {
+    page.off("request", onRequest);
+    page.off("requestfinished", onSettled);
+    page.off("requestfailed", onSettled);
+  }
+}
 
 /**
  * Shared navigation into a workout screen.
@@ -39,6 +134,15 @@ async function dismissReadinessSheet(page: Page) {
 /** Every program's workout href, in picker order. */
 async function programWorkoutHrefs(page: Page): Promise<string[]> {
   await page.goto("/new-workout");
+  // On a day the active cycle schedules a program, the picker leads with that
+  // cycle card and collapses the full list behind "Different program"
+  // (NewWorkoutClient). The seed schedules Mon/Wed/Fri, so without this the
+  // whole suite finds no links three days a week and reports it as "element(s)
+  // not found" — a missing prerequisite dressed up as a regression.
+  const showAll = page.getByRole("button", { name: "Different program" });
+  if (await showAll.isVisible({ timeout: 5_000 }).catch(() => false)) {
+    await showAll.click();
+  }
   const links = page.locator('a[href^="/programs/"][href$="/workout"]');
   await expect(links.first()).toBeVisible({ timeout: 10_000 });
   // Read every href in one DOM pass. Resolving them one locator at a time

@@ -18,10 +18,17 @@ import type { SetSuggestion } from "@/types/workout";
 export const CONSENSUS_WINDOW = 5;
 
 /**
- * Minimum number of confident hits required within CONSENSUS_WINDOW to trigger
+ * Default number of confident hits required within CONSENSUS_WINDOW to trigger
  * a weight/rep progression. Prevents one-lucky-session advances.
+ *
+ * Per-exercise override: programExercises.progressionRequiredHits. Null there
+ * means "use this constant", so the default lives in exactly one place.
  */
 export const REQUIRED_HITS = 2;
+
+/** Bounds for the per-exercise hit-count override. */
+export const MIN_REQUIRED_HITS = 1;
+export const MAX_REQUIRED_HITS = CONSENSUS_WINDOW;
 
 /**
  * Number of consecutive session failures required to trigger a deload suggestion.
@@ -78,6 +85,8 @@ export type ProgramSetData = {
   exerciseType?: string | null;
   /** Exercise name — optional, passed through to the suggestion for insight bucketing. */
   exerciseName?: string;
+  /** Per-exercise override of REQUIRED_HITS. Null/undefined = use the constant. */
+  requiredHits?: number | null;
 };
 
 /**
@@ -222,6 +231,151 @@ function countConsecutiveFails(rows: HistoryRow[], targetReps: number | null): n
   return count;
 }
 
+// ─── Rule description ───────────────────────────────────────────────────────
+
+/**
+ * One sentence describing what this exercise's progression will actually do,
+ * built from its live settings. Shown in the progression sheet so the rule is
+ * readable instead of being folded into "Add kg when target reps are hit".
+ *
+ * Returns null for modes that never suggest anything.
+ */
+export function describeProgressionRule(input: {
+  mode: string | null;
+  incrementKg: number | null;
+  incrementReps: number;
+  targetReps: number | null;
+  requiredHits: number;
+}): string | null {
+  const { mode, incrementKg, incrementReps, targetReps, requiredHits } = input;
+  const sessions = `${requiredHits} of the last ${CONSENSUS_WINDOW} sessions`;
+  const reps = targetReps != null ? `${targetReps} reps` : "the target reps";
+  // isConfidentHit: RPE <= 7 always counts, RPE 8 only with an extra rep,
+  // RPE 9-10 never. Spell that out rather than implying any hit counts.
+  const rpeGate = "RPE 9+ never counts, and RPE 8 counts only with an extra rep.";
+
+  switch (mode) {
+    case "weight":
+      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once you hit ${reps} in ${sessions}. ${rpeGate}`;
+    case "smart":
+      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once you hit ${reps} in ${sessions}, with the rep target re-estimated for the heavier load. ${rpeGate}`;
+    case "reps":
+      return `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once you hit ${reps} in ${sessions}. ${rpeGate}`;
+    case "time":
+      return `+${incrementReps > 0 ? incrementReps : 10}s once you hold the target duration in ${sessions}. Sessions at RPE 9+ don't count.`;
+    case "distance":
+      return `+${((incrementReps > 0 ? incrementReps : 500) / 1000)}km once you cover the target distance in ${sessions}. Sessions at RPE 9+ don't count.`;
+    default:
+      return null;
+  }
+}
+
+// ─── Batch application ──────────────────────────────────────────────────────
+
+/** A suggestion that is actionable and not yet reflected in the set's values. */
+export type PendingProgression = {
+  setId: number;
+  weightKg?: number;
+  targetReps?: number;
+  durationSeconds?: number;
+  distanceMeters?: number;
+};
+
+/** The shape pendingProgressions needs from a planned set. Override-aware values. */
+export type PendingSetInput = {
+  id: number;
+  weightKg: string | null;
+  targetReps: number | null;
+  durationSeconds?: number | null;
+  distanceMeters?: number | null;
+  setType?: string | null;
+};
+
+/**
+ * Which sets still have a suggestion the lifter hasn't taken, and what applying
+ * it would write. Drives the exercise-level "apply to all sets" chip and the
+ * payload it sends.
+ *
+ * Sets are matched on their *current* values (which the caller must pass with
+ * any live session override already folded in), so a set counts as pending only
+ * while it would actually change. Completed sets are excluded — the number they
+ * were logged at is history, not a plan.
+ */
+export function pendingProgressions(
+  sets: PendingSetInput[],
+  suggestions: Record<number, SetSuggestion> | undefined,
+  completedSetIds: ReadonlySet<number>,
+): PendingProgression[] {
+  if (!suggestions) return [];
+  const pending: PendingProgression[] = [];
+
+  for (const set of sets) {
+    if (completedSetIds.has(set.id)) continue;
+    // Warm-ups and other non-working sets never carry progression.
+    if (set.setType != null && set.setType !== "working") continue;
+    const s = suggestions[set.id];
+    if (!s) continue;
+
+    const currentWeight = Number(set.weightKg ?? 0);
+    const currentReps = set.targetReps ?? 0;
+
+    switch (s.reason) {
+      case "progressed":
+      case "deload":
+        if (currentWeight !== s.suggestedWeightKg) {
+          pending.push({
+            setId: set.id,
+            weightKg: s.suggestedWeightKg,
+            ...(s.adjustedRepsForWeight !== undefined
+              ? { targetReps: s.adjustedRepsForWeight }
+              : {}),
+          });
+        }
+        break;
+      case "retry":
+        if (s.suggestedReps !== undefined) {
+          if (s.suggestedReps !== currentReps) {
+            pending.push({ setId: set.id, targetReps: s.suggestedReps });
+          }
+        } else if (currentWeight !== s.suggestedWeightKg) {
+          pending.push({ setId: set.id, weightKg: s.suggestedWeightKg });
+        }
+        break;
+      case "progressed-reps":
+        if (s.suggestedReps !== undefined && s.suggestedReps > currentReps) {
+          pending.push({ setId: set.id, targetReps: s.suggestedReps });
+        }
+        break;
+      case "progressed-time":
+        if (
+          s.suggestedDurationSeconds !== undefined &&
+          s.suggestedDurationSeconds !== (set.durationSeconds ?? 0)
+        ) {
+          pending.push({
+            setId: set.id,
+            durationSeconds: s.suggestedDurationSeconds,
+          });
+        }
+        break;
+      case "progressed-distance":
+        if (
+          s.suggestedDistanceMeters !== undefined &&
+          s.suggestedDistanceMeters !== (set.distanceMeters ?? 0)
+        ) {
+          pending.push({
+            setId: set.id,
+            distanceMeters: s.suggestedDistanceMeters,
+          });
+        }
+        break;
+      default:
+        break; // held, held-readiness, manual — nothing to take
+    }
+  }
+
+  return pending;
+}
+
 // ─── Core suggestion builder ────────────────────────────────────────────────
 
 /**
@@ -287,10 +441,19 @@ export function buildSuggestion(
     mode === "time" || mode === "distance"
       ? // RPE 9–10 = not confident (near-max effort)
         rows.filter((r) => metTarget(r) && (r.rpe ?? 7) <= 8)
-      : rows.filter((r) => isConfidentHit(r, ps.targetReps));
+      : // Weight-bearing modes additionally require the hit to have happened at
+        // the current load or heavier. Without that clause the window counts
+        // hits from before the last bump, so a failed session at the new weight
+        // still adds another increment on top of it (30 hit, 30 hit, 32 missed
+        // -> suggests 34) and the load runs away from the lifter. Double
+        // progression means "hit the target twice at THIS weight, then move".
+        rows.filter(
+          (r) => isConfidentHit(r, ps.targetReps) && Number(r.weightKg) >= baseWeight,
+        );
 
   const hitsAchieved = hitsWithConfidence.length;
-  const hasConsensus = hitsAchieved >= REQUIRED_HITS;
+  const requiredHits = ps.requiredHits ?? REQUIRED_HITS;
+  const hasConsensus = hitsAchieved >= requiredHits;
 
   // ── "Felt easy" override ──
   // The lifter marked the last set easy: an explicit "there was plenty left,
@@ -298,6 +461,10 @@ export function buildSuggestion(
   // accumulated yet, so the increment is offered next session instead of one or
   // two sessions later. Gated on the set having actually met its target — an
   // easy verdict on a missed set must never push the load up.
+  //
+  // It bypasses the per-exercise gate deliberately: someone who sets the gate
+  // to three sessions and then says "this was easy" has answered the question
+  // the gate exists to ask.
   const easyOverride = !hasConsensus && latest.wasEasy === true && metTarget(latest);
   const shouldProgress = hasConsensus || easyOverride;
 
@@ -336,7 +503,7 @@ export function buildSuggestion(
     basedOnHitCount: hitsAchieved,
     // Enriched fields
     hitsAchieved,
-    hitsRequired: REQUIRED_HITS,
+    hitsRequired: requiredHits,
     sessionsUntilDeload,
     estimated1RM,
     readinessModulated: false,
