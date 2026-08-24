@@ -50,8 +50,11 @@ Thumbs.db
 .vscode/settings.json
 .idea/
 
-# Claude Code project memory (local only)
-.claude/
+# Project memory and local settings (local only) — except shared skills.
+# Ignore the contents, not the directory: git cannot re-include a path
+# whose parent directory is itself excluded.
+.claude/*
+!.claude/skills/
 .playwright-mcp
 
 # Playwright e2e

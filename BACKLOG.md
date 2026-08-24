@@ -78,6 +78,42 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A user reporting concrete confusion.
 - **Touchpoints:** `src/lib/utils/progression.ts:218-219`.
 
+### Progression spec divergences D1–D2: 1RM and rep-estimate leak past their own guards
+- **What:** Two display-side inconsistencies found writing [`docs/specs/smart-incrementation.md`](docs/specs/smart-incrementation.md). **D1 (rule SI-27):** `estimated1RM` is attached to every suggestion with no RPE gate (`progression.ts:419`), while `adjustedRepsForWeight` requires RPE ≥ 7 for the same Epley formula (`:615-621`) — so a shown 1RM can come from a sub-max set the code itself treats as off-curve. **D2 (rule SI-21):** the readiness downgrade clears `suggestedReps`/`suggestedDurationSeconds`/`suggestedDistanceMeters` but not `adjustedRepsForWeight` (`:708-717`), so a `held-readiness` smart suggestion can still carry a rep cut.
+- **Why deferred:** Both are display-only today. D2 cannot reach the plan because `pendingProgressions` ignores `held-readiness` (rule SI-37), and D1 only affects a number shown for information. The spec pass was scoped to documenting behaviour, not changing it.
+- **Unblocked by:** Deciding whether the shown 1RM should carry the same RPE ≥ 7 guard as the rep estimate — if yes, both are a few lines. Confirm no UI reads `adjustedRepsForWeight` on a held suggestion before treating D2 as cosmetic.
+- **Touchpoints:** `src/lib/utils/progression.ts:419`, `:615-621`, `:708-717`; `src/components/features/WorkoutSetsList.tsx:1410-1420`.
+
+### Progression spec divergences D3–D4: undecided asymmetries in timed/distance progression
+- **What:** Two places where `docs/specs/smart-incrementation.md` could not state intent because the code does not reveal it. **D3 (rule SI-17):** `canDeload` covers `weight|smart|reps` only (`progression.ts:473`), so timed and distance work can never deload — and the adjacent comment says "not manual, not time", omitting `distance`, so it is unclear whether the exclusion was decided or inherited. **D4 (rules SI-29, SI-30):** `time` and `distance` additionally require the *most recent* row to meet target (`:667`, `:690`) on top of the consensus gate; weight modes have no such requirement.
+- **Why deferred:** Needs a product decision, not a fix. Both may well be correct — a missed run is a different signal from a missed squat — but the spec should say so deliberately rather than describing an accident.
+- **Unblocked by:** Deciding (a) whether a held plank or a short run should ever trigger a back-off, and (b) whether the latest session must hit target in timed/distance modes. Then either write the answer into the spec as a rule and fix the comment, or change the code to match.
+- **Touchpoints:** `src/lib/utils/progression.ts:473-478`, `:657-701`; `docs/specs/smart-incrementation.md` (D3, D4).
+
+### Progression spec divergence D5: bodyweight exercises never progress out of the box
+- **What:** In `weight` and `smart` modes at zero weight, the rep fallback (rule SI-25) only fires when `overloadIncrementReps > 0` — and that column defaults to `0` (`src/db/schema/programs.ts:61`). So a bodyweight exercise returns `held` forever until someone sets a rep increment by hand, which nothing prompts them to do.
+- **Why deferred:** Found during the spec pass; changing the default is a behaviour change with a migration attached, which was out of scope for a documentation task.
+- **Unblocked by:** Deciding the right default — either default `overload_increment_reps` to 1 for new rows, or have the bodyweight fallback treat a missing increment as 1 in the engine (no migration). The second is smaller and reversible.
+- **Touchpoints:** `src/lib/utils/progression.ts:566-582` (weight), `:593-608` (smart); `src/db/schema/programs.ts:61`; `drizzle/` (only if the column default changes).
+
+### Progression spec divergence D6: the history window budget is an average, not a per-set guarantee
+- **What:** `getProgressiveSuggestions` fetches history with `LIMIT programData.length * CONSENSUS_WINDOW` applied globally, ordered by session (`src/lib/actions/workout-sets.ts:1236`), then buckets rows per `exerciseId+setNumber` client-side. The budget is sized for the average case; on a programme with uneven set counts per exercise, later keys can receive fewer than `CONSENSUS_WINDOW` rows and progress more slowly than rule SI-7 says they should.
+- **Why deferred:** No observed misbehaviour, and the limit exists to stop full scans on accounts with hundreds of sessions — removing it naively trades a correctness edge case for a performance one.
+- **Unblocked by:** A reproduction on a real programme shape, or a rewrite to a per-key windowed query (`ROW_NUMBER() OVER (PARTITION BY exercise_id, set_number ORDER BY start_time DESC) <= 5`), which is exact and still indexed.
+- **Touchpoints:** `src/lib/actions/workout-sets.ts:1210-1245`.
+
+### Progression spec divergence D7: the global increment settings are inert
+- **What:** Settings renders "Weight Increment" and "Rep Increment" with presets and a custom input (`src/components/features/SettingsClient.tsx:328-350`), but they persist only to `localStorage` (`defaultIncrementKg` / `defaultIncrementReps` in `theme-provider.tsx`) and no progression code reads them. `adaptiveIncrementKg` never sees them, so the controls do nothing. Already noted as a trap in `docs/gotchas.md`; recorded here because rule SI-1 makes the gap concrete — the per-exercise increment is the only one that matters.
+- **Why deferred:** Needs a product decision on what the global control should mean: the seed for new program exercises, a fallback ahead of the adaptive ladder, or nothing (in which case the control should go).
+- **Unblocked by:** Picking one of those three. "Seed for new exercises" is the least surprising and needs no change to the engine; "fallback in the ladder" means a server-side user column, since `localStorage` is never visible to a Server Action.
+- **Touchpoints:** `src/components/features/SettingsClient.tsx:328-350`, `src/components/ui/theme-provider.tsx`, `src/lib/utils/progression.ts:139-173`, `docs/gotchas.md`.
+
+### Progression spec divergence D8: generated programmes ignore the newer progression settings
+- **What:** The LLM plan prompt (`src/lib/utils/ai-prompt.ts:167`) describes only `manual|weight|smart|reps` and never mentions `progressionRequiredHits` or `progressionApplyToPlan`, so imported plans silently take the defaults (gate 2, ratchet off) and can never request `time` or `distance` modes. Admitted in the body of `3a09857`; recorded against rules SI-12 and SI-34.
+- **Why deferred:** The defaults are sane, so generated plans are correct — just less expressive than a hand-built one.
+- **Unblocked by:** Extending the prompt's schema description plus the import validator's coverage. The validator already accepts both fields (`.optional().catch(...)` in `importProgramSchema`), so this is prompt work rather than plumbing.
+- **Touchpoints:** `src/lib/utils/ai-prompt.ts:160-180`, `src/lib/validators/workout.ts` (`importProgramSchema`), `src/lib/actions/programs.ts` (`importProgram`).
+
 ## Codebase hygiene (deferred long-term)
 
 ### Remaining findings from the UI layout-shift audit
@@ -157,6 +193,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Why deferred:** Hit while setting up a smoke pass; unrelated to the change in flight, and the fix is an environment decision rather than a code one.
 - **Unblocked by:** Deciding how remote-daemon setups should develop — document `make dev PROD=1` as the fallback, or sync the tree to the daemon host (`docker context`, mutagen, or a named volume seeded from the build context). Separately: switch the Makefile's `COMPOSE` to `docker compose` with a v1 fallback.
 - **Touchpoints:** `docker-compose.dev.yml` (the `.:/app` mount), `Makefile` (`COMPOSE`, `dev` target), `CLAUDE.md` (Development + smoke-pass prereqs).
+
+### The rest of the app has no behaviour spec yet
+- **What:** `docs/specs/` now holds the spec standard and one worked example — [`smart-incrementation.md`](docs/specs/smart-incrementation.md), 40 rules `SI-1`…`SI-40`. Every other feature is still described only by reference maps (`docs/workout-and-sets.md`, `docs/cycles-and-plans.md`, `docs/data-model.md`), which say where code lives but never what it is supposed to do. The candidates, roughly in order of how much a disagreement about intent would cost: the workout logging + rest/exercise timer flow, cycle scheduling and missed-workout catch-up, PR detection and rollback, the offline replay queue, and auth/session handling.
+- **Why deferred:** Writing a spec means walking every rule against the source and re-verifying each `file.ts:line` — the smart-incrementation pass took a full session and turned up 8 divergences. Doing several at once would either rush that verification or bury the findings.
+- **Unblocked by:** Picking the next feature. Use the `feature-spec` skill (`.claude/skills/feature-spec/`), copy `docs/specs/TEMPLATE.md`, pick an unused rule prefix, and add a row to the Specs table in `docs/README.md` and the index in `docs/specs/README.md`.
+- **Touchpoints:** `docs/specs/README.md` (the standard), `docs/specs/TEMPLATE.md`, `docs/README.md` (the Specs index), `.claude/skills/feature-spec/SKILL.md`.
 
 ## MCP server
 
