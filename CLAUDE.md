@@ -179,9 +179,23 @@ Migration files in `drizzle/` are committed to git and **must never be regenerat
 
 ## Server Action stability across deploys
 
-Production must set `NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY` to a stable 32-byte base64 value (`openssl rand -base64 32`). Without it, Next.js generates a fresh key per build, so action IDs are randomized on every deploy — PWA users with cached client bundles then call action IDs the new server doesn't recognize and see `Failed to find Server Action`. Those calls feed into the offline-replay queue, which retries 5× and drops them. Net effect: **silent data loss for any user mid-workout when a deploy lands**.
+`NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` must be a stable 32-byte base64 value (`openssl rand -base64 32`), present **at build time as well as at runtime**. Without it Next generates a fresh key per build, so action IDs are randomized on every deploy — PWA users with cached client bundles then call action IDs the new server doesn't recognize and see `Failed to find Server Action`. Those calls feed the offline-replay queue, which retries 5x and drops them. Net effect: **silent data loss for any user mid-workout when a deploy lands**.
 
-Set the secret once in the k8s/ArgoCD secret store and never rotate it. The boot-time `env.ts` warns if it's missing in production. Client-side, `src/lib/utils/stale-bundle.ts` detects the specific error and forces a Service Worker update + page reload instead of dropping the write — but the stable key is the only thing that prevents the failure mode in the first place.
+> **The variable name is load-bearing.** Next 16 reads `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`. The older `NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY` appears **nowhere** in `next/dist` — setting it looks like a mitigation while doing nothing. This repo used the `NEXT_PRIVATE_` name until 2026-08-24, which is why deploys kept breaking cached bundles even though the key was "set". Measured on Next 16.1.6: two builds with the correct variable produce **identical** action IDs (124/124); without it, two builds of identical source share **none** (0/124).
+
+**Build time is the part that actually matters.** `next build` bakes the key into the client bundle and derives action IDs from it, so setting the variable only on the running container does nothing — the IDs were already fixed when the image was built. It has to be in three places, with the *same* value:
+
+| Where | How |
+|---|---|
+| GitHub Actions | Repo secret `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`, passed to the build as a BuildKit secret (`secrets: server_actions_key=…` in `ci.yml`) |
+| Dockerfile | `RUN --mount=type=secret,id=server_actions_key` around `pnpm build` — a secret mount, never an `ARG`, so it stays out of image layers and `docker history` |
+| Runtime | `logeverylift-secret` in the k8s/ArgoCD secret store, exposed to the container as `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` (manifests live in the homelab repo, not here) |
+
+Set it once and never rotate it — rotating breaks every cached bundle in the field exactly like a missing key would. CI fails the build if the repo secret is absent on any image that would be pushed; the boot-time `env.ts` warns if it's missing at runtime.
+
+Client-side, `src/lib/utils/stale-bundle.ts` catches the error and forces a Service Worker update + reload instead of dropping the write. Note it matches the generic "unexpected response" wording too, not just the server's `Failed to find Server Action` text — the server log and what reaches the client are not the same string, and matching only the former meant the recovery silently never fired.
+
+Doc-only pushes are excluded from the image build (`paths-ignore` in `ci.yml`, plus `*.md`/`docs/` in `.dockerignore`), so a documentation commit can't trigger a rollout that disturbs a live session.
 
 ## Architecture
 

@@ -200,6 +200,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Picking the next feature. Use the `feature-spec` skill (`.claude/skills/feature-spec/`), copy `docs/specs/TEMPLATE.md`, pick an unused rule prefix, and add a row to the Specs table in `docs/README.md` and the index in `docs/specs/README.md`.
 - **Touchpoints:** `docs/specs/README.md` (the standard), `docs/specs/TEMPLATE.md`, `docs/README.md` (the Specs index), `.claude/skills/feature-spec/SKILL.md`.
 
+### Server Action key: two manual steps outside this repo
+- **What:** The build-time half of the Server Action key fix is in this repo (`Dockerfile` secret mount, `ci.yml` secret + guard, `env.ts`). Two steps live elsewhere and must both be done with the **same** 32-byte base64 value: (1) add a GitHub Actions repo secret named `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY`; (2) in the homelab manifests, expose the existing `logeverylift-secret` value to the container as `NEXT_SERVER_ACTIONS_ENCRYPTION_KEY` instead of `NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY` — Next 16 does not read the `NEXT_PRIVATE_` name at all, which is why the mitigation never worked.
+- **Why deferred:** Neither is reachable from this repo. GitHub repo secrets are write-only via the API and the k8s manifests live in the homelab repo, which ArgoCD reconciles from git.
+- **Unblocked by:** Nothing — do them before merging the CI change, which fails any pushed build when the repo secret is absent. Note the first deploy carrying a key-derived build changes action IDs one final time, so it will break already-cached bundles once; land it when nobody is mid-workout.
+- **Touchpoints:** `Dockerfile` (builder stage secret mount), `.github/workflows/ci.yml` (`Require a stable Server Action key`, `secrets:`), `src/lib/env.ts`, `CLAUDE.md` (§ Server Action stability across deploys).
+
 ## MCP server
 
 ### Redis-backed SSE stream resumption for the MCP server
