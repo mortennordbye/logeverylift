@@ -44,7 +44,25 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV DATABASE_URL=postgresql://placeholder:placeholder@placeholder:5432/placeholder
 ENV SERWIST_SUPPRESS_TURBOPACK_WARNING=1
-RUN pnpm build
+
+# Server Action IDs are derived at BUILD time from this key, not at runtime.
+# Setting it only on the running container does nothing: `next build` will have
+# already baked a random key into the client bundle, so every image ships action
+# IDs the previous bundle doesn't recognise and in-flight PWA sessions break on
+# deploy ("Failed to find Server Action"). It must be the SAME value the runtime
+# container receives.
+#
+# Mounted as a BuildKit secret rather than passed as an ARG, so it never lands
+# in an image layer or in `docker history`. Absent (local builds), the build
+# still succeeds with a per-build key — CI enforces its presence for any image
+# that gets pushed.
+RUN --mount=type=secret,id=server_actions_key \
+    if [ -s /run/secrets/server_actions_key ]; then \
+      export NEXT_SERVER_ACTIONS_ENCRYPTION_KEY="$(cat /run/secrets/server_actions_key)"; \
+    else \
+      echo "WARNING: server_actions_key not mounted - Server Action IDs will be build-specific"; \
+    fi; \
+    pnpm build
 
 # ============================================================
 # Stage 4: Production-only dependencies (for migrate/seed at boot)
