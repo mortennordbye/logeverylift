@@ -23,7 +23,7 @@ Rule prefix: **`SI`**.
 
 ## Scope boundary
 
-This spec covers **per-set load progression**. It does not cover **cycle-level volume periodization** — the ramp/deload/taper that scales a training block week by week. That lives in `src/lib/utils/periodization.ts` and is documented in [`../cycles-and-plans.md`](../cycles-and-plans.md).
+This spec covers **per-set load progression**. It does not cover **cycle-level volume periodization** — the ramp/deload/taper that scales a training block week by week. That is specified in [`cycle-periodization.md`](cycle-periodization.md) (`PZ`), and mapped in [`../cycles-and-plans.md`](../cycles-and-plans.md).
 
 The two are independent and easy to confuse, because they share words and even a constant name: **`DELOAD_FACTOR` is `0.9` here and `0.75` in `periodization.ts`**. Check which module you are in before quoting a number.
 

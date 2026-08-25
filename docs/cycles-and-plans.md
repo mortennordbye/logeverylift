@@ -46,6 +46,8 @@ Sessions are built from structured segments (`sessionFrom`, `intervalRun`, `swim
 
 ## Periodization & adaptation — `src/lib/utils/periodization.ts`
 
+> This is the map. What the curve is *supposed* to do — and eight known divergences from it — is specified rule-by-rule in [specs/cycle-periodization.md](specs/cycle-periodization.md) (`PZ-1`…`PZ-44`).
+
 - `periodizedLoad(week, totalWeeks, goal, deloadCadence)` → the volume curve (phase + multiplier); `phaseLayout`, `deloadCadenceForLevel`, taper/deload factors.
 - `uncoupledAcwr(weeklyLoads)` — acute:chronic workload injury guardrail.
 - `intervalPhaseRecipe`/`strengthPhaseRecipe` — phase-aware zone/rest (used by the *endurance* sessions; strength is now flat).
