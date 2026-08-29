@@ -274,6 +274,11 @@ export type ProgramSetData = {
   movementPattern?: string | null;
   /** Resolved exercise type (program override ?? exercise default) — refines increment sizing. */
   exerciseType?: string | null;
+  /**
+   * The exercise's equipment, which decides the smallest weight change that can
+   * actually be loaded. Optional: unclassified takes the finest realistic step.
+   */
+  equipment?: string | null;
   /** Exercise name — optional, passed through to the suggestion for insight bucketing. */
   exerciseName?: string;
   /** Per-exercise override of REQUIRED_HITS. Null/undefined = use the constant. */
@@ -345,13 +350,54 @@ export function roundToNearest(value: number, increment: number): number {
 }
 
 /**
- * Compute the effective kg increment using load-zone scaling.
+ * The smallest weight change the equipment can actually make.
  *
- * Priority:
- *  1. User-configured increment (non-null) — always respected
- *  2. goal=endurance — 1kg regardless of load
- *  3. experienceLevel profile override (beginner=5kg, advanced=1.25kg)
- *  4. Load-zone scaling by movement pattern + current weight
+ * A suggestion of +1.25 kg on a barbell asks for 0.625 kg a side, which almost
+ * nobody owns; on a plate-loaded machine or a cable stack the smallest step is
+ * whatever the stack pin allows. Sizing an increment without this produces a
+ * number that reads precise and cannot be loaded, so the lifter rounds it
+ * themselves and the plan and the bar quietly disagree.
+ *
+ * Zero means "there is nothing to snap to": bodyweight and banded work has no
+ * load to add, and an exercise with no equipment recorded has no hardware to
+ * make a claim about. **Unclassified must not fall back to a step**, because
+ * most of the library carries no equipment and a default would coarsen every
+ * one of them on no evidence — the opposite of what this fix is for.
+ */
+const LOADABLE_STEP_KG: Record<string, number> = {
+  barbell: 2.5,
+  dumbbell: 2,
+  machine: 1.25,
+  cable: 1.25,
+  kettlebell: 4,
+  bodyweight: 0,
+  bands: 0,
+  other: 0,
+};
+
+/** The equipment's smallest step, or 0 when there is nothing to snap to. */
+export function loadableStepKg(equipment: string | null | undefined): number {
+  if (equipment == null) return 0;
+  return LOADABLE_STEP_KG[equipment] ?? 0;
+}
+
+/**
+ * Compute the effective kg increment.
+ *
+ * Order, and the order is the fix (`A3`):
+ *  1. A user-configured increment — always respected, nothing below applies.
+ *  2. goal=endurance — 1 kg regardless of load. A stated training intent, not
+ *     a guess about the lifter, so it stays an override rather than a modifier.
+ *  3. Load-zone scaling by movement size and current weight — the sound part.
+ *  4. Experience level as a **modifier on** that, not a replacement for it.
+ *  5. Snapped to a step the equipment can load.
+ *
+ * Steps 3 and 4 used to run the other way round, and the effect was that
+ * anyone with a filled-in profile never reached the load-zone table at all: a
+ * beginner got 5 kg on lateral raises, an advanced lifter got 1.25 kg on a
+ * 200 kg deadlift. The table is the part that knows a 20 kg lift and a 200 kg
+ * lift are different; the profile only knows how fast this person adapts. That
+ * is a multiplier, and it was written as an override.
  *
  * Compound movements: squat, hinge (deadlift), push (bench/OHP), pull (rows/pullups)
  */
@@ -362,16 +408,13 @@ export function adaptiveIncrementKg(
   goal: string | null | undefined,
   experienceLevel?: string | null,
   exerciseType?: string | null,
+  equipment?: string | null,
 ): number {
   // User has an explicit increment — always respect it
   if (storedIncrement !== null) return storedIncrement;
 
   // Endurance goal prioritizes small, precise increments regardless of load
   if (goal === "endurance") return 1.0;
-
-  // Profile-based overrides (preserve existing behavior for users with set profiles)
-  if (experienceLevel === "beginner") return 5.0;
-  if (experienceLevel === "advanced") return 1.25;
 
   // Prefer the explicit exercise type when set (only "compound" gets large jumps);
   // fall back to the movement-pattern heuristic for unclassified exercises.
@@ -380,15 +423,30 @@ export function adaptiveIncrementKg(
       ? exerciseType === "compound"
       : ["squat", "hinge", "push", "pull"].includes(movementPattern ?? "");
 
-  // Load-zone increments for users without an experience level set:
+  // Load-zone increments:
   //   < 30kg   — small loads; isolation: 1kg, compound: 2.5kg
   //   30–60kg  — moderate; isolation: 1.25kg, compound: 2.5kg
   //   60–100kg — standard: 2.5kg for both
   //   > 100kg  — heavy; compound: 5kg, isolation stays 2.5kg
-  if (currentWeightKg < 30) return isCompound ? 2.5 : 1.0;
-  if (currentWeightKg < 60) return isCompound ? 2.5 : 1.25;
-  if (currentWeightKg < 100) return 2.5;
-  return isCompound ? 5.0 : 2.5;
+  let increment: number;
+  if (currentWeightKg < 30) increment = isCompound ? 2.5 : 1.0;
+  else if (currentWeightKg < 60) increment = isCompound ? 2.5 : 1.25;
+  else if (currentWeightKg < 100) increment = 2.5;
+  else increment = isCompound ? 5.0 : 2.5;
+
+  // Experience as a modifier. Beginners adapt fast enough that small jumps
+  // waste sessions; advanced lifters need finer steps than the zone alone
+  // gives. Intermediate is deliberately unmodified — it has no single right
+  // answer and the zone is a better guess than a flat adjustment.
+  if (experienceLevel === "beginner") increment *= 2;
+  else if (experienceLevel === "advanced") increment *= 0.5;
+
+  // Snap to something the equipment can load, and never propose less than one
+  // of its steps. With no equipment recorded there is nothing to snap to, so
+  // the zone's own number stands.
+  const step = loadableStepKg(equipment);
+  if (step <= 0) return increment;
+  return Math.max(step, roundToNearest(increment, step));
 }
 
 // ─── Clearing a set ─────────────────────────────────────────────────────────
@@ -1000,10 +1058,18 @@ export function buildSuggestion(
     profile?.goal,
     profile?.experienceLevel,
     ps.exerciseType,
+    ps.equipment,
   );
-  // For "time" mode, overloadIncrementReps encodes seconds increment.
-  // (overloadIncrementReps is unused for timed exercises in all other modes.)
+  // overloadIncrementReps is triple-duty: reps here, seconds under `duration`,
+  // metres under `distance` (SI-32). The duration and distance branches supply
+  // their own fallbacks; this is the rep one.
   const incrementReps = Number(ps.overloadIncrementReps ?? 0);
+  // A missing rep increment means one rep, not no reps. The column defaults to
+  // 0 and nothing in the app ever set it, so `incrementReps > 0` guarded every
+  // rep advance behind a value nobody had chosen — which is why a bodyweight
+  // exercise held forever out of the box (SI-D5). One rep is the only honest
+  // default: it is the smallest move the dimension has.
+  const repStep = incrementReps > 0 ? incrementReps : 1;
 
   const roundToInc = (kg: number) => roundToNearest(kg, incrementKg);
 
@@ -1239,10 +1305,16 @@ export function buildSuggestion(
       // Bodyweight exercises (weight=0) can't progress by adding kg — fall back to reps.
       if (currentLoad === 0) {
         const bwTarget = ps.targetReps ?? reference.targetReps;
-        if (shouldProgress && incrementReps > 0 && bwTarget != null) {
+        // A rep range still caps the climb here, exactly as it does for a rep
+        // ladder (E-17): a chin-up prescription has to stop somewhere.
+        const bwCeiling = ps.repRangeMax ?? null;
+        const bwAtCeiling =
+          bwCeiling != null && bwTarget != null && bwTarget >= bwCeiling;
+        if (shouldProgress && bwTarget != null && !bwAtCeiling) {
+          const next = bwTarget + repStep;
           suggestion = {
             suggestedWeightKg: 0,
-            suggestedReps: bwTarget + incrementReps,
+            suggestedReps: bwCeiling != null ? Math.min(bwCeiling, next) : next,
             ...basedOn,
             reason: "progressed-reps",
           };
@@ -1269,8 +1341,8 @@ export function buildSuggestion(
       // own known gap: 8, 9, 10 … 40, with nothing to convert reps into load.
       const ceiling = ps.repRangeMax ?? null;
       const atCeiling = ceiling != null && targetReps != null && targetReps >= ceiling;
-      if (shouldProgress && incrementReps > 0 && targetReps != null && !atCeiling) {
-        const next = targetReps + incrementReps;
+      if (shouldProgress && targetReps != null && !atCeiling) {
+        const next = targetReps + repStep;
         suggestion = {
           suggestedWeightKg: baseWeight,
           suggestedReps: ceiling != null ? Math.min(ceiling, next) : next,
@@ -1310,7 +1382,6 @@ export function buildSuggestion(
         // with the prescription permanently lagging what they can do. The
         // one-rep floor keeps it moving when they did exactly the target, and
         // an unfinished session supplies no evidence, so it uses the floor.
-        const repStep = incrementReps > 0 ? incrementReps : 1;
         const achieved = latestOutcome.status === "cleared" ? latestOutcome.minReps : 0;
         suggestion = {
           suggestedWeightKg: baseWeight,

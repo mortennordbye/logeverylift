@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  adaptiveIncrementKg,
   buildSuggestion,
   describeProgressionRule,
   estimate1RM,
@@ -544,11 +545,26 @@ describe("buildSuggestion — bodyweight fallback", () => {
     expect(result?.suggestedWeightKg).toBe(0);
   });
 
-  it("holds for weight mode at weight=0 when no incrementReps configured", () => {
+  it("adds one rep at weight=0 when no rep increment is configured", () => {
+    // SI-D5: the column defaults to 0 and nothing in the app ever set it, so
+    // this used to hold forever — a bodyweight exercise could not progress out
+    // of the box. One rep is the smallest honest move the dimension has.
     const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 10, targetReps: 10, rpe: 6 });
     const ps = makePs({ advance: "load", targetReps: 10, overloadIncrementReps: 0 });
     const result = buildSuggestion(rows, ps, null);
-    expect(result?.reason).toBe("held");
+    expect(result?.reason).toBe("progressed-reps");
+    expect(result?.suggestedReps).toBe(11);
+  });
+
+  it("still stops a bodyweight climb at the top of a configured range", () => {
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 15, targetReps: 15, rpe: 6 });
+    const ps = makePs({
+      advance: "load",
+      targetReps: 15,
+      repRangeMax: 15,
+      overloadIncrementReps: 0,
+    });
+    expect(buildSuggestion(rows, ps, null)?.reason).toBe("held");
   });
 
   it("suggests more reps (not kg) for smart mode when baseWeight is 0", () => {
@@ -2103,5 +2119,76 @@ describe("buildSuggestion — the config stamp", () => {
       null,
     );
     expect(r?.reason).not.toBe("deload");
+  });
+});
+
+// ─── A3: the increment ladder's order, and what the equipment can load ───────
+
+describe("adaptiveIncrementKg — experience modifies the zone, it does not replace it", () => {
+  // The bug this closes: anyone with a filled-in profile never reached the
+  // load-zone table at all, so the part of the function that knows a 20kg lift
+  // and a 200kg lift are different was dead for most users.
+  it("gives a beginner a bigger step at every load, not a flat 5kg", () => {
+    // 20kg isolation: zone says 1kg, beginner doubles it. Not 5kg, which is
+    // more than the whole lift moves in a month.
+    expect(adaptiveIncrementKg(null, 20, "curl", null, "beginner", "isolation")).toBe(2);
+    // 80kg compound: zone says 2.5, beginner doubles it.
+    expect(adaptiveIncrementKg(null, 80, "squat", null, "beginner", "compound")).toBe(5);
+  });
+
+  it("gives an advanced lifter a finer step at every load, not a flat 1.25kg", () => {
+    // 200kg compound: zone says 5, advanced halves it. Not 1.25kg, which is
+    // under a percent of the lift.
+    expect(adaptiveIncrementKg(null, 200, "hinge", null, "advanced", "compound")).toBe(2.5);
+    expect(adaptiveIncrementKg(null, 20, "curl", null, "advanced", "isolation")).toBe(0.5);
+  });
+
+  it("leaves intermediate on the zone alone", () => {
+    expect(adaptiveIncrementKg(null, 80, "squat", null, "intermediate", "compound")).toBe(2.5);
+  });
+
+  it("still lets an explicit increment and an endurance goal win outright", () => {
+    expect(adaptiveIncrementKg(2.5, 200, "hinge", null, "beginner", "compound")).toBe(2.5);
+    expect(adaptiveIncrementKg(null, 200, "hinge", "endurance", "beginner", "compound")).toBe(1);
+  });
+});
+
+describe("adaptiveIncrementKg — loadable granularity", () => {
+  it("never proposes a barbell jump that needs microplates", () => {
+    // 1.25kg on a barbell is 0.625 a side. The number reads precise and cannot
+    // be loaded, so the lifter rounds it and the plan and the bar disagree.
+    expect(
+      adaptiveIncrementKg(null, 200, "hinge", null, "advanced", "compound", "barbell"),
+    ).toBe(2.5);
+    expect(
+      adaptiveIncrementKg(null, 20, "curl", null, "advanced", "isolation", "barbell"),
+    ).toBe(2.5);
+  });
+
+  it("rounds a fixed-dumbbell step up to the rack's own spacing", () => {
+    expect(
+      adaptiveIncrementKg(null, 20, "curl", null, null, "isolation", "dumbbell"),
+    ).toBe(2);
+  });
+
+  it("lets a cable stack take the fine step it can actually make", () => {
+    expect(
+      adaptiveIncrementKg(null, 20, "curl", null, "advanced", "isolation", "cable"),
+    ).toBe(1.25);
+  });
+
+  it("does not snap when no equipment is recorded", () => {
+    // Most of the library carries no equipment. Defaulting to a step would
+    // coarsen every one of those on no evidence, which is the opposite of the
+    // problem this solves.
+    expect(adaptiveIncrementKg(null, 20, "curl", null, null, "isolation")).toBe(1);
+    expect(adaptiveIncrementKg(null, 20, "curl", null, null, "isolation", null)).toBe(1);
+  });
+
+  it("does not snap bodyweight or banded work, which has no load to add", () => {
+    expect(
+      adaptiveIncrementKg(null, 20, "pull", null, null, "compound", "bodyweight"),
+    ).toBe(2.5);
+    expect(adaptiveIncrementKg(null, 20, "pull", null, null, "compound", "bands")).toBe(2.5);
   });
 });

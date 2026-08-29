@@ -1376,6 +1376,9 @@ export async function getProgressiveSuggestions(
         progressionReadiness: programExercises.progressionReadiness,
         progressionConfigAt: programExercises.progressionConfigAt,
         movementPattern: exercises.movementPattern,
+        // The smallest step this equipment can load — an increment it cannot
+        // make is a number the lifter has to round themselves (A3).
+        equipment: exercises.equipment,
         // Resolve override ?? default in JS below (Drizzle returns both columns).
         exerciseTypeOverride: programExercises.exerciseType,
         exerciseTypeDefault: exercises.exerciseType,
@@ -1597,6 +1600,7 @@ export async function getProgressiveSuggestions(
         peakDistanceMeters: ps.peakDistanceMeters,
         movementPattern: ps.movementPattern,
         exerciseType: ps.exerciseTypeOverride ?? ps.exerciseTypeDefault,
+        equipment: ps.equipment,
         exerciseName: ps.exerciseName,
       };
       const suggestion = buildSuggestion(sessions, psData, profile, readiness);
