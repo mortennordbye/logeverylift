@@ -1197,7 +1197,12 @@ export async function importProgram(
               notes: slot.notes ?? undefined,
               overloadIncrementKg: slot.incKg.toString(),
               overloadIncrementReps: slot.incReps,
-              progressionMode: slot.mode,
+              // The axis wins when the payload carries one, and the retired
+              // column is written from it so the two do not disagree — a share
+              // or an export of this program still emits the mode, and a
+              // pre-axes client reads nothing else.
+              progressionMode:
+                slot.adv != null ? LEGACY_MODE_FOR_ADVANCE[slot.adv] : slot.mode,
               progressionRequiredHits: slot.hits ?? null,
               // An export predating the axes carries only `mode`, so it is
               // mapped through the same table as migration 0051 rather than
