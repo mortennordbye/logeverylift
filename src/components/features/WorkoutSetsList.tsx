@@ -35,6 +35,17 @@ import { useEffect, useRef, useState } from "react";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Effort chips for the miss sheet. "None" leaves it unlogged (0 = to failure). */
+const MISS_RIR_OPTIONS: { value: number | null; label: string }[] = [
+  { value: null, label: "None" },
+  { value: 0, label: "0" },
+  { value: 1, label: "1" },
+  { value: 2, label: "2" },
+  { value: 3, label: "3" },
+  { value: 4, label: "4" },
+  { value: 5, label: "5+" },
+];
+
 /** Short label for the in-workout PR celebration badge. */
 function prBadgeLabel(pr: PRResult): string {
   switch (pr.type) {
@@ -145,6 +156,15 @@ export function WorkoutSetsList({
     setNumber: number;
     suggestion: SetSuggestionDisplay;
   } | null>(null);
+  // Long-press on a set's toggle: record what was actually done rather than
+  // taking the tap's word for it. Holds the set the press opened it on.
+  const [missSheet, setMissSheet] = useState<{
+    setId: number;
+    setNumber: number;
+    targetReps: number;
+  } | null>(null);
+  const [missReps, setMissReps] = useState(0);
+  const [missRir, setMissRir] = useState<number | null>(null);
   const [restMinStr, setRestMinStr] = useState("1");
   const [restSecStr, setRestSecStr] = useState("0");
   const restRowRef = useRef<HTMLDivElement>(null);
@@ -233,9 +253,62 @@ export function WorkoutSetsList({
     router.refresh();
   }
 
+  // ── The miss sheet ──────────────────────────────────────────────────────────
+
+  /**
+   * Long-press a set's toggle to log what actually happened.
+   *
+   * A short tap still claims the prescription, which is honest — it is a claim
+   * the lifter made. This is the path for the set that fell short, and it
+   * replaces the trip through the set editor to find "Mark set as failed".
+   * Reps start at the target, so a press that only adds an effort value costs
+   * one more tap than a plain log.
+   */
+  const openMissSheet = (setId: number, setNumber: number) => {
+    const set = flatItems.find(
+      (i): i is SetFlatItem => i.type === "set" && i.set.id === setId,
+    )?.set;
+    if (!set) return;
+    const target = workoutSession?.overrides[setId]?.targetReps ?? set.targetReps ?? 0;
+    setMissReps(target);
+    setMissRir(workoutSession?.overrides[setId]?.rir ?? null);
+    setMissSheet({ setId, setNumber, targetReps: target });
+  };
+
+  const saveMissSheet = () => {
+    if (!missSheet) return;
+    const { setId, targetReps } = missSheet;
+    const set = flatItems.find(
+      (i): i is SetFlatItem => i.type === "set" && i.set.id === setId,
+    )?.set;
+    const existing = workoutSession?.overrides[setId];
+    // setOverride replaces the whole record, so anything already on it (a
+    // corrected weight, a note) has to be carried across.
+    workoutSession?.setOverride(setId, {
+      ...existing,
+      targetReps: existing?.targetReps ?? targetReps,
+      weightKg: existing?.weightKg ?? Number(set?.weightKg ?? 0),
+      actualReps: missReps,
+      rir: missRir ?? undefined,
+    });
+    setMissSheet(null);
+    void toggleSet(setId, { actualReps: missReps, rir: missRir });
+  };
+
   // ── Set completion ──────────────────────────────────────────────────────────
 
-  const toggleSet = async (setId: number) => {
+  /**
+   * Toggle a set's completion.
+   *
+   * `logged` carries what the miss sheet collected. It is passed in rather
+   * than read back off the override because setOverride is React state: the
+   * write and this call happen in the same tick, so the override the log path
+   * would read is still the previous one.
+   */
+  const toggleSet = async (
+    setId: number,
+    logged?: { actualReps: number; rir: number | null },
+  ) => {
     const flatIndex = flatItems.findIndex((i) => i.id === `set-${setId}`);
     const setItems = flatItems.filter(
       (i): i is SetFlatItem => i.type === "set",
@@ -318,7 +391,10 @@ export function WorkoutSetsList({
             setNumber: sIdx + 1,
             programSetId: item.set.id,
             targetReps: tr > 0 ? tr : undefined,
-            actualReps: tr,
+            // The achieved count when the session recorded one (the miss sheet
+            // or a correction in the editor), otherwise the target: catching a
+            // set up with one tap is a claim that it went to plan.
+            actualReps: ov?.actualReps ?? tr,
             weightKg: ov?.weightKg ?? Number(item.set.weightKg ?? 0),
             durationSeconds: ov?.durationSeconds ?? item.set.durationSeconds ?? undefined,
             distanceMeters: ov?.distanceMeters ?? item.set.distanceMeters ?? undefined,
@@ -339,9 +415,11 @@ export function WorkoutSetsList({
         if (setData) {
           const ov = workoutSession?.overrides[setData.id];
           const tr = ov?.targetReps ?? setData.targetReps ?? 0;
-          // Failed set: keep the target as the goal, log the (lower) reps achieved.
+          // The target is the goal either way; what changes is the achieved
+          // count. A recorded one wins, a set taken to failure with nothing
+          // recorded is 0, and a plain tap claims the target.
           const failed = ov?.isFailed ?? false;
-          const achieved = failed ? (ov?.actualReps ?? 0) : tr;
+          const achieved = logged?.actualReps ?? ov?.actualReps ?? (failed ? 0 : tr);
           const result = await logWithRetry({
             sessionId,
             exerciseId,
@@ -355,7 +433,7 @@ export function WorkoutSetsList({
             // A failed set was taken to failure ⇒ RIR 0; otherwise use the logged
             // value, which may be absent — a tap says the set is done, not how
             // hard it was.
-            rir: failed ? 0 : ov?.rir,
+            rir: failed ? 0 : (logged?.rir ?? ov?.rir),
             restTimeSeconds: restSeconds,
             notes: ov?.notes ?? null,
             isCompleted: true,
@@ -732,6 +810,11 @@ export function WorkoutSetsList({
                     programId={programId}
                     programExerciseId={programExerciseId}
                     onToggle={() => toggleSet(item.set.id)}
+                    onLongPressToggle={
+                      isWorkout && workoutSession
+                        ? () => openMissSheet(item.set.id, setNumber)
+                        : undefined
+                    }
                     onDelete={() => onDeleteSet?.(item.set.id)}
                     onStartTimer={startExerciseTimer}
                     onOpenLogRun={isRunning ? (id) => setPendingRunSetId(id) : undefined}
@@ -744,6 +827,7 @@ export function WorkoutSetsList({
                     overrideDurationSeconds={isWorkout ? renderedOverrides[item.set.id]?.durationSeconds : undefined}
                     overrideStartDelaySeconds={isWorkout ? renderedOverrides[item.set.id]?.startDelaySeconds : undefined}
                     overrideNotes={isWorkout ? renderedOverrides[item.set.id]?.notes ?? null : null}
+                    overrideActualReps={isWorkout ? renderedOverrides[item.set.id]?.actualReps : undefined}
                     failed={isWorkout ? (renderedOverrides[item.set.id]?.isFailed ?? false) : false}
                     hasPR={prSetIds.has(item.set.id)}
                   />
@@ -1044,6 +1128,89 @@ export function WorkoutSetsList({
         </div>
       </BottomSheet>
 
+      {/* What actually happened on the set, from a long press on its toggle */}
+      <BottomSheet open={missSheet !== null} onClose={() => setMissSheet(null)} blur>
+        <div className="w-full bg-card rounded-t-3xl p-6">
+          <div className="flex items-center justify-between mb-5">
+            <span className="text-sm text-muted-foreground uppercase tracking-wider">
+              Set {missSheet?.setNumber}
+            </span>
+            <button
+              onClick={() => setMissSheet(null)}
+              className="text-muted-foreground text-sm font-medium"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-base font-medium">Reps done</span>
+            <span className="text-xs text-muted-foreground">
+              {missSheet != null && missReps < missSheet.targetReps
+                ? `${missSheet.targetReps - missReps} short of ${missSheet.targetReps}`
+                : `target ${missSheet?.targetReps ?? 0}`}
+            </span>
+          </div>
+          <div className="flex items-center gap-4 mb-6">
+            <button
+              onClick={() => setMissReps((r) => Math.max(0, r - 1))}
+              aria-label="One rep fewer"
+              className="w-12 h-12 rounded-full bg-muted flex items-center justify-center active:scale-95 transition-transform"
+            >
+              <Minus className="w-5 h-5" />
+            </button>
+            <span className="flex-1 text-center text-3xl font-semibold tabular-nums">
+              {missReps}
+            </span>
+            <button
+              onClick={() => setMissReps((r) => Math.min(99, r + 1))}
+              aria-label="One rep more"
+              className="w-12 h-12 rounded-full bg-muted flex items-center justify-center active:scale-95 transition-transform"
+            >
+              <Plus className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-base font-medium">
+              Reps in reserve{" "}
+              <span className="text-xs text-muted-foreground">(optional)</span>
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {missRir == null
+                ? "Not logged"
+                : missRir === 0
+                  ? "to failure"
+                  : missRir === 5
+                    ? "5+ left"
+                    : `${missRir} left`}
+            </span>
+          </div>
+          <div className="flex gap-2 mb-6">
+            {MISS_RIR_OPTIONS.map(({ value, label }) => (
+              <button
+                key={label}
+                onClick={() => setMissRir(value)}
+                className={`flex-1 h-11 rounded-xl text-sm font-semibold transition-all active:scale-95 ${
+                  missRir === value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted text-foreground"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={saveMissSheet}
+            className="w-full h-12 rounded-xl bg-primary text-primary-foreground font-semibold active:scale-[0.98] transition-transform"
+          >
+            Log set
+          </button>
+        </div>
+      </BottomSheet>
+
       {/* Why the dots read the way they do */}
       <BottomSheet
         open={sessionDetail !== null}
@@ -1221,6 +1388,7 @@ function SortableSetRow({
   programId,
   programExerciseId,
   onToggle,
+  onLongPressToggle,
   onDelete,
   onStartTimer,
   onOpenLogRun,
@@ -1231,6 +1399,7 @@ function SortableSetRow({
   overrideDurationSeconds,
   overrideStartDelaySeconds,
   overrideNotes,
+  overrideActualReps,
   failed,
   hasPR,
 }: {
@@ -1247,6 +1416,8 @@ function SortableSetRow({
   programId: number;
   programExerciseId: number;
   onToggle: () => void;
+  /** Long-press the toggle to record reps and effort. Absent = not offered. */
+  onLongPressToggle?: () => void;
   onDelete: () => void;
   onStartTimer?: (setId: number, duration: number, startDelaySeconds?: number) => void;
   onOpenLogRun?: (setId: number) => void;
@@ -1257,6 +1428,8 @@ function SortableSetRow({
   overrideDurationSeconds?: number;
   overrideStartDelaySeconds?: number;
   overrideNotes?: string | null;
+  /** Reps the session recorded for this set, when they differ from the target. */
+  overrideActualReps?: number;
   failed?: boolean;
   hasPR?: boolean;
 }) {
@@ -1282,8 +1455,42 @@ function SortableSetRow({
     // In program view mode (not editing, not workout) — do nothing
   };
 
+  // Long-press the toggle to open the miss sheet. Only for a strength set
+  // that has not been logged: a timed set's control is a play button, and a
+  // logged set is corrected in the editor, which is where the notes are.
+  const canLongPress =
+    onLongPressToggle != null && !isCompleted && !isTimed && !isRunning && !isEditing;
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressFired = useRef(false);
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  };
+  // Clear a press in flight when the row unmounts mid-hold (a drag-reorder, or
+  // the exercise being left), so the sheet cannot open on a set that is gone.
+  useEffect(() => cancelLongPress, []);
+
+  const startLongPress = () => {
+    if (!canLongPress) return;
+    longPressFired.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressFired.current = true;
+      haptics.tap();
+      onLongPressToggle?.();
+    }, 450);
+  };
+
   const handlePlayClick = (e: React.MouseEvent) => {
     e.stopPropagation();
+    // The press already opened the sheet; the click that follows it is not a
+    // second instruction to log the set.
+    if (longPressFired.current) {
+      longPressFired.current = false;
+      return;
+    }
     if (isEditing || !isWorkout) return;
     if (isRunning && !isCompleted) {
       onOpenLogRun?.(set.id);
@@ -1318,7 +1525,13 @@ function SortableSetRow({
       {isWorkout && (
         <button
           onClick={handlePlayClick}
-          className={`tap-slop w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-150 border-2 active:scale-90 ${
+          onPointerDown={startLongPress}
+          onPointerUp={cancelLongPress}
+          onPointerLeave={cancelLongPress}
+          onPointerCancel={cancelLongPress}
+          // iOS shows a selection callout on a long press otherwise.
+          onContextMenu={(e) => e.preventDefault()}
+          className={`tap-slop select-none w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all duration-150 border-2 active:scale-90 ${
             isCompleted
               ? failed
                 ? "bg-destructive border-destructive"
@@ -1399,6 +1612,14 @@ function SortableSetRow({
             {Number(set.weightKg ?? 0) > 0
               ? `${set.targetReps ?? "?"} x ${Number(set.weightKg)}kg`
               : `${set.targetReps ?? "?"} reps`}
+            {/* The prescription still reads as the prescription; what was
+                actually done sits beside it. Without this a set logged short
+                looks identical to one that went to plan. */}
+            {overrideActualReps != null && overrideActualReps !== set.targetReps && (
+              <span className="text-sm text-muted-foreground font-normal ml-1.5">
+                · {overrideActualReps} done
+              </span>
+            )}
           </p>
         )}
         {overrideNotes && (
