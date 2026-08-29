@@ -1345,7 +1345,9 @@ function RpeTrendChart({ data }: { data: RpeTrendPoint[] }) {
           <SectionLabel>RPE Trend</SectionLabel>
           <Activity className="w-4 h-4 text-muted-foreground flex-none" />
         </div>
-        <p className="text-sm text-muted-foreground">No RPE data recorded yet.</p>
+        <p className="text-sm text-muted-foreground">
+          No effort logged yet. Set an RIR on a set to start the trend.
+        </p>
       </div>
     );
   }
@@ -1443,7 +1445,8 @@ function RpeTrendChart({ data }: { data: RpeTrendPoint[] }) {
       </div>
 
       <p className="text-[10px] text-muted-foreground">
-        Higher RPE = more effort. A rising trend may signal accumulated fatigue.
+        Averaged over sets where you logged effort. Higher RPE = more effort; a
+        rising trend may signal accumulated fatigue.
       </p>
     </div>
   );

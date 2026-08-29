@@ -1596,6 +1596,12 @@ export async function getWorkoutInsight(
     // Count distinct exercises in the most recent completed session that
     // had at least one set logged at RPE ≥ 9 — the conservative "you got
     // cooked across multiple lifts" signal for mid-cycle deload nudges.
+    //
+    // Sets with no logged effort are excluded (null fails the comparison), so
+    // the count is of exercises the lifter *said* were near-max. That is the
+    // right reading for a nudge that tells someone to back off: silence is not
+    // evidence of a hard session. The count is lower than it used to be, when
+    // every tap wrote a 7 and only explicit RIR 0-1 could reach 9.
     db
       .select({
         cookedExerciseCount: sql<number>`COUNT(DISTINCT ${workoutSets.exerciseId})`,

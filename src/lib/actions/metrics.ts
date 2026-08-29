@@ -117,7 +117,13 @@ export type CyclePickerItem = {
 export type RpeTrendPoint = {
   weekStart: string;
   weekIndex: number;
+  /**
+   * Mean effort over the sets that *reported* effort. Null when the week has
+   * none — which now includes weeks that were trained but logged no RIR, since
+   * a tap on the set toggle no longer invents one.
+   */
   avgRpe: number | null;
+  /** Sessions contributing to avgRpe, not sessions trained that week. */
   sessionCount: number;
 };
 
@@ -596,6 +602,11 @@ async function fetchCycleRpeTrend(
         eq(workoutSessions.isCompleted, true),
         sql`${workoutSessions.date} >= ${start}::date`,
         sql`${workoutSessions.date} < ${end}::date`,
+        // Excludes sets logged with no effort reported: null fails the
+        // comparison under three-valued logic, which is the behaviour we want
+        // and is now the common case rather than a rarity. The average is of
+        // reported effort; a week nobody reported on drops out entirely instead
+        // of being averaged against invented sevens.
         sql`${workoutSets.rpe} > 0`,
       ),
     )
@@ -612,7 +623,10 @@ async function fetchCycleRpeTrend(
     return {
       weekStart,
       weekIndex: i + 1,
-      avgRpe: row ? Math.round(Number(row.avgRpe) * 10) / 10 : null,
+      // row.avgRpe is checked for null on its own: Number(null) is 0, so a
+      // group that averaged to SQL NULL would plot as a 0.0 data point rather
+      // than a gap.
+      avgRpe: row?.avgRpe != null ? Math.round(Number(row.avgRpe) * 10) / 10 : null,
       sessionCount: row ? Number(row.sessionCount) : 0,
     };
   });
