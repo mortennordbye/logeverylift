@@ -59,14 +59,136 @@ import type {
     WorkoutSetWithExercise,
     WorkoutStats,
 } from "@/types/workout";
-import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+
+/**
+ * The plan slot a logged set belongs to.
+ *
+ * A program may hold the same exercise twice (heavy bench, then a back-off
+ * bench). `workout_sets` used to be keyed on (session, exercise, setNumber), so
+ * logging set 1 of the second slot overwrote set 1 of the first and the heavy
+ * set's weight, reps and effort were gone. The slot is the identity; the
+ * exercise is not.
+ *
+ * `programSetId` is resolved server-side rather than trusted from the payload:
+ * it decides which row a write lands on, and a slot belonging to another
+ * program must never be written into this session.
+ */
+type PlanSlot = { programExerciseId: number; programSetId: number | null };
+
+/**
+ * Resolve the plan slot for a set being logged into `session`.
+ *
+ * Returns `{ slot: null }` when there is nothing to resolve (an unprogrammed
+ * session, or a program set deleted since the payload was queued). That is not
+ * an error: the workout still happened and the row is still written, it just
+ * carries no slot and is history-only from then on.
+ *
+ * Returns `{ error }` only when the caller named a slot that exists but belongs
+ * to a different program.
+ */
+async function resolvePlanSlot(
+  programId: number | null,
+  exerciseId: number,
+  setNumber: number,
+  programSetId: number | undefined,
+): Promise<{ slot: PlanSlot | null; error?: string }> {
+  if (programId == null) return { slot: null };
+
+  if (programSetId != null) {
+    const [row] = await db
+      .select({
+        programSetId: programSets.id,
+        programExerciseId: programSets.programExerciseId,
+        programId: programExercises.programId,
+      })
+      .from(programSets)
+      .innerJoin(
+        programExercises,
+        eq(programExercises.id, programSets.programExerciseId),
+      )
+      .where(eq(programSets.id, programSetId))
+      .limit(1);
+    if (row) {
+      if (row.programId !== programId) {
+        return { slot: null, error: "Set does not belong to this program" };
+      }
+      return {
+        slot: {
+          programExerciseId: row.programExerciseId,
+          programSetId: row.programSetId,
+        },
+      };
+    }
+    // Fall through: the set was deleted from the program after the payload was
+    // queued. Resolve what we can from the exercise rather than dropping the
+    // write.
+  }
+
+  // Legacy payload (a bundle cached before programSetId shipped, or a replay
+  // queued by one). Resolving by exercise is ambiguous when the program holds
+  // that exercise twice, which is the bug this column exists to fix — the
+  // lowest slot id reproduces the previous behaviour rather than inventing a
+  // new one.
+  const [slot] = await db
+    .select({
+      programExerciseId: programExercises.id,
+      programSetId: programSets.id,
+    })
+    .from(programExercises)
+    .leftJoin(
+      programSets,
+      and(
+        eq(programSets.programExerciseId, programExercises.id),
+        eq(programSets.setNumber, setNumber),
+      ),
+    )
+    .where(
+      and(
+        eq(programExercises.programId, programId),
+        eq(programExercises.exerciseId, exerciseId),
+      ),
+    )
+    .orderBy(programExercises.id)
+    .limit(1);
+
+  return { slot: slot ?? null };
+}
+
+/**
+ * Match the one `workout_sets` row a set edit addresses, within a session.
+ *
+ * Prefers the plan slot. Falls back to the exercise for rows the migration
+ * could not backfill a slot onto, and for slots deleted since — those still
+ * carry the exercise, so an un-log or a note edit on them keeps working.
+ */
+function setRowKey(slot: PlanSlot | null, exerciseId: number, setNumber: number) {
+  return and(
+    eq(workoutSets.setNumber, setNumber),
+    slot
+      ? or(
+          eq(workoutSets.programExerciseId, slot.programExerciseId),
+          and(
+            isNull(workoutSets.programExerciseId),
+            eq(workoutSets.exerciseId, exerciseId),
+          ),
+        )
+      : eq(workoutSets.exerciseId, exerciseId),
+  );
+}
 
 /**
  * Resolve the program_set.id values for every completed workout_set in the
  * given active session. Used on workout-page mount to rehydrate the in-memory
  * `completedSetIds` set — necessary because that state lives only in React and
  * is lost when iOS evicts the PWA's JS context after backgrounding.
+ *
+ * Reads the slot the set was logged against. This used to re-derive it by
+ * joining program_exercises on exercise_id, which returned both slots' set ids
+ * when a program held the same exercise twice — ticking sets the user had not
+ * done. A pre-migration row with no slot is skipped: its set renders unticked
+ * and re-logging it is idempotent.
  */
 export async function getActiveSessionCompletedProgramSetIds(
   sessionId: number,
@@ -74,31 +196,18 @@ export async function getActiveSessionCompletedProgramSetIds(
   const auth = await requireSession();
   try {
     const rows = await db
-      .select({ id: programSets.id })
+      .select({ id: workoutSets.programSetId })
       .from(workoutSets)
       .innerJoin(workoutSessions, eq(workoutSets.sessionId, workoutSessions.id))
-      .innerJoin(
-        programExercises,
-        and(
-          eq(programExercises.programId, workoutSessions.programId),
-          eq(programExercises.exerciseId, workoutSets.exerciseId),
-        ),
-      )
-      .innerJoin(
-        programSets,
-        and(
-          eq(programSets.programExerciseId, programExercises.id),
-          eq(programSets.setNumber, workoutSets.setNumber),
-        ),
-      )
       .where(
         and(
           eq(workoutSets.sessionId, sessionId),
           eq(workoutSessions.userId, auth.user.id),
           eq(workoutSets.isCompleted, true),
+          isNotNull(workoutSets.programSetId),
         ),
       );
-    return { success: true, data: rows.map((r) => r.id) };
+    return { success: true, data: rows.map((r) => r.id!) };
   } catch (error) {
     console.error("[getActiveSessionCompletedProgramSetIds] failed", error);
     return { success: false, error: "Failed to fetch completed sets" };
@@ -139,6 +248,7 @@ export async function logWorkoutSet(
       sessionId,
       exerciseId,
       setNumber,
+      programSetId,
       targetReps,
       actualReps,
       weightKg,
@@ -170,6 +280,23 @@ export async function logWorkoutSet(
       return { success: false, error: "Unauthorized" };
     }
 
+    // Which plan slot this row belongs to. Resolved before the write because it
+    // is part of the row's identity: the upsert below conflicts on it.
+    const resolved = await resolvePlanSlot(
+      session.programId,
+      exerciseId,
+      setNumber,
+      programSetId,
+    );
+    if (resolved.error) {
+      console.error("[logWorkoutSet] slot_program_mismatch", {
+        sessionId,
+        programSetId,
+      });
+      return { success: false, error: resolved.error };
+    }
+    const slot = resolved.slot;
+
     // Timed exercises must record a duration. Without this guard, a quick-tap
     // completion (no override, program had no planned duration) silently logs
     // duration=null, which then displays as "—" forever in history.
@@ -191,10 +318,15 @@ export async function logWorkoutSet(
       }
     }
 
-    // Upsert on the (session, exercise, set_number) unique key. A plain insert
+    // Upsert on the (session, plan slot, set_number) unique key. A plain insert
     // would throw on the second write for the same set, which the caller then
     // had to treat as success — silently discarding the user's corrected
     // weight/reps/RIR. Re-logging a set must overwrite it.
+    //
+    // When the slot could not be resolved the key holds a null and Postgres
+    // treats it as distinct, so nothing conflicts and the row is inserted. That
+    // only happens for an unprogrammed session or a set deleted from the plan
+    // mid-workout; both are better recorded twice than lost.
     //
     // Replays from the offline queue land here too and are idempotent: the row
     // is rewritten with the same values, and PR detection below only inserts
@@ -202,6 +334,8 @@ export async function logWorkoutSet(
     const setValues = {
       sessionId,
       exerciseId,
+      programExerciseId: slot?.programExerciseId ?? null,
+      programSetId: slot?.programSetId ?? null,
       setNumber,
       targetReps,
       actualReps,
@@ -224,12 +358,13 @@ export async function logWorkoutSet(
       .onConflictDoUpdate({
         target: [
           workoutSets.sessionId,
-          workoutSets.exerciseId,
+          workoutSets.programExerciseId,
           workoutSets.setNumber,
         ],
         // createdAt is deliberately not updated — it stays the time the set was
         // first logged.
         set: {
+          programSetId: setValues.programSetId,
           targetReps: setValues.targetReps ?? null,
           actualReps: setValues.actualReps,
           weightKg: setValues.weightKg,
@@ -299,7 +434,7 @@ export async function logWorkoutSet(
 /**
  * Un-log a workout set
  *
- * Removes the row written by logWorkoutSet for (session, exercise, setNumber).
+ * Removes the row written by logWorkoutSet for (session, plan slot, setNumber).
  * The row is deleted rather than flagged is_completed = false because the
  * metrics aggregates filter on workout_sessions.isCompleted, not on the set
  * flag — a lingering row would keep counting toward volume.
@@ -321,11 +456,11 @@ export async function unlogWorkoutSet(
       fieldErrors: validation.error.flatten().fieldErrors,
     };
   }
-  const { sessionId, exerciseId, setNumber } = validation.data;
+  const { sessionId, exerciseId, setNumber, programSetId } = validation.data;
 
   try {
     const [session] = await db
-      .select({ userId: workoutSessions.userId })
+      .select({ userId: workoutSessions.userId, programId: workoutSessions.programId })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, sessionId))
       .limit(1);
@@ -333,16 +468,24 @@ export async function unlogWorkoutSet(
       return { success: false, error: "Unauthorized" };
     }
 
+    const resolved = await resolvePlanSlot(
+      session.programId,
+      exerciseId,
+      setNumber,
+      programSetId,
+    );
+    if (resolved.error) {
+      console.error("[unlogWorkoutSet] slot_program_mismatch", {
+        sessionId,
+        programSetId,
+      });
+      return { success: false, error: resolved.error };
+    }
+
     const [existing] = await db
       .select({ id: workoutSets.id })
       .from(workoutSets)
-      .where(
-        and(
-          eq(workoutSets.sessionId, sessionId),
-          eq(workoutSets.exerciseId, exerciseId),
-          eq(workoutSets.setNumber, setNumber),
-        ),
-      )
+      .where(and(eq(workoutSets.sessionId, sessionId), setRowKey(resolved.slot, exerciseId, setNumber)))
       .limit(1);
 
     // Already absent — the user un-logged a set that never reached the server
@@ -1059,7 +1202,7 @@ export async function getSessionDetail(
  * Attach (or replace) a free-text note on an already-logged workout set.
  * Used by SetEditView when the lifter taps a completed set to record an
  * observation ("shoulder twinge", "felt easy"). Resolves the workout_sets
- * row by (sessionId, exerciseId, setNumber). If no row exists yet, returns
+ * row by (sessionId, plan slot, setNumber). If no row exists yet, returns
  * `success: true` without writing — the override carries the note forward
  * on the next `logWorkoutSet` call.
  */
@@ -1068,6 +1211,7 @@ export async function updateWorkoutSetNotes(
     sessionId: number;
     exerciseId: number;
     setNumber: number;
+    programSetId?: number;
     notes: string | null;
   },
 ): Promise<ActionResult<undefined>> {
@@ -1078,12 +1222,25 @@ export async function updateWorkoutSetNotes(
     }
     // Verify the session belongs to the user before touching anything
     const [session] = await db
-      .select({ userId: workoutSessions.userId })
+      .select({ userId: workoutSessions.userId, programId: workoutSessions.programId })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, data.sessionId))
       .limit(1);
     if (!session || session.userId !== auth.user.id) {
       return { success: false, error: "Unauthorized" };
+    }
+    const resolved = await resolvePlanSlot(
+      session.programId,
+      data.exerciseId,
+      data.setNumber,
+      data.programSetId,
+    );
+    if (resolved.error) {
+      console.error("[updateWorkoutSetNotes] slot_program_mismatch", {
+        sessionId: data.sessionId,
+        programSetId: data.programSetId,
+      });
+      return { success: false, error: resolved.error };
     }
     await db
       .update(workoutSets)
@@ -1091,8 +1248,7 @@ export async function updateWorkoutSetNotes(
       .where(
         and(
           eq(workoutSets.sessionId, data.sessionId),
-          eq(workoutSets.exerciseId, data.exerciseId),
-          eq(workoutSets.setNumber, data.setNumber),
+          setRowKey(resolved.slot, data.exerciseId, data.setNumber),
         ),
       );
     revalidatePath(`/history`);

@@ -250,9 +250,9 @@ export function WorkoutSetsList({
       setPrSetIds((prev) => { const s = new Set(prev); s.delete(setId); return s; });
       if (isWorkout && workoutSession) workoutSession.clearRestTimerEnd(setId);
       // Remove the row server-side too, using the same set identity the log
-      // path writes with (setIndex + 1).
+      // path writes with (the plan slot, plus setIndex + 1).
       if (isWorkout && sessionId != null && exerciseId != null && setIndex >= 0) {
-        void unlogWithRetry({ sessionId, exerciseId, setNumber: setIndex + 1 });
+        void unlogWithRetry({ sessionId, exerciseId, setNumber: setIndex + 1, programSetId: setId });
       }
     } else {
       haptics.tap();
@@ -310,6 +310,7 @@ export function WorkoutSetsList({
             sessionId,
             exerciseId,
             setNumber: sIdx + 1,
+            programSetId: item.set.id,
             targetReps: tr > 0 ? tr : undefined,
             actualReps: tr,
             weightKg: ov?.weightKg ?? Number(item.set.weightKg ?? 0),
@@ -339,6 +340,7 @@ export function WorkoutSetsList({
             sessionId,
             exerciseId,
             setNumber: setIndex + 1,
+            programSetId: setData.id,
             targetReps: tr > 0 ? tr : undefined,
             actualReps: achieved,
             weightKg: ov?.weightKg ?? Number(setData.weightKg ?? 0),
@@ -425,6 +427,7 @@ export function WorkoutSetsList({
         sessionId,
         exerciseId,
         setNumber: setIndex + 1,
+        programSetId: setId,
         actualReps: 0,
         weightKg: 0,
         distanceMeters,

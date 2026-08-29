@@ -323,6 +323,13 @@
       "when": 1786983859311,
       "tag": "0045_bouncy_wilson_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1788002767447,
+      "tag": "0046_slot_keyed_workout_sets",
+      "breakpoints": true
     }
   ]
 }

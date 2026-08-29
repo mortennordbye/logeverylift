@@ -69,6 +69,12 @@ export const logWorkoutSetSchema = z.object({
     .int()
     .positive("Exercise ID must be a positive integer"),
   setNumber: z.number().int().positive("Set number must be a positive integer"),
+  // The program_sets row this set was logged against. Optional because a client
+  // cached from before this shipped, or a replay queued by one, will not send
+  // it; the server falls back to resolving the slot from the exercise. Present,
+  // it is the exact identity — the only thing that can tell two slots for the
+  // same exercise apart.
+  programSetId: z.number().int().positive().optional(),
   targetReps: z
     .number()
     .int()
@@ -112,7 +118,7 @@ export const logWorkoutSetSchema = z.object({
  * Un-log Workout Set Schema
  *
  * Validates the identity of a logged set the user is un-completing. The set is
- * addressed the same way logWorkoutSet writes it: by (session, exercise,
+ * addressed the same way logWorkoutSet writes it: by (session, plan slot,
  * setNumber), which is the table's unique key.
  */
 export const unlogWorkoutSetSchema = z.object({
@@ -122,6 +128,9 @@ export const unlogWorkoutSetSchema = z.object({
     .int()
     .positive("Exercise ID must be a positive integer"),
   setNumber: z.number().int().positive("Set number must be a positive integer"),
+  // Same optionality and same purpose as on logWorkoutSetSchema: without it,
+  // un-logging set 1 of the second slot deletes set 1 of the first.
+  programSetId: z.number().int().positive().optional(),
 });
 
 /**

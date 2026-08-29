@@ -287,6 +287,7 @@ export function SetEditView({
           sessionId: activeSessionId,
           exerciseId,
           setNumber,
+          programSetId: set.id,
           targetReps: !isRunning && targetRepsValue > 0 ? targetRepsValue : undefined,
           actualReps: isRunning ? 0 : reps,
           weightKg: isRunning ? 0 : weight,
@@ -304,7 +305,7 @@ export function SetEditView({
         // Not yet logged: the override carries the values (and the note)
         // forward to the next logWorkoutSet call. The note still goes through
         // in case a row exists from an earlier session state.
-        void updateWorkoutSetNotes({ sessionId: activeSessionId, exerciseId, setNumber, notes: noteValue });
+        void updateWorkoutSetNotes({ sessionId: activeSessionId, exerciseId, setNumber, programSetId: set.id, notes: noteValue });
       }
     }
 

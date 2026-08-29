@@ -43,6 +43,7 @@ import {
     uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { exercises } from "./exercises";
+import { programExercises, programSets } from "./programs";
 import { workoutSessions } from "./workout-sessions";
 
 export const workoutSets = pgTable("workout_sets", {
@@ -53,6 +54,21 @@ export const workoutSets = pgTable("workout_sets", {
   exerciseId: integer("exercise_id")
     .references(() => exercises.id, { onDelete: "cascade" })
     .notNull(),
+  // The plan slot this set was logged against. A program may hold the same
+  // exercise twice (heavy bench, then a back-off bench), so exerciseId alone
+  // does not identify which prescription the row belongs to — keying on it made
+  // the second slot's set 1 overwrite the first slot's set 1.
+  //
+  // Deliberately `set null`, not `cascade` like the two FKs above: removing an
+  // exercise from a program must not delete the workouts already logged against
+  // it. Everything reading these columns has to tolerate a null.
+  programExerciseId: integer("program_exercise_id").references(
+    () => programExercises.id,
+    { onDelete: "set null" },
+  ),
+  programSetId: integer("program_set_id").references(() => programSets.id, {
+    onDelete: "set null",
+  }),
   setNumber: integer("set_number").notNull(),
   targetReps: integer("target_reps"),
   actualReps: integer("actual_reps").notNull(),
@@ -80,7 +96,16 @@ export const workoutSets = pgTable("workout_sets", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (t) => [
   index("idx_wsets_session").on(t.sessionId),
-  // Prevents double-logging the same set (e.g., rapid double-tap on the
-  // "complete" button). One row per (session, exercise, setNumber).
-  uniqueIndex("uniq_wsets_session_exercise_set").on(t.sessionId, t.exerciseId, t.setNumber),
+  // Prevents double-logging the same set (e.g. rapid double-tap on the
+  // "complete" button) and makes re-logging an upsert. One row per
+  // (session, plan slot, setNumber).
+  //
+  // Postgres treats nulls as distinct, so rows whose slot could not be resolved
+  // (pre-migration history, or a slot deleted after the fact) are not covered.
+  // That is accepted: those rows are read-only history and nothing upserts into
+  // them. Every live write resolves a slot server-side before it gets here.
+  uniqueIndex("uniq_wsets_session_slot_set").on(t.sessionId, t.programExerciseId, t.setNumber),
+  // Retained for the reads still keyed on the exercise (history windows, PR
+  // lookups) that the old unique index used to serve.
+  index("idx_wsets_session_exercise").on(t.sessionId, t.exerciseId),
 ]);

@@ -63,6 +63,19 @@ describe("logWorkoutSetSchema", () => {
     expect(logWorkoutSetSchema.safeParse(valid).success).toBe(true);
   });
 
+  // Optional on purpose: a client cached before it shipped, and every payload
+  // already sitting in the offline queue, has to keep logging. The server
+  // resolves the slot from the exercise when it is absent.
+  it("accepts a programSetId and still accepts a payload without one", () => {
+    expect(logWorkoutSetSchema.safeParse({ ...valid, programSetId: 42 }).success).toBe(true);
+    expect(logWorkoutSetSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("rejects a non-positive programSetId", () => {
+    expect(logWorkoutSetSchema.safeParse({ ...valid, programSetId: 0 }).success).toBe(false);
+    expect(logWorkoutSetSchema.safeParse({ ...valid, programSetId: -1 }).success).toBe(false);
+  });
+
   it("rejects RPE below 1", () => {
     expect(logWorkoutSetSchema.safeParse({ ...valid, rpe: 0 }).success).toBe(false);
   });
@@ -271,6 +284,18 @@ describe("unlogWorkoutSetSchema", () => {
 
   it("rejects missing fields", () => {
     expect(unlogWorkoutSetSchema.safeParse({ sessionId: 1 }).success).toBe(false);
+  });
+
+  // The plan slot is what tells two slots for the same exercise apart. It has
+  // to stay optional so a bundle cached before it shipped can still un-log.
+  it("accepts a programSetId and still accepts a payload without one", () => {
+    expect(unlogWorkoutSetSchema.safeParse({ ...valid, programSetId: 42 }).success).toBe(true);
+    expect(unlogWorkoutSetSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("rejects a non-positive programSetId", () => {
+    expect(unlogWorkoutSetSchema.safeParse({ ...valid, programSetId: 0 }).success).toBe(false);
+    expect(unlogWorkoutSetSchema.safeParse({ ...valid, programSetId: -1 }).success).toBe(false);
   });
 });
 

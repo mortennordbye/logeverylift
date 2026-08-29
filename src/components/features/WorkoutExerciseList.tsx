@@ -100,6 +100,7 @@ export function WorkoutExerciseList({
               sessionId,
               exerciseId: exercise.exerciseId,
               setNumber: exercise.sets.indexOf(s) + 1,
+              programSetId: s.id,
             }),
           ),
         );
@@ -118,6 +119,7 @@ export function WorkoutExerciseList({
                   sessionId,
                   exerciseId: exercise.exerciseId,
                   setNumber: exercise.sets.indexOf(s) + 1,
+                  programSetId: s.id,
                   actualReps: 0,
                   weightKg: 0,
                   distanceMeters: s.distanceMeters ?? undefined,
@@ -130,6 +132,7 @@ export function WorkoutExerciseList({
                   sessionId,
                   exerciseId: exercise.exerciseId,
                   setNumber: exercise.sets.indexOf(s) + 1,
+                  programSetId: s.id,
                   targetReps: s.targetReps ?? undefined,
                   actualReps: s.targetReps ?? 0,
                   weightKg: Number(s.weightKg ?? 0),
