@@ -84,6 +84,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Picking one of those three. "Seed for new exercises" is the least surprising and needs no change to the engine; "fallback in the ladder" means a server-side user column, since `localStorage` is never visible to a Server Action.
 - **Touchpoints:** `src/components/features/SettingsClient.tsx:328-350`, `src/components/ui/theme-provider.tsx`, `src/lib/utils/progression.ts:211-245`, `docs/gotchas.md`.
 
+### pnpm 11 is pinned away from, not migrated to
+- **What:** The Dockerfile installs `pnpm@10` at every stage, matching the major CI's `pnpm/action-setup` pins. It used to install whatever was newest, and when pnpm 11 shipped it turned `ERR_PNPM_IGNORED_BUILDS` into a hard error, so `pnpm install` began failing inside the image — breaking `make dev` and the production image CI pushes, with no change to this repo. Pinning restored the tested toolchain; it did not resolve the underlying question. Eight packages have build scripts pnpm has been *ignoring* all along (`sharp`, three `esbuild` versions, `unrs-resolver`, `lefthook`, `@sentry/cli`, `msw`), and `sharp` is the one that matters — Next.js uses it for image optimization, and it is a native module whose install script is what fetches its binaries.
+- **Why deferred:** Adding `pnpm.onlyBuiltDependencies` to `package.json` decides which packages may run arbitrary code at install time, and it changes what actually gets built in the image. That is a supply-chain decision, not a build fix, and it wants to land on its own rather than folded into an unrelated release. Locally, `pnpm` commands need `--config.verify-deps-before-run=false` until it is resolved.
+- **Unblocked by:** Deciding the allowlist, then verifying that image optimization still behaves — if `sharp` has never been built, the current production image is already running without it and the allowlist would change that behaviour rather than preserve it. Check before assuming either way.
+- **Touchpoints:** `Dockerfile` (four `npm install -g pnpm@10` lines), `.github/workflows/ci.yml:34-37`, `package.json`.
+
 ## Cycle periodization (spec divergences)
 
 Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spec pass (2026-08-25 @ `91c1646`). Rule IDs are `PZ-n`; divergence IDs `D1`-`D8` are the rows of that spec's Divergences table.
