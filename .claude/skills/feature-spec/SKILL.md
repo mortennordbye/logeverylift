@@ -47,6 +47,24 @@ Note as you go, but do not write rules yet.
 
 Name any neighbouring system that shares vocabulary and point where it is documented. Shared *constant names* across subsystems are worth calling out explicitly — in this repo `DELOAD_FACTOR` is `0.9` in `progression.ts` and `0.75` in `periodization.ts`, which is a trap worth three lines.
 
+### 4a. Trace every input's provenance
+
+Before writing a single rule, list the values the rules will be stated over, and for each one answer: **which code path writes it, and what is stored when nobody supplies it.** Put the answers in the spec as an "Inputs — provenance" table.
+
+This step exists because a spec verified rule by rule can still be wrong about the feature. In this repo, a progression rule stated over a logged effort value verified true against the function that read it, passed two review passes, and was inert in production — because the logging path wrote a hardcoded value on every tap, so the rule's input was never anything the user had reported. Nothing in a rule-level check can catch that. Only the question "where does this number come from" can.
+
+Three distinctions to make explicit for each input:
+
+- **Reported, claimed, derived, or configured.** A tap on a "done" control *claims* the prescription; a number typed into a field is *reported*; a column computed from another is *derived*, and the spec must say from what. These are not interchangeable and the engine may not promote one to another.
+- **What null means, and what reads it.** If null means "not supplied", say so, and check that no reader substitutes a default. A `?? <plausible value>` in a read turns silence into evidence, and it will look like a harmless convenience in review.
+- **Whether the feature writes anything it later reads.** A feedback loop is not automatically wrong, but it needs stating and bounding, and it is where runaway behaviour lives.
+
+### 4b. State a rate rule
+
+If the feature changes a number over time, one rule must say **how fast it is allowed to move**: the step per occurrence, and what bounds it. Name every exception, and for each one name the thing outside the feature that bounds it — a value the user configured, or one they already achieved.
+
+A rate rule is an outside check. It is stated in terms a reader can evaluate without following the implementation, so it catches the class of bug where an advance is sized by measured performance rather than by a configured step — which is how "beat the target by 30 seconds, move the target by 30 seconds" survives a rule-by-rule verification of everything around it.
+
 ### 5. Write the rules
 
 Number from 1, group under `##` headings by behaviour area, one `###` per rule.
@@ -137,6 +155,7 @@ Pair findings that share a single decision. Where `BACKLOG.md` **already** cover
 - **No behaviour changes in a spec pass.** Findings are recorded, never fixed in the same change. Mixing them makes the diff unreviewable and the progression logic is high blast-radius.
 - **State intent, not implementation.** Cite `file.ts:line` as evidence, never as the subject. A refactor that moves code without changing behaviour moves only the stamp.
 - **Link, don't restate.** Schema goes in `docs/data-model.md`, conventions in `CLAUDE.md`, gaps in `BACKLOG.md`.
+- **A rule stated over an input you have not traced is not verified.** Step 4a is not optional and is not covered by step 6: verifying a rule against the function that implements it proves the function does what the rule says, not that the rule's inputs mean what the rule assumes.
 - **House formatting:** no front-matter, one `#`, depth no deeper than `###`, tables with `|---|`, `✓`/`—` for yes/no, backticked paths, no emoji, and no assistant or tooling names anywhere in prose.
 
 ## Reviewing an existing spec
@@ -147,3 +166,5 @@ Same procedure, narrowed. Run the stale check from the header, read only what ch
 - Behaviour removed → strike the rule through, keep it, note what replaced it.
 - Behaviour added → append a new ID at the end of its section. Never renumber to make it tidy.
 - Nothing changed → move the stamp, but only after actually re-reading.
+
+A spec written before step 4a existed has no provenance table. Add one on the next pass rather than leaving it, and treat a missing rate rule the same way.

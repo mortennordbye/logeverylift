@@ -1963,3 +1963,72 @@ describe("buildSuggestion — estimated 1RM", () => {
     expect(buildSuggestion(rows, makePs(), null)?.estimated1RM).toBeCloseTo(101.3, 1);
   });
 });
+
+// ─── SI-41: the rate rule ────────────────────────────────────────────────────
+
+describe("buildSuggestion — one step per session", () => {
+  // A suggestion is offered once per session, so "how much can it move" and
+  // "how fast can it move" are the same question. Nothing here may propose more
+  // than a single step in the dimension it moves; the two documented exceptions
+  // are bounded by something the lifter chose or already did.
+  it("adds exactly one load increment however many sessions cleared", () => {
+    const rows = makeSessions(5, { actualReps: 8, targetReps: 8 });
+    const r = buildSuggestion(
+      rows,
+      makePs({ advance: "load", requiredHits: 1, overloadIncrementKg: "2.50" }),
+      null,
+    );
+    expect(r?.suggestedWeightKg).toBe(82.5);
+  });
+
+  it("adds exactly one rep increment however far past the target the lifter went", () => {
+    // 20 reps against a target of 8 still proposes 9. A rep ladder has no range
+    // to climb inside, so "what was achieved" is not a bound the lifter set.
+    const rows = makeSessions(2, { actualReps: 20, targetReps: 8 });
+    const r = buildSuggestion(
+      rows,
+      makePs({ advance: "reps", overloadIncrementReps: 1 }),
+      null,
+    );
+    expect(r?.suggestedReps).toBe(9);
+  });
+
+  it("bounds double progression's climb by the range, not by the session", () => {
+    // The documented exception: the climb goes to what the binding set did,
+    // which can be several reps at once, but never past a bound the lifter
+    // configured. Without the exception the prescription lags what they can do.
+    const session = makeMultiSession(
+      [
+        { actualReps: 12, targetReps: 8 },
+        { actualReps: 11, targetReps: 8 },
+      ],
+      { date: "2024-02-01" },
+    );
+    const r = buildSuggestion(
+      [session],
+      makePs({
+        advance: "double",
+        requiredHits: 1,
+        targetReps: 8,
+        repRangeMin: 6,
+        repRangeMax: 10,
+      }),
+      null,
+    );
+    expect(r?.suggestedReps).toBe(10);
+  });
+
+  it("adds one duration increment to the target, not to what was held", () => {
+    const rows = makeSessions(2, {
+      actualReps: 0,
+      targetReps: null,
+      durationSeconds: 300,
+    });
+    const r = buildSuggestion(
+      rows,
+      makePs({ advance: "duration", durationSeconds: 60, overloadIncrementReps: 10 }),
+      null,
+    );
+    expect(r?.suggestedDurationSeconds).toBe(70);
+  });
+});

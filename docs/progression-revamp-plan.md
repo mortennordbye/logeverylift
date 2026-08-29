@@ -550,7 +550,7 @@ Binding consequences for the build:
 
 Binding consequences for the build:
 - `smart` exercises migrate to preset **Load, confirmed** (fixed target, advance `load`), per section 10. They do not silently become double progression: no existing set has a rep range, and inventing one would change the prescription.
-- `adjustedRepsForWeight` is deleted from `SetSuggestion` and from both consumers. This also closes divergence `D2` (the rep cut surviving a readiness downgrade) by removing the field it was leaking through.
+- **Built (phase 5).** The `smart` rep-cut field is deleted from `SetSuggestion` and from both consumers, which also closes divergence `D2` (the rep cut surviving a readiness downgrade) by removing the field it was leaking through.
 - `estimated1RM` survives as a **display** value only, and gains the RPE gate it should always have had, which closes `SI-D1`. With `D-2` decided, "no effort logged" now means no 1RM estimate rather than an estimate built on an assumed 7.
 - Independent support for this decision, found in the triathlon generator: it already declines to use `smart`, on the grounds that it "nudges reps via a 1RM estimate, which would break the strictly-static rep scheme" (`triathlon-plan.ts:158-165`).
 
@@ -804,7 +804,7 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 
 **B-7. Program sharing carries progression settings between users. Phase 4 added the rep range to the copy** — it copies sets field by field, so a shared double-progression program would have arrived as a fixed-target one. `program-shares.ts:205-209` copies `progressionMode`, `progressionRequiredHits`, `progressionApplyToPlan` and both increments into the shared payload. Phase 5 retires `progression_mode`, so the share format changes. *Required:* accept both shapes on import for at least one release, and map a legacy `progressionMode` through the same table as section 10's migration. A share created by an old client must still import.
 
-**B-8. The MCP tool exposes the mode as an enum.** `mcp/tools/programs.ts:204` validates `progressionMode: z.enum(PROGRESSION_MODES)` and defaults it at `:275`. Phase 5 must update the enum, the tool description at `:192`, and keep accepting the old values so an agent mid-conversation does not start failing.
+**B-8. The MCP tool exposes the mode as an enum.** `mcp/tools/programs.ts` validated `progressionMode: z.enum(PROGRESSION_MODES)` and defaulted it. **Done in phase 5:** the tool takes the axes, still accepts the old values and maps them, and the description says which to prefer.
 
 **B-9. The triathlon generator sets modes and RIR caps directly.** `triathlon-plan.ts` writes `progressionMode` per exercise and `targetRir` per set, and its comment explains it deliberately avoids `smart`. Phase 5 must move it to presets. With `D-1` and `D-8` live, its existing `targetRir` caps **become load-bearing for the first time**: plans it generates will start gating progression on effort. That is the intended behaviour, but it is a behaviour change to generated plans that nobody asked for at generation time.
 
@@ -824,7 +824,7 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 
 **B-18. The same query's session count changes meaning. Done in phase 1** — the type says it counts sessions that contributed effort, and nothing renders it. `metrics.ts:590`'s `COUNT(DISTINCT session)` sits behind the `rpe > 0` predicate at `:599`, so weeks with no logged effort drop out of the chart entirely. Also note the exclusion is that `WHERE` clause, not `AVG` skipping nulls as `B-3` states.
 
-**B-19. Two more places gate the mode enum.** `validators/workout.ts:340` (`importProgramSchema`'s `.enum([...])`, which gates the import `B-13` describes) and `programs.ts:579` (`VALID_PROGRESSION_MODES`, backing the `updateProgramExerciseProgressionMode` Server Action). Neither is covered by `B-7`, `B-8` or `B-13`.
+**B-19. Two more places gate the mode enum.** `importProgramSchema`'s mode enum in `validators/workout.ts` (which gates the import `B-13` describes) and a `VALID_PROGRESSION_MODES` constant in `programs.ts` backing the mode-setting Server Action. Neither was covered by `B-7`, `B-8` or `B-13`. **Done in phase 5:** the import enum still accepts every legacy value and maps it, and the mode action is replaced by one that writes the axes.
 
 **B-20. The mode union lives in the component.** `WorkoutSetsClient.tsx:39`, `:53`, `:357`, `:585` hold the type, the picker list, the badge label and a layout conditional. Phase 5 rewrites this file anyway, but section 8 never says the type is defined here rather than in `types/`.
 
