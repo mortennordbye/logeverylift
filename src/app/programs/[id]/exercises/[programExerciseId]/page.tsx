@@ -45,6 +45,7 @@ export default async function ProgramExerciseDetailPage({ params, searchParams }
       overloadIncrementReps={Number(pe.overloadIncrementReps ?? 0)}
       progressionMode={progressionMode}
       progressionRequiredHits={pe.progressionRequiredHits}
+      progressionScope={pe.progressionScope}
       progressionApplyToPlan={pe.progressionApplyToPlan}
       exerciseTypeDefault={pe.exercise.exerciseType}
       exerciseTypeOverride={pe.exerciseType}

@@ -139,6 +139,12 @@ export function WorkoutSetsList({
   const [editingRestItemId, setEditingRestItemId] = useState<string | null>(null);
   const [restDraft, setRestDraft] = useState(60);
   const [pendingRunSetId, setPendingRunSetId] = useState<number | null>(null);
+  // Which set's progress dots were tapped. Holds the suggestion rather than the
+  // id so the sheet keeps rendering the window it was opened on.
+  const [sessionDetail, setSessionDetail] = useState<{
+    setNumber: number;
+    suggestion: SetSuggestionDisplay;
+  } | null>(null);
   const [restMinStr, setRestMinStr] = useState("1");
   const [restSecStr, setRestSecStr] = useState("0");
   const restRowRef = useRef<HTMLDivElement>(null);
@@ -730,6 +736,9 @@ export function WorkoutSetsList({
                     onStartTimer={startExerciseTimer}
                     onOpenLogRun={isRunning ? (id) => setPendingRunSetId(id) : undefined}
                     suggestion={suggestions?.[item.set.id]}
+                    onShowSessions={(suggestion) =>
+                      setSessionDetail({ setNumber, suggestion })
+                    }
                     onApplySuggestion={handleApplySuggestion}
                     onApplyRepSuggestion={handleApplyRepSuggestion}
                     overrideDurationSeconds={isWorkout ? renderedOverrides[item.set.id]?.durationSeconds : undefined}
@@ -1034,8 +1043,98 @@ export function WorkoutSetsList({
           </div>
         </div>
       </BottomSheet>
+
+      {/* Why the dots read the way they do */}
+      <BottomSheet
+        open={sessionDetail !== null}
+        onClose={() => setSessionDetail(null)}
+        blur
+      >
+        <div className="w-full bg-card rounded-t-3xl p-6">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-sm text-muted-foreground uppercase tracking-wider">
+              Set {sessionDetail?.setNumber} progress
+            </span>
+            <button
+              onClick={() => setSessionDetail(null)}
+              className="text-primary text-sm font-medium"
+            >
+              Done
+            </button>
+          </div>
+          {sessionDetail && (
+            <>
+              <p className="text-xs text-muted-foreground mb-4">
+                {sessionDetail.suggestion.hitsAchieved} of{" "}
+                {sessionDetail.suggestion.hitsRequired} sessions in a row.
+              </p>
+              <ul className="flex flex-col gap-2">
+                {sessionDetail.suggestion.sessions?.map((session, i) => (
+                  <li
+                    // Two sessions of the same program on one day are two
+                    // window slots (E-16), so the date alone is not unique.
+                    key={`${session.date}-${i}`}
+                    className="flex items-center justify-between gap-3 py-2 border-t border-border first:border-t-0"
+                  >
+                    <span className="text-sm font-medium shrink-0">
+                      {formatSessionDate(session.date)}
+                    </span>
+                    <span
+                      className={`text-xs text-right ${
+                        session.status === "cleared"
+                          ? "text-primary"
+                          : session.status === "missed"
+                            ? "text-orange-500"
+                            : "text-muted-foreground"
+                      }`}
+                    >
+                      {describeSessionOutcome(session)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[10px] text-muted-foreground/70 mt-4">
+                Sessions that did not answer the question — cut short, or
+                reported as tired — neither bank progress nor count against you.
+              </p>
+            </>
+          )}
+        </div>
+      </BottomSheet>
     </>
   );
+}
+
+// ─── Progress detail ──────────────────────────────────────────────────────────
+
+/** "Mon 3 Jun" from the session's stored date, which is already a plain date. */
+function formatSessionDate(date: string): string {
+  const parsed = new Date(`${date}T00:00:00`);
+  if (isNaN(parsed.getTime())) return date;
+  return parsed.toLocaleDateString("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+}
+
+/** One session's line in the dot detail sheet. */
+function describeSessionOutcome(
+  session: NonNullable<SetSuggestionDisplay["sessions"]>[number],
+): string {
+  if (session.status === "cleared") return "Cleared";
+  if (session.status === "missed") {
+    return session.shortfall != null
+      ? `${session.shortfall} rep${session.shortfall === 1 ? "" : "s"} short`
+      : "Short of target";
+  }
+  // Unknown, and the reason is worth naming — "nothing happened" is the report
+  // this view exists to prevent.
+  if (session.feeling === "Tired") return "Tired — not counted";
+  if (session.prescribedSets != null && session.loggedSets < session.prescribedSets) {
+    return `${session.loggedSets} of ${session.prescribedSets} sets logged`;
+  }
+  return "Not counted";
 }
 
 // ─── Insert rest button ───────────────────────────────────────────────────────
@@ -1126,6 +1225,7 @@ function SortableSetRow({
   onStartTimer,
   onOpenLogRun,
   suggestion,
+  onShowSessions,
   onApplySuggestion,
   onApplyRepSuggestion,
   overrideDurationSeconds,
@@ -1151,6 +1251,7 @@ function SortableSetRow({
   onStartTimer?: (setId: number, duration: number, startDelaySeconds?: number) => void;
   onOpenLogRun?: (setId: number) => void;
   suggestion?: SetSuggestionDisplay;
+  onShowSessions?: (suggestion: SetSuggestionDisplay) => void;
   onApplySuggestion?: (setId: number, weightKg: number, adjustedReps?: number, durationSeconds?: number, distanceMeters?: number) => void;
   onApplyRepSuggestion?: (setId: number, reps: number) => void;
   overrideDurationSeconds?: number;
@@ -1395,7 +1496,20 @@ function SortableSetRow({
                   </span>
                 )}
                 {showProgressDots && (
-                  <div className="flex items-center gap-1">
+                  // Tappable, because strictness without an explanation reads as
+                  // the app being broken: one set short in three of the last
+                  // five has to be visible on screen, not inferable. The dots
+                  // themselves stay 6px; the hit area around them does not.
+                  <button
+                    type="button"
+                    aria-label={`Progress: ${suggestion.hitsAchieved} of ${suggestion.hitsRequired} sessions`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onShowSessions?.(suggestion);
+                    }}
+                    disabled={!suggestion.sessions?.length}
+                    className="flex items-center gap-1 -m-3 p-3 disabled:pointer-events-none"
+                  >
                     {Array.from({ length: suggestion.hitsRequired }).map((_, i) => (
                       <div
                         key={i}
@@ -1406,7 +1520,7 @@ function SortableSetRow({
                         }`}
                       />
                     ))}
-                  </div>
+                  </button>
                 )}
               </div>
               {/* Second line: action buttons + readiness label */}

@@ -48,6 +48,7 @@ export default async function WorkoutExerciseSetsPage({ params }: Props) {
       overloadIncrementReps={Number(pe.overloadIncrementReps ?? 0)}
       progressionMode={progressionMode}
       progressionRequiredHits={pe.progressionRequiredHits}
+      progressionScope={pe.progressionScope}
       progressionApplyToPlan={pe.progressionApplyToPlan}
       exerciseTypeDefault={pe.exercise.exerciseType}
       exerciseTypeOverride={pe.exerciseType}

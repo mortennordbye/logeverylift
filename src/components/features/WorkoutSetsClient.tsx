@@ -72,6 +72,12 @@ type Props = {
   progressionMode?: ProgressionMode;
   /** Sessions at target before a bump. Null = the shared REQUIRED_HITS default. */
   progressionRequiredHits?: number | null;
+  /**
+   * Which sets have to clear for a session to count. Read-only here for now —
+   * the sheet states the rule, and the picker that lets it be changed arrives
+   * with the rest of the axes.
+   */
+  progressionScope?: string | null;
   /** Opt-in: accepting a bump also rewrites the planned sets. */
   progressionApplyToPlan?: boolean;
   /** Exercise's intrinsic type (the default shown when there's no override). */
@@ -96,6 +102,7 @@ export function WorkoutSetsClient({
   overloadIncrementReps: initialIncrementReps = 0,
   progressionMode: initialMode = "manual",
   progressionRequiredHits: initialRequiredHits = null,
+  progressionScope = null,
   progressionApplyToPlan: initialApplyToPlan = false,
   exerciseTypeDefault = null,
   exerciseTypeOverride: initialTypeOverride = null,
@@ -761,6 +768,7 @@ export function WorkoutSetsClient({
                       incrementReps,
                       targetReps: firstWorkingTargetReps,
                       requiredHits: requiredHits ?? REQUIRED_HITS,
+                      scope: progressionScope,
                     })}
                   </p>
                   <button
