@@ -1,13 +1,13 @@
 # Progression revamp: plan
 
-> **Status:** approved for phase 1. `D-1` and `D-2` decided 2026-08-29; `D-3` to `D-7` still open (not needed until phases 3, 5 and 6).
+> **Status:** approved. All seven decisions (`D-1` to `D-7`) decided 2026-08-29 and written up in section 12 with their binding consequences. Nothing blocks the build.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
 > **Closes:** audit findings `A1`-`A11` and spec divergences `D1`-`D8` in [`../BACKLOG.md`](../BACKLOG.md)
 
 Progression is the reason this app exists rather than a notes file. It is also the part with the least honest data behind it. This plan rebuilds it as one machine with a small number of settings, so that every progression scheme a lifter actually runs is the same engine with different values, and the app can say in one sentence what it will do next.
 
-Nothing here is a code change yet. Section 12 holds the decisions this plan deliberately does not make on its own; they are decisions, not guesses, and none of them are assumed silently anywhere else in this document. `D-1` and `D-2` are decided, which unblocks phase 1. The rest are answered as their phase comes up.
+Nothing here is a code change yet. Section 12 holds the seven decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
 
 ---
 
@@ -26,9 +26,21 @@ This document is the complete brief. It assumes no conversation history. Read it
 3. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`, the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (both consumers).
 4. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
 
-**Decisions.** Section 12 lists seven that this plan deliberately does not make. `D-1` (a prescribed RIR gates clearing, on capped exercises only) and `D-2` (unlogged effort is unknown, neither clear nor failure) are **decided** and written up there with their binding consequences; build to them, do not relitigate them. `D-3` to `D-7` are still open but are not needed until phases 3, 5 and 6, so phase 1 is unblocked. Get each answer from the repo owner and record it as a **Decided:** line before the phase that needs it.
+**Decisions: all seven are made.** Read section 12 in full before phase 1, not just the phase you are on. Each carries binding consequences the build must honour, several of which are not derivable from the one-line answer. Build to them and do not relitigate them; if one turns out to be wrong, say so and get it changed there rather than working around it in code.
 
-**Then:** build phase by phase from section 11, one phase per branch. `pnpm verify` after each. The smoke pass from `CLAUDE.md` after phases 2, 5 and 6. Do not start a later phase before the earlier one is merged; the phases are ordered by data dependency, not preference.
+The short form:
+
+| | Decision |
+|---|---|
+| `D-1` | A prescribed RIR gates clearing, on capped exercises only. Uncapped exercises clear on target alone. |
+| `D-2` | Unlogged effort on a capped exercise is unknown: neither a clear nor a failure, but it still ages the window. |
+| `D-3` | Existing exercises migrate to scope `all`. This visibly changes progression for everything already in the app. |
+| `D-4` | `smart` mode is retired. `adjustedRepsForWeight` is deleted; `estimated1RM` survives as a gated display value. |
+| `D-5` | Stale after 21 days, and a re-approach proposes the last logged load minus 10%. |
+| `D-6` | Delete the cycle's strength-phase branch. Progression owns `target_reps`. Preserve the research in the cycle spec. |
+| `D-7` | Scope `all` means literally every working set. No `n_of_m`. |
+
+**Then:** build phase by phase from section 11, one phase per branch. `pnpm verify` after each. The smoke pass from `CLAUDE.md` after phases 2, 5 and 6. Do not start a later phase before the earlier one is merged; the phases are ordered by data dependency, not preference. `D-6` is independent of all of them and can be done at any point, including first, as a self-contained cleanup.
 
 **The one thing to hold onto:** a tap records a claim the lifter made, and silence records nothing. Most of what is wrong today comes from inventing an effort value nobody supplied.
 
@@ -280,7 +292,7 @@ The places where this engine touches something else. Each of these is a known co
 
 **Cycle periodization owns anchored endurance sets.** `syncPeriodizedTargets` rewrites `duration_seconds` and `distance_meters` weekly from a peak anchor (`PZ` rules). Progression must never write those columns for a set carrying `peak_distance_meters` or `peak_duration_seconds`. Rule: an anchored set is never an advance target. This closes the `A5` half of that conflict.
 
-**Cycle periodization may also want `target_reps`.** The `strength` branch of the sync writes `target_reps`, though nothing currently produces the tag that reaches it (cycle spec `D3`). Double progression also owns `target_reps`. Two writers, one column. This needs deciding before phase 3, and it is decision **D-6** below.
+**Cycle periodization may also want `target_reps`.** The `strength` branch of the sync writes `target_reps`, though nothing produces the tag that reaches it. Double progression also owns `target_reps`. Resolved by decision **D-6**: the branch is deleted and progression owns the column outright, so no arbitration rule is needed. Independent of the phases and can be done first.
 
 **The plan ratchet.** Unchanged in structure. With scope `all`, one advance now writes every working set of the exercise in a single call rather than per set, which is what makes 4a work. The floor holds: only a back-off lowers the plan.
 
@@ -300,8 +312,8 @@ Existing exercises must keep working with no silent behaviour change that a lift
 |---|---|---|
 | `none` | preset **Off** | No change. |
 | `manual` | preset **Manual** | No change. |
-| `weight` | preset **Load, confirmed** | Gate carries over from `progression_required_hits`. Scope is decision **D-3**. |
-| `smart` | preset **Load, confirmed** | The Epley rep-cut is retired; proper double progression replaces what it approximated. `estimated_1rm` remains as a display, gated per `D1`. This is decision **D-4**. |
+| `weight` | preset **Load, confirmed** | Gate carries over from `progression_required_hits`. Scope becomes `all` per **D-3**, which visibly changes behaviour on first load. |
+| `smart` | preset **Load, confirmed** | Per **D-4**: the Epley rep-cut is retired and `adjustedRepsForWeight` deleted. `estimated_1rm` remains as a display value, gated per `SI-D1`. No exercise silently becomes double progression. |
 | `reps` | preset **Rep ladder** | No change. |
 | `time` | preset **Duration** | Advance changes from *actual* to *target* based (section 7, step 8). Slightly slower progression, deliberately. |
 | `distance` | preset **Distance** | Same change. |
@@ -355,28 +367,69 @@ Binding consequences for the build:
 - Because skipping the prompt stalls progression, the prompt in section 6 change 3 only ever appears on exercises that carry a cap. Nobody is nagged for effort they did not ask to be measured on.
 
 **D-3. Do existing `weight` exercises migrate to scope `all` or scope `set`?**
-*Recommendation: `all`.* Per-set drift produces plans nobody would write, so it is a bug rather than a behaviour to preserve. But it changes progression for every existing exercise on the first load after deploy, so it is your call. `set` remains available for exercises where sets genuinely differ.
+**Decided (2026-08-29): `all`.** Per-set drift produces plans nobody would write, so it is a bug rather than a behaviour to preserve.
+
+Binding consequences for the build:
+- The phase 3 migration sets `progression_scope = 'all'` on every existing `weight`, `smart` and `reps` exercise. `set` stays available for exercises whose sets genuinely differ, but nothing lands on it by default.
+- **This visibly changes progression for every exercise the owner already has, on the first load after deploy.** Some exercises that were about to bump will hold instead, because a set that was quietly banking its own count no longer can. That is the fix working, but it needs saying in the release note rather than being discovered.
+- Existing plans that have already drifted (62.5 / 62.5 / 60 / 60) are **not** rewritten. Migration changes the rule going forward; it does not touch logged history or re-level past plans. Levelling them is a separate, explicit action the owner can take by editing the sets.
 
 **D-4. Retire `smart` mode?**
-*Recommendation: yes.* Its Epley rep-cut only ever lowers, only fires on a near-max set in the 2 to 12 range, and is a rough approximation of the rep-drop that double progression does properly. Keeping both means two answers to one question.
+**Decided (2026-08-29): yes.** Its Epley rep-cut only ever lowers, only fires on a near-max set in the 2 to 12 range, and is a rough approximation of the rep-drop that double progression does properly.
+
+Binding consequences for the build:
+- `smart` exercises migrate to preset **Load, confirmed** (fixed target, advance `load`), per section 10. They do not silently become double progression: no existing set has a rep range, and inventing one would change the prescription.
+- `adjustedRepsForWeight` is deleted from `SetSuggestion` and from both consumers. This also closes divergence `D2` (the rep cut surviving a readiness downgrade) by removing the field it was leaking through.
+- `estimated1RM` survives as a **display** value only, and gains the RPE gate it should always have had, which closes `D1`. With `D-2` decided, "no effort logged" now means no 1RM estimate rather than an estimate built on an assumed 7.
+- Independent support for this decision, found in the triathlon generator: it already declines to use `smart`, on the grounds that it "nudges reps via a 1RM estimate, which would break the strictly-static rep scheme" (`triathlon-plan.ts:158-165`).
 
 **D-5. Staleness threshold, and what a re-approach proposes.**
-*Recommendation: 21 days, and propose the last logged load minus 10%.* Both numbers are conventions rather than derived, which is exactly why they should be your call rather than mine.
+**Decided (2026-08-29): 21 days, and the last logged load minus 10%.**
+
+Binding consequences for the build:
+- Measured from the most recent logged session for that exercise to today, not from the window's span.
+- 10% matches `DELOAD_FACTOR`, deliberately: one back-off size in the engine rather than two. If one changes later, both should be reconsidered together.
+- The suggestion is `re-approach`, a distinct reason code, so the chip can say "back after a break" rather than showing an unexplained drop. It is a suggestion like any other, so declining it and logging your old weight is allowed and simply feeds back into the window.
+- 21 days is a convention, not a derived number. It is written here so it is one constant in one place, not a literal scattered through the engine.
 
 **D-6. When double progression and the cycle's strength phase both want `target_reps`, who wins?**
-*Recommendation: the cycle wins for sets it owns, and those sets are excluded from rep advancement, mirroring the anchored-endurance rule.* Note the cycle branch is currently unreachable (cycle spec `D3`), so this can also be resolved by deleting that branch instead, which is the cheaper answer if triathlon strength is meant to stay flat.
+**Decided (2026-08-29): delete the cycle branch. Progression owns `target_reps` outright.**
+
+Evidence behind the decision: `git log -S '"strength"'` returns a single commit, the initial migration, so no producer for the `sessionRole = "strength"` tag was ever written. The triathlon generator explicitly names and rejects the mechanism ("no phase re-prescription (no sessionRole \"strength\")... to spare the CNS so the endurance quality sessions aren't compromised", `triathlon-plan.ts:158-165`). Flat strength is the later, deliberate choice; `strengthPhaseRecipe` is the superseded design it replaced.
+
+Binding consequences for the build:
+- Delete the `"strength"` branch in `syncPeriodizedTargets`, `strengthPhaseRecipe`, and its tests. Fix the two docblocks (`periodization.ts:218-230`, `triathlon-plan.ts:12-23`) that still describe the superseded three-strength-day week.
+- **Preserve the reasoning, not the code.** Move the rep scheme (base 12 @ 90s anatomical adaptation, build 5 @ 180s max strength, peak 4 @ 180s strength-power, taper 3 @ 180s sharpen, maintain 6 @ 150s), its citations (Rønnestad & Mujika 2014; Beattie 2017) and the CNS rationale for *not* using it into [`specs/cycle-periodization.md`](specs/cycle-periodization.md) as a "considered, not implemented" note. The research is the valuable part and it must not be lost with the function.
+- No arbitration rule is needed in the progression engine. The anchored-endurance exclusion (section 9) still applies and is unaffected.
+- This closes cycle spec divergence `D3`, which was open pending exactly this decision.
 
 **D-7. Should `all` scope require literally every working set, or N of M?**
-*Recommendation: literally all, configurable later if it proves too strict.* On 4x12 the last set is the one that falls short, so `all` may stall in practice. Starting strict and loosening on evidence beats the reverse, but you know your own sets better than the model does.
+**Decided (2026-08-29): literally every working set.**
+
+Binding consequences for the build:
+- No `n_of_m` configuration is built. Scope stays the four values in axis 4.
+- On 4x12 this is strict, and the last set is the one that tends to fall short, so it may stall more than expected. That is accepted deliberately: starting strict and loosening on evidence is recoverable, the reverse is not, because loosening never surprises anyone and tightening changes progression under people mid-programme.
+- The dot detail view (section 8) carries the weight here. When an exercise is not progressing, "set 4 was short in 3 of the last 5" has to be visible on screen, or strictness reads as the app being broken. Treat that view as part of this decision rather than a nice-to-have.
+- Revisit only with logged evidence, once real rep data exists (phase 2 onward). If exercises are demonstrably stalling on a single trailing set, `n_of_m` is an additive change to axis 4.
 
 ---
 
 ## 13. What this closes
 
-On completion, these `BACKLOG.md` entries are resolved and should be deleted:
+**A warning about `D` numbers.** Three separate things in this repo are numbered `D`. Keep them apart:
+
+- **`D-1` to `D-7`** (hyphenated) are the *decisions* in section 12 of this file.
+- **`SI-D1` to `SI-D8`** are the divergences table in [`specs/smart-incrementation.md`](specs/smart-incrementation.md).
+- **`PZ-D1` to `PZ-D8`** are the divergences in [`specs/cycle-periodization.md`](specs/cycle-periodization.md).
+
+The specs themselves label their tables plain `D1`-`D8`. Prefix them when writing about them from outside, as below.
+
+**Audit findings** (`BACKLOG.md`, "Progression engine audit"), all resolved on completion and to be deleted from the backlog as each phase lands:
 
 `A1` (fabricated inputs, phases 1-2), `A2` (`target_rir` unread, phase 5), `A3` (increment ladder order, phase 6), `A4` (no rep range, phase 4), `A5` (endurance ratchets from actual, phase 3), `A6` (Tired erased, phase 6), `A7` (readiness holds only, phase 6), `A8` (per-set drift, phase 3), `A9` (spec describes the function, phase 5), `A10` (no recency, phase 6), `A11` (PRs from assumed reps, phases 1 and 6).
 
-Spec divergences `D1` (ungated 1RM), `D2` (rep cut survives readiness), `D3` and `D4` (timed/distance asymmetries, resolved by the axes), `D5` (bodyweight never progresses, resolved by `advance: reps`), `D6` (window starvation, phase 3), `D8` (generated plans, phase 6).
+**Smart-incrementation spec divergences:** `SI-D1` (ungated 1RM, closed by `D-4`), `SI-D2` (rep cut survives readiness, closed by `D-4` deleting the field it leaked through), `SI-D3` and `SI-D4` (timed/distance asymmetries, resolved by the axes making them explicit settings), `SI-D5` (bodyweight never progresses, resolved by `advance: reps`), `SI-D6` (window starvation, phase 3), `SI-D8` (generated plans, phase 6).
 
-`D7` (inert global increment settings in Settings) is not addressed here and stays open. It is a Settings question, not a progression-engine one.
+**Cycle-periodization spec divergence:** `PZ-D3` (strength phase has no producer), closed by decision `D-6`.
+
+**Stays open:** `SI-D7`, the inert global increment controls in Settings. It is a Settings question, not a progression-engine one, and this plan does not touch it.
