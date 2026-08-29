@@ -1,6 +1,6 @@
 # Progression revamp: plan
 
-> **Status:** in build. Phases 0 and 1 shipped; phase 3 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
+> **Status:** in build. Phases 0, 1 and 3 shipped; phase 2 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
 > **Design status:** approved, all eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
@@ -28,13 +28,13 @@ Phases are listed in **build order**, which is not numeric order. The swap is de
 |---|---|---|
 | **0** | Prerequisites: `P-1`, `P-2`, `D-6` | **Done.** Branch `phase-0/progression-prerequisites`, 5 commits. Migrations `0046`, `0047`. |
 | **1** | Honest effort: `rpe` nullable, stop forging 7 | **Done.** Branch `phase-1/honest-effort`, 7 commits. Migration `0048`. |
-| **3** | Session windows and scope | **Next.** Not started. Depends on phase 0 only. |
-| **2** | Capture: the miss sheet and the reps-correction fix | Not started. Must follow phase 3. |
+| **3** | Session windows and scope | **Done.** Branch `phase-3/session-windows-and-scope`, 4 commits. Migration `0049`. |
+| **2** | Capture: the miss sheet and the reps-correction fix | **Next.** Not started. Phase 3 is built, so honest reps now meet a session-scoped engine. |
 | **4** | Rep ranges and double progression | Not started. |
 | **5** | Axes, presets, and the sheet | Not started. |
 | **6** | The rest | Not started. |
 
-**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**) → `phase-1/honest-effort` (7 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
+**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**) → `phase-1/honest-effort` (7 commits, **not pushed**) → `phase-3/session-windows-and-scope` (4 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
 
 ### What is already true in the code
 
@@ -55,17 +55,28 @@ Facts a cold session must not re-derive, re-decide, or accidentally undo. Each i
 - **Aggregate effort reads mean "of the sets that reported effort".** The cycle adaptation average filters nulls through `meanLoggedRpe` (summing straight through coerces null to 0 and *raises* volume); the RPE trend chart and the cooked-exercise count exclude them in SQL and say so in their labels.
 - **Seeded history logs effort about two-thirds of the time and carries its plan slots.** All three seeders. Do not make seeded effort universal again: an account where every set has a value never exercises the unknown paths.
 
+*From phase 3:*
+
+- **The window is sessions, not rows for one set number.** `getProgressiveSuggestions` ranks each plan slot's completed sessions with `DENSE_RANK` and keeps the last `CONSENSUS_WINDOW` of them, so every exercise gets its own five sessions however large the program is. `buildSuggestion` takes `SessionHistory[]`, not `HistoryRow[]`. Do not reintroduce a global `LIMIT` across slots: that was `SI-D6`, and it starved the window on long programs.
+- **`program_exercises.progression_scope` names the sets that decide clearing** — `all`, `first`, `last` or `set`. It is `not null default 'all'`, so every existing exercise moved to `all` (`D-3`). Scope `set` is the old per-set-number behaviour, kept for exercises whose sets genuinely differ. **There is no picker yet**; the sheet states the rule and phase 5 builds the control.
+- **A session is `cleared`, `missed` or `unknown`, and unknown is inert.** Fewer sets logged than the session prescribed, or a `Tired` session that fell short, is unknown: it neither banks a clear nor counts toward a back-off, and it does not reset the gate. It still consumes a slot in the window. Clears are consecutive (`D-11`) and misses are consecutive too — the deload guard reads `countConsecutiveMisses`, and dropping that would deload a whole 4x12 for one short set three sessions running.
+- **Tired sessions are in the window now.** The blanket `feeling IS DISTINCT FROM 'Tired'` filter is gone (`A6`); a Tired session's clears count, its misses are held harmless, and it supplies the "Last: …" numbers. Do not restore the SQL filter.
+- **Under scope `all` the exercise moves as one.** Every working set of a slot is judged against the same window, so they get the same advance. `currentLoad` is the *maximum* across the session's working sets deliberately: plans that already drifted apart are levelled up by the first advance rather than proposing a downgrade the plan floor would refuse.
+- **The dots are tappable and explain themselves.** `SetSuggestion.sessions` carries the window session by session, and the sheet in `WorkoutSetsList.tsx` renders it. `D-7`'s strictness depends on that view existing (`E-8`); do not drop the field when reshaping the suggestion.
+- **The rule sentence says "in N sessions in a row", and names the scope.** `describeProgressionRule` now describes the rule the engine applies. `e2e/progression-settings.spec.ts` asserts that wording.
+- **Seeded sessions sometimes drop their last set.** Roughly one exercise in eight, in all three seeders, so a development account actually produces unknown sessions. Do not make seeded sessions complete again.
+
 *Still true, and still wrong — these are the phases ahead, not oversights:*
 
-- `actual_reps` is still written as `target_reps` on the fast path. That is phase 2.
-- The engine is still per-set, still keyed on `exerciseId + setNumber`. That is phase 3.
+- `actual_reps` is still written as `target_reps` on the fast path. That is phase 2. Until it lands, `metTargetReps` is true for every set logged by a tap, so a session can only come out `missed` through *Mark failed* or a skipped set. The session machinery is built and correct; it is mostly unreachable in production until phase 2 feeds it.
 
 ### Carry-forward: things every phase still owes
 
-- **The Playwright e2e suite has never run on any of these branches.** The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list. Phase 0 touched it.
-- **The `CLAUDE.md` smoke pass is owed for phases 0 and 1** and for every later phase touching the set list (2, 3, 5 and 6 all do). It needs `make dev` running, which is the user's call to start.
-- **Migrations `0046`, `0047` and `0048` have not run against a real database.** They are generated, committed and reviewed; nothing has been applied outside a throwaway container. `0048` is a single `DROP NOT NULL`.
-- **Two release notes are owed at the end, and neither is a code change.** Phase 1 retired the RPE ladder, so exercises a lifter grinds will start bumping; phase 3's `D-3` will hold exercises that were quietly banking per-set counts. Phase 2 adds a third (`B-4`, every volume number falls).
+- **The Playwright e2e suite has never run on any of these branches.** The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list. Phases 0 and 3 both touched it.
+- **The `CLAUDE.md` smoke pass is owed for phases 0, 1 and 3** and for every later phase touching the set list (2, 5 and 6 all do). It needs `make dev` running, which is the user's call to start. Phase 3 is the one that most wants it: the new history query has never run against a real database, and no unit test executes SQL. Its rendered statement was checked by hand through `toSQL()`, which proves it parses, not that it returns the right rows.
+- **Migrations `0046` to `0049` have not run against a real database.** They are generated, committed and reviewed; nothing has been applied outside a throwaway container. `0048` is a single `DROP NOT NULL`; `0049` is a single `ADD COLUMN … NOT NULL DEFAULT 'all'` whose default *is* the backfill.
+- **`E-13` has no owner.** Changing scope or the gate re-judges the existing window under the new rule, so the dot count moves when a lifter touches a setting. Phase 3 did not build the config-version stamp `E-13` asks for, and it is not live yet because nothing can change the scope from the UI — but phase 5 ships the picker, and it owes this. Section 11 does not assign it to a phase; assign it there when phase 5 starts.
+- **Three release notes are owed at the end, and none of them is a code change.** Phase 1 retired the RPE ladder, so exercises a lifter grinds will start bumping. Phase 3's `D-3` now holds exercises that were quietly banking per-set counts, and the same phase stopped dropping Tired sessions, so a lifter who reports fatigue will see their numbers move again instead of freezing. Phase 2 adds the third (`B-4`, every volume number falls).
 
 ### Read in this order
 
@@ -273,7 +284,7 @@ Constraint: `rep_range_min` and `rep_range_max` are both null or both set; when 
 |---|---|---|
 | `progression_mode` | **retired** after migration | Replaced by `progression_preset` plus the axis columns. See section 10. |
 | ~~`progression_preset`~~ | **not added** | Cut on review. It would be display-only by this table's own admission, fully derivable from the axis values, and a second copy of state the engine does not read — which is precisely the failure that left `target_rir` dead for a year (`A2`). Derive the label at render time: match the axis values against the preset table in section 3, and show **Custom** when nothing matches. |
-| `progression_scope` | **new**, text, default `all` | `all` / `first` / `last` / `set`. |
+| `progression_scope` | **new**, text, default `all` | **Done, phase 3** (migration `0049`), `not null`. `all` / `first` / `last` / `set`. |
 | `progression_advance` | **new**, text | `load` / `reps` / `double` / `duration` / `distance` / `none`. |
 | `progression_regress` | **new**, text, default `backoff` | `hold` / `backoff`. |
 | `progression_backoff_pct` | **new**, int, default 10 | Only read when regress is `backoff`. |
@@ -296,7 +307,7 @@ Six new columns is a lot, and the alternative is a single `progression_config` J
 | `is_failed` | unchanged | Stays as the explicit "attempted and missed" marker. |
 | `was_easy` | unchanged | Keeps working as the gate bypass (`SI-13`). |
 
-**Five migrations total**, not three (three of them shipped: `0046`, `0047`, `0048`): rep range columns, progression axis columns, `rpe` nullable, plus the two in section 14 — `set_type` and the prescribed-set-count snapshot on `workout_sets` (`P-1`), and `program_exercise_id` with a **unique index replacement** on `workout_sets` (`P-2`). Two of the five land on the busiest write path in the app, which is why they get their own phase. Each generated with `pnpm db:generate` and committed with its schema change, per `CLAUDE.md`.
+**Five migrations total**, not three (`0046`, `0047` and `0048` shipped, and `0049` carries the first of the axis columns): rep range columns, progression axis columns, `rpe` nullable, plus the two in section 14 — `set_type` and the prescribed-set-count snapshot on `workout_sets` (`P-1`), and `program_exercise_id` with a **unique index replacement** on `workout_sets` (`P-2`). Two of the five land on the busiest write path in the app, which is why they get their own phase. Each generated with `pnpm db:generate` and committed with its schema change, per `CLAUDE.md`.
 
 ---
 
@@ -450,9 +461,13 @@ Shipped on branch `phase-1/honest-effort`, migration `0048` (`rpe` nullable). Th
 
 **Phase 3 runs before phase 2.** Phase 2 makes reps honest while the engine is still per-set (`SI-7`) and still backs off after three missed sessions *for that set number*. Set 4 of a 4x12 is the set that misses, so honest reps first would deload set 4 of every straight-set exercise and manufacture exactly the drift `D-3` exists to remove. Phase 3 depends only on phase 0. Build in the order **0, 1, 3, 2, 4, 5, 6**; the numbering is kept for stable references.
 
-**Phase 2: capture.** Long-press miss sheet, the reps-correction fix, offline queue coverage, and the exercise-level checkmark's own log path (`B-11`, `B-21`). No engine change. Verifiable by e2e: log a short set, assert `actual_reps` is what you entered and `target_reps` did not move. This is where `B-4` lands: every volume number in the app starts falling, because volume has always been planned volume relabelled as achieved. That needs a release note, not a code change.
+**Phase 2: capture. Next.** Long-press miss sheet, the reps-correction fix, offline queue coverage, and the exercise-level checkmark's own log path (`B-11`, `B-21`). No engine change. Verifiable by e2e: log a short set, assert `actual_reps` is what you entered and `target_reps` did not move. This is where `B-4` lands: every volume number in the app starts falling, because volume has always been planned volume relabelled as achieved. That needs a release note, not a code change.
 
-**Phase 3: session windows and scope.** **Blocked on `P-1` and `P-2` (section 14); do those first, in their own change.** Then rewrite the history query to session-grouped with a per-exercise window function (closes `SI-D6`), carrying the `SI-8` filters and the `A6` Tired rule from section 7 step 2. Add `progression_scope`, implement clearance per session including the `D-8` and `D-9` rules, and **build the dot detail view here** (`E-8`) rather than in phase 5 — `D-7`'s strictness lands in this phase and `D-7` calls that view part of the decision. Delivers 4a, with the 4a table as a literal fixture (`E-11`).
+**Phase 3: session windows and scope. Built.** The history query is session-grouped with a per-slot `DENSE_RANK` window (closes `SI-D6`), the `Tired` exclusion is gone and its rule from section 7 step 2 is in the engine (closes `A6`), `progression_scope` exists and clearance is judged per session (closes `A8`), and the dot detail view is built (`E-8`). Delivers 4a as a literal fixture (`E-11`).
+
+Shipped on branch `phase-3/session-windows-and-scope`, migration `0049` (`progression_scope`). Section 5's axis-columns migration is now *started* rather than done: `0049` carries only `progression_scope`, and the other five axis columns are phase 5's. Rep-range columns are phase 4's. Also closed `E-3`, `E-6`, `E-9` and `E-16`, and half of `E-11` — 4b lands with phase 4.
+
+`D-8`'s effort half is **not** built and could not be: no exercise can carry a cap until phase 5. What phase 3 built is the half `D-8` shares with `D-7` — the scope names one set of deciding sets, and `decidingSets` is the single place that answers it, so the cap has one obvious place to hook into. `E-13` is unbuilt and unassigned; see §0's carry-forward.
 
 **Phase 4: rep ranges and double progression.** Range columns, validator, `advance: double` with the reset step, and the `E-1` floor exemption that lets the reset actually write. Delivers 4b, tested against that table (`E-11`). `E-1` is the most likely regression in the plan: test it before writing the feature.
 
@@ -656,31 +671,31 @@ These have a defensible answer, so the plan states it rather than raising a deci
 
 **E-2. `re-approach` may lower the plan.** It is a back-off by another name (`D-5`), so it is exempt from the floor exactly as `backoff` is.
 
-**E-3. Under scope `all`, an advance applies uniformly to every working set.** Not per set. On 4x12 the whole exercise moves to 62.5 together, which is the entire point of `D-3`. Under scope `set` the current per-set behaviour is retained. Under `first` and `last`, the scope decides *whether* the session cleared; the advance still applies to all working sets, because a top set moving while its back-offs stay is a plan nobody wrote.
+**E-3. Built in phase 3. Under scope `all`, an advance applies uniformly to every working set.** Not per set. On 4x12 the whole exercise moves to 62.5 together, which is the entire point of `D-3`. Under scope `set` the current per-set behaviour is retained. Under `first` and `last`, the scope decides *whether* the session cleared; the advance still applies to all working sets, because a top set moving while its back-offs stay is a plan nobody wrote.
 
 **E-4. `advance: double` requires a positive load increment.** At `rep_range_max` with no load to add, the reset cannot happen and the exercise would sit at the top of its range forever. The sheet must not offer `double` without an increment, and the engine holds with `held-unknown`'s sibling message ("no load increment set") rather than silently climbing past the range the user configured. Bodyweight work uses `advance: reps` and no range, which is what `SI-D5` was really asking for.
 
 **E-5. Ranges apply to reps only.** `duration` and `distance` take a fixed target. A range plus `advance: double` has no meaning for a plank or a run, and section 3's table should be read as fixed-target for those two presets. This narrows what phase 4 has to build.
 
-**E-6. `was_easy` bypasses the gate at session level.** Under scope `all`, an easy verdict on one set does not carry the session. The rule becomes: the session cleared, and at least one of the scope-determining sets was marked easy. This preserves `SI-13`'s intent without letting one easy set speak for four.
+**E-6. Built in phase 3. `was_easy` bypasses the gate at session level.** Under scope `all`, an easy verdict on one set does not carry the session. The rule becomes: the session cleared, and at least one of the scope-determining sets was marked easy. This preserves `SI-13`'s intent without letting one easy set speak for four.
 
 **E-7. Readiness `reduce` reuses the `backoff` reason code** with `readinessModulated: true`, rather than adding a tenth code. Both consumers already branch on `backoff`, and the distinction is a display concern (the chip says why), not a different write.
 
-**E-8. The dot detail view needs data the suggestion does not carry today.** `SetSuggestion` has `hitsAchieved` and `hitsRequired` but no per-session breakdown. Add `sessions: { date, status, shortfall? }[]` covering the window, where status is `cleared` / `missed` / `unknown`. Without it, `D-7`'s strictness has no explanation on screen, and `D-7` explicitly depends on that view existing.
+**E-8. Built in phase 3. The dot detail view needs data the suggestion does not carry today.** `SetSuggestion` has `hitsAchieved` and `hitsRequired` but no per-session breakdown. Add `sessions: { date, status, shortfall? }[]` covering the window, where status is `cleared` / `missed` / `unknown`. Without it, `D-7`'s strictness has no explanation on screen, and `D-7` explicitly depends on that view existing.
 
-**E-9. A session's clearance is judged against what was logged in it, never against the current plan.** If a 4x12 exercise is later edited to 3x12, the four-set sessions in the window are still four-set sessions. This follows from `P-1` and is why the log must be self-describing.
+**E-9. Built in phase 3. A session's clearance is judged against what was logged in it, never against the current plan.** If a 4x12 exercise is later edited to 3x12, the four-set sessions in the window are still four-set sessions. This follows from `P-1` and is why the log must be self-describing.
 
 **E-10. Cross-programme history stays separate.** The history query filters by `program_id`. Bench in "Push 1" and bench in "Push 2" progress independently, and that stays true. It is defensible (different slots, different prescriptions) but it has never been written down, so it is written down here.
 
-**E-11. Test fixtures come from sections 4a and 4b.** Both worked examples are session-by-session tables and should be encoded literally as unit-test fixtures, asserting the suggestion and the dot count at every step. If the code disagrees with those tables, the code is wrong.
+**E-11. 4a built in phase 3; 4b is phase 4's. Test fixtures come from sections 4a and 4b.** Both worked examples are session-by-session tables and should be encoded literally as unit-test fixtures, asserting the suggestion and the dot count at every step. If the code disagrees with those tables, the code is wrong.
 
-**E-13. Changing an exercise's configuration re-judges history retroactively.** Switch preset, gate, scope, or fixed-to-range, and the existing 5-session window is re-evaluated under the new rule: sessions that cleared yesterday can un-clear today. `E-9` protects against plan *shape* changes but nothing protects against *rule* changes. Stamp a config version on the exercise and count only sessions logged since the last change. Anything else means the dot count moves when the lifter touches a setting, which reads as a bug.
+**E-13. Still open and unassigned; §0's carry-forward names it. Changing an exercise's configuration re-judges history retroactively.** Switch preset, gate, scope, or fixed-to-range, and the existing 5-session window is re-evaluated under the new rule: sessions that cleared yesterday can un-clear today. `E-9` protects against plan *shape* changes but nothing protects against *rule* changes. Stamp a config version on the exercise and count only sessions logged since the last change. Anything else means the dot count moves when the lifter touches a setting, which reads as a bug.
 
 **E-14. A copied, shared or imported program starts with no history.** `E-10` keys history to `program_id`, so a new program has zero sessions and returns no suggestion until five accumulate. `B-7` and `B-13` cover the *settings* travelling; nothing covered the progression restart, which is the part the lifter sees.
 
 **E-15. Editing history after the ratchet has written does not unwind the plan.** Suggestions recompute on read and self-heal, but `applyProgressionToPlan` writes are permanent. Correcting a past session downward leaves the bump it caused in place, and `SI-37`'s floor then prevents anything from lowering it back. Either recompute the plan on history edits or accept and document it; do not leave it undecided.
 
-**E-16. Two sessions of the same program on one day consume two window slots.** The window counts sessions, not days. Deliberate, but state it.
+**E-16. Built in phase 3. Two sessions of the same program on one day consume two window slots.** The window counts sessions, not days. Deliberate, but state it.
 
 **E-17. `advance: reps` has no ceiling.** `E-4` guards `double` against a missing load increment; the mirror case is a rep ladder with nowhere to stop, which climbs 8, 9, 10 … 40 forever. This is also the real content of `SI-D5`: the rep fallback needs `overload_increment_reps > 0` and that column **defaults to 0** (`schema/programs.ts:61`), so bodyweight exercises hold forever out of the box. Section 13 claimed `advance: reps` closes `SI-D5`; it does not unless the zero-increment default is fixed too. Treat a missing rep increment as 1 in the engine (no migration) and give `advance: reps` an optional `rep_range_max` stop.
 
@@ -716,13 +731,13 @@ An earlier draft of this section called the result `NaN`, named the function `ge
 
 | Site | What it does |
 |---|---|
-| `progression.ts:746-750` | readiness downgrade, matches four `progressed*` literals |
-| `progression.ts:766` | `reason.startsWith("progressed")` for the `easyOverride` flag |
-| `WorkoutSetsList.tsx:669` | sibling-apply dedup (`s.reason === target.reason`) |
-| `WorkoutSetsList.tsx:1318-1344` | the `*Pending` computations |
-| `WorkoutSetsList.tsx:1392-1512` | the render switch |
-| `workout-sets.ts:1642-1650` | `getWorkoutInsight` exercise status, ends in a catch-all `else status = "held"` |
-| `workout-sets.ts:1744-1750` | `getWorkoutInsight` `progressedCount` filter |
+| `progression.ts:1049-1056` | readiness downgrade, matches four `progressed*` literals |
+| `progression.ts:1071` | `reason.startsWith("progressed")` for the `easyOverride` flag |
+| `WorkoutSetsList.tsx:675` | sibling-apply dedup (`s.reason === target.reason`) |
+| `WorkoutSetsList.tsx:1419-1445` | the `*Pending` computations |
+| `WorkoutSetsList.tsx:1493-1635` | the render switch |
+| `workout-sets.ts:1712-1724` | `getWorkoutInsight` exercise status, ends in a catch-all `else status = "held"` |
+| `workout-sets.ts:1814-1820` | `getWorkoutInsight` `progressedCount` filter |
 
 Two consequences. **New codes** (`held-unknown`, `reset`, `re-approach`) fall into the insight's catch-all and report as *stalled* on the dashboard — `re-approach` means the opposite. **The rename** breaks the first two sites silently, with no type error; see the note under section 7's reason-code list, which is the authoritative statement of that hazard.
 
@@ -781,7 +796,7 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 
 **B-21. The offline queue's payload type is derived from the action.** `contexts/pending-queue-context.tsx:36` is `Parameters<typeof logWorkoutSet>[0]`. `P-3` requires the validator to accept both shapes for a release without naming the queue that persists the old one.
 
-**B-22. `getProgressiveSuggestions` does not select `target_rir`.** `workout-sets.ts:1137-1155` selects `setType`, `progressionMode`, `progressionRequiredHits` and the rest, but not `targetRir`. `D-1` and section 5 both assume the engine can see it. **The query change is a phase 5 prerequisite and was missing from the plan entirely.**
+**B-22. `getProgressiveSuggestions` does not select `target_rir`.** `workout-sets.ts:1349-1369` selects `setType`, `progressionMode`, `progressionRequiredHits` and the rest, but not `targetRir`. `D-1` and section 5 both assume the engine can see it. **The query change is a phase 5 prerequisite and was missing from the plan entirely.**
 
 **B-23. The AI plan prompt.** `ai-prompt.ts:167` describes the old modes. Section 9 and phase 6 mention it; this section claimed to trace everything outside the engine and did not list it.
 

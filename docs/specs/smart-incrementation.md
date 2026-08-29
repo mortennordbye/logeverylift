@@ -6,7 +6,7 @@
 >
 > Stale check: `git log f77d528..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
 >
-> **Partially revised 2026-08-29 by phase 1 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md).** SI-10, SI-12, SI-17, SI-31 and the vocabulary were rewritten against the code as it now stands; the effort ladder they described is retired. The stamp above is deliberately *not* advanced, because the rest of the spec has not been re-verified since — the full rewrite is scheduled for the end of that plan's phase 5.
+> **Partially revised 2026-08-29 by phases 1 and 3 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md).** Phase 1 rewrote SI-10, SI-12, SI-17, SI-31 and the vocabulary; the effort ladder they described is retired. Phase 3 rewrote SI-7, SI-8, SI-11, SI-13, SI-17 and SI-19 and added SI-7a to SI-7c: the window is now the last five **sessions** for an exercise slot, and whether a session cleared is a question about the sets its scope names. The stamp above is deliberately *not* advanced, because the rest of the spec has not been re-verified since — the full rewrite is scheduled for the end of that plan's phase 5.
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
 
@@ -20,8 +20,10 @@ Rule prefix: **`SI`**.
 - **Session override** — the accepted value, held client-side in `WorkoutSessionContext` and flushed into `workout_sets` on log. Affects today only.
 - **Plan** — `program_sets`, the blueprint. Only `applyProgressionToPlan` writes here, and only for opted-in exercises. See [`../workout-and-sets.md`](../workout-and-sets.md) for blueprint-vs-log.
 - **Hit** — a logged set that reached its target. That is the whole test; effort does not qualify it (SI-10).
-- **Window** — how many past sessions are looked at (`CONSENSUS_WINDOW`, 5). **Gate** — how many hits inside that window are needed (`requiredHits`, default 2). The window is fixed; the gate is per-exercise.
-- **Base weight** — the weight on the *most recent logged set*, not the planned weight. Everything is computed relative to it.
+- **Clear** — a *session* verdict, not a set one: every set the exercise's scope names was a hit (SI-7a). A session that did not answer the question is **unknown**, which is neither a clear nor a miss (SI-7b).
+- **Scope** — which sets decide that verdict: `all`, `first`, `last` or `set`, on `program_exercises.progression_scope`, defaulting to `all`.
+- **Window** — how many past sessions are looked at (`CONSENSUS_WINDOW`, 5), per exercise slot. **Gate** — how many clears *in a row* inside that window are needed (`requiredHits`, default 2). The window is fixed; the gate is per-exercise.
+- **Base weight** — the weight on this set's *most recent logged row*, not the planned weight. Distinct from the **current load**, which under scope `all` is the heaviest working set of the last session and is what an advance is computed from (SI-11a).
 
 ## Scope boundary
 
@@ -31,7 +33,7 @@ The two are independent and easy to confuse, because they share words and even a
 
 ## Inputs
 
-Per-exercise settings on `program_exercises`: `progressionMode`, `overloadIncrementKg`, `overloadIncrementReps`, `progressionRequiredHits`, `progressionApplyToPlan`, `exerciseType`. Per-set on `program_sets`: `setType`, `targetReps`, `durationSeconds`, `distanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it, and both null when the lifter reported nothing), `wasEasy`, `isFailed`. Schema detail is in [`../data-model.md`](../data-model.md).
+Per-exercise settings on `program_exercises`: `progressionMode`, `progressionScope`, `overloadIncrementKg`, `overloadIncrementReps`, `progressionRequiredHits`, `progressionApplyToPlan`, `exerciseType`. Per-set on `program_sets`: `setType`, `targetReps`, `durationSeconds`, `distanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it, and both null when the lifter reported nothing), `wasEasy`, `isFailed`. Also from `workout_sets`, and load-bearing for SI-7a to SI-7c: `programExerciseId` (which plan slot the row belongs to), `setType` and `prescribedWorkingSets`, all snapshotted at log time so a session describes itself rather than being re-read against today's plan. Schema detail is in [`../data-model.md`](../data-model.md).
 
 Two non-obvious ones:
 
@@ -90,16 +92,40 @@ The new weight is `roundToNearest(base + increment, increment)`, so it lands on 
 
 Whether a bump is earned at all.
 
-### SI-7 — The window is the 5 most recent sessions for that exercise *and set number*
-History is keyed on `exerciseId + setNumber`, so set 1 progresses independently of set 3.
+### SI-7 — The window is the 5 most recent sessions for that exercise slot
+History is keyed on `program_exercise_id` — the plan slot — and grouped into sessions, each carrying every working set logged against that slot. All the slot's working sets are judged against the same window.
 
-*Why:* the top set and a back-off set are different prescriptions and drift apart legitimately.
-*Covered by:* implicitly by every `buildSuggestion` test.
+The rank is computed per slot in SQL, so a programme with many exercises cannot starve the later ones; the previous query took a single global row limit and bucketed client-side, which gave uneven set counts uneven windows.
 
-### SI-8 — Only completed, non-"Tired" sessions enter the window
-Sessions still in progress are excluded, and so is any session the lifter marked `feeling = 'Tired'`.
+*Why:* "did the workout clear?" is a question about a session. Keying on `exerciseId + setNumber` asked it of one set at a time, so on a 4x12 each set banked its own count and the plan could ratchet to 62.5 / 60 / 60 / 60 with no session having ever cleared. Scope `set` (SI-7a) is where that independence still lives, for exercises whose sets genuinely differ.
+*Covered by:* `progressive-suggestions.test.ts` — the "worked example 4a" and "scope decides which sets have to clear" blocks.
 
-*Why:* two consequences worth stating outright. Excluding the live session means **marking a set easy never affects today — only the next session**. Excluding Tired sessions stops a bad-day miss from counting toward a deload the lifter doesn't need.
+### SI-7a — Scope names the sets that decide whether a session cleared
+`all` (the default) reads every working set the plan prescribed; `first` reads the first; `last` reads the last; `set` reads that set alone, which is the pre-session behaviour retained per exercise.
+
+A session **cleared** when every set the scope names was a hit (SI-9). `all` is literal: no "N of M" tolerance.
+
+*Why:* a top-set prescription and a straight-set prescription are different questions, and one setting is enough to tell them apart. Strict `all` is deliberate — loosening later is recoverable, tightening changes progression under people mid-programme.
+*Covered by:* `progressive-suggestions.test.ts` — the "scope decides which sets have to clear" block.
+
+### SI-7b — A session that cannot answer the question is unknown, not missed
+When a set the scope names has no logged row, the session is **unknown**. Under scope `all` that is exactly "fewer working sets logged than the plan prescribed at the time", measured against `workout_sets.prescribed_working_sets` and never against today's plan. When the snapshot is null (pre-migration rows) the count is not checked.
+
+An unknown session is inert in both directions: it does not bank a clear, it does not reset the run of clears, and it does not count toward a back-off. It still consumes a slot in the window.
+
+*Why:* cutting a session short usually says nothing about whether the load is right, and a back-off would be the engine at its most wrong in the situation a lifter is least able to argue with. Treating it as inert rather than forgiving matters too — if it reset the gate, an honest gap would erase banked progress; if it counted, skipping the hard last set would be strictly better than grinding it.
+*Covered by:* `progressive-suggestions.test.ts` — the "a partly logged session is unknown" block.
+
+### SI-7c — A Tired session's misses are held harmless, its clears are not
+A session marked `feeling = 'Tired'` that did not clear is recorded as unknown (SI-7b). One that cleared counts normally, and either way it supplies the base weight and the "Last: …" line.
+
+*Why:* the previous rule dropped Tired sessions from the window outright, which removed their *successful* sets from the count too and left the lifter reading numbers from weeks ago. Honest self-reporting froze progression, which is the opposite of what the exclusion was for.
+*Covered by:* `progressive-suggestions.test.ts` — the "a Tired session's misses are held harmless" block.
+
+### SI-8 — Only completed sessions enter the window
+Sessions still in progress are excluded. Tired sessions are no longer filtered out here; SI-7c handles them.
+
+*Why:* excluding the live session means **marking a set easy never affects today — only the next session**.
 *Covered by:* none — this filter lives in the SQL of `getProgressiveSuggestions`, which the unit suite doesn't reach.
 
 ### SI-9 — A set met its target when it reached the target reps
