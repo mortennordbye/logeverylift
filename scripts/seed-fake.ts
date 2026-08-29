@@ -52,10 +52,18 @@ type SetBlueprint = {
   targetReps?: number;
   weightKg?: number;
   durationSeconds?: number;
+  // Double progression's range. The seeded programme carries exactly one
+  // exercise with it, because until the preset picker lands (phase 5 of
+  // docs/progression-revamp-plan.md) nothing in the app can configure a range,
+  // and a scheme nobody can see is a scheme nobody tests.
+  repRangeMin?: number;
+  repRangeMax?: number;
 };
 
 type ExerciseBlueprint = {
   name: string;
+  /** Defaults to the column default ("manual") when absent. */
+  progressionMode?: string;
   sets: SetBlueprint[];
 };
 
@@ -87,10 +95,13 @@ const PROGRAMS: ProgramBlueprint[] = [
       },
       {
         name: "Tricep Pushdown",
+        // The demonstrable double-progression exercise: work 8 up to 12, then
+        // add load and drop back to 8.
+        progressionMode: "double",
         sets: [
-          { setNumber: 1, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
-          { setNumber: 2, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
-          { setNumber: 3, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
+          { setNumber: 1, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
+          { setNumber: 2, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
+          { setNumber: 3, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
         ],
       },
     ],
@@ -257,7 +268,14 @@ async function seedFake() {
 
       const [pe] = await db
         .insert(programExercises)
-        .values({ programId: program.id, exerciseId, orderIndex: i })
+        .values({
+          programId: program.id,
+          exerciseId,
+          orderIndex: i,
+          ...(exBlueprint.progressionMode
+            ? { progressionMode: exBlueprint.progressionMode }
+            : {}),
+        })
         .returning({ id: programExercises.id });
 
       const insertedSets = await db
@@ -270,6 +288,8 @@ async function seedFake() {
             weightKg: s.weightKg?.toString() ?? null,
             durationSeconds: s.durationSeconds ?? null,
             restTimeSeconds: s.restTimeSeconds,
+            repRangeMin: s.repRangeMin ?? null,
+            repRangeMax: s.repRangeMax ?? null,
           }))
         )
         .returning({ id: programSets.id, setNumber: programSets.setNumber });

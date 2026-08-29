@@ -46,12 +46,20 @@ type SetBlueprint = {
   targetReps: number;
   weightKg: number;
   restTimeSeconds: number;
+  // Double progression's range. One exercise in the blueprint carries it,
+  // because nothing in the app can configure a range until the preset picker
+  // lands (phase 5 of docs/progression-revamp-plan.md), and a demo account is
+  // where the scheme has to be visible.
+  repRangeMin?: number;
+  repRangeMax?: number;
 };
 
 type ExerciseBlueprint = {
   name: string;
   /** kg added to every set's weight each week (always a multiple of 2.5) */
   weeklyIncrementKg: number;
+  /** Defaults to the column default ("manual") when absent. */
+  progressionMode?: string;
   sets: SetBlueprint[];
 };
 
@@ -115,10 +123,13 @@ const FAKE_PROGRAMS: ProgramBlueprint[] = [
       {
         name: "Tricep Pushdown",
         weeklyIncrementKg: 2.5,
+        // The demonstrable double-progression exercise: work 8 up to 12, then
+        // add load and drop back to 8.
+        progressionMode: "double",
         sets: [
-          { setNumber: 1, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
-          { setNumber: 2, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
-          { setNumber: 3, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
+          { setNumber: 1, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
+          { setNumber: 2, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
+          { setNumber: 3, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
         ],
       },
     ],
@@ -207,10 +218,13 @@ const DEMO_PROGRAMS: ProgramBlueprint[] = [
       {
         name: "Tricep Pushdown",
         weeklyIncrementKg: 2.5,
+        // The demonstrable double-progression exercise: work 8 up to 12, then
+        // add load and drop back to 8.
+        progressionMode: "double",
         sets: [
-          { setNumber: 1, targetReps: 12, weightKg: 30, restTimeSeconds: 60 },
-          { setNumber: 2, targetReps: 12, weightKg: 30, restTimeSeconds: 60 },
-          { setNumber: 3, targetReps: 12, weightKg: 30, restTimeSeconds: 60 },
+          { setNumber: 1, targetReps: 12, weightKg: 30, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
+          { setNumber: 2, targetReps: 12, weightKg: 30, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
+          { setNumber: 3, targetReps: 12, weightKg: 30, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
         ],
       },
     ],
@@ -350,7 +364,14 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
 
       const [pe] = await db
         .insert(programExercises)
-        .values({ programId: program.id, exerciseId, orderIndex: i })
+        .values({
+          programId: program.id,
+          exerciseId,
+          orderIndex: i,
+          ...(exBlueprint.progressionMode
+            ? { progressionMode: exBlueprint.progressionMode }
+            : {}),
+        })
         .returning({ id: programExercises.id });
 
       const insertedSets = await db
@@ -362,6 +383,8 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
             targetReps: s.targetReps,
             weightKg: s.weightKg.toString(),
             restTimeSeconds: s.restTimeSeconds,
+            repRangeMin: s.repRangeMin ?? null,
+            repRangeMax: s.repRangeMax ?? null,
           }))
         )
         .returning({ id: programSets.id, setNumber: programSets.setNumber });
@@ -568,7 +591,14 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
 
       const [pe] = await db
         .insert(programExercises)
-        .values({ programId: program.id, exerciseId, orderIndex: i })
+        .values({
+          programId: program.id,
+          exerciseId,
+          orderIndex: i,
+          ...(exBlueprint.progressionMode
+            ? { progressionMode: exBlueprint.progressionMode }
+            : {}),
+        })
         .returning({ id: programExercises.id });
 
       const insertedSets = await db
@@ -580,6 +610,8 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
             targetReps: s.targetReps,
             weightKg: s.weightKg.toString(),
             restTimeSeconds: s.restTimeSeconds,
+            repRangeMin: s.repRangeMin ?? null,
+            repRangeMax: s.repRangeMax ?? null,
           }))
         )
         .returning({ id: programSets.id, setNumber: programSets.setNumber });

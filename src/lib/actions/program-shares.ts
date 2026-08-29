@@ -224,6 +224,10 @@ export async function copySharedProgram(
               targetHeartRateZone: ps.targetHeartRateZone ?? undefined,
               restTimeSeconds: ps.restTimeSeconds,
               setType: ps.setType,
+              // Without these a shared double-progression program silently
+              // becomes a fixed-target one for whoever accepts it.
+              repRangeMin: ps.repRangeMin ?? undefined,
+              repRangeMax: ps.repRangeMax ?? undefined,
             })),
           );
         }

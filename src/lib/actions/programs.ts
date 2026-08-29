@@ -878,6 +878,8 @@ export async function exportProgram(
           type: s.setType ?? "working",
           rir: s.targetRir ?? null,
           startDelay: s.startDelaySeconds ?? null,
+          repMin: s.repRangeMin ?? null,
+          repMax: s.repRangeMax ?? null,
         })),
       })),
     },
@@ -939,6 +941,8 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
               type: s.setType ?? "working",
               rir: s.targetRir ?? null,
               startDelay: s.startDelaySeconds ?? null,
+              repMin: s.repRangeMin ?? null,
+              repMax: s.repRangeMax ?? null,
             })),
           })),
         })),
@@ -1089,6 +1093,11 @@ export async function importProgram(
                 setType: s.type,
                 targetRir: s.rir ?? undefined,
                 startDelaySeconds: s.startDelay ?? undefined,
+                // Half a range is not a range: the engine needs both bounds,
+                // so a truncated pair is dropped rather than half-restored.
+                ...(s.repMin != null && s.repMax != null
+                  ? { repRangeMin: s.repMin, repRangeMax: s.repMax }
+                  : {}),
               })),
             );
           }
