@@ -3,20 +3,36 @@
 > **Status:** built, smoke-tested and e2e-tested. All seven phases have shipped and nothing is pushed. The `CLAUDE.md` smoke pass has now been run end to end against a real database and found one bug, since fixed; the release notes are written ([`releases/progression-rebuild.md`](releases/progression-rebuild.md)). The e2e suite has run too — 7 of 10, the three failures triaged: one was the spec's own, two are pre-existing and predate this plan. What remains is confirming `HONEST_REPS_FROM` against the real release date, and the push itself. See §0 "Build state".
 > **Design status:** approved, all eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
 > **Written:** 2026-08-29 against `197dea1`
-> **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
-> **Closes:** audit findings `A1`-`A11`, smart-incrementation divergences `SI-D1`-`SI-D6` and `SI-D8`, and cycle divergence `PZ-D3`. `SI-D7` stays open. Section 13 is authoritative; see its note on the three colliding `D` numbering schemes.
+> **Superseded:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md) were rewritten against the axes in phases 5 and 6. That spec, not this plan, is the reference for how the engine behaves.
+> **Closed:** all eleven audit findings `A1`-`A11`, smart-incrementation divergences `SI-D1`-`SI-D6` and `SI-D8`, and cycle divergence `PZ-D3`. Only `SI-D7` stays open, and deliberately — it is a Settings question, not an engine one. Section 13 is authoritative; see its note on the three colliding `D` numbering schemes.
 
 Progression is the reason this app exists rather than a notes file. It is also the part with the least honest data behind it. This plan rebuilds it as one machine with a small number of settings, so that every progression scheme a lifter actually runs is the same engine with different values, and the app can say in one sentence what it will do next.
 
 Section 12 holds the eleven decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
 
-**This document is written to be picked up cold, one phase at a time, with no memory of the phase before it.** Everything a session needs to know about what has already happened is in §0. Everything a session learns that the next one would need is written back into §0 before it finishes. If you are reading this with no context, you are the intended reader and nothing is missing.
+**This document is written to be picked up cold, with no memory of the session before it.** Everything a session needs to know about what has already happened is in §0, and everything a session learns that the next one would need is written back into §0 before it finishes. If you are reading this with no context, you are the intended reader and nothing is missing.
+
+**The building is finished.** All seven phases are written, tested and committed, and none of it is pushed. If you are here to work, your job is almost certainly one of the three things in §0's "What to do next" — not another phase.
 
 ---
 
 ## 0. Start here
 
-**You are picking up a planned rebuild of the progressive-overload engine, one phase at a time. This document is the complete brief; it assumes no conversation history.** It is long because the engine is the reason the app exists, and because two independent reviews found about thirty defects in an earlier draft that read as finished.
+**You are picking up a rebuilt progressive-overload engine that is finished and unpushed.** This document is the complete brief and assumes no conversation history. It is long because the engine is the reason the app exists, because two independent reviews found about thirty defects in an earlier draft that read as finished, and because most of it is now a record of decisions someone will otherwise re-litigate.
+
+Read "What to do next" first. The rest of §0 is what you need in order to do it safely.
+
+### What to do next
+
+Three things remain, and none of them is code.
+
+1. **Set `HONEST_REPS_FROM` to the real release date** (`src/lib/utils/pr-provenance.ts`, currently `2026-08-29`). It decides which personal records are shown as "set before reps were logged individually", and no column can answer that retroactively — before the release, a tap wrote the target back as the result, so those records are derived from reps nobody counted. **Set it late rather than early if the date is uncertain**: late over-flags a few genuine records and understates the app's confidence, early presents assumed numbers as measured ones, which is the thing `D-10` exists to prevent.
+
+2. **Publish the release notes with the deploy** ([`releases/progression-rebuild.md`](releases/progression-rebuild.md)). They are written and they are not optional. Six separate numbers move on the first load after this ships — volume falls, increments change size, some exercises stop progressing and others start — and every one of them looks like a regression to the person seeing it. A number that moves with an explanation is a fix; the same number moving without one is a bug report.
+
+3. **Push, and decide how.** 67 commits across eight branches, each stacked on the last, nothing deployed. They can land as one release or in sequence; the plan does not decide that for you. Whichever you choose, `0046`-`0051` run in order on the first boot after, and the entrypoint runs them automatically.
+
+Two known bugs are **deliberately** not fixed, both with `BACKLOG.md` entries: un-logging a set logged through the miss sheet does nothing (phase 2's, caught by its own never-run spec), and `page-transition.spec.ts` hangs on a bottom-sheet backdrop. Both predate this plan — verified, not assumed. Do not let either block the push; neither is a regression from it.
 
 ### Build state
 
@@ -26,15 +42,43 @@ Phases are listed in **build order**, which is not numeric order. The swap is de
 
 | Phase | Delivers | Status |
 |---|---|---|
-| **0** | Prerequisites: `P-1`, `P-2`, `D-6` | **Done.** Branch `phase-0/progression-prerequisites`, 5 commits. Migrations `0046`, `0047`. |
+| **0** | Prerequisites: `P-1`, `P-2`, `D-6` | **Done.** Branch `phase-0/progression-prerequisites`, 6 commits. Migrations `0046`, `0047`. |
 | **1** | Honest effort: `rpe` nullable, stop forging 7 | **Done.** Branch `phase-1/honest-effort`, 7 commits. Migration `0048`. |
 | **3** | Session windows and scope | **Done.** Branch `phase-3/session-windows-and-scope`, 4 commits. Migration `0049`. |
 | **2** | Capture: the miss sheet and the reps-correction fix | **Done.** Branch `phase-2/capture`, 4 commits. No migration. |
 | **4** | Rep ranges and double progression | **Done.** Branch `phase-4/rep-ranges`, 5 commits. Migration `0050`. |
-| **5** | Axes, presets, and the sheet | **Done.** Branch `phase-5/axes-and-presets`, 6 commits. Migration `0051`. |
-| **6** | The rest | **Done.** Branch `phase-6/the-rest`, 5 commits. No migration. |
+| **5** | Axes, presets, and the sheet | **Done.** Branch `phase-5/axes-and-presets`, 9 commits. Migration `0051`. |
+| **6** | The rest | **Done.** Branch `phase-6/the-rest`, 11 commits. No migration. |
 
-**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**) → `phase-1/honest-effort` (7 commits, **not pushed**) → `phase-3/session-windows-and-scope` (4 commits, **not pushed**) → `phase-2/capture` (4 commits, **not pushed**) → `phase-4/rep-ranges` (5 commits, **not pushed**) → `phase-5/axes-and-presets` (6 commits, **not pushed**) → `phase-6/the-rest` (5 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
+**Branches.** Each is stacked on the one before it, **and none is pushed**:
+
+| Branch | Commits | Carries |
+|---|---|---|
+| `fix/progression-never-lowers-plan` | 21 | The audit, one predating bug fix, and this plan |
+| `phase-0/progression-prerequisites` | 6 | Migrations `0046`, `0047` |
+| `phase-1/honest-effort` | 7 | Migration `0048` |
+| `phase-3/session-windows-and-scope` | 4 | Migration `0049` |
+| `phase-2/capture` | 4 | — |
+| `phase-4/rep-ranges` | 5 | Migration `0050` |
+| `phase-5/axes-and-presets` | 9 | Migration `0051` |
+| `phase-6/the-rest` | 11 | — |
+
+67 commits off `main`. Because nothing was pushed, each phase branched off the previous phase's branch rather than off `main`; `phase-6/the-rest` is the tip and carries everything.
+
+### What has actually been verified
+
+Stated precisely, because "tested" hides more than it says. Anything not on this list is not covered.
+
+| Check | State |
+|---|---|
+| `pnpm verify` — typecheck, eslint, `check:docs`, 544 unit tests | Passes. Run it with `--config.verify-deps-before-run=false` until the pnpm 11 item in `BACKLOG.md` is resolved. |
+| `next build` | Compiles. |
+| Migrations `0046`-`0051` | All 52 apply to an empty Postgres 16, `drizzle-kit check` reports no drift, **and they have now run against the populated dev database** (283 sessions, 166 sets, 35 PRs). `0051`'s backfill was also replayed over a fixture row carrying every legacy mode value including null, and produced §10's table exactly. Untested against production **volume**, not against production *shape*. |
+| `CLAUDE.md` smoke pass | Run 2026-08-29, 8 of 9 steps. Step 5 (timed-set countdown) skipped: no seeded program has a timed set. Found one bug, since fixed. |
+| Playwright e2e | Run 2026-08-29, 7 of 10 — **under chromium, not webkit**. See the carry-forward: for a PWA targeting iOS, the engine it was not run under is the engine it ships to. |
+| The engine against real history | The smoke pass exercised the preset badge and sentence, the axis controls, the config stamp, the `re-approach` chip and the unverified-PR flag against seeded data, and all behaved as specified. |
+
+Nothing here has run against **production data**, and no migration has run outside a dev container.
 
 ### What is already true in the code
 
@@ -127,19 +171,29 @@ Facts a cold session must not re-derive, re-decide, or accidentally undo. Each i
 
 ### Read in this order
 
-1. **This section (§0) in full.** It is the handoff.
-2. **Section 11, your phase's paragraph**, and every section it names. Section 11 is the per-phase brief; it says what is in scope and what must land in the same change.
-3. **Sections 14 and 15, filtered to your phase.** 14 holds the prerequisites (`P-1` to `P-3`) and nineteen pre-specified edge cases; 15 traces twenty-three consumers outside the engine, each tagged with the phase that breaks it. Neither is optional, but neither needs reading end to end for a single phase.
-4. **Sections 1 to 10 and 12** as reference. Section 2 is the model, section 7 is the engine pipeline, section 12 is the decisions. Read the whole document once if this is your first phase; after that, read what your phase touches.
-5. [`specs/smart-incrementation.md`](specs/smart-incrementation.md) — how the engine behaves today, rewritten against the axes at the end of phase 5. Accurate against the code, and the reference.
-6. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions` and the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (two of the consumers).
-7. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
+**If you are shipping it** — the likely case:
 
-### Leaving the doc for the next phase
+1. **This section (§0)**, especially "What to do next" and "What has actually been verified".
+2. [`releases/progression-rebuild.md`](releases/progression-rebuild.md), so you know what you are about to tell people.
+3. `BACKLOG.md`, for the two known bugs and the pnpm 11 item. Nothing else here is required to push.
 
-**All seven phases are built, so this section is history rather than instruction.** It is kept because the same discipline applies to anything that touches the engine next, and because it is the reason §0 can be trusted at all.
+**If you are changing the engine** — anything from a bug fix to a new scheme:
 
-The next session starts with no memory of yours. It gets exactly what you write here, so treat this as part of the phase, not paperwork after it. Before you call a phase done:
+1. **§0's "What is already true in the code"**, in full. It is a list of things that look like improvements and are not; every line is there because undoing it would reintroduce a bug this plan closed.
+2. [`specs/smart-incrementation.md`](specs/smart-incrementation.md) — the behaviour spec, rewritten against the axes and accurate. **Its "Inputs — provenance" section first**, because every rule is stated over a value and that section is the only thing that says where each value comes from. A rule verified against the function that reads it can still be wrong about the feature; that is how `A1` survived a full rule-by-rule pass.
+3. **Section 12**, the eleven decisions, before proposing anything that contradicts one.
+4. **Sections 2, 7 and 14** — the model, the engine pipeline, and nineteen edge cases with their answers already written down.
+5. `src/lib/utils/progression.ts` (the engine), `src/lib/utils/progression-presets.ts` (the preset table), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions` and the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (the two consumers).
+
+**Sections 11 and 15 are now history.** Section 11 was the per-phase brief and every phase is marked Built; section 15 traced the consumers each phase would break, and all are closed. Read them for the reasoning, not for instructions.
+
+### Leaving the doc for whoever is next
+
+**All seven phases are built, so the checklist below is history.** It is kept because the same discipline applies to anything that touches the engine next, and because it is the only reason §0 can be trusted at all: every line in "What is already true" is there because someone wrote it down at the moment they learned it.
+
+If you change the engine, update §0 the same way — the settled fact, and the thing a later change might undo by accident. If you push these branches, say so in the Build state table, because "not pushed" is load-bearing in half a dozen places in this document.
+
+The original checklist, which still describes what good looks like:
 
 1. **Move your phase's row in the Build state table** to Done, with the branch name, commit count and any migration numbers.
 2. **Add what your phase made true** to "What is already true in the code", in the same voice: the settled fact, and the thing a later phase might undo by accident. Delete the matching line from "Still true, and still wrong".
@@ -168,13 +222,11 @@ Section 12 holds `D-1` to `D-11` with the consequences each binds the build to, 
 
 If one turns out to be wrong once you are in the code, say so and get it changed in section 12. Do not work around it silently.
 
-### Build order
+### Build order — history, kept for the reasoning
 
-**`0, 1, 3, 2, 4, 5, 6`.** The swap is deliberate and explained in section 11: shipping honest reps (phase 2) while the engine is still per-set would deload set 4 of every straight-set exercise. Phase numbering is kept stable so references do not move.
+**`0, 1, 3, 2, 4, 5, 6`**, and the swap was deliberate: shipping honest reps (phase 2) while the engine was still per-set would have deloaded set 4 of every straight-set exercise. Phase numbering was kept stable so references did not move. All seven are built; this is recorded because the ordering argument is the kind of thing that gets rediscovered painfully.
 
-One phase per branch, named `phase-N/<what-it-does>`. Because nothing is pushed yet, each phase branches off the previous phase's branch rather than off `main`; once they start landing, branch off whatever carries the phase before yours. Do not start a later phase before the earlier one exists: the order is data dependency, not preference.
-
-`pnpm verify` after every phase. The smoke pass in `CLAUDE.md` after any phase touching the set list — phases 1, 2, 3, 5 and 6 all do.
+Still binding on anything that touches the set list or the engine: `pnpm verify`, **and** the smoke pass in `CLAUDE.md`. The smoke pass earns its place — it caught a bug in phase 6 that no unit test could, because none of them renders a chip.
 
 ### How not to repeat the mistakes this plan already made
 
