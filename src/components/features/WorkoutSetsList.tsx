@@ -1413,7 +1413,16 @@ function SortableSetRow({
                     applied={!weightPending || isCompleted}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, hasSmartAdjustment ? suggestion.adjustedRepsForWeight : undefined)}
                   >
-                    {weightPending ? "↑" : "✓"}{" "}
+                    {/* Direction comes from the comparison, not the reason: a
+                        suggestion is built from the last *logged* weight, so
+                        after a lighter session a "progressed" value can sit
+                        below the weight on the row. It is still worth offering
+                        for today's session — it just isn't an increase. */}
+                    {!weightPending
+                      ? "✓"
+                      : suggestion.suggestedWeightKg > currentWeight
+                      ? "↑"
+                      : "↓"}{" "}
                     {hasSmartAdjustment
                       ? `${suggestion.suggestedWeightKg}kg — ${suggestion.adjustedRepsForWeight} reps`
                       : `${suggestion.suggestedWeightKg}kg`}

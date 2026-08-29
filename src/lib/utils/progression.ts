@@ -300,6 +300,9 @@ export type PendingSetInput = {
  * any live session override already folded in), so a set counts as pending only
  * while it would actually change. Completed sets are excluded — the number they
  * were logged at is history, not a plan.
+ *
+ * A `progressed*` reason only ever moves a value upward. Deload and retry are
+ * recovery moves and write in either direction.
  */
 export function pendingProgressions(
   sets: PendingSetInput[],
@@ -321,8 +324,17 @@ export function pendingProgressions(
 
     switch (s.reason) {
       case "progressed":
-      case "deload":
-        if (currentWeight !== s.suggestedWeightKg) {
+      case "deload": {
+        // A progression never lowers the plan. The suggestion is built from the
+        // most recent *logged* weight, so after a lighter session it can land
+        // below the planned one, and an unguarded write turns the "↑" chip into
+        // a silent downgrade of the programme. Deload is the deliberate
+        // exception — a back-off is still a move, so it writes either way.
+        const moves =
+          s.reason === "deload"
+            ? currentWeight !== s.suggestedWeightKg
+            : s.suggestedWeightKg > currentWeight;
+        if (moves) {
           pending.push({
             setId: set.id,
             weightKg: s.suggestedWeightKg,
@@ -332,6 +344,7 @@ export function pendingProgressions(
           });
         }
         break;
+      }
       case "retry":
         if (s.suggestedReps !== undefined) {
           if (s.suggestedReps !== currentReps) {
@@ -349,7 +362,7 @@ export function pendingProgressions(
       case "progressed-time":
         if (
           s.suggestedDurationSeconds !== undefined &&
-          s.suggestedDurationSeconds !== (set.durationSeconds ?? 0)
+          s.suggestedDurationSeconds > (set.durationSeconds ?? 0)
         ) {
           pending.push({
             setId: set.id,
@@ -360,7 +373,7 @@ export function pendingProgressions(
       case "progressed-distance":
         if (
           s.suggestedDistanceMeters !== undefined &&
-          s.suggestedDistanceMeters !== (set.distanceMeters ?? 0)
+          s.suggestedDistanceMeters > (set.distanceMeters ?? 0)
         ) {
           pending.push({
             setId: set.id,

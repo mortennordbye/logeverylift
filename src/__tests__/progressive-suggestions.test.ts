@@ -882,6 +882,57 @@ describe("pendingProgressions", () => {
     expect(result).toEqual([{ setId: 1, weightKg: 72.5 }]);
   });
 
+  it("does not lower a planned weight that is already higher", () => {
+    // Base weight comes from the last logged set, so after a lighter session a
+    // "progressed" suggestion can land below the plan. Writing it would turn
+    // the ↑ chip into a silent downgrade of the programme.
+    const result = pendingProgressions(
+      [makeSet({ weightKg: "85.00" })],
+      { 1: makeSuggestion({ suggestedWeightKg: 82.5 }) },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("still deloads below a planned weight — the floor is progressions only", () => {
+    const result = pendingProgressions(
+      [makeSet({ weightKg: "85.00" })],
+      { 1: makeSuggestion({ reason: "deload", suggestedWeightKg: 72.5 }) },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, weightKg: 72.5 }]);
+  });
+
+  it("does not lower a planned duration that is already longer", () => {
+    const result = pendingProgressions(
+      [makeSet({ durationSeconds: 90 })],
+      {
+        1: makeSuggestion({
+          reason: "progressed-time",
+          suggestedDurationSeconds: 70,
+          suggestedWeightKg: 80,
+        }),
+      },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("does not lower a planned distance that is already longer", () => {
+    const result = pendingProgressions(
+      [makeSet({ distanceMeters: 6000, weightKg: null })],
+      {
+        1: makeSuggestion({
+          reason: "progressed-distance",
+          suggestedDistanceMeters: 5500,
+          suggestedWeightKg: 0,
+        }),
+      },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
   it("returns reps for a rep progression and leaves the weight alone", () => {
     const result = pendingProgressions(
       [makeSet()],

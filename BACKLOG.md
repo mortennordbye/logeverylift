@@ -114,6 +114,67 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Extending the prompt's schema description plus the import validator's coverage. The validator already accepts both fields (`.optional().catch(...)` in `importProgramSchema`), so this is prompt work rather than plumbing.
 - **Touchpoints:** `src/lib/utils/ai-prompt.ts:160-180`, `src/lib/validators/workout.ts` (`importProgramSchema`), `src/lib/actions/programs.ts` (`importProgram`).
 
+## Progression engine audit (2026-08-29)
+
+Findings from a domain audit of [`smart-incrementation`](docs/specs/smart-incrementation.md) — does the engine
+behave the way it should for someone who actually trains. The audit's one shippable fix (a progression must
+never lower the plan) landed with the audit; everything below is deferred. `A1` is the root cause and most of
+the rest are only worth tuning once it is fixed.
+
+### Progression audit A1: the fast logging path fabricates the inputs the engine reasons about
+- **What:** One-tap set logging writes `actualReps = targetReps` (`src/components/features/WorkoutSetsList.tsx:314`, `:337`, `:343`) and a hardcoded `rpe: 7` with no `rir` (`:320`, `:348`). The only place an achieved rep count is ever recorded is the explicit *Mark failed* branch (`src/components/features/SetEditView.tsx:268`); RIR is optional and defaults to "Not logged". So for a normally-logged workout `metTargetReps` and `isConfidentHit` are always true, `countConsecutiveFails` is always 0, and **SI-17 (deload) and SI-19 (retry-on-fewer-reps) are unreachable**. The consensus window, the RPE confidence gate, `sessionsUntilDeload` and the progress dots have no effect on the outcome. Net production behaviour is "add the increment every 2 sessions, forever, until the lifter opens the editor and declares a failure" — no autoregulation. Rules SI-9, SI-10, SI-17, SI-19 and SI-31 describe branches almost nothing reaches.
+- **Why deferred:** The fix is a logging-UX change, not an engine change, and it has to stay near one tap per set or it breaks the thing the app is fastest at. That is a design decision, not a patch.
+- **Unblocked by:** Deciding where achieved reps and effort get captured. Cheapest honest option: keep the toggle meaning "hit the target" and prompt for RIR **once per exercise, on the last working set** — that is the set carrying the information, so the cost is one tap per exercise rather than per set. Alternative: long-press the toggle to open a compact reps + RIR sheet. Either way, `A2` should land in the same change.
+- **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (296-360), `src/components/features/SetEditView.tsx` (260-305), `src/lib/utils/progression.ts` (`isConfidentHit`, `countConsecutiveFails`), `docs/specs/smart-incrementation.md` (SI-9, SI-10, SI-17, SI-19).
+
+### Progression audit A2: `targetRir` is prescribed, never read, and obeying it freezes the exercise
+- **What:** `program_sets.target_rir` exists (`src/db/schema/programs.ts:118`), is settable in the set editor (`SetEditView.tsx:706-730`) and renders as "@2 RIR" (`src/lib/utils/format.ts:56`), but no progression code reads it. Worse, it contradicts the gate: SI-10 counts RPE 8 (= RIR 2) as confident **only with an extra rep**, so a set prescribed "@2 RIR" and executed exactly as prescribed is never a confident hit and the exercise never progresses. The intensity prescription and the progression gate currently disagree about what a good set is.
+- **Why deferred:** Only bites once real RIR is being logged (`A1`), and the two want the same design conversation.
+- **Unblocked by:** Deciding that confidence is measured *against the prescription*: confident = target met and logged RIR ≥ `targetRir`, falling back to today's absolute RPE ladder when no RIR is prescribed. Then SI-10 becomes a rule about the plan rather than a fixed constant.
+- **Touchpoints:** `src/lib/utils/progression.ts` (`isConfidentHit`, `buildSuggestion` consensus block), `src/db/schema/programs.ts:118`, `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions` — `targetRir` is not currently selected), `docs/specs/smart-incrementation.md` (SI-10).
+
+### Progression audit A3: the increment ladder skips load scaling for anyone with an experience level
+- **What:** `adaptiveIncrementKg` returns at `src/lib/utils/progression.ts:151` / `:154` / `:155` before the load-and-movement table (SI-4) is ever reached. So `beginner` gets 5 kg on lateral raises and overhead press, and `advanced` gets 1.25 kg on a 200 kg deadlift. Separately, the 1.0 kg and 1.25 kg rungs are not barbell-loadable without microplates (0.5 / 0.625 kg per side). The load-zone table is the sound part of the function and it is the part most users with a filled-in profile never reach.
+- **Why deferred:** Changes suggested numbers for every existing user, so it wants to land deliberately rather than folded into another change.
+- **Unblocked by:** Reordering the ladder — load/movement zone first, experience level as a modifier on it rather than a replacement for it — and snapping the result to a granularity the equipment can actually load (barbell 2.5, dumbbell 2, machine/cable 1.25). Needs equipment on the exercise, or a barbell-vs-not heuristic from `movementPattern`.
+- **Touchpoints:** `src/lib/utils/progression.ts` (`adaptiveIncrementKg` 139-173), `docs/specs/smart-incrementation.md` (SI-2, SI-3, SI-4).
+
+### Progression audit A4: no rep range, so double progression cannot be expressed
+- **What:** `program_sets` carries only `target_reps` — there is no `rep_range_min` / `rep_range_max`. The standard scheme (work 8→12, then add load and reset to 8) therefore has nowhere to live. `reps` mode adds the increment to the target with no ceiling (`src/lib/utils/progression.ts:647`) and never converts banked reps back into load, so a target climbs 8 → 10 → 12 → 14 indefinitely. `smart` mode's `adjustedRepsForWeight` is a partial stand-in but only ever lowers, only in that mode, and only on a 2-12 rep set at RPE ≥ 7. Note SI-11's rationale calls the current scheme "double progression"; it is not — it is consensus at a fixed load. That wording should be corrected whether or not the feature is built.
+- **Why deferred:** Needs a schema migration and a new progression mode; well beyond the audit's shippable fix.
+- **Unblocked by:** Adding `rep_range_min`/`rep_range_max` to `program_sets` with the matching `drizzle/` migration, then a `double` mode: add reps while below max, and at max add the load increment and reset to min.
+- **Touchpoints:** `src/db/schema/programs.ts` (`programSets`), `src/lib/utils/progression.ts` (`reps` branch 640-655), `src/lib/validators/workout.ts`, `docs/specs/smart-incrementation.md` (SI-11 wording, SI-28).
+
+### Progression audit A5: timed and distance progressions build on the actual, so one good day ratchets the plan
+- **What:** `src/lib/utils/progression.ts:670` and `:693` add the increment to what was *logged*, not to the target. Run 5.2 km against a 5 km target and the next suggestion is 5.7 km, which the ratchet then writes into the plan; overshoot compounds session over session. Weight mode has the same base-from-history property (already tracked above as the "`latest.weightKg` vs program-planned weight quirk") but the consensus gate damps it there, and the new SI-37 floor now stops the downward half. Endurance has no equivalent damping. On a periodized cycle it also fights `syncPeriodizedTargets`, which owns `duration_seconds` / `distance_meters` for anchored sets.
+- **Why deferred:** Tangled with the `PZ` cycle sync's ownership of the same columns; picking a winner is a product decision.
+- **Unblocked by:** Deciding that endurance progresses from the **target** plus one increment, capped at one increment per session, and that an anchored (periodized) set is never a ratchet target at all.
+- **Touchpoints:** `src/lib/utils/progression.ts` (`time` 657-680, `distance` 682-703), `src/lib/actions/training-cycles.ts` (`syncPeriodizedTargets`), `docs/specs/smart-incrementation.md` (SI-29, SI-30, D4).
+
+### Progression audit A6: Tired sessions are erased rather than down-weighted
+- **What:** The history query drops every session marked `feeling = 'Tired'` outright (`src/lib/actions/workout-sets.ts:1231`). That removes its *successful* sets from the hit count too, and it makes `latest` — the base weight and the "Last: …" line the lifter reads — potentially a session from weeks ago while the actual last session is invisible. Someone who honestly reports a tired day pays for it by freezing their progression and being shown stale numbers.
+- **Why deferred:** SI-8's rationale (a bad-day miss should not force a deload) is sound; only the mechanism is too blunt. Changing it moves everyone's suggestions.
+- **Unblocked by:** Deciding the softer rule — most likely: a Tired session's **misses** are ignored, but its hits still count and it still supplies the base weight and the "Last:" line.
+- **Touchpoints:** `src/lib/actions/workout-sets.ts` (1210-1245), `src/lib/utils/progression.ts` (`buildSuggestion` — `latest`), `docs/specs/smart-incrementation.md` (SI-8).
+
+### Progression audit A7: low readiness holds the load but never reduces it
+- **What:** Readiness ≤ 2 downgrades a progression to `held-readiness` at the base weight (`src/lib/utils/progression.ts:704-719`) and stops there. Real autoregulation on a drained day cuts load (~10%) or volume; holding the same load is precisely the session most likely to produce the missed reps the deload logic is waiting for. Historical `readiness` is stored on every session (`workout_sessions.readiness`) and never read — only the live session's value is used.
+- **Why deferred:** A new suggestion direction (a readiness-driven back-off) needs a new `reason` code, which SI-33 says must land alongside both consumers' switch statements.
+- **Unblocked by:** Deciding whether readiness ≤ 2 should propose a back-off rather than a hold, and whether a run of low-readiness sessions in the window is itself a deload signal.
+- **Touchpoints:** `src/lib/utils/progression.ts` (704-719), `src/types/workout.ts` (`SetSuggestion.reason`), `src/components/features/WorkoutSetsList.tsx` (chip switch), `docs/specs/smart-incrementation.md` (SI-21, SI-33).
+
+### Progression audit A8: per-set-number independence drifts straight sets apart
+- **What:** SI-7 keys the window on `exerciseId + setNumber`, so a straight-set prescription (3×8 @ 60 kg) can ratchet to 62.5 / 60 / 60 when set 3 has banked fewer hits — a plan nobody would write by hand. The sibling propagation in `WorkoutSetsList.tsx:648-670` only fires when the suggestions are *identical*, so it covers the case that did not need help and not the drifted one.
+- **Why deferred:** The rationale for independence is real (a top set and a back-off set are different prescriptions), so the answer is probably per-exercise opt-in rather than a straight reversal.
+- **Unblocked by:** Deciding whether an exercise progresses per-set or as a block, most likely a flag on `program_exercises` alongside the existing progression settings, defaulting to block for sets that currently share a weight.
+- **Touchpoints:** `src/lib/actions/workout-sets.ts` (history bucketing 1238-1245), `src/lib/utils/progression.ts` (`buildSuggestion`), `src/components/features/WorkoutSetsList.tsx` (648-670), `docs/specs/smart-incrementation.md` (SI-7).
+
+### Progression audit A9: the spec describes the function, not the feature
+- **What:** Every rule in `smart-incrementation.md` is stated over its inputs (`rpe`, `actualReps`, `wasEasy`) without ever asserting where those values come from. That is exactly how `A1` stayed invisible through a full rule-by-rule verification pass: SI-10 verifies true against `isConfidentHit` and is inert in production. The Coverage table has the same blind spot, excusing SI-8 as untested because "the filter lives in SQL". The spec also has no rule about **rate** — nothing states how fast an exercise is allowed to move, which is the outside check that would have caught `A1` without reasoning about internals.
+- **Why deferred:** Recorded with the audit; writing the new sections is its own pass, and `A1`'s resolution changes what the provenance section would say.
+- **Unblocked by:** Nothing. Add an **Inputs — provenance** section listing, per input, which UI path produces it and what value is written when no one supplies it; add a rate rule (a per-exercise ceiling on increments per session and a sanity flag on absolute change over a block); and carry the same "where does this come from" question into `.claude/skills/feature-spec` so the next spec pass asks it by default.
+- **Touchpoints:** `docs/specs/smart-incrementation.md` (Inputs, Coverage), `.claude/skills/feature-spec/SKILL.md`.
+
 ## Cycle periodization (spec divergences)
 
 Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spec pass (2026-08-25 @ `91c1646`). Rule IDs are `PZ-n`; divergence IDs `D1`-`D8` are the rows of that spec's Divergences table.

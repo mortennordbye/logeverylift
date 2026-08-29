@@ -1,10 +1,10 @@
 # Smart incrementation
 
 > **Status:** implemented
-> **Last verified:** 2026-08-24 against `3a09857`
+> **Last verified:** 2026-08-29 against `a561648`
 > **Source of truth:** `src/lib/utils/progression.ts`, `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`), `src/lib/actions/programs.ts` (`applyProgressionToPlan` + the settings actions), `src/lib/validators/workout.ts`, `src/components/features/{WorkoutSetsClient,WorkoutSetsList,SetEditView}.tsx`
 >
-> Stale check: `git log 3a09857..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
+> Stale check: `git log a561648..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
 
@@ -292,11 +292,16 @@ Pending sets are matched against their *current* values with any live session ov
 *Why:* the number a set was logged at is history, not a plan. Warm-ups are excluded per SI-14.
 *Covered by:* `progressive-suggestions.test.ts` — "skips completed sets…", "skips warm-up sets".
 
-### SI-37 — Only actionable reasons write; a rep target is never lowered
-`held`, `held-readiness` and `manual` produce nothing. `progressed-reps` writes only when the suggestion is above the current target. `deload` does write — a downward move is still a move.
+### SI-37 — Only actionable reasons write, and a progression never lowers the plan
+`held`, `held-readiness` and `manual` produce nothing. Every `progressed*` reason writes only when its value is **above** what the plan already holds — weight, reps, duration and distance alike. `deload` and `retry` are exempt: both are recovery moves, and a downward move is still a move.
 
-*Why:* holding is a decision to leave the plan alone. The rep floor stops a suggestion built from a weaker session from quietly reducing the prescription.
-*Covered by:* `progressive-suggestions.test.ts` — "ignores held, held-readiness and manual suggestions", "does not lower a rep target that is already higher", "includes deloads…".
+*Why:* base values come from the most recent *logged* set, not the planned one (SI-1's "base weight"), so after one lighter session a `progressed` suggestion can land **below** the planned number. Unfloored, the ratchet writes it and the "↑" chip silently downgrades the programme — plan 80 kg, two hit sessions at 75, and the plan is rewritten to 77.5.
+
+The floor has to hold in **both** consumers, which is the trap here: `pendingProgressions` backs the exercise-level apply-all chip, but the per-set chip goes through `applySuggestion` in `WorkoutSetsClient`, which builds its own plan payload and never calls the engine. A guard added to only one of them covers the affordance nobody taps. `applyRepSuggestion` had the rep half of this floor (`Math.max`) from the start; the others did not.
+
+Display follows the same rule: the chip's arrow is derived from the comparison rather than the reason, so a below-plan `progressed` value renders `↓`, not `↑`. It is still offered for the live session — a session override reflects what was actually lifted and is legitimately allowed to go down.
+
+*Covered by:* `progressive-suggestions.test.ts` — "ignores held, held-readiness and manual suggestions", "does not lower a rep target that is already higher", "does not lower a planned weight that is already higher", "does not lower a planned duration…", "does not lower a planned distance…", "still deloads below a planned weight — the floor is progressions only", "includes deloads…".
 
 ### SI-38 — The server re-reads the opt-in flag, and opting out is a success
 `applyProgressionToPlan` re-checks `progressionApplyToPlan` and returns success without writing when it is off.
@@ -318,7 +323,7 @@ Failures are swallowed; the live workout route is not revalidated after a succes
 
 ## Divergences (intent vs code)
 
-Verified against `progression.ts` and `workout-sets.ts` at `3a09857` on 2026-08-24.
+Verified against `progression.ts` and `workout-sets.ts` at `a561648` on 2026-08-29.
 
 | # | Rule | Intended | Actual | Status |
 |---|---|---|---|---|

@@ -235,6 +235,24 @@ export function WorkoutSetsClient({
     // Persist only what this mode actually progressed. A duration bump carries
     // the unchanged weight along for the override; writing that back would
     // overwrite the planned weight with whatever was last lifted.
+    //
+    // A progression never lowers the plan — the same floor pendingProgressions
+    // applies to the apply-all chip, and the one applyRepSuggestion already
+    // applies to reps. A suggestion is built from the most recent *logged*
+    // value, so after a lighter session it can sit below the planned one.
+    // Deload and retry are recovery moves and still write in either direction.
+    // The session override above is untouched either way: it reflects what was
+    // actually lifted, which is legitimately allowed to go down.
+    const isProgression =
+      suggestions?.[setId]?.reason.startsWith("progressed") ?? false;
+    const lowersPlan =
+      isProgression &&
+      (durationSeconds != null
+        ? durationSeconds <= (set?.durationSeconds ?? 0)
+        : distanceMeters != null
+        ? distanceMeters <= (set?.distanceMeters ?? 0)
+        : suggestedWeightKg <= Number(set?.weightKg ?? 0));
+    if (lowersPlan) return;
     persistToPlan([
       durationSeconds != null
         ? { setId, durationSeconds }
