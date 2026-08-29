@@ -320,6 +320,17 @@ export function WorkoutSetsClient({
     new Set(pendingWeights).size === 1
       ? (pendingWeights[0] as number)
       : null;
+  // The arrow is derived from the comparison, never from the reason — the same
+  // rule the per-set chip follows. A back-off and a re-approach both propose a
+  // *lower* number, and this chip used to claim "↑" over either of them.
+  const pendingHeaviest = Math.max(
+    0,
+    ...pending
+      .filter((p) => p.weightKg !== undefined)
+      .map((p) => Number(sets.find((s) => s.id === p.setId)?.weightKg ?? 0)),
+  );
+  const pendingArrow =
+    pendingWeight != null && pendingWeight < pendingHeaviest ? "↓" : "↑";
 
   /**
    * Write accepted values into the plan, when this exercise has opted in.
@@ -603,7 +614,8 @@ export function WorkoutSetsClient({
             onClick={applyAllPending}
             className="ml-auto min-h-[44px] px-3.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold active:scale-95 transition-all"
           >
-            ↑ {pendingWeight != null
+            {pendingArrow}{" "}
+            {pendingWeight != null
               ? `${pendingWeight}kg · ${pending.length} sets`
               : `Apply ${pending.length} sets`}
           </button>
