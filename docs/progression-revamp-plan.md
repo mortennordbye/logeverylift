@@ -1,32 +1,84 @@
 # Progression revamp: plan
 
-> **Status:** approved. All eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
+> **Status:** in build. Phase 0 shipped; phase 1 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
+> **Design status:** approved, all eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
 > **Closes:** audit findings `A1`-`A11`, smart-incrementation divergences `SI-D1`-`SI-D6` and `SI-D8`, and cycle divergence `PZ-D3`. `SI-D7` stays open. Section 13 is authoritative; see its note on the three colliding `D` numbering schemes.
 
 Progression is the reason this app exists rather than a notes file. It is also the part with the least honest data behind it. This plan rebuilds it as one machine with a small number of settings, so that every progression scheme a lifter actually runs is the same engine with different values, and the app can say in one sentence what it will do next.
 
-Nothing here is a code change yet. Section 12 holds the eleven decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
+Section 12 holds the eleven decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
+
+**This document is written to be picked up cold, one phase at a time, with no memory of the phase before it.** Everything a session needs to know about what has already happened is in §0. Everything a session learns that the next one would need is written back into §0 before it finishes. If you are reading this with no context, you are the intended reader and nothing is missing.
 
 ---
 
 ## 0. Start here
 
-**You are picking up a planned rebuild of the progressive-overload engine. This document is the complete brief; it assumes no conversation history.** Read it top to bottom before touching code. It is long because the engine is the reason the app exists, and because two independent reviews found about thirty defects in an earlier draft that read as finished.
+**You are picking up a planned rebuild of the progressive-overload engine, one phase at a time. This document is the complete brief; it assumes no conversation history.** It is long because the engine is the reason the app exists, and because two independent reviews found about thirty defects in an earlier draft that read as finished.
 
-### Repo state
+### Build state
 
-- Branch **`fix/progression-never-lowers-plan`**, 20 commits ahead of `main`, **not pushed**. Everything below is committed there.
-- It contains an audit of the current engine (`A1`-`A11` in [`../BACKLOG.md`](../BACKLOG.md)), one bug fix that predates this plan (a progression suggestion could silently lower the plan, because the ratchet compared against the last *logged* value rather than the planned one), and this plan.
-- **Outstanding:** the Playwright e2e suite has never run on this branch. The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list.
+The single source of truth for where the work stands. **Read this before anything else, and update it before you finish** (see "Leaving the doc for the next phase" below).
+
+Phases are listed in **build order**, which is not numeric order. The swap is deliberate and explained in section 11.
+
+| Phase | Delivers | Status |
+|---|---|---|
+| **0** | Prerequisites: `P-1`, `P-2`, `D-6` | **Done.** Branch `phase-0/progression-prerequisites`, 5 commits. Migrations `0046`, `0047`. |
+| **1** | Honest effort: `rpe` nullable, stop forging 7 | **Next.** Not started. |
+| **3** | Session windows and scope | Not started. Depends on phase 0 only. |
+| **2** | Capture: the miss sheet and the reps-correction fix | Not started. Must follow phase 3. |
+| **4** | Rep ranges and double progression | Not started. |
+| **5** | Axes, presets, and the sheet | Not started. |
+| **6** | The rest | Not started. |
+
+**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
+
+### What is already true in the code
+
+Facts a cold session must not re-derive, re-decide, or accidentally undo. Each is the settled outcome of a shipped phase.
+
+*From phase 0:*
+
+- **A logged set is keyed to its plan slot, not its exercise.** `workout_sets` carries `program_exercise_id` and `program_set_id`, and the unique index is `(session_id, program_exercise_id, set_number)`. Clients pass the program set id they already hold; the server resolves the slot in `logWorkoutSet`, rejecting one that belongs to another program, and falls back to the old exercise-based resolution for payloads queued by a cached bundle. Both new foreign keys are `on delete set null`, deliberately not the `cascade` the older ones use — every read must tolerate a null.
+- **A logged set describes its own prescription.** `workout_sets` carries `set_type` and `prescribed_working_sets`, snapshotted at log time. Phase 3 asks its clearance questions of these columns, never by joining back to `program_sets` and reading today's plan.
+- **The cycle no longer writes `target_reps`.** `strengthPhaseRecipe` and the `sessionRole = "strength"` branch are deleted; progression owns the column outright. The research is preserved in [`specs/cycle-periodization.md`](specs/cycle-periodization.md) under "Strength periodization: considered, not implemented".
+- **`P-3`'s both-shapes rule is live and has one worked example.** The log and un-log validators take the new `programSetId` as *optional*, and the server falls back when it is absent, precisely so a bundle cached before phase 0 and every payload already sitting in the offline queue keep working. Every later phase that changes the logging payload owes the same treatment; `P-3` in section 14 is the standing rule, not a one-off.
+
+*Still true, and still wrong — these are the phases ahead, not oversights:*
+
+- `workout_sets.rpe` is still `notNull`, and all five call sites still forge `rpe: 7`. That is phase 1.
+- `actual_reps` is still written as `target_reps` on the fast path. That is phase 2.
+- The engine is still per-set, still keyed on `exerciseId + setNumber`. That is phase 3.
+
+### Carry-forward: things every phase still owes
+
+- **The Playwright e2e suite has never run on any of these branches.** The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list. Phase 0 touched it.
+- **The `CLAUDE.md` smoke pass is owed for phase 0** and for every later phase touching the set list (1, 2, 3, 5 and 6 all do). It needs `make dev` running, which is the user's call to start.
+- **Seeded history has null slot columns.** The two admin seeders insert `workout_sets` rows directly, so phase 0's columns land null on them. Nothing reads them yet; phase 3 reads all four, and seeded data is the only data a development account has. Tracked in `B-11`, to be fixed in phase 1.
 
 ### Read in this order
 
-1. **This file, sections 1 to 15.** Sections 14 and 15 are not optional: 14 holds three prerequisites (`P-1` to `P-3`) that block phases, including a live data-loss bug, plus nineteen edge cases specified in advance. 15 traces twenty-three consumers outside the engine that this plan changes.
-2. [`specs/smart-incrementation.md`](specs/smart-incrementation.md) — how the engine behaves today. Accurate against the code, and the reference until phase 5 rewrites it.
-3. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions` and the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (two of the consumers).
-4. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
+1. **This section (§0) in full.** It is the handoff.
+2. **Section 11, your phase's paragraph**, and every section it names. Section 11 is the per-phase brief; it says what is in scope and what must land in the same change.
+3. **Sections 14 and 15, filtered to your phase.** 14 holds the prerequisites (`P-1` to `P-3`) and nineteen pre-specified edge cases; 15 traces twenty-three consumers outside the engine, each tagged with the phase that breaks it. Neither is optional, but neither needs reading end to end for a single phase.
+4. **Sections 1 to 10 and 12** as reference. Section 2 is the model, section 7 is the engine pipeline, section 12 is the decisions. Read the whole document once if this is your first phase; after that, read what your phase touches.
+5. [`specs/smart-incrementation.md`](specs/smart-incrementation.md) — how the engine behaves today. Accurate against the code, and the reference until phase 5 rewrites it.
+6. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions` and the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (two of the consumers).
+7. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
+
+### Leaving the doc for the next phase
+
+The next session starts with no memory of yours. It gets exactly what you write here, so treat this as part of the phase, not paperwork after it. Before you call a phase done:
+
+1. **Move your phase's row in the Build state table** to Done, with the branch name, commit count and any migration numbers.
+2. **Add what your phase made true** to "What is already true in the code", in the same voice: the settled fact, and the thing a later phase might undo by accident. Delete the matching line from "Still true, and still wrong".
+3. **Update Carry-forward.** Add anything you left owed; delete anything you discharged. An empty entry is better deleted than left saying "still outstanding".
+4. **Mark the section 11 paragraph and the section 14 or 15 entries your phase closed**, so the next session does not re-read work that is finished. Phase 0's rows show the format.
+5. **Record anything you learned that contradicts the plan.** If a decision or an edge case turned out wrong in the code, change it in section 12 or 14 and say so — do not work around it silently. That instruction is the whole reason this document is trusted.
+6. `pnpm verify` must pass, `check:docs` included.
 
 ### Decisions: all eleven are made. Do not re-ask them.
 
@@ -52,7 +104,9 @@ If one turns out to be wrong once you are in the code, say so and get it changed
 
 **`0, 1, 3, 2, 4, 5, 6`.** The swap is deliberate and explained in section 11: shipping honest reps (phase 2) while the engine is still per-set would deload set 4 of every straight-set exercise. Phase numbering is kept stable so references do not move.
 
-One phase per branch. `pnpm verify` after each. The smoke pass in `CLAUDE.md` after phases 2, 5 and 6. Do not start a later phase before the earlier one is merged: the order is data dependency, not preference. `D-6`'s cleanup is independent of everything else and can go first or last.
+One phase per branch, named `phase-N/<what-it-does>`. Because nothing is pushed yet, each phase branches off the previous phase's branch rather than off `main`; once they start landing, branch off whatever carries the phase before yours. Do not start a later phase before the earlier one exists: the order is data dependency, not preference.
+
+`pnpm verify` after every phase. The smoke pass in `CLAUDE.md` after any phase touching the set list — phases 1, 2, 3, 5 and 6 all do.
 
 ### How not to repeat the mistakes this plan already made
 
@@ -374,7 +428,9 @@ Historical `workout_sets` rows keep `rpe = 7` from before the change. The engine
 
 ## 11. Build order
 
-Each phase ships on its own, is verifiable on its own, and leaves the app working. `pnpm verify` after every phase; the smoke pass in `CLAUDE.md` after any phase touching the set list (2, 5, 6).
+Each phase ships on its own, is verifiable on its own, and leaves the app working. `pnpm verify` after every phase; the smoke pass in `CLAUDE.md` after any phase touching the set list.
+
+This section is the per-phase brief: **read your phase's paragraph and every section it names.** A heading marked **Built** is finished and its detail is history — §0 "What is already true in the code" carries what survives from it. An unmarked heading is work still to do. When you finish a phase, mark its heading and append what shipped, the way phase 0 does below.
 
 **Phase 0: prerequisites. Built.** `P-2` (the duplicate-slot data loss) and `P-1` (`set_type` on `workout_sets`) from section 14, plus `D-6`'s cycle-branch deletion. All three are independent of the engine and of each other, and `P-2` was losing data. Doing them first means phase 3 is not blocked behind a schema change to the busiest write path in the app.
 
