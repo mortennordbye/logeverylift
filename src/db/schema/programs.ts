@@ -101,6 +101,14 @@ export const programSets = pgTable("program_sets", {
   setNumber: integer("set_number").notNull(),
   // For rep-based sets
   targetReps: integer("target_reps"),
+  // Rep range for double progression. Both null = a fixed target, which is
+  // every set that predates this. When set, target_reps is the prescription
+  // *today* and moves between the bounds: it climbs to what was achieved as
+  // the lifter clears, and drops back to the minimum when the load goes up.
+  // Reps only — a range has no meaning for a plank or a run (E-5 in
+  // docs/progression-revamp-plan.md).
+  repRangeMin: integer("rep_range_min"),
+  repRangeMax: integer("rep_range_max"),
   weightKg: decimal("weight_kg", { precision: 6, scale: 2 }),
   // For time-based sets (seconds)
   durationSeconds: integer("duration_seconds"),

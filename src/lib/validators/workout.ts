@@ -275,10 +275,44 @@ export const applyProgressionToPlanSchema = z.object({
 export const SET_TYPES = ["working", "warmup"] as const;
 export type SetType = (typeof SET_TYPES)[number];
 
-export const addProgramSetSchema = z.object({
+/**
+ * A rep range is both bounds or neither, and it has to contain the target.
+ *
+ * Half a range is not a weaker range, it is a set the engine cannot read: the
+ * reset step needs a bottom to drop to and a top to climb to, and with one of
+ * them missing double progression either never resets or never advances.
+ * Applied to both the add and update schemas — the update path is the one a
+ * preset picker will use, and it can arrive with one bound already stored.
+ */
+const repRangeIsWellFormed = <T extends {
+  repRangeMin?: number | null;
+  repRangeMax?: number | null;
+  targetReps?: number | null;
+}>(v: T) => {
+  const { repRangeMin: min, repRangeMax: max } = v;
+  if (min == null && max == null) return true;
+  if (min == null || max == null) return false;
+  if (min > max) return false;
+  // The target is the prescription for today and lives inside the range, when
+  // the same write carries it. A write that moves only the target against a
+  // stored range is not checked here — the engine clamps to the range on every
+  // advance, so an out-of-range target corrects itself on the next session.
+  return v.targetReps == null || (v.targetReps >= min && v.targetReps <= max);
+};
+
+const REP_RANGE_MESSAGE =
+  "A rep range needs both a minimum and a maximum, with min ≤ target ≤ max";
+
+// The fields, unrefined. Both schemas below add the rep-range check
+// themselves: zod refuses to `.omit()` from a schema that carries one, so the
+// update schema has to derive from the plain object and re-apply it.
+const programSetFields = z.object({
   programExerciseId: z.number().int().positive(),
   setNumber: z.number().int().positive(),
   targetReps: z.number().int().positive().optional(),
+  // Double progression's range. Both null = a fixed target (E-5: reps only).
+  repRangeMin: z.number().int().positive().max(1000).optional(),
+  repRangeMax: z.number().int().positive().max(1000).optional(),
   weightKg: z.number().min(0).max(1000).optional(),
   durationSeconds: z.number().int().min(0).optional(),
   distanceMeters: z.number().int().min(0).optional(),
@@ -293,7 +327,12 @@ export const addProgramSetSchema = z.object({
   startDelaySeconds: z.number().int().min(0).max(60).optional(),
 });
 
-export const updateProgramSetSchema = addProgramSetSchema
+export const addProgramSetSchema = programSetFields.refine(repRangeIsWellFormed, {
+  message: REP_RANGE_MESSAGE,
+  path: ["repRangeMin"],
+});
+
+export const updateProgramSetSchema = programSetFields
   .omit({ programExerciseId: true, setNumber: true })
   .extend({
     id: z.number().int().positive(),
@@ -311,7 +350,11 @@ export const updateProgramSetSchema = addProgramSetSchema
     // endurance set's mode is switched. Null clears the anchor.
     peakDistanceMeters: z.number().int().min(0).nullable().optional(),
     peakDurationSeconds: z.number().int().min(0).nullable().optional(),
-  });
+    // Null on either clears the range back to a fixed target.
+    repRangeMin: z.number().int().positive().max(1000).nullable().optional(),
+    repRangeMax: z.number().int().positive().max(1000).nullable().optional(),
+  })
+  .refine(repRangeIsWellFormed, { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] });
 
 export const removeExerciseFromProgramSchema = z.object({
   programExerciseId: z.number().int().positive(),
@@ -438,6 +481,10 @@ const importProgramEntrySchema = z.object({
               type: z.enum(SET_TYPES).catch("working"),
               rir: z.number().int().min(0).max(5).nullable().optional().catch(null),
               startDelay: z.number().int().min(0).max(60).nullable().optional().catch(null),
+              // Optional, so an export made before rep ranges existed still
+              // imports — the same both-shapes rule the logging payload follows.
+              repMin: z.number().int().positive().max(1000).nullable().optional().catch(null),
+              repMax: z.number().int().positive().max(1000).nullable().optional().catch(null),
             }),
           ),
         }),
