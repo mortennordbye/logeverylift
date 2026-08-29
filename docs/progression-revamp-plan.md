@@ -1,13 +1,13 @@
 # Progression revamp: plan
 
-> **Status:** approved. All nine decisions (`D-1` to `D-9`) decided 2026-08-29 and written up in section 12 with their binding consequences. Section 14 is a hardening pass: three prerequisites and twelve specified edge cases. Nothing blocks the build.
+> **Status:** approved. All ten decisions (`D-1` to `D-10`) decided 2026-08-29 and written up in section 12 with their binding consequences. Section 14 is a hardening pass (three prerequisites, twelve specified edge cases); section 15 is the traced blast radius outside the engine (fourteen impacts, three of which break outright). Nothing blocks the build.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
 > **Closes:** audit findings `A1`-`A11` and spec divergences `D1`-`D8` in [`../BACKLOG.md`](../BACKLOG.md)
 
 Progression is the reason this app exists rather than a notes file. It is also the part with the least honest data behind it. This plan rebuilds it as one machine with a small number of settings, so that every progression scheme a lifter actually runs is the same engine with different values, and the app can say in one sentence what it will do next.
 
-Nothing here is a code change yet. Section 12 holds the nine decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
+Nothing here is a code change yet. Section 12 holds the ten decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
 
 ---
 
@@ -21,12 +21,12 @@ This document is the complete brief. It assumes no conversation history. Read it
 
 **Read in this order:**
 
-1. This file, sections 1 to 14. **Section 14 is not optional**: it holds three prerequisites (`P-1` to `P-3`) that block phases, including a live data-loss bug, plus twelve edge cases specified in advance.
+1. This file, sections 1 to 15. **Sections 14 and 15 are not optional.** 14 holds three prerequisites (`P-1` to `P-3`) that block phases, including a live data-loss bug, plus twelve edge cases specified in advance. 15 traces every consumer outside the engine that this plan changes: `B-1` (a null flowing into cycle periodization as `NaN`) and `B-2` (a third consumer of the reason code that the spec does not mention) both break silently if missed.
 2. [`specs/smart-incrementation.md`](specs/smart-incrementation.md) for how the current engine behaves. It is accurate about the code and stays the reference until phase 5 rewrites it.
 3. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`, the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (both consumers).
 4. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
 
-**Decisions: all nine are made.** Read section 12 in full before phase 1, not just the phase you are on. Each carries binding consequences the build must honour, several of which are not derivable from the one-line answer. Build to them and do not relitigate them; if one turns out to be wrong, say so and get it changed there rather than working around it in code.
+**Decisions: all ten are made.** Read section 12 in full before phase 1, not just the phase you are on. Each carries binding consequences the build must honour, several of which are not derivable from the one-line answer. Build to them and do not relitigate them; if one turns out to be wrong, say so and get it changed there rather than working around it in code.
 
 The short form:
 
@@ -41,6 +41,7 @@ The short form:
 | `D-7` | Scope `all` means literally every working set. No `n_of_m`. |
 | `D-8` | With a cap, the last set carrying logged effort speaks for the session. |
 | `D-9` | A partially logged session is unknown: no gate credit, no back-off credit. |
+| `D-10` | PRs predating honest logging are kept and flagged unverified, never deleted. |
 
 **Then:** build phase by phase from section 11, one phase per branch. `pnpm verify` after each. The smoke pass from `CLAUDE.md` after phases 2, 5 and 6. Do not start a later phase before the earlier one is merged; the phases are ordered by data dependency, not preference. `D-6` is independent of all of them and can be done at any point, including first, as a self-contained cleanup.
 
@@ -332,9 +333,9 @@ Each phase ships on its own, is verifiable on its own, and leaves the app workin
 
 **Phase 0: prerequisites.** `P-2` (the duplicate-slot data loss) and `P-1` (`set_type` on `workout_sets`) from section 14, plus `D-6`'s cycle-branch deletion. All three are independent of the engine and of each other, and `P-2` is losing data today. Doing them first means phase 3 is not blocked behind a schema change to the busiest write path in the app.
 
-**Phase 1: honest effort.** Make `rpe` nullable, stop forging 7, treat null as unknown in the existing engine per `D-2`. Migration plus a small engine change. Verifiable: an uncapped exercise with no effort logged behaves exactly as before (target-only clearing, `D-1`); the fabricated confidence is gone. Add the `held-unknown` reason code to the engine and both switch statements in this phase, even though no exercise can carry a cap until phase 5, so the code path exists before anything depends on it.
+**Phase 1: honest effort.** Make `rpe` nullable, stop forging 7, treat null as unknown in the existing engine per `D-2`. Migration plus a small engine change. Verifiable: an uncapped exercise with no effort logged behaves exactly as before (target-only clearing, `D-1`); the fabricated confidence is gone. Add the `held-unknown` reason code to the engine and **all three** switch statements in this phase (`B-2`), even though no exercise can carry a cap until phase 5, so the code path exists before anything depends on it. **Also in this phase, non-negotiably:** `B-1` (the cycle adaptation average, which becomes `NaN` the moment any `rpe` is null) and `B-3` (the two aggregate RPE reads whose meaning changes).
 
-**Phase 2: capture.** Long-press miss sheet, the reps-correction fix, offline queue coverage. No engine change. Verifiable by e2e: log a short set, assert `actual_reps` is what you entered and `target_reps` did not move.
+**Phase 2: capture.** Long-press miss sheet, the reps-correction fix, offline queue coverage. No engine change. Verifiable by e2e: log a short set, assert `actual_reps` is what you entered and `target_reps` did not move. This is the phase where `B-4` lands: every volume number in the app starts falling, because volume has always been planned volume relabelled as achieved. That needs a release note, not a code change.
 
 **Phase 3: session windows and scope.** **Blocked on `P-1` and `P-2` (section 14); do those first, in their own change.** Then rewrite the history query to session-grouped with a per-exercise window function (closes `SI-D6`), add `progression_scope`, implement clearance per session including the `D-8` and `D-9` rules. This is the phase that delivers 4a. Verifiable by unit tests over the pipeline with the 4a table as a literal fixture (`E-11`).
 
@@ -438,6 +439,16 @@ Binding consequences for the build:
 - The dot detail view (`E-8`) shows "3 of 4 sets logged" for these, so a stalled exercise explains itself. Add `logged`/`prescribed` counts to the `sessions` array in `E-8`.
 - Deliberately forgiving: cutting a session short usually has nothing to do with whether the load is right, and punishing it with a back-off would make the engine wrong in exactly the situation a lifter is least able to argue with it.
 - The interaction to watch: a lifter who habitually drops the last set will now sit permanently at `unknown` and never progress. That is visible in the dot detail view rather than silent, which is the point, but it is the most likely source of "why is nothing happening" reports. If it shows up, the answer is to edit the prescription to 3 sets, not to loosen this rule.
+**D-10. What happens to PRs set before honest rep logging?**
+**Decided (2026-08-29): keep them, flagged as unverified.**
+
+Binding consequences for the build:
+- Add a nullable `verified_at` or equivalent marker to `exercise_prs`, or simply compare the record's date against the phase 2 cutover date recorded as a constant. The constant is cheaper and needs no migration; prefer it unless PRs are already being written for other reasons.
+- Applies to **derived** records only: `estimated_1rm` and `reps_at_weight`, both computed from `actual_reps`. Heaviest-weight records were never assumption-based and carry no flag.
+- The flag is display-only. It does not exclude the record from being the current PR, and beating it still counts normally. The point is that an unbeatable record has a visible reason instead of reading as a plateau.
+- Nothing is deleted or recomputed. Rewriting a user's record history to make the new engine look better would be the same dishonesty this plan exists to remove (see `B-4`, which makes the same call about volume).
+- Lands in phase 6 with the PR effort gate (`A11`), not earlier: the flag is meaningless until honest reps exist to contrast it with.
+
 ---
 
 ## 13. What this closes
@@ -523,3 +534,64 @@ These have a defensible answer, so the plan states it rather than raising a deci
 **E-11. Test fixtures come from sections 4a and 4b.** Both worked examples are session-by-session tables and should be encoded literally as unit-test fixtures, asserting the suggestion and the dot count at every step. If the code disagrees with those tables, the code is wrong.
 
 **E-12. Rollback.** Every migration is additive (new nullable columns, one column made nullable), so a code rollback needs no down-migration. The exception is `D-3`'s scope migration, which changes behaviour rather than shape: record the previous `progression_mode` values before overwriting, so behaviour can be restored without guessing.
+
+---
+
+## 15. Blast radius
+
+Every place outside the progression engine that this plan changes the behaviour of, traced by reading the code rather than assumed. Each row names the phase that breaks it and what has to happen in that same change. **Nothing in this section is optional work; it is the cost of the phases above.**
+
+### Things that break outright
+
+**B-1. The cycle adaptation factor divides by null. Breaks in phase 1.**
+
+`getAdaptationSignals` computes `rpeRows.reduce((a, r) => a + r.rpe, 0) / rpeRows.length` (`training-cycles.ts:522`) on a column phase 1 makes nullable. One null makes `avgRpe` **`NaN`**, which flows into `computeAdaptationFactor` and from there into the cycle's weekly volume scaling. It will not throw. It will silently corrupt periodization for anyone on an active cycle.
+
+*Required in phase 1:* filter nulls before averaging, and preserve the existing "no data" path (`avgRpe = null`) when nothing is left. Add a test with a mixed null/non-null set; this is the single most dangerous line in the blast radius because the failure is silent and lands in a different feature.
+
+**B-2. `reason` has three consumers, not two. Breaks in phases 1, 4 and 6.**
+
+`SI-33` states that both consumers branch exhaustively on the reason code. That is wrong: `getWorkoutInsight` is a third (`workout-sets.ts:1434-1438` for exercise status, `:1513-1514` for the held count). Its `if/else` chain ends in `else status = "held"`, so every new code (`held-unknown`, `reset`, `re-approach`, `backoff`) silently reports as *held* on the dashboard, and `re-approach` in particular would read as "stalled" when it means "you have been away".
+
+*Required:* every phase that adds a reason code updates **three** switch statements. Correct the `SI-33` rule text to say three consumers when the spec is rewritten in phase 5, and until then treat the spec as understating it.
+
+**B-3. Aggregate RPE reads change meaning. Breaks in phase 1.**
+
+- `metrics.ts:588` — `AVG(CAST(rpe AS numeric))`. SQL `AVG` skips nulls, so this silently becomes "average of sets where effort was logged" rather than "average effort". Defensible, but the RPE-trend chart's meaning changes and the label should say so.
+- `workout-sets.ts:1407` — `rpe >= 9` for the cooked-exercise count. Three-valued logic excludes nulls, so the count drops. Also defensible, also a changed meaning.
+
+*Required in phase 1:* decide and document per call site whether null means "exclude" (usually right) and label the UI accordingly. Do not leave a chart whose definition quietly changed under the same title.
+
+### Things that change visibly for the user
+
+**B-4. Every volume number falls. Lands in phase 2.**
+
+Volume is `weight_kg * actual_reps` in six places (`metrics.ts:298`, `:416`, `:453`, `:999`, plus `workout-sessions.ts` and `friends.ts`). Today `actual_reps` is always the target, so today's volume is the *planned* volume relabelled as achieved. Once real reps are logged, volume drops for anyone who ever misses a rep, and the drop appears as a decline in the charts on the day the feature ships.
+
+The numbers become correct, but "my volume fell off a cliff" is the reaction, and it is a reasonable one. *Required in phase 2:* a note in the release/changelog, and consider annotating the metrics charts at the cutover date. Do not backfill or adjust historical volume: it is what was recorded, and rewriting it to smooth the chart would be the same dishonesty this plan exists to remove.
+
+**B-5. The estimated-1RM trend changes, and existing PRs may become unbeatable.**
+
+`metrics.ts:549` computes `session1RM` as `MAX(weight * (1 + actual_reps / 30))` over sets with `actual_reps BETWEEN 1 AND 12`, and PR detection stores `estimated_1rm` and `reps_at_weight` records from the same assumed reps (`A11`). Records set under the old behaviour were computed from reps the lifter may not have hit. After phase 2 they stand as a bar that honest logging might never clear.
+
+*Required in phase 6, when the PR effort gate lands:* decide whether pre-cutover `estimated_1rm` records are kept, flagged as unverified, or reset. This is a user-data decision and is raised as **D-10** below rather than assumed here.
+
+**B-6. Friend comparisons mix old and new logging during rollout.** `friends.ts` reads `actual_reps` for shared stats. Two users on different app versions, or one who has not reloaded their PWA, are compared on different definitions of the same number. Self-resolving once everyone updates; worth knowing before someone reports it as a bug.
+
+### Things that must be updated in step
+
+**B-7. Program sharing carries progression settings between users.** `program-shares.ts:205-209` copies `progressionMode`, `progressionRequiredHits`, `progressionApplyToPlan` and both increments into the shared payload. Phase 5 retires `progression_mode`, so the share format changes. *Required:* accept both shapes on import for at least one release, and map a legacy `progressionMode` through the same table as section 10's migration. A share created by an old client must still import.
+
+**B-8. The MCP tool exposes the mode as an enum.** `mcp/tools/programs.ts:204` validates `progressionMode: z.enum(PROGRESSION_MODES)` and defaults it at `:275`. Phase 5 must update the enum, the tool description at `:192`, and keep accepting the old values so an agent mid-conversation does not start failing.
+
+**B-9. The triathlon generator sets modes and RIR caps directly.** `triathlon-plan.ts` writes `progressionMode` per exercise and `targetRir` per set, and its comment explains it deliberately avoids `smart`. Phase 5 must move it to presets. With `D-1` and `D-8` live, its existing `targetRir` caps **become load-bearing for the first time**: plans it generates will start gating progression on effort. That is the intended behaviour, but it is a behaviour change to generated plans that nobody asked for at generation time.
+
+**B-10. The e2e progression spec asserts the current sheet.** `e2e/progression-settings.spec.ts` drives the "Sessions at target" gate group and asserts the rule sentence quotes the live gate. Phase 5's three-layer sheet rewrites both. *Required:* update it in the same change, and extend it to cover the preset picker, since it is the only end-to-end coverage progression has and it doubles as the missing-migration canary.
+
+**B-11. Both seed scripts write `rpe`.** `scripts/seed.ts` and `scripts/seed-fake.ts` generate sets with effort values. Phase 1 should have them emit a realistic mix of logged and unlogged effort, or every development and demo account will look like the pre-fix world and the new code paths will never be exercised locally.
+
+**B-12. The demo user shares tables with real users.** Anything seeded is visible in the demo account. Seed data should exercise the new schemes (a fixed-target exercise, a rep-range exercise, one capped, one not) so the presets are demonstrable, not just implemented.
+
+**B-13. `ExportedProgram` round-trips progression settings.** The export/import types in `types/workout.ts` and `importProgramSchema` carry the per-exercise settings. Same requirement as `B-7`: accept the legacy shape for a release, and never reject an export a user made last month.
+
+**B-14. Onboarding explains progression.** `OnboardingTutorial.tsx` references the modes. Phase 5 must update the copy, or new users are taught a vocabulary the app no longer uses.
