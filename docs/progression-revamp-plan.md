@@ -1,6 +1,6 @@
 # Progression revamp: plan
 
-> **Status:** in build. Phases 0, 1 and 3 shipped; phase 2 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
+> **Status:** in build. Phases 0, 1, 3 and 2 shipped; phase 4 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
 > **Design status:** approved, all eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
@@ -29,12 +29,12 @@ Phases are listed in **build order**, which is not numeric order. The swap is de
 | **0** | Prerequisites: `P-1`, `P-2`, `D-6` | **Done.** Branch `phase-0/progression-prerequisites`, 5 commits. Migrations `0046`, `0047`. |
 | **1** | Honest effort: `rpe` nullable, stop forging 7 | **Done.** Branch `phase-1/honest-effort`, 7 commits. Migration `0048`. |
 | **3** | Session windows and scope | **Done.** Branch `phase-3/session-windows-and-scope`, 4 commits. Migration `0049`. |
-| **2** | Capture: the miss sheet and the reps-correction fix | **Next.** Not started. Phase 3 is built, so honest reps now meet a session-scoped engine. |
-| **4** | Rep ranges and double progression | Not started. |
+| **2** | Capture: the miss sheet and the reps-correction fix | **Done.** Branch `phase-2/capture`, 4 commits. No migration. |
+| **4** | Rep ranges and double progression | **Next.** Not started. |
 | **5** | Axes, presets, and the sheet | Not started. |
 | **6** | The rest | Not started. |
 
-**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**) → `phase-1/honest-effort` (7 commits, **not pushed**) → `phase-3/session-windows-and-scope` (4 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
+**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**) → `phase-1/honest-effort` (7 commits, **not pushed**) → `phase-3/session-windows-and-scope` (4 commits, **not pushed**) → `phase-2/capture` (4 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
 
 ### What is already true in the code
 
@@ -66,17 +66,29 @@ Facts a cold session must not re-derive, re-decide, or accidentally undo. Each i
 - **The rule sentence says "in N sessions in a row", and names the scope.** `describeProgressionRule` now describes the rule the engine applies. `e2e/progression-settings.spec.ts` asserts that wording.
 - **Seeded sessions sometimes drop their last set.** Roughly one exercise in eight, in all three seeders, so a development account actually produces unknown sessions. Do not make seeded sessions complete again.
 
+*From phase 2:*
+
+- **`actual_reps` is what the lifter reported.** A short tap still writes the target — that is the claim the tap makes — but every path now prefers a recorded achieved count: the tapped set, the catch-up sets, a set re-logged after an edit, and the exercise-level checkmark. `A1` is closed. Do not reintroduce `actualReps: targetReps` as an unconditional write anywhere.
+- **The set editor's reps field no longer moves the prescription.** During a workout it records reps achieved and `target_reps` stands; in program-edit mode it is still the prescription, and the label says which. This was the trap that let a correction log a perfect hit against a target the lifter had just lowered.
+- **A long press on the set toggle opens the miss sheet** — reps achieved (pre-filled with the target) and RIR (pre-selected to nothing). The achieved reps are passed *into* `toggleSet` rather than read back off the override, because the override write and the log happen in the same tick and React state has not caught up. Anything else that logs from a freshly written override owes the same treatment.
+- **`SetOverride.actualReps` is independent of `isFailed`.** Coming up short is not the same as going to failure, and only the second implies RIR 0. The old comment tied them together.
+- **The finish flush is safe now, and was not before.** `programs/[id]/workout/finish/page.tsx` writes every override's `targetReps` back to the program template when the workout ends, so a reps correction used to lower the *plan* permanently, not just that session. Nothing about the flush changed; it stopped being harmful because the override no longer carries a lowered target.
+- **The set row shows what was done beside what was asked for.** Without it a set logged short is pixel-identical to one that went to plan, and the capture is invisible to the person who did it.
+- **The exercise-level checkmark writes through the offline queue** (`useWorkoutSetWriter`) and reads the session overrides, like the set list. It used to call the Server Action directly, ignore the result, and overwrite the overrides with the program's planned values.
+- **The logging payload did not change shape**, so `P-3` needed no work: `actualReps` was always required and always accepted any count. A payload queued by a pre-phase-2 client replays as a set that hit its target, which is exactly what that client claimed.
+
 *Still true, and still wrong — these are the phases ahead, not oversights:*
 
-- `actual_reps` is still written as `target_reps` on the fast path. That is phase 2. Until it lands, `metTargetReps` is true for every set logged by a tap, so a session can only come out `missed` through *Mark failed* or a skipped set. The session machinery is built and correct; it is mostly unreachable in production until phase 2 feeds it.
+- There is no rep range, so double progression cannot be expressed. That is phase 4.
+- No exercise can carry an effort cap, so `D-1` does not gate anything and nothing emits `held-unknown`. That is phase 5, and `B-22` comes first.
 
 ### Carry-forward: things every phase still owes
 
-- **The Playwright e2e suite has never run on any of these branches.** The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list. Phases 0 and 3 both touched it.
-- **The `CLAUDE.md` smoke pass is owed for phases 0, 1 and 3** and for every later phase touching the set list (2, 5 and 6 all do). It needs `make dev` running, which is the user's call to start. Phase 3 is the one that most wants it: the new history query has never run against a real database, and no unit test executes SQL. Its rendered statement was checked by hand through `toSQL()`, which proves it parses, not that it returns the right rows.
+- **The Playwright e2e suite has never run on any of these branches.** The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list. Phases 0, 3 and 2 all touched it, and phase 2 added `e2e/miss-sheet.spec.ts`, which has therefore never run.
+- **The `CLAUDE.md` smoke pass is owed for phases 0, 1, 3 and 2** and for every later phase touching the set list (5 and 6 both do). It needs `make dev` running, which is the user's call to start. Phase 3 is the one that most wants it: the new history query has never run against a real database, and no unit test executes SQL. Its rendered statement was checked by hand through `toSQL()`, which proves it parses, not that it returns the right rows.
 - **Migrations `0046` to `0049` have not run against a real database.** They are generated, committed and reviewed; nothing has been applied outside a throwaway container. `0048` is a single `DROP NOT NULL`; `0049` is a single `ADD COLUMN … NOT NULL DEFAULT 'all'` whose default *is* the backfill.
 - **`E-13` has no owner.** Changing scope or the gate re-judges the existing window under the new rule, so the dot count moves when a lifter touches a setting. Phase 3 did not build the config-version stamp `E-13` asks for, and it is not live yet because nothing can change the scope from the UI — but phase 5 ships the picker, and it owes this. Section 11 does not assign it to a phase; assign it there when phase 5 starts.
-- **Three release notes are owed at the end, and none of them is a code change.** Phase 1 retired the RPE ladder, so exercises a lifter grinds will start bumping. Phase 3's `D-3` now holds exercises that were quietly banking per-set counts, and the same phase stopped dropping Tired sessions, so a lifter who reports fatigue will see their numbers move again instead of freezing. Phase 2 adds the third (`B-4`, every volume number falls).
+- **Three release notes are owed at the end, and none of them is a code change.** Phase 1 retired the RPE ladder, so exercises a lifter grinds will start bumping. Phase 3's `D-3` now holds exercises that were quietly banking per-set counts, and the same phase stopped dropping Tired sessions, so a lifter who reports fatigue will see their numbers move again instead of freezing. Phase 2 has now made the third due (`B-4`): volume has always been planned volume relabelled as achieved, so every volume number in the app falls for anyone who misses a rep, starting the day this ships.
 
 ### Read in this order
 
@@ -143,7 +155,7 @@ The rules it cannot enforce are in `CLAUDE.md`: never cite a file you have not o
 
 Four problems, in order of severity. Each is recorded in `BACKLOG.md` with file references.
 
-**The engine has never seen a missed rep (`A1`). Half fixed in phase 1** — the forged effort value is gone; the forged rep count is phase 2. The paragraph below describes the state this plan started from, and is kept because the reasoning still applies to the half that remains. Tapping the set toggle writes `actualReps = targetReps` and, until phase 1, a hardcoded `rpe: 7`. There are **five such call sites across three files**, not one path: `WorkoutSetsList.tsx:321` (catch-up) and `:349` (the toggle), `SetEditView.tsx:296` (re-log on edit), and `WorkoutExerciseList.tsx:125` and `:137` — the exercise-level "complete all sets" checkmark, which fabricates reps and effort for a whole exercise in one tap **and bypasses the offline queue**. RPE 7 is inside the "confident" band, so every logged set is a confident hit, the consensus window saturates, and the progress dots read 2 of 2 forever. Deload (`SI-17`) and rep-retry (`SI-19`) are unreachable in production. The observable behaviour is "add the increment every other session, indefinitely", which is what prompted this work.
+**The engine has never seen a missed rep (`A1`). Closed by phases 1 and 2** — the forged effort value went in phase 1, the forged rep count in phase 2. The paragraph below describes the state this plan started from, and is kept because it is the clearest statement of why the rest of the plan exists. Tapping the set toggle writes `actualReps = targetReps` and, until phase 1, a hardcoded `rpe: 7`. There are **five such call sites across three files**, not one path: `WorkoutSetsList.tsx:321` (catch-up) and `:349` (the toggle), `SetEditView.tsx:296` (re-log on edit), and `WorkoutExerciseList.tsx:125` and `:137` — the exercise-level "complete all sets" checkmark, which fabricates reps and effort for a whole exercise in one tap **and bypasses the offline queue**. RPE 7 is inside the "confident" band, so every logged set is a confident hit, the consensus window saturates, and the progress dots read 2 of 2 forever. Deload (`SI-17`) and rep-retry (`SI-19`) are unreachable in production. The observable behaviour is "add the increment every other session, indefinitely", which is what prompted this work.
 
 The forged effort value is the real offence. Assuming you hit the target when you tap a "done" control is a claim you made. Assuming you had three reps in reserve is a claim nobody made. Section 6 keeps the first and removes the second.
 
@@ -319,13 +331,13 @@ This is the foundation. It is also where a wrong move ruins the everyday flow, s
 
 Tapping the set toggle is an affirmative "I did the prescription", and continuing to write `actualReps = targetReps` from it is honest. Writing `rpe: 7` from the same tap is not: it invents an effort report nobody gave. So:
 
-**Change 1: stop forging effort.** All five call sites listed in section 1 stop sending `rpe: 7` — including the exercise-level checkmark, which is the easiest one to miss and the one that fabricates the most data per tap. `rir` and `rpe` go in null. The engine treats null effort as *unknown*, which is neutral: it neither satisfies an effort cap nor blocks a target-only gate. Exercises with no effort cap are unaffected. Exercises with a cap do not progress until effort is actually logged, which is correct: you asked for a condition and did not supply it.
+**Change 1: stop forging effort. Built in phase 1.** All five call sites listed in section 1 stop sending `rpe: 7` — including the exercise-level checkmark, which is the easiest one to miss and the one that fabricates the most data per tap. `rir` and `rpe` go in null. The engine treats null effort as *unknown*, which is neutral: it neither satisfies an effort cap nor blocks a target-only gate. Exercises with no effort cap are unaffected. Exercises with a cap do not progress until effort is actually logged, which is correct: you asked for a condition and did not supply it.
 
-**Change 2: a fast way to say "I missed it".** Long-press the set toggle to open a compact sheet with two controls, reps achieved (stepper, pre-filled with target) and RIR (six buttons, pre-selected to nothing). Short tap is unchanged, so the common case costs nothing. This replaces "open the set editor, find Mark failed" as the only miss path.
+**Change 2: a fast way to say "I missed it". Built in phase 2.** Long-press the set toggle to open a compact sheet with two controls, reps achieved (stepper, pre-filled with target) and RIR (six buttons, pre-selected to nothing). Short tap is unchanged, so the common case costs nothing. This replaces "open the set editor, find Mark failed" as the only miss path.
 
-**Change 3: one effort prompt per exercise, not per set.** When an effort cap is prescribed and the last working set of an exercise is logged, an inline row appears under the exercise: *"Last set, how much was left?"* with 0 / 1 / 2 / 3 / 4+ and a skip. One tap per exercise, roughly five per workout. Only shown when the exercise actually has a cap, so the setting you chose is the thing that adds the tap.
+**Change 3: one effort prompt per exercise, not per set. Not built — it waits for phase 5's cap.** When an effort cap is prescribed and the last working set of an exercise is logged, an inline row appears under the exercise: *"Last set, how much was left?"* with 0 / 1 / 2 / 3 / 4+ and a skip. One tap per exercise, roughly five per workout. Only shown when the exercise actually has a cap, so the setting you chose is the thing that adds the tap.
 
-**Change 4: fix the reps-correction trap.** Editing the reps field in `SetEditView` during a workout currently writes `targetReps`, so correcting "I got 6, not 8" silently lowers the prescription and then logs a perfect hit against it (`SetEditView.tsx:270`). In a live session that field must write `actualReps` and leave the target alone. In program-edit mode it keeps writing the target.
+**Change 4: fix the reps-correction trap. Built in phase 2.** Editing the reps field in `SetEditView` during a workout currently writes `targetReps`, so correcting "I got 6, not 8" silently lowers the prescription and then logs a perfect hit against it (`SetEditView.tsx:270`). In a live session that field must write `actualReps` and leave the target alone. In program-edit mode it keeps writing the target.
 
 Net cost to a normal set where everything went to plan: zero extra taps. Net cost to a set that fell short: one long-press instead of a trip through the editor.
 
@@ -461,7 +473,11 @@ Shipped on branch `phase-1/honest-effort`, migration `0048` (`rpe` nullable). Th
 
 **Phase 3 runs before phase 2.** Phase 2 makes reps honest while the engine is still per-set (`SI-7`) and still backs off after three missed sessions *for that set number*. Set 4 of a 4x12 is the set that misses, so honest reps first would deload set 4 of every straight-set exercise and manufacture exactly the drift `D-3` exists to remove. Phase 3 depends only on phase 0. Build in the order **0, 1, 3, 2, 4, 5, 6**; the numbering is kept for stable references.
 
-**Phase 2: capture. Next.** Long-press miss sheet, the reps-correction fix, offline queue coverage, and the exercise-level checkmark's own log path (`B-11`, `B-21`). No engine change. Verifiable by e2e: log a short set, assert `actual_reps` is what you entered and `target_reps` did not move. This is where `B-4` lands: every volume number in the app starts falling, because volume has always been planned volume relabelled as achieved. That needs a release note, not a code change.
+**Phase 2: capture. Built.** The long-press miss sheet, the reps-correction fix, and the exercise-level checkmark moved onto the queue-backed writer with the session's overrides. No engine change. `e2e/miss-sheet.spec.ts` logs a short set and asserts the achieved count is what was entered and the target did not move.
+
+Shipped on branch `phase-2/capture`, no migration — the logging payload did not change shape, so `P-3` needed no work this phase. Closes `A1` outright and the standalone checkmark entry in `BACKLOG.md`. `B-4`'s release note is now due: volume has always been planned volume relabelled as achieved, and it starts falling the day this ships. Do not backfill history to smooth the charts.
+
+Section 6's **Change 3** (one effort prompt per exercise) is **not** built and could not be: it only appears when an exercise carries an effort cap, and no exercise can carry one until phase 5. It belongs with `D-1`'s cap, not here.
 
 **Phase 3: session windows and scope. Built.** The history query is session-grouped with a per-slot `DENSE_RANK` window (closes `SI-D6`), the `Tired` exclusion is gone and its rule from section 7 step 2 is in the engine (closes `A6`), `progression_scope` exists and clearance is judged per session (closes `A8`), and the dot detail view is built (`E-8`). Delivers 4a as a literal fixture (`E-11`).
 
@@ -477,7 +493,7 @@ Shipped on branch `phase-3/session-windows-and-scope`, migration `0049` (`progre
 
 **Phase 6: the rest.** Increment ladder ordering **and equipment-loadable granularity** (`A3` has both halves), staleness (`A10`, with `E-19`'s frequency guard), readiness `reduce` (`A7`), PR effort gate and the `D-10` unverified flag (`A11`), generated-plan prompt (`SI-D8`), `B-23`.
 
-`A6` (Tired) is **not** here: its rule is section 7 step 2 and lands in phase 3 with the query rewrite. `A5` lands in **phase 5** with axis 6, not phase 3; its anchored-set exclusion (section 9) lands with it.
+`A6` (Tired) is **not** here: its rule is section 7 step 2 and landed in phase 3 with the query rewrite. `A5` lands in **phase 5** with axis 6, not phase 3; its anchored-set exclusion (section 9) lands with it.
 
 ---
 
@@ -615,11 +631,11 @@ The specs themselves label their tables plain `D1`-`D8`. Prefix them when writin
 
 **Audit findings** (`BACKLOG.md`, "Progression engine audit"), all resolved on completion and to be deleted from the backlog as each phase lands:
 
-`A1` (phases 1-2), `A2` (phase 5, needs `B-22`), `A3` (**both** halves, phase 6), `A4` (phase 4), `A5` (**phase 5**, not 3 — the fix is axis 6), `A6` (**phase 3** — the rule is section 7 step 2, not a phase-6 bullet), `A7` (phase 6), `A8` (phase 3), `A9` (phase 5, **only if its three artefacts are built**), `A10` (phase 6), `A11` (phases 1 and 6).
+`A1` (**closed**, phases 1 and 2), `A2` (phase 5, needs `B-22`), `A3` (**both** halves, phase 6), `A4` (phase 4), `A5` (**phase 5**, not 3 — the fix is axis 6), `A6` (**closed**, phase 3 — the rule is section 7 step 2, not a phase-6 bullet), `A7` (phase 6), `A8` (**closed**, phase 3), `A9` (phase 5, **only if its three artefacts are built**), `A10` (phase 6), `A11` (phases 1 and 6).
 
 The phase numbers above predate phase 0 and refer to the engine phases; phase 0 is prerequisites only and closes no audit finding on its own, though `P-2` closes the standalone duplicate-slot bug recorded beside `A1`.
 
-**Smart-incrementation spec divergences:** `SI-D1` (ungated 1RM, closed by `D-4`), `SI-D2` (rep cut survives readiness, closed by `D-4` deleting the field it leaked through), `SI-D3` and `SI-D4` (timed/distance asymmetries, resolved by the axes making them explicit settings), `SI-D5` (bodyweight never progresses — resolved by `advance: reps` **only together with `E-17`**, since the root cause is `overload_increment_reps` defaulting to 0), `SI-D6` (window starvation, phase 3), `SI-D8` (generated plans, phase 6).
+**Smart-incrementation spec divergences:** `SI-D1` (ungated 1RM, closed by `D-4`), `SI-D2` (rep cut survives readiness, closed by `D-4` deleting the field it leaked through), `SI-D3` and `SI-D4` (timed/distance asymmetries, resolved by the axes making them explicit settings), `SI-D5` (bodyweight never progresses — resolved by `advance: reps` **only together with `E-17`**, since the root cause is `overload_increment_reps` defaulting to 0), `SI-D6` (window starvation, **closed**, phase 3), `SI-D8` (generated plans, phase 6).
 
 **Cycle-periodization spec divergence:** `PZ-D3` (strength phase has no producer), closed by decision `D-6`.
 
@@ -657,9 +673,9 @@ The `onConflictDoUpdate` is correct for its intended purpose (re-logging a set m
 
 *Was recorded separately in `BACKLOG.md` as a standalone bug*, because it was losing data regardless of whether this plan proceeded. Fixed and the entry removed.
 
-**P-3. The logging payload changes shape while old clients are still installed. Standing rule; discharged for `programSetId` in phase 0 and for `rpe` in phase 1.**
+**P-3. The logging payload changes shape while old clients are still installed. Standing rule; discharged for `programSetId` in phase 0 and for `rpe` in phase 1. Phase 2 needed nothing: `actualReps` was already required and already accepted any count, so the shape did not change.**
 
-This is a PWA; cached bundles keep calling the old Server Action for a while, and the offline queue can hold payloads written by a previous version. Phase 1 makes `rpe` nullable and stops sending 7; phase 2 sends real `actual_reps`.
+This is a PWA; cached bundles keep calling the old Server Action for a while, and the offline queue can hold payloads written by a previous version. Phase 1 made `rpe` nullable and stopped sending 7; phase 2 sends real `actual_reps` in a field that was always there. A payload queued by a pre-phase-2 client replays as a set that hit its target, which is exactly what that client claimed.
 
 *Required:* the validator accepts both shapes for at least one release. `rpe` becomes optional rather than removed, and a payload that still carries `rpe: 7` with no `rir` is stored as-is. Do **not** treat a legacy `rpe: 7` as "unknown" retroactively: it is indistinguishable from a real logged 7, and rewriting history to make the new engine look better is worse than the imprecision. See section 10.
 
@@ -752,7 +768,7 @@ Two consequences. **New codes** (`held-unknown`, `reset`, `re-approach`) fall in
 
 ### Things that change visibly for the user
 
-**B-4. Every volume number falls. Lands in phase 2.**
+**B-4. Every volume number falls. Landed in phase 2; the release note is owed.**
 
 Volume is `weight_kg * actual_reps` in **twelve** places: `metrics.ts:298`, `:416`, `:453`, `:999`, `:1051`, `:1245`, `:1299`; `workout-sets.ts:922`; `friends.ts:378`, `:620`, `:636`, `:753`; and a client-side `reduce` in `SessionDetailClient.tsx:48`. (An earlier draft said six and named `workout-sessions.ts`, which computes no volume at all.) The per-session figure on the session detail screen and the friend-leaderboard totals are the ones people screenshot, and both were outside the files this section originally pointed at. Today `actual_reps` is always the target, so today's volume is the *planned* volume relabelled as achieved. Once real reps are logged, volume drops for anyone who ever misses a rep, and the drop appears as a decline in the charts on the day the feature ships.
 

@@ -111,19 +111,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 ## Progression engine audit (2026-08-29)
 
 **The plan that resolves all of these is [`docs/progression-revamp-plan.md`](docs/progression-revamp-plan.md).**
-Start there rather than picking entries off individually; they are interdependent and `A1` blocks most of them.
+Start there rather than picking entries off individually; they are interdependent. `A1` blocked most of them and is now closed (phases 1 and 2): logged effort and logged reps are both what the lifter reported.
 
 Findings from a domain audit of [`smart-incrementation`](docs/specs/smart-incrementation.md) — does the engine
 behave the way it should for someone who actually trains. The audit's one shippable fix (a progression must
-never lower the plan) landed with the audit; everything below is deferred. `A1` is the root cause and most of
-the rest are only worth tuning once it is fixed.
-
-### Progression audit A1: the fast logging path fabricates the reps the engine reasons about
-- **Half fixed (phase 1 of the plan).** The forged effort value is gone: the toggle no longer sends `rpe: 7`, the column is nullable, and null means "not logged". The absolute RPE ladder that read a missing value as 7 is retired with it. What follows is the remaining half.
-- **What:** One-tap set logging still writes `actualReps = targetReps` (`src/components/features/WorkoutSetsList.tsx:315`, `:345`, and `src/components/features/WorkoutExerciseList.tsx:136`). The only place an achieved rep count is ever recorded is the explicit *Mark failed* branch (`src/components/features/SetEditView.tsx:268`). So for a normally-logged workout `metTargetReps` is always true, `countConsecutiveMisses` is always 0, and **SI-17 (deload) and SI-19 (retry-on-fewer-reps) are unreachable**. The consensus window, `sessionsUntilDeload` and the progress dots have no effect on the outcome. Net production behaviour is "add the increment every 2 sessions, forever, until the lifter opens the editor and declares a failure" — no autoregulation. Rules SI-9, SI-17, SI-19 and SI-31 describe branches almost nothing reaches.
-- **Why deferred:** The fix is a logging-UX change, not an engine change, and it has to stay near one tap per set or it breaks the thing the app is fastest at. That is a design decision, not a patch.
-- **Unblocked by:** Deciding where achieved reps get captured — phase 2 of the plan, which is scheduled after phase 3 so that honest reps do not meet a per-set engine.
-- **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (300-360), `src/components/features/SetEditView.tsx` (260-305), `src/lib/utils/progression.ts` (`metTargetReps`, `countConsecutiveMisses`), `docs/specs/smart-incrementation.md` (SI-9, SI-17, SI-19).
+never lower the plan) landed with the audit; everything below is deferred. `A1` was the root cause and is
+closed, so the rest are now tunable on honest data rather than fabricated data.
 
 ### Progression audit A2: `targetRir` is prescribed, never read, and obeying it freezes the exercise
 - **What:** `program_sets.target_rir` exists (`src/db/schema/programs.ts:118`), is settable in the set editor (`SetEditView.tsx:706-730`) and renders as "@2 RIR" (`src/lib/utils/format.ts:56`), but no progression code reads it. The contradiction this entry originally described — the ladder counting RIR 2 as confident only with an extra rep, so a set executed exactly as prescribed never progressed — is gone with the ladder (phase 1). What remains is that the prescription is still inert.
@@ -157,7 +150,7 @@ the rest are only worth tuning once it is fixed.
 
 ### Progression audit A9: the spec describes the function, not the feature
 - **What:** Every rule in `smart-incrementation.md` is stated over its inputs (`rpe`, `actualReps`, `wasEasy`) without ever asserting where those values come from. That is exactly how `A1` stayed invisible through a full rule-by-rule verification pass: SI-10 verifies true against `isConfidentHit` and is inert in production. The Coverage table has the same blind spot, excusing SI-8 as untested because "the filter lives in SQL". The spec also has no rule about **rate** — nothing states how fast an exercise is allowed to move, which is the outside check that would have caught `A1` without reasoning about internals.
-- **Why deferred:** Recorded with the audit; writing the new sections is its own pass, and `A1`'s resolution changes what the provenance section would say.
+- **Why deferred:** Recorded with the audit; writing the new sections is its own pass. `A1` is now resolved and phase 2 added a short provenance paragraph for `actualReps` to the spec's Inputs, so what remains is the full section, the rate rule, and the skill change.
 - **Unblocked by:** Nothing. Add an **Inputs — provenance** section listing, per input, which UI path produces it and what value is written when no one supplies it; add a rate rule (a per-exercise ceiling on increments per session and a sanity flag on absolute change over a block); and carry the same "where does this come from" question into `.claude/skills/feature-spec` so the next spec pass asks it by default.
 - **Touchpoints:** `docs/specs/smart-incrementation.md` (Inputs, Coverage), `.claude/skills/feature-spec/SKILL.md`.
 
@@ -168,9 +161,9 @@ the rest are only worth tuning once it is fixed.
 - **Touchpoints:** `src/lib/utils/progression.ts` (`buildSuggestion` — `rows`, `latest.date`), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions` history query), `src/types/workout.ts` (`SetSuggestion.reason`), `docs/specs/smart-incrementation.md` (SI-7, SI-8, SI-33).
 
 ### Progression audit A11: PRs and the shown 1RM are computed from reps nobody measured
-- **What:** PR detection reads `actualReps` — `estimated_1rm` from `estimate1RM(weightKg, actualReps)` (`src/lib/actions/workout-sets.ts:477-478`) and `reps_at_weight` from a direct comparison (`:534`). Per `A1` the fast logging path writes `actualReps = targetReps` unconditionally, so both PR types are derived from *assumed* performance. A lifter who grinds out 6 of a prescribed 8 and taps the toggle is credited with 8, and can be shown a 🏆 PR and an estimated 1RM they did not hit. This compounds `D1` (the shown 1RM has no RPE gate either): the number is computed from a fabricated rep count *and* from sets the code elsewhere treats as off-curve. It is also the number people screenshot, so it is the worst place for the app to be confidently wrong.
-- **Why deferred:** Entirely downstream of `A1` — there is no honest fix while the rep count is fabricated, and once it is real this mostly resolves itself.
-- **Unblocked by:** `A1`. Afterwards, decide whether an estimated-1RM PR requires a near-max set (the RPE ≥ 7 guard `adjustedRepsForWeight` already uses, per `D1`) rather than any set in the 2-12 range.
+- **What:** PR detection reads `actualReps` — `estimated_1rm` from `estimate1RM(weightKg, actualReps)` (`src/lib/actions/workout-sets.ts:477-478`) and `reps_at_weight` from a direct comparison (`:534`). Until phase 2 of the plan the fast logging path wrote `actualReps = targetReps` unconditionally, so every PR set before that cutover is derived from *assumed* performance — which is what `D-10` decides to keep and flag rather than delete. A lifter who grinds out 6 of a prescribed 8 and taps the toggle is credited with 8, and can be shown a 🏆 PR and an estimated 1RM they did not hit. This compounds `D1` (the shown 1RM has no RPE gate either): the number is computed from a fabricated rep count *and* from sets the code elsewhere treats as off-curve. It is also the number people screenshot, so it is the worst place for the app to be confidently wrong.
+- **Why deferred:** Was entirely downstream of `A1`, which is now closed: reps logged from phase 2 onward are real, so what remains is the pre-cutover history and the missing effort gate.
+- **Unblocked by:** Nothing now. Decide whether an estimated-1RM PR requires a near-max set (the RPE ≥ 7 guard `adjustedRepsForWeight` already uses, per `D1`) rather than any set in the 2-12 range.
 - **Touchpoints:** `src/lib/actions/workout-sets.ts` (`detectAndRecordPRs` 437-540), `src/lib/utils/progression.ts` (`estimated1RM` in `buildSuggestion`), `docs/specs/smart-incrementation.md` (D1).
 
 ## Cycle periodization (spec divergences)
@@ -238,12 +231,6 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Why deferred:** Unverified, and it is a correctness question about override initialisation rather than the layout-shift brief.
 - **Unblocked by:** Reproduce first: apply a suggestion to a set, then hard-reload that set's `/sets/[setId]` URL and check whether the editor shows the adjusted or the program value. If adjusted, there is nothing to fix.
 - **Touchpoints:** `src/components/features/SetEditView.tsx` (the `useState` block, ~lines 125–160), `src/contexts/workout-session-context.tsx` (`useRenderedOverrides` and the restore effect).
-
-### Exercise-level checkmark: log side still bypasses the queue and overrides
-- **What:** `toggleExercise` in `WorkoutExerciseList.tsx` now removes the `workout_sets` rows when the exercise is un-checked (added alongside the un-log fix). The **log** side was left as it was: it calls `logWorkoutSet` directly rather than the queue-backed `useWorkoutSetWriter().logWithRetry`, ignores every result, and logs the program's planned values without applying the session overrides that the set list displays. So a checkmark tap can silently fail (or write pre-override values) while the UI shows the exercise complete, and offline it produces an unhandled rejection with nothing queued.
-- **Why deferred:** The un-log half was needed to close the UI/DB divergence that the un-log fix targeted. The log half is a distinct defect (it is P1-5 in the pre-release audit) with its own payload-construction work, and was out of the scope of the P0 pass.
-- **Unblocked by:** Doing the P1 batch. Switch the `logWorkoutSet` calls to `useWorkoutSetWriter().logWithRetry`, read `workoutSession.overrides[set.id]` when building each payload the way `WorkoutSetsList.toggleSet` does, and check the results.
-- **Touchpoints:** `src/components/features/WorkoutExerciseList.tsx` (`toggleExercise`), `src/contexts/pending-queue-context.tsx` (`useWorkoutSetWriter`), `src/components/features/WorkoutSetsList.tsx` (the payload shape to mirror).
 
 ### No automated test for the offline replay queue
 - **What:** `pending-queue-context.tsx` now carries real logic — per-item backoff (`BACKOFF_MS`), a due-time filter, drop-after-`MAX_ATTEMPTS`, and the mount/hydration ordering that decides whether a queued workout replays on cold open. All of it was verified by hand (fake `navigator.onLine` + a rejecting `window.fetch`, then a cold reload) and none of it is covered by a test. It is the mechanism that prevents mid-workout data loss, so a silent regression here is expensive.

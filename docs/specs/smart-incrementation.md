@@ -6,7 +6,7 @@
 >
 > Stale check: `git log f77d528..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
 >
-> **Partially revised 2026-08-29 by phases 1 and 3 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md).** Phase 1 rewrote SI-10, SI-12, SI-17, SI-31 and the vocabulary; the effort ladder they described is retired. Phase 3 rewrote SI-7, SI-8, SI-11, SI-13, SI-17 and SI-19 and added SI-7a to SI-7c: the window is now the last five **sessions** for an exercise slot, and whether a session cleared is a question about the sets its scope names. The stamp above is deliberately *not* advanced, because the rest of the spec has not been re-verified since — the full rewrite is scheduled for the end of that plan's phase 5.
+> **Partially revised 2026-08-29 by phases 1, 3 and 2 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md).** Phase 1 rewrote SI-10, SI-12, SI-17, SI-31 and the vocabulary; the effort ladder they described is retired. Phase 3 rewrote SI-7, SI-8, SI-11, SI-13, SI-17 and SI-19 and added SI-7a to SI-7c: the window is now the last five **sessions** for an exercise slot, and whether a session cleared is a question about the sets its scope names. Phase 2 changed no rule, only what feeds them: `actualReps` is now the reps the lifter reports rather than the target repeated back, so SI-9, SI-17 and SI-19 describe branches production can actually reach. The stamp above is deliberately *not* advanced, because the rest of the spec has not been re-verified since — the full rewrite is scheduled for the end of that plan's phase 5.
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
 
@@ -41,6 +41,8 @@ Two non-obvious ones:
 - **`overloadIncrementReps` does double duty**: reps in rep-based modes, **seconds** in `time` mode, **metres** in `distance` mode (SI-32).
 
 Readiness (1–5) comes from the active, uncompleted session. User `goals` and `experienceLevel` come from the profile.
+
+**Where `actualReps` comes from**, since every clearance rule is stated over it and none of them says: a short tap on the set toggle writes the target, which is the claim the tap makes; a long press opens the miss sheet and writes the reps the lifter enters; the set editor's reps field writes the achieved count during a workout and the prescription outside one; and *Mark set as failed* writes the achieved count with RIR 0. The exercise-level checkmark writes the same values as a tap on each of its sets. Nothing else writes the column. A fuller provenance section for every input is owed by `A9`.
 
 ## Increment sizing — SI-1…6
 
