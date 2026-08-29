@@ -1,10 +1,10 @@
 # Smart incrementation
 
 > **Status:** implemented
-> **Last verified:** 2026-08-29 against `c18fea3`
+> **Last verified:** 2026-08-29 against `f77d528`
 > **Source of truth:** `src/lib/utils/progression.ts`, `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`), `src/lib/actions/programs.ts` (`applyProgressionToPlan` + the settings actions), `src/lib/validators/workout.ts`, `src/components/features/{WorkoutSetsClient,WorkoutSetsList,SetEditView}.tsx`
 >
-> Stale check: `git log c18fea3..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
+> Stale check: `git log f77d528..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
 
@@ -326,7 +326,7 @@ Failures are swallowed; the live workout route is not revalidated after a succes
 
 ## Divergences (intent vs code)
 
-Verified against `progression.ts` and `workout-sets.ts` at `c18fea3` on 2026-08-29.
+Verified against `progression.ts` and `workout-sets.ts` at `f77d528` on 2026-08-29.
 
 | # | Rule | Intended | Actual | Status |
 |---|---|---|---|---|
