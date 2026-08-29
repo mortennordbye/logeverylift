@@ -32,7 +32,17 @@ import {
   type TrainingGoal,
 } from "@/lib/utils/periodization";
 
-export type PlanProgressionMode = "manual" | "distance" | "weight" | "reps";
+/**
+ * What the plan asks each exercise to progress — the advance axis, restricted
+ * to the four the generator uses.
+ *
+ * Named after axis 6 rather than the retired mode. Its strength block caps RIR
+ * on every working set, and with D-1 live those caps now gate progression: an
+ * exercise here only advances when the reps came with the reserve the plan
+ * prescribed. That is what the caps were always for, and it is the intended
+ * behaviour, but it is a change to plans this generator produces.
+ */
+export type PlanProgressionAdvance = "manual" | "distance" | "load" | "reps";
 
 export type PlanSet = {
   targetReps?: number;
@@ -55,7 +65,7 @@ export type PlanSet = {
 export type PlanExercise = {
   /** Exercise name — resolved to an exercises row at persist time. */
   name: string;
-  progressionMode: PlanProgressionMode;
+  progressionAdvance: PlanProgressionAdvance;
   /** Doubles as the meters increment for distance mode (see programExercises). */
   overloadIncrementReps: number;
   /** Per-session weight increment (kg) for "weight" mode progressive overload. */
@@ -161,8 +171,9 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   // (no sessionRole at all) and no top-set pyramiding — to spare the CNS so the
   // endurance quality sessions aren't compromised. Weight is left at 0 for the
   // athlete to load to the target reps at the prescribed RIR cap. The spec's `smart`
-  // mode is mapped to `weight`: smart nudges reps via a 1RM estimate, which would
-  // break the strictly-static rep scheme.
+  // scheme is mapped to `load`: smart nudged reps via a 1RM estimate, which would
+  // break the strictly-static rep scheme. It is retired outright now (D-4), and
+  // this generator having refused it years earlier is part of why.
   type StrengthSetSpec = {
     reps?: number;
     durationSeconds?: number;
@@ -172,13 +183,13 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   };
   const lift = (
     name: string,
-    mode: PlanProgressionMode,
+    advance: PlanProgressionAdvance,
     type: ExerciseType,
     sets: StrengthSetSpec[],
     incrementKg?: number,
   ): PlanExercise => ({
     name,
-    progressionMode: mode,
+    progressionAdvance: advance,
     exerciseType: type,
     overloadIncrementReps: 0,
     overloadIncrementKg: incrementKg,
@@ -199,10 +210,10 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   // Workout A — Squat & Horizontal: quad drive for the bike, horizontal push/pull to
   // reverse aero hunch, anti-rotation trunk stability.
   const workoutA: PlanExercise[] = [
-    lift("Front Squat", "weight", "compound", [WU(8), W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
-    lift("Dumbbell Bench Press", "weight", "compound", [WU(10), W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
-    lift("Pendlay Row", "weight", "compound", [W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
-    lift("Bulgarian Split Squat", "weight", "compound", [W(10, 90, 2), W(10, 90, 2)], INC_ISOLATION),
+    lift("Front Squat", "load", "compound", [WU(8), W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
+    lift("Dumbbell Bench Press", "load", "compound", [WU(10), W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
+    lift("Pendlay Row", "load", "compound", [W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
+    lift("Bulgarian Split Squat", "load", "compound", [W(10, 90, 2), W(10, 90, 2)], INC_ISOLATION),
     lift("Seated Calf Raise", "manual", "isolation", [W(15, 90, 1), W(15, 90, 1)]),
     lift("Pallof Press", "manual", "isometric", [HOLD(60), HOLD(60), HOLD(60)]),
   ];
@@ -210,9 +221,9 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   // Workout B — Hinge & Vertical: posterior chain for run power, vertical pull for the
   // swim catch, structural shoulder/rotator-cuff longevity, anti-extension core.
   const workoutB: PlanExercise[] = [
-    lift("Romanian Deadlift", "weight", "compound", [WU(8), W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
-    lift("Weighted Pull-up", "weight", "compound", [W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
-    lift("Dumbbell Shoulder Press", "weight", "compound", [W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
+    lift("Romanian Deadlift", "load", "compound", [WU(8), W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
+    lift("Weighted Pull-up", "load", "compound", [W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
+    lift("Dumbbell Shoulder Press", "load", "compound", [W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
     lift("Seated Leg Curl", "manual", "isolation", [W(12, 90, 1), W(12, 90, 1)]),
     lift("Face Pull", "manual", "isolation", [W(15, 90, 1), W(15, 90, 1)]),
     lift("Ab Wheel Rollout", "manual", "isometric", [W(10, 60, 1), W(10, 60, 1)]),
@@ -230,7 +241,7 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   type Segment = { meters: number; zone: number; restSeconds: number; role?: string };
   const sessionFrom = (name: string, segments: Segment[]): PlanExercise => ({
     name,
-    progressionMode: "manual",
+    progressionAdvance: "manual",
     overloadIncrementReps: 0,
     sets: segments.map((s) => ({
       distanceMeters: scaledDistance(s.meters, week1Multiplier),

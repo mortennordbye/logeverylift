@@ -58,12 +58,13 @@ type SetBlueprint = {
   // and a scheme nobody can see is a scheme nobody tests.
   repRangeMin?: number;
   repRangeMax?: number;
+  targetRir?: number;
 };
 
 type ExerciseBlueprint = {
   name: string;
-  /** Defaults to the column default ("manual") when absent. */
-  progressionMode?: string;
+  /** Axis 6. Defaults to the column default ("manual") when absent. */
+  progressionAdvance?: string;
   sets: SetBlueprint[];
 };
 
@@ -77,7 +78,10 @@ const PROGRAMS: ProgramBlueprint[] = [
     name: "Push Pull Legs A",
     exercises: [
       {
+        // Plain load progression, the common case: fixed reps, no cap, clears
+        // on the target alone.
         name: "Bench Press",
+        progressionAdvance: "load",
         sets: [
           { setNumber: 1, targetReps: 8, weightKg: 80, restTimeSeconds: 90 },
           { setNumber: 2, targetReps: 8, weightKg: 80, restTimeSeconds: 90 },
@@ -86,18 +90,22 @@ const PROGRAMS: ProgramBlueprint[] = [
         ],
       },
       {
+        // The capped one. Seeded effort is only logged about two thirds of the
+        // time, so this exercise actually produces unknown sessions and the
+        // "log effort to progress" path is reachable in a dev account.
         name: "Incline Dumbbell Press",
+        progressionAdvance: "load",
         sets: [
-          { setNumber: 1, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
-          { setNumber: 2, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
-          { setNumber: 3, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
+          { setNumber: 1, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
+          { setNumber: 2, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
+          { setNumber: 3, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
         ],
       },
       {
         name: "Tricep Pushdown",
         // The demonstrable double-progression exercise: work 8 up to 12, then
         // add load and drop back to 8.
-        progressionMode: "double",
+        progressionAdvance: "double",
         sets: [
           { setNumber: 1, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
           { setNumber: 2, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
@@ -272,8 +280,8 @@ async function seedFake() {
           programId: program.id,
           exerciseId,
           orderIndex: i,
-          ...(exBlueprint.progressionMode
-            ? { progressionMode: exBlueprint.progressionMode }
+          ...(exBlueprint.progressionAdvance
+            ? { progressionAdvance: exBlueprint.progressionAdvance }
             : {}),
         })
         .returning({ id: programExercises.id });
@@ -288,6 +296,7 @@ async function seedFake() {
             weightKg: s.weightKg?.toString() ?? null,
             durationSeconds: s.durationSeconds ?? null,
             restTimeSeconds: s.restTimeSeconds,
+            targetRir: s.targetRir ?? null,
             repRangeMin: s.repRangeMin ?? null,
             repRangeMax: s.repRangeMax ?? null,
           }))

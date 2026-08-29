@@ -9,20 +9,53 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
-import { MAX_REQUIRED_HITS, MIN_REQUIRED_HITS } from "@/lib/utils/progression";
+import {
+  MAX_BACKOFF_AFTER,
+  MAX_BACKOFF_PCT,
+  MAX_REQUIRED_HITS,
+  MIN_BACKOFF_AFTER,
+  MIN_BACKOFF_PCT,
+  MIN_REQUIRED_HITS,
+  PROGRESSION_ADVANCES,
+  PROGRESSION_READINESSES,
+  PROGRESSION_REGRESSES,
+  PROGRESSION_SCOPES,
+  type ProgressionAdvance,
+} from "@/lib/utils/progression";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 
+/**
+ * The retired mode values. Still accepted so an agent mid-conversation does not
+ * start failing, and mapped onto the advance axis on the way in; nothing reads
+ * the column any more. Do not add to this list — new schemes are axis values.
+ */
 const PROGRESSION_MODES = [
   "none",
   "manual",
   "weight",
   "smart",
+  "double",
   "reps",
   "time",
   "distance",
 ] as const;
+
+const ADVANCE_FOR_LEGACY_MODE: Record<
+  (typeof PROGRESSION_MODES)[number],
+  ProgressionAdvance
+> = {
+  none: "none",
+  manual: "manual",
+  weight: "load",
+  // D-4: smart is retired as a scheme and becomes plain load progression.
+  smart: "load",
+  double: "double",
+  reps: "reps",
+  time: "duration",
+  distance: "distance",
+};
 
 // Planned-set shape shared by the add/update paths of edit_program_exercise.
 const setShape = z.object({
@@ -189,7 +222,9 @@ export function registerProgramTools(server: McpServer, userId: string) {
     {
       description: [
         "Add, update, or remove an exercise slot within a program (including its planned sets).",
-        "operation='add': requires programId and exerciseId; optional orderIndex (defaults to end), notes, progressionMode, overloadIncrementKg, overloadIncrementReps, progressionRequiredHits, progressionApplyToPlan, and sets[].",
+        "operation='add': requires programId and exerciseId; optional orderIndex (defaults to end), notes, overloadIncrementKg, overloadIncrementReps, progressionRequiredHits, progressionApplyToPlan, the progression axes (progressionAdvance, progressionScope, progressionRegress, progressionBackoffPct, progressionBackoffAfter, progressionReadiness), and sets[].",
+        "progressionAdvance is what moves when the gate is met: 'load' adds weight, 'reps' adds reps at the same weight, 'double' works a rep range (set repRangeMin and repRangeMax on the sets), 'duration' and 'distance' for held or covered targets, 'manual' proposes nothing, 'none' turns progression off. Set targetRir on a set to require reps in reserve before a session counts.",
+        "progressionMode is the retired single-axis setting. It is still accepted and mapped onto progressionAdvance, but prefer the axes.",
         "operation='update': requires programExerciseId; any provided slot fields are updated. If sets[] is provided it REPLACES all existing sets for the slot.",
         "operation='remove': requires programExerciseId.",
       ].join(" "),
@@ -202,6 +237,22 @@ export function registerProgramTools(server: McpServer, userId: string) {
         orderIndex: z.number().int().nonnegative().optional(),
         notes: z.string().max(1000).nullable().optional(),
         progressionMode: z.enum(PROGRESSION_MODES).optional(),
+        progressionAdvance: z.enum(PROGRESSION_ADVANCES).optional(),
+        progressionScope: z.enum(PROGRESSION_SCOPES).optional(),
+        progressionRegress: z.enum(PROGRESSION_REGRESSES).optional(),
+        progressionBackoffPct: z
+          .number()
+          .int()
+          .min(MIN_BACKOFF_PCT)
+          .max(MAX_BACKOFF_PCT)
+          .optional(),
+        progressionBackoffAfter: z
+          .number()
+          .int()
+          .min(MIN_BACKOFF_AFTER)
+          .max(MAX_BACKOFF_AFTER)
+          .optional(),
+        progressionReadiness: z.enum(PROGRESSION_READINESSES).optional(),
         // decimal(4,2) column: max is 99.99 — 100 would overflow and throw.
         overloadIncrementKg: z.number().min(0).max(99.99).nullable().optional(),
         overloadIncrementReps: z.number().int().min(0).max(100).optional(),
@@ -273,6 +324,26 @@ export function registerProgramTools(server: McpServer, userId: string) {
                 orderIndex,
                 notes: args.notes ?? null,
                 progressionMode: args.progressionMode ?? "manual",
+                // The axis wins when both are given; the mode is the fallback
+                // for an agent working from the older tool description.
+                progressionAdvance:
+                  args.progressionAdvance ??
+                  ADVANCE_FOR_LEGACY_MODE[args.progressionMode ?? "manual"],
+                ...(args.progressionScope != null
+                  ? { progressionScope: args.progressionScope }
+                  : {}),
+                ...(args.progressionRegress != null
+                  ? { progressionRegress: args.progressionRegress }
+                  : {}),
+                ...(args.progressionBackoffPct != null
+                  ? { progressionBackoffPct: args.progressionBackoffPct }
+                  : {}),
+                ...(args.progressionBackoffAfter != null
+                  ? { progressionBackoffAfter: args.progressionBackoffAfter }
+                  : {}),
+                ...(args.progressionReadiness != null
+                  ? { progressionReadiness: args.progressionReadiness }
+                  : {}),
                 overloadIncrementKg:
                   args.overloadIncrementKg != null
                     ? args.overloadIncrementKg.toString()
@@ -304,8 +375,25 @@ export function registerProgramTools(server: McpServer, userId: string) {
           if (args.exerciseId !== undefined) peUpdates.exerciseId = args.exerciseId;
           if (args.orderIndex !== undefined) peUpdates.orderIndex = args.orderIndex;
           if (args.notes !== undefined) peUpdates.notes = args.notes;
-          if (args.progressionMode !== undefined)
+          if (args.progressionMode !== undefined) {
             peUpdates.progressionMode = args.progressionMode;
+            peUpdates.progressionAdvance =
+              ADVANCE_FOR_LEGACY_MODE[args.progressionMode];
+          }
+          // After the mode, so an agent that sends both gets the axis it asked
+          // for rather than the one derived from the value it sent for parity.
+          if (args.progressionAdvance !== undefined)
+            peUpdates.progressionAdvance = args.progressionAdvance;
+          if (args.progressionScope !== undefined)
+            peUpdates.progressionScope = args.progressionScope;
+          if (args.progressionRegress !== undefined)
+            peUpdates.progressionRegress = args.progressionRegress;
+          if (args.progressionBackoffPct !== undefined)
+            peUpdates.progressionBackoffPct = args.progressionBackoffPct;
+          if (args.progressionBackoffAfter !== undefined)
+            peUpdates.progressionBackoffAfter = args.progressionBackoffAfter;
+          if (args.progressionReadiness !== undefined)
+            peUpdates.progressionReadiness = args.progressionReadiness;
           if (args.overloadIncrementKg !== undefined)
             peUpdates.overloadIncrementKg =
               args.overloadIncrementKg != null

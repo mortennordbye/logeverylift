@@ -207,6 +207,17 @@ export async function copySharedProgram(
             progressionMode: pe.progressionMode ?? "manual",
             progressionRequiredHits: pe.progressionRequiredHits ?? null,
             progressionApplyToPlan: pe.progressionApplyToPlan ?? false,
+            // The axes. Without them a shared program arrives on the defaults —
+            // manual, back off 10% after 3 — whatever scheme its author was
+            // actually running, which is the same failure the rep range had.
+            // progressionMode above is still copied because it is still
+            // populated for one release; nothing reads it.
+            progressionAdvance: pe.progressionAdvance,
+            progressionScope: pe.progressionScope,
+            progressionRegress: pe.progressionRegress,
+            progressionBackoffPct: pe.progressionBackoffPct,
+            progressionBackoffAfter: pe.progressionBackoffAfter,
+            progressionReadiness: pe.progressionReadiness,
           })
           .returning({ id: programExercises.id });
 
@@ -228,6 +239,10 @@ export async function copySharedProgram(
               // becomes a fixed-target one for whoever accepts it.
               repRangeMin: ps.repRangeMin ?? undefined,
               repRangeMax: ps.repRangeMax ?? undefined,
+              // The effort cap is load-bearing now that D-1 reads it, so a
+              // shared autoregulated program has to arrive with its cap or it
+              // arrives as a different scheme.
+              targetRir: ps.targetRir ?? undefined,
             })),
           );
         }

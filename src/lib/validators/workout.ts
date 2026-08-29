@@ -453,8 +453,13 @@ const importProgramEntrySchema = z.object({
           notes: z.string().max(500).nullable().optional(),
           incKg: z.number().min(0).max(100).catch(2.5),
           incReps: z.number().int().min(0).max(100).catch(0),
+          // The retired mode. Still accepted, and still the only progression
+          // key an export written before the axes carries, so an import maps it
+          // through section 10's table when `adv` is absent. "smart" is gone as
+          // a scheme (D-4) but must still parse: a user's year-old export is not
+          // theirs to have rejected.
           mode: z
-            .enum(["none", "manual", "weight", "smart", "reps", "time", "distance"])
+            .enum(["none", "manual", "weight", "smart", "double", "reps", "time", "distance"])
             .catch("manual"),
           // Added after v1 payloads existed — absent means "use the defaults".
           hits: z
@@ -465,6 +470,27 @@ const importProgramEntrySchema = z.object({
             .nullable()
             .optional()
             .catch(null),
+          // The axes, all optional for the same reason: an older export has
+          // none of them, and the defaults an absent key falls back to are the
+          // ones the mode it does carry maps to.
+          adv: z.enum(PROGRESSION_ADVANCES).optional().catch(undefined),
+          scope: z.enum(PROGRESSION_SCOPES).optional().catch(undefined),
+          regress: z.enum(PROGRESSION_REGRESSES).optional().catch(undefined),
+          backPct: z
+            .number()
+            .int()
+            .min(MIN_BACKOFF_PCT)
+            .max(MAX_BACKOFF_PCT)
+            .optional()
+            .catch(undefined),
+          backAfter: z
+            .number()
+            .int()
+            .min(MIN_BACKOFF_AFTER)
+            .max(MAX_BACKOFF_AFTER)
+            .optional()
+            .catch(undefined),
+          readiness: z.enum(PROGRESSION_READINESSES).optional().catch(undefined),
           applyToPlan: z.boolean().optional().catch(false),
           exercise: z.object({
             name: z.string().min(1).max(100),

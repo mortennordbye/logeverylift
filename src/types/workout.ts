@@ -470,9 +470,25 @@ export type ExportedProgram = {
       notes: string | null;
       incKg: number;
       incReps: number;
+      /**
+       * The retired progression mode. Still emitted so an export opened by a
+       * client that predates the axes restores a scheme rather than defaulting
+       * to manual, and still read on import when `adv` is absent.
+       */
       mode: string;
       /** Sessions at target before a bump. Null = the shared default. */
       hits?: number | null;
+      /**
+       * The progression axes. All optional: an export written before they
+       * existed carries none of them, and the import maps its `mode` through
+       * the same table migration 0051 uses.
+       */
+      adv?: string;
+      scope?: string;
+      regress?: string;
+      backPct?: number;
+      backAfter?: number;
+      readiness?: string;
       /** Whether accepting a bump rewrites the planned sets. */
       applyToPlan?: boolean;
       exercise: {

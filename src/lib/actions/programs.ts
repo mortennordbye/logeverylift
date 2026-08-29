@@ -544,6 +544,25 @@ export async function updateProgramExerciseIncrementReps(
  * It is written here so those wire formats never go stale rather than because
  * the engine cares.
  */
+/**
+ * The inverse, for reading a payload written before the axes existed. Kept
+ * beside its twin so the two cannot drift; migration 0051 applies the same
+ * table to the rows already in the database.
+ */
+const ADVANCE_FOR_LEGACY_MODE: Record<string, ProgressionAdvance> = {
+  none: "none",
+  manual: "manual",
+  weight: "load",
+  // D-4: smart is retired and becomes plain load progression. It never becomes
+  // double progression — no set it left behind has a rep range, and inventing
+  // one would change the prescription.
+  smart: "load",
+  reps: "reps",
+  double: "double",
+  time: "duration",
+  distance: "distance",
+};
+
 const LEGACY_MODE_FOR_ADVANCE: Record<ProgressionAdvance, string> = {
   none: "none",
   manual: "manual",
@@ -945,8 +964,17 @@ export async function exportProgram(
         notes: pe.notes ?? null,
         incKg: Number(pe.overloadIncrementKg ?? 2.5),
         incReps: pe.overloadIncrementReps ?? 0,
+        // `mode` is still emitted so an export opened by a client that
+        // predates the axes still restores a scheme rather than defaulting to
+        // manual. It goes when the column does, a release later.
         mode: pe.progressionMode ?? "manual",
         hits: pe.progressionRequiredHits ?? null,
+        adv: pe.progressionAdvance,
+        scope: pe.progressionScope,
+        regress: pe.progressionRegress,
+        backPct: pe.progressionBackoffPct,
+        backAfter: pe.progressionBackoffAfter,
+        readiness: pe.progressionReadiness,
         applyToPlan: pe.progressionApplyToPlan ?? false,
         exercise: {
           name: pe.exercise.name,
@@ -1010,6 +1038,12 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
             incReps: pe.overloadIncrementReps ?? 0,
             mode: pe.progressionMode ?? "manual",
             hits: pe.progressionRequiredHits ?? null,
+            adv: pe.progressionAdvance,
+            scope: pe.progressionScope,
+            regress: pe.progressionRegress,
+            backPct: pe.progressionBackoffPct,
+            backAfter: pe.progressionBackoffAfter,
+            readiness: pe.progressionReadiness,
             applyToPlan: pe.progressionApplyToPlan ?? false,
             exercise: {
               name: pe.exercise.name,
@@ -1165,6 +1199,19 @@ export async function importProgram(
               overloadIncrementReps: slot.incReps,
               progressionMode: slot.mode,
               progressionRequiredHits: slot.hits ?? null,
+              // An export predating the axes carries only `mode`, so it is
+              // mapped through the same table as migration 0051 rather than
+              // arriving on the defaults. Section 10 of the progression plan.
+              progressionAdvance: slot.adv ?? ADVANCE_FOR_LEGACY_MODE[slot.mode],
+              ...(slot.scope != null ? { progressionScope: slot.scope } : {}),
+              ...(slot.regress != null ? { progressionRegress: slot.regress } : {}),
+              ...(slot.backPct != null ? { progressionBackoffPct: slot.backPct } : {}),
+              ...(slot.backAfter != null
+                ? { progressionBackoffAfter: slot.backAfter }
+                : {}),
+              ...(slot.readiness != null
+                ? { progressionReadiness: slot.readiness }
+                : {}),
               progressionApplyToPlan: slot.applyToPlan ?? false,
               exerciseType: overrideType,
             })

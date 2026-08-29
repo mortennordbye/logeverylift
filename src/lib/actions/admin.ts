@@ -46,20 +46,21 @@ type SetBlueprint = {
   targetReps: number;
   weightKg: number;
   restTimeSeconds: number;
-  // Double progression's range. One exercise in the blueprint carries it,
-  // because nothing in the app can configure a range until the preset picker
-  // lands (phase 5 of docs/progression-revamp-plan.md), and a demo account is
-  // where the scheme has to be visible.
+  // Double progression's range, and the effort cap. Both are per-set, both are
+  // now configurable from the progression sheet, and both are seeded on one
+  // exercise apiece so a development or demo account demonstrates the schemes
+  // rather than only implementing them.
   repRangeMin?: number;
   repRangeMax?: number;
+  targetRir?: number;
 };
 
 type ExerciseBlueprint = {
   name: string;
   /** kg added to every set's weight each week (always a multiple of 2.5) */
   weeklyIncrementKg: number;
-  /** Defaults to the column default ("manual") when absent. */
-  progressionMode?: string;
+  /** Axis 6. Defaults to the column default ("manual") when absent. */
+  progressionAdvance?: string;
   sets: SetBlueprint[];
 };
 
@@ -102,8 +103,11 @@ const FAKE_PROGRAMS: ProgramBlueprint[] = [
     name: "Push Pull Legs A",
     exercises: [
       {
+        // Plain load progression, the common case: fixed reps, no cap, clears
+        // on the target alone.
         name: "Bench Press",
         weeklyIncrementKg: 2.5,
+        progressionAdvance: "load",
         sets: [
           { setNumber: 1, targetReps: 8, weightKg: 80, restTimeSeconds: 90 },
           { setNumber: 2, targetReps: 8, weightKg: 80, restTimeSeconds: 90 },
@@ -112,12 +116,16 @@ const FAKE_PROGRAMS: ProgramBlueprint[] = [
         ],
       },
       {
+        // The capped one. Seeded effort is only logged about two thirds of the
+        // time, so this exercise actually produces unknown sessions and the
+        // "log effort to progress" path is reachable in a demo account.
         name: "Incline Dumbbell Press",
         weeklyIncrementKg: 2.5,
+        progressionAdvance: "load",
         sets: [
-          { setNumber: 1, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
-          { setNumber: 2, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
-          { setNumber: 3, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
+          { setNumber: 1, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
+          { setNumber: 2, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
+          { setNumber: 3, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
         ],
       },
       {
@@ -125,7 +133,7 @@ const FAKE_PROGRAMS: ProgramBlueprint[] = [
         weeklyIncrementKg: 2.5,
         // The demonstrable double-progression exercise: work 8 up to 12, then
         // add load and drop back to 8.
-        progressionMode: "double",
+        progressionAdvance: "double",
         sets: [
           { setNumber: 1, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
           { setNumber: 2, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
@@ -181,6 +189,7 @@ const DEMO_PROGRAMS: ProgramBlueprint[] = [
         // Week 1 @ 87.5 → Week 6 @ 100kg — clean progression toward the 100kg milestone
         name: "Bench Press",
         weeklyIncrementKg: 2.5,
+        progressionAdvance: "load",
         sets: [
           { setNumber: 1, targetReps: 5, weightKg: 87.5, restTimeSeconds: 180 },
           { setNumber: 2, targetReps: 5, weightKg: 87.5, restTimeSeconds: 180 },
@@ -189,12 +198,14 @@ const DEMO_PROGRAMS: ProgramBlueprint[] = [
         ],
       },
       {
+        // The capped one — see the demo blueprint above for why one is seeded.
         name: "Incline Dumbbell Press",
         weeklyIncrementKg: 2.5,
+        progressionAdvance: "load",
         sets: [
-          { setNumber: 1, targetReps: 10, weightKg: 32.5, restTimeSeconds: 90 },
-          { setNumber: 2, targetReps: 10, weightKg: 32.5, restTimeSeconds: 90 },
-          { setNumber: 3, targetReps: 10, weightKg: 32.5, restTimeSeconds: 90 },
+          { setNumber: 1, targetReps: 10, weightKg: 32.5, restTimeSeconds: 90, targetRir: 2 },
+          { setNumber: 2, targetReps: 10, weightKg: 32.5, restTimeSeconds: 90, targetRir: 2 },
+          { setNumber: 3, targetReps: 10, weightKg: 32.5, restTimeSeconds: 90, targetRir: 2 },
         ],
       },
       {
@@ -220,7 +231,7 @@ const DEMO_PROGRAMS: ProgramBlueprint[] = [
         weeklyIncrementKg: 2.5,
         // The demonstrable double-progression exercise: work 8 up to 12, then
         // add load and drop back to 8.
-        progressionMode: "double",
+        progressionAdvance: "double",
         sets: [
           { setNumber: 1, targetReps: 12, weightKg: 30, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
           { setNumber: 2, targetReps: 12, weightKg: 30, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
@@ -368,8 +379,8 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
           programId: program.id,
           exerciseId,
           orderIndex: i,
-          ...(exBlueprint.progressionMode
-            ? { progressionMode: exBlueprint.progressionMode }
+          ...(exBlueprint.progressionAdvance
+            ? { progressionAdvance: exBlueprint.progressionAdvance }
             : {}),
         })
         .returning({ id: programExercises.id });
@@ -383,6 +394,7 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
             targetReps: s.targetReps,
             weightKg: s.weightKg.toString(),
             restTimeSeconds: s.restTimeSeconds,
+            targetRir: s.targetRir ?? null,
             repRangeMin: s.repRangeMin ?? null,
             repRangeMax: s.repRangeMax ?? null,
           }))
@@ -595,8 +607,8 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
           programId: program.id,
           exerciseId,
           orderIndex: i,
-          ...(exBlueprint.progressionMode
-            ? { progressionMode: exBlueprint.progressionMode }
+          ...(exBlueprint.progressionAdvance
+            ? { progressionAdvance: exBlueprint.progressionAdvance }
             : {}),
         })
         .returning({ id: programExercises.id });
@@ -610,6 +622,7 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
             targetReps: s.targetReps,
             weightKg: s.weightKg.toString(),
             restTimeSeconds: s.restTimeSeconds,
+            targetRir: s.targetRir ?? null,
             repRangeMin: s.repRangeMin ?? null,
             repRangeMax: s.repRangeMax ?? null,
           }))
