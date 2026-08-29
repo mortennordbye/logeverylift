@@ -169,6 +169,12 @@ the rest are only worth tuning once it is fixed.
 - **Unblocked by:** Deciding whether an exercise progresses per-set or as a block, most likely a flag on `program_exercises` alongside the existing progression settings, defaulting to block for sets that currently share a weight.
 - **Touchpoints:** `src/lib/actions/workout-sets.ts` (history bucketing 1238-1245), `src/lib/utils/progression.ts` (`buildSuggestion`), `src/components/features/WorkoutSetsList.tsx` (648-670), `docs/specs/smart-incrementation.md` (SI-7).
 
+### Progression audit A9: the spec describes the function, not the feature
+- **What:** Every rule in `smart-incrementation.md` is stated over its inputs (`rpe`, `actualReps`, `wasEasy`) without ever asserting where those values come from. That is exactly how `A1` stayed invisible through a full rule-by-rule verification pass: SI-10 verifies true against `isConfidentHit` and is inert in production. The Coverage table has the same blind spot, excusing SI-8 as untested because "the filter lives in SQL". The spec also has no rule about **rate** — nothing states how fast an exercise is allowed to move, which is the outside check that would have caught `A1` without reasoning about internals.
+- **Why deferred:** Recorded with the audit; writing the new sections is its own pass, and `A1`'s resolution changes what the provenance section would say.
+- **Unblocked by:** Nothing. Add an **Inputs — provenance** section listing, per input, which UI path produces it and what value is written when no one supplies it; add a rate rule (a per-exercise ceiling on increments per session and a sanity flag on absolute change over a block); and carry the same "where does this come from" question into `.claude/skills/feature-spec` so the next spec pass asks it by default.
+- **Touchpoints:** `docs/specs/smart-incrementation.md` (Inputs, Coverage), `.claude/skills/feature-spec/SKILL.md`.
+
 ### Progression audit A10: the window has no sense of time, so a layoff progresses you
 - **What:** `HistoryRow.date` is carried through `buildSuggestion` and used for exactly one thing — `basedOnDate`, the "Last: …" display (`src/lib/utils/progression.ts:514`). Nothing else reads it. The window is the last 5 *sessions* regardless of when they happened, so after three months away the gate is still satisfied by sessions from before the break and the first session back opens with "↑ +2.5 kg" on top of a weight the lifter has not touched since spring. Detraining is invisible to the engine. The same blindness runs the other way: six sessions in four days and five sessions in five months are treated identically.
 - **Why deferred:** Needs a decision on the rule, and it interacts with `A6` (Tired sessions) since both are about which history counts.
@@ -180,12 +186,6 @@ the rest are only worth tuning once it is fixed.
 - **Why deferred:** Entirely downstream of `A1` — there is no honest fix while the rep count is fabricated, and once it is real this mostly resolves itself.
 - **Unblocked by:** `A1`. Afterwards, decide whether an estimated-1RM PR requires a near-max set (the RPE ≥ 7 guard `adjustedRepsForWeight` already uses, per `D1`) rather than any set in the 2-12 range.
 - **Touchpoints:** `src/lib/actions/workout-sets.ts` (`detectPRs` 437-540), `src/lib/utils/progression.ts` (`estimated1RM` in `buildSuggestion`), `docs/specs/smart-incrementation.md` (D1).
-
-### Progression audit A9: the spec describes the function, not the feature
-- **What:** Every rule in `smart-incrementation.md` is stated over its inputs (`rpe`, `actualReps`, `wasEasy`) without ever asserting where those values come from. That is exactly how `A1` stayed invisible through a full rule-by-rule verification pass: SI-10 verifies true against `isConfidentHit` and is inert in production. The Coverage table has the same blind spot, excusing SI-8 as untested because "the filter lives in SQL". The spec also has no rule about **rate** — nothing states how fast an exercise is allowed to move, which is the outside check that would have caught `A1` without reasoning about internals.
-- **Why deferred:** Recorded with the audit; writing the new sections is its own pass, and `A1`'s resolution changes what the provenance section would say.
-- **Unblocked by:** Nothing. Add an **Inputs — provenance** section listing, per input, which UI path produces it and what value is written when no one supplies it; add a rate rule (a per-exercise ceiling on increments per session and a sanity flag on absolute change over a block); and carry the same "where does this come from" question into `.claude/skills/feature-spec` so the next spec pass asks it by default.
-- **Touchpoints:** `docs/specs/smart-incrementation.md` (Inputs, Coverage), `.claude/skills/feature-spec/SKILL.md`.
 
 ## Cycle periodization (spec divergences)
 
