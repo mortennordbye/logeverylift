@@ -1,6 +1,6 @@
 # Progression revamp: plan
 
-> **Status:** in build. Phase 0 shipped; phase 1 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
+> **Status:** in build. Phases 0 and 1 shipped; phase 3 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
 > **Design status:** approved, all eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
@@ -27,14 +27,14 @@ Phases are listed in **build order**, which is not numeric order. The swap is de
 | Phase | Delivers | Status |
 |---|---|---|
 | **0** | Prerequisites: `P-1`, `P-2`, `D-6` | **Done.** Branch `phase-0/progression-prerequisites`, 5 commits. Migrations `0046`, `0047`. |
-| **1** | Honest effort: `rpe` nullable, stop forging 7 | **Next.** Not started. |
-| **3** | Session windows and scope | Not started. Depends on phase 0 only. |
+| **1** | Honest effort: `rpe` nullable, stop forging 7 | **Done.** Branch `phase-1/honest-effort`, 7 commits. Migration `0048`. |
+| **3** | Session windows and scope | **Next.** Not started. Depends on phase 0 only. |
 | **2** | Capture: the miss sheet and the reps-correction fix | Not started. Must follow phase 3. |
 | **4** | Rep ranges and double progression | Not started. |
 | **5** | Axes, presets, and the sheet | Not started. |
 | **6** | The rest | Not started. |
 
-**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
+**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**) → `phase-1/honest-effort` (7 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
 
 ### What is already true in the code
 
@@ -45,19 +45,27 @@ Facts a cold session must not re-derive, re-decide, or accidentally undo. Each i
 - **A logged set is keyed to its plan slot, not its exercise.** `workout_sets` carries `program_exercise_id` and `program_set_id`, and the unique index is `(session_id, program_exercise_id, set_number)`. Clients pass the program set id they already hold; the server resolves the slot in `logWorkoutSet`, rejecting one that belongs to another program, and falls back to the old exercise-based resolution for payloads queued by a cached bundle. Both new foreign keys are `on delete set null`, deliberately not the `cascade` the older ones use — every read must tolerate a null.
 - **A logged set describes its own prescription.** `workout_sets` carries `set_type` and `prescribed_working_sets`, snapshotted at log time. Phase 3 asks its clearance questions of these columns, never by joining back to `program_sets` and reading today's plan.
 - **The cycle no longer writes `target_reps`.** `strengthPhaseRecipe` and the `sessionRole = "strength"` branch are deleted; progression owns the column outright. The research is preserved in [`specs/cycle-periodization.md`](specs/cycle-periodization.md) under "Strength periodization: considered, not implemented".
-- **`P-3`'s both-shapes rule is live and has one worked example.** The log and un-log validators take the new `programSetId` as *optional*, and the server falls back when it is absent, precisely so a bundle cached before phase 0 and every payload already sitting in the offline queue keep working. Every later phase that changes the logging payload owes the same treatment; `P-3` in section 14 is the standing rule, not a one-off.
+- **`P-3`'s both-shapes rule is live and has two worked examples.** The log and un-log validators take the new `programSetId` as *optional*, and the log validator takes `rpe` as optional, precisely so a bundle cached before phase 0 or phase 1 — and every payload already sitting in the offline queue — keeps working. Every later phase that changes the logging payload owes the same treatment; `P-3` in section 14 is the standing rule, not a one-off.
+
+*From phase 1:*
+
+- **A logged set records effort only when the lifter reported it.** `workout_sets.rpe` is nullable, null means "not logged", and no call site forges a value. **Do not restore a default anywhere.** A `?? 7` in a read is the exact bug this phase removed, and it will look like a harmless convenience. Legacy rows carrying a real 7, and payloads from clients that still send one, are stored as a real 7 — indistinguishable on the wire, and not ours to rewrite.
+- **Effort no longer gates clearing, and there is no absolute RPE ladder.** `isConfidentHit` is gone; `metTargetReps` is the whole test. `D-1`'s cap is how effort gates again, per set and opt-in, and phase 5 builds it — `B-22` first, since the history query still does not select `target_rir`. Do not reintroduce a global threshold in the meantime.
+- **`held-unknown` exists and every consumer handles it, but nothing emits it.** The engine gains an emitter in phase 5 with the cap. Section 15's `B-2` records which sites needed changing and which did not.
+- **Aggregate effort reads mean "of the sets that reported effort".** The cycle adaptation average filters nulls through `meanLoggedRpe` (summing straight through coerces null to 0 and *raises* volume); the RPE trend chart and the cooked-exercise count exclude them in SQL and say so in their labels.
+- **Seeded history logs effort about two-thirds of the time and carries its plan slots.** All three seeders. Do not make seeded effort universal again: an account where every set has a value never exercises the unknown paths.
 
 *Still true, and still wrong — these are the phases ahead, not oversights:*
 
-- `workout_sets.rpe` is still `notNull`, and all five call sites still forge `rpe: 7`. That is phase 1.
 - `actual_reps` is still written as `target_reps` on the fast path. That is phase 2.
 - The engine is still per-set, still keyed on `exerciseId + setNumber`. That is phase 3.
 
 ### Carry-forward: things every phase still owes
 
 - **The Playwright e2e suite has never run on any of these branches.** The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list. Phase 0 touched it.
-- **The `CLAUDE.md` smoke pass is owed for phase 0** and for every later phase touching the set list (1, 2, 3, 5 and 6 all do). It needs `make dev` running, which is the user's call to start.
-- **Seeded history has null slot columns.** The two admin seeders insert `workout_sets` rows directly, so phase 0's columns land null on them. Nothing reads them yet; phase 3 reads all four, and seeded data is the only data a development account has. Tracked in `B-11`, to be fixed in phase 1.
+- **The `CLAUDE.md` smoke pass is owed for phases 0 and 1** and for every later phase touching the set list (2, 3, 5 and 6 all do). It needs `make dev` running, which is the user's call to start.
+- **Migrations `0046`, `0047` and `0048` have not run against a real database.** They are generated, committed and reviewed; nothing has been applied outside a throwaway container. `0048` is a single `DROP NOT NULL`.
+- **Two release notes are owed at the end, and neither is a code change.** Phase 1 retired the RPE ladder, so exercises a lifter grinds will start bumping; phase 3's `D-3` will hold exercises that were quietly banking per-set counts. Phase 2 adds a third (`B-4`, every volume number falls).
 
 ### Read in this order
 
@@ -124,7 +132,7 @@ The rules it cannot enforce are in `CLAUDE.md`: never cite a file you have not o
 
 Four problems, in order of severity. Each is recorded in `BACKLOG.md` with file references.
 
-**The engine has never seen a missed rep (`A1`).** Tapping the set toggle writes `actualReps = targetReps` and a hardcoded `rpe: 7`. There are **five such call sites across three files**, not one path: `WorkoutSetsList.tsx:321` (catch-up) and `:349` (the toggle), `SetEditView.tsx:296` (re-log on edit), and `WorkoutExerciseList.tsx:125` and `:137` — the exercise-level "complete all sets" checkmark, which fabricates reps and effort for a whole exercise in one tap **and bypasses the offline queue**. RPE 7 is inside the "confident" band, so every logged set is a confident hit, the consensus window saturates, and the progress dots read 2 of 2 forever. Deload (`SI-17`) and rep-retry (`SI-19`) are unreachable in production. The observable behaviour is "add the increment every other session, indefinitely", which is what prompted this work.
+**The engine has never seen a missed rep (`A1`). Half fixed in phase 1** — the forged effort value is gone; the forged rep count is phase 2. The paragraph below describes the state this plan started from, and is kept because the reasoning still applies to the half that remains. Tapping the set toggle writes `actualReps = targetReps` and, until phase 1, a hardcoded `rpe: 7`. There are **five such call sites across three files**, not one path: `WorkoutSetsList.tsx:321` (catch-up) and `:349` (the toggle), `SetEditView.tsx:296` (re-log on edit), and `WorkoutExerciseList.tsx:125` and `:137` — the exercise-level "complete all sets" checkmark, which fabricates reps and effort for a whole exercise in one tap **and bypasses the offline queue**. RPE 7 is inside the "confident" band, so every logged set is a confident hit, the consensus window saturates, and the progress dots read 2 of 2 forever. Deload (`SI-17`) and rep-retry (`SI-19`) are unreachable in production. The observable behaviour is "add the increment every other session, indefinitely", which is what prompted this work.
 
 The forged effort value is the real offence. Assuming you hit the target when you tap a "done" control is a claim you made. Assuming you had three reps in reserve is a claim nobody made. Section 6 keeps the first and removes the second.
 
@@ -284,11 +292,11 @@ Six new columns is a lot, and the alternative is a single `progression_config` J
 |---|---|---|
 | `actual_reps` | unchanged | Must start carrying real values. See section 6. |
 | `rir` | unchanged | Already nullable. |
-| `rpe` | **made nullable** | Currently `notNull`, which is what forces the fabricated 7. Null must mean "not logged", distinct from any effort value. |
+| `rpe` | **made nullable** | **Done, phase 1** (migration `0048`). Null means "not logged", distinct from any effort value. |
 | `is_failed` | unchanged | Stays as the explicit "attempted and missed" marker. |
 | `was_easy` | unchanged | Keeps working as the gate bypass (`SI-13`). |
 
-**Five migrations total**, not three: rep range columns, progression axis columns, `rpe` nullable, plus the two in section 14 — `set_type` and the prescribed-set-count snapshot on `workout_sets` (`P-1`), and `program_exercise_id` with a **unique index replacement** on `workout_sets` (`P-2`). Two of the five land on the busiest write path in the app, which is why they get their own phase. Each generated with `pnpm db:generate` and committed with its schema change, per `CLAUDE.md`.
+**Five migrations total**, not three (three of them shipped: `0046`, `0047`, `0048`): rep range columns, progression axis columns, `rpe` nullable, plus the two in section 14 — `set_type` and the prescribed-set-count snapshot on `workout_sets` (`P-1`), and `program_exercise_id` with a **unique index replacement** on `workout_sets` (`P-2`). Two of the five land on the busiest write path in the app, which is why they get their own phase. Each generated with `pnpm db:generate` and committed with its schema change, per `CLAUDE.md`.
 
 ---
 
@@ -352,7 +360,7 @@ Three are new: `reset`, `re-approach`, `held-unknown`. `held-unknown` matters be
 
 Every reason must be handled everywhere it is branched on, in the same change that adds it. `SI-33` says "both consumers" and is wrong: there are **seven sites across four files** (see `B-2`), and the rule should be read as that number.
 
-**The rename is more dangerous than the additions.** Two of those sites match on the string prefix rather than the full value: `progression.ts:785` is `reason.startsWith("progressed")`, and `:766-769` lists the four `progressed*` literals. Renaming the family to `advanced-*` makes both match nothing, so `easyOverride` (which this section says is kept) and readiness modulation (axis 8) **silently stop firing**. `reason` stays a string union so `.startsWith` remains valid and `tsc` reports nothing.
+**The rename is more dangerous than the additions.** Two of those sites match on the string prefix rather than the full value: `progression.ts:766` is `reason.startsWith("progressed")`, and `:746-750` lists the four `progressed*` literals. Renaming the family to `advanced-*` makes both match nothing, so `easyOverride` (which this section says is kept) and readiness modulation (axis 8) **silently stop firing**. `reason` stays a string union so `.startsWith` remains valid and `tsc` reports nothing.
 
 If the rename is not worth that risk, keep the `progressed*` names and add only the genuinely new codes. The names are internal; the safety is not.
 
@@ -436,11 +444,9 @@ This section is the per-phase brief: **read your phase's paragraph and every sec
 
 Shipped on branch `phase-0/progression-prerequisites`: migrations `0046` (`program_exercise_id`, `program_set_id`, the unique-index move) and `0047` (`set_type`, `prescribed_working_sets`), both backfilled. `workout_sets` rows now carry the plan slot they were logged against and the prescription that was in force, so phase 3 can ask its questions of the log rather than of today's plan. Two migrations of the five in section 5 are done; three remain (`rpe` nullable, rep-range columns, progression axis columns).
 
-**Phase 1: honest effort.** Make `rpe` nullable, stop forging 7 at **all five call sites** (section 1), treat null as unknown per `D-2`. Add the `held-unknown` reason code to **all seven branch sites** (`B-2`), even though no exercise can carry a cap until phase 5, so the path exists before anything depends on it.
+**Phase 1: honest effort. Built.** Made `rpe` nullable, stopped forging 7 at all five call sites, and retired the absolute RPE ladder per `D-1`, which was the live behaviour change this phase carried: it applied to every exercise, and no exercise can carry a cap until phase 5, so a lifter logging RIR 0-1 at the target gets a bump where they used to get `held`. That is the intended end state arriving early, and it belongs in the release note alongside `D-3`'s. Added `held-unknown` and handled it at every site that branches on `reason`, so the path exists before the engine can emit it.
 
-**This is a live behaviour change, not a no-op, and an earlier draft claimed otherwise.** `isConfidentHit` already treats null as `?? 7` (`progression.ts:204`), so the RPE ladder applies to every exercise today. No exercise can carry a cap until phase 5, so retiring the ladder per `D-1` retires it for all of them: a lifter logging RIR 0-1 gets `held` today and a bump after this phase. That is the intended end state, arriving early. Put it in the release note alongside `D-3`'s. (`BACKLOG.md`'s `A2` proposes the opposite fallback; `D-1` supersedes it.)
-
-**Also in this phase, non-negotiably:** `B-1` (the cycle adaptation average, which dilutes toward a *volume boost* rather than throwing) and `B-3`, `B-16`, `B-17`, `B-18` (the RPE reads and renders whose meaning changes).
+Shipped on branch `phase-1/honest-effort`, migration `0048` (`rpe` nullable). Three of the five migrations in section 5 are done; two remain (rep-range columns, progression axis columns). Also closed `B-1`, `B-3`, `B-11`, `B-15`, `B-16`, `B-17` and `B-18`, and discharged `P-3` for the effort payload.
 
 **Phase 3 runs before phase 2.** Phase 2 makes reps honest while the engine is still per-set (`SI-7`) and still backs off after three missed sessions *for that set number*. Set 4 of a 4x12 is the set that misses, so honest reps first would deload set 4 of every straight-set exercise and manufacture exactly the drift `D-3` exists to remove. Phase 3 depends only on phase 0. Build in the order **0, 1, 3, 2, 4, 5, 6**; the numbering is kept for stable references.
 
@@ -636,7 +642,7 @@ The `onConflictDoUpdate` is correct for its intended purpose (re-logging a set m
 
 *Was recorded separately in `BACKLOG.md` as a standalone bug*, because it was losing data regardless of whether this plan proceeded. Fixed and the entry removed.
 
-**P-3. The logging payload changes shape while old clients are still installed.**
+**P-3. The logging payload changes shape while old clients are still installed. Standing rule; discharged for `programSetId` in phase 0 and for `rpe` in phase 1.**
 
 This is a PWA; cached bundles keep calling the old Server Action for a while, and the offline queue can hold payloads written by a previous version. Phase 1 makes `rpe` nullable and stops sending 7; phase 2 sends real `actual_reps`.
 
@@ -692,7 +698,7 @@ Every place outside the progression engine that this plan changes the behaviour 
 
 ### Things that break outright
 
-**B-1. The cycle adaptation silently *boosts* volume when effort stops being logged. Breaks in phase 1.**
+**B-1. The cycle adaptation silently *boosts* volume when effort stops being logged. Fixed in phase 1.**
 
 `computeCycleAdaptation` (`training-cycles.ts:479`, the averaging at `:522`) computes `rpeRows.reduce((a, r) => a + r.rpe, 0) / rpeRows.length` on the column phase 1 makes nullable.
 
@@ -702,7 +708,7 @@ An earlier draft of this section called the result `NaN`, named the function `ge
 - **The harm runs the opposite way.** `computeAdaptationFactor` (`periodization.ts:283-288`) boosts weekly volume by 5% when `avgRpe == null || avgRpe <= 6`. Nulls dragging the average under 6 therefore **increase training volume for someone who simply stopped logging effort**. Had it been `NaN`, `NaN <= 6` is `false` and the branch would have been inert. The wrong diagnosis was the reassuring one.
 - **It is not silent.** `tsconfig.json` sets `"strict": true`, so `a + r.rpe` where `r.rpe: number | null` is a compile error. `pnpm verify` refuses to build it. This is the one item in this section that cannot ship unnoticed.
 
-*Required in phase 1:* filter nulls before averaging and preserve the existing "no data" path (`avgRpe = null`) when nothing remains. The test must assert the **average and the resulting adaptation percentage** on a mixed null/non-null set. A test that only asserts "not NaN" passes while the volume boost ships, which is exactly what the earlier draft prescribed.
+*Done in phase 1:* `meanLoggedRpe` drops the nulls and returns null when nothing remains, which is the existing no-data path. `periodization.test.ts` asserts the average, the resulting percentage, and the percentage the coercing version would have produced.
 
 **B-2. `reason` is branched on at seven sites across four files, not two. Breaks in phases 1, 4 and 6.**
 
@@ -710,22 +716,24 @@ An earlier draft of this section called the result `NaN`, named the function `ge
 
 | Site | What it does |
 |---|---|
-| `progression.ts:766-769` | readiness downgrade, matches four `progressed*` literals |
-| `progression.ts:785` | `reason.startsWith("progressed")` for the `easyOverride` flag |
-| `WorkoutSetsList.tsx:665` | sibling-apply dedup (`s.reason === target.reason`) |
-| `WorkoutSetsList.tsx:1315-1341` | the `*Pending` computations |
-| `WorkoutSetsList.tsx:1388-1495` | the render switch |
-| `workout-sets.ts:1433-1441` | `getWorkoutInsight` exercise status, ends in a catch-all `else status = "held"` |
-| `workout-sets.ts:1529-1535` | `getWorkoutInsight` `progressedCount` filter |
+| `progression.ts:746-750` | readiness downgrade, matches four `progressed*` literals |
+| `progression.ts:766` | `reason.startsWith("progressed")` for the `easyOverride` flag |
+| `WorkoutSetsList.tsx:669` | sibling-apply dedup (`s.reason === target.reason`) |
+| `WorkoutSetsList.tsx:1318-1344` | the `*Pending` computations |
+| `WorkoutSetsList.tsx:1392-1512` | the render switch |
+| `workout-sets.ts:1642-1650` | `getWorkoutInsight` exercise status, ends in a catch-all `else status = "held"` |
+| `workout-sets.ts:1744-1750` | `getWorkoutInsight` `progressedCount` filter |
 
 Two consequences. **New codes** (`held-unknown`, `reset`, `re-approach`) fall into the insight's catch-all and report as *stalled* on the dashboard — `re-approach` means the opposite. **The rename** breaks the first two sites silently, with no type error; see the note under section 7's reason-code list, which is the authoritative statement of that hazard.
 
-**B-3. Aggregate RPE reads change meaning. Breaks in phase 1.**
+**Done for `held-unknown` (phase 1).** All seven were walked. Four needed no change (the two `progressed*` matches, the dedup, the `*Pending` computations), three did: the render switch labels it, the insight's catch-all keeps reporting it as held deliberately, and an eighth site the table missed — the *stagnating* headline's `heldCount` filter — excludes it, because that headline prescribes a plateau remedy. `reset` and `re-approach` still owe the same walk.
+
+**B-3. Aggregate RPE reads change meaning. Handled in phase 1.**
 
 - `metrics.ts:588` — `AVG(CAST(rpe AS numeric))`. SQL `AVG` skips nulls, so this silently becomes "average of sets where effort was logged" rather than "average effort". Defensible, but the RPE-trend chart's meaning changes and the label should say so.
 - `workout-sets.ts:1407` — `rpe >= 9` for the cooked-exercise count. Three-valued logic excludes nulls, so the count drops. Also defensible, also a changed meaning.
 
-*Required in phase 1:* decide and document per call site whether null means "exclude" (usually right) and label the UI accordingly. Do not leave a chart whose definition quietly changed under the same title.
+*Done in phase 1:* both exclude, both say so. The trend chart's caption and empty state name the exclusion, and `RpeTrendPoint` documents what `sessionCount` counts; the cooked-exercise count carries the reasoning in a comment, since silence is not evidence of a hard session. Note the trend's exclusion is the `rpe > 0` predicate, not `AVG` skipping nulls as this entry originally said — `B-18` has it right.
 
 ### Things that change visibly for the user
 
@@ -753,19 +761,19 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 
 **B-10. The e2e progression spec asserts the current sheet.** `e2e/progression-settings.spec.ts` drives the "Sessions at target" gate group and asserts the rule sentence quotes the live gate. Phase 5's three-layer sheet rewrites both. *Required:* update it in the same change, and extend it to cover the preset picker, since it is the only end-to-end coverage progression has and it doubles as the missing-migration canary.
 
-**B-11. The seeders that matter are Server Actions, not scripts.** `scripts/seed.ts` inserts only exercises and model configs; it writes no sets and no `rpe`. The real producers are `scripts/seed-fake.ts:338`/`:358` and, more importantly, two in-app admin actions: `admin.ts:420`/`:429` (`seedDemoDataForUser`) and `admin.ts:605`/`:614` (`seedDataForUser`). All write `actualReps = targetReps + bonusRep` and a synthetic `rpe`. Phase 1 should have them emit a realistic mix of logged and unlogged effort, or every development and demo account will look like the pre-fix world and the new code paths will never be exercised locally.
+**B-11. The seeders that matter are Server Actions, not scripts. Done in phase 1** — all three now log effort about two-thirds of the time and look up the plan slot at insert time. `scripts/seed.ts` inserts only exercises and model configs; it writes no sets and no `rpe`. The real producers are `scripts/seed-fake.ts:338`/`:358` and, more importantly, two in-app admin actions: `admin.ts:420`/`:429` (`seedDemoDataForUser`) and `admin.ts:605`/`:614` (`seedDataForUser`). All write `actualReps = targetReps + bonusRep` and a synthetic `rpe`. Phase 1 should have them emit a realistic mix of logged and unlogged effort, or every development and demo account will look like the pre-fix world and the new code paths will never be exercised locally.
 
 **They also insert `workout_sets` rows directly, so phase 0's columns land null on them.** Seeded history carries no `program_exercise_id`, `program_set_id` or `prescribed_working_sets`, and takes the `set_type` default. Nothing reads those columns yet, so nothing is broken today — but phase 3 reads all four, and seeded data is the only data a development account has. Resolve it in the same change: build one map from `(programId, exerciseId, setNumber)` to the slot after the programs are created, and look it up at insert time.
 
 **B-12. The demo user shares tables with real users.** Anything seeded is visible in the demo account, and the demo seeder is `admin.ts:420` (`seedDemoDataForUser`), not anything under `scripts/`. Seed data should exercise the new schemes (a fixed-target exercise, a rep-range exercise, one capped, one not) so the presets are demonstrable, not just implemented.
 
-**B-15. `ExportedWorkoutHistory` is a third wire format with non-nullable `rpe`.** `types/workout.ts:392` types it `rpe: number`, fed by `workout-sessions.ts:305`/`:327`. Phase 1 makes the column nullable; the type and both producers need it. `B-13` warns that export and sharing are separate paths and then misses this one.
+**B-15. `ExportedWorkoutHistory` is a third wire format with non-nullable `rpe`. Done in phase 1** — the type and the producer both take null. `types/workout.ts:392` types it `rpe: number`, fed by `workout-sessions.ts:305`/`:327`. Phase 1 makes the column nullable; the type and both producers need it. `B-13` warns that export and sharing are separate paths and then misses this one.
 
-**B-16. Session detail renders "RPE null".** `SessionDetailClient.tsx:168` is `set.rir != null ? \`RIR ${set.rir}\` : \`RPE ${set.rpe}\``. Every set logged after phase 1 hits the else branch with a null. Needs a third case for "not logged".
+**B-16. Session detail renders "RPE null". Done in phase 1** — three cases: RIR, a bare RPE, or nothing. `SessionDetailClient.tsx:168` is `set.rir != null ? \`RIR ${set.rir}\` : \`RPE ${set.rpe}\``. Every set logged after phase 1 hits the else branch with a null. Needs a third case for "not logged".
 
-**B-17. The RPE trend chart plots 0.0 for weeks with no data.** `metrics.ts:615` is `row ? Math.round(Number(row.avgRpe) * 10) / 10 : null`; when the week's `AVG` returns SQL NULL, `Number(null)` is `0`. Not the same problem as `B-3` and not fixed by it.
+**B-17. The RPE trend chart plots 0.0 for weeks with no data. Guarded in phase 1** — and the guard is belt-and-braces: the `WHERE rpe > 0` predicate in `B-18` already excludes every null row, so no group can average to SQL NULL unless that predicate is relaxed. The null check costs a line and survives the relaxation. `metrics.ts:615` is `row ? Math.round(Number(row.avgRpe) * 10) / 10 : null`; when the week's `AVG` returns SQL NULL, `Number(null)` is `0`. Not the same problem as `B-3` and not fixed by it.
 
-**B-18. The same query's session count changes meaning.** `metrics.ts:590`'s `COUNT(DISTINCT session)` sits behind the `rpe > 0` predicate at `:599`, so weeks with no logged effort drop out of the chart entirely. Also note the exclusion is that `WHERE` clause, not `AVG` skipping nulls as `B-3` states.
+**B-18. The same query's session count changes meaning. Done in phase 1** — the type says it counts sessions that contributed effort, and nothing renders it. `metrics.ts:590`'s `COUNT(DISTINCT session)` sits behind the `rpe > 0` predicate at `:599`, so weeks with no logged effort drop out of the chart entirely. Also note the exclusion is that `WHERE` clause, not `AVG` skipping nulls as `B-3` states.
 
 **B-19. Two more places gate the mode enum.** `validators/workout.ts:340` (`importProgramSchema`'s `.enum([...])`, which gates the import `B-13` describes) and `programs.ts:579` (`VALID_PROGRESSION_MODES`, backing the `updateProgramExerciseProgressionMode` Server Action). Neither is covered by `B-7`, `B-8` or `B-13`.
 

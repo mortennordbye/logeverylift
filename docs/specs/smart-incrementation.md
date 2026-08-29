@@ -5,6 +5,8 @@
 > **Source of truth:** `src/lib/utils/progression.ts`, `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`), `src/lib/actions/programs.ts` (`applyProgressionToPlan` + the settings actions), `src/lib/validators/workout.ts`, `src/components/features/{WorkoutSetsClient,WorkoutSetsList,SetEditView}.tsx`
 >
 > Stale check: `git log f77d528..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
+>
+> **Partially revised 2026-08-29 by phase 1 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md).** SI-10, SI-12, SI-17, SI-31 and the vocabulary were rewritten against the code as it now stands; the effort ladder they described is retired. The stamp above is deliberately *not* advanced, because the rest of the spec has not been re-verified since — the full rewrite is scheduled for the end of that plan's phase 5.
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
 
@@ -17,8 +19,8 @@ Rule prefix: **`SI`**.
 - **Suggestion** — the `SetSuggestion` returned by `buildSuggestion`. Advisory. Recomputed from logged history every time the page loads, so a lost one costs nothing.
 - **Session override** — the accepted value, held client-side in `WorkoutSessionContext` and flushed into `workout_sets` on log. Affects today only.
 - **Plan** — `program_sets`, the blueprint. Only `applyProgressionToPlan` writes here, and only for opted-in exercises. See [`../workout-and-sets.md`](../workout-and-sets.md) for blueprint-vs-log.
-- **Hit** — a logged set that reached its target. **Confident hit** — a hit that also had effort in reserve (SI-10). Only confident hits count toward progression.
-- **Window** — how many past sessions are looked at (`CONSENSUS_WINDOW`, 5). **Gate** — how many confident hits inside that window are needed (`requiredHits`, default 2). The window is fixed; the gate is per-exercise.
+- **Hit** — a logged set that reached its target. That is the whole test; effort does not qualify it (SI-10).
+- **Window** — how many past sessions are looked at (`CONSENSUS_WINDOW`, 5). **Gate** — how many hits inside that window are needed (`requiredHits`, default 2). The window is fixed; the gate is per-exercise.
 - **Base weight** — the weight on the *most recent logged set*, not the planned weight. Everything is computed relative to it.
 
 ## Scope boundary
@@ -29,7 +31,7 @@ The two are independent and easy to confuse, because they share words and even a
 
 ## Inputs
 
-Per-exercise settings on `program_exercises`: `progressionMode`, `overloadIncrementKg`, `overloadIncrementReps`, `progressionRequiredHits`, `progressionApplyToPlan`, `exerciseType`. Per-set on `program_sets`: `setType`, `targetReps`, `durationSeconds`, `distanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it), `wasEasy`, `isFailed`. Schema detail is in [`../data-model.md`](../data-model.md).
+Per-exercise settings on `program_exercises`: `progressionMode`, `overloadIncrementKg`, `overloadIncrementReps`, `progressionRequiredHits`, `progressionApplyToPlan`, `exerciseType`. Per-set on `program_sets`: `setType`, `targetReps`, `durationSeconds`, `distanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it, and both null when the lifter reported nothing), `wasEasy`, `isFailed`. Schema detail is in [`../data-model.md`](../data-model.md).
 
 Two non-obvious ones:
 
@@ -106,13 +108,13 @@ The target is the row's own `targetReps`, falling back to the program's. With no
 *Why:* open-ended sets ("AMRAP") shouldn't be permanently ineligible for progression just because nothing was prescribed.
 *Covered by:* `progressive-suggestions.test.ts` — "returns true for null targets when reps > 0…", "returns false for null targets when actualReps = 0…".
 
-### SI-10 — A confident hit is a hit with reserve left
-On top of SI-9: RPE ≤ 7 counts; RPE 8 counts only if the lifter did *more* than the target; RPE 9–10 never counts. Missing RPE is treated as 7.
+### SI-10 — Logged effort does not decide whether a hit counts
+A set that reached its target is a hit, whatever the lifter reported about how hard it was — including nothing at all.
 
-Because `rpe = 10 − rir`, this reads in RIR terms as: RIR ≥ 3 counts, RIR 2 counts only with an extra rep, RIR 0–1 never.
+There used to be an absolute ladder on top of SI-9: RPE ≤ 7 counted, RPE 8 counted only with an extra rep, RPE 9–10 never counted, and a missing value was read as 7. It is retired.
 
-*Why:* hitting the target at a maximal grind is not evidence you can hold more weight. Treating a missing RPE as neutral keeps pre-RIR history usable instead of freezing those exercises.
-*Covered by:* `progressive-suggestions.test.ts` — the `isConfidentHit` block; "holds when all sessions are RPE 9-10 hits".
+*Why:* two faults, and the second is the serious one. It judged every exercise against a threshold nobody had chosen, and reading a missing value as 7 turned silence into evidence — with the old logging path writing 7 on every tap, that made every logged set a confident hit. Effort is meant to gate clearing again, but only where a lifter asks for it: a per-set prescribed RIR cap, compared against what was actually logged. Nothing carries a cap yet.
+*Covered by:* `progressive-suggestions.test.ts` — the `metTargetReps` block, "progresses off hits the retired RPE ladder would have rejected", "counts sessions with no effort logged".
 
 ### SI-11 — In weight-bearing modes, a hit only counts at the current load or heavier
 Hits logged below the base weight are excluded from the count.
@@ -120,7 +122,7 @@ Hits logged below the base weight are excluded from the count.
 *Why:* without this, hits from *before* the last bump keep counting after it, so `80 hit → 80 hit → 82.5 missed` suggests 85 and the load runs away from the lifter. Double progression means "hit the target twice at **this** weight, then move". Harmless while a suggestion was only a chip; not harmless once it can write to the plan.
 *Covered by:* `progressive-suggestions.test.ts` — the "hits must be at the current weight" block.
 
-### SI-12 — The gate is 2 confident hits, overridable per exercise between 1 and 5
+### SI-12 — The gate is 2 hits, overridable per exercise between 1 and 5
 `progressionRequiredHits` overrides the default; null restores it. The validator clamps to 1…`CONSENSUS_WINDOW`.
 
 *Why:* one good session can be luck. The ceiling is the window itself — asking for more hits than the window can hold would be unsatisfiable, so it is rejected at the edge rather than silently freezing the exercise.
@@ -166,10 +168,10 @@ Distinct from `manual`, which produces a suggestion carrying the current weight 
 *Why:* `none` means "don't show me anything here"; `manual` means "show me where I am, but don't propose changes". The UI renders a badge for the second and nothing for the first.
 *Covered by:* none.
 
-### SI-17 — Three straight misses with no confident hit is a deload
-In `weight`, `smart` and `reps` modes only: when the 3 most recent sessions all missed their target *and* the window holds zero confident hits, suggest 90% of base weight, snapped to the increment grid.
+### SI-17 — Three straight misses with no hit anywhere in the window is a deload
+In `weight`, `smart` and `reps` modes only: when the 3 most recent sessions all missed their target *and* the window holds zero hits, suggest 90% of base weight, snapped to the increment grid.
 
-*Why:* repeated failure at a load is a signal to back off and re-approach, not to keep grinding. The "no confident hits anywhere in the window" clause stops a single bad patch from overriding evidence the weight is manageable.
+*Why:* repeated failure at a load is a signal to back off and re-approach, not to keep grinding. The "no hits anywhere in the window" clause stops a single bad patch from overriding evidence the weight is manageable.
 *Covered by:* `progressive-suggestions.test.ts` — the "deload detection" block; "yields to a deload — three misses outrank an easy verdict".
 
 ### SI-18 — A one-off drop in weight is offered back, an intentional deload is not
@@ -242,11 +244,11 @@ Suggest `lastDistance + metresIncrement`, defaulting to 500 m. Requires the most
 
 *Covered by:* `progressive-suggestions.test.ts` — the "distance mode" blocks.
 
-### SI-31 — Timed and distance work uses a plain RPE ≤ 8 gate
-These modes count any target-meeting session at RPE ≤ 8 as a hit — they do not apply the extra-rep clause (SI-10) or the at-current-load clause (SI-11).
+### SI-31 — Timed and distance work counts any target-meeting session
+These modes count any session that met the target as a hit — they do not apply the at-current-load clause (SI-11). They carried their own RPE ≤ 8 filter until SI-10's ladder was retired; it went with it.
 
-*Why:* "one more rep than target" has no meaning for a hold or a run, and there is no load to compare against.
-*Covered by:* `progressive-suggestions.test.ts` — "time mode RPE confidence", "distance mode RPE confidence".
+*Why:* there is no load to compare a hold or a run against.
+*Covered by:* `progressive-suggestions.test.ts` — "time mode effort", "distance mode effort".
 
 ### SI-32 — `overloadIncrementReps` carries three different units
 Reps in rep-based modes, seconds in `time`, metres in `distance`. One column, three meanings, disambiguated only by `progressionMode`.
