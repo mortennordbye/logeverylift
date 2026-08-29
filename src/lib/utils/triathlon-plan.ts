@@ -11,14 +11,14 @@
  *
  * Strength is three sessions a week (Lower / Upper-Push / Upper-Pull) built to
  * maintain and build muscle alongside the endurance load, not just support economy.
- * The four lower-body / posterior-chain compound mains (Squat, RDL, Hip Thrust,
- * Bulgarian Split Squat) stay tagged sessionRole = "strength" so the active cycle
- * periodizes their reps/rest by phase (see strengthPhaseRecipe) — they carry the
- * economy stimulus and still maintain muscle. The full-body hypertrophy work added
- * around them (chest/shoulders/back/arms/calves) runs in fixed 8–12 rep ranges with
+ * It runs FLAT for the whole block: no set carries a sessionRole, so the weekly
+ * cycle sync never re-prescribes strength reps or rest, and rep targets belong to
+ * the progression engine alone. The lower-body / posterior-chain compound mains
+ * (Squat, RDL, Hip Thrust, Bulgarian Split Squat) carry the economy stimulus at a
+ * fixed rep target; the full-body hypertrophy work around them
+ * (chest/shoulders/back/arms/calves) runs in fixed 8–12 rep ranges with
  * "weight"/"reps" progressive overload, so the history-based suggestion engine
- * auto-adds load week to week; these accessories carry no sessionRole, so the weekly
- * sync leaves their rep targets stable. Plyometric and core work is held constant.
+ * auto-adds load week to week. Plyometric and core work is held constant.
  * The standalone endurance swim is folded onto the Upper-Push day so no swim/bike/run
  * volume is lost when the third strength day is added.
  */
@@ -158,7 +158,7 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   // ── Strength block (flat straight sets, RIR-capped) ─────────────────────────
   // A maintenance/hypertrophy block run alongside the endurance load. Sets are
   // FLAT — the same target reps across every working set, no phase re-prescription
-  // (no sessionRole "strength") and no top-set pyramiding — to spare the CNS so the
+  // (no sessionRole at all) and no top-set pyramiding — to spare the CNS so the
   // endurance quality sessions aren't compromised. Weight is left at 0 for the
   // athlete to load to the target reps at the prescribed RIR cap. The spec's `smart`
   // mode is mapped to `weight`: smart nudges reps via a 1RM estimate, which would

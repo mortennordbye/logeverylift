@@ -7,7 +7,6 @@ import {
   periodizedLoad,
   phaseLayout,
   scaledDuration,
-  strengthPhaseRecipe,
   uncoupledAcwr,
   type PeriodizationSummaryInput,
   type TrainingGoal,
@@ -134,32 +133,6 @@ describe("intervalPhaseRecipe — quality session evolves by phase", () => {
   it("gives harder reps more recovery", () => {
     expect(intervalPhaseRecipe("peak").restSeconds).toBeGreaterThan(intervalPhaseRecipe("base").restSeconds);
     expect(intervalPhaseRecipe("build").restSeconds).toBeGreaterThanOrEqual(intervalPhaseRecipe("base").restSeconds);
-  });
-});
-
-describe("strengthPhaseRecipe — strength periodizes alongside endurance", () => {
-  it("drops reps as load rises base → build → peak → taper", () => {
-    expect(strengthPhaseRecipe("base").reps).toBeGreaterThan(strengthPhaseRecipe("build").reps);
-    expect(strengthPhaseRecipe("build").reps).toBeGreaterThanOrEqual(strengthPhaseRecipe("peak").reps);
-    expect(strengthPhaseRecipe("peak").reps).toBeGreaterThanOrEqual(strengthPhaseRecipe("taper").reps);
-  });
-
-  it("cuts taper to low-rep work while holding heavy intensity (long rest)", () => {
-    expect(strengthPhaseRecipe("taper").reps).toBeLessThanOrEqual(3);
-    expect(strengthPhaseRecipe("taper").restSeconds).toBeGreaterThanOrEqual(150);
-  });
-
-  it("gives the heavy max-strength block longer rest than the adaptation base", () => {
-    expect(strengthPhaseRecipe("build").restSeconds).toBeGreaterThan(strengthPhaseRecipe("base").restSeconds);
-  });
-
-  it("covers every phase with a positive rep and rest prescription", () => {
-    for (const phase of ["base", "build", "peak", "taper", "maintain"] as const) {
-      const r = strengthPhaseRecipe(phase);
-      expect(r.reps).toBeGreaterThan(0);
-      expect(r.restSeconds).toBeGreaterThan(0);
-      expect(r.intent.length).toBeGreaterThan(0);
-    }
   });
 });
 

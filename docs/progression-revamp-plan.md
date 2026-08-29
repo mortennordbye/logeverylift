@@ -453,10 +453,10 @@ Binding consequences for the build:
 **D-6. When double progression and the cycle's strength phase both want `target_reps`, who wins?**
 **Decided (2026-08-29): delete the cycle branch. Progression owns `target_reps` outright.**
 
-Evidence behind the decision: `git log -S '"strength"'` returns a single commit, the initial migration, so no producer for the `sessionRole = "strength"` tag was ever written. The triathlon generator explicitly names and rejects the mechanism ("no phase re-prescription (no sessionRole \"strength\")... to spare the CNS so the endurance quality sessions aren't compromised", `triathlon-plan.ts:158-165`). Flat strength is the later, deliberate choice; `strengthPhaseRecipe` is the superseded design it replaced.
+Evidence behind the decision: `git log -S '"strength"'` returns a single commit, the initial migration, so no producer for the `sessionRole = "strength"` tag was ever written. The triathlon generator explicitly names and rejects the mechanism ("no phase re-prescription (no sessionRole \"strength\")... to spare the CNS so the endurance quality sessions aren't compromised", `triathlon-plan.ts:158-165`). Flat strength is the later, deliberate choice; *strengthPhaseRecipe* is the superseded design it replaced.
 
 Binding consequences for the build:
-- Delete the `"strength"` branch in `syncPeriodizedTargets`, `strengthPhaseRecipe`, and its tests. Fix the two docblocks (`periodization.ts:218-230`, `triathlon-plan.ts:12-23`) that still describe the superseded three-strength-day week.
+- **Built (phase 0).** Deleted the `"strength"` branch in `syncPeriodizedTargets`, the *strengthPhaseRecipe* helper and its tests, and corrected both stale docblocks.
 - **Preserve the reasoning, not the code.** Move the rep scheme (base 12 @ 90s anatomical adaptation, build 5 @ 180s max strength, peak 4 @ 180s strength-power, taper 3 @ 180s sharpen, maintain 6 @ 150s), its citations (Rønnestad & Mujika 2014; Beattie 2017) and the CNS rationale for *not* using it into [`specs/cycle-periodization.md`](specs/cycle-periodization.md) as a "considered, not implemented" note. The research is the valuable part and it must not be lost with the function.
 - No arbitration rule is needed in the progression engine. The anchored-endurance exclusion (section 9) still applies and is unaffected.
 - This closes cycle spec divergence `D3`, which was open pending exactly this decision.

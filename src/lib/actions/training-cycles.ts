@@ -17,7 +17,6 @@ import {
   phaseLayout,
   scaledDistance,
   scaledDuration,
-  strengthPhaseRecipe,
   type AthleteLevel,
   type TrainingGoal,
   type TrainingPhase,
@@ -575,8 +574,6 @@ async function syncPeriodizedTargets(
           or(
             isNotNull(programSets.peakDistanceMeters),
             isNotNull(programSets.peakDurationSeconds),
-            // Main strength lifts periodize their reps/rest by phase too.
-            eq(programSets.sessionRole, "strength"),
           ),
         ),
       );
@@ -588,7 +585,6 @@ async function syncPeriodizedTargets(
             distanceMeters?: number;
             durationSeconds?: number;
             targetHeartRateZone?: number;
-            targetReps?: number;
             restTimeSeconds?: number;
           } = {};
           if (ps.peakDistance != null) update.distanceMeters = scaledDistance(ps.peakDistance, effective);
@@ -597,12 +593,6 @@ async function syncPeriodizedTargets(
           if (ps.sessionRole === "work") {
             update.targetHeartRateZone = recipe.zone;
             update.restTimeSeconds = recipe.restSeconds;
-          }
-          // Main strength lifts move reps/rest by phase (load stays athlete-entered).
-          if (ps.sessionRole === "strength") {
-            const s = strengthPhaseRecipe(phase);
-            update.targetReps = s.reps;
-            update.restTimeSeconds = s.restSeconds;
           }
           return db.update(programSets).set(update).where(eq(programSets.id, ps.id));
         }),

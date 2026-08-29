@@ -5,9 +5,10 @@
  * exercise represent the *peak* (race-prep) week. `periodizedLoad` returns the
  * multiplier to apply to those peak distances for a given week of the block, so
  * volume ramps Base → Build → Peak, then tapers into race week, with a lighter
- * deload week every ~4th week. Strength is periodized in parallel — see
- * `strengthPhaseRecipe` — moving from an anatomical-adaptation base to heavy,
- * low-rep max strength, then a low-volume taper.
+ * deload week every ~4th week. Strength is deliberately *not* periodized here:
+ * it runs flat for the whole block and its reps belong to the progression
+ * engine. See "Strength periodization: considered, not implemented" in
+ * docs/specs/cycle-periodization.md.
  *
  *  - goal "maintain": flat 1.0 every week (hold fitness, no race peak/taper).
  *  - goal "build":    the curve described above.
@@ -212,38 +213,6 @@ export function intervalPhaseRecipe(phase: TrainingPhase): {
       return { zone: 4, restSeconds: 150, intent: "Sharpener" };
     case "maintain":
       return { zone: 4, restSeconds: 120, intent: "Threshold" };
-  }
-}
-
-/**
- * Phase-specific prescription for a triathlon strength session's main barbell
- * lifts. Strength periodizes alongside endurance (Rønnestad & Mujika 2014;
- * Beattie 2017): an anatomical-adaptation base of higher reps at moderate load
- * progresses to heavy, low-rep max strength — the principal driver of improved
- * economy in endurance athletes — then a low-volume taper that preserves the
- * neuromuscular gain without adding fatigue. Reps fall and rest lengthens as
- * load rises. The active cycle's weekly sync applies this to sets tagged
- * sessionRole = "strength"; plyometric and core accessories are not periodized.
- * Working-set count is held constant (the sync rewrites rows, not their count),
- * so the volume change rides on reps. Load stays athlete-entered — they pick a
- * weight that makes the target reps hard, which is the intensity prescription.
- */
-export function strengthPhaseRecipe(phase: TrainingPhase): {
-  reps: number;
-  restSeconds: number;
-  intent: string;
-} {
-  switch (phase) {
-    case "base":
-      return { reps: 12, restSeconds: 90, intent: "Anatomical adaptation" };
-    case "build":
-      return { reps: 5, restSeconds: 180, intent: "Max strength" };
-    case "peak":
-      return { reps: 4, restSeconds: 180, intent: "Strength-power" };
-    case "taper":
-      return { reps: 3, restSeconds: 180, intent: "Sharpen — hold intensity, cut volume" };
-    case "maintain":
-      return { reps: 6, restSeconds: 150, intent: "Maintenance" };
   }
 }
 
