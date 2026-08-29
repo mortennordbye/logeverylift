@@ -1070,6 +1070,36 @@ describe("pendingProgressions", () => {
     ]);
   });
 
+  it("gives one set the same update whether applied alone or with the others", () => {
+    // The per-set chip (applySuggestion) filters the shared input array down to
+    // one set and calls this; the exercise-level chip passes the whole array.
+    // They must agree, or tapping one row writes something different from
+    // tapping "apply all" — which is exactly how the two paths drifted before
+    // applySuggestion stopped hand-building its own payload.
+    const sets = [
+      makeSet({ id: 1 }),
+      makeSet({ id: 2, weightKg: "70.00", planned: { weightKg: "80.00", targetReps: 8 } }),
+      makeSet({ id: 3, targetReps: 12 }),
+      makeSet({ id: 4, durationSeconds: 60 }),
+    ];
+    const suggestions = {
+      1: makeSuggestion(),
+      2: makeSuggestion({ suggestedWeightKg: 75 }),
+      3: makeSuggestion({ reason: "progressed-reps", suggestedReps: 9 }),
+      4: makeSuggestion({
+        reason: "progressed-time",
+        suggestedDurationSeconds: 70,
+        suggestedWeightKg: 80,
+      }),
+    };
+    const all = pendingProgressions(sets, suggestions, NONE);
+    for (const set of sets) {
+      expect(pendingProgressions([set], suggestions, NONE)).toEqual(
+        all.filter((u) => u.setId === set.id),
+      );
+    }
+  });
+
   it("returns nothing when there are no suggestions at all", () => {
     expect(pendingProgressions([makeSet()], undefined, NONE)).toEqual([]);
     expect(pendingProgressions([makeSet()], {}, NONE)).toEqual([]);

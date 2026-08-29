@@ -173,18 +173,24 @@ export function WorkoutSetsClient({
   const incrementSections: ("weight" | "reps" | "time" | "distance")[] =
     isRunning ? ["distance"] : exerciseIsTimed ? ["time"] : ["weight", "reps"];
 
+  // Today's values with the blueprint carried alongside. The first decides
+  // whether a suggestion has been taken yet, the second whether writing it
+  // would lower the plan — see PendingSetInput.planned.
+  //
+  // Built once and shared: applySuggestion filters this same array down to one
+  // set rather than assembling its own input. The per-set and apply-all paths
+  // having separately-built inputs is what let them drift apart before.
+  const pendingInputs = displaySets.map((s) => ({
+    ...s,
+    planned: sets.find((p) => p.id === s.id),
+  }));
+  const completedSetIds = workoutSession?.completedSetIds ?? EMPTY_SET_IDS;
+
   // Suggestions the lifter hasn't taken yet, in the values applying them would
   // write. Reads the override-folded sets so a set drops out the moment it is
   // already at the suggested numbers.
   const pending = isWorkout
-    ? pendingProgressions(
-        // `planned` carries the un-overridden blueprint alongside today's
-        // values: the first decides whether the suggestion has been taken yet,
-        // the second whether writing it would lower the plan.
-        displaySets.map((s) => ({ ...s, planned: sets.find((p) => p.id === s.id) })),
-        suggestions,
-        workoutSession?.completedSetIds ?? EMPTY_SET_IDS,
-      )
+    ? pendingProgressions(pendingInputs, suggestions, completedSetIds)
     : [];
 
   // Only label the chip with a weight when every pending set lands on the same
@@ -235,21 +241,15 @@ export function WorkoutSetsClient({
       ...(durationSeconds != null ? { durationSeconds } : {}),
       ...(distanceMeters != null ? { distanceMeters } : {}),
     });
-    // Derive the plan write from pendingProgressions rather than hand-building
-    // it. This used to construct its own payload, which drifted from the engine
-    // in two ways: it wrote the carried-along weight for a rep retry, and it
-    // had no floor, so a suggestion sitting below the plan rewrote the plan
-    // downward behind an "↑" chip. One rule, one implementation, both consumers
-    // — the apply-all chip above passes the same shape.
-    const display = displaySets.find((s) => s.id === setId);
+    // Derive the plan write from pendingProgressions over this one set, using
+    // the same inputs the apply-all chip uses. This used to hand-build its own
+    // payload, which drifted from the engine in two ways: it wrote the
+    // carried-along weight for a rep retry, and it had no floor, so a
+    // suggestion sitting below the plan rewrote the plan downward behind an
+    // "↑" chip. One rule, one implementation, one input.
+    const input = pendingInputs.find((s) => s.id === setId);
     persistToPlan(
-      display
-        ? pendingProgressions(
-            [{ ...display, planned: set }],
-            suggestions,
-            workoutSession.completedSetIds ?? EMPTY_SET_IDS,
-          )
-        : [],
+      input ? pendingProgressions([input], suggestions, completedSetIds) : [],
     );
   }
 
