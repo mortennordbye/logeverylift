@@ -454,7 +454,15 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
         const exerciseId = exerciseIdByName.get(exBlueprint.name);
         if (!exerciseId) continue;
 
-        for (const setBlueprint of exBlueprint.sets) {
+        // Roughly one exercise in eight loses its last set. An account where
+        // every session logs every prescribed set never exercises the
+        // "unknown" verdict the session gate hangs on, so the dot detail view
+        // has nothing to explain locally.
+        const dropsLastSet =
+          exBlueprint.sets.length > 1 && Math.random() < 0.12;
+
+        for (const [setIndex, setBlueprint] of exBlueprint.sets.entries()) {
+          if (dropsLastSet && setIndex === exBlueprint.sets.length - 1) continue;
           const weightKg = setBlueprint.weightKg + week * exBlueprint.weeklyIncrementKg;
           // Mostly hit target; early weeks occasionally beat it by 1 rep
           const bonusRep = week < 3 && Math.random() < 0.3 ? 1 : 0;
@@ -660,7 +668,15 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
         const exerciseId = exerciseIdByName.get(exBlueprint.name);
         if (!exerciseId) continue;
 
-        for (const setBlueprint of exBlueprint.sets) {
+        // Roughly one exercise in eight loses its last set. An account where
+        // every session logs every prescribed set never exercises the
+        // "unknown" verdict the session gate hangs on, so the dot detail view
+        // has nothing to explain locally.
+        const dropsLastSet =
+          exBlueprint.sets.length > 1 && Math.random() < 0.12;
+
+        for (const [setIndex, setBlueprint] of exBlueprint.sets.entries()) {
+          if (dropsLastSet && setIndex === exBlueprint.sets.length - 1) continue;
           // Progressive overload: add increment each week, always a clean multiple of 2.5
           const weightKg = setBlueprint.weightKg + week * exBlueprint.weeklyIncrementKg;
           // Reps always hit target; occasionally +1 when weights are lighter (early weeks)

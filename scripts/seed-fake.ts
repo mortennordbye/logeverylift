@@ -365,7 +365,15 @@ async function seedFake() {
         const exerciseId = exerciseIdByName.get(exBlueprint.name);
         if (!exerciseId) continue;
 
-        for (const setBlueprint of exBlueprint.sets) {
+        // Roughly one exercise in eight loses its last set. An account where
+        // every session logs every prescribed set never exercises the
+        // "unknown" verdict the session gate hangs on, so the dot detail view
+        // has nothing to explain locally.
+        const dropsLastSet =
+          exBlueprint.sets.length > 1 && Math.random() < 0.12;
+
+        for (const [setIndex, setBlueprint] of exBlueprint.sets.entries()) {
+          if (dropsLastSet && setIndex === exBlueprint.sets.length - 1) continue;
           const effort = seededEffort(2 + Math.floor(Math.random() * 3)); // RIR 2-4
           const slot = prog.exerciseMap.get(exBlueprint.name);
 
