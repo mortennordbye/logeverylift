@@ -734,7 +734,13 @@ export function WorkoutSetsClient({
                 {/* Reserved height: it runs one to four lines depending on the
                     axes, and the sheet grows upward from the bottom edge. */}
                 <div className="px-4 py-3 border-b border-border">
-                  <p className="text-xs text-muted-foreground min-h-[64px]">
+                  {/* Addressable on its own: the sentence quotes the same words
+                      the preset descriptions above it use, so a test matching on
+                      text alone cannot tell them apart. */}
+                  <p
+                    data-testid="progression-rule"
+                    className="text-xs text-muted-foreground min-h-[64px]"
+                  >
                     {ruleSentence ?? "No suggestions for this exercise."}
                   </p>
                 </div>

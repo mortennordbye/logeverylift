@@ -37,6 +37,10 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
     }
   };
   const gate = () => page.getByRole("group", { name: "Sessions at target" });
+  // Layer 2, addressed directly. The sentence quotes the same words the preset
+  // descriptions do — "the first set" appears in both — so matching on text
+  // alone resolves to two elements and fails on strict mode.
+  const rule = () => page.getByTestId("progression-rule");
 
   await openSheet();
 
@@ -47,10 +51,8 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   });
 
   // ── Layer 2: the sentence quotes the axes it just wrote ───────────────────
-  await expect(page.getByText(/2 sessions in a row/)).toBeVisible({
-    timeout: 5_000,
-  });
-  await expect(page.getByText(/Back off 10% after 3 workouts/)).toBeVisible({
+  await expect(rule()).toContainText(/2 sessions in a row/, { timeout: 5_000 });
+  await expect(rule()).toContainText(/Back off 10% after 3 workouts/, {
     timeout: 5_000,
   });
 
@@ -60,9 +62,7 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   await tapAndSave(page, gate().getByRole("button", { name: "3", exact: true }), {
     bodyIncludes: '"requiredHits":3',
   });
-  await expect(page.getByText(/3 sessions in a row/)).toBeVisible({
-    timeout: 5_000,
-  });
+  await expect(rule()).toContainText(/3 sessions in a row/, { timeout: 5_000 });
   // A gate of 3 matches no preset, so the badge says so. This is the whole
   // point of deriving the label rather than storing it.
   await expect(page.getByText("Custom", { exact: true }).first()).toBeVisible({
@@ -74,7 +74,7 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   await tapAndSave(page, scope().getByRole("button", { name: "First set" }), {
     bodyIncludes: '"scope":"first"',
   });
-  await expect(page.getByText(/the first set/)).toBeVisible({ timeout: 5_000 });
+  await expect(rule()).toContainText(/the first set/, { timeout: 5_000 });
 
   const applyToPlan = page.getByRole("switch");
   await expect(applyToPlan).toHaveAttribute("aria-checked", "false");
@@ -85,10 +85,8 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   // still set below came back out of the database.
   await page.reload();
   await openSheet();
-  await expect(page.getByText(/3 sessions in a row/)).toBeVisible({
-    timeout: 5_000,
-  });
-  await expect(page.getByText(/the first set/)).toBeVisible({ timeout: 5_000 });
+  await expect(rule()).toContainText(/3 sessions in a row/, { timeout: 5_000 });
+  await expect(rule()).toContainText(/the first set/, { timeout: 5_000 });
   await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "true");
 
   // Restore, and prove the restore itself persisted — a silent failure here
@@ -101,9 +99,7 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   });
   await page.reload();
   await openSheet();
-  await expect(page.getByText(/2 sessions in a row/)).toBeVisible({
-    timeout: 5_000,
-  });
-  await expect(page.getByText(/every set/)).toBeVisible({ timeout: 5_000 });
+  await expect(rule()).toContainText(/2 sessions in a row/, { timeout: 5_000 });
+  await expect(rule()).toContainText(/every set/, { timeout: 5_000 });
   await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "false");
 });
