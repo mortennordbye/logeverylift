@@ -1555,14 +1555,7 @@ export async function getProgressiveSuggestions(
       // progression entirely.
       if (ps.setType && ps.setType !== "working") continue;
 
-      const all = windows.get(ps.programExerciseId) ?? [];
-      // E-13: a settings change re-judges the window under the new rule, so
-      // sessions logged before it are dropped rather than silently re-scored.
-      // Without this the dot count moves when the lifter touches a setting,
-      // which reads as a bug — the numbers change and nothing they did caused it.
-      const sessions = ps.progressionConfigAt
-        ? all.filter((sess) => new Date(sess.date) >= ps.progressionConfigAt!)
-        : all;
+      const sessions = windows.get(ps.programExerciseId) ?? [];
 
       const working = workingBySlot.get(ps.programExerciseId) ?? [];
       const scope = toScope(ps.progressionScope);
@@ -1593,6 +1586,13 @@ export async function getProgressiveSuggestions(
         backoffAfter: ps.progressionBackoffAfter,
         readiness: ps.progressionReadiness,
         effortCap: capSet?.targetRir ?? null,
+        // E-13. Compared against the session's own plain date, so the
+        // granularity is a day: a session logged earlier on the day the setting
+        // changed still counts. The engine holds anything older inert rather
+        // than re-judging it under a rule that did not apply at the time.
+        configChangedAt: ps.progressionConfigAt
+          ? ps.progressionConfigAt.toISOString().slice(0, 10)
+          : null,
         peakDurationSeconds: ps.peakDurationSeconds,
         peakDistanceMeters: ps.peakDistanceMeters,
         movementPattern: ps.movementPattern,

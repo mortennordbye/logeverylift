@@ -1360,8 +1360,9 @@ export function WorkoutSetsList({
               </ul>
               <p className="text-[10px] text-muted-foreground/70 mt-4">
                 Sessions that did not answer the question — cut short, reported
-                as tired, or logged with no effort where an effort cap asked for
-                one — neither bank progress nor count against you.
+                as tired, logged with no effort where an effort cap asked for
+                one, or run under progression settings you have since changed —
+                neither bank progress nor count against you.
               </p>
             </>
           )}
@@ -1400,6 +1401,10 @@ function describeSessionOutcome(
   // Unknown, and the reason is worth naming — "nothing happened" is the report
   // this view exists to prevent.
   if (session.unknownReason === "effort") return "No effort logged";
+  // The lifter changed a setting after this session, so it was judged under a
+  // rule that no longer applies. Saying so is the whole point of E-13: the
+  // alternative is a dot count that moves for reasons nothing on screen explains.
+  if (session.unknownReason === "reconfigured") return "Before you changed the rule";
   if (session.unknownReason === "tired" || session.feeling === "Tired") {
     return "Tired — not counted";
   }

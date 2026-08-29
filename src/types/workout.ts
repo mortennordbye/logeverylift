@@ -265,9 +265,10 @@ export type SuggestionSession = {
   /**
    * Why an unknown session is unknown. "partial" means fewer working sets were
    * logged than prescribed, "effort" that a cap was prescribed and nothing was
-   * reported against it, "tired" that it fell short on a Tired day.
+   * reported against it, "tired" that it fell short on a Tired day, and
+   * "reconfigured" that it predates the last change to the progression rules.
    */
-  unknownReason?: "partial" | "effort" | "tired";
+  unknownReason?: "partial" | "effort" | "tired" | "reconfigured";
   /** Missed on the effort cap rather than on reps: the targets were met. */
   effortShort?: boolean;
 };

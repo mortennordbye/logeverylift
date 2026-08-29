@@ -807,6 +807,20 @@ describe("describeProgressionRule", () => {
     ).toContain("+0.5km");
   });
 
+  it("says the cycle owns an anchored target rather than promising a bump", () => {
+    // The sentence is the contract, and the engine refuses to write an
+    // anchored duration. Quoting an increment here would be the sheet
+    // promising something that never happens.
+    const text = describeProgressionRule({
+      ...base,
+      advance: "duration",
+      incrementReps: 30,
+      anchored: true,
+    })!;
+    expect(text).toContain("training cycle");
+    expect(text).not.toContain("+30s");
+  });
+
   it("returns null for modes that never suggest anything", () => {
     expect(describeProgressionRule({ ...base, advance: "manual" })).toBeNull();
     expect(describeProgressionRule({ ...base, advance: "none" })).toBeNull();
@@ -2030,5 +2044,64 @@ describe("buildSuggestion — one step per session", () => {
       null,
     );
     expect(r?.suggestedDurationSeconds).toBe(70);
+  });
+});
+
+// ─── E-13: a settings change does not re-judge history ───────────────────────
+
+describe("buildSuggestion — the config stamp", () => {
+  const cleared = () =>
+    Array.from({ length: 3 }, (_, i) =>
+      makeSession({
+        actualReps: 8,
+        targetReps: 8,
+        date: `2024-01-0${3 - i}`,
+      }),
+    );
+
+  it("counts everything when the rules have never changed", () => {
+    const r = buildSuggestion(cleared(), makePs({ advance: "load" }), null);
+    expect(r?.hitsAchieved).toBe(3);
+    expect(r?.reason).toBe("progressed");
+  });
+
+  it("holds sessions logged before the change inert, rather than re-judging them", () => {
+    const r = buildSuggestion(
+      cleared(),
+      makePs({ advance: "load", configChangedAt: "2024-01-03" }),
+      null,
+    );
+    // Only the session on the day of the change is still evidence.
+    expect(r?.hitsAchieved).toBe(1);
+    expect(r?.sessions?.[1].status).toBe("unknown");
+    expect(r?.sessions?.[1].unknownReason).toBe("reconfigured");
+  });
+
+  it("still reports what was done last, even with the whole window inert", () => {
+    // The failure this guards against: dropping the sessions instead of
+    // marking them inert empties the window, and an empty window returns no
+    // suggestion at all — so changing a setting would delete the chip, the
+    // dots and the "Last: 80kg" line the lifter was reading.
+    const r = buildSuggestion(
+      cleared(),
+      makePs({ advance: "load", configChangedAt: "2024-06-01" }),
+      null,
+    );
+    expect(r).not.toBeNull();
+    expect(r?.basedOnWeightKg).toBe(80);
+    expect(r?.hitsAchieved).toBe(0);
+    expect(r?.sessions).toHaveLength(3);
+  });
+
+  it("does not let an inert session count toward a back-off either", () => {
+    const missed = Array.from({ length: 3 }, (_, i) =>
+      makeSession({ actualReps: 5, targetReps: 8, date: `2024-01-0${3 - i}` }),
+    );
+    const r = buildSuggestion(
+      missed,
+      makePs({ advance: "load", configChangedAt: "2024-06-01" }),
+      null,
+    );
+    expect(r?.reason).not.toBe("deload");
   });
 });

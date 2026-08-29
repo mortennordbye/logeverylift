@@ -241,6 +241,11 @@ export function WorkoutSetsClient({
   const capSet =
     axes.scope === "first" ? workingSets[0] : workingSets[workingSets.length - 1];
   const effortCap = capSet?.targetRir ?? null;
+  // The cycle owns an anchored set's target, so the sentence has to say so
+  // rather than promising an advance the engine will refuse (SI-30a).
+  const anchored = workingSets.some(
+    (s) => s.peakDurationSeconds != null || s.peakDistanceMeters != null,
+  );
 
   // Layer 1's list, filtered to the schemes this exercise's measure can run. A
   // plank has no reps to double-progress and a run has no weight to add.
@@ -274,6 +279,7 @@ export function WorkoutSetsClient({
     backoffPct: axes.backoffPct,
     backoffAfter: axes.backoffAfter,
     readiness: axes.readiness,
+    anchored,
   });
 
   // Increment sections this exercise can ever reach, mirroring the mode filter
@@ -414,11 +420,7 @@ export function WorkoutSetsClient({
     const previous = axes;
     const merged = { ...axes, ...next };
     setAxes(merged);
-    const result = await setProgramExerciseProgression({
-      programExerciseId,
-      ...next,
-      ...(next.requiredHits !== undefined ? { requiredHits: next.requiredHits } : {}),
-    });
+    const result = await setProgramExerciseProgression({ programExerciseId, ...next });
     if (!result.success) {
       setAxes(previous);
       return;

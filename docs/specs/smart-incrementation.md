@@ -343,6 +343,8 @@ Suggest **`targetDistance` + metresIncrement**, defaulting to 500 m. Weight is a
 ### SI-30a — An anchored set is never an advance target
 A set carrying `peakDurationSeconds` or `peakDistanceMeters` gets `held-anchored` and no suggested value, whatever the window says.
 
+The rule sentence says so too, ahead of every other clause: an anchored exercise reads "your training cycle sets these targets week by week, so progression leaves them alone" rather than quoting an increment it will never apply.
+
 *Why:* the training cycle rewrites those columns weekly from the peak anchor (`PZ` rules in [`cycle-periodization.md`](cycle-periodization.md)). A progression write there is overwritten at best and fights the periodization at worst, and the lifter would watch a number they did not set move twice. The other half of `A5`, and the boundary the two engines were always supposed to keep.
 *Covered by:* `progressive-suggestions.test.ts` — "never writes an anchored duration — the cycle owns it", "never writes an anchored distance either".
 
@@ -436,6 +438,14 @@ Failures are swallowed; the live workout route is not revalidated after a succes
 
 ## Rate — SI-41
 
+### SI-40a — A session logged before the rules changed is inert
+`program_exercises.progression_config_at` records when a judging rule last moved — an axis, the rep range, or an effort cap. A session in the window whose date precedes it is **unknown** (SI-7b) with reason `reconfigured`: it banks nothing, resets nothing, and still supplies the base weight and the "Last: …" line. The increments and the plan opt-in deliberately do not stamp it; they change what an advance writes, not what counts as a clear.
+
+Comparison is by date, not timestamp, so a session logged earlier on the day of the change still counts.
+
+*Why:* without it, switching preset or scope re-scores five sessions of history under the new rule and the dot count moves for reasons nothing on screen explains — a lifter asks a question about a setting and their progress appears to change as a result (`E-13`). **Inert rather than dropped** matters just as much: dropping them empties the window, and an empty window returns no suggestion at all, so changing a setting would delete the chip, the dots and the last-session numbers the lifter was reading.
+*Covered by:* `progressive-suggestions.test.ts` — the "config stamp" block.
+
 ### SI-41 — One step per session, in one dimension
 A suggestion is computed once per session, and it may never propose more than **one step** in the dimension it moves:
 
@@ -486,9 +496,6 @@ Rules with no automated test:
 | SI-16 | Advance `none` returning null |
 | SI-38, SI-39, SI-40 | Server-side ratchet guards — no action-level test exists |
 
-Two things the unit suite structurally cannot reach, and neither has another test:
-
-- **The effort cap's resolution against the scope.** `buildSuggestion` takes `effortCap` already resolved; the code that picks *which* set's `target_rir` that is lives in `getProgressiveSuggestions`, beside the query. SI-10b is tested through the resolved value, not through the resolution.
-- **The config stamp (`E-13`).** Sessions logged before `progressionConfigAt` are filtered out in the same action, so the rule that stops a settings change re-judging history has no test at all.
+One thing the unit suite structurally cannot reach, and it has no other test: **the effort cap's resolution against the scope.** `buildSuggestion` takes `effortCap` already resolved; the code that picks *which* set's `target_rir` that is lives in `getProgressiveSuggestions`, beside the query. SI-10b is tested through the resolved value, not through the resolution.
 
 Everything else maps to a case in `src/__tests__/progressive-suggestions.test.ts` or `progression-presets.test.ts`, named in the *Covered by* line under each rule. `e2e/progression-settings.spec.ts` covers the preset, the gate, the scope and SI-34 end to end, and doubles as the check that migration `0051` has been applied — a unit test cannot catch a missing migration, and the production symptom is a 500 on tapping a pill.

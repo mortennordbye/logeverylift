@@ -237,11 +237,12 @@ export type SessionOutcome = {
   effortShort?: boolean;
   /**
    * Why an unknown session is unknown, so the chip can say which.
-   *   partial — fewer working sets logged than the plan prescribed (D-9)
-   *   effort  — a cap is prescribed and the deciding set reported none (D-2)
-   *   tired   — it fell short on a session the lifter marked Tired (A6)
+   *   partial      — fewer working sets logged than the plan prescribed (D-9)
+   *   effort       — a cap is prescribed and the deciding set reported none (D-2)
+   *   tired        — it fell short on a session the lifter marked Tired (A6)
+   *   reconfigured — it predates the last change to the judging rules (E-13)
    */
-  unknownReason?: "partial" | "effort" | "tired";
+  unknownReason?: "partial" | "effort" | "tired" | "reconfigured";
 };
 
 /**
@@ -301,6 +302,18 @@ export type ProgramSetData = {
    */
   peakDurationSeconds?: number | null;
   peakDistanceMeters?: number | null;
+  /**
+   * When the judging rules last changed, as an ISO date. Sessions logged
+   * before it are inert: they were judged under a rule that no longer applies,
+   * so counting them would move the dots the moment a lifter touches a setting
+   * and nothing they did would explain it (E-13).
+   *
+   * Inert, not *dropped*. Dropping them empties the window on the first
+   * settings change, and an empty window returns no suggestion at all — no
+   * chip, no dots, and no "Last: 80kg" either. The lifter would lose the
+   * information as a side effect of asking a question about it.
+   */
+  configChangedAt?: string | null;
 };
 
 /**
@@ -463,6 +476,7 @@ export function evaluateSession(
   setNumber: number,
   judge: (set: LoggedSet) => { cleared: boolean; shortfall?: number },
   effortCap?: number | null,
+  configChangedAt?: string | null,
 ): SessionOutcome {
   const deciding = decidingSets(session, scope, setNumber);
   const base = {
@@ -471,6 +485,19 @@ export function evaluateSession(
     prescribedSets: session.prescribedWorkingSets,
     feeling: session.feeling,
   };
+
+  // E-13, and it is asked before anything else: a session logged under a rule
+  // that has since changed cannot answer today's question, whatever it did.
+  if (configChangedAt != null && session.date < configChangedAt) {
+    return {
+      ...base,
+      status: "unknown",
+      unknownReason: "reconfigured",
+      loadKg: maxLoad(session.sets),
+      minReps: minReps(session.sets),
+      wasEasy: false,
+    };
+  }
 
   if (deciding === null) {
     return {
@@ -639,6 +666,12 @@ export function describeProgressionRule(input: {
   backoffAfter?: number | null;
   /** Axis 8. */
   readiness?: string | null;
+  /**
+   * The sets carry a cycle anchor, so the training cycle prescribes their
+   * duration or distance weekly and progression never writes it (SI-30a).
+   * Without this the sentence promises an advance the engine will refuse.
+   */
+  anchored?: boolean;
 }): string | null {
   const { incrementKg, incrementReps, targetReps, requiredHits } = input;
   const advance = toAdvance(input.advance);
@@ -669,6 +702,12 @@ export function describeProgressionRule(input: {
     effortCap != null
       ? ` with at least ${effortCap} rep${effortCap === 1 ? "" : "s"} in reserve`
       : "";
+
+  // Said before anything else, because it overrides everything after it: the
+  // cycle owns these targets and no axis below changes that.
+  if (input.anchored && (advance === "duration" || advance === "distance")) {
+    return "Your training cycle sets these targets week by week, so progression leaves them alone.";
+  }
 
   let rule: string | null;
   switch (advance) {
@@ -1005,7 +1044,7 @@ export function buildSuggestion(
 
   // ── Clearance per session, then the gate ───────────────────────────────────
   const outcomes = window.map((sess) =>
-    evaluateSession(sess, scope, ps.setNumber, judge, effortCap),
+    evaluateSession(sess, scope, ps.setNumber, judge, effortCap, ps.configChangedAt),
   );
   const latestOutcome = outcomes[0];
   // Load is incidental to a plank or a run, so the "at this load or heavier"
