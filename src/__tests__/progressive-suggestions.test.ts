@@ -4,7 +4,7 @@ import {
   describeProgressionRule,
   estimate1RM,
   estimateRepsAt,
-  isConfidentHit,
+  metTargetReps,
   pendingProgressions,
   roundToNearest,
   CONSENSUS_WINDOW,
@@ -114,41 +114,30 @@ describe("roundToNearest", () => {
   });
 });
 
-// ─── isConfidentHit ───────────────────────────────────────────────────────────
+// ─── metTargetReps ────────────────────────────────────────────────────────────
 
-describe("isConfidentHit", () => {
-  it("returns true for RPE ≤ 7 when target reps met", () => {
-    expect(isConfidentHit(makeRow({ rpe: 6, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
-    expect(isConfidentHit(makeRow({ rpe: 7, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
+describe("metTargetReps", () => {
+  it("returns true when the target was met, whatever the effort", () => {
+    expect(metTargetReps(makeRow({ rpe: 6, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
+    expect(metTargetReps(makeRow({ rpe: 8, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
+    expect(metTargetReps(makeRow({ rpe: 10, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
   });
 
-  it("returns true for RPE 8 only when actualReps > targetReps", () => {
-    expect(isConfidentHit(makeRow({ rpe: 8, actualReps: 9, targetReps: 8 }), 8)).toBe(true);
-    expect(isConfidentHit(makeRow({ rpe: 8, actualReps: 8, targetReps: 8 }), 8)).toBe(false);
-  });
-
-  it("returns false for RPE 9-10 regardless of reps", () => {
-    expect(isConfidentHit(makeRow({ rpe: 9, actualReps: 8, targetReps: 8 }), 8)).toBe(false);
-    expect(isConfidentHit(makeRow({ rpe: 10, actualReps: 10, targetReps: 8 }), 8)).toBe(false);
-  });
-
-  it("treats null RPE as 7 (neutral — old sessions)", () => {
-    // rpe in HistoryRow is required integer, but 0 means "no RPE set" in practice
-    // Treat 0 as equivalent to null by passing rpe=0 which is < 7
-    expect(isConfidentHit(makeRow({ rpe: 0, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
+  it("returns true when no effort was logged", () => {
+    expect(metTargetReps(makeRow({ rpe: null, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
   });
 
   it("returns false when target reps not met", () => {
-    expect(isConfidentHit(makeRow({ rpe: 6, actualReps: 6, targetReps: 8 }), 8)).toBe(false);
+    expect(metTargetReps(makeRow({ rpe: 6, actualReps: 6, targetReps: 8 }), 8)).toBe(false);
   });
 
-  it("returns true for null targets when reps > 0 (open-ended sets count as confident)", () => {
-    expect(isConfidentHit(makeRow({ rpe: 6, actualReps: 8, targetReps: null }), null)).toBe(true);
-    expect(isConfidentHit(makeRow({ rpe: 9, actualReps: 8, targetReps: null }), null)).toBe(true);
+  it("returns true for null targets when reps > 0 (open-ended sets clear on any rep)", () => {
+    expect(metTargetReps(makeRow({ rpe: 6, actualReps: 8, targetReps: null }), null)).toBe(true);
+    expect(metTargetReps(makeRow({ rpe: null, actualReps: 8, targetReps: null }), null)).toBe(true);
   });
 
   it("returns false for null targets when actualReps = 0 (nothing performed)", () => {
-    expect(isConfidentHit(makeRow({ rpe: 6, actualReps: 0, targetReps: null }), null)).toBe(false);
+    expect(metTargetReps(makeRow({ rpe: 6, actualReps: 0, targetReps: null }), null)).toBe(false);
   });
 });
 
@@ -174,21 +163,29 @@ describe("buildSuggestion — consensus gate", () => {
     expect(result?.suggestedWeightKg).toBeCloseTo(82.5); // 80 + 2.5
   });
 
-  it("holds when last session was RPE 10 even with previous hits", () => {
+  it("progresses when the last session was a grind, as long as the target was met", () => {
     const rows = [
-      makeRow({ rpe: 10, actualReps: 8, date: "2024-01-03" }), // most recent, no confidence
-      makeRow({ rpe: 6,  actualReps: 8, date: "2024-01-02" }), // confident
-      makeRow({ rpe: 6,  actualReps: 8, date: "2024-01-01" }), // confident
+      makeRow({ rpe: 10, actualReps: 8, date: "2024-01-03" }),
+      makeRow({ rpe: 6,  actualReps: 8, date: "2024-01-02" }),
+      makeRow({ rpe: 6,  actualReps: 8, date: "2024-01-01" }),
     ];
-    // 2 confident hits but most recent was RPE 10 — still progresses (consensus is count, not recency)
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("progressed");
   });
 
-  it("holds when all sessions are RPE 9-10 hits", () => {
+  it("progresses off hits the retired RPE ladder would have rejected", () => {
+    // Three sessions at the target, all logged RIR 1. The old absolute ladder
+    // held these forever; a prescribed RIR cap is how a lifter asks for that
+    // now, and no exercise carries one.
     const rows = makeRows(3, { rpe: 9, actualReps: 8, targetReps: 8 });
     const result = buildSuggestion(rows, makePs(), null);
-    expect(result?.reason).toBe("held");
+    expect(result?.reason).toBe("progressed");
+  });
+
+  it("counts sessions with no effort logged", () => {
+    const rows = makeRows(REQUIRED_HITS, { rpe: null, actualReps: 8, targetReps: 8 });
+    const result = buildSuggestion(rows, makePs(), null);
+    expect(result?.reason).toBe("progressed");
   });
 });
 
@@ -465,9 +462,9 @@ describe("buildSuggestion — basedOn fields", () => {
 
   it("exposes basedOnHitCount for transparency", () => {
     const rows = [
-      makeRow({ rpe: 6, date: "2024-01-03" }), // confident hit
-      makeRow({ rpe: 6, date: "2024-01-02" }), // confident hit
-      makeRow({ rpe: 9, date: "2024-01-01" }), // NOT confident (RPE 9)
+      makeRow({ rpe: 6, date: "2024-01-03" }), // hit
+      makeRow({ rpe: 6, date: "2024-01-02" }), // hit
+      makeRow({ rpe: 9, actualReps: 6, date: "2024-01-01" }), // short of target
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.basedOnHitCount).toBe(2);
@@ -581,17 +578,17 @@ describe("buildSuggestion — bodyweight fallback", () => {
   });
 });
 
-// ─── Bug fix: time/distance mode RPE confidence gate ─────────────────────────
+// ─── Time/distance modes clear on the target alone ───────────────────────────
 
-describe("buildSuggestion — time mode RPE confidence", () => {
-  it("does NOT count a timed set as confident when RPE is 9 or 10", () => {
+describe("buildSuggestion — time mode effort", () => {
+  it("counts a timed set that hit its duration at RPE 9", () => {
     const rows = makeRows(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 9 });
     const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
-    expect(result?.reason).toBe("held"); // not progressed-time despite hitting duration
+    expect(result?.reason).toBe("progressed-time");
   });
 
-  it("counts a timed set as confident when RPE is 8 and duration met", () => {
+  it("counts a timed set as a hit when RPE is 8 and duration met", () => {
     const rows = makeRows(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 8 });
     const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
@@ -599,16 +596,16 @@ describe("buildSuggestion — time mode RPE confidence", () => {
     expect(result?.suggestedDurationSeconds).toBe(70);
   });
 
-  it("treats null RPE as 7 (confident) for timed sets", () => {
-    const rows = makeRows(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 0 });
+  it("counts a timed set with no effort logged", () => {
+    const rows = makeRows(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: null });
     const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-time");
   });
 });
 
-describe("buildSuggestion — distance mode RPE confidence", () => {
-  it("does NOT count a distance set as confident when RPE is 9 or 10", () => {
+describe("buildSuggestion — distance mode effort", () => {
+  it("counts a distance set that covered its target at RPE 9", () => {
     const rows = makeRows(REQUIRED_HITS, {
       distanceMeters: 5000,
       actualReps: 1, targetReps: null, rpe: 9,
@@ -619,10 +616,10 @@ describe("buildSuggestion — distance mode RPE confidence", () => {
       overloadIncrementReps: 500,
     });
     const result = buildSuggestion(rows, ps, null);
-    expect(result?.reason).toBe("held");
+    expect(result?.reason).toBe("progressed-distance");
   });
 
-  it("counts a distance set as confident when RPE ≤ 8 and distance met", () => {
+  it("counts a distance set as a hit when RPE ≤ 8 and distance met", () => {
     const rows = makeRows(REQUIRED_HITS, {
       distanceMeters: 5000,
       actualReps: 1, targetReps: null, rpe: 7,
@@ -742,9 +739,9 @@ describe("describeProgressionRule", () => {
     expect(text).toContain(`2 of the last ${CONSENSUS_WINDOW} sessions`);
   });
 
-  it("spells out the RPE gate for rep-based modes", () => {
-    expect(describeProgressionRule(base)).toContain("RPE 9+");
-    expect(describeProgressionRule(base)).toContain("RPE 8");
+  it("no longer quotes an RPE gate, because there is not one", () => {
+    expect(describeProgressionRule(base)).not.toContain("RPE");
+    expect(describeProgressionRule({ ...base, mode: "time", incrementReps: 10 })).not.toContain("RPE");
   });
 
   it("tracks a changed gate", () => {

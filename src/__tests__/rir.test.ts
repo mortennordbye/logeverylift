@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { effectiveRir, rirFromRpe, rpeFromRir } from "@/lib/utils/rir";
-import { isConfidentHit } from "@/lib/utils/progression";
+import { metTargetReps } from "@/lib/utils/progression";
 import type { HistoryRow } from "@/lib/utils/progression";
 
 // ─── rpeFromRir ────────────────────────────────────────────────────────────────
@@ -45,9 +45,9 @@ describe("effectiveRir", () => {
   });
 });
 
-// ─── AI transitivity: RIR drives the progression confidence gate via derived RPE ─
+// ─── Logged effort no longer gates clearing ──────────────────────────────────
 
-describe("RIR feeds isConfidentHit through the derived RPE", () => {
+describe("logged effort does not decide whether a set cleared", () => {
   const base: HistoryRow = {
     exerciseId: 1,
     setNumber: 1,
@@ -60,18 +60,20 @@ describe("RIR feeds isConfidentHit through the derived RPE", () => {
     rpe: 7,
   };
 
-  it("RIR ≥ 3 (rpe ≤ 7) on a hit is confident", () => {
-    expect(isConfidentHit({ ...base, rpe: rpeFromRir(3) }, 5)).toBe(true);
-    expect(isConfidentHit({ ...base, rpe: rpeFromRir(5) }, 5)).toBe(true);
+  it("counts a hit at any logged RIR, including a grind", () => {
+    expect(metTargetReps({ ...base, rpe: rpeFromRir(5) }, 5)).toBe(true);
+    expect(metTargetReps({ ...base, rpe: rpeFromRir(2) }, 5)).toBe(true);
+    // The retired ladder rejected these two: RIR 2 without an extra rep, and
+    // RIR 0-1 outright. An exercise with no prescribed cap clears on the target.
+    expect(metTargetReps({ ...base, rpe: rpeFromRir(1) }, 5)).toBe(true);
+    expect(metTargetReps({ ...base, rpe: rpeFromRir(0) }, 5)).toBe(true);
   });
 
-  it("RIR 2 (rpe 8) is confident only with an extra rep", () => {
-    expect(isConfidentHit({ ...base, rpe: rpeFromRir(2) }, 5)).toBe(false);
-    expect(isConfidentHit({ ...base, actualReps: 6, rpe: rpeFromRir(2) }, 5)).toBe(true);
+  it("counts a hit with no effort logged at all", () => {
+    expect(metTargetReps({ ...base, rpe: null }, 5)).toBe(true);
   });
 
-  it("RIR 0-1 (rpe 9-10) is never confident", () => {
-    expect(isConfidentHit({ ...base, rpe: rpeFromRir(1) }, 5)).toBe(false);
-    expect(isConfidentHit({ ...base, actualReps: 7, rpe: rpeFromRir(0) }, 5)).toBe(false);
+  it("still rejects a set that missed the target, however easy it felt", () => {
+    expect(metTargetReps({ ...base, actualReps: 4, rpe: rpeFromRir(5) }, 5)).toBe(false);
   });
 });

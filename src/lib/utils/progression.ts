@@ -18,8 +18,8 @@ import type { SetSuggestion } from "@/types/workout";
 export const CONSENSUS_WINDOW = 5;
 
 /**
- * Default number of confident hits required within CONSENSUS_WINDOW to trigger
- * a weight/rep progression. Prevents one-lucky-session advances.
+ * Default number of target-meeting sessions required within CONSENSUS_WINDOW to
+ * trigger a weight/rep progression. Prevents one-lucky-session advances.
  *
  * Per-exercise override: programExercises.progressionRequiredHits. Null there
  * means "use this constant", so the default lives in exactly one place.
@@ -58,7 +58,8 @@ export type HistoryRow = {
   distanceMeters?: number | null;
   feeling: string | null;
   date: string;
-  rpe: number;
+  /** Logged effort, or null when the lifter did not report any. */
+  rpe: number | null;
   /** Lifter marked the set easy — see easyOverride in buildSuggestion. */
   wasEasy?: boolean | null;
 };
@@ -172,44 +173,25 @@ export function adaptiveIncrementKg(
   return isCompound ? 5.0 : 2.5;
 }
 
-// ─── RPE confidence gate ────────────────────────────────────────────────────
+// ─── Clearing a set ─────────────────────────────────────────────────────────
 
 /**
- * Did the set reach its rep target, ignoring how hard it felt?
+ * Did the set reach its rep target?
  *
- * The confidence gate below layers RPE on top of this; the "easy" override in
- * buildSuggestion needs the bare target check on its own, since a set the
- * lifter marked easy must still have been completed to earn a load bump.
+ * This is the whole test. There used to be a second gate on top of it — an
+ * absolute RPE ladder where 8 counted only with an extra rep and 9-10 never
+ * counted, with a missing value read as 7 — and it is retired. It judged every
+ * exercise against a threshold nobody had chosen, and it read silence as a
+ * moderate effort, so a set the lifter said nothing about counted as evidence.
+ *
+ * Effort will gate clearing again, but only where a lifter asks for it: a
+ * per-set prescribed RIR cap, which is opt-in and compared against what was
+ * actually logged. Nothing carries a cap yet.
  */
 export function metTargetReps(row: HistoryRow, programTargetReps: number | null): boolean {
   const target = row.targetReps ?? programTargetReps;
   if (target == null) return row.actualReps > 0;
   return row.actualReps >= target;
-}
-
-/**
- * Returns true when a logged set qualifies as a "confident hit" —
- * the lifter both hit the target rep count AND had sufficient reserve.
- *
- * For sets logged with Reps In Reserve, rpe is the RIR-derived value
- * (rpe = 10 − rir), so this gate reasons in RIR terms transitively:
- * RIR ≥ 3 → confident, RIR 2 → confident only with an extra rep, RIR 0-1 → not.
- *
- * Gate:
- *   RPE null → treated as 7 (neutral; old sessions without RPE data)
- *   RPE ≤ 7  → confident if target reps met            (RIR ≥ 3)
- *   RPE 8    → confident only if actual > target        (RIR 2; had a rep in reserve)
- *   RPE 9-10 → not confident regardless                 (RIR 0-1; near max effort)
- */
-export function isConfidentHit(row: HistoryRow, programTargetReps: number | null): boolean {
-  const target = row.targetReps ?? programTargetReps;
-  if (target == null) return row.actualReps > 0; // no defined target → any completed rep counts
-  if (row.actualReps < target) return false;
-
-  const rpe = row.rpe ?? 7;
-  if (rpe <= 7) return true;
-  if (rpe === 8) return row.actualReps > target; // needed at least one extra rep
-  return false; // rpe 9-10
 }
 
 // ─── Internal helpers ───────────────────────────────────────────────────────
@@ -250,21 +232,21 @@ export function describeProgressionRule(input: {
   const { mode, incrementKg, incrementReps, targetReps, requiredHits } = input;
   const sessions = `${requiredHits} of the last ${CONSENSUS_WINDOW} sessions`;
   const reps = targetReps != null ? `${targetReps} reps` : "the target reps";
-  // isConfidentHit: RPE <= 7 always counts, RPE 8 only with an extra rep,
-  // RPE 9-10 never. Spell that out rather than implying any hit counts.
-  const rpeGate = "RPE 9+ never counts, and RPE 8 counts only with an extra rep.";
+  // No effort clause: hitting the target is the whole test now that the RPE
+  // ladder is retired. Saying otherwise here described a rule the engine had
+  // stopped applying.
 
   switch (mode) {
     case "weight":
-      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once you hit ${reps} in ${sessions}. ${rpeGate}`;
+      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once you hit ${reps} in ${sessions}.`;
     case "smart":
-      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once you hit ${reps} in ${sessions}, with the rep target re-estimated for the heavier load. ${rpeGate}`;
+      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once you hit ${reps} in ${sessions}, with the rep target re-estimated for the heavier load.`;
     case "reps":
-      return `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once you hit ${reps} in ${sessions}. ${rpeGate}`;
+      return `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once you hit ${reps} in ${sessions}.`;
     case "time":
-      return `+${incrementReps > 0 ? incrementReps : 10}s once you hold the target duration in ${sessions}. Sessions at RPE 9+ don't count.`;
+      return `+${incrementReps > 0 ? incrementReps : 10}s once you hold the target duration in ${sessions}.`;
     case "distance":
-      return `+${((incrementReps > 0 ? incrementReps : 500) / 1000)}km once you cover the target distance in ${sessions}. Sessions at RPE 9+ don't count.`;
+      return `+${((incrementReps > 0 ? incrementReps : 500) / 1000)}km once you cover the target distance in ${sessions}.`;
     default:
       return null;
   }
@@ -491,11 +473,10 @@ export function buildSuggestion(
     return metTargetReps(r, ps.targetReps);
   };
 
-  // ── Consensus: count confident hits across the window ──
-  const hitsWithConfidence =
+  // ── Consensus: count hits across the window ──
+  const hits =
     mode === "time" || mode === "distance"
-      ? // RPE 9–10 = not confident (near-max effort)
-        rows.filter((r) => metTarget(r) && (r.rpe ?? 7) <= 8)
+      ? rows.filter(metTarget)
       : // Weight-bearing modes additionally require the hit to have happened at
         // the current load or heavier. Without that clause the window counts
         // hits from before the last bump, so a failed session at the new weight
@@ -503,16 +484,16 @@ export function buildSuggestion(
         // -> suggests 34) and the load runs away from the lifter. Double
         // progression means "hit the target twice at THIS weight, then move".
         rows.filter(
-          (r) => isConfidentHit(r, ps.targetReps) && Number(r.weightKg) >= baseWeight,
+          (r) => metTargetReps(r, ps.targetReps) && Number(r.weightKg) >= baseWeight,
         );
 
-  const hitsAchieved = hitsWithConfidence.length;
+  const hitsAchieved = hits.length;
   const requiredHits = ps.requiredHits ?? REQUIRED_HITS;
   const hasConsensus = hitsAchieved >= requiredHits;
 
   // ── "Felt easy" override ──
   // The lifter marked the last set easy: an explicit "there was plenty left,
-  // bump it". It stands in for the confident hits the consensus window hasn't
+  // bump it". It stands in for the hits the consensus window hasn't
   // accumulated yet, so the increment is offered next session instead of one or
   // two sessions later. Gated on the set having actually met its target — an
   // easy verdict on a missed set must never push the load up.
@@ -533,7 +514,7 @@ export function buildSuggestion(
       const target = r.targetReps ?? ps.targetReps;
       return target != null && r.actualReps < target;
     });
-  const isStuck = canDeload && allRecentFailed && hitsWithConfidence.length === 0;
+  const isStuck = canDeload && allRecentFailed && hits.length === 0;
 
   // ── Sessions until deload warning ──────────────────────────────────────────
   let sessionsUntilDeload: number | null = null;
