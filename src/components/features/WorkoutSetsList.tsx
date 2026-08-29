@@ -1500,6 +1500,16 @@ function SortableSetRow({
                     {distancePending ? "↑" : "✓"} {formatEnduranceDistance(cfg.inputUnit, suggestion.suggestedDistanceMeters)}
                   </SuggestionChip>
                 )}
+                {/* Distinct from "held", which renders nothing but the dots.
+                    "Not enough sessions yet" and "you have not told me how hard
+                    that was" are different answers, and showing both as silence
+                    is what left people guessing. Nothing to apply, so it is a
+                    label rather than a chip. */}
+                {suggestion.reason === "held-unknown" && (
+                  <span className="text-[10px] font-medium text-amber-600 dark:text-amber-500">
+                    Log effort to progress
+                  </span>
+                )}
                 {suggestion.readinessModulated && (
                   <span className="text-[10px] text-muted-foreground/60">
                     ↓ adjusted for readiness

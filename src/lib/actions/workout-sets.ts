@@ -1641,6 +1641,9 @@ export async function getWorkoutInsight(
     } else if (sug.reason === "progressed" || sug.reason === "progressed-reps" || sug.reason === "progressed-time" || sug.reason === "progressed-distance") {
       status = "progressing";
     } else {
+      // "held-unknown" lands here deliberately: the load is being held, which
+      // is what the pill reports. Why it is held (missing effort rather than
+      // missing sessions) is the set row's job to say, not a fifth pill state.
       status = "held";
     }
     // Keep worst status: deloading > near_deload > held > progressing
@@ -1714,6 +1717,9 @@ export async function getWorkoutInsight(
 
   // ── Priority 3: stagnating — >50% sets held for 3+ sessions ────────────────
   const tracked = suggestions.filter((s) => s.reason !== "manual");
+  // "held-unknown" is deliberately not counted: the remedy this insight offers
+  // (slow eccentrics, drop sets, a small deload) is advice for a plateau, and an
+  // exercise waiting on an unanswered effort prompt has not shown one.
   const heldCount = tracked.filter((s) => s.reason === "held" || s.reason === "held-readiness").length;
   const isStagnating = sessionCount >= 3 && tracked.length > 0 && heldCount / tracked.length > 0.5;
 

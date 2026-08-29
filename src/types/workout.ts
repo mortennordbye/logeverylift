@@ -160,8 +160,14 @@ export type ActiveCycleInfo = {
  *   "progressed"        — weight progression suggested
  *   "progressed-reps"   — rep count progression suggested
  *   "progressed-time"   — duration progression suggested (time mode)
- *   "held"              — not enough confident hits to progress; hold current weight
+ *   "held"              — not enough hits to progress; hold current weight
  *   "held-readiness"    — would have progressed, but readiness ≤ 2 today
+ *   "held-unknown"      — an effort cap is prescribed and no effort was logged,
+ *                         so the session is neither a clear nor a miss. A
+ *                         different message from "held": the app is missing an
+ *                         answer, not waiting for more sessions. No exercise can
+ *                         carry a cap yet, so nothing emits this — the consumers
+ *                         handle it now so the engine can emit it later.
  *   "deload"            — 3+ consecutive failures detected; 10% weight reduction suggested
  *   "manual"            — progression mode is manual; no suggestion
  */
@@ -178,10 +184,10 @@ export type SetSuggestion = {
   basedOnFeeling: string; // last session feeling
   basedOnDate: string; // last session date
   basedOnRpe?: number; // last logged RPE (optional — null for old sessions)
-  basedOnHitCount?: number; // how many of the last CONSENSUS_WINDOW sessions hit target with confidence
-  reason: "progressed" | "held" | "held-readiness" | "manual" | "progressed-reps" | "deload" | "progressed-time" | "progressed-distance" | "retry";
+  basedOnHitCount?: number; // how many of the last CONSENSUS_WINDOW sessions hit the target
+  reason: "progressed" | "held" | "held-readiness" | "held-unknown" | "manual" | "progressed-reps" | "deload" | "progressed-time" | "progressed-distance" | "retry";
   // ─── Enriched fields (populated by getProgressiveSuggestions) ───────────────
-  /** How many confident hits have been recorded in the current consensus window. */
+  /** How many target-meeting sessions have been recorded in the current consensus window. */
   hitsAchieved: number;
   /**
    * Hits required to trigger progression — the exercise's
@@ -201,7 +207,7 @@ export type SetSuggestion = {
   readinessModulated: boolean;
   /**
    * True when the progression fired off an explicit "felt easy" verdict on the
-   * last set rather than the usual two confident hits. Only ever set on a
+   * last set rather than the usual two hits. Only ever set on a
    * "progressed*" reason.
    */
   easyOverride?: boolean;
