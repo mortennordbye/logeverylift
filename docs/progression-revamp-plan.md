@@ -230,7 +230,7 @@ Net cost to a normal set where everything went to plan: zero extra taps. Net cos
 `buildSuggestion` is rewritten around the axes. Evaluation is a pipeline, and unlike today the order is stated rather than discoverable only by reading top to bottom.
 
 1. **Guard.** Non-working set, or advance `none`: return nothing.
-2. **Assemble the window.** The last 5 *sessions* for this exercise, each carrying every working set logged in it. Not the last 5 rows for one `setNumber`. This is the change that makes axis 4 possible and closes `D6` (the global `LIMIT` starvation) by querying per exercise with a window function.
+2. **Assemble the window.** The last 5 *sessions* for this exercise, each carrying every working set logged in it. Not the last 5 rows for one `setNumber`. This is the change that makes axis 4 possible and closes `SI-D6` (the global `LIMIT` starvation) by querying per exercise with a window function.
 3. **Staleness.** If the most recent session is older than the staleness threshold, return a re-approach suggestion. Closes `A10`, where a three-month layoff currently still offers a bump.
 4. **Clearance per session.** For each session in the window, decide clear / not clear / unknown:
    - Each working set clears when it met its target for the measure, and, when an effort cap is prescribed, logged RIR is at least the cap.
@@ -244,7 +244,7 @@ Net cost to a normal set where everything went to plan: zero extra taps. Net cos
    - `reps`: target + rep increment.
    - `double`: if `target_reps < rep_range_max`, target + rep increment (capped at max). If already at max, load + increment and target reset to `rep_range_min`.
    - `duration` / `distance`: **target** + increment, not *actual* + increment. Closes `A5`, where beating a 5 km target by 200 m permanently ratcheted the plan.
-9. **Readiness.** Apply axis 8: `ignore` passes through, `hold` downgrades to held, `reduce` proposes a back-off. Clears every suggested value, including `adjustedRepsForWeight`, which closes `D2`.
+9. **Readiness.** Apply axis 8: `ignore` passes through, `hold` downgrades to held, `reduce` proposes a back-off. Clears every suggested value, including `adjustedRepsForWeight`, which closes `SI-D2`. (Under `D-4` that field is deleted outright, so this becomes moot once phase 5 lands; state it anyway, because phases 1 to 4 still carry it.)
 
 ### Reason codes
 
@@ -340,9 +340,9 @@ Each phase ships on its own, is verifiable on its own, and leaves the app workin
 
 **Phase 4: rep ranges and double progression.** Range columns, validator, `advance: double` with the reset step, and the `E-1` floor exemption that lets the reset actually write. Delivers 4b, tested against that table (`E-11`). `E-1` is the most likely regression in the plan: test it before writing the feature.
 
-**Phase 5: axes, presets, and the sheet.** Remaining axis columns, preset mapping, the extended sentence, the three-layer sheet, the dot detail view. Retire `progression_mode`. Rewrite the `SI` spec against the new engine.
+**Phase 5: axes, presets, and the sheet.** Remaining axis columns, preset mapping, the extended sentence, the three-layer sheet, and the dot detail view with the per-session data from `E-8`. Retire `progression_mode` and, per `D-4`, `adjustedRepsForWeight`. Rewrite the `SI` spec against the new engine. The dot detail view is not optional here: `D-7` depends on it to explain a stalled exercise.
 
-**Phase 6: the rest.** Increment ladder ordering (`A3`), staleness (`A10`), Tired down-weighting (`A6`), readiness `reduce` (`A7`), PR effort gate (`A11`), generated-plan prompt (`D8`).
+**Phase 6: the rest.** Increment ladder ordering (`A3`), staleness (`A10`), Tired down-weighting (`A6`), readiness `reduce` (`A7`), PR effort gate (`A11`), generated-plan prompt (`SI-D8`).
 
 Phases 1 and 2 are worth doing even if the rest is never built: they make the existing engine tell the truth.
 
@@ -384,7 +384,7 @@ Binding consequences for the build:
 Binding consequences for the build:
 - `smart` exercises migrate to preset **Load, confirmed** (fixed target, advance `load`), per section 10. They do not silently become double progression: no existing set has a rep range, and inventing one would change the prescription.
 - `adjustedRepsForWeight` is deleted from `SetSuggestion` and from both consumers. This also closes divergence `D2` (the rep cut surviving a readiness downgrade) by removing the field it was leaking through.
-- `estimated1RM` survives as a **display** value only, and gains the RPE gate it should always have had, which closes `D1`. With `D-2` decided, "no effort logged" now means no 1RM estimate rather than an estimate built on an assumed 7.
+- `estimated1RM` survives as a **display** value only, and gains the RPE gate it should always have had, which closes `SI-D1`. With `D-2` decided, "no effort logged" now means no 1RM estimate rather than an estimate built on an assumed 7.
 - Independent support for this decision, found in the triathlon generator: it already declines to use `smart`, on the grounds that it "nudges reps via a 1RM estimate, which would break the strictly-static rep scheme" (`triathlon-plan.ts:158-165`).
 
 **D-5. Staleness threshold, and what a re-approach proposes.**
@@ -453,6 +453,8 @@ The specs themselves label their tables plain `D1`-`D8`. Prefix them when writin
 **Audit findings** (`BACKLOG.md`, "Progression engine audit"), all resolved on completion and to be deleted from the backlog as each phase lands:
 
 `A1` (fabricated inputs, phases 1-2), `A2` (`target_rir` unread, phase 5), `A3` (increment ladder order, phase 6), `A4` (no rep range, phase 4), `A5` (endurance ratchets from actual, phase 3), `A6` (Tired erased, phase 6), `A7` (readiness holds only, phase 6), `A8` (per-set drift, phase 3), `A9` (spec describes the function, phase 5), `A10` (no recency, phase 6), `A11` (PRs from assumed reps, phases 1 and 6).
+
+The phase numbers above predate phase 0 and refer to the engine phases; phase 0 is prerequisites only and closes no audit finding on its own, though `P-2` closes the standalone duplicate-slot bug recorded beside `A1`.
 
 **Smart-incrementation spec divergences:** `SI-D1` (ungated 1RM, closed by `D-4`), `SI-D2` (rep cut survives readiness, closed by `D-4` deleting the field it leaked through), `SI-D3` and `SI-D4` (timed/distance asymmetries, resolved by the axes making them explicit settings), `SI-D5` (bodyweight never progresses, resolved by `advance: reps`), `SI-D6` (window starvation, phase 3), `SI-D8` (generated plans, phase 6).
 
