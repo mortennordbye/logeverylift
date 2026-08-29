@@ -7,7 +7,7 @@
 
 Progression is the reason this app exists rather than a notes file. It is also the part with the least honest data behind it. This plan rebuilds it as one machine with a small number of settings, so that every progression scheme a lifter actually runs is the same engine with different values, and the app can say in one sentence what it will do next.
 
-Nothing here is a code change yet. Section 12 lists the decisions that need an answer before phase 1 starts; they are decisions, not guesses, and none of them are made silently anywhere else in this document.
+Nothing here is a code change yet. Section 12 holds the decisions this plan deliberately does not make on its own; they are decisions, not guesses, and none of them are assumed silently anywhere else in this document. `D-1` and `D-2` are decided, which unblocks phase 1. The rest are answered as their phase comes up.
 
 ---
 
