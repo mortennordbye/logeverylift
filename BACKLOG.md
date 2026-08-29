@@ -78,51 +78,11 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A user reporting concrete confusion.
 - **Touchpoints:** `src/lib/utils/progression.ts:695-712`.
 
-### Progression spec divergence D5: bodyweight exercises never progress out of the box
-- **What:** In `weight` and `smart` modes at zero weight, the rep fallback (rule SI-25) only fires when `overloadIncrementReps > 0` — and that column defaults to `0` (`src/db/schema/programs.ts:61`). So a bodyweight exercise returns `held` forever until someone sets a rep increment by hand, which nothing prompts them to do.
-- **Why deferred:** Found during the spec pass; changing the default is a behaviour change with a migration attached, which was out of scope for a documentation task.
-- **Unblocked by:** Deciding the right default — either default `overload_increment_reps` to 1 for new rows, or have the bodyweight fallback treat a missing increment as 1 in the engine (no migration). The second is smaller and reversible. Phase 4 of the progression plan added the *other* half `E-17` asks for (a rep ladder now stops at `rep_range_max` when the set carries one); this half is untouched.
-- **Touchpoints:** `src/lib/utils/progression.ts:905-925` (weight), `:930-950` (smart); `src/db/schema/programs.ts:61`; `drizzle/` (only if the column default changes).
-
 ### Progression spec divergence D7: the global increment settings are inert
 - **What:** Settings renders "Weight Increment" and "Rep Increment" with presets and a custom input (`src/components/features/SettingsClient.tsx:328-350`), but they persist only to `localStorage` (`defaultIncrementKg` / `defaultIncrementReps` in `theme-provider.tsx`) and no progression code reads them. `adaptiveIncrementKg` never sees them, so the controls do nothing. Already noted as a trap in `docs/gotchas.md`; recorded here because rule SI-1 makes the gap concrete — the per-exercise increment is the only one that matters.
 - **Why deferred:** Needs a product decision on what the global control should mean: the seed for new program exercises, a fallback ahead of the adaptive ladder, or nothing (in which case the control should go).
 - **Unblocked by:** Picking one of those three. "Seed for new exercises" is the least surprising and needs no change to the engine; "fallback in the ladder" means a server-side user column, since `localStorage` is never visible to a Server Action.
 - **Touchpoints:** `src/components/features/SettingsClient.tsx:328-350`, `src/components/ui/theme-provider.tsx`, `src/lib/utils/progression.ts:211-245`, `docs/gotchas.md`.
-
-### Progression spec divergence D8: generated programmes ignore the newer progression settings
-- **What:** The LLM plan prompt (`src/lib/utils/ai-prompt.ts:167`) describes only `manual|weight|smart|reps` and never mentions `progressionRequiredHits` or `progressionApplyToPlan`, so imported plans silently take the defaults (gate 2, ratchet off) and can never request `time` or `distance` modes. Admitted in the body of `3a09857`; recorded against rules SI-12 and SI-34.
-- **Why deferred:** The defaults are sane, so generated plans are correct — just less expressive than a hand-built one.
-- **Unblocked by:** Extending the prompt's schema description plus the import validator's coverage. The validator already accepts both fields (`.optional().catch(...)` in `importProgramSchema`), so this is prompt work rather than plumbing.
-- **Touchpoints:** `src/lib/utils/ai-prompt.ts:160-180`, `src/lib/validators/workout.ts` (`importProgramSchema`), `src/lib/actions/programs.ts` (`importProgram`).
-
-## Progression engine audit (2026-08-29)
-
-**The plan that resolves all of these is [`docs/progression-revamp-plan.md`](docs/progression-revamp-plan.md).**
-Start there rather than picking entries off individually; they are interdependent. `A1` blocked most of them and is now closed (phases 1 and 2): logged effort and logged reps are both what the lifter reported.
-
-Findings from a domain audit of [`smart-incrementation`](docs/specs/smart-incrementation.md) — does the engine
-behave the way it should for someone who actually trains. The audit's one shippable fix (a progression must
-never lower the plan) landed with the audit; everything below is deferred. `A1` was the root cause and is
-closed, so the rest are now tunable on honest data rather than fabricated data.
-
-### Progression audit A3: the increment ladder skips load scaling for anyone with an experience level
-- **What:** `adaptiveIncrementKg` returns at `src/lib/utils/progression.ts:220` / `:226` / `:227` before the load-and-movement table (SI-4) is ever reached. So `beginner` gets 5 kg on lateral raises and overhead press, and `advanced` gets 1.25 kg on a 200 kg deadlift. Separately, the 1.0 kg and 1.25 kg rungs are not barbell-loadable without microplates (0.5 / 0.625 kg per side). The load-zone table is the sound part of the function and it is the part most users with a filled-in profile never reach.
-- **Why deferred:** Changes suggested numbers for every existing user, so it wants to land deliberately rather than folded into another change.
-- **Unblocked by:** Reordering the ladder — load/movement zone first, experience level as a modifier on it rather than a replacement for it — and snapping the result to a granularity the equipment can actually load (barbell 2.5, dumbbell 2, machine/cable 1.25). Needs equipment on the exercise, or a barbell-vs-not heuristic from `movementPattern`.
-- **Touchpoints:** `src/lib/utils/progression.ts` (`adaptiveIncrementKg` 139-173), `docs/specs/smart-incrementation.md` (SI-2, SI-3, SI-4).
-
-### Progression audit A10: the window has no sense of time, so a layoff progresses you
-- **What:** `SessionHistory.date` is carried through `buildSuggestion` and used for display only — `basedOnDate`, the "Last: …" line (`src/lib/utils/progression.ts:805`), and the dates in the dot detail view. No rule reads it. The window is the last 5 *sessions* regardless of when they happened, so after three months away the gate is still satisfied by sessions from before the break and the first session back opens with "↑ +2.5 kg" on top of a weight the lifter has not touched since spring. Detraining is invisible to the engine. The same blindness runs the other way: six sessions in four days and five sessions in five months are treated identically.
-- **Why deferred:** Needs a decision on the rule, and it interacts with `A6` (Tired sessions) since both are about which history counts.
-- **Unblocked by:** Deciding the staleness rule. Simplest honest version: if the most recent session for an exercise is older than some threshold (3-4 weeks), suppress progression and suggest a re-approach at a percentage of the last logged weight — a new `reason` code, so per SI-33 it lands with both consumers' switches. A weaker version that needs no new reason: treat a stale window as `held` and say why in the chip's subtitle.
-- **Touchpoints:** `src/lib/utils/progression.ts` (`buildSuggestion` — `rows`, `latest.date`), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions` history query), `src/types/workout.ts` (`SetSuggestion.reason`), `docs/specs/smart-incrementation.md` (SI-7, SI-8, SI-33).
-
-### Progression audit A11: PRs and the shown 1RM are computed from reps nobody measured
-- **What:** PR detection reads `actualReps` — `estimated_1rm` from `estimate1RM(weightKg, actualReps)` (`src/lib/actions/workout-sets.ts:477-478`) and `reps_at_weight` from a direct comparison (`:534`). Until phase 2 of the plan the fast logging path wrote `actualReps = targetReps` unconditionally, so every PR set before that cutover is derived from *assumed* performance — which is what `D-10` decides to keep and flag rather than delete. A lifter who grinds out 6 of a prescribed 8 and taps the toggle is credited with 8, and can be shown a 🏆 PR and an estimated 1RM they did not hit. This compounded `D1`, the shown 1RM having no effort gate either — closed in phase 5, so the *displayed* number is now gated even though the stored PR is not. It is also the number people screenshot, so it is the worst place for the app to be confidently wrong.
-- **Why deferred:** Was entirely downstream of `A1`, which is now closed: reps logged from phase 2 onward are real, so what remains is the pre-cutover history and the missing effort gate.
-- **Unblocked by:** Nothing now. Decide whether an estimated-1RM PR requires a near-max set — the same logged-RIR ≤ 3 guard `estimated1RM` now uses, per `D1` — rather than any set in the 2-12 range.
-- **Touchpoints:** `src/lib/actions/workout-sets.ts` (`detectAndRecordPRs` 437-540), `src/lib/utils/progression.ts` (`estimated1RM` in `buildSuggestion`), `docs/specs/smart-incrementation.md` (D1).
 
 ## Cycle periodization (spec divergences)
 
