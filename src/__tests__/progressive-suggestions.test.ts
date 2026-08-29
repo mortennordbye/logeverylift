@@ -829,6 +829,26 @@ describe("describeProgressionRule", () => {
     );
   });
 
+  it("describes double progression as the climb and the reset", () => {
+    expect(
+      describeProgressionRule({
+        ...base,
+        mode: "double",
+        incrementKg: 2.5,
+        repRangeMin: 6,
+        repRangeMax: 12,
+      }),
+    ).toBe(
+      "Work up to 12 reps, then +2.5kg and back to 6. The reps move once every set hits the target in 2 sessions in a row.",
+    );
+  });
+
+  it("describes a rangeless double as the load progression it becomes", () => {
+    expect(
+      describeProgressionRule({ ...base, mode: "double", incrementKg: 2.5 }),
+    ).toBe("+2.5kg once every set hits 10 reps in 2 sessions in a row.");
+  });
+
   it("describes reps mode in reps, singular and plural", () => {
     expect(
       describeProgressionRule({ ...base, mode: "reps", incrementReps: 1 }),
@@ -926,6 +946,69 @@ describe("pendingProgressions", () => {
         pendingProgressions([makeSet()], { 1: makeSuggestion({ reason }) }, NONE),
       ).toEqual([]);
     }
+  });
+
+  // ── E-1: the reset step must get past the plan floor ──
+  //
+  // SI-37's floor exists to stop a suggestion built from history quietly
+  // downgrading the plan. Double progression's reset raises the load and
+  // *lowers* the target back to the bottom of the range in the same breath, so
+  // a floor applied to its reps blocks the headline behaviour of phase 4.
+  it("writes the reset's lower rep target, which the floor would otherwise block", () => {
+    const result = pendingProgressions(
+      [makeSet({ weightKg: "80.00", targetReps: 12 })],
+      { 1: makeSuggestion({ reason: "reset", suggestedWeightKg: 82.5, suggestedReps: 6 }) },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, weightKg: 82.5, targetReps: 6 }]);
+  });
+
+  it("refuses a reset whose load sits below the plan", () => {
+    // Not a reset at all from the plan's point of view: it would drop the reps
+    // without buying anything with load.
+    const result = pendingProgressions(
+      [makeSet({ weightKg: "90.00", targetReps: 12 })],
+      { 1: makeSuggestion({ reason: "reset", suggestedWeightKg: 82.5, suggestedReps: 6 }) },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("is a no-op once the reset has been applied", () => {
+    const result = pendingProgressions(
+      [makeSet({ weightKg: "82.50", targetReps: 6 })],
+      { 1: makeSuggestion({ reason: "reset", suggestedWeightKg: 82.5, suggestedReps: 6 }) },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("finishes a half-applied reset", () => {
+    // The load landed, the reps did not. The remaining half is still owed, and
+    // it is the half the floor would reject.
+    const result = pendingProgressions(
+      [makeSet({ weightKg: "82.50", targetReps: 12 })],
+      { 1: makeSuggestion({ reason: "reset", suggestedWeightKg: 82.5, suggestedReps: 6 }) },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, targetReps: 6 }]);
+  });
+
+  it("measures a reset against the plan, not today's override", () => {
+    // Today's set was dropped to 70 by hand; the plan still says 80. The reset
+    // to 82.5 is above the plan, so it writes.
+    const result = pendingProgressions(
+      [
+        makeSet({
+          weightKg: "70.00",
+          targetReps: 12,
+          planned: { weightKg: "80.00", targetReps: 12 },
+        }),
+      ],
+      { 1: makeSuggestion({ reason: "reset", suggestedWeightKg: 82.5, suggestedReps: 6 }) },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, weightKg: 82.5, targetReps: 6 }]);
   });
 
   it("carries a smart-mode rep adjustment alongside the weight", () => {
@@ -1256,6 +1339,188 @@ describe("buildSuggestion — worked example 4a (fixed 12, four sets, gate 2)", 
       const r = buildSuggestion(window, fixedTwelvePs({ setNumber }), null);
       expect(r?.suggestedWeightKg).toBe(62.5);
     }
+  });
+});
+
+/** Table 4b's exercise: range 6-8, three sets, scope all, gate 1, +2.5kg. */
+function rangePs(overrides: Partial<ProgramSetData> = {}): ProgramSetData {
+  return makePs({
+    progressionMode: "double",
+    targetReps: 8,
+    repRangeMin: 6,
+    repRangeMax: 8,
+    overloadIncrementKg: "2.50",
+    requiredHits: 1,
+    scope: "all",
+    ...overrides,
+  });
+}
+
+/** Three working sets at one load, each carrying the target in force that day. */
+function rangeSets(
+  reps: number[],
+  weightKg: string,
+  targetReps: number,
+  date: string,
+): SessionHistory {
+  return makeMultiSession(
+    reps.map((r) => ({ actualReps: r, targetReps, weightKg })),
+    { date, prescribedWorkingSets: 3 },
+  );
+}
+
+describe("buildSuggestion — worked example 4b (range 6-8, climb then reset)", () => {
+  // The plan's table, encoded literally. The prescription is `targetReps` as
+  // the plan holds it that day, which is why session 4 is judged against 6:
+  // session 3's reset rewrote it. If the code disagrees with this table the
+  // code is wrong.
+  const s1 = rangeSets([8, 7, 6], "80.00", 8, "2024-01-01");
+  const s2 = rangeSets([8, 8, 7], "80.00", 8, "2024-01-02");
+  const s3 = rangeSets([8, 8, 8], "80.00", 8, "2024-01-03");
+  const s4 = rangeSets([6, 6, 6], "82.50", 6, "2024-01-04");
+
+  it("session 1: two sets short of 8, nothing moves", () => {
+    const r = buildSuggestion([s1], rangePs(), null);
+    expect(r?.reason).toBe("held");
+    expect(r?.hitsAchieved).toBe(0);
+  });
+
+  it("session 2: closer, still not every set", () => {
+    const r = buildSuggestion([s2, s1], rangePs(), null);
+    expect(r?.reason).toBe("held");
+    expect(r?.hitsAchieved).toBe(0);
+  });
+
+  it("session 3: every set reaches 8, so the load buys the next range", () => {
+    const r = buildSuggestion([s3, s2, s1], rangePs(), null);
+    expect(r?.reason).toBe("reset");
+    expect(r?.suggestedWeightKg).toBe(82.5);
+    expect(r?.suggestedReps).toBe(6);
+  });
+
+  it("session 4: the reset session clears at once, and the reps climb", () => {
+    // The point of the reset is that the new load is workable, which is why
+    // double progression pairs with gate 1.
+    const r = buildSuggestion([s4, s3, s2, s1], rangePs({ targetReps: 6 }), null);
+    expect(r?.reason).toBe("progressed-reps");
+    expect(r?.suggestedWeightKg).toBe(82.5);
+    expect(r?.suggestedReps).toBe(7);
+  });
+
+  it("gives every working set of the exercise the same reset", () => {
+    for (const setNumber of [1, 2, 3]) {
+      const r = buildSuggestion([s3, s2, s1], rangePs({ setNumber }), null);
+      expect(r?.reason).toBe("reset");
+      expect(r?.suggestedWeightKg).toBe(82.5);
+      expect(r?.suggestedReps).toBe(6);
+    }
+  });
+});
+
+describe("buildSuggestion — double progression, the rest of the range", () => {
+  it("climbs to the reps the binding set actually did, not one more than asked", () => {
+    // Range 6-12, prescription just reset to 6, and the lifter managed 12/12/11
+    // at the new load. The prescription becomes 11 — the set that bound the
+    // session — rather than 7, which would lag them for five more sessions.
+    const session = rangeSets([12, 12, 11], "82.50", 6, "2024-02-01");
+    const r = buildSuggestion(
+      [session],
+      rangePs({ targetReps: 6, repRangeMin: 6, repRangeMax: 12 }),
+      null,
+    );
+    expect(r?.reason).toBe("progressed-reps");
+    expect(r?.suggestedReps).toBe(11);
+  });
+
+  it("never climbs past the top of the range", () => {
+    const session = rangeSets([20, 20, 20], "82.50", 6, "2024-02-01");
+    const r = buildSuggestion(
+      [session],
+      rangePs({ targetReps: 6, repRangeMin: 6, repRangeMax: 8 }),
+      null,
+    );
+    expect(r?.suggestedReps).toBe(8);
+  });
+
+  it("moves by at least one rep when the target was met exactly", () => {
+    const session = rangeSets([6, 6, 6], "82.50", 6, "2024-02-01");
+    const r = buildSuggestion(
+      [session],
+      rangePs({ targetReps: 6, repRangeMin: 6, repRangeMax: 12 }),
+      null,
+    );
+    expect(r?.suggestedReps).toBe(7);
+  });
+
+  it("holds at the top of the range when there is no load to add", () => {
+    // E-4: without an increment the reset cannot happen, and climbing past the
+    // range the lifter configured is not the answer.
+    const session = rangeSets([8, 8, 8], "80.00", 8, "2024-02-01");
+    const r = buildSuggestion(
+      [session],
+      rangePs({ overloadIncrementKg: "0" }),
+      null,
+    );
+    expect(r?.reason).toBe("held");
+  });
+
+  it("holds at the top of the range for a bodyweight exercise", () => {
+    const session = rangeSets([8, 8, 8], "0.00", 8, "2024-02-01");
+    const r = buildSuggestion([session], rangePs(), null);
+    expect(r?.reason).toBe("held");
+  });
+
+  it("falls back to load progression when no range is configured", () => {
+    // Nothing can produce this pairing today; freezing the exercise would be a
+    // worse answer than the progression the lifter plainly asked for.
+    const session = rangeSets([8, 8, 8], "80.00", 8, "2024-02-01");
+    const r = buildSuggestion(
+      [session],
+      rangePs({ repRangeMin: null, repRangeMax: null }),
+      null,
+    );
+    expect(r?.reason).toBe("progressed");
+    expect(r?.suggestedWeightKg).toBe(82.5);
+  });
+
+  it("holds below the gate like every other mode", () => {
+    const session = rangeSets([8, 8, 7], "80.00", 8, "2024-02-01");
+    const r = buildSuggestion([session], rangePs(), null);
+    expect(r?.reason).toBe("held");
+  });
+
+  it("yields to low readiness — a reset is still a load increase", () => {
+    const session = rangeSets([8, 8, 8], "80.00", 8, "2024-02-01");
+    const r = buildSuggestion([session], rangePs(), null, 2);
+    expect(r?.reason).toBe("held-readiness");
+    expect(r?.suggestedWeightKg).toBe(80);
+    expect(r?.suggestedReps).toBeUndefined();
+  });
+});
+
+describe("buildSuggestion — a rep ladder stops at the top of its range", () => {
+  const ladderPs = (overrides: Partial<ProgramSetData> = {}) =>
+    makePs({
+      progressionMode: "reps",
+      targetReps: 8,
+      overloadIncrementReps: 2,
+      requiredHits: 1,
+      ...overrides,
+    });
+
+  it("climbs when there is no range, as it always has", () => {
+    const r = buildSuggestion(makeSessions(1), ladderPs(), null);
+    expect(r?.suggestedReps).toBe(10);
+  });
+
+  it("clamps the last step to the top of the range", () => {
+    const r = buildSuggestion(makeSessions(1), ladderPs({ repRangeMax: 9 }), null);
+    expect(r?.suggestedReps).toBe(9);
+  });
+
+  it("holds once the target is at the top of the range", () => {
+    const r = buildSuggestion(makeSessions(1), ladderPs({ repRangeMax: 8 }), null);
+    expect(r?.reason).toBe("held");
   });
 });
 

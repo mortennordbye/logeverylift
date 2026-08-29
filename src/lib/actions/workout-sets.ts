@@ -1352,6 +1352,8 @@ export async function getProgressiveSuggestions(
         programExerciseId: programExercises.id,
         setNumber: programSets.setNumber,
         targetReps: programSets.targetReps,
+        repRangeMin: programSets.repRangeMin,
+        repRangeMax: programSets.repRangeMax,
         durationSeconds: programSets.durationSeconds,
         distanceMeters: programSets.distanceMeters,
         setType: programSets.setType,
@@ -1530,6 +1532,8 @@ export async function getProgressiveSuggestions(
       const psData: ProgramSetData = {
         programSetId: ps.programSetId,
         setNumber: ps.setNumber,
+        repRangeMin: ps.repRangeMin,
+        repRangeMax: ps.repRangeMax,
         targetReps: ps.targetReps,
         durationSeconds: ps.durationSeconds,
         distanceMeters: ps.distanceMeters,
@@ -1714,7 +1718,9 @@ export async function getWorkoutInsight(
       status = "deloading";
     } else if (sug.sessionsUntilDeload === 1) {
       status = "near_deload";
-    } else if (sug.reason === "progressed" || sug.reason === "progressed-reps" || sug.reason === "progressed-time" || sug.reason === "progressed-distance") {
+    } else if (sug.reason === "progressed" || sug.reason === "progressed-reps" || sug.reason === "reset" || sug.reason === "progressed-time" || sug.reason === "progressed-distance") {
+      // "reset" is progress: the load went up. The reps dropping back to the
+      // bottom of the range is the price of it, not a stall.
       status = "progressing";
     } else {
       // "held-unknown" lands here deliberately: the load is being held, which
@@ -1815,6 +1821,7 @@ export async function getWorkoutInsight(
     (s) =>
       s.reason === "progressed" ||
       s.reason === "progressed-reps" ||
+      s.reason === "reset" ||
       s.reason === "progressed-time" ||
       s.reason === "progressed-distance",
   ).length;

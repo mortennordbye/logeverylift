@@ -168,6 +168,11 @@ export type ActiveCycleInfo = {
  *                         answer, not waiting for more sessions. No exercise can
  *                         carry a cap yet, so nothing emits this — the consumers
  *                         handle it now so the engine can emit it later.
+ *   "reset"             — double progression's load-up-reps-down step: every
+ *                         set reached the top of the rep range, so the load
+ *                         rises and the target drops back to the bottom of it.
+ *                         The one suggestion that deliberately lowers a number
+ *                         in the plan besides a deload (E-1).
  *   "deload"            — 3+ consecutive failures detected; 10% weight reduction suggested
  *   "manual"            — progression mode is manual; no suggestion
  */
@@ -185,7 +190,7 @@ export type SetSuggestion = {
   basedOnDate: string; // last session date
   basedOnRpe?: number; // last logged RPE (optional — null for old sessions)
   basedOnHitCount?: number; // how many of the last CONSENSUS_WINDOW sessions hit the target
-  reason: "progressed" | "held" | "held-readiness" | "held-unknown" | "manual" | "progressed-reps" | "deload" | "progressed-time" | "progressed-distance" | "retry";
+  reason: "progressed" | "held" | "held-readiness" | "held-unknown" | "manual" | "progressed-reps" | "reset" | "deload" | "progressed-time" | "progressed-distance" | "retry";
   // ─── Enriched fields (populated by getProgressiveSuggestions) ───────────────
   /** How many target-meeting sessions have been recorded in the current consensus window. */
   hitsAchieved: number;
@@ -465,6 +470,9 @@ export type ExportedProgram = {
         type?: string;
         rir?: number | null;
         startDelay?: number | null;
+        /** Double progression's rep range. Absent on exports that predate it. */
+        repMin?: number | null;
+        repMax?: number | null;
       }>;
     }>;
   };

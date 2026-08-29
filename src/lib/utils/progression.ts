@@ -159,6 +159,10 @@ export type ProgramSetData = {
   requiredHits?: number | null;
   /** Which sets decide whether a session cleared. Null/undefined = "all". */
   scope?: string | null;
+  /** Bottom of the rep range. Null/undefined = fixed target, no range. */
+  repRangeMin?: number | null;
+  /** Top of the rep range. Null/undefined = fixed target, no range. */
+  repRangeMax?: number | null;
 };
 
 /**
@@ -447,6 +451,9 @@ export function describeProgressionRule(input: {
   requiredHits: number;
   /** Which sets have to clear. Null/undefined = "all". */
   scope?: string | null;
+  /** The rep range, for double progression. Both null = a fixed target. */
+  repRangeMin?: number | null;
+  repRangeMax?: number | null;
 }): string | null {
   const { mode, incrementKg, incrementReps, targetReps, requiredHits } = input;
   const scope = toScope(input.scope);
@@ -475,6 +482,16 @@ export function describeProgressionRule(input: {
       return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once ${subject} hits ${reps} ${sessions}.`;
     case "smart":
       return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once ${subject} hits ${reps} ${sessions}, with the rep target re-estimated for the heavier load.`;
+    case "double": {
+      const { repRangeMin: min, repRangeMax: max } = input;
+      // Without a range the mode has nothing to climb and behaves as load
+      // progression, so it says so rather than describing a range it has not
+      // got. Nothing can configure that pairing today.
+      if (min == null || max == null) {
+        return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once ${subject} hits ${reps} ${sessions}.`;
+      }
+      return `Work up to ${max} reps, then ${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "more weight"} and back to ${min}. The reps move once ${subject} hits the target ${sessions}.`;
+    }
     case "reps":
       return `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once ${subject} hits ${reps} ${sessions}.`;
     case "time":
@@ -606,6 +623,26 @@ export function pendingProgressions(
           pending.push({ setId: set.id, weightKg: s.suggestedWeightKg });
         }
         break;
+      // Double progression's reset: the load goes up and the target drops
+      // back to the bottom of the range. The two are one move, so the rep
+      // write is exempt from the floor the other branches apply — that is
+      // `E-1`, and applying the floor here blocks the whole scheme. The floor
+      // still guards the *load*: a reset that would land below the planned
+      // weight is not a reset, it is a downgrade with the reps thrown in.
+      case "reset": {
+        if (s.suggestedWeightKg < planWeight) break;
+        const entry: PendingProgression = { setId: set.id };
+        if (currentWeight !== s.suggestedWeightKg) {
+          entry.weightKg = s.suggestedWeightKg;
+        }
+        if (s.suggestedReps !== undefined && s.suggestedReps !== currentReps) {
+          entry.targetReps = s.suggestedReps;
+        }
+        if (entry.weightKg !== undefined || entry.targetReps !== undefined) {
+          pending.push(entry);
+        }
+        break;
+      }
       case "progressed-reps":
         if (
           s.suggestedReps !== undefined &&
@@ -982,16 +1019,84 @@ export function buildSuggestion(
 
     case "reps": {
       const targetReps = ps.targetReps ?? reference.targetReps;
-      if (shouldProgress && incrementReps > 0 && targetReps != null) {
+      // A rep ladder with a range configured stops at the top of it (E-17).
+      // Without a range it keeps climbing, which is today's behaviour and its
+      // own known gap: 8, 9, 10 … 40, with nothing to convert reps into load.
+      const ceiling = ps.repRangeMax ?? null;
+      const atCeiling = ceiling != null && targetReps != null && targetReps >= ceiling;
+      if (shouldProgress && incrementReps > 0 && targetReps != null && !atCeiling) {
+        const next = targetReps + incrementReps;
         suggestion = {
           suggestedWeightKg: baseWeight,
-          suggestedReps: targetReps + incrementReps,
+          suggestedReps: ceiling != null ? Math.min(ceiling, next) : next,
           ...basedOn,
           reason: "progressed-reps",
         };
       } else {
         suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "held" };
       }
+      break;
+    }
+
+    /**
+     * Double progression: climb the reps inside the range, then convert them
+     * into load and drop back to the bottom of it.
+     *
+     * The prescription is `target_reps` as it stands today, which moves between
+     * the bounds. Clearing is the same question as everywhere else — every set
+     * the scope names met that target — so nothing about the window or the gate
+     * changes here; only what an advance *does*.
+     */
+    case "double": {
+      const rangeMin = ps.repRangeMin ?? null;
+      const rangeMax = ps.repRangeMax ?? null;
+      const target = ps.targetReps ?? reference.targetReps ?? null;
+
+      if (!shouldProgress) {
+        suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "held" };
+        break;
+      }
+
+      if (rangeMin != null && rangeMax != null && target != null && target < rangeMax) {
+        // Below the top of the range, so the reps climb and the load stands.
+        // The new target is what the binding set actually did, not one more
+        // rep than was asked for: a lifter who already manages the top of the
+        // range would otherwise be walked up to it one session at a time,
+        // with the prescription permanently lagging what they can do. The
+        // one-rep floor keeps it moving when they did exactly the target, and
+        // an unfinished session supplies no evidence, so it uses the floor.
+        const repStep = incrementReps > 0 ? incrementReps : 1;
+        const achieved = latestOutcome.status === "cleared" ? latestOutcome.minReps : 0;
+        suggestion = {
+          suggestedWeightKg: baseWeight,
+          suggestedReps: Math.min(rangeMax, Math.max(target + repStep, achieved)),
+          ...basedOn,
+          reason: "progressed-reps",
+        };
+        break;
+      }
+
+      // At the top of the range: buy the next range with load. With nothing to
+      // add — no increment, or a bodyweight exercise — the exercise holds
+      // rather than climbing past the range its owner configured (E-4).
+      if (incrementKg <= 0 || currentLoad === 0) {
+        suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "held" };
+        break;
+      }
+      const resetWeight = roundToInc(currentLoad + incrementKg);
+      suggestion =
+        rangeMin != null
+          ? {
+              suggestedWeightKg: resetWeight,
+              suggestedReps: rangeMin,
+              ...basedOn,
+              reason: "reset",
+            }
+          : // No range at all. Nothing can configure that today — phase 5's
+            // preset writes the mode and the range together — and freezing the
+            // exercise would be a worse answer than the load progression the
+            // lifter plainly wanted.
+            { suggestedWeightKg: resetWeight, ...basedOn, reason: "progressed" };
       break;
     }
 
@@ -1049,8 +1154,11 @@ export function buildSuggestion(
   if (
     readiness != null &&
     readiness <= 2 &&
+    // "reset" belongs here for the same reason as the rest: it raises the
+    // load. That it also drops the reps does not make it a lighter day.
     (suggestion.reason === "progressed" ||
       suggestion.reason === "progressed-reps" ||
+      suggestion.reason === "reset" ||
       suggestion.reason === "progressed-time" ||
       suggestion.reason === "progressed-distance")
   ) {
@@ -1068,7 +1176,14 @@ export function buildSuggestion(
   // Flag the bump the easy verdict earned, so the UI can say why it fired
   // without two hits behind it. Deliberately after readiness modulation: a
   // low-readiness day still holds the load, easy verdict or not.
-  if (easyOverride && suggestion.reason.startsWith("progressed")) {
+  // The prefix test is why the reason family is still named `progressed*`:
+  // renaming it to `advanced*` would make this match nothing and silently stop
+  // the flag firing, with no type error. `reset` has to be named explicitly
+  // because it is an advance that does not share the prefix.
+  if (
+    easyOverride &&
+    (suggestion.reason.startsWith("progressed") || suggestion.reason === "reset")
+  ) {
     suggestion = { ...suggestion, easyOverride: true };
   }
 
