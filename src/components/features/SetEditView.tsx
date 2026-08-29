@@ -130,7 +130,15 @@ export function SetEditView({
     : set.durationSeconds != null ? "time"
     : "distance"
   );
-  const [reps, setReps] = useState(override?.targetReps ?? set.targetReps ?? 10);
+  // In a workout this field is the reps *achieved*, so it seeds from the
+  // achieved count when the session already has one. In program-edit mode it
+  // is the prescription and seeds from the target.
+  const [reps, setReps] = useState(
+    (isWorkout ? override?.actualReps : undefined) ??
+      override?.targetReps ??
+      set.targetReps ??
+      10,
+  );
   const [weight, setWeight] = useState(override?.weightKg ?? Number(set.weightKg ?? 0));
   const [setType, setSetType] = useState<SetType>(
     (set.setType as SetType | undefined) ?? "working",
@@ -154,7 +162,14 @@ export function SetEditView({
   const [inclinePercent, setInclinePercent] = useState<number | null>(set.inclinePercent ?? null);
   const [inclineStr, setInclineStr] = useState(set.inclinePercent != null ? String(set.inclinePercent) : "");
   const [targetHeartRateZone, setTargetHeartRateZone] = useState<number | null>(set.targetHeartRateZone ?? null);
-  const [repsStr, setRepsStr] = useState(String(override?.targetReps ?? set.targetReps ?? 10));
+  const [repsStr, setRepsStr] = useState(
+    String(
+      (isWorkout ? override?.actualReps : undefined) ??
+        override?.targetReps ??
+        set.targetReps ??
+        10,
+    ),
+  );
   const [weightStr, setWeightStr] = useState(String(override?.weightKg ?? Number(set.weightKg ?? 0)));
   const initialDuration = Number(set.durationSeconds ?? 60);
   const [durationMinStr, setDurationMinStr] = useState(String(Math.floor(initialDuration / 60)));
@@ -227,9 +242,13 @@ export function SetEditView({
     setSaving(true);
     const trimmedNote = notes.trim();
     const noteValue = trimmedNote.length > 0 ? trimmedNote : null;
-    // A failed set keeps the program target as the goal and records the lower
-    // achieved reps; an ordinary set targets what was entered.
-    const targetRepsValue = failed ? (set.targetReps ?? reps) : reps;
+    // During a workout the reps field records what was achieved and the
+    // prescription stands: correcting "I got 6, not 8" used to write 6 into
+    // targetReps, so the set then logged a perfect hit against a target the
+    // lifter had just lowered, and the engine never saw the miss. In
+    // program-edit mode the same field is the prescription.
+    const plannedReps = override?.targetReps ?? set.targetReps ?? reps;
+    const targetRepsValue = isWorkout ? plannedReps : reps;
 
     // Telemetry for tuning the weight presets: record the weights people have
     // to type in because no circle offers them. Fire-and-forget.
@@ -265,9 +284,9 @@ export function SetEditView({
       } else if (failed) {
         // Failed: keep the program target as the goal, record the achieved reps.
         // A failed set was taken to failure, so RIR is 0 regardless of the picker.
-        workoutSession?.setOverride(set.id, { targetReps: set.targetReps ?? reps, weightKg: weight, notes: noteValue, isFailed: true, actualReps: reps, rir: 0 });
+        workoutSession?.setOverride(set.id, { targetReps: plannedReps, weightKg: weight, notes: noteValue, isFailed: true, actualReps: reps, rir: 0 });
       } else {
-        workoutSession?.setOverride(set.id, { targetReps: reps, weightKg: weight, notes: noteValue, rir: rir ?? undefined, wasEasy: easy });
+        workoutSession?.setOverride(set.id, { targetReps: plannedReps, weightKg: weight, notes: noteValue, actualReps: reps, rir: rir ?? undefined, wasEasy: easy });
       }
     } else if (isTimed) {
       await updateProgramSet({ id: set.id, durationSeconds: duration, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null });
@@ -573,7 +592,7 @@ export function SetEditView({
               onClick={() => { setRepsStr(String(reps)); setShowRepsPicker(true); }}
               className="w-full flex items-center justify-between py-4 border-b border-border transition-colors hover:bg-muted/50 active:bg-muted/70"
             >
-              <span className="text-base font-medium">{failed ? "Reps done" : "Reps"}</span>
+              <span className="text-base font-medium">{isWorkout ? "Reps done" : "Reps"}</span>
               <span className="text-base text-muted-foreground">{reps}</span>
             </button>
 
