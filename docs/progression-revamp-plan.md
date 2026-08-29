@@ -1,13 +1,13 @@
 # Progression revamp: plan
 
-> **Status:** approved, with two open items. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-1` to `D-7`, `D-9` and `D-10` are decided. **`D-8` is reopened and `D-11` is new** (section 12) — both block phase 5 only, so phases 0 to 4 are clear to start. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
+> **Status:** approved. All eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
 > **Closes:** audit findings `A1`-`A11`, smart-incrementation divergences `SI-D1`-`SI-D6` and `SI-D8`, and cycle divergence `PZ-D3`. `SI-D7` stays open. Section 13 is authoritative; see its note on the three colliding `D` numbering schemes.
 
 Progression is the reason this app exists rather than a notes file. It is also the part with the least honest data behind it. This plan rebuilds it as one machine with a small number of settings, so that every progression scheme a lifter actually runs is the same engine with different values, and the app can say in one sentence what it will do next.
 
-Nothing here is a code change yet. Section 12 holds the ten decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
+Nothing here is a code change yet. Section 12 holds the eleven decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
 
 ---
 
@@ -26,7 +26,7 @@ This document is the complete brief. It assumes no conversation history. Read it
 3. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`, the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (both consumers).
 4. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
 
-**Decisions: all ten are made.** Read section 12 in full before phase 1, not just the phase you are on. Each carries binding consequences the build must honour, several of which are not derivable from the one-line answer. Build to them and do not relitigate them; if one turns out to be wrong, say so and get it changed there rather than working around it in code.
+**Decisions: all eleven are made.** Read section 12 in full before phase 1, not just the phase you are on. Each carries binding consequences the build must honour, several of which are not derivable from the one-line answer. Build to them and do not relitigate them; if one turns out to be wrong, say so and get it changed there rather than working around it in code.
 
 The short form:
 
@@ -39,8 +39,8 @@ The short form:
 | `D-5` | Stale after 21 days, and a re-approach proposes the last logged load minus 10%. |
 | `D-6` | Delete the cycle's strength-phase branch. Progression owns `target_reps`. Preserve the research in the cycle spec. |
 | `D-7` | Scope `all` means literally every working set. No `n_of_m`. |
-| `D-8` | **REOPENED** — contradicts scope `first` and inverts the training convention. Blocks phase 5. |
-| `D-11` | **OPEN** — should the gate require *consecutive* clears? The request said "two full workouts". |
+| `D-8` | The set that decides clearing also decides effort. Floor follows the scope. |
+| `D-11` | The gate is **consecutive** clears. A miss resets it; an unknown session does not. |
 | `D-9` | A partially logged session is unknown: no gate credit, no back-off credit. |
 | `D-10` | PRs predating honest logging are kept and flagged unverified, never deleted. |
 
@@ -138,22 +138,24 @@ The two schemes that prompted this, traced end to end.
 
 ### 4a. Fixed 12 reps, four sets, bump when two full workouts clear
 
-Configuration: preset **Load, confirmed**. Target fixed 12, no effort cap, scope `all`, gate 2, advance `load` (+2.5 kg), regress -10% after 3.
+Configuration: preset **Load, confirmed**. Target fixed 12, no effort floor, scope `all`, gate 2 **consecutive** (`D-11`), advance `load` (+2.5 kg), regress -10% after 3.
 
 | Session | Set 1 | Set 2 | Set 3 | Set 4 | Session clears? | Dots | Suggestion |
 |---|---|---|---|---|---|---|---|
 | 1 | 12 | 12 | 12 | 12 | yes | 1 of 2 | held at 60 |
-| 2 | 12 | 12 | 12 | **10** | **no** | 1 of 2 | held at 60 |
-| 3 | 12 | 12 | 12 | 12 | yes | 2 of 2 | **+2.5 kg on all four sets** |
-| 4 | 12 | 12 | 12 | 12 | yes (at 62.5) | 1 of 2 | held at 62.5 |
+| 2 | 12 | 12 | 12 | **10** | **no** | **0 of 2** | held at 60 |
+| 3 | 12 | 12 | 12 | 12 | yes | 1 of 2 | held at 60 |
+| 4 | 12 | 12 | 12 | 12 | yes | 2 of 2 | **+2.5 kg on all four sets** |
+| 5 | 12 | 12 | 12 | 12 | yes (at 62.5) | 1 of 2 | held at 62.5 |
 
-Session 2 is the case the current engine cannot see at all: set 4 fell short, and today that is recorded as 12 and counted as a confident hit. Under this plan the dots stay at 1 of 2 and you can watch it happen.
+Session 2 is the case the current engine cannot see at all: set 4 fell short, and today that is recorded as 12 and counted as a confident hit. Under this plan the dots **empty**, and you can watch it happen.
 
-Note that the gate counts *sessions*, and a session that does not clear does not reset the count, it simply does not add to it. The window is still the last 5 sessions, so a session that fails drops out of the window after 5 more.
+Two rules are doing the work here, and both are easy to lose in implementation:
 
-**This is not quite what was asked for, and it is worth a decision.** The stated requirement was load increasing after "two full workouts" clearing. A non-consecutive gate means clear, fail, fail, fail, clear also satisfies it — a bump off two clears with three misses between them. Paired with the back-off rule in section 7 step 5, the same history can satisfy the gate *and* the back-off streak, and only pipeline ordering decides which fires.
+- **`D-11`, consecutive clears.** Session 2's miss resets the count to zero, so the bump lands at session 4 rather than session 3. An earlier draft of this table had the miss merely *not add* to the count and bumped at session 3; that is not "two full workouts" and it is not what was asked for.
+- **`SI-11`, clears count only at the current load or heavier.** Session 5 reads 1 of 2, not 3 of 2, because the clears at 60 do not count once the load is 62.5. Without this the exercise would bump every session forever, which is the bug the whole plan exists to fix.
 
-A **consecutive**-clears gate matches both the request and every scheme in section 3. If non-consecutive is deliberate, a failing session should at least decay the count rather than being free. Flagged rather than silently changed, because it alters every preset. This is **`D-11`** below.
+Also settled here: `SI-11` means the window is effectively bounded by the last load change, and `D-11` means it is bounded by the last miss. Neither ever needs to look further back than that.
 
 ### 4b. Range 6 to 8, climb then reset
 
@@ -455,23 +457,23 @@ Binding consequences for the build:
 - **The mitigation is diagnostic, not corrective.** The dot detail view explains why an exercise is not progressing; it does not make it progress. If 4x12 stalls on set 4, a tolerance is the cheaper fix than `n_of_m`: either total reps across working sets (48 for 4x12) or a one-rep allowance on a single set. Both are one number and neither needs a new axis.
 
 
-**D-8. A per-set effort floor, against a prompt that only asks about the last set.**
-**Decided 2026-08-29, then REOPENED on review. Do not build to it yet.**
+**D-8. Which set's effort decides whether the session cleared?**
+**Decided (2026-08-29), reopened on review, re-decided: the floor is judged on the set the scope already names.**
 
-The decision was: the last set carrying logged effort speaks for the session. Review found two problems with it.
+| Scope | Clearing decided by | Effort judged on | Prompt fires |
+|---|---|---|---|
+| `all` | every working set | the **last** working set | after the exercise (unchanged) |
+| `first` | the first working set | the **first** working set | after set 1 |
+| `last` | the last working set | the **last** working set | after the exercise |
+| `set` | that set | that set | after that set |
 
-**It contradicts axis 4.** Preset *Double progression, top set* uses scope `first`: the first set decides whether the session cleared. D-8 says the last set's RIR gates it. Two different sets adjudicate one session, and nothing reconciles them.
+One rule: **the set that decides clearing also decides effort.** This replaces the earlier "last set carrying logged effort speaks for the session", which contradicted scope `first` (two different sets adjudicating one session), cancelled the reason per-set floors exist (on a top-set prescription the last set is the back-off, carrying the loosest floor), and inverted the convention that a prescribed RIR applies to the top set.
 
-**It cancels the reason per-set floors exist.** `D-1`'s justification was that a top set and its back-offs carry different floors. On exactly that prescription the last set *is* the back-off, carrying the loosest floor — so the strict top-set floor, the only one worth reading, is the one never evaluated.
-
-**And it is backwards as programming.** RIR falls across straight sets by design; the last set is where reserve is lowest. Judging an *Autoregulated* exercise (floor RIR 1-3) on its last set means it essentially never clears. The training convention is that a prescribed RPE/RIR applies to the **top** set.
-
-Two ways out, both needing a decision:
-
-- **Judge the scope-determining set, and move the prompt to match it.** Coherent with axis 4 and with convention. Costs the clean "one prompt at the end of the exercise" UX for scope `all` and `first`, since it has to ask about set 1.
-- **Keep the end-of-exercise prompt, and drop per-set floors.** Make the floor a property of the exercise, evaluated on whichever set the prompt asks about. Simpler and honest, but `D-1`'s per-set framing goes with it and `program_sets.target_rir` becomes an exercise-level setting stored per set.
-
-Until this is settled, `D-1` is decided and `D-8` is not. Nothing in phases 0 to 4 depends on it; it blocks phase 5.
+Binding consequences for the build:
+- Per-set floors stay real. `program_sets.target_rir` is read from the scope-determining set, so a top set and its back-offs can carry different values and the strict one is the one evaluated.
+- Only top-set schemes pay a mid-exercise prompt. Straight sets keep the single end-of-exercise prompt, which is the common case.
+- If the scope-determining set has no logged effort, the session is `unknown` per `D-2`. Effort logged on *other* sets is stored and displayed but does not substitute — that substitution was the previous rule and is what broke.
+- For scope `all` the last set is the strictest reading (reserve is lowest there by design). If capped straight-set exercises stall on this, the fix is to lower the floor, not to change which set is read.
 
 
 **D-9. What does a partially logged session mean?**
@@ -494,18 +496,15 @@ Binding consequences for the build:
 - Lands in phase 6 with the PR effort gate (`A11`), not earlier: the flag is meaningless until honest reps exist to contrast it with.
 
 **D-11. Should the gate require *consecutive* clearing sessions?**
-**OPEN. Blocks phase 5 (it changes every preset); phases 0 to 4 can proceed on the current non-consecutive rule.**
+**Decided (2026-08-29): yes. A non-clearing session resets the count to zero.**
 
-The gate counts cleared sessions in the 5-session window without requiring them to be adjacent, so clear, fail, fail, fail, clear satisfies a gate of 2 and bumps the load off two clears with three misses between them. The stated requirement was "two full workouts", which reads as consecutive.
+Binding consequences for the build:
+- `clear, clear` bumps. `clear, fail, clear` does not. The gate means "N in a row", which is what "two full workouts" was asking for and what every preset in section 3 implies.
+- **Unknown sessions (`D-2`, `D-9`) do not reset the count.** They are inert in both directions, as they are for the back-off streak. A session you did not log effort for must not undo banked progress, or `D-2` becomes a punishment for the honest gap it was designed to represent.
+- This removes the ambiguity where the same history could satisfy both the gate and the back-off streak, with only the pipeline's ordering deciding which fired. With a consecutive gate the two are mutually exclusive by construction.
+- The window still bounds the lookback at 5 sessions, but with a consecutive rule the window only matters for the back-off guard and the `SI-11` load comparison; the gate itself never needs to look past the first miss.
+- Update section 4a: its table already shows a miss at session 2 and a bump at session 3, which under this rule is **wrong** — session 2 resets, so session 3 is 1 of 2 and the bump lands at session 4. Fix the table; it is a test fixture (`E-11`).
 
-It also interacts badly with the back-off rule: the same history can satisfy the gate *and* the back-off streak, and only the pipeline's ordering (section 7, regress before gate) decides which fires. That is an accident, not a design.
-
-Three options:
-- **Consecutive clears.** Matches the request and every scheme in section 3. A miss resets the count to zero.
-- **Decay.** A non-clearing session decrements the count rather than being free. Softer, and harder to explain in the one-sentence rule (section 8).
-- **Keep as is.** Defensible if the intent is "two good sessions recently" rather than "two in a row", but then the back-off interaction needs stating deliberately rather than falling out of ordering.
-
-*Recommendation: consecutive.* It is what was asked for, it is what the presets imply, and it removes the ambiguity with the back-off streak.
 
 ---
 
