@@ -389,7 +389,8 @@ export type ExportedSessions = {
       distanceMeters: number | null;
       inclinePercent: number | null;
       heartRateZone: number | null;
-      rpe: number;
+      /** Null when the lifter logged no effort for the set. */
+      rpe: number | null;
       restTimeSeconds: number;
       isCompleted: boolean;
     }>;

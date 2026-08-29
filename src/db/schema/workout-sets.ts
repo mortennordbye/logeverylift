@@ -13,6 +13,7 @@
  *        5 = 5+ reps left). When set, rpe is derived as clamp(10 - rir, 1, 10).
  * - rpe: Rate of Perceived Exertion (1-10 scale, where 10 = absolute max effort).
  *        Derived from rir when rir is provided; kept for legacy rows and downstream logic.
+ *        Null when no effort was logged, which is distinct from any effort value.
  * - rest_time_seconds: Rest period after this set
  * - is_completed: Whether the set was finished or skipped
  *
@@ -96,7 +97,12 @@ export const workoutSets = pgTable("workout_sets", {
   // Reps In Reserve (0 = to failure, 5 = 5+). Primary user-logged effort signal;
   // rpe is derived from it. Nullable for legacy rows logged before RIR existed.
   rir: integer("rir"),
-  rpe: integer("rpe").notNull(), // 1-10 scale (derived from rir when present)
+  // 1-10 scale, derived from rir when present. Nullable, and null means the
+  // lifter did not say how hard the set was — not "average effort". Tapping a
+  // set done used to write a 7 here, which put every logged set inside the
+  // confident band and made the progression window saturate; silence records
+  // nothing now. Every read has to handle the null rather than default it.
+  rpe: integer("rpe"),
   restTimeSeconds: integer("rest_time_seconds").notNull(),
   // Free-text per-set note: "left shoulder twinged", "added belt", "felt easy"
   notes: text("notes"),

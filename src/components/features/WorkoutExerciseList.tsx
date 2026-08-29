@@ -124,7 +124,6 @@ export function WorkoutExerciseList({
                   weightKg: 0,
                   distanceMeters: s.distanceMeters ?? undefined,
                   durationSeconds: s.durationSeconds ?? undefined,
-                  rpe: 7,
                   restTimeSeconds: s.restTimeSeconds ?? 0,
                   isCompleted: true,
                 })
@@ -137,7 +136,6 @@ export function WorkoutExerciseList({
                   actualReps: s.targetReps ?? 0,
                   weightKg: Number(s.weightKg ?? 0),
                   durationSeconds: s.durationSeconds ?? undefined,
-                  rpe: 7,
                   restTimeSeconds: s.restTimeSeconds ?? 0,
                   isCompleted: true,
                 }),

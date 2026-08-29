@@ -55,7 +55,7 @@ export const createWorkoutSessionSchema = z.object({
  *
  * Validates individual set data during a workout.
  *
- * RPE (Rate of Perceived Exertion) must be 1-10:
+ * RPE (Rate of Perceived Exertion), when supplied, must be 1-10:
  * - 10: Maximum effort, no reps left
  * - 9: 1 rep in reserve (RIR)
  * - 8: 2-3 reps in reserve
@@ -92,11 +92,18 @@ export const logWorkoutSetSchema = z.object({
   // Reps In Reserve — the primary effort input (0 = to failure, 5 = 5+ left).
   // When present, the server derives rpe from it (rpe = clamp(10 - rir, 1, 10)).
   rir: z.number().int().min(0).max(5).optional(),
+  // Optional, and absent means "the lifter did not say how hard it was". The
+  // toggle used to send 7 on every tap, which is a claim nobody made; it now
+  // sends nothing. Still accepted because a bundle cached before this shipped —
+  // and every payload already sitting in the offline queue — still sends 7, and
+  // a legacy 7 is stored as a real 7 rather than rewritten to unknown: the two
+  // are indistinguishable on the wire and history is not ours to edit.
   rpe: z
     .number()
     .int()
     .min(1, "RPE must be at least 1")
-    .max(10, "RPE must be at most 10"),
+    .max(10, "RPE must be at most 10")
+    .optional(),
   restTimeSeconds: z
     .number()
     .int()

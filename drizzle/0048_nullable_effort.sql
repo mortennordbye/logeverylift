@@ -1,0 +1,1 @@
+ALTER TABLE "workout_sets" ALTER COLUMN "rpe" DROP NOT NULL;

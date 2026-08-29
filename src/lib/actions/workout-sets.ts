@@ -305,8 +305,13 @@ export async function logWorkoutSet(
 
     // RIR is the primary effort input; derive RPE from it so all downstream
     // RPE-based progression/adaptation keeps working. Fall back to the supplied
-    // RPE for callers that don't report RIR yet (e.g. logged runs).
-    const effectiveRpe = rir != null ? rpeFromRir(rir) : rpe;
+    // RPE for callers that report effort without RIR (e.g. logged runs).
+    //
+    // Null when neither was supplied: the lifter tapped the set done and said
+    // nothing about how hard it was. That is stored as unknown, not as a
+    // middling 7 — inventing an effort value is what made every logged set read
+    // as a confident hit.
+    const effectiveRpe = rir != null ? rpeFromRir(rir) : (rpe ?? null);
 
     // Verify the session belongs to the authenticated user
     const [session] = await db

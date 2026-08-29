@@ -293,8 +293,9 @@ export function SetEditView({
           weightKg: isRunning ? 0 : weight,
           durationSeconds: duration > 0 ? duration : undefined,
           distanceMeters: isRunning ? (distanceMeters ?? undefined) : undefined,
+          // No rpe: rir is the effort the lifter actually picked, and leaving
+          // the picker alone means effort is unknown rather than a middling 7.
           rir: failed ? 0 : (rir ?? undefined),
-          rpe: 7,
           restTimeSeconds: restSeconds,
           notes: noteValue,
           isCompleted: true,

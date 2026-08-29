@@ -76,6 +76,15 @@ describe("logWorkoutSetSchema", () => {
     expect(logWorkoutSetSchema.safeParse({ ...valid, programSetId: -1 }).success).toBe(false);
   });
 
+  // P-3: the payload changes shape while old clients are still installed. A
+  // bundle cached before effort became optional still sends rpe: 7 on every
+  // tap, and so does everything already queued offline; both must keep logging.
+  it("accepts a payload with no effort at all, and one that still sends RPE", () => {
+    const noEffort = { ...valid, rpe: undefined };
+    expect(logWorkoutSetSchema.safeParse(noEffort).success).toBe(true);
+    expect(logWorkoutSetSchema.safeParse({ ...valid, rpe: 7 }).success).toBe(true);
+  });
+
   it("rejects RPE below 1", () => {
     expect(logWorkoutSetSchema.safeParse({ ...valid, rpe: 0 }).success).toBe(false);
   });
