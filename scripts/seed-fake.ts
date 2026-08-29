@@ -23,8 +23,23 @@ import {
   workoutSessions,
   workoutSets,
 } from "../src/db/schema";
+import { rpeFromRir } from "../src/lib/utils/rir";
 
 const FORCE = process.argv.includes("--force");
+
+/**
+ * Effort for one seeded set, logged about two-thirds of the time.
+ *
+ * A tap on the set toggle records that the set happened, not how hard it was,
+ * so seeded history has to contain unknowns too — otherwise the demo account is
+ * the only place where every set carries an effort value and the code paths that
+ * handle a missing one never run locally.
+ */
+function seededEffort(intendedRir: number): { rir: number | null; rpe: number | null } {
+  if (Math.random() < 0.35) return { rir: null, rpe: null };
+  const rir = Math.max(0, Math.min(5, intendedRir));
+  return { rir, rpe: rpeFromRir(rir) };
+}
 
 // ── Program definitions ────────────────────────────────────────────────────
 
@@ -209,7 +224,15 @@ async function seedFake() {
   const createdPrograms: Array<{
     id: number;
     blueprint: ProgramBlueprint;
-    exerciseMap: Map<string, { programExerciseId: number; blueprint: ExerciseBlueprint }>;
+    exerciseMap: Map<
+      string,
+      {
+        programExerciseId: number;
+        blueprint: ExerciseBlueprint;
+        /** program_sets.id per set number — workout_sets records the slot it was logged against. */
+        setIdByNumber: Map<number, number>;
+      }
+    >;
   }> = [];
 
   for (const blueprint of PROGRAMS) {
@@ -220,7 +243,11 @@ async function seedFake() {
 
     const exerciseMap = new Map<
       string,
-      { programExerciseId: number; blueprint: ExerciseBlueprint }
+      {
+        programExerciseId: number;
+        blueprint: ExerciseBlueprint;
+        setIdByNumber: Map<number, number>;
+      }
     >();
 
     for (let i = 0; i < blueprint.exercises.length; i++) {
@@ -233,20 +260,24 @@ async function seedFake() {
         .values({ programId: program.id, exerciseId, orderIndex: i })
         .returning({ id: programExercises.id });
 
-      await db.insert(programSets).values(
-        exBlueprint.sets.map((s) => ({
-          programExerciseId: pe.id,
-          setNumber: s.setNumber,
-          targetReps: s.targetReps ?? null,
-          weightKg: s.weightKg?.toString() ?? null,
-          durationSeconds: s.durationSeconds ?? null,
-          restTimeSeconds: s.restTimeSeconds,
-        }))
-      );
+      const insertedSets = await db
+        .insert(programSets)
+        .values(
+          exBlueprint.sets.map((s) => ({
+            programExerciseId: pe.id,
+            setNumber: s.setNumber,
+            targetReps: s.targetReps ?? null,
+            weightKg: s.weightKg?.toString() ?? null,
+            durationSeconds: s.durationSeconds ?? null,
+            restTimeSeconds: s.restTimeSeconds,
+          }))
+        )
+        .returning({ id: programSets.id, setNumber: programSets.setNumber });
 
       exerciseMap.set(exBlueprint.name, {
         programExerciseId: pe.id,
         blueprint: exBlueprint,
+        setIdByNumber: new Map(insertedSets.map((ps) => [ps.setNumber, ps.id])),
       });
     }
 
@@ -335,7 +366,8 @@ async function seedFake() {
         if (!exerciseId) continue;
 
         for (const setBlueprint of exBlueprint.sets) {
-          const rpe = 6 + Math.floor(Math.random() * 3); // 6, 7, or 8
+          const effort = seededEffort(2 + Math.floor(Math.random() * 3)); // RIR 2-4
+          const slot = prog.exerciseMap.get(exBlueprint.name);
 
           // A timed set has no reps or load to vary — jitter the hold instead.
           // actualReps and weightKg are NOT NULL, so they record 1 x 0kg.
@@ -348,6 +380,10 @@ async function seedFake() {
           await db.insert(workoutSets).values({
             sessionId: session.id,
             exerciseId,
+            programExerciseId: slot?.programExerciseId ?? null,
+            programSetId: slot?.setIdByNumber.get(setBlueprint.setNumber) ?? null,
+            setType: "working",
+            prescribedWorkingSets: exBlueprint.sets.length,
             setNumber: setBlueprint.setNumber,
             targetReps: setBlueprint.targetReps ?? null,
             actualReps,
@@ -355,7 +391,8 @@ async function seedFake() {
             durationSeconds: isTimedSet
               ? Math.max(10, Math.round(jitter(setBlueprint.durationSeconds!, 5)))
               : null,
-            rpe,
+            rir: effort.rir,
+            rpe: effort.rpe,
             restTimeSeconds: setBlueprint.restTimeSeconds,
             isCompleted: true,
           });

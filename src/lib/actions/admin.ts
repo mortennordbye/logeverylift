@@ -16,6 +16,7 @@ import {
 } from "@/db/schema";
 import { ForbiddenError, requireAdmin, requireSession } from "@/lib/utils/session";
 import { DEMO_USER_EMAIL, DEMO_USER_NAME } from "@/lib/constants/demo";
+import { rpeFromRir } from "@/lib/utils/rir";
 import { ActionResult } from "@/types/workout";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -58,6 +59,35 @@ type ProgramBlueprint = {
   name: string;
   exercises: ExerciseBlueprint[];
 };
+
+/**
+ * The plan slot a seeded set belongs to, keyed by exercise name and set number.
+ *
+ * Seeded history is inserted straight into workout_sets, so none of the columns
+ * logWorkoutSet fills — the slot ids, the set type, the prescribed working-set
+ * count — arrive on their own. The progression engine reads all of them, and a
+ * development or demo account has no history but this one.
+ */
+type SeededSlots = Map<
+  string,
+  { programExerciseId: number; programSetId: number; prescribedWorkingSets: number }
+>;
+
+const slotKey = (exerciseName: string, setNumber: number) => `${exerciseName}::${setNumber}`;
+
+/**
+ * Effort for one seeded set, logged about two-thirds of the time.
+ *
+ * Not every set gets a value on purpose: tapping a set done says nothing about
+ * how hard it was, and seeding an effort value onto every row would recreate the
+ * world where the engine never sees an unknown. Takes the RIR the seed intends;
+ * rpe is derived from it exactly as the log path derives it.
+ */
+function seededEffort(intendedRir: number): { rir: number | null; rpe: number | null } {
+  if (Math.random() < 0.35) return { rir: null, rpe: null };
+  const rir = Math.max(0, Math.min(5, intendedRir));
+  return { rir, rpe: rpeFromRir(rir) };
+}
 
 const FAKE_PROGRAMS: ProgramBlueprint[] = [
   {
@@ -303,13 +333,15 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
 
   const exerciseIdByName = new Map(exerciseRows.map((e) => [e.name, e.id]));
 
-  const createdPrograms: Array<{ id: number; blueprint: ProgramBlueprint }> = [];
+  const createdPrograms: Array<{ id: number; blueprint: ProgramBlueprint; slots: SeededSlots }> = [];
 
   for (const blueprint of DEMO_PROGRAMS) {
     const [program] = await db
       .insert(programs)
       .values({ userId, name: blueprint.name })
       .returning({ id: programs.id });
+
+    const slots: SeededSlots = new Map();
 
     for (let i = 0; i < blueprint.exercises.length; i++) {
       const exBlueprint = blueprint.exercises[i];
@@ -321,18 +353,29 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
         .values({ programId: program.id, exerciseId, orderIndex: i })
         .returning({ id: programExercises.id });
 
-      await db.insert(programSets).values(
-        exBlueprint.sets.map((s) => ({
+      const insertedSets = await db
+        .insert(programSets)
+        .values(
+          exBlueprint.sets.map((s) => ({
+            programExerciseId: pe.id,
+            setNumber: s.setNumber,
+            targetReps: s.targetReps,
+            weightKg: s.weightKg.toString(),
+            restTimeSeconds: s.restTimeSeconds,
+          }))
+        )
+        .returning({ id: programSets.id, setNumber: programSets.setNumber });
+
+      for (const ps of insertedSets) {
+        slots.set(slotKey(exBlueprint.name, ps.setNumber), {
           programExerciseId: pe.id,
-          setNumber: s.setNumber,
-          targetReps: s.targetReps,
-          weightKg: s.weightKg.toString(),
-          restTimeSeconds: s.restTimeSeconds,
-        }))
-      );
+          programSetId: ps.id,
+          prescribedWorkingSets: exBlueprint.sets.length,
+        });
+      }
     }
 
-    createdPrograms.push({ id: program.id, blueprint });
+    createdPrograms.push({ id: program.id, blueprint, slots });
   }
 
   // Training cycle: "Push Pull Legs" — Mon/Wed/Fri (3×/week), 6 weeks in
@@ -416,17 +459,23 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
           // Mostly hit target; early weeks occasionally beat it by 1 rep
           const bonusRep = week < 3 && Math.random() < 0.3 ? 1 : 0;
           const actualReps = setBlueprint.targetReps + bonusRep;
-          // RPE climbs as weight increases: week 0 ≈ 7, week 5 ≈ 9
-          const rpe = Math.min(10, 7 + Math.round(week * 0.4) + (Math.random() < 0.4 ? 1 : 0));
+          // Reserve shrinks as the weight climbs: week 0 ≈ RIR 3, week 5 ≈ RIR 0
+          const effort = seededEffort(3 - Math.round(week * 0.4) - (Math.random() < 0.4 ? 1 : 0));
+          const slot = prog.slots.get(slotKey(exBlueprint.name, setBlueprint.setNumber));
 
           await db.insert(workoutSets).values({
             sessionId: session.id,
             exerciseId,
+            programExerciseId: slot?.programExerciseId ?? null,
+            programSetId: slot?.programSetId ?? null,
+            setType: "working",
+            prescribedWorkingSets: slot?.prescribedWorkingSets ?? null,
             setNumber: setBlueprint.setNumber,
             targetReps: setBlueprint.targetReps,
             actualReps,
             weightKg: weightKg.toString(),
-            rpe,
+            rir: effort.rir,
+            rpe: effort.rpe,
             restTimeSeconds: setBlueprint.restTimeSeconds,
             isCompleted: true,
           });
@@ -493,6 +542,7 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
   const createdPrograms: Array<{
     id: number;
     blueprint: ProgramBlueprint;
+    slots: SeededSlots;
   }> = [];
 
   for (const blueprint of FAKE_PROGRAMS) {
@@ -500,6 +550,8 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
       .insert(programs)
       .values({ userId, name: blueprint.name })
       .returning({ id: programs.id });
+
+    const slots: SeededSlots = new Map();
 
     for (let i = 0; i < blueprint.exercises.length; i++) {
       const exBlueprint = blueprint.exercises[i];
@@ -511,18 +563,29 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
         .values({ programId: program.id, exerciseId, orderIndex: i })
         .returning({ id: programExercises.id });
 
-      await db.insert(programSets).values(
-        exBlueprint.sets.map((s) => ({
+      const insertedSets = await db
+        .insert(programSets)
+        .values(
+          exBlueprint.sets.map((s) => ({
+            programExerciseId: pe.id,
+            setNumber: s.setNumber,
+            targetReps: s.targetReps,
+            weightKg: s.weightKg.toString(),
+            restTimeSeconds: s.restTimeSeconds,
+          }))
+        )
+        .returning({ id: programSets.id, setNumber: programSets.setNumber });
+
+      for (const ps of insertedSets) {
+        slots.set(slotKey(exBlueprint.name, ps.setNumber), {
           programExerciseId: pe.id,
-          setNumber: s.setNumber,
-          targetReps: s.targetReps,
-          weightKg: s.weightKg.toString(),
-          restTimeSeconds: s.restTimeSeconds,
-        }))
-      );
+          programSetId: ps.id,
+          prescribedWorkingSets: exBlueprint.sets.length,
+        });
+      }
     }
 
-    createdPrograms.push({ id: program.id, blueprint });
+    createdPrograms.push({ id: program.id, blueprint, slots });
   }
 
   // Create training cycle
@@ -602,16 +665,23 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
           const weightKg = setBlueprint.weightKg + week * exBlueprint.weeklyIncrementKg;
           // Reps always hit target; occasionally +1 when weights are lighter (early weeks)
           const actualReps = setBlueprint.targetReps + (week < 2 && Math.random() < 0.25 ? 1 : 0);
-          const rpe = 6 + week + (Math.random() < 0.4 ? 1 : 0); // harder as weeks progress
+          // Reserve shrinks as the weeks progress
+          const effort = seededEffort(4 - week - (Math.random() < 0.4 ? 1 : 0));
+          const slot = prog.slots.get(slotKey(exBlueprint.name, setBlueprint.setNumber));
 
           await db.insert(workoutSets).values({
             sessionId: session.id,
             exerciseId,
+            programExerciseId: slot?.programExerciseId ?? null,
+            programSetId: slot?.programSetId ?? null,
+            setType: "working",
+            prescribedWorkingSets: slot?.prescribedWorkingSets ?? null,
             setNumber: setBlueprint.setNumber,
             targetReps: setBlueprint.targetReps,
             actualReps,
             weightKg: weightKg.toString(),
-            rpe,
+            rir: effort.rir,
+            rpe: effort.rpe,
             restTimeSeconds: setBlueprint.restTimeSeconds,
             isCompleted: true,
           });
