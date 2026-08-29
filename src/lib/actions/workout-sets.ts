@@ -45,7 +45,7 @@ import {
     CONSENSUS_WINDOW,
     estimate1RM,
 } from "@/lib/utils/progression";
-import type { HistoryRow, ProgramSetData } from "@/lib/utils/progression";
+import type { ProgramSetData, SessionHistory } from "@/lib/utils/progression";
 import type {
     ActionResult,
     ActiveCycleInfo,
@@ -59,7 +59,7 @@ import type {
     WorkoutSetWithExercise,
     WorkoutStats,
 } from "@/types/workout";
-import { and, desc, eq, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -1309,16 +1309,24 @@ export async function updateWorkoutSetNotes(
 /**
  * Calculate progressive overload suggestions for every set in a program.
  *
- * For each program_set, we examine recent completed sessions (excluding "Tired"
- * sessions) and apply multi-session consensus logic:
- * - Requires REQUIRED_HITS confident hits within the last CONSENSUS_WINDOW sessions
- *   to trigger a progression (prevents single-fluke advances).
- * - RPE gates confidence: RPE 9-10 sets are not counted as confident hits.
- * - 3+ consecutive failures trigger a 10% deload suggestion.
- * - If no history exists for a set, it is omitted (caller uses the program default).
+ * The window is the last CONSENSUS_WINDOW completed *sessions* per plan slot,
+ * each carrying every working set logged in it. It used to be the last N rows
+ * for one exercise + set number, which had two defects this query fixes:
  *
- * NULL feeling (old sessions recorded before the column existed) is treated
- * as valid — only explicit "Tired" entries are excluded.
+ *  - Each set of a 4x12 banked its own count, so the plan could ratchet to
+ *    62.5 / 60 / 60 / 60 with no session ever having cleared. "Did the workout
+ *    clear?" is a question about a session, and it was never asked.
+ *  - A single global LIMIT across every set of every exercise starved the
+ *    window on large programs: the sets of the most recent exercises consumed
+ *    it and the rest got nothing. The DENSE_RANK partitions per slot, so each
+ *    exercise gets its own five sessions regardless of how many there are.
+ *
+ * Two filters are load-bearing. **In-progress sessions are excluded**, which is
+ * what makes an "easy" verdict affect the next workout rather than the current
+ * one. **Tired sessions are no longer excluded here**: the blanket exclusion
+ * froze progression and showed stale numbers for anyone who reported fatigue
+ * honestly. The engine holds a Tired session's misses harmless instead, and
+ * still counts its clears.
  */
 export async function getProgressiveSuggestions(
   programId: number,
@@ -1341,6 +1349,7 @@ export async function getProgressiveSuggestions(
     const programData = await db
       .select({
         programSetId: programSets.id,
+        programExerciseId: programExercises.id,
         setNumber: programSets.setNumber,
         targetReps: programSets.targetReps,
         durationSeconds: programSets.durationSeconds,
@@ -1350,6 +1359,7 @@ export async function getProgressiveSuggestions(
         overloadIncrementKg: programExercises.overloadIncrementKg,
         overloadIncrementReps: programExercises.overloadIncrementReps,
         progressionMode: programExercises.progressionMode,
+        progressionScope: programExercises.progressionScope,
         progressionRequiredHits: programExercises.progressionRequiredHits,
         movementPattern: exercises.movementPattern,
         // Resolve override ?? default in JS below (Drizzle returns both columns).
@@ -1368,8 +1378,6 @@ export async function getProgressiveSuggestions(
     if (programData.length === 0) {
       return { success: true, data: {} };
     }
-
-    const exerciseIds = [...new Set(programData.map((r) => r.exerciseId))];
 
     // Step 2: fetch user profile and current session readiness in parallel
     const [userProfile, activeSession] = await Promise.all([
@@ -1406,13 +1414,21 @@ export async function getProgressiveSuggestions(
         }
       : null;
 
-    // Step 3: fetch history, excluding Tired sessions
-    // NULL feeling (pre-feature sessions) is kept via IS DISTINCT FROM.
-    // Limit to CONSENSUS_WINDOW rows per exercise+setNumber to avoid full scans
-    // on accounts with hundreds of sessions.
-    const history = await db
+    // Step 3: rank each slot's completed sessions independently, then keep the
+    // most recent CONSENSUS_WINDOW of them. DENSE_RANK over session start time
+    // gives every session its own rank (session id breaks ties), so two
+    // sessions on the same day consume two slots of the window — the window
+    // counts sessions, not days.
+    //
+    // Warm-ups are excluded on the row's own snapshotted set_type rather than
+    // by joining back to program_sets, because today's plan does not describe a
+    // session from three weeks ago. Rows whose slot could not be resolved are
+    // dropped by the inner join, as are rows logged against a slot whose
+    // exercise has since been swapped — those belong to the previous exercise
+    // and would otherwise be read as this one's history.
+    const ranked = db
       .select({
-        exerciseId: workoutSets.exerciseId,
+        programExerciseId: workoutSets.programExerciseId,
         setNumber: workoutSets.setNumber,
         actualReps: workoutSets.actualReps,
         targetReps: workoutSets.targetReps,
@@ -1421,42 +1437,95 @@ export async function getProgressiveSuggestions(
         distanceMeters: workoutSets.distanceMeters,
         rpe: workoutSets.rpe,
         wasEasy: workoutSets.wasEasy,
+        prescribedWorkingSets: workoutSets.prescribedWorkingSets,
+        sessionId: workoutSessions.id,
         feeling: workoutSessions.feeling,
         date: workoutSessions.date,
+        sessionRank: sql<number>`DENSE_RANK() OVER (
+          PARTITION BY ${workoutSets.programExerciseId}
+          ORDER BY ${workoutSessions.startTime} DESC, ${workoutSessions.id} DESC
+        )`.as("session_rank"),
       })
       .from(workoutSets)
       .innerJoin(workoutSessions, eq(workoutSets.sessionId, workoutSessions.id))
+      .innerJoin(
+        programExercises,
+        eq(programExercises.id, workoutSets.programExerciseId),
+      )
       .where(
         and(
           eq(workoutSessions.userId, userId),
           eq(workoutSessions.programId, programId),
           eq(workoutSessions.isCompleted, true),
-          sql`${workoutSessions.feeling} IS DISTINCT FROM 'Tired'`,
-          inArray(workoutSets.exerciseId, exerciseIds),
+          eq(programExercises.programId, programId),
+          eq(programExercises.exerciseId, workoutSets.exerciseId),
+          eq(workoutSets.setType, "working"),
         ),
       )
-      .orderBy(desc(workoutSessions.startTime), desc(workoutSets.id))
-      .limit(programData.length * CONSENSUS_WINDOW);
+      .as("ranked");
 
-    // Step 4: group history rows per exerciseId+setNumber (most-recent-first)
-    const historyPerKey = new Map<string, HistoryRow[]>();
+    const history = await db
+      .select()
+      .from(ranked)
+      .where(lte(ranked.sessionRank, CONSENSUS_WINDOW))
+      .orderBy(ranked.sessionRank, ranked.setNumber);
+
+    // Step 4: fold the rows into one window of sessions per slot. Rows arrive
+    // in rank order and, within a session, in set order, so appending in place
+    // keeps both orderings without a second sort.
+    const windows = new Map<number, SessionHistory[]>();
+    const openSessions = new Map<string, SessionHistory>();
     for (const row of history) {
-      const key = `${row.exerciseId}-${row.setNumber}`;
-      if (!historyPerKey.has(key)) historyPerKey.set(key, []);
-      const list = historyPerKey.get(key)!;
-      if (list.length < CONSENSUS_WINDOW) list.push(row as HistoryRow);
+      const slotId = row.programExerciseId;
+      if (slotId == null) continue;
+      const key = `${slotId}-${row.sessionId}`;
+      let session = openSessions.get(key);
+      if (!session) {
+        session = {
+          date: row.date,
+          feeling: row.feeling,
+          sets: [],
+          prescribedWorkingSets: row.prescribedWorkingSets,
+        };
+        openSessions.set(key, session);
+        const list = windows.get(slotId);
+        if (list) list.push(session);
+        else windows.set(slotId, [session]);
+      }
+      // Rows of one session normally agree. They disagree only when the plan
+      // changed mid-session, and the larger count is the safe reading: it can
+      // make a session unknown, which is inert, where the smaller could make a
+      // short session read as a clear.
+      if (
+        row.prescribedWorkingSets != null &&
+        (session.prescribedWorkingSets == null ||
+          row.prescribedWorkingSets > session.prescribedWorkingSets)
+      ) {
+        session.prescribedWorkingSets = row.prescribedWorkingSets;
+      }
+      session.sets.push({
+        setNumber: row.setNumber,
+        actualReps: row.actualReps,
+        targetReps: row.targetReps,
+        weightKg: row.weightKg,
+        durationSeconds: row.durationSeconds,
+        distanceMeters: row.distanceMeters,
+        rpe: row.rpe,
+        wasEasy: row.wasEasy,
+      });
     }
 
-    // Step 5: build suggestion for each program set using the pure helper
+    // Step 5: build suggestion for each program set using the pure helper.
+    // Every working set of a slot is judged against the same window and the
+    // same scope, so under scope "all" one advance moves the whole exercise.
     const suggestions: Record<number, SetSuggestion> = {};
 
     for (const ps of programData) {
-      const key = `${ps.exerciseId}-${ps.setNumber}`;
-      const rows = historyPerKey.get(key) ?? [];
-
       // Any set marked anything other than "working" is excluded from
       // progression entirely.
       if (ps.setType && ps.setType !== "working") continue;
+
+      const sessions = windows.get(ps.programExerciseId) ?? [];
 
       const psData: ProgramSetData = {
         programSetId: ps.programSetId,
@@ -1469,12 +1538,13 @@ export async function getProgressiveSuggestions(
         overloadIncrementKg: ps.overloadIncrementKg,
         overloadIncrementReps: ps.overloadIncrementReps,
         progressionMode: ps.progressionMode,
+        scope: ps.progressionScope,
         requiredHits: ps.progressionRequiredHits,
         movementPattern: ps.movementPattern,
         exerciseType: ps.exerciseTypeOverride ?? ps.exerciseTypeDefault,
         exerciseName: ps.exerciseName,
       };
-      const suggestion = buildSuggestion(rows, psData, profile, readiness);
+      const suggestion = buildSuggestion(sessions, psData, profile, readiness);
       if (suggestion) {
         suggestions[ps.programSetId] = suggestion;
       }

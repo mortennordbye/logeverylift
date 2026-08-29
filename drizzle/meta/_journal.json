@@ -344,6 +344,13 @@
       "when": 1788004279608,
       "tag": "0048_nullable_effort",
       "breakpoints": true
+    },
+    {
+      "idx": 49,
+      "version": "7",
+      "when": 1788005738296,
+      "tag": "0049_progression_scope",
+      "breakpoints": true
     }
   ]
 }

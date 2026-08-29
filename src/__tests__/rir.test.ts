@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { effectiveRir, rirFromRpe, rpeFromRir } from "@/lib/utils/rir";
 import { metTargetReps } from "@/lib/utils/progression";
-import type { HistoryRow } from "@/lib/utils/progression";
+import type { LoggedSet } from "@/lib/utils/progression";
 
 // ─── rpeFromRir ────────────────────────────────────────────────────────────────
 
@@ -48,15 +48,12 @@ describe("effectiveRir", () => {
 // ─── Logged effort no longer gates clearing ──────────────────────────────────
 
 describe("logged effort does not decide whether a set cleared", () => {
-  const base: HistoryRow = {
-    exerciseId: 1,
+  const base: LoggedSet = {
     setNumber: 1,
     actualReps: 5,
     targetReps: 5,
     weightKg: "80",
     durationSeconds: null,
-    feeling: null,
-    date: "2026-06-01",
     rpe: 7,
   };
 

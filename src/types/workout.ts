@@ -213,6 +213,34 @@ export type SetSuggestion = {
   easyOverride?: boolean;
   /** Exercise name — populated by getProgressiveSuggestions for insight bucketing. */
   exerciseName?: string;
+  /**
+   * The consensus window session by session, newest first — what the dots are
+   * counting. Without it a strict scope reads as the app being broken: "set 4
+   * was one rep short in three of the last five" has to be visible on screen,
+   * not inferable only from a mental model of the engine.
+   *
+   *   cleared — every set the scope reads met its target
+   *   missed  — one of them fell short (by `shortfall` reps, when reps are the
+   *             measure; timed and distance sets log no target to measure against)
+   *   unknown — the session did not answer the question: fewer sets logged than
+   *             the plan prescribed, or a session the lifter marked Tired that
+   *             fell short. Neither banks a clear nor counts toward a back-off.
+   */
+  sessions?: SuggestionSession[];
+};
+
+/** One session in the consensus window, as the dot detail view renders it. */
+export type SuggestionSession = {
+  date: string;
+  status: "cleared" | "missed" | "unknown";
+  /** Reps short on the worst set the scope reads. Rep-based sets only. */
+  shortfall?: number;
+  /** Working sets logged for this exercise in that session. */
+  loggedSets: number;
+  /** Working sets the plan prescribed at the time. Null on pre-migration rows. */
+  prescribedSets: number | null;
+  /** Session feeling, so a Tired session can say why it did not count. */
+  feeling: string | null;
 };
 
 // ─── Personal Records ─────────────────────────────────────────────────────────

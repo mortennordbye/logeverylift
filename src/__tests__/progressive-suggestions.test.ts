@@ -7,32 +7,68 @@ import {
   metTargetReps,
   pendingProgressions,
   roundToNearest,
-  CONSENSUS_WINDOW,
   DELOAD_THRESHOLD,
   REQUIRED_HITS,
 } from "@/lib/utils/progression";
 import type {
-  HistoryRow,
+  LoggedSet,
   PendingSetInput,
   ProgramSetData,
+  SessionHistory,
   UserProfile,
 } from "@/lib/utils/progression";
 import type { SetSuggestion } from "@/types/workout";
 
 // ─── Test helpers ──────────────────────────────────────────────────────────────
 
-function makeRow(overrides: Partial<HistoryRow> = {}): HistoryRow {
+/** Session-level fields, alongside the single set's own. */
+type SessionOverrides = Partial<LoggedSet> & {
+  date?: string;
+  feeling?: string | null;
+  prescribedWorkingSets?: number | null;
+};
+
+/** A completed session in which one working set was logged. */
+function makeSession(overrides: SessionOverrides = {}): SessionHistory {
+  const { date, feeling, prescribedWorkingSets, ...set } = overrides;
   return {
-    exerciseId: 1,
+    date: date ?? "2024-01-01",
+    feeling: feeling === undefined ? "Good" : feeling,
+    prescribedWorkingSets:
+      prescribedWorkingSets === undefined ? 1 : prescribedWorkingSets,
+    sets: [makeLoggedSet(set)],
+  };
+}
+
+function makeLoggedSet(overrides: Partial<LoggedSet> = {}): LoggedSet {
+  return {
     setNumber: 1,
     actualReps: 8,
     targetReps: 8,
     weightKg: "80.00",
     durationSeconds: null,
-    feeling: "Good",
-    date: "2024-01-01",
     rpe: 7,
     ...overrides,
+  };
+}
+
+/** A session holding several working sets, numbered from 1. */
+function makeMultiSession(
+  sets: Partial<LoggedSet>[],
+  overrides: {
+    date?: string;
+    feeling?: string | null;
+    prescribedWorkingSets?: number | null;
+  } = {},
+): SessionHistory {
+  return {
+    date: overrides.date ?? "2024-01-01",
+    feeling: overrides.feeling === undefined ? "Good" : overrides.feeling,
+    prescribedWorkingSets:
+      overrides.prescribedWorkingSets === undefined
+        ? sets.length
+        : overrides.prescribedWorkingSets,
+    sets: sets.map((s, i) => makeLoggedSet({ setNumber: i + 1, ...s })),
   };
 }
 
@@ -50,10 +86,13 @@ function makePs(overrides: Partial<ProgramSetData> = {}): ProgramSetData {
   };
 }
 
-/** Build N identical rows, newest first (dates 2024-01-0N, 2024-01-0N-1, …) */
-function makeRows(n: number, rowOverride: Partial<HistoryRow> = {}): HistoryRow[] {
+/** Build N identical sessions, newest first (dates 2024-01-0N, 2024-01-0N-1, …) */
+function makeSessions(
+  n: number,
+  override: SessionOverrides = {},
+): SessionHistory[] {
   return Array.from({ length: n }, (_, i) =>
-    makeRow({ ...rowOverride, date: `2024-01-${String(n - i).padStart(2, "0")}` }),
+    makeSession({ ...override, date: `2024-01-${String(n - i).padStart(2, "0")}` }),
   );
 }
 
@@ -118,26 +157,26 @@ describe("roundToNearest", () => {
 
 describe("metTargetReps", () => {
   it("returns true when the target was met, whatever the effort", () => {
-    expect(metTargetReps(makeRow({ rpe: 6, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
-    expect(metTargetReps(makeRow({ rpe: 8, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
-    expect(metTargetReps(makeRow({ rpe: 10, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
+    expect(metTargetReps(makeLoggedSet({ rpe: 6, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
+    expect(metTargetReps(makeLoggedSet({ rpe: 8, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
+    expect(metTargetReps(makeLoggedSet({ rpe: 10, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
   });
 
   it("returns true when no effort was logged", () => {
-    expect(metTargetReps(makeRow({ rpe: null, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
+    expect(metTargetReps(makeLoggedSet({ rpe: null, actualReps: 8, targetReps: 8 }), 8)).toBe(true);
   });
 
   it("returns false when target reps not met", () => {
-    expect(metTargetReps(makeRow({ rpe: 6, actualReps: 6, targetReps: 8 }), 8)).toBe(false);
+    expect(metTargetReps(makeLoggedSet({ rpe: 6, actualReps: 6, targetReps: 8 }), 8)).toBe(false);
   });
 
   it("returns true for null targets when reps > 0 (open-ended sets clear on any rep)", () => {
-    expect(metTargetReps(makeRow({ rpe: 6, actualReps: 8, targetReps: null }), null)).toBe(true);
-    expect(metTargetReps(makeRow({ rpe: null, actualReps: 8, targetReps: null }), null)).toBe(true);
+    expect(metTargetReps(makeLoggedSet({ rpe: 6, actualReps: 8, targetReps: null }), null)).toBe(true);
+    expect(metTargetReps(makeLoggedSet({ rpe: null, actualReps: 8, targetReps: null }), null)).toBe(true);
   });
 
   it("returns false for null targets when actualReps = 0 (nothing performed)", () => {
-    expect(metTargetReps(makeRow({ rpe: 6, actualReps: 0, targetReps: null }), null)).toBe(false);
+    expect(metTargetReps(makeLoggedSet({ rpe: 6, actualReps: 0, targetReps: null }), null)).toBe(false);
   });
 });
 
@@ -151,13 +190,13 @@ describe("buildSuggestion — no history", () => {
 
 describe("buildSuggestion — consensus gate", () => {
   it("holds when only 1 session hit target (insufficient consensus)", () => {
-    const rows = [makeRow({ rpe: 6 })]; // 1 hit, need 2
+    const rows = [makeSession({ rpe: 6 })]; // 1 hit, need 2
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("held");
   });
 
   it("progresses when REQUIRED_HITS sessions hit target with confidence", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 6, actualReps: 8, targetReps: 8 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 6, actualReps: 8, targetReps: 8 });
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.suggestedWeightKg).toBeCloseTo(82.5); // 80 + 2.5
@@ -165,9 +204,9 @@ describe("buildSuggestion — consensus gate", () => {
 
   it("progresses when the last session was a grind, as long as the target was met", () => {
     const rows = [
-      makeRow({ rpe: 10, actualReps: 8, date: "2024-01-03" }),
-      makeRow({ rpe: 6,  actualReps: 8, date: "2024-01-02" }),
-      makeRow({ rpe: 6,  actualReps: 8, date: "2024-01-01" }),
+      makeSession({ rpe: 10, actualReps: 8, date: "2024-01-03" }),
+      makeSession({ rpe: 6,  actualReps: 8, date: "2024-01-02" }),
+      makeSession({ rpe: 6,  actualReps: 8, date: "2024-01-01" }),
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("progressed");
@@ -177,13 +216,13 @@ describe("buildSuggestion — consensus gate", () => {
     // Three sessions at the target, all logged RIR 1. The old absolute ladder
     // held these forever; a prescribed RIR cap is how a lifter asks for that
     // now, and no exercise carries one.
-    const rows = makeRows(3, { rpe: 9, actualReps: 8, targetReps: 8 });
+    const rows = makeSessions(3, { rpe: 9, actualReps: 8, targetReps: 8 });
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("progressed");
   });
 
   it("counts sessions with no effort logged", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: null, actualReps: 8, targetReps: 8 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: null, actualReps: 8, targetReps: 8 });
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("progressed");
   });
@@ -191,7 +230,7 @@ describe("buildSuggestion — consensus gate", () => {
 
 describe("buildSuggestion — felt-easy override", () => {
   it("progresses off a single easy set that would otherwise hold", () => {
-    const rows = [makeRow({ rpe: 6, wasEasy: true })]; // 1 hit, need 2
+    const rows = [makeSession({ rpe: 6, wasEasy: true })]; // 1 hit, need 2
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.suggestedWeightKg).toBeCloseTo(82.5); // 80 + 2.5
@@ -199,7 +238,7 @@ describe("buildSuggestion — felt-easy override", () => {
   });
 
   it("ignores an easy verdict on a set that missed its target", () => {
-    const rows = [makeRow({ rpe: 6, actualReps: 5, targetReps: 8, wasEasy: true })];
+    const rows = [makeSession({ rpe: 6, actualReps: 5, targetReps: 8, wasEasy: true })];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("held");
     expect(result?.easyOverride).toBeUndefined();
@@ -207,8 +246,8 @@ describe("buildSuggestion — felt-easy override", () => {
 
   it("only reads the most recent session's easy verdict", () => {
     const rows = [
-      makeRow({ rpe: 6, date: "2024-01-02" }),
-      makeRow({ rpe: 6, date: "2024-01-01", wasEasy: true }),
+      makeSession({ rpe: 6, date: "2024-01-02" }),
+      makeSession({ rpe: 6, date: "2024-01-01", wasEasy: true }),
     ];
     // Two confident hits — progresses on consensus, so the stale verdict is moot.
     const result = buildSuggestion(rows, makePs(), null);
@@ -217,14 +256,14 @@ describe("buildSuggestion — felt-easy override", () => {
   });
 
   it("does not flag a progression the consensus gate earned on its own", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 6, wasEasy: true });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 6, wasEasy: true });
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.easyOverride).toBeUndefined();
   });
 
   it("progresses reps instead of weight for a bodyweight set", () => {
-    const rows = [makeRow({ rpe: 6, weightKg: "0.00", wasEasy: true })];
+    const rows = [makeSession({ rpe: 6, weightKg: "0.00", wasEasy: true })];
     const result = buildSuggestion(
       rows,
       makePs({ overloadIncrementReps: 2 }),
@@ -236,15 +275,15 @@ describe("buildSuggestion — felt-easy override", () => {
   });
 
   it("yields to low readiness — an easy verdict does not force a bump today", () => {
-    const rows = [makeRow({ rpe: 6, wasEasy: true })];
+    const rows = [makeSession({ rpe: 6, wasEasy: true })];
     const result = buildSuggestion(rows, makePs(), null, 2);
     expect(result?.reason).toBe("held-readiness");
     expect(result?.easyOverride).toBeUndefined();
   });
 
   it("yields to a deload — three misses outrank an easy verdict", () => {
-    const rows = makeRows(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8, rpe: 9 });
-    rows[0].wasEasy = true;
+    const rows = makeSessions(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8, rpe: 9 });
+    rows[0].sets[0].wasEasy = true;
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("deload");
   });
@@ -252,7 +291,7 @@ describe("buildSuggestion — felt-easy override", () => {
 
 describe("buildSuggestion — deload detection", () => {
   it("suggests deload after DELOAD_THRESHOLD consecutive failures", () => {
-    const rows = makeRows(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8, rpe: 9 });
+    const rows = makeSessions(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8, rpe: 9 });
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("deload");
     // 10% deload: 80 * 0.9 = 72, rounded to nearest 2.5 = 72.5
@@ -260,13 +299,13 @@ describe("buildSuggestion — deload detection", () => {
   });
 
   it("does not deload with fewer than DELOAD_THRESHOLD rows", () => {
-    const rows = makeRows(DELOAD_THRESHOLD - 1, { actualReps: 5, targetReps: 8 });
+    const rows = makeSessions(DELOAD_THRESHOLD - 1, { actualReps: 5, targetReps: 8 });
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("held");
   });
 
   it("does not deload in manual mode", () => {
-    const rows = makeRows(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8 });
+    const rows = makeSessions(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8 });
     const result = buildSuggestion(rows, makePs({ progressionMode: "manual" }), null);
     expect(result?.reason).toBe("manual");
   });
@@ -274,7 +313,7 @@ describe("buildSuggestion — deload detection", () => {
 
 describe("buildSuggestion — smart mode", () => {
   it("provides adjustedRepsForWeight for near-max sets (RPE ≥ 7)", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "80.00", actualReps: 8, targetReps: 8, rpe: 7 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "80.00", actualReps: 8, targetReps: 8, rpe: 7 });
     const result = buildSuggestion(rows, makePs({ progressionMode: "smart" }), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.suggestedWeightKg).toBeCloseTo(82.5);
@@ -285,27 +324,27 @@ describe("buildSuggestion — smart mode", () => {
 
   it("skips adjustedRepsForWeight on sub-max sets (RPE < 7) — Epley invalid", () => {
     // Same data as above but RPE 5 — too easy for the 1RM estimate to be meaningful
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "80.00", actualReps: 8, targetReps: 8, rpe: 5 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "80.00", actualReps: 8, targetReps: 8, rpe: 5 });
     const result = buildSuggestion(rows, makePs({ progressionMode: "smart" }), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.adjustedRepsForWeight).toBeUndefined();
   });
 
   it("skips adjustedRepsForWeight when weight is 0 (bodyweight exercises)", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "0.00", actualReps: 8, targetReps: 8, rpe: 7 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 8, targetReps: 8, rpe: 7 });
     const result = buildSuggestion(rows, makePs({ progressionMode: "smart", overloadIncrementKg: "2.50" }), null);
     // With weight=0, Epley can't compute 1RM; no adjustedRepsForWeight
     expect(result?.adjustedRepsForWeight).toBeUndefined();
   });
 
   it("skips adjustedRepsForWeight for actualReps > 12 (Epley unreliable at high reps)", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "60.00", actualReps: 15, targetReps: 15, rpe: 7 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "60.00", actualReps: 15, targetReps: 15, rpe: 7 });
     const result = buildSuggestion(rows, makePs({ progressionMode: "smart" }), null);
     expect(result?.adjustedRepsForWeight).toBeUndefined();
   });
 
   it("holds and provides no adjustedRepsForWeight when not enough consensus", () => {
-    const rows = [makeRow({ rpe: 7 })]; // only 1 confident hit
+    const rows = [makeSession({ rpe: 7 })]; // only 1 confident hit
     const result = buildSuggestion(rows, makePs({ progressionMode: "smart" }), null);
     expect(result?.reason).toBe("held");
     expect(result?.adjustedRepsForWeight).toBeUndefined();
@@ -314,14 +353,14 @@ describe("buildSuggestion — smart mode", () => {
 
 describe("buildSuggestion — reps mode", () => {
   it("increments reps when target hit with consensus", () => {
-    const rows = makeRows(REQUIRED_HITS, { actualReps: 8, targetReps: 8, rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { actualReps: 8, targetReps: 8, rpe: 6 });
     const result = buildSuggestion(rows, makePs({ progressionMode: "reps", overloadIncrementReps: 1 }), null);
     expect(result?.reason).toBe("progressed-reps");
     expect(result?.suggestedReps).toBe(9);
   });
 
   it("holds when targetReps is null (no safe target to add to)", () => {
-    const rows = makeRows(REQUIRED_HITS, { actualReps: 8, targetReps: null, rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { actualReps: 8, targetReps: null, rpe: 6 });
     const result = buildSuggestion(
       rows,
       makePs({ progressionMode: "reps", targetReps: null, overloadIncrementReps: 1 }),
@@ -334,7 +373,7 @@ describe("buildSuggestion — reps mode", () => {
 
 describe("buildSuggestion — time mode", () => {
   it("suggests longer duration when target duration hit with consensus", () => {
-    const rows = makeRows(REQUIRED_HITS, {
+    const rows = makeSessions(REQUIRED_HITS, {
       durationSeconds: 60,
       actualReps: 1, // not relevant in time mode
       targetReps: null,
@@ -351,14 +390,14 @@ describe("buildSuggestion — time mode", () => {
   });
 
   it("holds when duration not met", () => {
-    const rows = makeRows(REQUIRED_HITS, { durationSeconds: 45 });
+    const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 45 });
     const ps = makePs({ progressionMode: "time", durationSeconds: 60 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("held");
   });
 
   it("defaults to 10s increment when overloadIncrementReps is 0", () => {
-    const rows = makeRows(REQUIRED_HITS, { durationSeconds: 60 });
+    const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 60 });
     const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 0 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.suggestedDurationSeconds).toBe(70); // 60 + 10
@@ -367,28 +406,28 @@ describe("buildSuggestion — time mode", () => {
 
 describe("buildSuggestion — user profile increment defaults", () => {
   it("uses beginner default of 5kg when increment is null (unconfigured)", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 6 });
     const profile: UserProfile = { experienceLevel: "beginner", goal: null };
     const result = buildSuggestion(rows, makePs(), profile);
     expect(result?.suggestedWeightKg).toBeCloseTo(85); // 80 + 5
   });
 
   it("uses advanced default of 1.25kg when increment is null (unconfigured)", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "80.00", rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "80.00", rpe: 6 });
     const profile: UserProfile = { experienceLevel: "advanced", goal: null };
     const result = buildSuggestion(rows, makePs(), profile);
     expect(result?.suggestedWeightKg).toBeCloseTo(81.25);
   });
 
   it("ignores profile when user has a custom increment set", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 6 });
     const profile: UserProfile = { experienceLevel: "beginner", goal: null };
     const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "10.00" }), profile);
     expect(result?.suggestedWeightKg).toBeCloseTo(90); // 80 + 10
   });
 
   it("respects explicit 2.5 override even for beginner profile", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 6 });
     const profile: UserProfile = { experienceLevel: "beginner", goal: null };
     const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "2.50" }), profile);
     expect(result?.suggestedWeightKg).toBeCloseTo(82.5); // 80 + 2.5, not 80 + 5
@@ -398,8 +437,8 @@ describe("buildSuggestion — user profile increment defaults", () => {
 describe("buildSuggestion — recovery (retry)", () => {
   it("suggests previous weight when most recent session logged less than the one before", () => {
     const rows = [
-      makeRow({ weightKg: "75.00", actualReps: 8, date: "2024-01-02" }), // dropped
-      makeRow({ weightKg: "80.00", actualReps: 8, date: "2024-01-01" }), // was here
+      makeSession({ weightKg: "75.00", actualReps: 8, date: "2024-01-02" }), // dropped
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-01" }), // was here
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("retry");
@@ -408,19 +447,33 @@ describe("buildSuggestion — recovery (retry)", () => {
 
   it("suggests previous reps when same weight but fewer reps last session", () => {
     const rows = [
-      makeRow({ weightKg: "80.00", actualReps: 2, date: "2024-01-02" }), // dropped reps
-      makeRow({ weightKg: "80.00", actualReps: 3, date: "2024-01-01" }), // was here
+      makeSession({ weightKg: "80.00", actualReps: 9, date: "2024-01-02" }), // dropped reps
+      makeSession({ weightKg: "80.00", actualReps: 10, date: "2024-01-01" }), // was here
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("retry");
     expect(result?.suggestedWeightKg).toBe(80);
-    expect(result?.suggestedReps).toBe(3);
+    expect(result?.suggestedReps).toBe(10);
+  });
+
+  it("does not dress an ordinary miss up as a rep retry", () => {
+    // 12 then 10 against a fixed target of 12: there is no ground above the
+    // prescription to reclaim, so this is a missed session, not a retry. Only
+    // honest rep logging makes this branch reachable at all, which is why the
+    // rule needed the extra clause.
+    const rows = [
+      makeSession({ weightKg: "80.00", actualReps: 10, targetReps: 12, date: "2024-01-02" }),
+      makeSession({ weightKg: "80.00", actualReps: 12, targetReps: 12, date: "2024-01-01" }),
+    ];
+    const result = buildSuggestion(rows, makePs({ targetReps: 12 }), null);
+    expect(result?.reason).toBe("held");
+    expect(result?.suggestedReps).toBeUndefined();
   });
 
   it("does not trigger retry when weight is the same and reps are the same", () => {
     const rows = [
-      makeRow({ weightKg: "80.00", actualReps: 8, date: "2024-01-02" }),
-      makeRow({ weightKg: "80.00", actualReps: 8, date: "2024-01-01" }),
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-02" }),
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-01" }),
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).not.toBe("retry");
@@ -428,8 +481,8 @@ describe("buildSuggestion — recovery (retry)", () => {
 
   it("does not trigger retry when weight increased (normal progression path)", () => {
     const rows = [
-      makeRow({ weightKg: "82.50", actualReps: 8, date: "2024-01-02" }),
-      makeRow({ weightKg: "80.00", actualReps: 8, date: "2024-01-01" }),
+      makeSession({ weightKg: "82.50", actualReps: 8, date: "2024-01-02" }),
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-01" }),
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).not.toBe("retry");
@@ -438,16 +491,16 @@ describe("buildSuggestion — recovery (retry)", () => {
   it("deload takes priority over weight retry when stuck", () => {
     // DELOAD_THRESHOLD consecutive misses → deload fires even though weight dropped
     const rows = Array.from({ length: DELOAD_THRESHOLD }, (_, i) =>
-      makeRow({ weightKg: "75.00", actualReps: 4, targetReps: 8, rpe: 9, date: `2024-01-${String(DELOAD_THRESHOLD - i).padStart(2, "0")}` }),
+      makeSession({ weightKg: "75.00", actualReps: 4, targetReps: 8, rpe: 9, date: `2024-01-${String(DELOAD_THRESHOLD - i).padStart(2, "0")}` }),
     );
     // previous row at higher weight, also a miss (rpe 9 so not a confident hit)
-    rows.push(makeRow({ weightKg: "80.00", actualReps: 4, targetReps: 8, rpe: 9, date: "2023-12-31" }));
+    rows.push(makeSession({ weightKg: "80.00", actualReps: 4, targetReps: 8, rpe: 9, date: "2023-12-31" }));
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("deload");
   });
 
   it("does not trigger retry with only one row of history", () => {
-    const rows = [makeRow({ weightKg: "80.00", actualReps: 8 })];
+    const rows = [makeSession({ weightKg: "80.00", actualReps: 8 })];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).not.toBe("retry");
   });
@@ -455,23 +508,23 @@ describe("buildSuggestion — recovery (retry)", () => {
 
 describe("buildSuggestion — basedOn fields", () => {
   it("exposes basedOnRpe from the most recent row", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 7 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 7 });
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.basedOnRpe).toBe(7);
   });
 
   it("exposes basedOnHitCount for transparency", () => {
     const rows = [
-      makeRow({ rpe: 6, date: "2024-01-03" }), // hit
-      makeRow({ rpe: 6, date: "2024-01-02" }), // hit
-      makeRow({ rpe: 9, actualReps: 6, date: "2024-01-01" }), // short of target
+      makeSession({ rpe: 6, date: "2024-01-03" }), // hit
+      makeSession({ rpe: 6, date: "2024-01-02" }), // hit
+      makeSession({ rpe: 9, actualReps: 6, date: "2024-01-01" }), // short of target
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.basedOnHitCount).toBe(2);
   });
 
   it("uses raw baseWeight without 0.5 rounding", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "77.30", rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "77.30", rpe: 6 });
     const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "1.00" }), null);
     expect(result?.basedOnWeightKg).toBeCloseTo(77.3);
     // suggestion should be 77.3 + 1 = 78.3, rounded to nearest 1kg = 78
@@ -481,7 +534,7 @@ describe("buildSuggestion — basedOn fields", () => {
 
 describe("buildSuggestion — readiness modulation", () => {
   it("downgrades weight progression to held-readiness when readiness ≤ 2", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 6 });
     const result = buildSuggestion(rows, makePs(), null, 2);
     expect(result?.reason).toBe("held-readiness");
     expect(result?.readinessModulated).toBe(true);
@@ -489,7 +542,7 @@ describe("buildSuggestion — readiness modulation", () => {
   });
 
   it("downgrades rep progression to held-readiness when readiness ≤ 2", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 6 });
     const result = buildSuggestion(rows, makePs({ progressionMode: "reps", overloadIncrementReps: 1 }), null, 1);
     expect(result?.reason).toBe("held-readiness");
     expect(result?.readinessModulated).toBe(true);
@@ -497,7 +550,7 @@ describe("buildSuggestion — readiness modulation", () => {
   });
 
   it("does not suppress progression when readiness is 3", () => {
-    const rows = makeRows(REQUIRED_HITS, { rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { rpe: 6 });
     const result = buildSuggestion(rows, makePs(), null, 3);
     expect(result?.reason).toBe("progressed");
     expect(result?.readinessModulated).toBe(false);
@@ -510,9 +563,9 @@ describe("buildSuggestion — deload→retry guard", () => {
   it("does NOT suggest retry when weight drop follows DELOAD_THRESHOLD-1 consecutive failures", () => {
     // User had 2+ consecutive misses at 80kg, then trained at 72kg (intentional deload)
     const rows = [
-      makeRow({ weightKg: "72.00", actualReps: 8, targetReps: 8, rpe: 7, date: "2024-01-04" }), // post-deload success
-      makeRow({ weightKg: "80.00", actualReps: 4, targetReps: 8, rpe: 9, date: "2024-01-03" }), // miss #2
-      makeRow({ weightKg: "80.00", actualReps: 4, targetReps: 8, rpe: 9, date: "2024-01-02" }), // miss #1
+      makeSession({ weightKg: "72.00", actualReps: 8, targetReps: 8, rpe: 7, date: "2024-01-04" }), // post-deload success
+      makeSession({ weightKg: "80.00", actualReps: 4, targetReps: 8, rpe: 9, date: "2024-01-03" }), // miss #2
+      makeSession({ weightKg: "80.00", actualReps: 4, targetReps: 8, rpe: 9, date: "2024-01-02" }), // miss #1
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).not.toBe("retry");
@@ -523,8 +576,8 @@ describe("buildSuggestion — deload→retry guard", () => {
   it("DOES suggest retry when weight drop is a one-off bad session (single miss)", () => {
     // Only 1 miss before the drop — accidental, not a systematic deload
     const rows = [
-      makeRow({ weightKg: "77.50", actualReps: 8, targetReps: 8, rpe: 7, date: "2024-01-02" }), // dropped weight
-      makeRow({ weightKg: "80.00", actualReps: 4, targetReps: 8, rpe: 9, date: "2024-01-01" }), // single miss
+      makeSession({ weightKg: "77.50", actualReps: 8, targetReps: 8, rpe: 7, date: "2024-01-02" }), // dropped weight
+      makeSession({ weightKg: "80.00", actualReps: 4, targetReps: 8, rpe: 9, date: "2024-01-01" }), // single miss
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).toBe("retry");
@@ -533,10 +586,10 @@ describe("buildSuggestion — deload→retry guard", () => {
 
   it("does NOT suggest retry when preceding streak is exactly DELOAD_THRESHOLD-1 misses", () => {
     const rows = [
-      makeRow({ weightKg: "72.00", actualReps: 8, targetReps: 8, rpe: 7, date: "2024-01-03" }),
+      makeSession({ weightKg: "72.00", actualReps: 8, targetReps: 8, rpe: 7, date: "2024-01-03" }),
       // DELOAD_THRESHOLD-1 = 2 consecutive failures precede the drop
-      makeRow({ weightKg: "80.00", actualReps: 3, targetReps: 8, rpe: 9, date: "2024-01-02" }),
-      makeRow({ weightKg: "80.00", actualReps: 3, targetReps: 8, rpe: 9, date: "2024-01-01" }),
+      makeSession({ weightKg: "80.00", actualReps: 3, targetReps: 8, rpe: 9, date: "2024-01-02" }),
+      makeSession({ weightKg: "80.00", actualReps: 3, targetReps: 8, rpe: 9, date: "2024-01-01" }),
     ];
     const result = buildSuggestion(rows, makePs(), null);
     expect(result?.reason).not.toBe("retry");
@@ -547,7 +600,7 @@ describe("buildSuggestion — deload→retry guard", () => {
 
 describe("buildSuggestion — bodyweight fallback", () => {
   it("suggests more reps (not kg) for weight mode when baseWeight is 0", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "0.00", actualReps: 10, targetReps: 10, rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 10, targetReps: 10, rpe: 6 });
     const ps = makePs({ progressionMode: "weight", targetReps: 10, overloadIncrementReps: 2 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-reps");
@@ -556,14 +609,14 @@ describe("buildSuggestion — bodyweight fallback", () => {
   });
 
   it("holds for weight mode at weight=0 when no incrementReps configured", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "0.00", actualReps: 10, targetReps: 10, rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 10, targetReps: 10, rpe: 6 });
     const ps = makePs({ progressionMode: "weight", targetReps: 10, overloadIncrementReps: 0 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("held");
   });
 
   it("suggests more reps (not kg) for smart mode when baseWeight is 0", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "0.00", actualReps: 8, targetReps: 8, rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 8, targetReps: 8, rpe: 6 });
     const ps = makePs({ progressionMode: "smart", targetReps: 8, overloadIncrementReps: 1 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-reps");
@@ -571,7 +624,7 @@ describe("buildSuggestion — bodyweight fallback", () => {
   });
 
   it("progresses by weight as normal when baseWeight > 0 in weight mode", () => {
-    const rows = makeRows(REQUIRED_HITS, { weightKg: "60.00", actualReps: 10, targetReps: 10, rpe: 6 });
+    const rows = makeSessions(REQUIRED_HITS, { weightKg: "60.00", actualReps: 10, targetReps: 10, rpe: 6 });
     const result = buildSuggestion(rows, makePs({ progressionMode: "weight" }), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.suggestedWeightKg).toBeGreaterThan(60);
@@ -582,14 +635,14 @@ describe("buildSuggestion — bodyweight fallback", () => {
 
 describe("buildSuggestion — time mode effort", () => {
   it("counts a timed set that hit its duration at RPE 9", () => {
-    const rows = makeRows(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 9 });
+    const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 9 });
     const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-time");
   });
 
   it("counts a timed set as a hit when RPE is 8 and duration met", () => {
-    const rows = makeRows(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 8 });
+    const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 8 });
     const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-time");
@@ -597,7 +650,7 @@ describe("buildSuggestion — time mode effort", () => {
   });
 
   it("counts a timed set with no effort logged", () => {
-    const rows = makeRows(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: null });
+    const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: null });
     const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-time");
@@ -606,7 +659,7 @@ describe("buildSuggestion — time mode effort", () => {
 
 describe("buildSuggestion — distance mode effort", () => {
   it("counts a distance set that covered its target at RPE 9", () => {
-    const rows = makeRows(REQUIRED_HITS, {
+    const rows = makeSessions(REQUIRED_HITS, {
       distanceMeters: 5000,
       actualReps: 1, targetReps: null, rpe: 9,
     });
@@ -620,7 +673,7 @@ describe("buildSuggestion — distance mode effort", () => {
   });
 
   it("counts a distance set as a hit when RPE ≤ 8 and distance met", () => {
-    const rows = makeRows(REQUIRED_HITS, {
+    const rows = makeSessions(REQUIRED_HITS, {
       distanceMeters: 5000,
       actualReps: 1, targetReps: null, rpe: 7,
     });
@@ -639,14 +692,14 @@ describe("buildSuggestion — distance mode effort", () => {
 
 describe("buildSuggestion — requiredHits override", () => {
   it("progresses after a single hit when the gate is 1", () => {
-    const rows = [makeRow({ actualReps: 8, targetReps: 8, rpe: 7 })];
+    const rows = [makeSession({ actualReps: 8, targetReps: 8, rpe: 7 })];
     const result = buildSuggestion(rows, makePs({ requiredHits: 1 }), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.hitsRequired).toBe(1);
   });
 
   it("holds at two hits when the gate is 3", () => {
-    const rows = makeRows(2, { actualReps: 8, targetReps: 8, rpe: 7 });
+    const rows = makeSessions(2, { actualReps: 8, targetReps: 8, rpe: 7 });
     const result = buildSuggestion(rows, makePs({ requiredHits: 3 }), null);
     expect(result?.reason).toBe("held");
     expect(result?.hitsAchieved).toBe(2);
@@ -654,13 +707,13 @@ describe("buildSuggestion — requiredHits override", () => {
   });
 
   it("progresses at three hits when the gate is 3", () => {
-    const rows = makeRows(3, { actualReps: 8, targetReps: 8, rpe: 7 });
+    const rows = makeSessions(3, { actualReps: 8, targetReps: 8, rpe: 7 });
     const result = buildSuggestion(rows, makePs({ requiredHits: 3 }), null);
     expect(result?.reason).toBe("progressed");
   });
 
   it("falls back to REQUIRED_HITS when the override is null", () => {
-    const rows = makeRows(REQUIRED_HITS, { actualReps: 8, targetReps: 8, rpe: 7 });
+    const rows = makeSessions(REQUIRED_HITS, { actualReps: 8, targetReps: 8, rpe: 7 });
     const result = buildSuggestion(rows, makePs({ requiredHits: null }), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.hitsRequired).toBe(REQUIRED_HITS);
@@ -673,10 +726,10 @@ describe("buildSuggestion — hits must be at the current weight", () => {
   it("does not stack another bump on a weight that was just missed", () => {
     // Two clean sessions at 80kg earned a bump to 82.5kg, which was then missed.
     // Counting the 80kg hits again would suggest 85kg off the back of a failure.
-    const rows: HistoryRow[] = [
-      makeRow({ weightKg: "82.50", actualReps: 6, targetReps: 8, date: "2024-01-03" }),
-      makeRow({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
-      makeRow({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-01" }),
+    const rows: SessionHistory[] = [
+      makeSession({ weightKg: "82.50", actualReps: 6, targetReps: 8, date: "2024-01-03" }),
+      makeSession({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
+      makeSession({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-01" }),
     ];
     const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "2.50" }), null);
     expect(result?.reason).toBe("held");
@@ -685,10 +738,10 @@ describe("buildSuggestion — hits must be at the current weight", () => {
   });
 
   it("progresses once the target is hit twice at the new weight", () => {
-    const rows: HistoryRow[] = [
-      makeRow({ weightKg: "82.50", actualReps: 8, targetReps: 8, date: "2024-01-04" }),
-      makeRow({ weightKg: "82.50", actualReps: 8, targetReps: 8, date: "2024-01-03" }),
-      makeRow({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
+    const rows: SessionHistory[] = [
+      makeSession({ weightKg: "82.50", actualReps: 8, targetReps: 8, date: "2024-01-04" }),
+      makeSession({ weightKg: "82.50", actualReps: 8, targetReps: 8, date: "2024-01-03" }),
+      makeSession({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
     ];
     const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "2.50" }), null);
     expect(result?.reason).toBe("progressed");
@@ -696,16 +749,16 @@ describe("buildSuggestion — hits must be at the current weight", () => {
   });
 
   it("still counts hits logged above the current weight", () => {
-    const rows: HistoryRow[] = [
-      makeRow({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
-      makeRow({ weightKg: "85.00", actualReps: 8, targetReps: 8, date: "2024-01-01" }),
+    const rows: SessionHistory[] = [
+      makeSession({ weightKg: "80.00", actualReps: 8, targetReps: 8, date: "2024-01-02" }),
+      makeSession({ weightKg: "85.00", actualReps: 8, targetReps: 8, date: "2024-01-01" }),
     ];
     const result = buildSuggestion(rows, makePs({ overloadIncrementKg: "2.50" }), null);
     expect(result?.hitsAchieved).toBe(2);
   });
 
   it("leaves bodyweight sets unaffected (every row is 0kg)", () => {
-    const rows = makeRows(REQUIRED_HITS, {
+    const rows = makeSessions(REQUIRED_HITS, {
       weightKg: "0.00",
       actualReps: 8,
       targetReps: 8,
@@ -732,11 +785,22 @@ describe("describeProgressionRule", () => {
     requiredHits: 2,
   };
 
-  it("quotes the increment, rep target, gate and window", () => {
+  it("quotes the increment, rep target, scope and gate", () => {
     const text = describeProgressionRule(base)!;
     expect(text).toContain("+2.5kg");
     expect(text).toContain("10 reps");
-    expect(text).toContain(`2 of the last ${CONSENSUS_WINDOW} sessions`);
+    expect(text).toContain("every set");
+    // "in a row", not "of the last 5": a miss resets the count, so the old
+    // wording described a rule the engine no longer applies.
+    expect(text).toContain("2 sessions in a row");
+  });
+
+  it("names the sets the scope actually reads", () => {
+    expect(describeProgressionRule({ ...base, scope: "first" })).toContain("the first set");
+    expect(describeProgressionRule({ ...base, scope: "last" })).toContain("the last set");
+    expect(describeProgressionRule({ ...base, scope: "set" })).toContain("a set");
+    // An unrecognised value falls back to the default rather than reading "undefined".
+    expect(describeProgressionRule({ ...base, scope: "nonsense" })).toContain("every set");
   });
 
   it("no longer quotes an RPE gate, because there is not one", () => {
@@ -744,9 +808,12 @@ describe("describeProgressionRule", () => {
     expect(describeProgressionRule({ ...base, mode: "time", incrementReps: 10 })).not.toContain("RPE");
   });
 
-  it("tracks a changed gate", () => {
+  it("tracks a changed gate, and drops the count when one session is enough", () => {
+    expect(describeProgressionRule({ ...base, requiredHits: 3 })).toContain(
+      "3 sessions in a row",
+    );
     expect(describeProgressionRule({ ...base, requiredHits: 1 })).toContain(
-      `1 of the last ${CONSENSUS_WINDOW} sessions`,
+      "in a session",
     );
   });
 
@@ -1100,5 +1167,338 @@ describe("pendingProgressions", () => {
   it("returns nothing when there are no suggestions at all", () => {
     expect(pendingProgressions([makeSet()], undefined, NONE)).toEqual([]);
     expect(pendingProgressions([makeSet()], {}, NONE)).toEqual([]);
+  });
+});
+
+
+// ─── Session scope, clearance and the consecutive gate ───────────────────────
+
+/** A 4x12 session at one load, one entry per set's achieved reps. */
+function straightSets(
+  reps: number[],
+  weightKg: string,
+  date: string,
+  overrides: { feeling?: string | null; prescribedWorkingSets?: number | null } = {},
+): SessionHistory {
+  return makeMultiSession(
+    reps.map((actualReps) => ({ actualReps, targetReps: 12, weightKg })),
+    { date, prescribedWorkingSets: 4, ...overrides },
+  );
+}
+
+/** Table 4a's exercise: fixed 12, four sets, scope all, gate 2, +2.5kg. */
+function fixedTwelvePs(overrides: Partial<ProgramSetData> = {}): ProgramSetData {
+  return makePs({
+    targetReps: 12,
+    overloadIncrementKg: "2.50",
+    requiredHits: 2,
+    scope: "all",
+    ...overrides,
+  });
+}
+
+describe("buildSuggestion — worked example 4a (fixed 12, four sets, gate 2)", () => {
+  // The plan's table, encoded literally. Sessions are listed oldest first and
+  // the suggestion is read after each one, from the window that existed then.
+  // If the code disagrees with this table the code is wrong.
+  const s1 = straightSets([12, 12, 12, 12], "60.00", "2024-01-01");
+  const s2 = straightSets([12, 12, 12, 10], "60.00", "2024-01-02");
+  const s3 = straightSets([12, 12, 12, 12], "60.00", "2024-01-03");
+  const s4 = straightSets([12, 12, 12, 12], "60.00", "2024-01-04");
+  const s5 = straightSets([12, 12, 12, 12], "62.50", "2024-01-05");
+
+  /** The window as it stands after `sessions` have been logged, newest first. */
+  const after = (...sessions: SessionHistory[]) =>
+    buildSuggestion([...sessions].reverse(), fixedTwelvePs(), null);
+
+  it("session 1: one clear banked, nothing moves", () => {
+    const r = after(s1);
+    expect(r?.reason).toBe("held");
+    expect(r?.hitsAchieved).toBe(1);
+    expect(r?.hitsRequired).toBe(2);
+    expect(r?.suggestedWeightKg).toBe(60);
+  });
+
+  it("session 2: set 4 falls two reps short and the dots empty", () => {
+    const r = after(s1, s2);
+    expect(r?.reason).toBe("held");
+    // Not 1: a miss resets the count outright (D-11). An earlier draft had it
+    // merely not add, which bumps a session early.
+    expect(r?.hitsAchieved).toBe(0);
+    expect(r?.sessions?.[0]).toMatchObject({ status: "missed", shortfall: 2 });
+  });
+
+  it("session 3: back to one, still short of the gate", () => {
+    const r = after(s1, s2, s3);
+    expect(r?.reason).toBe("held");
+    expect(r?.hitsAchieved).toBe(1);
+  });
+
+  it("session 4: two in a row, so the whole exercise gets +2.5kg", () => {
+    const r = after(s1, s2, s3, s4);
+    expect(r?.reason).toBe("progressed");
+    expect(r?.hitsAchieved).toBe(2);
+    expect(r?.suggestedWeightKg).toBe(62.5);
+  });
+
+  it("session 5: the clears at 60 do not count once the load is 62.5", () => {
+    const r = after(s1, s2, s3, s4, s5);
+    expect(r?.reason).toBe("held");
+    // 1, not 3. Without SI-11's at-this-load clause the exercise bumps every
+    // session forever, which is the runaway this rebuild exists to fix.
+    expect(r?.hitsAchieved).toBe(1);
+    expect(r?.suggestedWeightKg).toBe(62.5);
+  });
+
+  it("gives every working set of the exercise the same advance", () => {
+    const window = [s4, s3, s2, s1];
+    for (const setNumber of [1, 2, 3, 4]) {
+      const r = buildSuggestion(window, fixedTwelvePs({ setNumber }), null);
+      expect(r?.suggestedWeightKg).toBe(62.5);
+    }
+  });
+});
+
+describe("buildSuggestion — scope decides which sets have to clear", () => {
+  // Set 4 is one rep short; sets 1-3 cleared.
+  const short = [
+    straightSets([12, 12, 12, 11], "60.00", "2024-01-02"),
+    straightSets([12, 12, 12, 11], "60.00", "2024-01-01"),
+  ];
+
+  it("all: one short set holds the whole exercise", () => {
+    const r = buildSuggestion(short, fixedTwelvePs({ scope: "all" }), null);
+    expect(r?.reason).toBe("held");
+    expect(r?.hitsAchieved).toBe(0);
+  });
+
+  it("first: the top set carries the session", () => {
+    const r = buildSuggestion(short, fixedTwelvePs({ scope: "first" }), null);
+    expect(r?.reason).toBe("progressed");
+    expect(r?.hitsAchieved).toBe(2);
+  });
+
+  it("last: the trailing set decides, so the same history holds", () => {
+    const r = buildSuggestion(short, fixedTwelvePs({ scope: "last" }), null);
+    expect(r?.reason).toBe("held");
+  });
+
+  it("set: each set banks its own count — the old per-set behaviour", () => {
+    const cleared = buildSuggestion(
+      short,
+      fixedTwelvePs({ scope: "set", setNumber: 1 }),
+      null,
+    );
+    const missed = buildSuggestion(
+      short,
+      fixedTwelvePs({ scope: "set", setNumber: 4 }),
+      null,
+    );
+    expect(cleared?.reason).toBe("progressed");
+    expect(missed?.reason).toBe("held");
+  });
+
+  it("defaults to all when the column holds something unexpected", () => {
+    const r = buildSuggestion(short, fixedTwelvePs({ scope: null }), null);
+    expect(r?.reason).toBe("held");
+  });
+
+  it("levels drifted sets up rather than proposing a downgrade for the top one", () => {
+    // A plan that already ratcheted apart: 62.5 / 62.5 / 60 / 60. Taking the
+    // minimum would propose 62.5 for sets already at 62.5 and the plan floor
+    // would refuse it, leaving the exercise permanently pending.
+    const drifted = [
+      makeMultiSession(
+        [
+          { actualReps: 12, targetReps: 12, weightKg: "62.50" },
+          { actualReps: 12, targetReps: 12, weightKg: "62.50" },
+          { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+          { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        ],
+        { date: "2024-01-02", prescribedWorkingSets: 4 },
+      ),
+      makeMultiSession(
+        [
+          { actualReps: 12, targetReps: 12, weightKg: "62.50" },
+          { actualReps: 12, targetReps: 12, weightKg: "62.50" },
+          { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+          { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        ],
+        { date: "2024-01-01", prescribedWorkingSets: 4 },
+      ),
+    ];
+    const r = buildSuggestion(drifted, fixedTwelvePs({ setNumber: 4 }), null);
+    expect(r?.reason).toBe("progressed");
+    expect(r?.suggestedWeightKg).toBe(65);
+    // "Last:" still reports what this set actually did.
+    expect(r?.basedOnWeightKg).toBe(60);
+  });
+});
+
+describe("buildSuggestion — a partly logged session is unknown", () => {
+  const full = straightSets([12, 12, 12, 12], "60.00", "2024-01-01");
+  const partial = makeMultiSession(
+    [
+      { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+      { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+      { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+    ],
+    { date: "2024-01-02", prescribedWorkingSets: 4 },
+  );
+
+  it("neither banks a clear nor resets the ones already banked", () => {
+    const r = buildSuggestion([partial, full], fixedTwelvePs(), null);
+    expect(r?.sessions?.[0]).toMatchObject({
+      status: "unknown",
+      loggedSets: 3,
+      prescribedSets: 4,
+    });
+    // The one full session before it still counts.
+    expect(r?.hitsAchieved).toBe(1);
+    expect(r?.reason).toBe("held");
+  });
+
+  it("does not count toward a back-off either", () => {
+    const missed = straightSets([12, 12, 12, 4], "60.00", "2024-01-01");
+    const r = buildSuggestion(
+      [partial, missed, missed, missed],
+      fixedTwelvePs(),
+      null,
+    );
+    // Three misses is the back-off threshold, and the unknown session on top
+    // of them neither adds to the streak nor breaks it.
+    expect(r?.reason).toBe("deload");
+    expect(r?.sessionsUntilDeload).toBe(0);
+  });
+
+  it("still consumes a slot in the window", () => {
+    const r = buildSuggestion([partial, full], fixedTwelvePs(), null);
+    expect(r?.sessions).toHaveLength(2);
+  });
+
+  it("judges against what the session prescribed, not today's plan", () => {
+    // The exercise was edited down to 3 sets since. The old sessions are still
+    // four-set sessions and are not retroactively completed.
+    const threeOfThree = makeMultiSession(
+      [
+        { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+      ],
+      { date: "2024-01-03", prescribedWorkingSets: 3 },
+    );
+    const r = buildSuggestion([threeOfThree, partial], fixedTwelvePs(), null);
+    expect(r?.sessions?.[0].status).toBe("cleared");
+    expect(r?.sessions?.[1].status).toBe("unknown");
+  });
+
+  it("checks nothing when the prescribed count was never recorded", () => {
+    // Pre-migration rows carry no snapshot. Judging them against today's plan
+    // is exactly the mistake the snapshot exists to prevent, so they are taken
+    // at face value.
+    const noSnapshot = { ...partial, prescribedWorkingSets: null };
+    const r = buildSuggestion([noSnapshot, full], fixedTwelvePs(), null);
+    expect(r?.sessions?.[0].status).toBe("cleared");
+  });
+});
+
+describe("buildSuggestion — a Tired session's misses are held harmless", () => {
+  const tiredMiss = straightSets([12, 12, 12, 8], "60.00", "2024-01-03", {
+    feeling: "Tired",
+  });
+  const tiredClear = straightSets([12, 12, 12, 12], "60.00", "2024-01-03", {
+    feeling: "Tired",
+  });
+  const clear = straightSets([12, 12, 12, 12], "60.00", "2024-01-02");
+
+  it("does not reset the gate", () => {
+    const r = buildSuggestion([tiredMiss, clear, clear], fixedTwelvePs(), null);
+    expect(r?.sessions?.[0].status).toBe("unknown");
+    expect(r?.hitsAchieved).toBe(2);
+    expect(r?.reason).toBe("progressed");
+  });
+
+  it("still counts when it cleared", () => {
+    const r = buildSuggestion([tiredClear, clear], fixedTwelvePs(), null);
+    expect(r?.sessions?.[0].status).toBe("cleared");
+    expect(r?.hitsAchieved).toBe(2);
+  });
+
+  it("still supplies the latest numbers rather than being dropped", () => {
+    const r = buildSuggestion([tiredMiss, clear], fixedTwelvePs(), null);
+    expect(r?.basedOnDate).toBe("2024-01-03");
+    expect(r?.basedOnFeeling).toBe("Tired");
+  });
+});
+
+describe("buildSuggestion — an easy verdict speaks for a session, not a set", () => {
+  it("does not carry a session where another set fell short", () => {
+    const session = makeMultiSession(
+      [
+        { actualReps: 12, targetReps: 12, weightKg: "60.00", wasEasy: true },
+        { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        { actualReps: 9, targetReps: 12, weightKg: "60.00" },
+      ],
+      { date: "2024-01-01", prescribedWorkingSets: 4 },
+    );
+    const r = buildSuggestion([session], fixedTwelvePs(), null);
+    expect(r?.reason).toBe("held");
+    expect(r?.easyOverride).toBeUndefined();
+  });
+
+  it("carries a session that cleared", () => {
+    const session = makeMultiSession(
+      [
+        { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        { actualReps: 12, targetReps: 12, weightKg: "60.00" },
+        { actualReps: 12, targetReps: 12, weightKg: "60.00", wasEasy: true },
+      ],
+      { date: "2024-01-01", prescribedWorkingSets: 4 },
+    );
+    const r = buildSuggestion([session], fixedTwelvePs(), null);
+    expect(r?.reason).toBe("progressed");
+    expect(r?.easyOverride).toBe(true);
+  });
+});
+
+describe("buildSuggestion — the window explains itself", () => {
+  it("reports every session newest first, with the shortfall and the counts", () => {
+    const r = buildSuggestion(
+      [
+        straightSets([12, 12, 12, 9], "60.00", "2024-01-03"),
+        straightSets([12, 12, 12, 12], "60.00", "2024-01-02"),
+      ],
+      fixedTwelvePs(),
+      null,
+    );
+    expect(r?.sessions).toEqual([
+      {
+        date: "2024-01-03",
+        status: "missed",
+        shortfall: 3,
+        loggedSets: 4,
+        prescribedSets: 4,
+        feeling: "Good",
+      },
+      {
+        date: "2024-01-02",
+        status: "cleared",
+        loggedSets: 4,
+        prescribedSets: 4,
+        feeling: "Good",
+      },
+    ]);
+  });
+
+  it("reports no shortfall for a timed set, which logs no target", () => {
+    const r = buildSuggestion(
+      makeSessions(2, { durationSeconds: 30, targetReps: null, weightKg: "0.00" }),
+      makePs({ progressionMode: "time", durationSeconds: 60, targetReps: null }),
+      null,
+    );
+    expect(r?.sessions?.[0]).toMatchObject({ status: "missed" });
+    expect(r?.sessions?.[0].shortfall).toBeUndefined();
   });
 });

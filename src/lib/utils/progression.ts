@@ -13,7 +13,9 @@ import type { SetSuggestion } from "@/types/workout";
 
 /**
  * Number of recent sessions to consider when evaluating progression readiness.
- * The "window" we look back through for each exercise+setNumber combo.
+ * The "window" we look back through, per exercise slot — sessions, not rows for
+ * one set number. Enforced by the history query; buildSuggestion judges whatever
+ * window it is handed.
  */
 export const CONSENSUS_WINDOW = 5;
 
@@ -45,23 +47,90 @@ export const DELOAD_FACTOR = 0.9;
 // ─── Input types ────────────────────────────────────────────────────────────
 
 /**
- * A single logged set from workout history, shaped for progression analysis.
- * Matches what the DB returns from workoutSets joined with workoutSessions.
+ * Which sets have to clear before the *session* counts toward the gate.
+ *
+ *   all   — every working set the plan prescribed
+ *   first — the first working set (a top set driving its back-offs)
+ *   last  — the last working set
+ *   set   — each set banks its own count, judged alone
+ *
+ * Stored on programExercises.progressionScope, defaulting to "all".
  */
-export type HistoryRow = {
-  exerciseId: number;
+export type ProgressionScope = "all" | "first" | "last" | "set";
+
+export const PROGRESSION_SCOPES = ["all", "first", "last", "set"] as const;
+
+/** Narrow an unvalidated column value to a scope, falling back to the default. */
+export function toScope(value: string | null | undefined): ProgressionScope {
+  return (PROGRESSION_SCOPES as readonly string[]).includes(value ?? "")
+    ? (value as ProgressionScope)
+    : "all";
+}
+
+/**
+ * A single logged working set, as one session recorded it.
+ * Matches what the DB returns from workoutSets for one plan slot.
+ */
+export type LoggedSet = {
   setNumber: number;
   actualReps: number;
   targetReps: number | null;
   weightKg: string; // decimal returned as string from Drizzle
   durationSeconds: number | null;
   distanceMeters?: number | null;
-  feeling: string | null;
-  date: string;
   /** Logged effort, or null when the lifter did not report any. */
   rpe: number | null;
   /** Lifter marked the set easy — see easyOverride in buildSuggestion. */
   wasEasy?: boolean | null;
+};
+
+/**
+ * One completed session's work on one exercise slot.
+ *
+ * The window is a list of these, newest first. It used to be a flat list of
+ * rows for a single exerciseId + setNumber, which meant every set of a 4x12
+ * banked its own progress and the plan could ratchet apart. "Did the workout
+ * clear?" is a question about a session, so a session is the unit.
+ */
+export type SessionHistory = {
+  date: string;
+  /** Session feeling. "Tired" softens a miss to unknown — see A6 in the plan. */
+  feeling: string | null;
+  /** Working sets logged against this slot, ordered by set number. */
+  sets: LoggedSet[];
+  /**
+   * Working sets the plan prescribed for this slot when they were logged,
+   * snapshotted per row. A skipped set leaves no row at all, so without this a
+   * session that logged 3 of a prescribed 4 is indistinguishable from one that
+   * was only ever prescribed 3. Null on rows the phase 0 backfill could not
+   * resolve, in which case the count is not checked.
+   */
+  prescribedWorkingSets: number | null;
+};
+
+/** How one session in the window came out. */
+export type SessionStatus = "cleared" | "missed" | "unknown";
+
+export type SessionOutcome = {
+  date: string;
+  status: SessionStatus;
+  /**
+   * Reps short on the worst deciding set. Only set on a rep-judged miss —
+   * duration and distance sets carry no logged target to measure against.
+   */
+  shortfall?: number;
+  /** Working sets logged for this slot in this session. */
+  loggedSets: number;
+  /** Working sets the plan prescribed at the time. Null when unknown. */
+  prescribedSets: number | null;
+  /** Session feeling, so the dot detail view can say why a session is inert. */
+  feeling: string | null;
+  /** Heaviest deciding set. SI-11 compares this against the current load. */
+  loadKg: number;
+  /** Lowest rep count across the deciding sets — the binding one. */
+  minReps: number;
+  /** A deciding set carried the lifter's explicit "that was easy" (E-6). */
+  wasEasy: boolean;
 };
 
 /**
@@ -88,6 +157,8 @@ export type ProgramSetData = {
   exerciseName?: string;
   /** Per-exercise override of REQUIRED_HITS. Null/undefined = use the constant. */
   requiredHits?: number | null;
+  /** Which sets decide whether a session cleared. Null/undefined = "all". */
+  scope?: string | null;
 };
 
 /**
@@ -188,27 +259,173 @@ export function adaptiveIncrementKg(
  * per-set prescribed RIR cap, which is opt-in and compared against what was
  * actually logged. Nothing carries a cap yet.
  */
-export function metTargetReps(row: HistoryRow, programTargetReps: number | null): boolean {
+export function metTargetReps(row: LoggedSet, programTargetReps: number | null): boolean {
   const target = row.targetReps ?? programTargetReps;
   if (target == null) return row.actualReps > 0;
   return row.actualReps >= target;
 }
 
-// ─── Internal helpers ───────────────────────────────────────────────────────
+// ─── Session clearance ──────────────────────────────────────────────────────
+
+/** Loads are decimals-as-strings; compare with a tolerance rather than ===. */
+const LOAD_EPSILON = 1e-6;
 
 /**
- * Count how many sessions at the front of the array missed the target reps
- * consecutively (most-recent first). Stops at the first success.
+ * The sets that decide whether this session cleared, per the exercise's scope.
+ *
+ * Returns null when a deciding set has no logged row, which makes the session
+ * *unknown* rather than missed (D-9): cutting a workout short says nothing
+ * about whether the load is right, and treating it as a failure would deload
+ * the lifter for leaving early. Under scope "all" that reduces to exactly
+ * D-9's rule, since every prescribed working set is a deciding set.
+ *
+ * `sets` must be ordered by set number. `prescribedWorkingSets` is what lets a
+ * missing trailing set be seen at all — a skipped set leaves no row.
  */
-function countConsecutiveFails(rows: HistoryRow[], targetReps: number | null): number {
-  let count = 0;
-  for (const row of rows) {
-    const target = row.targetReps ?? targetReps;
-    if (target != null && row.actualReps < target) {
-      count++;
-    } else {
-      break;
+export function decidingSets(
+  session: SessionHistory,
+  scope: ProgressionScope,
+  setNumber: number,
+): LoggedSet[] | null {
+  const sets = session.sets;
+  if (sets.length === 0) return null;
+  const prescribed = session.prescribedWorkingSets;
+  // Fewer rows than the plan asked for: some working set was skipped, and
+  // which one is not recorded. Only the scopes that depend on the trailing
+  // sets have to care.
+  const short = prescribed != null && sets.length < prescribed;
+
+  switch (scope) {
+    case "all":
+      return short ? null : sets;
+    case "first":
+      // A dropped set is almost always a trailing one, and the first set is
+      // present, so the top set can still speak for the session.
+      return [sets[0]];
+    case "last":
+      return short ? null : [sets[sets.length - 1]];
+    case "set": {
+      const own = sets.find((s) => s.setNumber === setNumber);
+      return own ? [own] : null;
     }
+  }
+}
+
+/**
+ * Decide one session: cleared, missed, or unknown.
+ *
+ * `judge` answers "did this set reach what it was prescribed", and returns the
+ * shortfall so the dot detail view can say *how* short. Duration and distance
+ * sets pass `shortfall: undefined` — nothing logs their target.
+ *
+ * A "Tired" session that fell short comes out **unknown**, not missed (A6).
+ * Self-reported fatigue used to exclude the session from the window entirely,
+ * which froze progression and showed stale numbers; its clears now count
+ * normally and only its misses are held harmless.
+ */
+export function evaluateSession(
+  session: SessionHistory,
+  scope: ProgressionScope,
+  setNumber: number,
+  judge: (set: LoggedSet) => { cleared: boolean; shortfall?: number },
+): SessionOutcome {
+  const deciding = decidingSets(session, scope, setNumber);
+  const base = {
+    date: session.date,
+    loggedSets: session.sets.length,
+    prescribedSets: session.prescribedWorkingSets,
+    feeling: session.feeling,
+  };
+
+  if (deciding === null) {
+    return {
+      ...base,
+      status: "unknown",
+      loadKg: maxLoad(session.sets),
+      minReps: minReps(session.sets),
+      wasEasy: false,
+    };
+  }
+
+  const verdicts = deciding.map(judge);
+  const cleared = verdicts.every((v) => v.cleared);
+  const shortfall = verdicts.reduce<number | undefined>(
+    (worst, v) =>
+      v.shortfall != null && (worst == null || v.shortfall > worst)
+        ? v.shortfall
+        : worst,
+    undefined,
+  );
+
+  const status: SessionStatus = cleared
+    ? "cleared"
+    : session.feeling === "Tired"
+      ? "unknown"
+      : "missed";
+
+  return {
+    ...base,
+    status,
+    ...(status === "missed" && shortfall != null ? { shortfall } : {}),
+    loadKg: maxLoad(deciding),
+    minReps: minReps(deciding),
+    wasEasy: cleared && deciding.some((s) => s.wasEasy === true),
+  };
+}
+
+function maxLoad(sets: LoggedSet[]): number {
+  return sets.reduce((m, s) => Math.max(m, Number(s.weightKg)), 0);
+}
+
+function minReps(sets: LoggedSet[]): number {
+  if (sets.length === 0) return 0;
+  return sets.reduce((m, s) => Math.min(m, s.actualReps), Infinity);
+}
+
+/**
+ * How many sessions in a row cleared, newest first.
+ *
+ * Two rules, both load-bearing and both easy to lose:
+ *
+ * **D-11, consecutive.** A missed session resets the count to zero. "Two full
+ * workouts" means two in a row; counting two clears either side of a miss is a
+ * different, weaker rule.
+ *
+ * **D-2 / D-9, unknown is inert.** An unknown session neither counts nor
+ * resets. A session you did not finish must not undo progress you banked, or
+ * the forgiving reading of a short session becomes a punishment.
+ *
+ * **SI-11, at this load or heavier.** A clear logged below the current load
+ * stops the run. Without it the two clears that earned the last bump stay in
+ * the window and immediately earn another, which is the runaway this whole
+ * rebuild exists to fix. Not applied to duration and distance, where the load
+ * is incidental.
+ */
+export function countConsecutiveClears(
+  outcomes: SessionOutcome[],
+  currentLoadKg: number,
+  compareLoad: boolean,
+): number {
+  let count = 0;
+  for (const o of outcomes) {
+    if (o.status === "unknown") continue;
+    if (o.status === "missed") break;
+    if (compareLoad && o.loadKg < currentLoadKg - LOAD_EPSILON) break;
+    count++;
+  }
+  return count;
+}
+
+/**
+ * How many sessions in a row failed to clear, newest first. Unknown sessions
+ * are skipped rather than breaking the streak, for the same reason as above.
+ */
+export function countConsecutiveMisses(outcomes: SessionOutcome[]): number {
+  let count = 0;
+  for (const o of outcomes) {
+    if (o.status === "unknown") continue;
+    if (o.status === "cleared") break;
+    count++;
   }
   return count;
 }
@@ -228,9 +445,26 @@ export function describeProgressionRule(input: {
   incrementReps: number;
   targetReps: number | null;
   requiredHits: number;
+  /** Which sets have to clear. Null/undefined = "all". */
+  scope?: string | null;
 }): string | null {
   const { mode, incrementKg, incrementReps, targetReps, requiredHits } = input;
-  const sessions = `${requiredHits} of the last ${CONSENSUS_WINDOW} sessions`;
+  const scope = toScope(input.scope);
+  // "N in a row", not "N of the last 5": a miss resets the count (D-11), and
+  // the sentence is the contract with the lifter, so it has to say the rule
+  // the engine actually applies.
+  const sessions =
+    requiredHits <= 1 ? "in a session" : `in ${requiredHits} sessions in a row`;
+  // Who has to clear. Progression used to ask this of one set at a time, which
+  // is why a 4x12 could bump while its last set kept falling short.
+  const subject =
+    scope === "first"
+      ? "the first set"
+      : scope === "last"
+        ? "the last set"
+        : scope === "set"
+          ? "a set"
+          : "every set";
   const reps = targetReps != null ? `${targetReps} reps` : "the target reps";
   // No effort clause: hitting the target is the whole test now that the RPE
   // ladder is retired. Saying otherwise here described a rule the engine had
@@ -238,15 +472,15 @@ export function describeProgressionRule(input: {
 
   switch (mode) {
     case "weight":
-      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once you hit ${reps} in ${sessions}.`;
+      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once ${subject} hits ${reps} ${sessions}.`;
     case "smart":
-      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once you hit ${reps} in ${sessions}, with the rep target re-estimated for the heavier load.`;
+      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once ${subject} hits ${reps} ${sessions}, with the rep target re-estimated for the heavier load.`;
     case "reps":
-      return `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once you hit ${reps} in ${sessions}.`;
+      return `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once ${subject} hits ${reps} ${sessions}.`;
     case "time":
-      return `+${incrementReps > 0 ? incrementReps : 10}s once you hold the target duration in ${sessions}.`;
+      return `+${incrementReps > 0 ? incrementReps : 10}s once ${subject} holds the target duration ${sessions}.`;
     case "distance":
-      return `+${((incrementReps > 0 ? incrementReps : 500) / 1000)}km once you cover the target distance in ${sessions}.`;
+      return `+${((incrementReps > 0 ? incrementReps : 500) / 1000)}km once ${subject} covers the target distance ${sessions}.`;
     default:
       return null;
   }
@@ -418,28 +652,59 @@ export function pendingProgressions(
 /**
  * Build a progressive overload suggestion for one program set.
  *
- * @param rows     Recent history rows for this exerciseId+setNumber, sorted
- *                 by date DESC (most-recent first). Pass up to CONSENSUS_WINDOW.
- * @param ps       Program set + exercise settings.
+ * @param sessions The last CONSENSUS_WINDOW completed sessions for this
+ *                 exercise slot, newest first, each carrying every working set
+ *                 logged in it. Not the last N rows for one set number — the
+ *                 gate asks whether the *session* cleared.
+ * @param ps       Program set + exercise settings, including the scope that
+ *                 says which sets decide that question.
  * @param profile  User profile for default increment fallback. May be null.
  * @param readiness Pre-workout readiness score (1–5). When ≤ 2, a progression
  *                 suggestion is downgraded to "held-readiness".
  * @returns        A SetSuggestion, or null if there is no history to base one on.
  */
 export function buildSuggestion(
-  rows: HistoryRow[],
+  sessions: SessionHistory[],
   ps: ProgramSetData,
   profile: UserProfile | null,
   readiness?: number | null,
 ): SetSuggestion | null {
-  if (rows.length === 0) return null;
+  const window = sessions.filter((s) => s.sets.length > 0);
+  if (window.length === 0) return null;
 
-  const latest = rows[0]; // most recent session — used for "Last: 75kg" display
-  const baseWeight = Number(latest.weightKg); // raw, no rounding
+  const scope = toScope(ps.scope);
+  const mode = ps.progressionMode ?? "manual";
+  const latest = window[0]; // most recent session — used for "Last: 75kg" display
+
+  // This set as the last session logged it. Null when the set is new to the
+  // plan: under scope "all" the exercise moves as one, so it takes the
+  // exercise's suggestion rather than none at all, falling back to the set the
+  // scope reads for its "last time" numbers.
+  const latestDeciding = decidingSets(latest, scope, ps.setNumber);
+  const reference =
+    latest.sets.find((s) => s.setNumber === ps.setNumber) ??
+    latestDeciding?.[latestDeciding.length - 1] ??
+    latest.sets[latest.sets.length - 1];
+
+  // Two different weights, deliberately.
+  //   baseWeight  — what this set actually did last time. A fact, so it is what
+  //                 "Last: 60kg" reports and what a back-off is measured from.
+  //   currentLoad — what the exercise is working at. Under scope "all" that is
+  //                 the *maximum* across the working sets: plans that drifted
+  //                 apart (62.5 / 62.5 / 60 / 60) are not re-levelled by the
+  //                 migration, so taking the minimum would propose a downgrade
+  //                 for set 1 that the plan floor rejects, leaving the whole
+  //                 exercise permanently pending. Taking the max levels them up
+  //                 on the first advance, which is the plan a lifter wanted.
+  const baseWeight = Number(reference.weightKg);
+  const currentLoad =
+    scope === "all"
+      ? latest.sets.reduce((m, s) => Math.max(m, Number(s.weightKg)), 0)
+      : baseWeight;
 
   const incrementKg = adaptiveIncrementKg(
     ps.overloadIncrementKg != null ? Number(ps.overloadIncrementKg) : null,
-    baseWeight,
+    currentLoad,
     ps.movementPattern,
     profile?.goal,
     profile?.experienceLevel,
@@ -448,94 +713,97 @@ export function buildSuggestion(
   // For "time" mode, overloadIncrementReps encodes seconds increment.
   // (overloadIncrementReps is unused for timed exercises in all other modes.)
   const incrementReps = Number(ps.overloadIncrementReps ?? 0);
-  const mode = ps.progressionMode ?? "manual";
 
   const roundToInc = (kg: number) => roundToNearest(kg, incrementKg);
 
-  // ── Estimated 1RM from latest set ──────────────────────────────────────────
+  // ── Estimated 1RM from the reference set ───────────────────────────────────
   const estimated1RM: number | null =
-    baseWeight > 0 &&
-    latest.actualReps >= 2 &&
-    latest.actualReps <= 12
-      ? Math.round(estimate1RM(baseWeight, latest.actualReps) * 10) / 10
+    baseWeight > 0 && reference.actualReps >= 2 && reference.actualReps <= 12
+      ? Math.round(estimate1RM(baseWeight, reference.actualReps) * 10) / 10
       : null;
 
-  // Did a logged set reach the target this mode measures?
-  const metTarget = (r: HistoryRow): boolean => {
+  // Did a logged set reach the target this mode measures, and by how much did
+  // it fall short? Only reps carry a logged target, so only reps report a
+  // shortfall — a timed set records what was held, never what was asked for.
+  const judge = (r: LoggedSet): { cleared: boolean; shortfall?: number } => {
     if (mode === "time") {
       const target = ps.durationSeconds ?? r.durationSeconds;
-      return target != null && (r.durationSeconds ?? 0) >= target;
+      return { cleared: target != null && (r.durationSeconds ?? 0) >= target };
     }
     if (mode === "distance") {
       const target = ps.distanceMeters ?? r.distanceMeters;
-      return target != null && (r.distanceMeters ?? 0) >= target;
+      return { cleared: target != null && (r.distanceMeters ?? 0) >= target };
     }
-    return metTargetReps(r, ps.targetReps);
+    if (metTargetReps(r, ps.targetReps)) return { cleared: true };
+    const target = r.targetReps ?? ps.targetReps;
+    return {
+      cleared: false,
+      ...(target != null ? { shortfall: target - r.actualReps } : {}),
+    };
   };
 
-  // ── Consensus: count hits across the window ──
-  const hits =
-    mode === "time" || mode === "distance"
-      ? rows.filter(metTarget)
-      : // Weight-bearing modes additionally require the hit to have happened at
-        // the current load or heavier. Without that clause the window counts
-        // hits from before the last bump, so a failed session at the new weight
-        // still adds another increment on top of it (30 hit, 30 hit, 32 missed
-        // -> suggests 34) and the load runs away from the lifter. Double
-        // progression means "hit the target twice at THIS weight, then move".
-        rows.filter(
-          (r) => metTargetReps(r, ps.targetReps) && Number(r.weightKg) >= baseWeight,
-        );
+  // ── Clearance per session, then the gate ───────────────────────────────────
+  const outcomes = window.map((sess) =>
+    evaluateSession(sess, scope, ps.setNumber, judge),
+  );
+  const latestOutcome = outcomes[0];
+  // Load is incidental to a plank or a run, so the "at this load or heavier"
+  // clause only applies where load is the thing being progressed.
+  const compareLoad = mode !== "time" && mode !== "distance";
+  // What SI-11 compares against: the load the sets the scope reads are working
+  // at, which under scope "all" is the same maximum currentLoad uses.
+  const decidingLoad = latestOutcome.loadKg;
 
-  const hitsAchieved = hits.length;
+  const hitsAchieved = countConsecutiveClears(outcomes, decidingLoad, compareLoad);
   const requiredHits = ps.requiredHits ?? REQUIRED_HITS;
   const hasConsensus = hitsAchieved >= requiredHits;
 
   // ── "Felt easy" override ──
-  // The lifter marked the last set easy: an explicit "there was plenty left,
-  // bump it". It stands in for the hits the consensus window hasn't
-  // accumulated yet, so the increment is offered next session instead of one or
-  // two sessions later. Gated on the set having actually met its target — an
-  // easy verdict on a missed set must never push the load up.
+  // The lifter marked a set easy: an explicit "there was plenty left, bump it".
+  // It stands in for the clears the gate hasn't accumulated yet, so the
+  // increment is offered next session instead of one or two sessions later.
   //
-  // It bypasses the per-exercise gate deliberately: someone who sets the gate
-  // to three sessions and then says "this was easy" has answered the question
-  // the gate exists to ask.
-  const easyOverride = !hasConsensus && latest.wasEasy === true && metTarget(latest);
+  // Gated on the *session* having cleared, not just the set (E-6): under scope
+  // "all" an easy verdict on set 1 must not carry a session where set 4 fell
+  // short. It bypasses the per-exercise gate deliberately — someone who sets
+  // the gate to three sessions and then says "this was easy" has answered the
+  // question the gate exists to ask.
+  const easyOverride = !hasConsensus && latestOutcome.wasEasy;
   const shouldProgress = hasConsensus || easyOverride;
 
-  // ── Deload detection: last DELOAD_THRESHOLD sessions all missed ──
+  // ── Deload detection: DELOAD_THRESHOLD sessions in a row failed to clear ──
   // Only applies to weight-bearing modes (not manual, not time).
   const canDeload = mode === "weight" || mode === "smart" || mode === "reps";
-  const recentSlice = rows.slice(0, DELOAD_THRESHOLD);
-  const allRecentFailed =
-    recentSlice.length >= DELOAD_THRESHOLD &&
-    recentSlice.every((r) => {
-      const target = r.targetReps ?? ps.targetReps;
-      return target != null && r.actualReps < target;
-    });
-  const isStuck = canDeload && allRecentFailed && hits.length === 0;
+  const consecutiveMisses = countConsecutiveMisses(outcomes);
+  // The guard that must not be dropped. Without it, one rep short on set 4
+  // three sessions running deloads all four sets by 10% — the normal state of
+  // a 4x12 block, not a stall. It would also make *skipping* set 4 strictly
+  // better than grinding it, since a skip is inert and a grind compounds.
+  const qualifyingClears = outcomes.filter(
+    (o) =>
+      o.status === "cleared" &&
+      (!compareLoad || o.loadKg >= decidingLoad - LOAD_EPSILON),
+  ).length;
+  const isStuck =
+    canDeload && consecutiveMisses >= DELOAD_THRESHOLD && qualifyingClears === 0;
 
   // ── Sessions until deload warning ──────────────────────────────────────────
   let sessionsUntilDeload: number | null = null;
   if (canDeload) {
-    if (isStuck) {
-      sessionsUntilDeload = 0;
-    } else {
-      const consecutiveFails = countConsecutiveFails(rows, ps.targetReps);
-      sessionsUntilDeload = consecutiveFails === 0
+    sessionsUntilDeload = isStuck
+      ? 0
+      : consecutiveMisses === 0
         ? null
-        : DELOAD_THRESHOLD - consecutiveFails;
-    }
+        : DELOAD_THRESHOLD - consecutiveMisses;
   }
 
   // ── Shared "basedOn" fields ──
   const basedOn = {
     basedOnWeightKg: baseWeight,
-    basedOnReps: latest.actualReps ?? 0,
+    basedOnReps: reference.actualReps ?? 0,
     basedOnFeeling: latest.feeling ?? "OK",
     basedOnDate: latest.date,
-    basedOnRpe: latest.rpe ?? undefined,
+    basedOnRpe: reference.rpe ?? undefined,
     basedOnHitCount: hitsAchieved,
     // Enriched fields
     hitsAchieved,
@@ -544,6 +812,16 @@ export function buildSuggestion(
     estimated1RM,
     readinessModulated: false,
     exerciseName: ps.exerciseName,
+    // The window, session by session, so "why is this not progressing" has an
+    // answer on screen instead of requiring a mental model of the engine.
+    sessions: outcomes.map((o) => ({
+      date: o.date,
+      status: o.status,
+      ...(o.shortfall != null ? { shortfall: o.shortfall } : {}),
+      loggedSets: o.loggedSets,
+      prescribedSets: o.prescribedSets,
+      feeling: o.feeling,
+    })),
   };
 
   // ── Deload takes priority over all mode-specific logic ──
@@ -560,28 +838,54 @@ export function buildSuggestion(
   // Only applies to weight-bearing modes; deload already handled above.
   // Guard: if the weight drop was preceded by consecutive failures (an intentional
   // deload), do NOT suggest going back up immediately.
-  if (rows.length >= 2 && (mode === "weight" || mode === "smart" || mode === "reps")) {
-    const prev = rows[1];
-    const prevWeight = Number(prev.weightKg);
+  //
+  // Both sessions must be *known*. An unknown one reports the load and reps of
+  // whatever it did log, which under a per-set scope can be a different set
+  // entirely — reading a drop out of that would invent a claim the lifter
+  // never made.
+  if (
+    outcomes.length >= 2 &&
+    canDeload &&
+    latestOutcome.status !== "unknown" &&
+    outcomes[1].status !== "unknown"
+  ) {
+    const prev = outcomes[1];
 
-    if (prevWeight > baseWeight) {
+    if (prev.loadKg > decidingLoad + LOAD_EPSILON) {
       // Weight decreased — only retry if the drop was a one-off, not a deload
-      const prevFailStreak = countConsecutiveFails(rows.slice(1), ps.targetReps);
+      const prevFailStreak = countConsecutiveMisses(outcomes.slice(1));
       const wasIntentionalDeload = prevFailStreak >= DELOAD_THRESHOLD - 1;
       if (!wasIntentionalDeload) {
         return {
-          suggestedWeightKg: prevWeight,
+          suggestedWeightKg: prev.loadKg,
           ...basedOn,
           reason: "retry",
         };
       }
     }
 
-    if (prevWeight === baseWeight && prev.actualReps > latest.actualReps && prev.actualReps > 0) {
-      // Same weight but fewer reps — suggest matching previous rep count
+    // Same weight but fewer reps — suggest matching the previous rep count.
+    // Measured on the worst set of each session, which is the one that decides
+    // clearing.
+    //
+    // The last clause is not in the rule as originally written, and without it
+    // this fires on every ordinary miss. Reclaiming ground only means something
+    // when the previous session went *past* the prescription: against a fixed
+    // target of 12, a session of 12 followed by one of 10 has nothing to
+    // reclaim — the plan already asks for 12, the session simply missed, and
+    // relabelling that as "retry 12 reps" hides the miss behind a suggestion
+    // the plan floor would refuse to write anyway. This never showed up before
+    // because logged reps were always the target, so the branch was unreachable.
+    const repTarget = ps.targetReps ?? reference.targetReps;
+    if (
+      Math.abs(prev.loadKg - decidingLoad) < LOAD_EPSILON &&
+      prev.minReps > latestOutcome.minReps &&
+      prev.minReps > 0 &&
+      (repTarget == null || prev.minReps > repTarget)
+    ) {
       return {
         suggestedWeightKg: baseWeight,
-        suggestedReps: prev.actualReps,
+        suggestedReps: prev.minReps,
         ...basedOn,
         reason: "retry",
       };
@@ -601,8 +905,8 @@ export function buildSuggestion(
 
     case "weight":
       // Bodyweight exercises (weight=0) can't progress by adding kg — fall back to reps.
-      if (baseWeight === 0) {
-        const bwTarget = ps.targetReps ?? latest.targetReps;
+      if (currentLoad === 0) {
+        const bwTarget = ps.targetReps ?? reference.targetReps;
         if (shouldProgress && incrementReps > 0 && bwTarget != null) {
           suggestion = {
             suggestedWeightKg: 0,
@@ -617,7 +921,7 @@ export function buildSuggestion(
       }
       if (shouldProgress && incrementKg > 0) {
         suggestion = {
-          suggestedWeightKg: roundToInc(baseWeight + incrementKg),
+          suggestedWeightKg: roundToInc(currentLoad + incrementKg),
           ...basedOn,
           reason: "progressed",
         };
@@ -628,8 +932,8 @@ export function buildSuggestion(
 
     case "smart": {
       // Bodyweight exercises (weight=0) can't use 1RM logic — fall back to reps.
-      if (baseWeight === 0) {
-        const bwTarget = ps.targetReps ?? latest.targetReps;
+      if (currentLoad === 0) {
+        const bwTarget = ps.targetReps ?? reference.targetReps;
         if (shouldProgress && incrementReps > 0 && bwTarget != null) {
           suggestion = {
             suggestedWeightKg: 0,
@@ -643,22 +947,23 @@ export function buildSuggestion(
         break;
       }
       if (shouldProgress && incrementKg > 0) {
-        const newWeight = roundToInc(baseWeight + incrementKg);
+        const newWeight = roundToInc(currentLoad + incrementKg);
         let adjustedRepsForWeight: number | undefined;
         // 1RM estimation: only valid for weight > 0, 2–12 reps, and a near-max
         // last set (RPE ≥ 7). Sub-max sets aren't on the Epley curve, so an
         // estimated rep cut would be meaningless.
         const canComputeRM =
           baseWeight > 0 &&
-          latest.actualReps != null &&
-          latest.actualReps >= 2 &&
-          latest.actualReps <= 12 &&
-          latest.rpe != null &&
-          latest.rpe >= 7;
+          reference.actualReps != null &&
+          reference.actualReps >= 2 &&
+          reference.actualReps <= 12 &&
+          reference.rpe != null &&
+          reference.rpe >= 7;
         if (canComputeRM && newWeight > baseWeight) {
-          const oneRM = estimate1RM(baseWeight, latest.actualReps);
+          const oneRM = estimate1RM(baseWeight, reference.actualReps);
           const adj = estimateRepsAt(oneRM, newWeight);
-          const currentTarget = ps.targetReps ?? latest.targetReps ?? latest.actualReps;
+          const currentTarget =
+            ps.targetReps ?? reference.targetReps ?? reference.actualReps;
           if (currentTarget != null && adj < currentTarget) {
             adjustedRepsForWeight = adj;
           }
@@ -676,7 +981,7 @@ export function buildSuggestion(
     }
 
     case "reps": {
-      const targetReps = ps.targetReps ?? latest.targetReps;
+      const targetReps = ps.targetReps ?? reference.targetReps;
       if (shouldProgress && incrementReps > 0 && targetReps != null) {
         suggestion = {
           suggestedWeightKg: baseWeight,
@@ -691,8 +996,8 @@ export function buildSuggestion(
     }
 
     case "time": {
-      const targetDuration = ps.durationSeconds ?? latest.durationSeconds;
-      const actualDuration = latest.durationSeconds ?? 0;
+      const targetDuration = ps.durationSeconds ?? reference.durationSeconds;
+      const actualDuration = reference.durationSeconds ?? 0;
       // overloadIncrementReps doubles as seconds increment for time mode;
       // fall back to 10s if not configured.
       const incrementSecs = incrementReps > 0 ? incrementReps : 10;
@@ -714,8 +1019,8 @@ export function buildSuggestion(
     }
 
     case "distance": {
-      const targetDistance = ps.distanceMeters ?? latest.distanceMeters;
-      const actualDistance = latest.distanceMeters ?? 0;
+      const targetDistance = ps.distanceMeters ?? reference.distanceMeters;
+      const actualDistance = reference.distanceMeters ?? 0;
       // overloadIncrementReps doubles as meters increment for distance mode;
       // fall back to 500m (+0.5km) if not configured.
       const incrementMeters = incrementReps > 0 ? incrementReps : 500;

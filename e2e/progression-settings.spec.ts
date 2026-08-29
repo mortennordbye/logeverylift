@@ -42,14 +42,14 @@ test("progression gate and plan opt-in persist across a reload", async ({ page }
   await expect(gate()).toBeVisible({ timeout: 5_000 });
 
   // The rule sentence quotes the live gate.
-  await expect(page.getByText(/2 of the last 5 sessions/)).toBeVisible({
+  await expect(page.getByText(/2 sessions in a row/)).toBeVisible({
     timeout: 5_000,
   });
 
   await tapAndSave(page, gate().getByRole("button", { name: "3", exact: true }), {
     bodyIncludes: '"requiredHits":3',
   });
-  await expect(page.getByText(/3 of the last 5 sessions/)).toBeVisible({
+  await expect(page.getByText(/3 sessions in a row/)).toBeVisible({
     timeout: 5_000,
   });
 
@@ -62,7 +62,7 @@ test("progression gate and plan opt-in persist across a reload", async ({ page }
   // still set below came back out of the database.
   await page.reload();
   await openSheet();
-  await expect(page.getByText(/3 of the last 5 sessions/)).toBeVisible({
+  await expect(page.getByText(/3 sessions in a row/)).toBeVisible({
     timeout: 5_000,
   });
   await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "true");
@@ -77,7 +77,7 @@ test("progression gate and plan opt-in persist across a reload", async ({ page }
   });
   await page.reload();
   await openSheet();
-  await expect(page.getByText(/2 of the last 5 sessions/)).toBeVisible({
+  await expect(page.getByText(/2 sessions in a row/)).toBeVisible({
     timeout: 5_000,
   });
   await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "false");

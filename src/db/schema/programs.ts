@@ -61,6 +61,18 @@ export const programExercises = pgTable("program_exercises", {
   overloadIncrementReps: integer("overload_increment_reps").default(0),
   // "none" | "manual" | "weight" | "smart" | "reps" | "time" | "distance"
   progressionMode: text("progression_mode").default("manual"),
+  // Which sets have to clear for the *session* to count toward the gate.
+  //   all   — every working set (the default, and what a straight-set plan means)
+  //   first — the top set drives it, back-offs follow
+  //   last  — the last working set drives it
+  //   set   — each set banks its own count, judged alone
+  //
+  // Progression used to be keyed on exercise + set number with no session-level
+  // question at all, so on 4x12 each set banked its own count and the plan could
+  // ratchet to 62.5 / 60 / 60 / 60. That is scope "set", and nothing lands on it
+  // by default: existing exercises take the "all" default, which visibly holds
+  // exercises that were quietly progressing off one set.
+  progressionScope: text("progression_scope").notNull().default("all"),
   // How many qualifying sessions inside the consensus window are needed before
   // a bump is suggested. Null = inherit REQUIRED_HITS from progression.ts, so
   // the shared default stays in one place instead of being copied per row.
