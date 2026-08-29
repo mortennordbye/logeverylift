@@ -1,6 +1,6 @@
 # Progression revamp: plan
 
-> **Status:** proposed, not started
+> **Status:** approved for phase 1. `D-1` and `D-2` decided 2026-08-29; `D-3` to `D-7` still open (not needed until phases 3, 5 and 6).
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
 > **Closes:** audit findings `A1`-`A11` and spec divergences `D1`-`D8` in [`../BACKLOG.md`](../BACKLOG.md)
@@ -26,7 +26,7 @@ This document is the complete brief. It assumes no conversation history. Read it
 3. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`, the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (both consumers).
 4. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
 
-**Before writing any code:** section 12 lists seven decisions (`D-1` to `D-7`) that this plan deliberately does not make. Each has a recommendation. Get answers from the repo owner and record them in section 12 as **Decided:** lines. Phase 1 depends on `D-1` and `D-2`; do not start without them.
+**Decisions.** Section 12 lists seven that this plan deliberately does not make. `D-1` (a prescribed RIR gates clearing, on capped exercises only) and `D-2` (unlogged effort is unknown, neither clear nor failure) are **decided** and written up there with their binding consequences; build to them, do not relitigate them. `D-3` to `D-7` are still open but are not needed until phases 3, 5 and 6, so phase 1 is unblocked. Get each answer from the repo owner and record it as a **Decided:** line before the phase that needs it.
 
 **Then:** build phase by phase from section 11, one phase per branch. `pnpm verify` after each. The smoke pass from `CLAUDE.md` after phases 2, 5 and 6. Do not start a later phase before the earlier one is merged; the phases are ordered by data dependency, not preference.
 
@@ -316,7 +316,7 @@ Historical `workout_sets` rows keep `rpe = 7` from before the change. The engine
 
 Each phase ships on its own, is verifiable on its own, and leaves the app working. `pnpm verify` after every phase; the smoke pass in `CLAUDE.md` after any phase touching the set list (2, 5, 6).
 
-**Phase 1: honest effort.** Make `rpe` nullable, stop forging 7, treat null as unknown in the existing engine. Migration plus a small engine change. Verifiable: an exercise with no effort logged behaves exactly as before; the fabricated confidence is gone.
+**Phase 1: honest effort.** Make `rpe` nullable, stop forging 7, treat null as unknown in the existing engine per `D-2`. Migration plus a small engine change. Verifiable: an uncapped exercise with no effort logged behaves exactly as before (target-only clearing, `D-1`); the fabricated confidence is gone. Add the `held-unknown` reason code to the engine and both switch statements in this phase, even though no exercise can carry a cap until phase 5, so the code path exists before anything depends on it.
 
 **Phase 2: capture.** Long-press miss sheet, the reps-correction fix, offline queue coverage. No engine change. Verifiable by e2e: log a short set, assert `actual_reps` is what you entered and `target_reps` did not move.
 
@@ -337,10 +337,22 @@ Phases 1 and 2 are worth doing even if the rest is never built: they make the ex
 These are open. Each has a recommendation and a reason, and none is assumed anywhere above.
 
 **D-1. Does clearing require the prescribed RIR, or is effort recorded alongside?**
-*Recommendation: prescribed RIR gates clearing, but only when a cap is set on the exercise.* Opt-in means nobody is blocked by a setting they did not choose, and the people who want autoregulation get it exactly.
+**Decided (2026-08-29): prescribed RIR gates clearing, but only when a cap is set on the exercise.** Opt-in means nobody is blocked by a setting they did not choose, and the people who want autoregulation get it exactly.
+
+Binding consequences for the build:
+- An exercise with `target_rir = NULL` clears on target alone. Effort is still recorded when supplied, and still shown, but never blocks.
+- An exercise with a cap clears only when the set met its target **and** logged RIR is greater than or equal to the cap. RIR 2 against a cap of 2 clears; RIR 1 does not.
+- The cap is per set (`program_sets.target_rir`), so a top set and its back-offs can carry different caps. Under scope `all`, every working set is judged against its own cap.
+- This replaces the current absolute ladder (`SI-10`: RPE 8 counts only with an extra rep) for capped exercises. Uncapped exercises keep target-only clearing; the old ladder is retired rather than kept as a third path.
 
 **D-2. What does an unlogged effort mean when a cap is prescribed?**
-*Recommendation: unknown, not clear and not failed.* The alternative, treating silence as a clear, is what the current RPE 7 default does and is the whole problem. The cost is that skipping the prompt stalls progression, which is why `held-unknown` is a distinct reason code with its own message.
+**Decided (2026-08-29): unknown. Not a clear, not a failure.** The alternative, treating silence as a clear, is what the current RPE 7 default does and is the whole problem.
+
+Binding consequences for the build:
+- An unknown session does not increment the gate count and does not count toward the back-off streak (section 7, steps 4 and 5). It is inert in both directions.
+- It still occupies a slot in the 5-session window, so a run of unlogged sessions ages real ones out rather than preserving them.
+- The suggestion is `held-unknown`, which the chip must render distinctly from `held`. "You have not told me how hard that was" and "you have not cleared it enough times" are different messages and were the same one before.
+- Because skipping the prompt stalls progression, the prompt in section 6 change 3 only ever appears on exercises that carry a cap. Nobody is nagged for effort they did not ask to be measured on.
 
 **D-3. Do existing `weight` exercises migrate to scope `all` or scope `set`?**
 *Recommendation: `all`.* Per-set drift produces plans nobody would write, so it is a bug rather than a behaviour to preserve. But it changes progression for every existing exercise on the first load after deploy, so it is your call. `set` remains available for exercises where sets genuinely differ.
