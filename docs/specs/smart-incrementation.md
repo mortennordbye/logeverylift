@@ -6,7 +6,7 @@
 >
 > Stale check: `git log f77d528..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
 >
-> **Partially revised 2026-08-29 by phases 1, 3 and 2 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md).** Phase 1 rewrote SI-10, SI-12, SI-17, SI-31 and the vocabulary; the effort ladder they described is retired. Phase 3 rewrote SI-7, SI-8, SI-11, SI-13, SI-17 and SI-19 and added SI-7a to SI-7c: the window is now the last five **sessions** for an exercise slot, and whether a session cleared is a question about the sets its scope names. Phase 2 changed no rule, only what feeds them: `actualReps` is now the reps the lifter reports rather than the target repeated back, so SI-9, SI-17 and SI-19 describe branches production can actually reach. The stamp above is deliberately *not* advanced, because the rest of the spec has not been re-verified since — the full rewrite is scheduled for the end of that plan's phase 5.
+> **Partially revised 2026-08-29 by phases 1, 3, 2 and 4 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md).** Phase 1 rewrote SI-10, SI-12, SI-17, SI-31 and the vocabulary; the effort ladder they described is retired. Phase 3 rewrote SI-7, SI-8, SI-11, SI-13, SI-17 and SI-19 and added SI-7a to SI-7c: the window is now the last five **sessions** for an exercise slot, and whether a session cleared is a question about the sets its scope names. Phase 2 changed no rule, only what feeds them: `actualReps` is now the reps the lifter reports rather than the target repeated back, so SI-9, SI-17 and SI-19 describe branches production can actually reach. Phase 4 added SI-28a and SI-28b (double progression and its reset), extended SI-28 with the range ceiling, and added `reset` to SI-33 and SI-37. The stamp above is deliberately *not* advanced, because the rest of the spec has not been re-verified since — the full rewrite is scheduled for the end of that plan's phase 5.
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
 
@@ -33,7 +33,7 @@ The two are independent and easy to confuse, because they share words and even a
 
 ## Inputs
 
-Per-exercise settings on `program_exercises`: `progressionMode`, `progressionScope`, `overloadIncrementKg`, `overloadIncrementReps`, `progressionRequiredHits`, `progressionApplyToPlan`, `exerciseType`. Per-set on `program_sets`: `setType`, `targetReps`, `durationSeconds`, `distanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it, and both null when the lifter reported nothing), `wasEasy`, `isFailed`. Also from `workout_sets`, and load-bearing for SI-7a to SI-7c: `programExerciseId` (which plan slot the row belongs to), `setType` and `prescribedWorkingSets`, all snapshotted at log time so a session describes itself rather than being re-read against today's plan. Schema detail is in [`../data-model.md`](../data-model.md).
+Per-exercise settings on `program_exercises`: `progressionMode`, `progressionScope`, `overloadIncrementKg`, `overloadIncrementReps`, `progressionRequiredHits`, `progressionApplyToPlan`, `exerciseType`. Per-set on `program_sets`: `setType`, `targetReps`, `repRangeMin`, `repRangeMax`, `durationSeconds`, `distanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it, and both null when the lifter reported nothing), `wasEasy`, `isFailed`. Also from `workout_sets`, and load-bearing for SI-7a to SI-7c: `programExerciseId` (which plan slot the row belongs to), `setType` and `prescribedWorkingSets`, all snapshotted at log time so a session describes itself rather than being re-read against today's plan. Schema detail is in [`../data-model.md`](../data-model.md).
 
 Two non-obvious ones:
 
@@ -257,10 +257,27 @@ Computed only when base weight > 0, the last set was 2–12 reps, the last set w
 *Covered by:* `progressive-suggestions.test.ts` — "skips adjustedRepsForWeight on sub-max sets (RPE < 7)…", "…when weight is 0…", "…for actualReps > 12…".
 
 ### SI-28 — `reps`
-Suggest `target + repIncrement` at the same weight. Holds when there is no rep target to add to.
+Suggest `target + repIncrement` at the same weight, clamped to `repRangeMax` when the set carries one, and holding once the target is already there. Holds when there is no rep target to add to.
 
-*Why:* with no target, there is no safe number to increment — guessing from the last performance would ratchet on a single good day.
-*Covered by:* `progressive-suggestions.test.ts` — the "reps mode" block.
+*Why:* with no target, there is no safe number to increment — guessing from the last performance would ratchet on a single good day. The ceiling is what stops a rep ladder climbing 8, 9, 10 … 40 with nothing to convert the reps into. A set with no range still has no ceiling, which is the open half of `E-17`.
+*Covered by:* `progressive-suggestions.test.ts` — the "reps mode" block; "a rep ladder stops at the top of its range".
+
+### SI-28a — `double` climbs the reps, then buys the next range with load
+The prescription is `targetReps` as the plan holds it today, and it moves inside `[repRangeMin, repRangeMax]`.
+
+- Below `repRangeMax`: suggest `targetReps` = the reps the **binding set** of the last cleared session actually did, capped at `repRangeMax`, with a floor of one rep increment. Same weight, reason `progressed-reps`.
+- At `repRangeMax`: suggest `currentLoad + increment` snapped to the grid, with `targetReps` back to `repRangeMin`. Reason `reset`.
+
+Clearing, the window and the gate are exactly as they are for every other mode: the session clears when every set the scope names met the target in force that day.
+
+*Why:* climbing to what was achieved rather than one rep per session keeps the prescription from lagging a lifter who can already do the top of the range — 12/10/9 against a target of 8 takes the target to 9, and 12/12/12 takes it to the top in one step.
+*Covered by:* `progressive-suggestions.test.ts` — "worked example 4b", "double progression, the rest of the range".
+
+### SI-28b — `double` holds rather than climbing past its own range
+At `repRangeMax` with no load to add — a zero increment, or a bodyweight exercise — the suggestion is `held`. With no range configured at all, `double` behaves as `weight`.
+
+*Why:* the reset is the only way out of the top of the range, so without an increment there is nothing to buy it with; climbing past a range the lifter configured would be answering a question they did not ask. Nothing can currently configure `double` without a range — the preset picker writes both — so the fallback is a safety net, not a supported shape.
+*Covered by:* `progressive-suggestions.test.ts` — "holds at the top of the range when there is no load to add", "holds at the top of the range for a bodyweight exercise", "falls back to load progression when no range is configured".
 
 ### SI-29 — `time`
 Suggest `lastDuration + secondsIncrement`, defaulting to 10s when unconfigured. Requires the most recent set to have met the target duration.
@@ -285,18 +302,20 @@ Reps in rep-based modes, seconds in `time`, metres in `distance`. One column, th
 *Covered by:* the mode blocks above.
 
 ### SI-33 — The `reason` code is the contract
-Nine values, and both consumers (the chip UI and the ratchet) branch on them exhaustively.
+Eleven values. "Both consumers" is wrong and has been since it was written: seven sites across four files branch on a reason, and a new code has to be walked through all of them in the change that adds it.
 
 | Reason | Meaning | Ratchet writes? |
 |---|---|---|
 | `progressed` | More weight | ✓ weight (+ rep cut if any) |
 | `progressed-reps` | More reps | ✓ reps, only upward |
+| `reset` | Double progression: more load, reps back to the bottom of the range | ✓ weight **and** reps, the reps unfloored |
 | `progressed-time` | Longer hold | ✓ duration |
 | `progressed-distance` | Further | ✓ distance |
 | `deload` | Back off 10% | ✓ weight |
 | `retry` | Reclaim a previous value | ✓ weight or reps |
 | `held` | Gate not met | — |
 | `held-readiness` | Earned, suppressed by readiness | — |
+| `held-unknown` | An effort cap is prescribed and no effort was logged | — |
 | `manual` | Mode is manual | — |
 
 *Why:* a new reason code that either consumer doesn't handle silently becomes a no-op. Add one only alongside both switch statements.
@@ -323,7 +342,7 @@ Pending sets are matched against their *current* values with any live session ov
 *Covered by:* `progressive-suggestions.test.ts` — "skips completed sets…", "skips warm-up sets".
 
 ### SI-37 — Only actionable reasons write, and only a deload lowers the plan
-`held`, `held-readiness` and `manual` produce nothing. Every other reason writes only when its value lands **strictly above** what the plan already holds, in whichever dimension it moves. `deload` is the single exception — backing off is the whole point of it.
+`held`, `held-readiness`, `held-unknown` and `manual` produce nothing. Every other reason writes only when its value lands **strictly above** what the plan already holds, in whichever dimension it moves. Two exceptions: `deload`, because backing off is the whole point of it, and `reset`'s **rep** write, because dropping the target to the bottom of the range is the other half of raising the load and a floor there blocks double progression outright (`E-1`). `reset`'s load write keeps the floor — a reset that would land below the planned weight is a downgrade with the reps thrown in, so it writes nothing at all.
 
 *Why:* base values come from the most recent *logged* set, not the planned one (see **Base weight**), so after one lighter session a `progressed` suggestion can land **below** the planned number. Unfloored, the ratchet writes it and the "↑" chip silently downgrades the programme: plan 80 kg, two hit sessions at 75, plan rewritten to 77.5. `retry` needs the same floor for a different reason — it reclaims a weight held in a recent session, which says nothing about the plan, so when the plan is already higher there is nothing to reclaim there.
 
@@ -334,7 +353,7 @@ Two things make this easy to get wrong, both of which it was:
 
 Display follows the same rule: the chip's arrow is derived from the comparison rather than the reason, so a below-plan `progressed` value renders `↓`, not `↑`. It is still offered for the live session — a session override reflects what was actually lifted and is legitimately allowed to go down.
 
-*Covered by:* `progressive-suggestions.test.ts` — "ignores held, held-readiness and manual suggestions", "does not lower a rep target that is already higher", "does not lower a planned weight that is already higher", "does not lower a planned duration…", "does not lower a planned distance…", "does not let a retry lower the plan either", "floors against the plan, not today's override", "still progresses above the plan when today's set was dropped", "still deloads below a planned weight — the floor is progressions only".
+*Covered by:* `progressive-suggestions.test.ts` — "ignores held, held-readiness and manual suggestions", "writes the reset's lower rep target, which the floor would otherwise block", "refuses a reset whose load sits below the plan", "does not lower a rep target that is already higher", "does not lower a planned weight that is already higher", "does not lower a planned duration…", "does not lower a planned distance…", "does not let a retry lower the plan either", "floors against the plan, not today's override", "still progresses above the plan when today's set was dropped", "still deloads below a planned weight — the floor is progressions only".
 
 ### SI-38 — The server re-reads the opt-in flag, and opting out is a success
 `applyProgressionToPlan` re-checks `progressionApplyToPlan` and returns success without writing when it is off.

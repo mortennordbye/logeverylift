@@ -1,6 +1,6 @@
 # Progression revamp: plan
 
-> **Status:** in build. Phases 0, 1, 3 and 2 shipped; phase 4 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
+> **Status:** in build. Phases 0, 1, 3, 2 and 4 shipped; phase 5 is next. See §0 "Build state" — it is the one place that says where the work stands, and every phase updates it before finishing.
 > **Design status:** approved, all eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
@@ -30,11 +30,11 @@ Phases are listed in **build order**, which is not numeric order. The swap is de
 | **1** | Honest effort: `rpe` nullable, stop forging 7 | **Done.** Branch `phase-1/honest-effort`, 7 commits. Migration `0048`. |
 | **3** | Session windows and scope | **Done.** Branch `phase-3/session-windows-and-scope`, 4 commits. Migration `0049`. |
 | **2** | Capture: the miss sheet and the reps-correction fix | **Done.** Branch `phase-2/capture`, 4 commits. No migration. |
-| **4** | Rep ranges and double progression | **Next.** Not started. |
-| **5** | Axes, presets, and the sheet | Not started. |
+| **4** | Rep ranges and double progression | **Done.** Branch `phase-4/rep-ranges`, 5 commits. Migration `0050`. |
+| **5** | Axes, presets, and the sheet | **Next.** Not started. It owns the picker that makes phases 3 and 4 reachable. |
 | **6** | The rest | Not started. |
 
-**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**) → `phase-1/honest-effort` (7 commits, **not pushed**) → `phase-3/session-windows-and-scope` (4 commits, **not pushed**) → `phase-2/capture` (4 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
+**Branches.** `main` → `fix/progression-never-lowers-plan` (the audit, one predating bug fix, and this plan; 20 commits, **not pushed**) → `phase-0/progression-prerequisites` (5 commits, **not pushed**) → `phase-1/honest-effort` (7 commits, **not pushed**) → `phase-3/session-windows-and-scope` (4 commits, **not pushed**) → `phase-2/capture` (4 commits, **not pushed**) → `phase-4/rep-ranges` (5 commits, **not pushed**). One phase per branch, each branched off the last. Nothing has been pushed yet, so nothing is deployed and no migration has run outside a throwaway container.
 
 ### What is already true in the code
 
@@ -77,16 +77,28 @@ Facts a cold session must not re-derive, re-decide, or accidentally undo. Each i
 - **The exercise-level checkmark writes through the offline queue** (`useWorkoutSetWriter`) and reads the session overrides, like the set list. It used to call the Server Action directly, ignore the result, and overwrite the overrides with the program's planned values.
 - **The logging payload did not change shape**, so `P-3` needed no work: `actualReps` was always required and always accepted any count. A payload queued by a pre-phase-2 client replays as a set that hit its target, which is exactly what that client claimed.
 
+*From phase 4:*
+
+- **`program_sets` carries `rep_range_min` and `rep_range_max`** (migration `0050`), both nullable and both null on every existing set. The validator takes them as a pair and requires `min <= target_reps <= max` when the same write carries a target. Half a range is not a weaker range: the reset needs a bottom to drop to and a top to climb to.
+- **`progressionMode` has a fifth value, `double`.** The prescription is `target_reps` as it stands today and moves between the bounds. Clearing, the window and the gate are unchanged — only what an advance *does* is new.
+- **The climb goes to the reps the binding set actually did**, capped at `rep_range_max`, with a one-rep floor so it always moves. Not one rep per session: a lifter who already manages the top of the range would be walked up to it over several sessions with the prescription permanently behind them, which is the flaw section 7 names in the walking-target draft. **This resolves a contradiction in this document** — §4b's table says the target drops to the minimum and climbs back, §7 step 8 says it "stays at `rep_range_max`". §4b wins, because `E-11` makes it the fixture, and §7 step 8 has been corrected to match.
+- **`reset` is the reason code for the load-up-reps-down step**, and it is the only suggestion besides a deload that deliberately lowers a number in the plan. `E-1`'s exemption lives in `pendingProgressions`: the rep write has no floor, the load write keeps one. Test it before touching that function again.
+- **At the top of the range with nothing to add, the exercise holds** (`E-4`) rather than climbing past the range its owner configured. That covers a zero increment and a bodyweight exercise. With no range at all, `double` behaves as load progression; nothing can configure that pairing.
+- **A rep ladder with a range stops at the top of it** (`E-17`'s ceiling). The other half of `E-17`, the zero rep-increment default that makes bodyweight exercises hold forever, is untouched and still open as `SI-D5`.
+- **Nothing in the app can set a range or the `double` mode.** The preset picker is phase 5, exactly as the scope column has been since phase 3. The mode picker in `WorkoutSetsClient` does not list `double`, so an exercise on it shows no selected mode until phase 5 rewrites that file (`B-20`). One seeded exercise runs the scheme in all three seeders, so it is visible in a dev or demo account.
+- **Sharing and export/import carry the range.** Both copy sets field by field and would otherwise have turned a shared or re-imported double-progression program into a fixed-target one. The import keys are optional, so an export predating ranges still imports.
+
 *Still true, and still wrong — these are the phases ahead, not oversights:*
 
-- There is no rep range, so double progression cannot be expressed. That is phase 4.
 - No exercise can carry an effort cap, so `D-1` does not gate anything and nothing emits `held-unknown`. That is phase 5, and `B-22` comes first.
+- Two schemes now exist that no UI can turn on: scope (phase 3) and rep ranges with `double` (phase 4). Phase 5's preset picker is what makes both reachable, which is why it is the next phase rather than phase 6.
 
 ### Carry-forward: things every phase still owes
 
 - **The Playwright e2e suite has never run on any of these branches.** The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list. Phases 0, 3 and 2 all touched it, and phase 2 added `e2e/miss-sheet.spec.ts`, which has therefore never run.
-- **The `CLAUDE.md` smoke pass is owed for phases 0, 1, 3 and 2** and for every later phase touching the set list (5 and 6 both do). It needs `make dev` running, which is the user's call to start. Phase 3 is the one that most wants it: the new history query has never run against a real database, and no unit test executes SQL. Its rendered statement was checked by hand through `toSQL()`, which proves it parses, not that it returns the right rows.
-- **Migrations `0046` to `0049` have not run against a real database.** They are generated, committed and reviewed; nothing has been applied outside a throwaway container. `0048` is a single `DROP NOT NULL`; `0049` is a single `ADD COLUMN … NOT NULL DEFAULT 'all'` whose default *is* the backfill.
+- **The `CLAUDE.md` smoke pass is owed for phases 0, 1, 3, 2 and 4** and for every later phase touching the set list (5 and 6 both do). Phase 4's UI is one chip on a scheme nothing can select yet, so it is the least urgent of the five. It needs `make dev` running, which is the user's call to start. Phase 3 is the one that most wants it: the new history query has never run against a real database, and no unit test executes SQL. Its rendered statement was checked by hand through `toSQL()`, which proves it parses, not that it returns the right rows.
+- **Migrations `0046` to `0050` have not run against a real database.** They are generated, committed and reviewed; nothing has been applied outside a throwaway container. `0048` is a single `DROP NOT NULL`; `0049` is a single `ADD COLUMN … NOT NULL DEFAULT 'all'` whose default *is* the backfill; `0050` adds two nullable columns and backfills nothing.
+- **`E-4`'s message is not built.** The engine holds at the top of a range with no increment, but it emits plain `held`, which is indistinguishable from "not enough clears yet". `E-4` asks for a distinct message; that means a new reason code, and the guard belongs in phase 5's picker anyway, which should refuse to offer `double` without an increment.
 - **`E-13` has no owner.** Changing scope or the gate re-judges the existing window under the new rule, so the dot count moves when a lifter touches a setting. Phase 3 did not build the config-version stamp `E-13` asks for, and it is not live yet because nothing can change the scope from the UI — but phase 5 ships the picker, and it owes this. Section 11 does not assign it to a phase; assign it there when phase 5 starts.
 - **Three release notes are owed at the end, and none of them is a code change.** Phase 1 retired the RPE ladder, so exercises a lifter grinds will start bumping. Phase 3's `D-3` now holds exercises that were quietly banking per-set counts, and the same phase stopped dropping Tired sessions, so a lifter who reports fatigue will see their numbers move again instead of freezing. Phase 2 has now made the third due (`B-4`): volume has always been planned volume relabelled as achieved, so every volume number in the app falls for anyone who misses a rep, starting the day this ships.
 
@@ -271,7 +283,7 @@ The prescription reads **8** throughout the climb. You are not told to do 6, the
 | 3 | 3x8 @ 80 | 8, 8, 8 | yes | **+2.5 kg, prescription resets to 3x6 @ 82.5** |
 | 4 | 3x6 @ 82.5 | 6, 6, 6 | yes (target is 6) | prescription climbs toward 8 at the new load |
 
-Row 4 is the subtlety: after a reset the target is `rep_range_min`, so the first session at the new load clears immediately. That is correct — the point of the reset is that the new load is workable — and it is why `double` pairs naturally with gate 1. With a higher gate the reset session would bank a clear it does not deserve, so **`advance: double` should use gate 1** unless the lifter deliberately wants two sessions at the bottom of each range.
+Row 4 is the subtlety, and **it is the rule §7 step 8 was corrected to match**: after a reset the target is `rep_range_min`, so the first session at the new load clears immediately. That is correct — the point of the reset is that the new load is workable — and it is why `double` pairs naturally with gate 1. With a higher gate the reset session would bank a clear it does not deserve, so **`advance: double` should use gate 1** unless the lifter deliberately wants two sessions at the bottom of each range.
 
 An earlier draft of this table showed the prescription itself walking 6, 7, 8. That is a rep ladder bounded by a range, not double progression, and it has a concrete failure: `metTargetReps` is `actualReps >= target`, so a lifter doing 12/10/9 against a target of 8 clears and the target advances by exactly one, permanently lagging what they can actually do.
 
@@ -284,8 +296,8 @@ An earlier draft of this table showed the prescription itself walking 6, 7, 8. T
 | Column | Change | Notes |
 |---|---|---|
 | `target_reps` | unchanged | Stays "what you are trying to hit today". When a range is set the scheme moves this value between the bounds. Everything that reads it (display, logging, PR comparison, cycle sync) keeps working untouched. |
-| `rep_range_min` | **new**, nullable int | Bottom of the range. Null means fixed target. |
-| `rep_range_max` | **new**, nullable int | Top of the range. Null means fixed target. |
+| `rep_range_min` | **new**, nullable int | **Done, phase 4** (migration `0050`). Bottom of the range. Null means fixed target. |
+| `rep_range_max` | **new**, nullable int | **Done, phase 4** (migration `0050`). Top of the range. Null means fixed target. |
 | `target_rir` | unchanged, newly **read** | Becomes axis 3. Already exists and is rendered in set summaries; no *progression* code reads it and `getProgressiveSuggestions` does not select it (`A2`, `B-22`). |
 
 Constraint: `rep_range_min` and `rep_range_max` are both null or both set; when set, `min <= target_reps <= max`. Enforced in the Zod validator and asserted in the engine.
@@ -319,7 +331,7 @@ Six new columns is a lot, and the alternative is a single `progression_config` J
 | `is_failed` | unchanged | Stays as the explicit "attempted and missed" marker. |
 | `was_easy` | unchanged | Keeps working as the gate bypass (`SI-13`). |
 
-**Five migrations total**, not three (`0046`, `0047` and `0048` shipped, and `0049` carries the first of the axis columns): rep range columns, progression axis columns, `rpe` nullable, plus the two in section 14 — `set_type` and the prescribed-set-count snapshot on `workout_sets` (`P-1`), and `program_exercise_id` with a **unique index replacement** on `workout_sets` (`P-2`). Two of the five land on the busiest write path in the app, which is why they get their own phase. Each generated with `pnpm db:generate` and committed with its schema change, per `CLAUDE.md`.
+**Five migrations total**, not three (`0046`, `0047`, `0048` and `0050` shipped, and `0049` carries the first of the axis columns): rep range columns, progression axis columns, `rpe` nullable, plus the two in section 14 — `set_type` and the prescribed-set-count snapshot on `workout_sets` (`P-1`), and `program_exercise_id` with a **unique index replacement** on `workout_sets` (`P-2`). Two of the five land on the busiest write path in the app, which is why they get their own phase. Each generated with `pnpm db:generate` and committed with its schema change, per `CLAUDE.md`.
 
 ---
 
@@ -367,9 +379,11 @@ Net cost to a normal set where everything went to plan: zero extra taps. Net cos
 8. **Advance.** Apply axis 6:
    - `load`: current load + increment, snapped to the increment grid. **"Current load" under scope `all` is the maximum across the exercise's working sets**, not the minimum and not per set. `D-3` declines to re-level plans that have already drifted (62.5 / 62.5 / 60 / 60), so the four sets can legitimately disagree; taking the max levels them up on the first advance, which is the outcome a lifter wants and the only one `SI-37`'s floor will accept. Taking the min would propose a downgrade for set 1, which the floor rejects, leaving the exercise permanently pending. The same rule fixes the load comparison in step 7's `SI-11` clause.
    - `reps`: target + rep increment.
-   - `double`: **the prescription is the top of the range for the whole climb.** `target_reps` stays at `rep_range_max` and the load moves only when every scope-determining set reaches it; the advance is then load + increment with `target_reps` reset to `rep_range_min` and climbing back by performance, not by prescription.
+   - `double`: **the load moves only when every scope-determining set reaches `rep_range_max`.** The advance is then load + increment with `target_reps` reset to `rep_range_min`. Below the top of the range the reps move instead: `target_reps` becomes **the reps the binding set actually did**, capped at `rep_range_max`, with a floor of one increment so it always moves.
 
-     This is the correction of an earlier draft that moved `target_reps` up one rep per session (6, then 7, then 8). That is a rep ladder bounded by a range, not double progression, and it has a specific failure: `metTargetReps` is `actualReps >= target`, so a lifter who does 12/10/9 against a target of 8 "clears" and the target advances by exactly one regardless of how far they exceeded it. The prescription then permanently lags actual performance. Standard 3x8-12 prescribes 12 throughout; you log 12/10/9 and the load moves when all three reach 12.
+     *Corrected in phase 4, which found this step and §4b's table describing different schemes.* This step said `target_reps` "stays at `rep_range_max`" for the whole climb, which cannot be reconciled with the same sentence resetting it to the minimum, nor with §4b row 4 judging a session against 6. `E-11` makes §4b the fixture, so §4b wins and this step now matches it.
+
+     What survives from the older wording is the objection it raised, and the climb rule above is what answers it: an earlier draft moved `target_reps` up **one rep per session** (6, then 7, then 8), which is a rep ladder bounded by a range. `metTargetReps` is `actualReps >= target`, so a lifter who does 12/10/9 against a target of 8 clears and the target advances by exactly one however far they exceeded it — the prescription then permanently lags what they can do. Climbing to the binding set's own rep count is what removes that lag: 12/10/9 takes the target to 9, and 12/12/12 takes it to the top of the range in one step.
    - `duration` / `distance`: **target** + increment, not *actual* + increment. Closes `A5`, where beating a 5 km target by 200 m permanently ratcheted the plan.
 9. **Readiness.** Apply axis 8: `ignore` passes through, `hold` downgrades to held, `reduce` proposes a back-off. Clears every suggested value, including `adjustedRepsForWeight`, which closes `SI-D2`. (Under `D-4` that field is deleted outright, so this becomes moot once phase 5 lands; state it anyway, because phases 1 to 4 still carry it.)
 
@@ -485,7 +499,11 @@ Shipped on branch `phase-3/session-windows-and-scope`, migration `0049` (`progre
 
 `D-8`'s effort half is **not** built and could not be: no exercise can carry a cap until phase 5. What phase 3 built is the half `D-8` shares with `D-7` — the scope names one set of deciding sets, and `decidingSets` is the single place that answers it, so the cap has one obvious place to hook into. `E-13` is unbuilt and unassigned; see §0's carry-forward.
 
-**Phase 4: rep ranges and double progression.** Range columns, validator, `advance: double` with the reset step, and the `E-1` floor exemption that lets the reset actually write. Delivers 4b, tested against that table (`E-11`). `E-1` is the most likely regression in the plan: test it before writing the feature.
+**Phase 4: rep ranges and double progression. Built.** Range columns (migration `0050`), the paired validator, `double` with the climb and the reset, and `E-1`'s floor exemption — written test-first, as the brief asked. Delivers 4b as a literal fixture (`E-11`), so `E-11` is now closed. Also closed `E-4` (holds rather than climbing past the range) and `E-17`'s ceiling half; `E-17`'s zero rep-increment default is untouched and still open as `SI-D5`.
+
+Shipped on branch `phase-4/rep-ranges`. Section 5's remaining migration is the rest of the axis columns, which is phase 5's. The `reset` reason code was walked through every site in `B-2`.
+
+**It corrected §7 step 8**, which described a different scheme from §4b's table. See the note there; §4b won because `E-11` makes it the fixture.
 
 **Phase 5: axes, presets, and the sheet.** Remaining axis columns, preset mapping, the extended sentence, the three-layer sheet, and `B-22`'s query change so the engine can finally read `target_rir`. Retire `progression_mode` reads and, per `D-4`, `adjustedRepsForWeight` — but keep the column itself for one release (`E-12`). Rewrite the `SI` spec against the new engine, including the corrected consumer count in `SI-33`.
 
@@ -631,7 +649,7 @@ The specs themselves label their tables plain `D1`-`D8`. Prefix them when writin
 
 **Audit findings** (`BACKLOG.md`, "Progression engine audit"), all resolved on completion and to be deleted from the backlog as each phase lands:
 
-`A1` (**closed**, phases 1 and 2), `A2` (phase 5, needs `B-22`), `A3` (**both** halves, phase 6), `A4` (phase 4), `A5` (**phase 5**, not 3 — the fix is axis 6), `A6` (**closed**, phase 3 — the rule is section 7 step 2, not a phase-6 bullet), `A7` (phase 6), `A8` (**closed**, phase 3), `A9` (phase 5, **only if its three artefacts are built**), `A10` (phase 6), `A11` (phases 1 and 6).
+`A1` (**closed**, phases 1 and 2), `A2` (phase 5, needs `B-22`), `A3` (**both** halves, phase 6), `A4` (**closed**, phase 4), `A5` (**phase 5**, not 3 — the fix is axis 6), `A6` (**closed**, phase 3 — the rule is section 7 step 2, not a phase-6 bullet), `A7` (phase 6), `A8` (**closed**, phase 3), `A9` (phase 5, **only if its three artefacts are built**), `A10` (phase 6), `A11` (phases 1 and 6).
 
 The phase numbers above predate phase 0 and refer to the engine phases; phase 0 is prerequisites only and closes no audit finding on its own, though `P-2` closes the standalone duplicate-slot bug recorded beside `A1`.
 
@@ -683,15 +701,15 @@ This is a PWA; cached bundles keep calling the old Server Action for a while, an
 
 These have a defensible answer, so the plan states it rather than raising a decision.
 
-**E-1. `reset` must be exempt from the rep floor.** Double progression's reset step raises load and *lowers* `target_reps` back to `rep_range_min`. The plan ratchet's rule (`SI-37`) is that only a back-off lowers the plan. `reset` must be added to that exemption for the rep dimension while still raising load, or phase 4's headline behaviour is blocked by phase 0's bug fix. Test this explicitly; it is the single most likely regression in the whole plan.
+**E-1. Built in phase 4, test-first. `reset` must be exempt from the rep floor.** Double progression's reset step raises load and *lowers* `target_reps` back to `rep_range_min`. The plan ratchet's rule (`SI-37`) is that only a back-off lowers the plan. `reset` must be added to that exemption for the rep dimension while still raising load, or phase 4's headline behaviour is blocked by phase 0's bug fix. Test this explicitly; it is the single most likely regression in the whole plan.
 
 **E-2. `re-approach` may lower the plan.** It is a back-off by another name (`D-5`), so it is exempt from the floor exactly as `backoff` is.
 
 **E-3. Built in phase 3. Under scope `all`, an advance applies uniformly to every working set.** Not per set. On 4x12 the whole exercise moves to 62.5 together, which is the entire point of `D-3`. Under scope `set` the current per-set behaviour is retained. Under `first` and `last`, the scope decides *whether* the session cleared; the advance still applies to all working sets, because a top set moving while its back-offs stay is a plan nobody wrote.
 
-**E-4. `advance: double` requires a positive load increment.** At `rep_range_max` with no load to add, the reset cannot happen and the exercise would sit at the top of its range forever. The sheet must not offer `double` without an increment, and the engine holds with `held-unknown`'s sibling message ("no load increment set") rather than silently climbing past the range the user configured. Bodyweight work uses `advance: reps` and no range, which is what `SI-D5` was really asking for.
+**E-4. Engine half built in phase 4; the sheet's guard is phase 5's. `advance: double` requires a positive load increment.** At `rep_range_max` with no load to add, the reset cannot happen and the exercise would sit at the top of its range forever. The sheet must not offer `double` without an increment, and the engine holds with `held-unknown`'s sibling message ("no load increment set") rather than silently climbing past the range the user configured. Bodyweight work uses `advance: reps` and no range, which is what `SI-D5` was really asking for.
 
-**E-5. Ranges apply to reps only.** `duration` and `distance` take a fixed target. A range plus `advance: double` has no meaning for a plank or a run, and section 3's table should be read as fixed-target for those two presets. This narrows what phase 4 has to build.
+**E-5. Held to in phase 4. Ranges apply to reps only.** `duration` and `distance` take a fixed target. A range plus `advance: double` has no meaning for a plank or a run, and section 3's table should be read as fixed-target for those two presets. This narrows what phase 4 has to build.
 
 **E-6. Built in phase 3. `was_easy` bypasses the gate at session level.** Under scope `all`, an easy verdict on one set does not carry the session. The rule becomes: the session cleared, and at least one of the scope-determining sets was marked easy. This preserves `SI-13`'s intent without letting one easy set speak for four.
 
@@ -703,7 +721,7 @@ These have a defensible answer, so the plan states it rather than raising a deci
 
 **E-10. Cross-programme history stays separate.** The history query filters by `program_id`. Bench in "Push 1" and bench in "Push 2" progress independently, and that stays true. It is defensible (different slots, different prescriptions) but it has never been written down, so it is written down here.
 
-**E-11. 4a built in phase 3; 4b is phase 4's. Test fixtures come from sections 4a and 4b.** Both worked examples are session-by-session tables and should be encoded literally as unit-test fixtures, asserting the suggestion and the dot count at every step. If the code disagrees with those tables, the code is wrong.
+**E-11. Closed: 4a in phase 3, 4b in phase 4. Test fixtures come from sections 4a and 4b.** Both worked examples are session-by-session tables and should be encoded literally as unit-test fixtures, asserting the suggestion and the dot count at every step. If the code disagrees with those tables, the code is wrong.
 
 **E-13. Still open and unassigned; §0's carry-forward names it. Changing an exercise's configuration re-judges history retroactively.** Switch preset, gate, scope, or fixed-to-range, and the existing 5-session window is re-evaluated under the new rule: sessions that cleared yesterday can un-clear today. `E-9` protects against plan *shape* changes but nothing protects against *rule* changes. Stamp a config version on the exercise and count only sessions logged since the last change. Anything else means the dot count moves when the lifter touches a setting, which reads as a bug.
 
@@ -713,7 +731,7 @@ These have a defensible answer, so the plan states it rather than raising a deci
 
 **E-16. Built in phase 3. Two sessions of the same program on one day consume two window slots.** The window counts sessions, not days. Deliberate, but state it.
 
-**E-17. `advance: reps` has no ceiling.** `E-4` guards `double` against a missing load increment; the mirror case is a rep ladder with nowhere to stop, which climbs 8, 9, 10 … 40 forever. This is also the real content of `SI-D5`: the rep fallback needs `overload_increment_reps > 0` and that column **defaults to 0** (`schema/programs.ts:61`), so bodyweight exercises hold forever out of the box. Section 13 claimed `advance: reps` closes `SI-D5`; it does not unless the zero-increment default is fixed too. Treat a missing rep increment as 1 in the engine (no migration) and give `advance: reps` an optional `rep_range_max` stop.
+**E-17. Ceiling built in phase 4; the zero-increment half is still open. `advance: reps` has no ceiling.** `E-4` guards `double` against a missing load increment; the mirror case is a rep ladder with nowhere to stop, which climbs 8, 9, 10 … 40 forever. This is also the real content of `SI-D5`: the rep fallback needs `overload_increment_reps > 0` and that column **defaults to 0** (`schema/programs.ts:61`), so bodyweight exercises hold forever out of the box. Section 13 claimed `advance: reps` closes `SI-D5`; it does not unless the zero-increment default is fixed too. Treat a missing rep increment as 1 in the engine (no migration) and give `advance: reps` an optional `rep_range_max` stop.
 
 **E-18. A back-off has no floor.** Repeated 10% cuts walk a lift below an empty bar, and at `baseWeight = 0` (bodyweight) both the back-off and the `re-approach` compute to 0. Floor the result at one increment, and make back-off a no-op at zero load.
 
@@ -784,7 +802,7 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 
 ### Things that must be updated in step
 
-**B-7. Program sharing carries progression settings between users.** `program-shares.ts:205-209` copies `progressionMode`, `progressionRequiredHits`, `progressionApplyToPlan` and both increments into the shared payload. Phase 5 retires `progression_mode`, so the share format changes. *Required:* accept both shapes on import for at least one release, and map a legacy `progressionMode` through the same table as section 10's migration. A share created by an old client must still import.
+**B-7. Program sharing carries progression settings between users. Phase 4 added the rep range to the copy** — it copies sets field by field, so a shared double-progression program would have arrived as a fixed-target one. `program-shares.ts:205-209` copies `progressionMode`, `progressionRequiredHits`, `progressionApplyToPlan` and both increments into the shared payload. Phase 5 retires `progression_mode`, so the share format changes. *Required:* accept both shapes on import for at least one release, and map a legacy `progressionMode` through the same table as section 10's migration. A share created by an old client must still import.
 
 **B-8. The MCP tool exposes the mode as an enum.** `mcp/tools/programs.ts:204` validates `progressionMode: z.enum(PROGRESSION_MODES)` and defaults it at `:275`. Phase 5 must update the enum, the tool description at `:192`, and keep accepting the old values so an agent mid-conversation does not start failing.
 
@@ -816,7 +834,7 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 
 **B-23. The AI plan prompt.** `ai-prompt.ts:167` describes the old modes. Section 9 and phase 6 mention it; this section claimed to trace everything outside the engine and did not list it.
 
-**B-13. The export format uses its own compact keys for progression settings.** `ExportedProgram` (`types/workout.ts:399-423`) carries the per-exercise settings, and the export/import code shortens the column names: `progressionMode` is emitted as `mode` and `overloadIncrementKg` as `incKg`, with defaults applied on the way out (`programs.ts:856-858`, `:917-919`) and expanded back on the way in (`:1070-1072`). So phase 5 changes a **wire format**, not just a column.
+**B-13. The export format uses its own compact keys for progression settings. Phase 4 added `repMin`/`repMax`**, optional on import so an older export still loads. `ExportedProgram` (`types/workout.ts:399-423`) carries the per-exercise settings, and the export/import code shortens the column names: `progressionMode` is emitted as `mode` and `overloadIncrementKg` as `incKg`, with defaults applied on the way out (`programs.ts:856-858`, `:917-919`) and expanded back on the way in (`:1070-1072`). So phase 5 changes a **wire format**, not just a column.
 
 *Required:* map the legacy `mode` value through the same table as section 10's migration on import, keep emitting something an old client can read for at least one release, and never reject an export a user made last month. Same requirement as `B-7`, and note the two formats are separate code paths that must both be updated.
 
