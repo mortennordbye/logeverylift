@@ -116,6 +116,9 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Progression engine audit (2026-08-29)
 
+**The plan that resolves all of these is [`docs/progression-revamp-plan.md`](docs/progression-revamp-plan.md).**
+Start there rather than picking entries off individually; they are interdependent and `A1` blocks most of them.
+
 Findings from a domain audit of [`smart-incrementation`](docs/specs/smart-incrementation.md) — does the engine
 behave the way it should for someone who actually trains. The audit's one shippable fix (a progression must
 never lower the plan) landed with the audit; everything below is deferred. `A1` is the root cause and most of
