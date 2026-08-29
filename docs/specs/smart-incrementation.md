@@ -292,16 +292,19 @@ Pending sets are matched against their *current* values with any live session ov
 *Why:* the number a set was logged at is history, not a plan. Warm-ups are excluded per SI-14.
 *Covered by:* `progressive-suggestions.test.ts` — "skips completed sets…", "skips warm-up sets".
 
-### SI-37 — Only actionable reasons write, and a progression never lowers the plan
-`held`, `held-readiness` and `manual` produce nothing. Every `progressed*` reason writes only when its value is **above** what the plan already holds — weight, reps, duration and distance alike. `deload` and `retry` are exempt: both are recovery moves, and a downward move is still a move.
+### SI-37 — Only actionable reasons write, and only a deload lowers the plan
+`held`, `held-readiness` and `manual` produce nothing. Every other reason writes only when its value lands **strictly above** what the plan already holds, in whichever dimension it moves. `deload` is the single exception — backing off is the whole point of it.
 
-*Why:* base values come from the most recent *logged* set, not the planned one (SI-1's "base weight"), so after one lighter session a `progressed` suggestion can land **below** the planned number. Unfloored, the ratchet writes it and the "↑" chip silently downgrades the programme — plan 80 kg, two hit sessions at 75, and the plan is rewritten to 77.5.
+*Why:* base values come from the most recent *logged* set, not the planned one (see **Base weight**), so after one lighter session a `progressed` suggestion can land **below** the planned number. Unfloored, the ratchet writes it and the "↑" chip silently downgrades the programme: plan 80 kg, two hit sessions at 75, plan rewritten to 77.5. `retry` needs the same floor for a different reason — it reclaims a weight held in a recent session, which says nothing about the plan, so when the plan is already higher there is nothing to reclaim there.
 
-The floor has to hold in **both** consumers, which is the trap here: `pendingProgressions` backs the exercise-level apply-all chip, but the per-set chip goes through `applySuggestion` in `WorkoutSetsClient`, which builds its own plan payload and never calls the engine. A guard added to only one of them covers the affordance nobody taps. `applyRepSuggestion` had the rep half of this floor (`Math.max`) from the start; the others did not.
+Two things make this easy to get wrong, both of which it was:
+
+- **The floor is measured against the plan, not against today's values.** `pendingProgressions` receives override-folded sets, because "has the lifter already taken this?" is a question about today. "Would this lower the plan?" is a question about the blueprint, and answering it against the override-folded value re-opens the hole whenever the lifter has hand-edited today's set — plan 80, dropped to 70, a 75 suggestion reads as an increase. Hence the separate `planned` field. Both conditions apply: the first keeps the chip settling to a tick once tapped, the second is the floor.
+- **There are two consumers and they must not each implement it.** `pendingProgressions` backs the exercise-level apply-all chip; the per-set chip goes through `applySuggestion` in `WorkoutSetsClient`. That function used to build its own payload, and had drifted — no floor, and it wrote the carried-along weight for a rep retry, which the engine does not. It now derives its write from `pendingProgressions` for the single set, so the rule has one implementation.
 
 Display follows the same rule: the chip's arrow is derived from the comparison rather than the reason, so a below-plan `progressed` value renders `↓`, not `↑`. It is still offered for the live session — a session override reflects what was actually lifted and is legitimately allowed to go down.
 
-*Covered by:* `progressive-suggestions.test.ts` — "ignores held, held-readiness and manual suggestions", "does not lower a rep target that is already higher", "does not lower a planned weight that is already higher", "does not lower a planned duration…", "does not lower a planned distance…", "still deloads below a planned weight — the floor is progressions only", "includes deloads…".
+*Covered by:* `progressive-suggestions.test.ts` — "ignores held, held-readiness and manual suggestions", "does not lower a rep target that is already higher", "does not lower a planned weight that is already higher", "does not lower a planned duration…", "does not lower a planned distance…", "does not let a retry lower the plan either", "floors against the plan, not today's override", "still progresses above the plan when today's set was dropped", "still deloads below a planned weight — the floor is progressions only".
 
 ### SI-38 — The server re-reads the opt-in flag, and opting out is a success
 `applyProgressionToPlan` re-checks `progressionApplyToPlan` and returns success without writing when it is off.

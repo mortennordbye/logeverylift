@@ -178,7 +178,10 @@ export function WorkoutSetsClient({
   // already at the suggested numbers.
   const pending = isWorkout
     ? pendingProgressions(
-        displaySets,
+        // `planned` carries the un-overridden blueprint alongside today's
+        // values: the first decides whether the suggestion has been taken yet,
+        // the second whether writing it would lower the plan.
+        displaySets.map((s) => ({ ...s, planned: sets.find((p) => p.id === s.id) })),
         suggestions,
         workoutSession?.completedSetIds ?? EMPTY_SET_IDS,
       )
@@ -232,38 +235,22 @@ export function WorkoutSetsClient({
       ...(durationSeconds != null ? { durationSeconds } : {}),
       ...(distanceMeters != null ? { distanceMeters } : {}),
     });
-    // Persist only what this mode actually progressed. A duration bump carries
-    // the unchanged weight along for the override; writing that back would
-    // overwrite the planned weight with whatever was last lifted.
-    //
-    // A progression never lowers the plan — the same floor pendingProgressions
-    // applies to the apply-all chip, and the one applyRepSuggestion already
-    // applies to reps. A suggestion is built from the most recent *logged*
-    // value, so after a lighter session it can sit below the planned one.
-    // Deload and retry are recovery moves and still write in either direction.
-    // The session override above is untouched either way: it reflects what was
-    // actually lifted, which is legitimately allowed to go down.
-    const isProgression =
-      suggestions?.[setId]?.reason.startsWith("progressed") ?? false;
-    const lowersPlan =
-      isProgression &&
-      (durationSeconds != null
-        ? durationSeconds <= (set?.durationSeconds ?? 0)
-        : distanceMeters != null
-        ? distanceMeters <= (set?.distanceMeters ?? 0)
-        : suggestedWeightKg <= Number(set?.weightKg ?? 0));
-    if (lowersPlan) return;
-    persistToPlan([
-      durationSeconds != null
-        ? { setId, durationSeconds }
-        : distanceMeters != null
-        ? { setId, distanceMeters }
-        : {
-            setId,
-            weightKg: suggestedWeightKg,
-            ...(adjustedReps != null ? { targetReps: adjustedReps } : {}),
-          },
-    ]);
+    // Derive the plan write from pendingProgressions rather than hand-building
+    // it. This used to construct its own payload, which drifted from the engine
+    // in two ways: it wrote the carried-along weight for a rep retry, and it
+    // had no floor, so a suggestion sitting below the plan rewrote the plan
+    // downward behind an "↑" chip. One rule, one implementation, both consumers
+    // — the apply-all chip above passes the same shape.
+    const display = displaySets.find((s) => s.id === setId);
+    persistToPlan(
+      display
+        ? pendingProgressions(
+            [{ ...display, planned: set }],
+            suggestions,
+            workoutSession.completedSetIds ?? EMPTY_SET_IDS,
+          )
+        : [],
+    );
   }
 
   function applyRepSuggestion(setId: number, suggestedReps: number) {

@@ -894,6 +894,49 @@ describe("pendingProgressions", () => {
     expect(result).toEqual([]);
   });
 
+  it("floors against the plan, not today's override", () => {
+    // The set is shown at 70 because the lifter hand-dropped it this session,
+    // but the plan still holds 80. Measuring the floor against the 70 makes a
+    // 75 suggestion look like an increase and rewrites the plan down to 75.
+    const result = pendingProgressions(
+      [
+        makeSet({
+          weightKg: "70.00",
+          planned: { weightKg: "80.00", targetReps: 8 },
+        }),
+      ],
+      { 1: makeSuggestion({ suggestedWeightKg: 75 }) },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("still progresses above the plan when today's set was dropped", () => {
+    const result = pendingProgressions(
+      [
+        makeSet({
+          weightKg: "70.00",
+          planned: { weightKg: "80.00", targetReps: 8 },
+        }),
+      ],
+      { 1: makeSuggestion({ suggestedWeightKg: 82.5 }) },
+      NONE,
+    );
+    expect(result).toEqual([{ setId: 1, weightKg: 82.5 }]);
+  });
+
+  it("does not let a retry lower the plan either", () => {
+    // Retry reclaims a weight held in a recent session, which says nothing
+    // about the plan — when the plan is already higher there is nothing to
+    // reclaim there.
+    const result = pendingProgressions(
+      [makeSet({ weightKg: "75.00", planned: { weightKg: "80.00", targetReps: 8 } })],
+      { 1: makeSuggestion({ reason: "retry", suggestedWeightKg: 77.5 }) },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
   it("still deloads below a planned weight — the floor is progressions only", () => {
     const result = pendingProgressions(
       [makeSet({ weightKg: "85.00" })],

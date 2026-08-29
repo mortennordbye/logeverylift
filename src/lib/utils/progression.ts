@@ -289,6 +289,25 @@ export type PendingSetInput = {
   durationSeconds?: number | null;
   distanceMeters?: number | null;
   setType?: string | null;
+  /**
+   * The same set as the *plan* holds it, before any session override.
+   *
+   * Two different questions are being asked of one set. "Has the lifter already
+   * taken this suggestion?" is about today's values, overrides folded in.
+   * "Would writing it lower the plan?" is about the blueprint. Answering the
+   * second against the override-folded value gets it wrong whenever the lifter
+   * has hand-edited today's set: plan 80, today dropped to 70, a 75 suggestion
+   * then reads as an increase and quietly rewrites the plan down to 75.
+   *
+   * Optional: when omitted the set's own values are used, which is correct for
+   * any caller that isn't override-folding in the first place.
+   */
+  planned?: {
+    weightKg: string | null;
+    targetReps: number | null;
+    durationSeconds?: number | null;
+    distanceMeters?: number | null;
+  };
 };
 
 /**
@@ -301,8 +320,10 @@ export type PendingSetInput = {
  * while it would actually change. Completed sets are excluded — the number they
  * were logged at is history, not a plan.
  *
- * A `progressed*` reason only ever moves a value upward. Deload and retry are
- * recovery moves and write in either direction.
+ * Only a deload lowers the plan. Every other reason must land strictly above
+ * what the plan already holds, measured against `planned` rather than today's
+ * possibly-overridden value. Both conditions apply: the first keeps the chip
+ * settling to a tick once taken, the second is the floor.
  */
 export function pendingProgressions(
   sets: PendingSetInput[],
@@ -322,18 +343,26 @@ export function pendingProgressions(
     const currentWeight = Number(set.weightKg ?? 0);
     const currentReps = set.targetReps ?? 0;
 
+    // The plan's own values — what a write would be replacing. Falls back to
+    // the set itself when the caller isn't override-folding. See `planned`.
+    const plan = set.planned ?? set;
+    const planWeight = Number(plan.weightKg ?? 0);
+    const planReps = plan.targetReps ?? 0;
+    const planDuration = plan.durationSeconds ?? 0;
+    const planDistance = plan.distanceMeters ?? 0;
+
     switch (s.reason) {
       case "progressed":
       case "deload": {
-        // A progression never lowers the plan. The suggestion is built from the
-        // most recent *logged* weight, so after a lighter session it can land
-        // below the planned one, and an unguarded write turns the "↑" chip into
-        // a silent downgrade of the programme. Deload is the deliberate
-        // exception — a back-off is still a move, so it writes either way.
+        // A suggestion is built from the most recent *logged* weight, so after
+        // a lighter session it can land below the planned one. Writing that
+        // turns the "↑" chip into a silent downgrade of the programme. Deload
+        // is the one exception — backing off is the whole point of it.
         const moves =
           s.reason === "deload"
             ? currentWeight !== s.suggestedWeightKg
-            : s.suggestedWeightKg > currentWeight;
+            : currentWeight !== s.suggestedWeightKg &&
+              s.suggestedWeightKg > planWeight;
         if (moves) {
           pending.push({
             setId: set.id,
@@ -345,24 +374,36 @@ export function pendingProgressions(
         }
         break;
       }
+      // Retry reclaims ground held in a recent session, so it is measured
+      // against history — which says nothing about the plan. When the plan
+      // already holds the higher number there is nothing to reclaim there, and
+      // writing the lower one is the same downgrade a progression would be.
       case "retry":
         if (s.suggestedReps !== undefined) {
-          if (s.suggestedReps !== currentReps) {
+          if (s.suggestedReps !== currentReps && s.suggestedReps > planReps) {
             pending.push({ setId: set.id, targetReps: s.suggestedReps });
           }
-        } else if (currentWeight !== s.suggestedWeightKg) {
+        } else if (
+          currentWeight !== s.suggestedWeightKg &&
+          s.suggestedWeightKg > planWeight
+        ) {
           pending.push({ setId: set.id, weightKg: s.suggestedWeightKg });
         }
         break;
       case "progressed-reps":
-        if (s.suggestedReps !== undefined && s.suggestedReps > currentReps) {
+        if (
+          s.suggestedReps !== undefined &&
+          s.suggestedReps !== currentReps &&
+          s.suggestedReps > planReps
+        ) {
           pending.push({ setId: set.id, targetReps: s.suggestedReps });
         }
         break;
       case "progressed-time":
         if (
           s.suggestedDurationSeconds !== undefined &&
-          s.suggestedDurationSeconds > (set.durationSeconds ?? 0)
+          s.suggestedDurationSeconds !== (set.durationSeconds ?? 0) &&
+          s.suggestedDurationSeconds > planDuration
         ) {
           pending.push({
             setId: set.id,
@@ -373,7 +414,8 @@ export function pendingProgressions(
       case "progressed-distance":
         if (
           s.suggestedDistanceMeters !== undefined &&
-          s.suggestedDistanceMeters > (set.distanceMeters ?? 0)
+          s.suggestedDistanceMeters !== (set.distanceMeters ?? 0) &&
+          s.suggestedDistanceMeters > planDistance
         ) {
           pending.push({
             setId: set.id,
