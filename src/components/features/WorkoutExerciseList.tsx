@@ -1,7 +1,7 @@
 "use client";
 
 import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
-import { logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
+import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import type { Discipline } from "@/lib/utils/discipline";
 import type { ProgramSet } from "@/types/workout";
@@ -55,6 +55,10 @@ export function WorkoutExerciseList({
   // Rendered output only — the toggle handlers below still read
   // workoutSession.overrides directly, since those write to the database.
   const renderedOverrides = useRenderedOverrides();
+  // The same queue-backed writer the set list uses. Calling the Server Actions
+  // directly meant a checkmark could fail silently while the UI showed the
+  // exercise complete, and offline it threw with nothing queued.
+  const { logWithRetry, unlogWithRetry } = useWorkoutSetWriter();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -96,7 +100,7 @@ export function WorkoutExerciseList({
       if (sessionId != null) {
         await Promise.all(
           exercise.sets.map((s) =>
-            unlogWorkoutSet({
+            unlogWithRetry({
               sessionId,
               exerciseId: exercise.exerciseId,
               setNumber: exercise.sets.indexOf(s) + 1,
@@ -113,33 +117,48 @@ export function WorkoutExerciseList({
       exercise.sets.forEach((s) => workoutSession.addCompletedSet(s.id));
       if (sessionId != null) {
         await Promise.all(
-          setsToLog.map((s) =>
-            exercise.isRunning
-              ? logWorkoutSet({
-                  sessionId,
-                  exerciseId: exercise.exerciseId,
-                  setNumber: exercise.sets.indexOf(s) + 1,
-                  programSetId: s.id,
-                  actualReps: 0,
-                  weightKg: 0,
-                  distanceMeters: s.distanceMeters ?? undefined,
-                  durationSeconds: s.durationSeconds ?? undefined,
-                  restTimeSeconds: s.restTimeSeconds ?? 0,
-                  isCompleted: true,
-                })
-              : logWorkoutSet({
-                  sessionId,
-                  exerciseId: exercise.exerciseId,
-                  setNumber: exercise.sets.indexOf(s) + 1,
-                  programSetId: s.id,
-                  targetReps: s.targetReps ?? undefined,
-                  actualReps: s.targetReps ?? 0,
-                  weightKg: Number(s.weightKg ?? 0),
-                  durationSeconds: s.durationSeconds ?? undefined,
-                  restTimeSeconds: s.restTimeSeconds ?? 0,
-                  isCompleted: true,
-                }),
-          ),
+          setsToLog.map((s) => {
+            // The set list's payload, built from the same overrides: a weight
+            // corrected in the session, a note, the reps and effort a miss
+            // sheet recorded. The checkmark used to write the program's
+            // planned values over all of it.
+            const ov = workoutSession.overrides[s.id];
+            if (exercise.isRunning) {
+              return logWithRetry({
+                sessionId,
+                exerciseId: exercise.exerciseId,
+                setNumber: exercise.sets.indexOf(s) + 1,
+                programSetId: s.id,
+                actualReps: 0,
+                weightKg: 0,
+                distanceMeters: ov?.distanceMeters ?? s.distanceMeters ?? undefined,
+                durationSeconds: ov?.durationSeconds ?? s.durationSeconds ?? undefined,
+                restTimeSeconds: s.restTimeSeconds ?? 0,
+                notes: ov?.notes ?? null,
+                isCompleted: true,
+              });
+            }
+            const target = ov?.targetReps ?? s.targetReps ?? 0;
+            const failed = ov?.isFailed ?? false;
+            return logWithRetry({
+              sessionId,
+              exerciseId: exercise.exerciseId,
+              setNumber: exercise.sets.indexOf(s) + 1,
+              programSetId: s.id,
+              targetReps: target > 0 ? target : undefined,
+              actualReps: ov?.actualReps ?? (failed ? 0 : target),
+              weightKg: ov?.weightKg ?? Number(s.weightKg ?? 0),
+              durationSeconds: ov?.durationSeconds ?? s.durationSeconds ?? undefined,
+              restTimeSeconds: s.restTimeSeconds ?? 0,
+              // One tap for a whole exercise says even less about effort than
+              // one tap for a set. Only a value the lifter supplied is sent.
+              rir: failed ? 0 : ov?.rir,
+              notes: ov?.notes ?? null,
+              isCompleted: true,
+              isFailed: failed,
+              wasEasy: !failed && (ov?.wasEasy ?? false),
+            });
+          }),
         );
       }
     }
