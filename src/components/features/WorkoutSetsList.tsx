@@ -165,6 +165,10 @@ export function WorkoutSetsList({
   } | null>(null);
   const [missReps, setMissReps] = useState(0);
   const [missRir, setMissRir] = useState<number | null>(null);
+  // Dismissed for this exercise, this session. Deliberately not persisted: the
+  // prompt is one tap, and the session it is holding open is worth re-offering
+  // if the lifter comes back to the exercise.
+  const [effortSkipped, setEffortSkipped] = useState(false);
   const [restMinStr, setRestMinStr] = useState("1");
   const [restSecStr, setRestSecStr] = useState("0");
   const restRowRef = useRef<HTMLDivElement>(null);
@@ -273,6 +277,67 @@ export function WorkoutSetsList({
     setMissReps(target);
     setMissRir(workoutSession?.overrides[setId]?.rir ?? null);
     setMissSheet({ setId, setNumber, targetReps: target });
+  };
+
+  /**
+   * The exercise's effort prompt, or null when it has nothing to ask.
+   *
+   * It asks only when a cap is prescribed (D-2: nobody is nagged for effort
+   * they did not ask to be measured on), only once the last working set is
+   * logged, and only while that set carries no effort. Until it is answered
+   * the session is `unknown` — neither a clear nor a miss — so the prompt is
+   * the thing standing between the lifter and their dots moving, and it says so.
+   */
+  const effortPrompt = (() => {
+    if (!isWorkout || effortSkipped) return null;
+    const working = flatItems.filter(
+      (i): i is SetFlatItem => i.type === "set" && (i.set.setType ?? "working") === "working",
+    );
+    const last = working[working.length - 1];
+    if (!last || last.set.targetRir == null) return null;
+    if (!activeCompletedSets.has(last.set.id)) return null;
+    if (workoutSession?.overrides[last.set.id]?.rir != null) return null;
+    const setItems = flatItems.filter((i): i is SetFlatItem => i.type === "set");
+    return {
+      set: last.set,
+      setIndex: setItems.findIndex((s) => s.set.id === last.set.id),
+    };
+  })();
+
+  /**
+   * Answer the prompt: re-log the set with the reserve the lifter reported.
+   *
+   * Through the same queue-backed writer as every other log, not fired at the
+   * Server Action directly — this is a write to an already-logged set and it
+   * has to survive going offline like the rest of them.
+   */
+  const logEffort = async (set: ProgramSet, setIndex: number, rir: number) => {
+    if (sessionId == null || exerciseId == null) return;
+    const ov = workoutSession?.overrides[set.id];
+    const tr = ov?.targetReps ?? set.targetReps ?? 0;
+    workoutSession?.setOverride(set.id, {
+      ...ov,
+      targetReps: tr,
+      weightKg: ov?.weightKg ?? Number(set.weightKg ?? 0),
+      rir,
+    });
+    await logWithRetry({
+      sessionId,
+      exerciseId,
+      setNumber: setIndex + 1,
+      programSetId: set.id,
+      targetReps: tr > 0 ? tr : undefined,
+      actualReps: ov?.actualReps ?? tr,
+      weightKg: ov?.weightKg ?? Number(set.weightKg ?? 0),
+      durationSeconds: ov?.durationSeconds ?? set.durationSeconds ?? undefined,
+      distanceMeters: ov?.distanceMeters ?? set.distanceMeters ?? undefined,
+      rir,
+      restTimeSeconds: 0,
+      notes: ov?.notes ?? null,
+      isCompleted: true,
+      isFailed: ov?.isFailed ?? false,
+      wasEasy: ov?.wasEasy ?? false,
+    });
   };
 
   const saveMissSheet = () => {
@@ -873,6 +938,39 @@ export function WorkoutSetsList({
         </SortableContext>
       </DndContext>
 
+      {/* One effort prompt per exercise, not one per set.
+          Section 6, change 3: it only appears where a cap is prescribed, so
+          the setting the lifter chose is the thing that adds the tap. Roughly
+          five taps a workout, against one per set for everyone. */}
+      {effortPrompt && (
+        <div className="mt-3 rounded-2xl bg-card border border-border p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm font-medium">Last set — how much was left?</span>
+            <button
+              onClick={() => setEffortSkipped(true)}
+              className="text-xs text-muted-foreground font-medium min-h-[44px] px-2"
+            >
+              Skip
+            </button>
+          </div>
+          <div className="flex gap-2">
+            {MISS_RIR_OPTIONS.filter((o) => o.value != null).map(({ value, label }) => (
+              <button
+                key={label}
+                onClick={() => void logEffort(effortPrompt.set, effortPrompt.setIndex, value!)}
+                className="flex-1 h-11 rounded-xl text-sm font-semibold bg-muted text-foreground active:scale-95 transition-transform"
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-muted-foreground/70 mt-2">
+            This exercise only counts a session once you say how much was in
+            reserve. Skipping leaves it neither cleared nor missed.
+          </p>
+        </div>
+      )}
+
       {/* PR Celebration overlay */}
       {prCelebration !== null && (
         <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
@@ -1261,8 +1359,9 @@ export function WorkoutSetsList({
                 ))}
               </ul>
               <p className="text-[10px] text-muted-foreground/70 mt-4">
-                Sessions that did not answer the question — cut short, or
-                reported as tired — neither bank progress nor count against you.
+                Sessions that did not answer the question — cut short, reported
+                as tired, or logged with no effort where an effort cap asked for
+                one — neither bank progress nor count against you.
               </p>
             </>
           )}
@@ -1291,13 +1390,19 @@ function describeSessionOutcome(
 ): string {
   if (session.status === "cleared") return "Cleared";
   if (session.status === "missed") {
+    // The reps were there and the reserve was not. Reporting that as "short of
+    // target" would send the lifter looking for a rep they did not miss.
+    if (session.effortShort) return "Harder than prescribed";
     return session.shortfall != null
       ? `${session.shortfall} rep${session.shortfall === 1 ? "" : "s"} short`
       : "Short of target";
   }
   // Unknown, and the reason is worth naming — "nothing happened" is the report
   // this view exists to prevent.
-  if (session.feeling === "Tired") return "Tired — not counted";
+  if (session.unknownReason === "effort") return "No effort logged";
+  if (session.unknownReason === "tired" || session.feeling === "Tired") {
+    return "Tired — not counted";
+  }
   if (session.prescribedSets != null && session.loggedSets < session.prescribedSets) {
     return `${session.loggedSets} of ${session.prescribedSets} sets logged`;
   }
