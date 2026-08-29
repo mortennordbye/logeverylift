@@ -330,6 +330,13 @@
       "when": 1788002767447,
       "tag": "0046_slot_keyed_workout_sets",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1788003204637,
+      "tag": "0047_self_describing_workout_sets",
+      "breakpoints": true
     }
   ]
 }

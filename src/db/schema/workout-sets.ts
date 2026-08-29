@@ -70,6 +70,22 @@ export const workoutSets = pgTable("workout_sets", {
     onDelete: "set null",
   }),
   setNumber: integer("set_number").notNull(),
+  // "working" | "warmup", snapshotted from the program set at log time.
+  //
+  // set_number counts warm-ups, and asking "did every working set clear in the
+  // session three weeks ago" by joining back to program_sets reads *today's*
+  // plan — wrong the moment a set was added, deleted or reordered. A log has to
+  // describe itself.
+  setType: text("set_type").notNull().default("working"),
+  // How many working sets the plan prescribed for this slot when the set was
+  // logged. A skipped set leaves no row, so set_type alone cannot tell "logged
+  // 3 of a prescribed 4" from "the prescription was 3" — and that distinction
+  // is what decides whether a session counts as cleared or merely unknown.
+  //
+  // Every row logged for one slot in one session carries the same count, unless
+  // the plan changed mid-session, in which case each row carries what was
+  // prescribed when it was written. Null on pre-migration rows.
+  prescribedWorkingSets: integer("prescribed_working_sets"),
   targetReps: integer("target_reps"),
   actualReps: integer("actual_reps").notNull(),
   weightKg: decimal("weight_kg", { precision: 6, scale: 2 }).notNull(),

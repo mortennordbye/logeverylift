@@ -75,7 +75,28 @@ import { revalidatePath } from "next/cache";
  * it decides which row a write lands on, and a slot belonging to another
  * program must never be written into this session.
  */
-type PlanSlot = { programExerciseId: number; programSetId: number | null };
+type PlanSlot = {
+  programExerciseId: number;
+  programSetId: number | null;
+  /** "working" | "warmup", snapshotted onto the row so the log describes itself. */
+  setType: string;
+  /** Working sets the slot prescribes right now. Null when the slot has none. */
+  prescribedWorkingSets: number | null;
+};
+
+/**
+ * Working sets currently prescribed by the slot that owns the row being
+ * selected. Correlated rather than joined so it does not multiply the outer
+ * rows, and inlined here so resolving a slot stays one round trip on the
+ * hottest write path in the app.
+ */
+function workingSetCount(slotIdColumn: string) {
+  return sql<number>`(
+    SELECT COUNT(*)::int FROM "program_sets" wsc
+    WHERE wsc."program_exercise_id" = ${sql.raw(slotIdColumn)}
+      AND wsc."set_type" = 'working'
+  )`;
+}
 
 /**
  * Resolve the plan slot for a set being logged into `session`.
@@ -102,6 +123,8 @@ async function resolvePlanSlot(
         programSetId: programSets.id,
         programExerciseId: programSets.programExerciseId,
         programId: programExercises.programId,
+        setType: programSets.setType,
+        prescribedWorkingSets: workingSetCount('"program_sets"."program_exercise_id"'),
       })
       .from(programSets)
       .innerJoin(
@@ -118,6 +141,8 @@ async function resolvePlanSlot(
         slot: {
           programExerciseId: row.programExerciseId,
           programSetId: row.programSetId,
+          setType: row.setType,
+          prescribedWorkingSets: row.prescribedWorkingSets || null,
         },
       };
     }
@@ -131,10 +156,12 @@ async function resolvePlanSlot(
   // that exercise twice, which is the bug this column exists to fix — the
   // lowest slot id reproduces the previous behaviour rather than inventing a
   // new one.
-  const [slot] = await db
+  const [row] = await db
     .select({
       programExerciseId: programExercises.id,
       programSetId: programSets.id,
+      setType: programSets.setType,
+      prescribedWorkingSets: workingSetCount('"program_exercises"."id"'),
     })
     .from(programExercises)
     .leftJoin(
@@ -153,7 +180,18 @@ async function resolvePlanSlot(
     .orderBy(programExercises.id)
     .limit(1);
 
-  return { slot: slot ?? null };
+  if (!row) return { slot: null };
+  return {
+    slot: {
+      programExerciseId: row.programExerciseId,
+      programSetId: row.programSetId,
+      // The left join misses when the plan has no set at that position, which
+      // says nothing about whether the set logged there was a warm-up. Default
+      // to the common case rather than guessing.
+      setType: row.setType ?? "working",
+      prescribedWorkingSets: row.prescribedWorkingSets || null,
+    },
+  };
 }
 
 /**
@@ -336,6 +374,8 @@ export async function logWorkoutSet(
       exerciseId,
       programExerciseId: slot?.programExerciseId ?? null,
       programSetId: slot?.programSetId ?? null,
+      setType: slot?.setType ?? "working",
+      prescribedWorkingSets: slot?.prescribedWorkingSets ?? null,
       setNumber,
       targetReps,
       actualReps,
@@ -365,6 +405,8 @@ export async function logWorkoutSet(
         // first logged.
         set: {
           programSetId: setValues.programSetId,
+          setType: setValues.setType,
+          prescribedWorkingSets: setValues.prescribedWorkingSets,
           targetReps: setValues.targetReps ?? null,
           actualReps: setValues.actualReps,
           weightKg: setValues.weightKg,
