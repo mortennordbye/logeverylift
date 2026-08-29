@@ -1747,7 +1747,9 @@ function SortableSetRow({
           const currentWeight = Number(set.weightKg ?? 0);
           const currentReps = set.targetReps ?? 0;
           const weightPending =
-            (suggestion.reason === "progressed" || suggestion.reason === "deload") &&
+            (suggestion.reason === "progressed" ||
+              suggestion.reason === "deload" ||
+              suggestion.reason === "re-approach") &&
             currentWeight !== suggestion.suggestedWeightKg;
           const retryWeightPending =
             suggestion.reason === "retry" &&
@@ -1879,6 +1881,20 @@ function SortableSetRow({
                       : "↓"}{" "}
                     {`${suggestion.suggestedWeightKg}kg`}
                     {suggestion.easyOverride && " — felt easy"}
+                  </SuggestionChip>
+                )}
+                {/* Coming back after a break. Rendered apart from a deload
+                    because the two mean opposite things — one says the load is
+                    too heavy for you, the other says nothing about the load at
+                    all — and showing an unexplained drop is what makes people
+                    distrust the chip. */}
+                {suggestion.reason === "re-approach" && (
+                  <SuggestionChip
+                    tone="orange"
+                    applied={!weightPending || isCompleted}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
+                  >
+                    ↓ {suggestion.suggestedWeightKg}kg — back after a break
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "deload" && (

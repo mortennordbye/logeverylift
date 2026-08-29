@@ -1420,6 +1420,10 @@ export async function getProgressiveSuggestions(
     ]);
 
     const readiness = activeSession?.readiness ?? null;
+    // Today, as the plain date the sessions are stored in. The engine takes it
+    // as an argument rather than reading the clock, so it stays a pure function
+    // and a test fixture can sit three months after its own history.
+    const today = new Date().toISOString().slice(0, 10);
 
     // buildSuggestion only special-cases an "endurance" goal (smaller increments);
     // derive it from the user's goals array (endurance wins, else the first goal).
@@ -1603,7 +1607,7 @@ export async function getProgressiveSuggestions(
         equipment: ps.equipment,
         exerciseName: ps.exerciseName,
       };
-      const suggestion = buildSuggestion(sessions, psData, profile, readiness);
+      const suggestion = buildSuggestion(sessions, psData, profile, readiness, today);
       if (suggestion) {
         suggestions[ps.programSetId] = suggestion;
       }
@@ -1771,6 +1775,11 @@ export async function getWorkoutInsight(
     let status: ExerciseInsight["status"];
     if (sug.reason === "deload") {
       status = "deloading";
+    } else if (sug.reason === "re-approach") {
+      // Not "deloading". The pill would report a plateau remedy for someone
+      // who has simply been away, and "re-approach" means the opposite of a
+      // stall — this is the first session back, not the fourth failed one.
+      status = "held";
     } else if (sug.sessionsUntilDeload === 1) {
       status = "near_deload";
     } else if (sug.reason === "progressed" || sug.reason === "progressed-reps" || sug.reason === "reset" || sug.reason === "progressed-time" || sug.reason === "progressed-distance") {
@@ -1858,7 +1867,12 @@ export async function getWorkoutInsight(
   // cycle prescribes those targets weekly, so progression proposes nothing for
   // them and counting them would drag every endurance block toward "stagnating".
   const tracked = suggestions.filter(
-    (s) => s.reason !== "manual" && s.reason !== "held-anchored",
+    (s) =>
+      s.reason !== "manual" &&
+      s.reason !== "held-anchored" &&
+      // A layoff is not a plateau. Counting a re-approach here would tell
+      // someone coming back after three months to try drop sets.
+      s.reason !== "re-approach",
   );
   // "held-unknown" and "held-no-increment" are deliberately not counted: the
   // remedy this insight offers (slow eccentrics, drop sets, a small deload) is

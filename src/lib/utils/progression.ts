@@ -49,6 +49,32 @@ export const DELOAD_THRESHOLD = 3;
 export const DELOAD_FACTOR = 0.9;
 export const DELOAD_PCT = 10;
 
+/**
+ * Days since the last logged session after which the engine stops proposing an
+ * advance and offers a re-approach instead (`D-5`).
+ *
+ * A convention, not a derived number, and written here so it is one constant
+ * rather than a literal scattered through the engine. Without it the window is
+ * the last five sessions whenever they happened, so after three months away the
+ * gate is still satisfied by sessions from before the break and the first
+ * session back opens with "+2.5 kg" on a weight the lifter has not touched
+ * since spring. Detraining was invisible.
+ */
+export const STALE_DAYS = 21;
+
+/**
+ * The multiple of an exercise's own median gap that also counts as fresh
+ * (`E-19`).
+ *
+ * 21 days measured absolutely misfires on deliberately low-frequency work: an
+ * exercise trained on a three-week rotation would sit permanently stale and be
+ * offered -10% every single session, which is the engine punishing someone for
+ * following their own programme. The effective threshold is the larger of the
+ * two, so a frequent lift keeps the 21-day rule and a rare one is judged
+ * against its own rhythm.
+ */
+export const STALE_INTERVAL_MULTIPLE = 2.5;
+
 /** Bounds for the per-exercise back-off controls. */
 export const MIN_BACKOFF_PCT = 5;
 export const MAX_BACKOFF_PCT = 25;
@@ -627,6 +653,38 @@ function minReps(sets: LoggedSet[]): number {
   return sets.reduce((m, s) => Math.min(m, s.actualReps), Infinity);
 }
 
+/** Whole days between two plain dates, positive when `later` is later. */
+function daysBetween(earlier: string, later: string): number {
+  const a = Date.parse(`${earlier}T00:00:00Z`);
+  const b = Date.parse(`${later}T00:00:00Z`);
+  if (Number.isNaN(a) || Number.isNaN(b)) return 0;
+  return Math.round((b - a) / 86_400_000);
+}
+
+/**
+ * How long this exercise may go unlogged before it is stale.
+ *
+ * `STALE_DAYS`, or 2.5x its own median gap between sessions when that is
+ * longer (`E-19`). The median needs at least two sessions to exist; with fewer
+ * there is no rhythm to read and the absolute threshold is all there is.
+ *
+ * Exported because the threshold is the interesting half of the rule — a test
+ * that only checks "stale after 21 days" never sees the low-frequency case.
+ */
+export function staleThresholdDays(sessionDates: string[]): number {
+  if (sessionDates.length < 2) return STALE_DAYS;
+  const gaps: number[] = [];
+  for (let i = 0; i < sessionDates.length - 1; i++) {
+    // Newest first, so the earlier date is the *next* element.
+    gaps.push(daysBetween(sessionDates[i + 1], sessionDates[i]));
+  }
+  gaps.sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  const median =
+    gaps.length % 2 === 0 ? (gaps[mid - 1] + gaps[mid]) / 2 : gaps[mid];
+  return Math.max(STALE_DAYS, Math.ceil(median * STALE_INTERVAL_MULTIPLE));
+}
+
 /**
  * What a back-off proposes, snapped to the increment grid.
  *
@@ -901,13 +959,15 @@ export function pendingProgressions(
 
     switch (s.reason) {
       case "progressed":
+      case "re-approach":
       case "deload": {
         // A suggestion is built from the most recent *logged* weight, so after
         // a lighter session it can land below the planned one. Writing that
-        // turns the "↑" chip into a silent downgrade of the programme. Deload
-        // is the one exception — backing off is the whole point of it.
+        // turns the "↑" chip into a silent downgrade of the programme. Two
+        // exceptions: a deload, because backing off is the whole point of it,
+        // and a re-approach, which is a back-off by another name (E-2).
         const moves =
-          s.reason === "deload"
+          s.reason === "deload" || s.reason === "re-approach"
             ? currentWeight !== s.suggestedWeightKg
             : currentWeight !== s.suggestedWeightKg &&
               s.suggestedWeightKg > planWeight;
@@ -1007,6 +1067,10 @@ export function pendingProgressions(
  * @param profile  User profile for default increment fallback. May be null.
  * @param readiness Pre-workout readiness score (1–5). When ≤ 2, a progression
  *                 suggestion is downgraded to "held-readiness".
+ * @param today    Today's date as `YYYY-MM-DD`, for the staleness rule. Passed
+ *                 in rather than read from the clock so this stays a pure
+ *                 function of its inputs and a fixture can sit three months
+ *                 after its own sessions.
  * @returns        A SetSuggestion, or null if there is no history to base one on.
  */
 export function buildSuggestion(
@@ -1014,6 +1078,7 @@ export function buildSuggestion(
   ps: ProgramSetData,
   profile: UserProfile | null,
   readiness?: number | null,
+  today?: string | null,
 ): SetSuggestion | null {
   const window = sessions.filter((s) => s.sets.length > 0);
   if (window.length === 0) return null;
@@ -1205,6 +1270,33 @@ export function buildSuggestion(
       feeling: o.feeling,
     })),
   };
+
+  // ── Staleness takes priority over everything, including a back-off ──
+  // A layoff is not a stall, and the two want opposite responses: a back-off
+  // says "this load is too heavy for you", a re-approach says "we have not
+  // seen you in a while, start here". Asking the staleness question first is
+  // what keeps three missed sessions before a three-month break from reading
+  // as a plateau.
+  //
+  // Advances only. `manual` still reports what was done last time, which is
+  // exactly what someone coming back wants to see, and `none` shows nothing.
+  const staleAfter = staleThresholdDays(window.map((w) => w.date));
+  const daysSinceLast = today != null ? daysBetween(latest.date, today) : 0;
+  if (
+    advance !== "manual" &&
+    advance !== "none" &&
+    daysSinceLast > staleAfter &&
+    baseWeight > 0
+  ) {
+    return {
+      // D-5: the last logged load, less one back-off. Deliberately the same
+      // size as a deload rather than a second number to keep in step — if one
+      // changes later, both should be reconsidered together.
+      suggestedWeightKg: backoffWeight(baseWeight, backoffPct, incrementKg),
+      ...basedOn,
+      reason: "re-approach",
+    };
+  }
 
   // ── A back-off takes priority over everything the advance would do ──
   // E-18: repeated cuts must not walk a lift below an empty bar, and at zero

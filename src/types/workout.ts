@@ -203,8 +203,13 @@ export type SetSuggestion = {
    *   held-no-increment — double progression at the top of its range with no
    *                       load to add, so the reset it needs cannot happen (E-4)
    *   held-anchored     — the training cycle owns this set's target (A5)
+   *
+   * `re-approach` is the odd one out and the only reason besides `deload` and
+   * `reset` that lowers a number: the exercise has not been logged in long
+   * enough that the window describes a lifter who no longer exists, so it
+   * proposes coming back under the last load rather than on top of it.
    */
-  reason: "progressed" | "held" | "held-readiness" | "held-unknown" | "held-no-increment" | "held-anchored" | "manual" | "progressed-reps" | "reset" | "deload" | "progressed-time" | "progressed-distance" | "retry";
+  reason: "progressed" | "held" | "held-readiness" | "held-unknown" | "held-no-increment" | "held-anchored" | "manual" | "progressed-reps" | "reset" | "deload" | "re-approach" | "progressed-time" | "progressed-distance" | "retry";
   // ─── Enriched fields (populated by getProgressiveSuggestions) ───────────────
   /** How many target-meeting sessions have been recorded in the current consensus window. */
   hitsAchieved: number;

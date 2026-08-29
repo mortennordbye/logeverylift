@@ -9,6 +9,8 @@ import {
   roundToNearest,
   DELOAD_THRESHOLD,
   REQUIRED_HITS,
+  STALE_DAYS,
+  staleThresholdDays,
 } from "@/lib/utils/progression";
 import type {
   LoggedSet,
@@ -2190,5 +2192,124 @@ describe("adaptiveIncrementKg — loadable granularity", () => {
       adaptiveIncrementKg(null, 20, "pull", null, null, "compound", "bodyweight"),
     ).toBe(2.5);
     expect(adaptiveIncrementKg(null, 20, "pull", null, null, "compound", "bands")).toBe(2.5);
+  });
+});
+
+// ─── A10 / D-5 / E-19: staleness ─────────────────────────────────────────────
+
+describe("staleThresholdDays", () => {
+  it("is the flat threshold with too little history to read a rhythm", () => {
+    expect(staleThresholdDays([])).toBe(STALE_DAYS);
+    expect(staleThresholdDays(["2024-01-01"])).toBe(STALE_DAYS);
+  });
+
+  it("stays at the flat threshold for a frequently trained exercise", () => {
+    // Twice a week: 2.5x a 3-4 day gap is well under 21 days.
+    expect(
+      staleThresholdDays(["2024-01-15", "2024-01-11", "2024-01-08", "2024-01-04"]),
+    ).toBe(STALE_DAYS);
+  });
+
+  it("stretches for an exercise deliberately trained on a long rotation", () => {
+    // E-19: a three-week rotation would otherwise sit permanently stale and be
+    // offered -10% every single session — the engine punishing someone for
+    // following their own programme.
+    expect(
+      staleThresholdDays(["2024-03-01", "2024-02-09", "2024-01-19", "2023-12-29"]),
+    ).toBe(53); // 21-day median gap, 2.5x
+  });
+});
+
+describe("buildSuggestion — staleness", () => {
+  const window = () =>
+    Array.from({ length: 3 }, (_, i) =>
+      makeSession({
+        actualReps: 8,
+        targetReps: 8,
+        date: `2024-01-0${3 - i}`,
+      }),
+    );
+
+  it("still advances when the last session is recent", () => {
+    const r = buildSuggestion(
+      window(),
+      makePs({ advance: "load", overloadIncrementKg: "2.50" }),
+      null,
+      null,
+      "2024-01-10",
+    );
+    expect(r?.reason).toBe("progressed");
+  });
+
+  it("offers a re-approach after a layoff instead of a bump", () => {
+    // The bug: the gate is still satisfied by sessions from before the break,
+    // so the first session back opened with "+2.5kg" on a weight the lifter
+    // had not touched since spring.
+    const r = buildSuggestion(
+      window(),
+      makePs({ advance: "load", overloadIncrementKg: "2.50" }),
+      null,
+      null,
+      "2024-04-01",
+    );
+    expect(r?.reason).toBe("re-approach");
+    expect(r?.suggestedWeightKg).toBe(72.5); // 80 less one back-off
+  });
+
+  it("outranks a back-off, because a layoff is not a stall", () => {
+    // Three missed sessions and then a three-month break is not a plateau, and
+    // the two want opposite responses.
+    const missed = Array.from({ length: 3 }, (_, i) =>
+      makeSession({ actualReps: 5, targetReps: 8, date: `2024-01-0${3 - i}` }),
+    );
+    const r = buildSuggestion(
+      missed,
+      makePs({ advance: "load", overloadIncrementKg: "2.50" }),
+      null,
+      null,
+      "2024-06-01",
+    );
+    expect(r?.reason).toBe("re-approach");
+  });
+
+  it("leaves a manual exercise reporting what was done last time", () => {
+    const r = buildSuggestion(
+      window(),
+      makePs({ advance: "manual" }),
+      null,
+      null,
+      "2024-06-01",
+    );
+    // Exactly what someone coming back wants to see, and it proposes nothing.
+    expect(r?.reason).toBe("manual");
+  });
+
+  it("does not fire on a long rotation the lifter is actually keeping to", () => {
+    const rotation = [
+      makeSession({ actualReps: 8, targetReps: 8, date: "2024-03-01" }),
+      makeSession({ actualReps: 8, targetReps: 8, date: "2024-02-09" }),
+      makeSession({ actualReps: 8, targetReps: 8, date: "2024-01-19" }),
+    ];
+    const r = buildSuggestion(
+      rotation,
+      makePs({ advance: "load", overloadIncrementKg: "2.50" }),
+      null,
+      null,
+      "2024-03-25", // 24 days on: past 21, inside this exercise's own rhythm
+    );
+    expect(r?.reason).toBe("progressed");
+  });
+
+  it("is a no-op at zero load — there is nothing to re-approach under", () => {
+    const bw = Array.from({ length: 3 }, (_, i) =>
+      makeSession({
+        actualReps: 10,
+        targetReps: 10,
+        weightKg: "0.00",
+        date: `2024-01-0${3 - i}`,
+      }),
+    );
+    const r = buildSuggestion(bw, makePs({ advance: "load" }), null, null, "2024-06-01");
+    expect(r?.reason).not.toBe("re-approach");
   });
 });
