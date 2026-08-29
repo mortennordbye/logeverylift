@@ -1653,6 +1653,13 @@ function SortableSetRow({
             suggestion.reason === "retry" &&
             suggestion.suggestedReps !== undefined &&
             suggestion.suggestedReps !== currentReps;
+          // A reset moves two numbers at once, so it is outstanding while
+          // either of them is still to be taken.
+          const resetPending =
+            suggestion.reason === "reset" &&
+            (currentWeight !== suggestion.suggestedWeightKg ||
+              (suggestion.suggestedReps !== undefined &&
+                suggestion.suggestedReps !== currentReps));
           const repsPending =
             suggestion.reason === "progressed-reps" &&
             !hasSmartAdjustment &&
@@ -1814,6 +1821,21 @@ function SortableSetRow({
                     onApply={() => onApplyRepSuggestion?.(set.id, suggestion.suggestedReps!)}
                   >
                     {repsPending ? "↑" : "✓"} {suggestion.suggestedReps} reps
+                    {suggestion.easyOverride && " — felt easy"}
+                  </SuggestionChip>
+                )}
+                {suggestion.reason === "reset" && suggestion.suggestedReps !== undefined && (
+                  <SuggestionChip
+                    tone="primary"
+                    applied={!resetPending || isCompleted}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, suggestion.suggestedReps)}
+                  >
+                    {/* Both halves in one chip, because they are one move: the
+                        reps drop is what the heavier load costs. Applying only
+                        the weight would leave the lifter chasing the top of
+                        the range at a load they have just earned. */}
+                    {resetPending ? "↑" : "✓"} {suggestion.suggestedWeightKg}kg —
+                    back to {suggestion.suggestedReps} reps
                     {suggestion.easyOverride && " — felt easy"}
                   </SuggestionChip>
                 )}

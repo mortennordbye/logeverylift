@@ -161,9 +161,10 @@ export function WorkoutSetsClient({
 
   // The rule sentence quotes a rep target; the first working set is the one the
   // lifter thinks of as "the" target. Null when there is nothing to quote yet.
-  const firstWorkingTargetReps =
-    sets.find((s) => (s.setType ?? "working") === "working" && s.targetReps != null)
-      ?.targetReps ?? null;
+  const firstWorkingSet =
+    sets.find((s) => (s.setType ?? "working") === "working" && s.targetReps != null) ??
+    null;
+  const firstWorkingTargetReps = firstWorkingSet?.targetReps ?? null;
 
   // Increment sections this exercise can ever reach, mirroring the mode filter
   // in the progression sheet. They all render into a single grid cell, so that
@@ -767,6 +768,11 @@ export function WorkoutSetsClient({
                       incrementKg: increment,
                       incrementReps,
                       targetReps: firstWorkingTargetReps,
+                      // Same set, same reasoning: the range the sentence
+                      // quotes is the one on the set the lifter thinks of as
+                      // the target.
+                      repRangeMin: firstWorkingSet?.repRangeMin,
+                      repRangeMax: firstWorkingSet?.repRangeMax,
                       requiredHits: requiredHits ?? REQUIRED_HITS,
                       scope: progressionScope,
                     })}
