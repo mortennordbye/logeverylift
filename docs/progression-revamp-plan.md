@@ -376,7 +376,9 @@ Historical `workout_sets` rows keep `rpe = 7` from before the change. The engine
 
 Each phase ships on its own, is verifiable on its own, and leaves the app working. `pnpm verify` after every phase; the smoke pass in `CLAUDE.md` after any phase touching the set list (2, 5, 6).
 
-**Phase 0: prerequisites.** `P-2` (the duplicate-slot data loss) and `P-1` (`set_type` on `workout_sets`) from section 14, plus `D-6`'s cycle-branch deletion. All three are independent of the engine and of each other, and `P-2` is losing data today. Doing them first means phase 3 is not blocked behind a schema change to the busiest write path in the app.
+**Phase 0: prerequisites. Built.** `P-2` (the duplicate-slot data loss) and `P-1` (`set_type` on `workout_sets`) from section 14, plus `D-6`'s cycle-branch deletion. All three are independent of the engine and of each other, and `P-2` was losing data. Doing them first means phase 3 is not blocked behind a schema change to the busiest write path in the app.
+
+Shipped on branch `phase-0/progression-prerequisites`: migrations `0046` (`program_exercise_id`, `program_set_id`, the unique-index move) and `0047` (`set_type`, `prescribed_working_sets`), both backfilled. `workout_sets` rows now carry the plan slot they were logged against and the prescription that was in force, so phase 3 can ask its questions of the log rather than of today's plan. Two migrations of the five in section 5 are done; three remain (`rpe` nullable, rep-range columns, progression axis columns).
 
 **Phase 1: honest effort.** Make `rpe` nullable, stop forging 7 at **all five call sites** (section 1), treat null as unknown per `D-2`. Add the `held-unknown` reason code to **all seven branch sites** (`B-2`), even though no exercise can carry a cap until phase 5, so the path exists before anything depends on it.
 
@@ -554,7 +556,7 @@ A hardening pass over the plan above, done before any code was written. Everythi
 
 ### Prerequisites
 
-**P-1. A logged set does not record whether it was a warm-up. Blocks phase 3.**
+**P-1. A logged set does not record whether it was a warm-up. Blocks phase 3. Built in phase 0 (migration `0047`).**
 
 `workout_sets` has no `set_type` column. `set_number` is the positional index across *all* sets including warm-ups (`WorkoutSetsList.tsx:341`), and warm-ups are logged like any other set. Today this is survivable because progression keys on `exercise_id + set_number` and simply skips non-working *program* sets.
 
@@ -564,7 +566,7 @@ Session-scoped clearance (`D-7`, every working set must clear) cannot work this 
 
 *While you are there:* `set_number` should keep counting warm-ups (do not renumber), because renumbering would break the `(session, exercise, set_number)` identity of every existing row.
 
-**P-2. The same exercise twice in one program silently destroys logged data. Blocks phase 3, and is a live bug today.**
+**P-2. The same exercise twice in one program silently destroys logged data. Blocks phase 3, and was a live bug. Built in phase 0 (migration `0046`).**
 
 Nothing stops a program holding two `program_exercises` slots for the same exercise, which is a normal thing to want (heavy bench, then a back-off bench). But `workout_sets` is uniquely indexed on `(session_id, exercise_id, set_number)` and `logWorkoutSet` uses `onConflictDoUpdate` (`workout-sets.ts:222-247`). So logging set 1 of the second slot **overwrites set 1 of the first slot**. The heavy set's weight, reps and effort are gone, replaced by the back-off's.
 
@@ -576,7 +578,7 @@ The `onConflictDoUpdate` is correct for its intended purpose (re-logging a set m
 
 **Second-order:** `program_exercises.exercise_id` is mutable. Swap the exercise in a slot (bench to incline bench) and a slot-keyed history window inherits the previous exercise's sets, which the current `exercise_id` key makes impossible. Key the window on the slot *and* verify the exercise still matches, or re-key the slot on swap.
 
-*Recorded separately in `BACKLOG.md` as a standalone bug*, because it is losing data today regardless of whether this plan proceeds.
+*Was recorded separately in `BACKLOG.md` as a standalone bug*, because it was losing data regardless of whether this plan proceeded. Fixed and the entry removed.
 
 **P-3. The logging payload changes shape while old clients are still installed.**
 
@@ -696,6 +698,8 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 **B-10. The e2e progression spec asserts the current sheet.** `e2e/progression-settings.spec.ts` drives the "Sessions at target" gate group and asserts the rule sentence quotes the live gate. Phase 5's three-layer sheet rewrites both. *Required:* update it in the same change, and extend it to cover the preset picker, since it is the only end-to-end coverage progression has and it doubles as the missing-migration canary.
 
 **B-11. The seeders that matter are Server Actions, not scripts.** `scripts/seed.ts` inserts only exercises and model configs; it writes no sets and no `rpe`. The real producers are `scripts/seed-fake.ts:338`/`:358` and, more importantly, two in-app admin actions: `admin.ts:420`/`:429` (`seedDemoDataForUser`) and `admin.ts:605`/`:614` (`seedDataForUser`). All write `actualReps = targetReps + bonusRep` and a synthetic `rpe`. Phase 1 should have them emit a realistic mix of logged and unlogged effort, or every development and demo account will look like the pre-fix world and the new code paths will never be exercised locally.
+
+**They also insert `workout_sets` rows directly, so phase 0's columns land null on them.** Seeded history carries no `program_exercise_id`, `program_set_id` or `prescribed_working_sets`, and takes the `set_type` default. Nothing reads those columns yet, so nothing is broken today — but phase 3 reads all four, and seeded data is the only data a development account has. Resolve it in the same change: build one map from `(programId, exerciseId, setNumber)` to the slot after the programs are created, and look it up at insert time.
 
 **B-12. The demo user shares tables with real users.** Anything seeded is visible in the demo account, and the demo seeder is `admin.ts:420` (`seedDemoDataForUser`), not anything under `scripts/`. Seed data should exercise the new schemes (a fixed-target exercise, a rep-range exercise, one capped, one not) so the presets are demonstrable, not just implemented.
 
