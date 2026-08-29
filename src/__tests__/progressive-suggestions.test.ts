@@ -3,7 +3,6 @@ import {
   buildSuggestion,
   describeProgressionRule,
   estimate1RM,
-  estimateRepsAt,
   metTargetReps,
   pendingProgressions,
   roundToNearest,
@@ -81,7 +80,7 @@ function makePs(overrides: Partial<ProgramSetData> = {}): ProgramSetData {
     exerciseId: 1,
     overloadIncrementKg: null,
     overloadIncrementReps: 0,
-    progressionMode: "weight",
+    advance: "load",
     ...overrides,
   };
 }
@@ -108,29 +107,6 @@ describe("estimate1RM", () => {
   it("returns 0 for weight=0 (caller must guard before calling)", () => {
     // This is why we guard `baseWeight > 0` before calling
     expect(estimate1RM(0, 10)).toBe(0);
-  });
-});
-
-// ─── estimateRepsAt ───────────────────────────────────────────────────────────
-
-describe("estimateRepsAt", () => {
-  it("returns fewer reps at higher weight", () => {
-    const oneRM = estimate1RM(100, 8); // ~126.7
-    const repsAt105 = estimateRepsAt(oneRM, 105);
-    expect(repsAt105).toBeLessThan(8);
-    expect(repsAt105).toBeGreaterThanOrEqual(1);
-  });
-
-  it("returns at least 1 even when weight exceeds 1RM", () => {
-    expect(estimateRepsAt(100, 200)).toBe(1);
-  });
-
-  it("is consistent inverse of estimate1RM", () => {
-    const oneRM = estimate1RM(80, 6);
-    const reps = estimateRepsAt(oneRM, 85);
-    // At 85kg from a ~96kg 1RM, should be ~4 reps
-    expect(reps).toBeLessThan(6);
-    expect(reps).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -306,55 +282,15 @@ describe("buildSuggestion — deload detection", () => {
 
   it("does not deload in manual mode", () => {
     const rows = makeSessions(DELOAD_THRESHOLD, { actualReps: 5, targetReps: 8 });
-    const result = buildSuggestion(rows, makePs({ progressionMode: "manual" }), null);
+    const result = buildSuggestion(rows, makePs({ advance: "manual" }), null);
     expect(result?.reason).toBe("manual");
-  });
-});
-
-describe("buildSuggestion — smart mode", () => {
-  it("provides adjustedRepsForWeight for near-max sets (RPE ≥ 7)", () => {
-    const rows = makeSessions(REQUIRED_HITS, { weightKg: "80.00", actualReps: 8, targetReps: 8, rpe: 7 });
-    const result = buildSuggestion(rows, makePs({ progressionMode: "smart" }), null);
-    expect(result?.reason).toBe("progressed");
-    expect(result?.suggestedWeightKg).toBeCloseTo(82.5);
-    // adjustedRepsForWeight should be < 8 at 82.5kg
-    expect(result?.adjustedRepsForWeight).toBeDefined();
-    expect(result?.adjustedRepsForWeight ?? 99).toBeLessThan(8);
-  });
-
-  it("skips adjustedRepsForWeight on sub-max sets (RPE < 7) — Epley invalid", () => {
-    // Same data as above but RPE 5 — too easy for the 1RM estimate to be meaningful
-    const rows = makeSessions(REQUIRED_HITS, { weightKg: "80.00", actualReps: 8, targetReps: 8, rpe: 5 });
-    const result = buildSuggestion(rows, makePs({ progressionMode: "smart" }), null);
-    expect(result?.reason).toBe("progressed");
-    expect(result?.adjustedRepsForWeight).toBeUndefined();
-  });
-
-  it("skips adjustedRepsForWeight when weight is 0 (bodyweight exercises)", () => {
-    const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 8, targetReps: 8, rpe: 7 });
-    const result = buildSuggestion(rows, makePs({ progressionMode: "smart", overloadIncrementKg: "2.50" }), null);
-    // With weight=0, Epley can't compute 1RM; no adjustedRepsForWeight
-    expect(result?.adjustedRepsForWeight).toBeUndefined();
-  });
-
-  it("skips adjustedRepsForWeight for actualReps > 12 (Epley unreliable at high reps)", () => {
-    const rows = makeSessions(REQUIRED_HITS, { weightKg: "60.00", actualReps: 15, targetReps: 15, rpe: 7 });
-    const result = buildSuggestion(rows, makePs({ progressionMode: "smart" }), null);
-    expect(result?.adjustedRepsForWeight).toBeUndefined();
-  });
-
-  it("holds and provides no adjustedRepsForWeight when not enough consensus", () => {
-    const rows = [makeSession({ rpe: 7 })]; // only 1 confident hit
-    const result = buildSuggestion(rows, makePs({ progressionMode: "smart" }), null);
-    expect(result?.reason).toBe("held");
-    expect(result?.adjustedRepsForWeight).toBeUndefined();
   });
 });
 
 describe("buildSuggestion — reps mode", () => {
   it("increments reps when target hit with consensus", () => {
     const rows = makeSessions(REQUIRED_HITS, { actualReps: 8, targetReps: 8, rpe: 6 });
-    const result = buildSuggestion(rows, makePs({ progressionMode: "reps", overloadIncrementReps: 1 }), null);
+    const result = buildSuggestion(rows, makePs({ advance: "reps", overloadIncrementReps: 1 }), null);
     expect(result?.reason).toBe("progressed-reps");
     expect(result?.suggestedReps).toBe(9);
   });
@@ -363,7 +299,7 @@ describe("buildSuggestion — reps mode", () => {
     const rows = makeSessions(REQUIRED_HITS, { actualReps: 8, targetReps: null, rpe: 6 });
     const result = buildSuggestion(
       rows,
-      makePs({ progressionMode: "reps", targetReps: null, overloadIncrementReps: 1 }),
+      makePs({ advance: "reps", targetReps: null, overloadIncrementReps: 1 }),
       null,
     );
     expect(result?.reason).toBe("held");
@@ -380,7 +316,7 @@ describe("buildSuggestion — time mode", () => {
       rpe: 6,
     });
     const ps = makePs({
-      progressionMode: "time",
+      advance: "duration",
       durationSeconds: 60,
       overloadIncrementReps: 15, // 15s increment stored in incrementReps for time mode
     });
@@ -391,14 +327,14 @@ describe("buildSuggestion — time mode", () => {
 
   it("holds when duration not met", () => {
     const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 45 });
-    const ps = makePs({ progressionMode: "time", durationSeconds: 60 });
+    const ps = makePs({ advance: "duration", durationSeconds: 60 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("held");
   });
 
   it("defaults to 10s increment when overloadIncrementReps is 0", () => {
     const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 60 });
-    const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 0 });
+    const ps = makePs({ advance: "duration", durationSeconds: 60, overloadIncrementReps: 0 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.suggestedDurationSeconds).toBe(70); // 60 + 10
   });
@@ -543,7 +479,7 @@ describe("buildSuggestion — readiness modulation", () => {
 
   it("downgrades rep progression to held-readiness when readiness ≤ 2", () => {
     const rows = makeSessions(REQUIRED_HITS, { rpe: 6 });
-    const result = buildSuggestion(rows, makePs({ progressionMode: "reps", overloadIncrementReps: 1 }), null, 1);
+    const result = buildSuggestion(rows, makePs({ advance: "reps", overloadIncrementReps: 1 }), null, 1);
     expect(result?.reason).toBe("held-readiness");
     expect(result?.readinessModulated).toBe(true);
     expect(result?.suggestedReps).toBeUndefined();
@@ -601,7 +537,7 @@ describe("buildSuggestion — deload→retry guard", () => {
 describe("buildSuggestion — bodyweight fallback", () => {
   it("suggests more reps (not kg) for weight mode when baseWeight is 0", () => {
     const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 10, targetReps: 10, rpe: 6 });
-    const ps = makePs({ progressionMode: "weight", targetReps: 10, overloadIncrementReps: 2 });
+    const ps = makePs({ advance: "load", targetReps: 10, overloadIncrementReps: 2 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-reps");
     expect(result?.suggestedReps).toBe(12);
@@ -610,14 +546,14 @@ describe("buildSuggestion — bodyweight fallback", () => {
 
   it("holds for weight mode at weight=0 when no incrementReps configured", () => {
     const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 10, targetReps: 10, rpe: 6 });
-    const ps = makePs({ progressionMode: "weight", targetReps: 10, overloadIncrementReps: 0 });
+    const ps = makePs({ advance: "load", targetReps: 10, overloadIncrementReps: 0 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("held");
   });
 
   it("suggests more reps (not kg) for smart mode when baseWeight is 0", () => {
     const rows = makeSessions(REQUIRED_HITS, { weightKg: "0.00", actualReps: 8, targetReps: 8, rpe: 6 });
-    const ps = makePs({ progressionMode: "smart", targetReps: 8, overloadIncrementReps: 1 });
+    const ps = makePs({ advance: "load", targetReps: 8, overloadIncrementReps: 1 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-reps");
     expect(result?.suggestedReps).toBe(9);
@@ -625,7 +561,7 @@ describe("buildSuggestion — bodyweight fallback", () => {
 
   it("progresses by weight as normal when baseWeight > 0 in weight mode", () => {
     const rows = makeSessions(REQUIRED_HITS, { weightKg: "60.00", actualReps: 10, targetReps: 10, rpe: 6 });
-    const result = buildSuggestion(rows, makePs({ progressionMode: "weight" }), null);
+    const result = buildSuggestion(rows, makePs({ advance: "load" }), null);
     expect(result?.reason).toBe("progressed");
     expect(result?.suggestedWeightKg).toBeGreaterThan(60);
   });
@@ -636,14 +572,14 @@ describe("buildSuggestion — bodyweight fallback", () => {
 describe("buildSuggestion — time mode effort", () => {
   it("counts a timed set that hit its duration at RPE 9", () => {
     const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 9 });
-    const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
+    const ps = makePs({ advance: "duration", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-time");
   });
 
   it("counts a timed set as a hit when RPE is 8 and duration met", () => {
     const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: 8 });
-    const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
+    const ps = makePs({ advance: "duration", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-time");
     expect(result?.suggestedDurationSeconds).toBe(70);
@@ -651,7 +587,7 @@ describe("buildSuggestion — time mode effort", () => {
 
   it("counts a timed set with no effort logged", () => {
     const rows = makeSessions(REQUIRED_HITS, { durationSeconds: 60, actualReps: 1, targetReps: null, rpe: null });
-    const ps = makePs({ progressionMode: "time", durationSeconds: 60, overloadIncrementReps: 10 });
+    const ps = makePs({ advance: "duration", durationSeconds: 60, overloadIncrementReps: 10 });
     const result = buildSuggestion(rows, ps, null);
     expect(result?.reason).toBe("progressed-time");
   });
@@ -664,7 +600,7 @@ describe("buildSuggestion — distance mode effort", () => {
       actualReps: 1, targetReps: null, rpe: 9,
     });
     const ps = makePs({
-      progressionMode: "distance",
+      advance: "distance",
       distanceMeters: 5000,
       overloadIncrementReps: 500,
     });
@@ -678,7 +614,7 @@ describe("buildSuggestion — distance mode effort", () => {
       actualReps: 1, targetReps: null, rpe: 7,
     });
     const ps = makePs({
-      progressionMode: "distance",
+      advance: "distance",
       distanceMeters: 5000,
       overloadIncrementReps: 500,
     });
@@ -766,7 +702,7 @@ describe("buildSuggestion — hits must be at the current weight", () => {
     });
     const result = buildSuggestion(
       rows,
-      makePs({ progressionMode: "weight", overloadIncrementReps: 1 }),
+      makePs({ advance: "load", overloadIncrementReps: 1 }),
       null,
     );
     expect(result?.reason).toBe("progressed-reps");
@@ -778,7 +714,7 @@ describe("buildSuggestion — hits must be at the current weight", () => {
 
 describe("describeProgressionRule", () => {
   const base = {
-    mode: "weight",
+    advance: "load",
     incrementKg: 2.5,
     incrementReps: 0,
     targetReps: 10,
@@ -805,7 +741,7 @@ describe("describeProgressionRule", () => {
 
   it("no longer quotes an RPE gate, because there is not one", () => {
     expect(describeProgressionRule(base)).not.toContain("RPE");
-    expect(describeProgressionRule({ ...base, mode: "time", incrementReps: 10 })).not.toContain("RPE");
+    expect(describeProgressionRule({ ...base, advance: "duration", incrementReps: 10 })).not.toContain("RPE");
   });
 
   it("tracks a changed gate, and drops the count when one session is enough", () => {
@@ -833,44 +769,48 @@ describe("describeProgressionRule", () => {
     expect(
       describeProgressionRule({
         ...base,
-        mode: "double",
+        advance: "double",
         incrementKg: 2.5,
         repRangeMin: 6,
         repRangeMax: 12,
       }),
     ).toBe(
-      "Work up to 12 reps, then +2.5kg and back to 6. The reps move once every set hits the target in 2 sessions in a row.",
+      "Work 6 to 12 reps. Add reps once every set hits the target in 2 sessions in a row, then +2.5kg and back to 6." +
+        " Back off 10% after 3 workouts short of target.",
     );
   });
 
   it("describes a rangeless double as the load progression it becomes", () => {
     expect(
-      describeProgressionRule({ ...base, mode: "double", incrementKg: 2.5 }),
-    ).toBe("+2.5kg once every set hits 10 reps in 2 sessions in a row.");
+      describeProgressionRule({ ...base, advance: "double", incrementKg: 2.5 }),
+    ).toBe(
+      "+2.5kg once every set hits 10 reps in 2 sessions in a row." +
+        " Back off 10% after 3 workouts short of target.",
+    );
   });
 
   it("describes reps mode in reps, singular and plural", () => {
     expect(
-      describeProgressionRule({ ...base, mode: "reps", incrementReps: 1 }),
+      describeProgressionRule({ ...base, advance: "reps", incrementReps: 1 }),
     ).toContain("+1 rep ");
     expect(
-      describeProgressionRule({ ...base, mode: "reps", incrementReps: 2 }),
+      describeProgressionRule({ ...base, advance: "reps", incrementReps: 2 }),
     ).toContain("+2 reps");
   });
 
   it("describes time and distance modes in their own units", () => {
     expect(
-      describeProgressionRule({ ...base, mode: "time", incrementReps: 30 }),
+      describeProgressionRule({ ...base, advance: "duration", incrementReps: 30 }),
     ).toContain("+30s");
     expect(
-      describeProgressionRule({ ...base, mode: "distance", incrementReps: 500 }),
+      describeProgressionRule({ ...base, advance: "distance", incrementReps: 500 }),
     ).toContain("+0.5km");
   });
 
   it("returns null for modes that never suggest anything", () => {
-    expect(describeProgressionRule({ ...base, mode: "manual" })).toBeNull();
-    expect(describeProgressionRule({ ...base, mode: "none" })).toBeNull();
-    expect(describeProgressionRule({ ...base, mode: null })).toBeNull();
+    expect(describeProgressionRule({ ...base, advance: "manual" })).toBeNull();
+    expect(describeProgressionRule({ ...base, advance: "none" })).toBeNull();
+    expect(describeProgressionRule({ ...base, advance: null })).toBeNull();
   });
 });
 
@@ -1006,15 +946,6 @@ describe("pendingProgressions", () => {
         }),
       ],
       { 1: makeSuggestion({ reason: "reset", suggestedWeightKg: 82.5, suggestedReps: 6 }) },
-      NONE,
-    );
-    expect(result).toEqual([{ setId: 1, weightKg: 82.5, targetReps: 6 }]);
-  });
-
-  it("carries a smart-mode rep adjustment alongside the weight", () => {
-    const result = pendingProgressions(
-      [makeSet()],
-      { 1: makeSuggestion({ adjustedRepsForWeight: 6 }) },
       NONE,
     );
     expect(result).toEqual([{ setId: 1, weightKg: 82.5, targetReps: 6 }]);
@@ -1345,7 +1276,7 @@ describe("buildSuggestion — worked example 4a (fixed 12, four sets, gate 2)", 
 /** Table 4b's exercise: range 6-8, three sets, scope all, gate 1, +2.5kg. */
 function rangePs(overrides: Partial<ProgramSetData> = {}): ProgramSetData {
   return makePs({
-    progressionMode: "double",
+    advance: "double",
     targetReps: 8,
     repRangeMin: 6,
     repRangeMax: 8,
@@ -1461,13 +1392,15 @@ describe("buildSuggestion — double progression, the rest of the range", () => 
       rangePs({ overloadIncrementKg: "0" }),
       null,
     );
-    expect(r?.reason).toBe("held");
+    // Distinct from plain "held" (E-4): "not enough clears yet" and "there is
+    // no weight to add" are different answers, and the sheet says which.
+    expect(r?.reason).toBe("held-no-increment");
   });
 
   it("holds at the top of the range for a bodyweight exercise", () => {
     const session = rangeSets([8, 8, 8], "0.00", 8, "2024-02-01");
     const r = buildSuggestion([session], rangePs(), null);
-    expect(r?.reason).toBe("held");
+    expect(r?.reason).toBe("held-no-increment");
   });
 
   it("falls back to load progression when no range is configured", () => {
@@ -1501,7 +1434,7 @@ describe("buildSuggestion — double progression, the rest of the range", () => 
 describe("buildSuggestion — a rep ladder stops at the top of its range", () => {
   const ladderPs = (overrides: Partial<ProgramSetData> = {}) =>
     makePs({
-      progressionMode: "reps",
+      advance: "reps",
       targetReps: 8,
       overloadIncrementReps: 2,
       requiredHits: 1,
@@ -1760,10 +1693,273 @@ describe("buildSuggestion — the window explains itself", () => {
   it("reports no shortfall for a timed set, which logs no target", () => {
     const r = buildSuggestion(
       makeSessions(2, { durationSeconds: 30, targetReps: null, weightKg: "0.00" }),
-      makePs({ progressionMode: "time", durationSeconds: 60, targetReps: null }),
+      makePs({ advance: "duration", durationSeconds: 60, targetReps: null }),
       null,
     );
     expect(r?.sessions?.[0]).toMatchObject({ status: "missed" });
     expect(r?.sessions?.[0].shortfall).toBeUndefined();
+  });
+});
+
+// ─── Axis 3: the effort cap (D-1, D-2, D-8) ──────────────────────────────────
+
+describe("buildSuggestion — effort cap", () => {
+  const capped = (o: Partial<ProgramSetData> = {}) =>
+    makePs({ advance: "load", requiredHits: 1, effortCap: 2, ...o });
+
+  it("clears when the target came with the reserve that was asked for", () => {
+    // RIR 2 against a cap of 2 clears. The cap is a minimum reserve, not a
+    // ceiling — a set that had more left is not a failure.
+    const rows = [makeSession({ actualReps: 8, targetReps: 8, rir: 2, rpe: 8 })];
+    expect(buildSuggestion(rows, capped(), null)?.reason).toBe("progressed");
+  });
+
+  it("does not clear when the reserve came in under the cap", () => {
+    // RIR 1 against a cap of 2: the reps were there, the reserve was not. This
+    // is the grind an autoregulated scheme exists to catch.
+    const rows = [makeSession({ actualReps: 8, targetReps: 8, rir: 1, rpe: 9 })];
+    const r = buildSuggestion(rows, capped(), null);
+    expect(r?.reason).toBe("held");
+    expect(r?.hitsAchieved).toBe(0);
+    expect(r?.sessions?.[0].status).toBe("missed");
+    expect(r?.sessions?.[0].effortShort).toBe(true);
+  });
+
+  it("holds as unknown, not as a miss, when no effort was logged (D-2)", () => {
+    const rows = [
+      makeSession({ actualReps: 8, targetReps: 8, rir: null, rpe: null }),
+    ];
+    const r = buildSuggestion(rows, capped(), null);
+    // Neither a clear nor a failure: the lifter asked to be measured on effort
+    // and then said nothing, so there is no answer to bank in either direction.
+    expect(r?.reason).toBe("held-unknown");
+    expect(r?.hitsAchieved).toBe(0);
+    expect(r?.sessions?.[0].status).toBe("unknown");
+    expect(r?.sessions?.[0].unknownReason).toBe("effort");
+  });
+
+  it("does not gate at all without a cap — silence is fine (D-1)", () => {
+    const rows = [
+      makeSession({ actualReps: 8, targetReps: 8, rir: null, rpe: null }),
+    ];
+    const r = buildSuggestion(rows, makePs({ advance: "load", requiredHits: 1 }), null);
+    expect(r?.reason).toBe("progressed");
+  });
+
+  it("falls back to the derived RIR for rows that predate the column", () => {
+    // rir null, rpe 8 → RIR 2, which meets a cap of 2.
+    const rows = [makeSession({ actualReps: 8, targetReps: 8, rir: null, rpe: 8 })];
+    expect(buildSuggestion(rows, capped(), null)?.reason).toBe("progressed");
+  });
+
+  it("a missed target stays a miss whatever the effort says", () => {
+    // The cap makes clearing stricter; it cannot rescue a session that came up
+    // short on reps, so the target question is asked first.
+    const rows = [
+      makeSession({ actualReps: 6, targetReps: 8, rir: null, rpe: null }),
+    ];
+    expect(buildSuggestion(rows, capped(), null)?.sessions?.[0].status).toBe("missed");
+  });
+
+  it("reads the cap off the set the scope names — last, under scope all (D-8)", () => {
+    // Set 1 has plenty in reserve, set 4 does not. Under scope "all" the last
+    // working set adjudicates, where reserve is lowest by design.
+    const session = makeMultiSession([
+      { actualReps: 8, targetReps: 8, rir: 4, rpe: 6 },
+      { actualReps: 8, targetReps: 8, rir: 1, rpe: 9 },
+    ]);
+    const r = buildSuggestion(
+      [session],
+      capped({ scope: "all", setNumber: 1 }),
+      null,
+    );
+    expect(r?.sessions?.[0].status).toBe("missed");
+  });
+
+  it("reads the first set's effort under scope first (D-8)", () => {
+    const session = makeMultiSession([
+      { actualReps: 8, targetReps: 8, rir: 3, rpe: 7 },
+      { actualReps: 8, targetReps: 8, rir: 0, rpe: 10 },
+    ]);
+    const r = buildSuggestion(
+      [session],
+      capped({ scope: "first", setNumber: 1 }),
+      null,
+    );
+    // The back-off's effort does not speak for a top-set scheme.
+    expect(r?.reason).toBe("progressed");
+  });
+});
+
+// ─── Axis 7: regress ─────────────────────────────────────────────────────────
+
+describe("buildSuggestion — regress axis", () => {
+  const missed = () =>
+    Array.from({ length: 3 }, (_, i) =>
+      makeSession({
+        actualReps: 5,
+        targetReps: 8,
+        date: `2024-01-0${3 - i}`,
+      }),
+    );
+
+  it("holds instead of backing off when regress is hold", () => {
+    const r = buildSuggestion(missed(), makePs({ advance: "load", regress: "hold" }), null);
+    expect(r?.reason).toBe("held");
+    expect(r?.sessionsUntilDeload).toBeNull();
+  });
+
+  it("backs off by the configured percentage after the configured run", () => {
+    const rows = missed().slice(0, 2);
+    const r = buildSuggestion(
+      rows,
+      makePs({ advance: "load", backoffAfter: 2, backoffPct: 20, overloadIncrementKg: "2.50" }),
+      null,
+    );
+    expect(r?.reason).toBe("deload");
+    expect(r?.suggestedWeightKg).toBe(65); // 80 - 20%, snapped to 2.5
+  });
+
+  it("never proposes less than one increment (E-18)", () => {
+    const rows = Array.from({ length: 3 }, (_, i) =>
+      makeSession({
+        actualReps: 1,
+        targetReps: 8,
+        weightKg: "2.50",
+        date: `2024-01-0${3 - i}`,
+      }),
+    );
+    const r = buildSuggestion(
+      rows,
+      makePs({ advance: "load", overloadIncrementKg: "2.50" }),
+      null,
+    );
+    expect(r?.suggestedWeightKg).toBe(2.5);
+  });
+
+  it("is a no-op at zero load — there is nothing to back off from (E-18)", () => {
+    const rows = Array.from({ length: 3 }, (_, i) =>
+      makeSession({
+        actualReps: 5,
+        targetReps: 8,
+        weightKg: "0.00",
+        date: `2024-01-0${3 - i}`,
+      }),
+    );
+    const r = buildSuggestion(rows, makePs({ advance: "load" }), null);
+    expect(r?.reason).not.toBe("deload");
+  });
+});
+
+// ─── Axis 8: readiness ───────────────────────────────────────────────────────
+
+describe("buildSuggestion — readiness axis", () => {
+  const cleared = () => makeSessions(REQUIRED_HITS, { actualReps: 8, targetReps: 8 });
+
+  it("holds on a low-readiness day by default", () => {
+    const r = buildSuggestion(cleared(), makePs({ advance: "load" }), null, 1);
+    expect(r?.reason).toBe("held-readiness");
+    expect(r?.readinessModulated).toBe(true);
+  });
+
+  it("passes the advance through when readiness is set to ignore", () => {
+    const r = buildSuggestion(
+      cleared(),
+      makePs({ advance: "load", readiness: "ignore" }),
+      null,
+      1,
+    );
+    expect(r?.reason).toBe("progressed");
+    expect(r?.readinessModulated).toBe(false);
+  });
+
+  it("backs off rather than holding when readiness is set to reduce (E-7)", () => {
+    const r = buildSuggestion(
+      cleared(),
+      makePs({ advance: "load", readiness: "reduce", overloadIncrementKg: "2.50" }),
+      null,
+      1,
+    );
+    // E-7 reuses the backoff reason with readinessModulated set, rather than
+    // teaching every consumer a tenth code for a display distinction.
+    expect(r?.reason).toBe("deload");
+    expect(r?.readinessModulated).toBe(true);
+    expect(r?.suggestedWeightKg).toBe(72.5);
+  });
+});
+
+// ─── A5: duration and distance move the target, not the achievement ──────────
+
+describe("buildSuggestion — duration and distance advance from the target", () => {
+  const held = (seconds: number) =>
+    makeSessions(REQUIRED_HITS, {
+      actualReps: 0,
+      targetReps: null,
+      durationSeconds: seconds,
+    });
+
+  it("adds the increment to the target, not to what was held", () => {
+    // Beating a 60s target by 30s used to make 90s the new prescription, so one
+    // good session permanently reset what counted as clearing.
+    const r = buildSuggestion(
+      held(90),
+      makePs({ advance: "duration", durationSeconds: 60, overloadIncrementReps: 10 }),
+      null,
+    );
+    expect(r?.reason).toBe("progressed-time");
+    expect(r?.suggestedDurationSeconds).toBe(70);
+  });
+
+  it("never writes an anchored duration — the cycle owns it (A5)", () => {
+    const r = buildSuggestion(
+      held(90),
+      makePs({
+        advance: "duration",
+        durationSeconds: 60,
+        overloadIncrementReps: 10,
+        peakDurationSeconds: 300,
+      }),
+      null,
+    );
+    expect(r?.reason).toBe("held-anchored");
+    expect(r?.suggestedDurationSeconds).toBeUndefined();
+  });
+
+  it("never writes an anchored distance either", () => {
+    const rows = makeSessions(REQUIRED_HITS, {
+      actualReps: 0,
+      targetReps: null,
+      distanceMeters: 5200,
+    });
+    const r = buildSuggestion(
+      rows,
+      makePs({
+        advance: "distance",
+        distanceMeters: 5000,
+        peakDistanceMeters: 10000,
+      }),
+      null,
+    );
+    expect(r?.reason).toBe("held-anchored");
+    expect(r?.suggestedDistanceMeters).toBeUndefined();
+  });
+});
+
+// ─── SI-D1: the 1RM estimate needs logged effort ─────────────────────────────
+
+describe("buildSuggestion — estimated 1RM", () => {
+  it("is null when the lifter reported no effort", () => {
+    const rows = makeSessions(1, { actualReps: 8, rir: null, rpe: null });
+    expect(buildSuggestion(rows, makePs(), null)?.estimated1RM).toBeNull();
+  });
+
+  it("is null for a set with plenty left in reserve — Epley does not apply", () => {
+    const rows = makeSessions(1, { actualReps: 8, rir: 5, rpe: 5 });
+    expect(buildSuggestion(rows, makePs(), null)?.estimated1RM).toBeNull();
+  });
+
+  it("is computed for a near-max set", () => {
+    const rows = makeSessions(1, { actualReps: 8, rir: 1, rpe: 9 });
+    expect(buildSuggestion(rows, makePs(), null)?.estimated1RM).toBeCloseTo(101.3, 1);
   });
 });

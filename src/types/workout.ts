@@ -179,7 +179,6 @@ export type ActiveCycleInfo = {
 export type SetSuggestion = {
   suggestedWeightKg: number;
   suggestedReps?: number;
-  adjustedRepsForWeight?: number; // 1RM-estimated reps at new weight (smart mode)
   suggestedDurationSeconds?: number; // time mode: suggested new duration
   suggestedDistanceMeters?: number; // distance mode: suggested new target distance
   basedOnWeightKg: number; // last logged weight (raw, no rounding)
@@ -190,7 +189,22 @@ export type SetSuggestion = {
   basedOnDate: string; // last session date
   basedOnRpe?: number; // last logged RPE (optional — null for old sessions)
   basedOnHitCount?: number; // how many of the last CONSENSUS_WINDOW sessions hit the target
-  reason: "progressed" | "held" | "held-readiness" | "held-unknown" | "manual" | "progressed-reps" | "reset" | "deload" | "progressed-time" | "progressed-distance" | "retry";
+  /**
+   * Why the engine landed where it did. A string union, and deliberately still
+   * named `progressed*` rather than `advanced*`: two sites match on the prefix
+   * rather than the full value, and a rename would make them match nothing
+   * with no type error to catch it.
+   *
+   * The three held* variants past plain `held` all mean "nothing is moving",
+   * and they exist because the reasons are not interchangeable to the person
+   * reading the chip:
+   *   held-readiness    — you said you were flat today
+   *   held-unknown      — a cap is prescribed and you did not say how hard it was
+   *   held-no-increment — double progression at the top of its range with no
+   *                       load to add, so the reset it needs cannot happen (E-4)
+   *   held-anchored     — the training cycle owns this set's target (A5)
+   */
+  reason: "progressed" | "held" | "held-readiness" | "held-unknown" | "held-no-increment" | "held-anchored" | "manual" | "progressed-reps" | "reset" | "deload" | "progressed-time" | "progressed-distance" | "retry";
   // ─── Enriched fields (populated by getProgressiveSuggestions) ───────────────
   /** How many target-meeting sessions have been recorded in the current consensus window. */
   hitsAchieved: number;
@@ -228,8 +242,10 @@ export type SetSuggestion = {
    *   missed  — one of them fell short (by `shortfall` reps, when reps are the
    *             measure; timed and distance sets log no target to measure against)
    *   unknown — the session did not answer the question: fewer sets logged than
-   *             the plan prescribed, or a session the lifter marked Tired that
-   *             fell short. Neither banks a clear nor counts toward a back-off.
+   *             the plan prescribed, a session the lifter marked Tired that
+   *             fell short, or an effort cap with no effort logged against it.
+   *             Neither banks a clear nor counts toward a back-off, and
+   *             `unknownReason` says which of the three it was.
    */
   sessions?: SuggestionSession[];
 };
@@ -246,6 +262,14 @@ export type SuggestionSession = {
   prescribedSets: number | null;
   /** Session feeling, so a Tired session can say why it did not count. */
   feeling: string | null;
+  /**
+   * Why an unknown session is unknown. "partial" means fewer working sets were
+   * logged than prescribed, "effort" that a cap was prescribed and nothing was
+   * reported against it, "tired" that it fell short on a Tired day.
+   */
+  unknownReason?: "partial" | "effort" | "tired";
+  /** Missed on the effort cap rather than on reps: the targets were met. */
+  effortShort?: boolean;
 };
 
 // ─── Personal Records ─────────────────────────────────────────────────────────

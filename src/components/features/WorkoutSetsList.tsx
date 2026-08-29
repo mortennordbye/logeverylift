@@ -1636,7 +1636,6 @@ function SortableSetRow({
         {isWorkout && suggestion && (() => {
           const currentWeight = Number(set.weightKg ?? 0);
           const currentReps = set.targetReps ?? 0;
-          const hasSmartAdjustment = suggestion.adjustedRepsForWeight !== undefined;
           const weightPending =
             (suggestion.reason === "progressed" || suggestion.reason === "deload") &&
             currentWeight !== suggestion.suggestedWeightKg;
@@ -1662,7 +1661,6 @@ function SortableSetRow({
                 suggestion.suggestedReps !== currentReps));
           const repsPending =
             suggestion.reason === "progressed-reps" &&
-            !hasSmartAdjustment &&
             suggestion.suggestedReps !== undefined &&
             suggestion.suggestedReps > currentReps;
           const timePending =
@@ -1757,7 +1755,7 @@ function SortableSetRow({
                   <SuggestionChip
                     tone="primary"
                     applied={!weightPending || isCompleted}
-                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, hasSmartAdjustment ? suggestion.adjustedRepsForWeight : undefined)}
+                    onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
                     {/* Direction comes from the comparison, not the reason: a
                         suggestion is built from the last *logged* weight, so
@@ -1769,9 +1767,7 @@ function SortableSetRow({
                       : suggestion.suggestedWeightKg > currentWeight
                       ? "↑"
                       : "↓"}{" "}
-                    {hasSmartAdjustment
-                      ? `${suggestion.suggestedWeightKg}kg — ${suggestion.adjustedRepsForWeight} reps`
-                      : `${suggestion.suggestedWeightKg}kg`}
+                    {`${suggestion.suggestedWeightKg}kg`}
                     {suggestion.easyOverride && " — felt easy"}
                   </SuggestionChip>
                 )}
@@ -1814,7 +1810,7 @@ function SortableSetRow({
                     {suggestion.suggestedReps} reps — retry
                   </SuggestionChip>
                 )}
-                {suggestion.reason === "progressed-reps" && !hasSmartAdjustment && suggestion.suggestedReps !== undefined && (
+                {suggestion.reason === "progressed-reps" && suggestion.suggestedReps !== undefined && (
                   <SuggestionChip
                     tone="primary"
                     applied={!repsPending || isCompleted}
@@ -1865,6 +1861,19 @@ function SortableSetRow({
                 {suggestion.reason === "held-unknown" && (
                   <span className="text-[10px] font-medium text-amber-600 dark:text-amber-500">
                     Log effort to progress
+                  </span>
+                )}
+                {/* Same idea, two more answers the dots cannot give. Both mean
+                    "this will not move until you change something", and both
+                    name the thing. Nothing to apply, so both are labels. */}
+                {suggestion.reason === "held-no-increment" && (
+                  <span className="text-[10px] font-medium text-amber-600 dark:text-amber-500">
+                    Set a weight increment to progress
+                  </span>
+                )}
+                {suggestion.reason === "held-anchored" && (
+                  <span className="text-[10px] text-muted-foreground/60">
+                    Target set by your training cycle
                   </span>
                 )}
                 {suggestion.readinessModulated && (

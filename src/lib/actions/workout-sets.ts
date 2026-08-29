@@ -44,6 +44,7 @@ import {
     buildSuggestion,
     CONSENSUS_WINDOW,
     estimate1RM,
+    toScope,
 } from "@/lib/utils/progression";
 import type { ProgramSetData, SessionHistory } from "@/lib/utils/progression";
 import type {
@@ -1357,12 +1358,23 @@ export async function getProgressiveSuggestions(
         durationSeconds: programSets.durationSeconds,
         distanceMeters: programSets.distanceMeters,
         setType: programSets.setType,
+        // The effort cap — axis 3. Selected at last: it has existed and been
+        // rendered in set summaries for a year, and no progression code has
+        // ever read it, so D-1's gate had nothing to gate on (B-22).
+        targetRir: programSets.targetRir,
+        peakDurationSeconds: programSets.peakDurationSeconds,
+        peakDistanceMeters: programSets.peakDistanceMeters,
         exerciseId: programExercises.exerciseId,
         overloadIncrementKg: programExercises.overloadIncrementKg,
         overloadIncrementReps: programExercises.overloadIncrementReps,
-        progressionMode: programExercises.progressionMode,
         progressionScope: programExercises.progressionScope,
         progressionRequiredHits: programExercises.progressionRequiredHits,
+        progressionAdvance: programExercises.progressionAdvance,
+        progressionRegress: programExercises.progressionRegress,
+        progressionBackoffPct: programExercises.progressionBackoffPct,
+        progressionBackoffAfter: programExercises.progressionBackoffAfter,
+        progressionReadiness: programExercises.progressionReadiness,
+        progressionConfigAt: programExercises.progressionConfigAt,
         movementPattern: exercises.movementPattern,
         // Resolve override ?? default in JS below (Drizzle returns both columns).
         exerciseTypeOverride: programExercises.exerciseType,
@@ -1438,6 +1450,7 @@ export async function getProgressiveSuggestions(
         durationSeconds: workoutSets.durationSeconds,
         distanceMeters: workoutSets.distanceMeters,
         rpe: workoutSets.rpe,
+        rir: workoutSets.rir,
         wasEasy: workoutSets.wasEasy,
         prescribedWorkingSets: workoutSets.prescribedWorkingSets,
         sessionId: workoutSessions.id,
@@ -1513,6 +1526,7 @@ export async function getProgressiveSuggestions(
         durationSeconds: row.durationSeconds,
         distanceMeters: row.distanceMeters,
         rpe: row.rpe,
+        rir: row.rir,
         wasEasy: row.wasEasy,
       });
     }
@@ -1522,12 +1536,42 @@ export async function getProgressiveSuggestions(
     // same scope, so under scope "all" one advance moves the whole exercise.
     const suggestions: Record<number, SetSuggestion> = {};
 
+    // D-8: the set the scope names decides clearing *and* effort, so the cap
+    // the engine judges against is that set's, not each set's own. Resolve it
+    // once per slot from the slot's working sets, in set order.
+    const workingBySlot = new Map<number, typeof programData>();
+    for (const ps of programData) {
+      if (ps.setType && ps.setType !== "working") continue;
+      const list = workingBySlot.get(ps.programExerciseId);
+      if (list) list.push(ps);
+      else workingBySlot.set(ps.programExerciseId, [ps]);
+    }
+    for (const list of workingBySlot.values()) {
+      list.sort((a, b) => a.setNumber - b.setNumber);
+    }
+
     for (const ps of programData) {
       // Any set marked anything other than "working" is excluded from
       // progression entirely.
       if (ps.setType && ps.setType !== "working") continue;
 
-      const sessions = windows.get(ps.programExerciseId) ?? [];
+      const all = windows.get(ps.programExerciseId) ?? [];
+      // E-13: a settings change re-judges the window under the new rule, so
+      // sessions logged before it are dropped rather than silently re-scored.
+      // Without this the dot count moves when the lifter touches a setting,
+      // which reads as a bug — the numbers change and nothing they did caused it.
+      const sessions = ps.progressionConfigAt
+        ? all.filter((sess) => new Date(sess.date) >= ps.progressionConfigAt!)
+        : all;
+
+      const working = workingBySlot.get(ps.programExerciseId) ?? [];
+      const scope = toScope(ps.progressionScope);
+      const capSet =
+        scope === "first"
+          ? working[0]
+          : scope === "set"
+            ? ps
+            : working[working.length - 1];
 
       const psData: ProgramSetData = {
         programSetId: ps.programSetId,
@@ -1541,9 +1585,16 @@ export async function getProgressiveSuggestions(
         exerciseId: ps.exerciseId,
         overloadIncrementKg: ps.overloadIncrementKg,
         overloadIncrementReps: ps.overloadIncrementReps,
-        progressionMode: ps.progressionMode,
         scope: ps.progressionScope,
         requiredHits: ps.progressionRequiredHits,
+        advance: ps.progressionAdvance,
+        regress: ps.progressionRegress,
+        backoffPct: ps.progressionBackoffPct,
+        backoffAfter: ps.progressionBackoffAfter,
+        readiness: ps.progressionReadiness,
+        effortCap: capSet?.targetRir ?? null,
+        peakDurationSeconds: ps.peakDurationSeconds,
+        peakDistanceMeters: ps.peakDistanceMeters,
         movementPattern: ps.movementPattern,
         exerciseType: ps.exerciseTypeOverride ?? ps.exerciseTypeDefault,
         exerciseName: ps.exerciseName,
@@ -1723,9 +1774,10 @@ export async function getWorkoutInsight(
       // bottom of the range is the price of it, not a stall.
       status = "progressing";
     } else {
-      // "held-unknown" lands here deliberately: the load is being held, which
-      // is what the pill reports. Why it is held (missing effort rather than
-      // missing sessions) is the set row's job to say, not a fifth pill state.
+      // Every held* reason lands here deliberately: the load is being held,
+      // which is what the pill reports. Why it is held — missing effort, no
+      // increment to add, or the cycle owning the target — is the set row's
+      // job to say, not four more pill states.
       status = "held";
     }
     // Keep worst status: deloading > near_deload > held > progressing
@@ -1798,10 +1850,17 @@ export async function getWorkoutInsight(
   }
 
   // ── Priority 3: stagnating — >50% sets held for 3+ sessions ────────────────
-  const tracked = suggestions.filter((s) => s.reason !== "manual");
-  // "held-unknown" is deliberately not counted: the remedy this insight offers
-  // (slow eccentrics, drop sets, a small deload) is advice for a plateau, and an
-  // exercise waiting on an unanswered effort prompt has not shown one.
+  // "held-anchored" joins "manual" outside the sample entirely: the training
+  // cycle prescribes those targets weekly, so progression proposes nothing for
+  // them and counting them would drag every endurance block toward "stagnating".
+  const tracked = suggestions.filter(
+    (s) => s.reason !== "manual" && s.reason !== "held-anchored",
+  );
+  // "held-unknown" and "held-no-increment" are deliberately not counted: the
+  // remedy this insight offers (slow eccentrics, drop sets, a small deload) is
+  // advice for a plateau, and an exercise waiting on an unanswered effort
+  // prompt or on a missing increment has not shown one — it is waiting on a
+  // setting, and the set row already says which.
   const heldCount = tracked.filter((s) => s.reason === "held" || s.reason === "held-readiness").length;
   const isStagnating = sessionCount >= 3 && tracked.length > 0 && heldCount / tracked.length > 0.5;
 

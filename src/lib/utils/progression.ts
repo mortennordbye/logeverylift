@@ -7,6 +7,7 @@
  * Extracted from getProgressiveSuggestions for testability and reuse.
  */
 
+import { rirFromRpe } from "@/lib/utils/rir";
 import type { SetSuggestion } from "@/types/workout";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -40,8 +41,19 @@ export const DELOAD_THRESHOLD = 3;
 
 /**
  * Fraction to reduce weight by when a deload is detected (10% reduction).
+ *
+ * Per-exercise override: programExercises.progressionBackoffPct, expressed as
+ * whole percent. DELOAD_PCT is the same number in the units that column uses,
+ * so the shared default lives in one place rather than two that can drift.
  */
 export const DELOAD_FACTOR = 0.9;
+export const DELOAD_PCT = 10;
+
+/** Bounds for the per-exercise back-off controls. */
+export const MIN_BACKOFF_PCT = 5;
+export const MAX_BACKOFF_PCT = 25;
+export const MIN_BACKOFF_AFTER = 1;
+export const MAX_BACKOFF_AFTER = CONSENSUS_WINDOW;
 
 
 // ─── Input types ────────────────────────────────────────────────────────────
@@ -68,6 +80,87 @@ export function toScope(value: string | null | undefined): ProgressionScope {
 }
 
 /**
+ * What moves when the gate is met — axis 6, and the axis that replaced
+ * `progressionMode`. The mode mixed this question ("which dimension moves")
+ * with "what scheme is running", so the app could not tell a fixed 12 reps
+ * apart from a 6-8 range even though they are different programmes.
+ *
+ *   none     — no suggestions at all
+ *   manual   — proposes nothing, still reports what you did last time
+ *   load     — add kg
+ *   reps     — add reps at the same load
+ *   double   — climb the reps inside the range, then convert them into load
+ *   duration — add seconds
+ *   distance — add metres
+ *
+ * `manual` is on this axis and not in the plan's section 5 list. It has to be:
+ * Manual and Off differ only in whether the last session's numbers are shown,
+ * and no other column carries that difference.
+ */
+export type ProgressionAdvance =
+  | "none"
+  | "manual"
+  | "load"
+  | "reps"
+  | "double"
+  | "duration"
+  | "distance";
+
+export const PROGRESSION_ADVANCES = [
+  "none",
+  "manual",
+  "load",
+  "reps",
+  "double",
+  "duration",
+  "distance",
+] as const;
+
+/** Narrow an unvalidated column value to an advance, falling back to manual. */
+export function toAdvance(value: string | null | undefined): ProgressionAdvance {
+  return (PROGRESSION_ADVANCES as readonly string[]).includes(value ?? "")
+    ? (value as ProgressionAdvance)
+    : "manual";
+}
+
+/** What happens when the gate keeps not being met — axis 7. */
+export type ProgressionRegress = "hold" | "backoff";
+
+export const PROGRESSION_REGRESSES = ["hold", "backoff"] as const;
+
+export function toRegress(value: string | null | undefined): ProgressionRegress {
+  return value === "hold" ? "hold" : "backoff";
+}
+
+/** What a low pre-workout readiness score does to a suggestion — axis 8. */
+export type ProgressionReadiness = "ignore" | "hold" | "reduce";
+
+export const PROGRESSION_READINESSES = ["ignore", "hold", "reduce"] as const;
+
+export function toReadiness(
+  value: string | null | undefined,
+): ProgressionReadiness {
+  return (PROGRESSION_READINESSES as readonly string[]).includes(value ?? "")
+    ? (value as ProgressionReadiness)
+    : "hold";
+}
+
+/**
+ * Effective reps in reserve for a logged set, or null when the lifter reported
+ * nothing.
+ *
+ * `rir` is what the app logs today; `rpe` is the derived twin kept for rows
+ * that predate it. Both null means silence, which is *not* an effort value —
+ * reading it as one is the bug phase 1 removed, and an effort cap is precisely
+ * the setting that must not do it.
+ */
+export function loggedRir(set: LoggedSet): number | null {
+  if (set.rir != null) return set.rir;
+  if (set.rpe != null) return rirFromRpe(set.rpe);
+  return null;
+}
+
+/**
  * A single logged working set, as one session recorded it.
  * Matches what the DB returns from workoutSets for one plan slot.
  */
@@ -80,6 +173,11 @@ export type LoggedSet = {
   distanceMeters?: number | null;
   /** Logged effort, or null when the lifter did not report any. */
   rpe: number | null;
+  /**
+   * Reps left in reserve, as logged. Null when nothing was reported — and the
+   * derived `rpe` is then null too. What an effort cap is compared against.
+   */
+  rir?: number | null;
   /** Lifter marked the set easy — see easyOverride in buildSuggestion. */
   wasEasy?: boolean | null;
 };
@@ -131,6 +229,19 @@ export type SessionOutcome = {
   minReps: number;
   /** A deciding set carried the lifter's explicit "that was easy" (E-6). */
   wasEasy: boolean;
+  /**
+   * The targets were met but the effort cap was not: the lifter ground it out
+   * with less in reserve than they asked to keep. A real miss, and the only
+   * kind the engine can see that has nothing to do with reps.
+   */
+  effortShort?: boolean;
+  /**
+   * Why an unknown session is unknown, so the chip can say which.
+   *   partial — fewer working sets logged than the plan prescribed (D-9)
+   *   effort  — a cap is prescribed and the deciding set reported none (D-2)
+   *   tired   — it fell short on a session the lifter marked Tired (A6)
+   */
+  unknownReason?: "partial" | "effort" | "tired";
 };
 
 /**
@@ -146,7 +257,16 @@ export type ProgramSetData = {
   exerciseId: number;
   overloadIncrementKg: string | null;
   overloadIncrementReps: number | null;
-  progressionMode: string | null;
+  /** Axis 6. Null/undefined = "manual". Replaced progressionMode. */
+  advance?: string | null;
+  /** Axis 7. Null/undefined = "backoff". */
+  regress?: string | null;
+  /** How far a back-off cuts, in percent. Null/undefined = DELOAD_PCT. */
+  backoffPct?: number | null;
+  /** Consecutive non-clearing sessions before it fires. Null = DELOAD_THRESHOLD. */
+  backoffAfter?: number | null;
+  /** Axis 8. Null/undefined = "hold". */
+  readiness?: string | null;
   /** "working" | "warmup" — non-working sets get no progression suggestions. */
   setType?: string | null;
   /** Exercise movement pattern — used for adaptive increment sizing. Optional for backwards compatibility. */
@@ -163,6 +283,24 @@ export type ProgramSetData = {
   repRangeMin?: number | null;
   /** Top of the rep range. Null/undefined = fixed target, no range. */
   repRangeMax?: number | null;
+  /**
+   * The prescribed reps-in-reserve floor that decides clearing for this slot —
+   * axis 3, already resolved against the scope by the caller (D-8: the set
+   * that decides clearing also decides effort, so under scope "all" this is
+   * the *last* working set's cap, not this set's). Null = no cap, and the
+   * exercise clears on target alone.
+   *
+   * Named a cap in the UI and the column, but it tests `logged RIR >= this`,
+   * so it is a minimum reserve. Do not implement it as a ceiling.
+   */
+  effortCap?: number | null;
+  /**
+   * The cycle's peak anchor for this set. When either is present the cycle
+   * rewrites that column weekly from the anchor, so progression must never
+   * write it: an anchored set is never an advance target (A5).
+   */
+  peakDurationSeconds?: number | null;
+  peakDistanceMeters?: number | null;
 };
 
 /**
@@ -182,14 +320,6 @@ export type UserProfile = {
  */
 export function estimate1RM(weightKg: number, reps: number): number {
   return weightKg * (1 + reps / 30);
-}
-
-/**
- * Estimate reps achievable at a given weight from a known 1RM.
- * Returns at least 1 (never negative).
- */
-export function estimateRepsAt(oneRepMax: number, weightKg: number): number {
-  return Math.max(1, Math.floor(30 * (oneRepMax / weightKg - 1)));
 }
 
 /**
@@ -332,6 +462,7 @@ export function evaluateSession(
   scope: ProgressionScope,
   setNumber: number,
   judge: (set: LoggedSet) => { cleared: boolean; shortfall?: number },
+  effortCap?: number | null,
 ): SessionOutcome {
   const deciding = decidingSets(session, scope, setNumber);
   const base = {
@@ -345,6 +476,7 @@ export function evaluateSession(
     return {
       ...base,
       status: "unknown",
+      unknownReason: "partial",
       loadKg: maxLoad(session.sets),
       minReps: minReps(session.sets),
       wasEasy: false,
@@ -352,7 +484,7 @@ export function evaluateSession(
   }
 
   const verdicts = deciding.map(judge);
-  const cleared = verdicts.every((v) => v.cleared);
+  const targetsMet = verdicts.every((v) => v.cleared);
   const shortfall = verdicts.reduce<number | undefined>(
     (worst, v) =>
       v.shortfall != null && (worst == null || v.shortfall > worst)
@@ -361,16 +493,40 @@ export function evaluateSession(
     undefined,
   );
 
-  const status: SessionStatus = cleared
-    ? "cleared"
-    : session.feeling === "Tired"
-      ? "unknown"
-      : "missed";
+  // D-8: the set the scope already names decides effort too. For every scope
+  // but "all" that is the only deciding set; for "all" it is the last working
+  // set, where reserve is lowest by design and the reading is strictest.
+  const effortRir =
+    effortCap != null ? loggedRir(deciding[deciding.length - 1]) : null;
+  // D-1: a cap makes clearing stricter. It can never rescue a session that
+  // missed its reps, so the target question is asked first.
+  const effortMet = effortCap == null || (effortRir != null && effortRir >= effortCap);
+  const effortUnknown = effortCap != null && effortRir == null;
+  const cleared = targetsMet && effortMet;
+
+  // A6: a Tired session's misses are held harmless — its clears still count and
+  // it still supplies the "Last:" numbers. D-2: silence where a cap was asked
+  // for is unknown, not a failure. Both land on the same inert status.
+  let status: SessionStatus;
+  let unknownReason: SessionOutcome["unknownReason"];
+  if (cleared) {
+    status = "cleared";
+  } else if (targetsMet && effortUnknown) {
+    status = "unknown";
+    unknownReason = "effort";
+  } else if (session.feeling === "Tired") {
+    status = "unknown";
+    unknownReason = "tired";
+  } else {
+    status = "missed";
+  }
 
   return {
     ...base,
     status,
+    ...(unknownReason ? { unknownReason } : {}),
     ...(status === "missed" && shortfall != null ? { shortfall } : {}),
+    ...(status === "missed" && targetsMet ? { effortShort: true } : {}),
     loadKg: maxLoad(deciding),
     minReps: minReps(deciding),
     wasEasy: cleared && deciding.some((s) => s.wasEasy === true),
@@ -384,6 +540,23 @@ function maxLoad(sets: LoggedSet[]): number {
 function minReps(sets: LoggedSet[]): number {
   if (sets.length === 0) return 0;
   return sets.reduce((m, s) => Math.min(m, s.actualReps), Infinity);
+}
+
+/**
+ * What a back-off proposes, snapped to the increment grid.
+ *
+ * Floored at one increment (E-18). Percentage cuts compound, and a lift that
+ * keeps missing would otherwise be walked down past an empty bar one 10% step
+ * at a time. Callers must not reach here at zero load — there is nothing to
+ * back off from, and the answer is to leave the plan alone.
+ */
+export function backoffWeight(
+  baseWeightKg: number,
+  pct: number,
+  incrementKg: number,
+): number {
+  const cut = roundToNearest(baseWeightKg * (1 - pct / 100), incrementKg);
+  return Math.max(cut, incrementKg > 0 ? incrementKg : cut);
 }
 
 /**
@@ -437,14 +610,18 @@ export function countConsecutiveMisses(outcomes: SessionOutcome[]): number {
 // ─── Rule description ───────────────────────────────────────────────────────
 
 /**
- * One sentence describing what this exercise's progression will actually do,
- * built from its live settings. Shown in the progression sheet so the rule is
- * readable instead of being folded into "Add kg when target reps are hit".
+ * One or two plain sentences describing what this exercise's progression will
+ * actually do, built from its live axis values. Shown under the preset in the
+ * progression sheet, always visible.
  *
- * Returns null for modes that never suggest anything.
+ * This sentence is the contract with the lifter. If it cannot be written, the
+ * configuration is incoherent and the sheet should not allow it.
+ *
+ * Returns null for advances that never suggest anything.
  */
 export function describeProgressionRule(input: {
-  mode: string | null;
+  /** Axis 6. */
+  advance: string | null;
   incrementKg: number | null;
   incrementReps: number;
   targetReps: number | null;
@@ -454,9 +631,19 @@ export function describeProgressionRule(input: {
   /** The rep range, for double progression. Both null = a fixed target. */
   repRangeMin?: number | null;
   repRangeMax?: number | null;
+  /** Axis 3: the prescribed reps in reserve on the deciding set. Null = none. */
+  effortCap?: number | null;
+  /** Axis 7 and its two numbers. */
+  regress?: string | null;
+  backoffPct?: number | null;
+  backoffAfter?: number | null;
+  /** Axis 8. */
+  readiness?: string | null;
 }): string | null {
-  const { mode, incrementKg, incrementReps, targetReps, requiredHits } = input;
+  const { incrementKg, incrementReps, targetReps, requiredHits } = input;
+  const advance = toAdvance(input.advance);
   const scope = toScope(input.scope);
+  const effortCap = input.effortCap ?? null;
   // "N in a row", not "N of the last 5": a miss resets the count (D-11), and
   // the sentence is the contract with the lifter, so it has to say the rule
   // the engine actually applies.
@@ -473,34 +660,65 @@ export function describeProgressionRule(input: {
           ? "a set"
           : "every set";
   const reps = targetReps != null ? `${targetReps} reps` : "the target reps";
-  // No effort clause: hitting the target is the whole test now that the RPE
-  // ladder is retired. Saying otherwise here described a rule the engine had
-  // stopped applying.
+  const kg =
+    incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight";
+  // Axis 3, and the clause that only appears when a lifter asked for it. An
+  // uncapped exercise clears on the target alone (D-1), and saying otherwise
+  // would describe a rule the engine is not applying.
+  const withReserve =
+    effortCap != null
+      ? ` with at least ${effortCap} rep${effortCap === 1 ? "" : "s"} in reserve`
+      : "";
 
-  switch (mode) {
-    case "weight":
-      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once ${subject} hits ${reps} ${sessions}.`;
-    case "smart":
-      return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once ${subject} hits ${reps} ${sessions}, with the rep target re-estimated for the heavier load.`;
+  let rule: string | null;
+  switch (advance) {
+    case "load":
+      rule = `${kg} once ${subject} hits ${reps}${withReserve} ${sessions}.`;
+      break;
     case "double": {
       const { repRangeMin: min, repRangeMax: max } = input;
-      // Without a range the mode has nothing to climb and behaves as load
+      // Without a range the scheme has nothing to climb and behaves as load
       // progression, so it says so rather than describing a range it has not
-      // got. Nothing can configure that pairing today.
+      // got. The picker refuses the pairing; an import can still produce it.
       if (min == null || max == null) {
-        return `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} once ${subject} hits ${reps} ${sessions}.`;
+        rule = `${kg} once ${subject} hits ${reps}${withReserve} ${sessions}.`;
+        break;
       }
-      return `Work up to ${max} reps, then ${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "more weight"} and back to ${min}. The reps move once ${subject} hits the target ${sessions}.`;
+      rule = `Work ${min} to ${max} reps. Add reps once ${subject} hits the target${withReserve} ${sessions}, then ${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "more weight"} and back to ${min}.`;
+      break;
     }
     case "reps":
-      return `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once ${subject} hits ${reps} ${sessions}.`;
-    case "time":
-      return `+${incrementReps > 0 ? incrementReps : 10}s once ${subject} holds the target duration ${sessions}.`;
+      rule = `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once ${subject} hits ${reps}${withReserve} ${sessions}.`;
+      break;
+    case "duration":
+      rule = `+${incrementReps > 0 ? incrementReps : 10}s once ${subject} holds the target duration ${sessions}.`;
+      break;
     case "distance":
-      return `+${((incrementReps > 0 ? incrementReps : 500) / 1000)}km once ${subject} covers the target distance ${sessions}.`;
+      rule = `+${(incrementReps > 0 ? incrementReps : 500) / 1000}km once ${subject} covers the target distance ${sessions}.`;
+      break;
     default:
+      // "none" and "manual" propose nothing, so there is no rule to state.
       return null;
   }
+
+  // Axis 7. Only load-bearing advances can back off — cutting the weight when
+  // the reps stall progresses one dimension and regresses another.
+  const pct = input.backoffPct ?? DELOAD_PCT;
+  const after = input.backoffAfter ?? DELOAD_THRESHOLD;
+  if (toRegress(input.regress) === "backoff") {
+    rule += ` Back off ${pct}% after ${after} workout${after === 1 ? "" : "s"} short of target.`;
+  }
+
+  // Axis 8. "hold" is the default and the behaviour people already have, so it
+  // goes unsaid; the two that differ from it are named.
+  const readiness = toReadiness(input.readiness);
+  if (readiness === "ignore") {
+    rule += " Suggests the same whatever your readiness says.";
+  } else if (readiness === "reduce") {
+    rule += " On a low-readiness day, backs off instead.";
+  }
+
+  return rule;
 }
 
 // ─── Batch application ──────────────────────────────────────────────────────
@@ -597,13 +815,7 @@ export function pendingProgressions(
             : currentWeight !== s.suggestedWeightKg &&
               s.suggestedWeightKg > planWeight;
         if (moves) {
-          pending.push({
-            setId: set.id,
-            weightKg: s.suggestedWeightKg,
-            ...(s.adjustedRepsForWeight !== undefined
-              ? { targetReps: s.adjustedRepsForWeight }
-              : {}),
-          });
+          pending.push({ setId: set.id, weightKg: s.suggestedWeightKg });
         }
         break;
       }
@@ -677,7 +889,7 @@ export function pendingProgressions(
         }
         break;
       default:
-        break; // held, held-readiness, manual — nothing to take
+        break; // every held* reason, and manual — nothing to take
     }
   }
 
@@ -710,7 +922,10 @@ export function buildSuggestion(
   if (window.length === 0) return null;
 
   const scope = toScope(ps.scope);
-  const mode = ps.progressionMode ?? "manual";
+  const advance = toAdvance(ps.advance);
+  const regress = toRegress(ps.regress);
+  const readinessRule = toReadiness(ps.readiness);
+  const effortCap = ps.effortCap ?? null;
   const latest = window[0]; // most recent session — used for "Last: 75kg" display
 
   // This set as the last session logged it. Null when the set is new to the
@@ -754,8 +969,17 @@ export function buildSuggestion(
   const roundToInc = (kg: number) => roundToNearest(kg, incrementKg);
 
   // ── Estimated 1RM from the reference set ───────────────────────────────────
+  // Display only, and gated on logged effort (SI-D1). Epley on a set the lifter
+  // stopped four reps short of failure is not a 1RM estimate, and with effort
+  // no longer forged, "nothing logged" now means no estimate rather than an
+  // estimate quietly built on an assumed RPE 7.
+  const referenceRir = loggedRir(reference);
   const estimated1RM: number | null =
-    baseWeight > 0 && reference.actualReps >= 2 && reference.actualReps <= 12
+    baseWeight > 0 &&
+    reference.actualReps >= 2 &&
+    reference.actualReps <= 12 &&
+    referenceRir != null &&
+    referenceRir <= 3
       ? Math.round(estimate1RM(baseWeight, reference.actualReps) * 10) / 10
       : null;
 
@@ -763,11 +987,11 @@ export function buildSuggestion(
   // it fall short? Only reps carry a logged target, so only reps report a
   // shortfall — a timed set records what was held, never what was asked for.
   const judge = (r: LoggedSet): { cleared: boolean; shortfall?: number } => {
-    if (mode === "time") {
+    if (advance === "duration") {
       const target = ps.durationSeconds ?? r.durationSeconds;
       return { cleared: target != null && (r.durationSeconds ?? 0) >= target };
     }
-    if (mode === "distance") {
+    if (advance === "distance") {
       const target = ps.distanceMeters ?? r.distanceMeters;
       return { cleared: target != null && (r.distanceMeters ?? 0) >= target };
     }
@@ -781,12 +1005,12 @@ export function buildSuggestion(
 
   // ── Clearance per session, then the gate ───────────────────────────────────
   const outcomes = window.map((sess) =>
-    evaluateSession(sess, scope, ps.setNumber, judge),
+    evaluateSession(sess, scope, ps.setNumber, judge, effortCap),
   );
   const latestOutcome = outcomes[0];
   // Load is incidental to a plank or a run, so the "at this load or heavier"
   // clause only applies where load is the thing being progressed.
-  const compareLoad = mode !== "time" && mode !== "distance";
+  const compareLoad = advance !== "duration" && advance !== "distance";
   // What SI-11 compares against: the load the sets the scope reads are working
   // at, which under scope "all" is the same maximum currentLoad uses.
   const decidingLoad = latestOutcome.loadKg;
@@ -808,9 +1032,23 @@ export function buildSuggestion(
   const easyOverride = !hasConsensus && latestOutcome.wasEasy;
   const shouldProgress = hasConsensus || easyOverride;
 
-  // ── Deload detection: DELOAD_THRESHOLD sessions in a row failed to clear ──
-  // Only applies to weight-bearing modes (not manual, not time).
-  const canDeload = mode === "weight" || mode === "smart" || mode === "reps";
+  // ── Back-off detection: `backoffAfter` sessions in a row failed to clear ──
+  // Axis 7 decides whether this fires at all, and by how much. It used to be
+  // decided by the mode, which meant a rep ladder cut the *weight* when the
+  // reps stalled — progressing one dimension and regressing another.
+  const backoffPct = ps.backoffPct ?? DELOAD_PCT;
+  const backoffAfter = ps.backoffAfter ?? DELOAD_THRESHOLD;
+  // A back-off cuts the load, so it needs a load to cut. Duration and distance
+  // sets carry a weight only incidentally, and the two advances that suggest
+  // nothing have nothing to back off from either.
+  const canDeload =
+    regress === "backoff" &&
+    (advance === "load" || advance === "double" || advance === "reps");
+  // Recovering ground (SI-18) asks whether the load or the reps dropped, which
+  // is a question about what is being progressed rather than about whether a
+  // back-off is configured. The two used to share one flag.
+  const canRecover =
+    advance === "load" || advance === "double" || advance === "reps";
   const consecutiveMisses = countConsecutiveMisses(outcomes);
   // The guard that must not be dropped. Without it, one rep short on set 4
   // three sessions running deloads all four sets by 10% — the normal state of
@@ -822,7 +1060,7 @@ export function buildSuggestion(
       (!compareLoad || o.loadKg >= decidingLoad - LOAD_EPSILON),
   ).length;
   const isStuck =
-    canDeload && consecutiveMisses >= DELOAD_THRESHOLD && qualifyingClears === 0;
+    canDeload && consecutiveMisses >= backoffAfter && qualifyingClears === 0;
 
   // ── Sessions until deload warning ──────────────────────────────────────────
   let sessionsUntilDeload: number | null = null;
@@ -831,7 +1069,7 @@ export function buildSuggestion(
       ? 0
       : consecutiveMisses === 0
         ? null
-        : DELOAD_THRESHOLD - consecutiveMisses;
+        : backoffAfter - consecutiveMisses;
   }
 
   // ── Shared "basedOn" fields ──
@@ -855,16 +1093,21 @@ export function buildSuggestion(
       date: o.date,
       status: o.status,
       ...(o.shortfall != null ? { shortfall: o.shortfall } : {}),
+      ...(o.unknownReason ? { unknownReason: o.unknownReason } : {}),
+      ...(o.effortShort ? { effortShort: true } : {}),
       loggedSets: o.loggedSets,
       prescribedSets: o.prescribedSets,
       feeling: o.feeling,
     })),
   };
 
-  // ── Deload takes priority over all mode-specific logic ──
-  if (isStuck) {
+  // ── A back-off takes priority over everything the advance would do ──
+  // E-18: repeated cuts must not walk a lift below an empty bar, and at zero
+  // load (bodyweight) there is nothing to cut, so it is a no-op rather than a
+  // suggestion to lift 0 kg.
+  if (isStuck && baseWeight > 0) {
     return {
-      suggestedWeightKg: roundToInc(baseWeight * DELOAD_FACTOR),
+      suggestedWeightKg: backoffWeight(baseWeight, backoffPct, incrementKg),
       ...basedOn,
       reason: "deload",
     };
@@ -882,7 +1125,7 @@ export function buildSuggestion(
   // never made.
   if (
     outcomes.length >= 2 &&
-    canDeload &&
+    canRecover &&
     latestOutcome.status !== "unknown" &&
     outcomes[1].status !== "unknown"
   ) {
@@ -891,7 +1134,7 @@ export function buildSuggestion(
     if (prev.loadKg > decidingLoad + LOAD_EPSILON) {
       // Weight decreased — only retry if the drop was a one-off, not a deload
       const prevFailStreak = countConsecutiveMisses(outcomes.slice(1));
-      const wasIntentionalDeload = prevFailStreak >= DELOAD_THRESHOLD - 1;
+      const wasIntentionalDeload = prevFailStreak >= backoffAfter - 1;
       if (!wasIntentionalDeload) {
         return {
           suggestedWeightKg: prev.loadKg,
@@ -929,10 +1172,23 @@ export function buildSuggestion(
     }
   }
 
-  // ── Build mode-specific suggestion ──────────────────────────────────────────
+  // ── Build the advance ───────────────────────────────────────────────────────
+  // Every branch below asks "should this move" the same way; only *what* moves
+  // differs. That is axis 6, and it is the whole reason the mode was split.
   let suggestion: SetSuggestion;
 
-  switch (mode) {
+  // A cap was prescribed and the deciding set said nothing about effort. That
+  // is a different message from "you have not cleared it enough times", and
+  // rendering both as `held` is how the old UI left people guessing.
+  const heldReason: SetSuggestion["reason"] =
+    latestOutcome.unknownReason === "effort" ? "held-unknown" : "held";
+  const held = (weightKg: number): SetSuggestion => ({
+    suggestedWeightKg: weightKg,
+    ...basedOn,
+    reason: heldReason,
+  });
+
+  switch (advance) {
     case "none":
       return null;
 
@@ -940,7 +1196,7 @@ export function buildSuggestion(
       suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "manual" };
       break;
 
-    case "weight":
+    case "load":
       // Bodyweight exercises (weight=0) can't progress by adding kg — fall back to reps.
       if (currentLoad === 0) {
         const bwTarget = ps.targetReps ?? reference.targetReps;
@@ -952,7 +1208,7 @@ export function buildSuggestion(
             reason: "progressed-reps",
           };
         } else {
-          suggestion = { suggestedWeightKg: 0, ...basedOn, reason: "held" };
+          suggestion = held(0);
         }
         break;
       }
@@ -963,59 +1219,9 @@ export function buildSuggestion(
           reason: "progressed",
         };
       } else {
-        suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "held" };
+        suggestion = held(baseWeight);
       }
       break;
-
-    case "smart": {
-      // Bodyweight exercises (weight=0) can't use 1RM logic — fall back to reps.
-      if (currentLoad === 0) {
-        const bwTarget = ps.targetReps ?? reference.targetReps;
-        if (shouldProgress && incrementReps > 0 && bwTarget != null) {
-          suggestion = {
-            suggestedWeightKg: 0,
-            suggestedReps: bwTarget + incrementReps,
-            ...basedOn,
-            reason: "progressed-reps",
-          };
-        } else {
-          suggestion = { suggestedWeightKg: 0, ...basedOn, reason: "held" };
-        }
-        break;
-      }
-      if (shouldProgress && incrementKg > 0) {
-        const newWeight = roundToInc(currentLoad + incrementKg);
-        let adjustedRepsForWeight: number | undefined;
-        // 1RM estimation: only valid for weight > 0, 2–12 reps, and a near-max
-        // last set (RPE ≥ 7). Sub-max sets aren't on the Epley curve, so an
-        // estimated rep cut would be meaningless.
-        const canComputeRM =
-          baseWeight > 0 &&
-          reference.actualReps != null &&
-          reference.actualReps >= 2 &&
-          reference.actualReps <= 12 &&
-          reference.rpe != null &&
-          reference.rpe >= 7;
-        if (canComputeRM && newWeight > baseWeight) {
-          const oneRM = estimate1RM(baseWeight, reference.actualReps);
-          const adj = estimateRepsAt(oneRM, newWeight);
-          const currentTarget =
-            ps.targetReps ?? reference.targetReps ?? reference.actualReps;
-          if (currentTarget != null && adj < currentTarget) {
-            adjustedRepsForWeight = adj;
-          }
-        }
-        suggestion = {
-          suggestedWeightKg: newWeight,
-          adjustedRepsForWeight,
-          ...basedOn,
-          reason: "progressed",
-        };
-      } else {
-        suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "held" };
-      }
-      break;
-    }
 
     case "reps": {
       const targetReps = ps.targetReps ?? reference.targetReps;
@@ -1033,7 +1239,7 @@ export function buildSuggestion(
           reason: "progressed-reps",
         };
       } else {
-        suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "held" };
+        suggestion = held(baseWeight);
       }
       break;
     }
@@ -1053,7 +1259,7 @@ export function buildSuggestion(
       const target = ps.targetReps ?? reference.targetReps ?? null;
 
       if (!shouldProgress) {
-        suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "held" };
+        suggestion = held(baseWeight);
         break;
       }
 
@@ -1078,9 +1284,15 @@ export function buildSuggestion(
 
       // At the top of the range: buy the next range with load. With nothing to
       // add — no increment, or a bodyweight exercise — the exercise holds
-      // rather than climbing past the range its owner configured (E-4).
+      // rather than climbing past the range its owner configured (E-4). The
+      // sheet refuses to offer this pairing, so it should be unreachable; the
+      // engine still says so rather than inventing an advance.
       if (incrementKg <= 0 || currentLoad === 0) {
-        suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "held" };
+        suggestion = {
+          suggestedWeightKg: baseWeight,
+          ...basedOn,
+          reason: "held-no-increment",
+        };
         break;
       }
       const resetWeight = roundToInc(currentLoad + incrementKg);
@@ -1092,33 +1304,47 @@ export function buildSuggestion(
               ...basedOn,
               reason: "reset",
             }
-          : // No range at all. Nothing can configure that today — phase 5's
-            // preset writes the mode and the range together — and freezing the
-            // exercise would be a worse answer than the load progression the
-            // lifter plainly wanted.
+          : // No range at all. The picker writes the mode and the range
+            // together, so this is a hand-edited or imported pairing; freezing
+            // the exercise would be a worse answer than the load progression
+            // the lifter plainly wanted.
             { suggestedWeightKg: resetWeight, ...basedOn, reason: "progressed" };
       break;
     }
 
-    case "time": {
+    case "duration": {
       const targetDuration = ps.durationSeconds ?? reference.durationSeconds;
       const actualDuration = reference.durationSeconds ?? 0;
-      // overloadIncrementReps doubles as seconds increment for time mode;
+      // overloadIncrementReps doubles as seconds increment for this axis;
       // fall back to 10s if not configured.
       const incrementSecs = incrementReps > 0 ? incrementReps : 10;
       const basedOnWithDuration = {
         ...basedOn,
         basedOnDurationSeconds: actualDuration > 0 ? actualDuration : undefined,
       };
-      if (targetDuration != null && actualDuration >= targetDuration && shouldProgress) {
+      // A5: an anchored set is never an advance target. The cycle rewrites
+      // duration_seconds from peak_duration_seconds every week, so a bump here
+      // is overwritten at best and fights the periodization at worst.
+      if (ps.peakDurationSeconds != null) {
         suggestion = {
           suggestedWeightKg: baseWeight,
-          suggestedDurationSeconds: actualDuration + incrementSecs,
+          ...basedOnWithDuration,
+          reason: "held-anchored",
+        };
+        break;
+      }
+      if (targetDuration != null && shouldProgress) {
+        // Target + increment, not actual + increment (A5). Beating a 5-minute
+        // hold by 40 seconds used to ratchet the plan by 40 seconds, so one
+        // good session permanently reset what counted as clearing.
+        suggestion = {
+          suggestedWeightKg: baseWeight,
+          suggestedDurationSeconds: targetDuration + incrementSecs,
           ...basedOnWithDuration,
           reason: "progressed-time",
         };
       } else {
-        suggestion = { suggestedWeightKg: baseWeight, ...basedOnWithDuration, reason: "held" };
+        suggestion = { suggestedWeightKg: baseWeight, ...basedOnWithDuration, reason: heldReason };
       }
       break;
     }
@@ -1126,51 +1352,67 @@ export function buildSuggestion(
     case "distance": {
       const targetDistance = ps.distanceMeters ?? reference.distanceMeters;
       const actualDistance = reference.distanceMeters ?? 0;
-      // overloadIncrementReps doubles as meters increment for distance mode;
+      // overloadIncrementReps doubles as meters increment for this axis;
       // fall back to 500m (+0.5km) if not configured.
       const incrementMeters = incrementReps > 0 ? incrementReps : 500;
       const basedOnWithDistance = {
         ...basedOn,
         basedOnDistanceMeters: actualDistance > 0 ? actualDistance : undefined,
       };
-      if (targetDistance != null && actualDistance >= targetDistance && shouldProgress) {
+      if (ps.peakDistanceMeters != null) {
         suggestion = {
           suggestedWeightKg: 0,
-          suggestedDistanceMeters: actualDistance + incrementMeters,
+          ...basedOnWithDistance,
+          reason: "held-anchored",
+        };
+        break;
+      }
+      if (targetDistance != null && shouldProgress) {
+        // Target + increment, for the same reason as duration above: beating a
+        // 5 km target by 200 m used to make 5.2 km the new prescription.
+        suggestion = {
+          suggestedWeightKg: 0,
+          suggestedDistanceMeters: targetDistance + incrementMeters,
           ...basedOnWithDistance,
           reason: "progressed-distance",
         };
       } else {
-        suggestion = { suggestedWeightKg: 0, ...basedOnWithDistance, reason: "held" };
+        suggestion = { suggestedWeightKg: 0, ...basedOnWithDistance, reason: heldReason };
       }
       break;
     }
-
-    default:
-      suggestion = { suggestedWeightKg: baseWeight, ...basedOn, reason: "manual" };
   }
 
-  // ── Readiness modulation: low energy → hold all progressions ────────────
-  if (
-    readiness != null &&
-    readiness <= 2 &&
-    // "reset" belongs here for the same reason as the rest: it raises the
-    // load. That it also drops the reps does not make it a lighter day.
-    (suggestion.reason === "progressed" ||
-      suggestion.reason === "progressed-reps" ||
-      suggestion.reason === "reset" ||
-      suggestion.reason === "progressed-time" ||
-      suggestion.reason === "progressed-distance")
-  ) {
-    suggestion = {
+  // ── Readiness modulation: axis 8 ────────────────────────────────────────
+  // "reset" is in the list for the same reason as the rest: it raises the
+  // load. That it also drops the reps does not make it a lighter day.
+  const isAdvance =
+    suggestion.reason === "progressed" ||
+    suggestion.reason === "progressed-reps" ||
+    suggestion.reason === "reset" ||
+    suggestion.reason === "progressed-time" ||
+    suggestion.reason === "progressed-distance";
+  if (readiness != null && readiness <= 2 && readinessRule !== "ignore" && isAdvance) {
+    const cleared = {
       ...suggestion,
-      reason: "held-readiness",
       suggestedWeightKg: baseWeight,
       suggestedReps: undefined,
       suggestedDurationSeconds: undefined,
       suggestedDistanceMeters: undefined,
       readinessModulated: true,
     };
+    suggestion =
+      // "reduce" backs off rather than merely holding — E-7 reuses the
+      // `backoff` reason code with readinessModulated set, so the chip can say
+      // why without every consumer learning a tenth code. Nothing to back off
+      // from at zero load, so bodyweight work holds either way.
+      readinessRule === "reduce" && baseWeight > 0
+        ? {
+            ...cleared,
+            suggestedWeightKg: backoffWeight(baseWeight, backoffPct, incrementKg),
+            reason: "deload",
+          }
+        : { ...cleared, reason: "held-readiness" };
   }
 
   // Flag the bump the easy verdict earned, so the UI can say why it fired

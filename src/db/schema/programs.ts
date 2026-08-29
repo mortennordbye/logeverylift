@@ -77,6 +77,39 @@ export const programExercises = pgTable("program_exercises", {
   // a bump is suggested. Null = inherit REQUIRED_HITS from progression.ts, so
   // the shared default stays in one place instead of being copied per row.
   progressionRequiredHits: integer("progression_required_hits"),
+  // What moves when the gate is met. This is the axis the engine reads;
+  // progressionMode above is kept for one release so a client or an export
+  // written before the axes still round-trips, and nothing reads it.
+  //   none     — no suggestions, no chips, no dots
+  //   manual   — proposes nothing, but still shows what you did last time
+  //   load     — add kg
+  //   reps     — add reps at the same load
+  //   double   — climb the reps inside the range, then convert them into load
+  //   duration — add seconds
+  //   distance — add metres
+  progressionAdvance: text("progression_advance").notNull().default("manual"),
+  // What happens when the gate keeps not being met.
+  //   hold    — nothing; the plan stands
+  //   backoff — cut the load once the misses run long enough
+  progressionRegress: text("progression_regress").notNull().default("backoff"),
+  // How far a back-off cuts, and how many consecutive non-clearing sessions it
+  // waits for. Only read when progressionRegress is "backoff". The defaults are
+  // DELOAD_FACTOR and DELOAD_THRESHOLD from progression.ts, expressed per row.
+  progressionBackoffPct: integer("progression_backoff_pct").notNull().default(10),
+  progressionBackoffAfter: integer("progression_backoff_after").notNull().default(3),
+  // What a low pre-workout readiness score does to a suggestion.
+  //   ignore — nothing; the suggestion stands
+  //   hold   — downgrade an advance to held
+  //   reduce — propose a back-off instead
+  progressionReadiness: text("progression_readiness").notNull().default("hold"),
+  // When the judging rules last changed (scope, gate, advance, regress, the
+  // rep range or an effort cap). Sessions logged before it are dropped from the
+  // window, because they were judged under a rule that no longer applies:
+  // without this, changing a setting silently re-judges history and the dot
+  // count moves for reasons the lifter cannot see. Null = never changed, so
+  // the whole window counts. Increments and the plan opt-in do not stamp it —
+  // they change what an advance writes, not what counts as a clear.
+  progressionConfigAt: timestamp("progression_config_at"),
   // Opt-in: accepting a suggestion also rewrites this slot's planned sets, so
   // the next session opens at the new numbers instead of the old ones. Off
   // keeps the historical behaviour — a suggestion only overrides the live
