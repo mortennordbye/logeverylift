@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Active work: the progression rebuild
+
+If you are asked to work on progressive overload, progression suggestions, the
+increment engine, rep ranges, RIR/effort logging, or anything under
+`src/lib/utils/progression.ts`, **read
+[`docs/progression-revamp-plan.md`](docs/progression-revamp-plan.md) first,
+starting at section 0.** It is a complete build brief written to be picked up
+with no conversation history.
+
+Short version: the engine is being rebuilt as one machine with configurable
+settings, in seven phases, built in the order `0, 1, 3, 2, 4, 5, 6`. All eleven
+design decisions are already made and recorded in its section 12 — build to
+them rather than re-asking. The work lives on branch
+`fix/progression-never-lowers-plan`, which is not yet pushed.
+
+Do not start from `docs/specs/smart-incrementation.md` alone: it accurately
+describes the engine as it is today, which the plan is replacing.
+
 ## Working approach
 
 These guidelines bias toward caution over speed. For trivial tasks, use judgment.

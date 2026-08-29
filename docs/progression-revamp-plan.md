@@ -11,42 +11,58 @@ Nothing here is a code change yet. Section 12 holds the eleven decisions this pl
 
 ---
 
-## 0. Start here (picking this up in a fresh session)
+## 0. Start here
 
-This document is the complete brief. It assumes no conversation history. Read it top to bottom before touching code.
+**You are picking up a planned rebuild of the progressive-overload engine. This document is the complete brief; it assumes no conversation history.** Read it top to bottom before touching code. It is long because the engine is the reason the app exists, and because two independent reviews found about thirty defects in an earlier draft that read as finished.
 
-**Repo state at time of writing.** Branch `fix/progression-never-lowers-plan`, seven commits ahead of `main`, not pushed and not smoke-tested. It contains an audit of the current engine and one bug fix that predates this plan: a progression suggestion could lower the plan, because the ratchet compared against the last *logged* value rather than the planned one. That fix stands and this plan builds on top of it. The audit findings it produced are `A1`-`A11` in [`../BACKLOG.md`](../BACKLOG.md); this document is the plan to resolve them.
+### Repo state
 
-**Outstanding from that branch, unrelated to this plan:** the Playwright smoke pass was never run, because the webkit browser binary is not installed (`./node_modules/.bin/playwright install webkit`). Anything touching the set list needs it before pushing, per `CLAUDE.md`.
+- Branch **`fix/progression-never-lowers-plan`**, 20 commits ahead of `main`, **not pushed**. Everything below is committed there.
+- It contains an audit of the current engine (`A1`-`A11` in [`../BACKLOG.md`](../BACKLOG.md)), one bug fix that predates this plan (a progression suggestion could silently lower the plan, because the ratchet compared against the last *logged* value rather than the planned one), and this plan.
+- **Outstanding:** the Playwright e2e suite has never run on this branch. The webkit browser binary is not installed and an earlier install stalled while holding the cache lock. Resolve with `./node_modules/.bin/playwright install webkit` (kill any stale install process first) before pushing anything that touches the set list.
 
-**Read in this order:**
+### Read in this order
 
-1. This file, sections 1 to 15. **Sections 14 and 15 are not optional.** 14 holds three prerequisites (`P-1` to `P-3`) that block phases, including a live data-loss bug, plus twelve edge cases specified in advance. 15 traces every consumer outside the engine that this plan changes: `B-1` (a null flowing into cycle periodization as `NaN`) and `B-2` (a third consumer of the reason code that the spec does not mention) both break silently if missed.
-2. [`specs/smart-incrementation.md`](specs/smart-incrementation.md) for how the current engine behaves. It is accurate about the code and stays the reference until phase 5 rewrites it.
-3. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`, the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (both consumers).
+1. **This file, sections 1 to 15.** Sections 14 and 15 are not optional: 14 holds three prerequisites (`P-1` to `P-3`) that block phases, including a live data-loss bug, plus nineteen edge cases specified in advance. 15 traces twenty-three consumers outside the engine that this plan changes.
+2. [`specs/smart-incrementation.md`](specs/smart-incrementation.md) — how the engine behaves today. Accurate against the code, and the reference until phase 5 rewrites it.
+3. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions` and the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (two of the consumers).
 4. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
 
-**Decisions: all eleven are made.** Read section 12 in full before phase 1, not just the phase you are on. Each carries binding consequences the build must honour, several of which are not derivable from the one-line answer. Build to them and do not relitigate them; if one turns out to be wrong, say so and get it changed there rather than working around it in code.
+### Decisions: all eleven are made. Do not re-ask them.
 
-The short form:
+Section 12 holds `D-1` to `D-11` with the consequences each binds the build to, several of which are not derivable from the one-line answer. Read the section, not just this table.
 
 | | Decision |
 |---|---|
 | `D-1` | A prescribed RIR gates clearing, on capped exercises only. Uncapped exercises clear on target alone. |
-| `D-2` | Unlogged effort on a capped exercise is unknown: neither a clear nor a failure, but it still ages the window. |
+| `D-2` | Unlogged effort on a capped exercise is unknown: neither clear nor failure, but it still ages the window. |
 | `D-3` | Existing exercises migrate to scope `all`. This visibly changes progression for everything already in the app. |
 | `D-4` | `smart` mode is retired. `adjustedRepsForWeight` is deleted; `estimated1RM` survives as a gated display value. |
-| `D-5` | Stale after 21 days, and a re-approach proposes the last logged load minus 10%. |
+| `D-5` | Stale after 21 days; a re-approach proposes the last logged load, less ten percent. |
 | `D-6` | Delete the cycle's strength-phase branch. Progression owns `target_reps`. Preserve the research in the cycle spec. |
 | `D-7` | Scope `all` means literally every working set. No `n_of_m`. |
-| `D-8` | The set that decides clearing also decides effort. Floor follows the scope. |
-| `D-11` | The gate is **consecutive** clears. A miss resets it; an unknown session does not. |
+| `D-8` | The set that decides clearing also decides effort. The floor follows the scope. |
 | `D-9` | A partially logged session is unknown: no gate credit, no back-off credit. |
 | `D-10` | PRs predating honest logging are kept and flagged unverified, never deleted. |
+| `D-11` | The gate is **consecutive** clears. A miss resets it; an unknown session does not. |
 
-**Then:** build phase by phase from section 11, one phase per branch. `pnpm verify` after each. The smoke pass from `CLAUDE.md` after phases 2, 5 and 6. Do not start a later phase before the earlier one is merged; the phases are ordered by data dependency, not preference. `D-6` is independent of all of them and can be done at any point, including first, as a self-contained cleanup.
+If one turns out to be wrong once you are in the code, say so and get it changed in section 12. Do not work around it silently.
 
-**The one thing to hold onto:** a tap records a claim the lifter made, and silence records nothing. Most of what is wrong today comes from inventing an effort value nobody supplied.
+### Build order
+
+**`0, 1, 3, 2, 4, 5, 6`.** The swap is deliberate and explained in section 11: shipping honest reps (phase 2) while the engine is still per-set would deload set 4 of every straight-set exercise. Phase numbering is kept stable so references do not move.
+
+One phase per branch. `pnpm verify` after each. The smoke pass in `CLAUDE.md` after phases 2, 5 and 6. Do not start a later phase before the earlier one is merged: the order is data dependency, not preference. `D-6`'s cleanup is independent of everything else and can go first or last.
+
+### How not to repeat the mistakes this plan already made
+
+`pnpm verify` runs `pnpm check:docs`, which verifies every `file:line` citation and symbol name in `docs/` against the code. It exists because an earlier draft of this document cited a function that has never existed and two review passes missed it. When you touch a doc, that check must pass.
+
+The rules it cannot enforce are in `CLAUDE.md`: never cite a file you have not opened at that line; run the check rather than reasoning about it when it is runnable; verify a finding before relaying it as fact, including one from a subagent.
+
+### The one thing to hold onto
+
+**A tap records a claim the lifter made. Silence records nothing.** Most of what is wrong with the engine today comes from inventing an effort value nobody supplied. Judge every design choice against that.
 
 ---
 
