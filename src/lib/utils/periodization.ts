@@ -234,6 +234,21 @@ export type Adaptation = {
 };
 
 /**
+ * Mean of the effort values that were actually logged, or null when none were.
+ *
+ * Null means "not logged", and it has to be dropped rather than folded in:
+ * summing straight through coerces null to 0, so [8, null, 6] averages to 4.67
+ * instead of 7. That is not a harmless imprecision — it drags the mean under the
+ * avgRpe ≤ 6 threshold in computeAdaptationFactor, which *raises* weekly volume
+ * by 5% for someone whose only sin was not reporting how hard the week felt.
+ */
+export function meanLoggedRpe(values: Array<number | null>): number | null {
+  const logged = values.filter((v): v is number => v != null);
+  if (logged.length === 0) return null;
+  return logged.reduce((a, b) => a + b, 0) / logged.length;
+}
+
+/**
  * No-wearable performance adaptation. Eases the block when the athlete is behind
  * or under-recovered, and nudges it up when they're consistent and fresh. Pure
  * and conservative — a tight ±band, and neutral (100) when there's no signal, so

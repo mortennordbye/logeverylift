@@ -12,6 +12,7 @@ import {
   computeAdaptationFactor,
   deloadCadenceForLevel,
   intervalPhaseRecipe,
+  meanLoggedRpe,
   periodizedLoad,
   phaseLabel,
   phaseLayout,
@@ -511,15 +512,17 @@ async function computeCycleAdaptation(
   // rpe is RIR-derived (rpe = 10 − rir) for sets logged with Reps In Reserve,
   // so this average is a real effort signal — the avgRpe ≤ 6 "push" condition in
   // computeAdaptationFactor corresponds to averaging ≥ 4 reps in reserve.
+  //
+  // Sets with no logged effort are dropped, not counted as zero: the average is
+  // "how hard the logged sets were", and a week where nobody answered stays the
+  // no-signal case (null) that leaves the block neutral.
   let avgRpe: number | null = null;
   if (recent.length > 0) {
     const rpeRows = await db
       .select({ rpe: workoutSets.rpe })
       .from(workoutSets)
       .where(inArray(workoutSets.sessionId, recent.map((r) => r.id)));
-    if (rpeRows.length > 0) {
-      avgRpe = rpeRows.reduce((a, r) => a + r.rpe, 0) / rpeRows.length;
-    }
+    avgRpe = meanLoggedRpe(rpeRows.map((r) => r.rpe));
   }
 
   return computeAdaptationFactor({ adherence, avgReadiness, avgRpe });

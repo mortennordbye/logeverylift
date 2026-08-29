@@ -4,6 +4,7 @@ import {
   deloadCadenceForLevel,
   formatPeriodizationSummary,
   intervalPhaseRecipe,
+  meanLoggedRpe,
   periodizedLoad,
   phaseLayout,
   scaledDuration,
@@ -133,6 +134,29 @@ describe("intervalPhaseRecipe — quality session evolves by phase", () => {
   it("gives harder reps more recovery", () => {
     expect(intervalPhaseRecipe("peak").restSeconds).toBeGreaterThan(intervalPhaseRecipe("base").restSeconds);
     expect(intervalPhaseRecipe("build").restSeconds).toBeGreaterThanOrEqual(intervalPhaseRecipe("base").restSeconds);
+  });
+});
+
+describe("meanLoggedRpe", () => {
+  it("averages only the sets that reported effort", () => {
+    expect(meanLoggedRpe([8, null, 6])).toBe(7);
+  });
+
+  it("returns null when nothing was logged, which keeps the block neutral", () => {
+    expect(meanLoggedRpe([null, null])).toBeNull();
+    expect(meanLoggedRpe([])).toBeNull();
+    expect(
+      computeAdaptationFactor({ adherence: 1, avgReadiness: 4.5, avgRpe: meanLoggedRpe([null, null]) }).pct,
+    ).toBe(105); // the no-signal branch, unchanged
+  });
+
+  it("does not let unlogged sets boost the week's volume", () => {
+    // Summing straight through coerces null to 0: [8, null, 6] would average
+    // 4.67, slip under the avgRpe ≤ 6 "comfortable" branch, and add 5% volume
+    // for someone who simply stopped answering the effort prompt.
+    const week = { adherence: 1, avgReadiness: 4.5 };
+    expect(computeAdaptationFactor({ ...week, avgRpe: meanLoggedRpe([8, null, 6]) }).pct).toBe(100);
+    expect(computeAdaptationFactor({ ...week, avgRpe: (8 + 0 + 6) / 3 }).pct).toBe(105); // the bug
   });
 });
 
