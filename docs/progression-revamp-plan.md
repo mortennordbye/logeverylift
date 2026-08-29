@@ -550,7 +550,7 @@ Session-scoped clearance (`D-7`, every working set must clear) cannot work this 
 
 **P-2. The same exercise twice in one program silently destroys logged data. Blocks phase 3, and is a live bug today.**
 
-Nothing stops a program holding two `program_exercises` slots for the same exercise, which is a normal thing to want (heavy bench, then a back-off bench). But `workout_sets` is uniquely indexed on `(session_id, exercise_id, set_number)` and `logSet` uses `onConflictDoUpdate` (`workout-sets.ts:222-247`). So logging set 1 of the second slot **overwrites set 1 of the first slot**. The heavy set's weight, reps and effort are gone, replaced by the back-off's.
+Nothing stops a program holding two `program_exercises` slots for the same exercise, which is a normal thing to want (heavy bench, then a back-off bench). But `workout_sets` is uniquely indexed on `(session_id, exercise_id, set_number)` and `logWorkoutSet` uses `onConflictDoUpdate` (`workout-sets.ts:222-247`). So logging set 1 of the second slot **overwrites set 1 of the first slot**. The heavy set's weight, reps and effort are gone, replaced by the back-off's.
 
 The `onConflictDoUpdate` is correct for its intended purpose (re-logging a set must overwrite, and offline replays must be idempotent). The identity is what is wrong: a logged set is identified by exercise and position, when it should be identified by the plan slot it came from.
 
@@ -691,7 +691,7 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 
 **B-18. The same query's session count changes meaning.** `metrics.ts:590`'s `COUNT(DISTINCT session)` sits behind the `rpe > 0` predicate at `:599`, so weeks with no logged effort drop out of the chart entirely. Also note the exclusion is that `WHERE` clause, not `AVG` skipping nulls as `B-3` states.
 
-**B-19. Two more places gate the mode enum.** `validators/workout.ts:340` (`importProgramSchema`'s `.enum([...])`, which gates the import `B-13` describes) and `programs.ts:579` (`VALID_PROGRESSION_MODES`, backing the `updateProgressionMode` Server Action). Neither is covered by `B-7`, `B-8` or `B-13`.
+**B-19. Two more places gate the mode enum.** `validators/workout.ts:340` (`importProgramSchema`'s `.enum([...])`, which gates the import `B-13` describes) and `programs.ts:579` (`VALID_PROGRESSION_MODES`, backing the `updateProgramExerciseProgressionMode` Server Action). Neither is covered by `B-7`, `B-8` or `B-13`.
 
 **B-20. The mode union lives in the component.** `WorkoutSetsClient.tsx:39`, `:53`, `:357`, `:585` hold the type, the picker list, the badge label and a layout conditional. Phase 5 rewrites this file anyway, but section 8 never says the type is defined here rather than in `types/`.
 

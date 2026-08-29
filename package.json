@@ -22,11 +22,12 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
-    "verify": "pnpm typecheck && pnpm lint && pnpm test",
+    "verify": "pnpm typecheck && pnpm lint && pnpm check:docs && pnpm test",
     "test:e2e": "playwright test",
     "verify:full": "pnpm verify && pnpm test:e2e",
     "test:coverage": "vitest run --coverage",
-    "prepare": "lefthook install || true"
+    "prepare": "lefthook install || true",
+    "check:docs": "tsx scripts/check-doc-claims.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

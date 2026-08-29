@@ -110,6 +110,15 @@ Run `pnpm verify` from the host. It runs `tsc --noEmit`, `eslint`, and the Vites
 
 Do not skip this even when the change "looks obviously correct" — the bugs that slip through are the unexpected ones.
 
+`pnpm verify` includes `pnpm check:docs`, which verifies the `file:line` citations and symbol names in `docs/` and `BACKLOG.md` against the actual code. It exists because a design doc in this repo cited a function that had never existed, and two review passes missed it. Prose is not type-checked; this makes the checkable part of it fail the build.
+
+Rules it cannot enforce, which still apply when writing docs:
+
+- **Never cite a file you have not opened at that line.** A `grep -l` hit tells you a file matched a word, not why.
+- **Run the check instead of reasoning about it** when it is runnable. `node -e` settles a question about JS semantics in one line; reasoning about it is how `null` coercion gets written up as `NaN`.
+- **Verify a finding before relaying it as fact**, including one from a subagent or a review. Repeating someone else's claim in your own voice makes it yours.
+- Point-in-time audits opt out with `<!-- doc-claims: skip -->`, since their citations describe the code as measured.
+
 A pre-push git hook (lefthook) runs `pnpm verify` automatically — install it once with `pnpm install` (the `prepare` script wires it up). Pre-commit is intentionally empty so commits stay fast for AI loops.
 
 For changes that touch a critical user flow (workout logging, rest picker, set editing, drag-reorder, login), additionally run `pnpm verify:full` — it adds Playwright e2e on top of `verify`. Requires the dev server running at `localhost:3000` and `E2E_USER_EMAIL`/`E2E_USER_PASSWORD` env vars set to a test account. Specs live in `e2e/`; add a new one when you ship a critical flow that doesn't have coverage.
