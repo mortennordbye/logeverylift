@@ -153,7 +153,7 @@ Note that the gate counts *sessions*, and a session that does not clear does not
 
 **This is not quite what was asked for, and it is worth a decision.** The stated requirement was load increasing after "two full workouts" clearing. A non-consecutive gate means clear, fail, fail, fail, clear also satisfies it — a bump off two clears with three misses between them. Paired with the back-off rule in section 7 step 5, the same history can satisfy the gate *and* the back-off streak, and only pipeline ordering decides which fires.
 
-A **consecutive**-clears gate matches both the request and every scheme in section 3. If non-consecutive is deliberate, a failing session should at least decay the count rather than being free. Flagged rather than silently changed, because it alters every preset. Call it **`D-11`**, open.
+A **consecutive**-clears gate matches both the request and every scheme in section 3. If non-consecutive is deliberate, a failing session should at least decay the count rather than being free. Flagged rather than silently changed, because it alters every preset. This is **`D-11`** below.
 
 ### 4b. Range 6 to 8, climb then reset
 
@@ -492,6 +492,20 @@ Binding consequences for the build:
 - The flag is display-only. It does not exclude the record from being the current PR, and beating it still counts normally. The point is that an unbeatable record has a visible reason instead of reading as a plateau.
 - Nothing is deleted or recomputed. Rewriting a user's record history to make the new engine look better would be the same dishonesty this plan exists to remove (see `B-4`, which makes the same call about volume).
 - Lands in phase 6 with the PR effort gate (`A11`), not earlier: the flag is meaningless until honest reps exist to contrast it with.
+
+**D-11. Should the gate require *consecutive* clearing sessions?**
+**OPEN. Blocks phase 5 (it changes every preset); phases 0 to 4 can proceed on the current non-consecutive rule.**
+
+The gate counts cleared sessions in the 5-session window without requiring them to be adjacent, so clear, fail, fail, fail, clear satisfies a gate of 2 and bumps the load off two clears with three misses between them. The stated requirement was "two full workouts", which reads as consecutive.
+
+It also interacts badly with the back-off rule: the same history can satisfy the gate *and* the back-off streak, and only the pipeline's ordering (section 7, regress before gate) decides which fires. That is an accident, not a design.
+
+Three options:
+- **Consecutive clears.** Matches the request and every scheme in section 3. A miss resets the count to zero.
+- **Decay.** A non-clearing session decrements the count rather than being free. Softer, and harder to explain in the one-sentence rule (section 8).
+- **Keep as is.** Defensible if the intent is "two good sessions recently" rather than "two in a row", but then the back-off interaction needs stating deliberately rather than falling out of ordering.
+
+*Recommendation: consecutive.* It is what was asked for, it is what the presets imply, and it removes the ambiguity with the back-off streak.
 
 ---
 
