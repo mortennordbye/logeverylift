@@ -5,11 +5,11 @@ import {
   applyProgressionToPlan,
   deleteProgramSet,
   setProgramExerciseApplyToPlan,
-  setProgramExerciseRequiredHits,
+  setProgramExerciseProgression,
+  setProgramExerciseSetDefaults,
   setProgramExerciseType,
   updateProgramExerciseIncrement,
   updateProgramExerciseIncrementReps,
-  updateProgramExerciseProgressionMode,
 } from "@/lib/actions/programs";
 import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
 import {
@@ -20,11 +20,28 @@ import {
 } from "@/lib/utils/exercise-type";
 import { sanitizeDecimalInput } from "@/lib/utils/format";
 import {
+  DELOAD_PCT,
+  DELOAD_THRESHOLD,
+  MAX_REQUIRED_HITS,
   REQUIRED_HITS,
   describeProgressionRule,
   pendingProgressions,
   type PendingProgression,
+  type ProgressionAdvance,
+  type ProgressionReadiness,
+  type ProgressionRegress,
+  toAdvance,
+  toReadiness,
+  toRegress,
+  toScope,
+  type ProgressionScope,
 } from "@/lib/utils/progression";
+import {
+  PROGRESSION_PRESETS,
+  matchPreset,
+  presetLabel,
+  type ProgressionPreset,
+} from "@/lib/utils/progression-presets";
 import type { Discipline } from "@/lib/utils/discipline";
 import type { ProgramSet } from "@/types/workout";
 import { ChevronLeftIcon, Plus } from "lucide-react";
@@ -36,8 +53,6 @@ import { useEffect, useMemo, useState } from "react";
 export type { SetSuggestion as SetSuggestionDisplay } from "@/types/workout";
 import type { SetSuggestion } from "@/types/workout";
 
-type ProgressionMode = "none" | "manual" | "weight" | "smart" | "reps" | "time" | "distance";
-
 const KG_INCREMENT_PRESETS = [0.5, 1, 2.5, 5, 10] as const;
 /** Sessions-at-target presets. Beyond 3 the gate is slower than most cycles. */
 const REQUIRED_HITS_PRESETS = [1, 2, 3] as const;
@@ -45,15 +60,40 @@ const REQUIRED_HITS_PRESETS = [1, 2, 3] as const;
 const EMPTY_SET_IDS: ReadonlySet<number> = new Set<number>();
 const REP_INCREMENT_PRESETS = [1, 2, 3] as const;
 const DISTANCE_INCREMENT_PRESETS_M = [500, 1000, 2000] as const;
+const BACKOFF_PCT_PRESETS = [5, 10, 15, 20] as const;
+/** The ranges people actually run. Anything else goes in through set editing. */
+const REP_RANGE_PRESETS: readonly (readonly [number, number])[] = [
+  [5, 8],
+  [6, 8],
+  [6, 10],
+  [8, 12],
+  [10, 15],
+  [12, 20],
+];
+const EFFORT_CAP_PRESETS = [0, 1, 2, 3, 4] as const;
 
-const MODE_OPTIONS: { mode: ProgressionMode; label: string; description: string }[] = [
-  { mode: "none",      label: "No progression", description: "Log freely — no suggestions or hints" },
-  { mode: "manual",    label: "Manual",          description: "No auto-progression" },
-  { mode: "weight",    label: "Weight",          description: "Add kg when target reps are hit" },
-  { mode: "smart",     label: "Smart weight",    description: "Add kg and adjust reps via 1RM formula" },
-  { mode: "reps",      label: "Reps",            description: "Add reps when target reps are hit" },
-  { mode: "time",      label: "Duration",        description: "Add seconds when target duration is hit" },
-  { mode: "distance",  label: "Distance",        description: "Add 0.5km when target distance is completed" },
+/** Every axis the sheet writes, held together so the sentence can quote them all. */
+type Axes = {
+  advance: ProgressionAdvance;
+  scope: ProgressionScope;
+  requiredHits: number | null;
+  regress: ProgressionRegress;
+  backoffPct: number;
+  backoffAfter: number;
+  readiness: ProgressionReadiness;
+};
+
+const SCOPE_OPTIONS: { value: ProgressionScope; label: string }[] = [
+  { value: "all", label: "Every set" },
+  { value: "first", label: "First set" },
+  { value: "last", label: "Last set" },
+  { value: "set", label: "Each set alone" },
+];
+
+const READINESS_OPTIONS: { value: ProgressionReadiness; label: string }[] = [
+  { value: "ignore", label: "Ignore" },
+  { value: "hold", label: "Hold" },
+  { value: "reduce", label: "Back off" },
 ];
 
 type Props = {
@@ -69,15 +109,18 @@ type Props = {
   suggestions?: Record<number, SetSuggestion>;
   overloadIncrementKg?: number | null;
   overloadIncrementReps?: number;
-  progressionMode?: ProgressionMode;
+  /** Axis 6 — what moves when the gate is met. */
+  progressionAdvance?: string | null;
   /** Sessions at target before a bump. Null = the shared REQUIRED_HITS default. */
   progressionRequiredHits?: number | null;
-  /**
-   * Which sets have to clear for a session to count. Read-only here for now —
-   * the sheet states the rule, and the picker that lets it be changed arrives
-   * with the rest of the axes.
-   */
+  /** Axis 4 — which sets have to clear for a session to count. */
   progressionScope?: string | null;
+  /** Axis 7 and its two numbers. */
+  progressionRegress?: string | null;
+  progressionBackoffPct?: number | null;
+  progressionBackoffAfter?: number | null;
+  /** Axis 8 — what a low readiness score does. */
+  progressionReadiness?: string | null;
   /** Opt-in: accepting a bump also rewrites the planned sets. */
   progressionApplyToPlan?: boolean;
   /** Exercise's intrinsic type (the default shown when there's no override). */
@@ -100,9 +143,13 @@ export function WorkoutSetsClient({
   suggestions,
   overloadIncrementKg: initialIncrement = null,
   overloadIncrementReps: initialIncrementReps = 0,
-  progressionMode: initialMode = "manual",
+  progressionAdvance: initialAdvance = "manual",
   progressionRequiredHits: initialRequiredHits = null,
-  progressionScope = null,
+  progressionScope: initialScope = null,
+  progressionRegress: initialRegress = null,
+  progressionBackoffPct: initialBackoffPct = null,
+  progressionBackoffAfter: initialBackoffAfter = null,
+  progressionReadiness: initialReadiness = null,
   progressionApplyToPlan: initialApplyToPlan = false,
   exerciseTypeDefault = null,
   exerciseTypeOverride: initialTypeOverride = null,
@@ -117,13 +164,29 @@ export function WorkoutSetsClient({
   const [increment, setIncrement] = useState(initialIncrement);
   const [incrementReps, setIncrementReps] = useState(initialIncrementReps);
   const [typeOverride, setTypeOverride] = useState<string | null>(initialTypeOverride);
-  const [requiredHits, setRequiredHits] = useState<number | null>(initialRequiredHits);
   const [applyToPlan, setApplyToPlan] = useState(initialApplyToPlan);
-  const [mode, setMode] = useState<ProgressionMode>(() => {
-    // Snap stale modes to sensible defaults for the exercise type
-    if (exerciseIsTimed && initialMode !== "manual" && initialMode !== "time") return "time";
-    if (exerciseCategory === "cardio" && !exerciseIsTimed && initialMode !== "manual" && initialMode !== "distance") return "manual";
-    return initialMode;
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [axes, setAxes] = useState<Axes>(() => {
+    const isRunningEx =
+      exerciseCategory === "cardio" && !exerciseIsTimed;
+    // Snap a stale advance onto something the exercise can actually do. A
+    // strength scheme on a plank has no measure to move.
+    const advance = toAdvance(initialAdvance);
+    const snapped: ProgressionAdvance =
+      exerciseIsTimed && advance !== "manual" && advance !== "none" && advance !== "duration"
+        ? "duration"
+        : isRunningEx && advance !== "manual" && advance !== "none" && advance !== "distance"
+          ? "manual"
+          : advance;
+    return {
+      advance: snapped,
+      scope: toScope(initialScope),
+      requiredHits: initialRequiredHits,
+      regress: toRegress(initialRegress),
+      backoffPct: initialBackoffPct ?? DELOAD_PCT,
+      backoffAfter: initialBackoffAfter ?? DELOAD_THRESHOLD,
+      readiness: toReadiness(initialReadiness),
+    };
   });
   const workoutSession = useWorkoutSession();
   // Rendered output only — applySuggestion et al. still write through
@@ -165,6 +228,53 @@ export function WorkoutSetsClient({
     sets.find((s) => (s.setType ?? "working") === "working" && s.targetReps != null) ??
     null;
   const firstWorkingTargetReps = firstWorkingSet?.targetReps ?? null;
+
+  const workingSets = sets.filter((s) => (s.setType ?? "working") === "working");
+  // The range the sheet edits and the sentence quotes. Read off the first
+  // working set that carries one — the sheet writes them all together, so they
+  // agree unless somebody edited one set by hand.
+  const repRange =
+    workingSets.find((s) => s.repRangeMin != null && s.repRangeMax != null) ?? null;
+  // D-8: the cap that decides clearing is the one on the set the scope names,
+  // and the server resolves it exactly this way. The sheet has to agree, or the
+  // preset name and the sentence describe a cap the engine is not reading.
+  const capSet =
+    axes.scope === "first" ? workingSets[0] : workingSets[workingSets.length - 1];
+  const effortCap = capSet?.targetRir ?? null;
+
+  // Layer 1's list, filtered to the schemes this exercise's measure can run. A
+  // plank has no reps to double-progress and a run has no weight to add.
+  const measure = isRunning ? "distance" : exerciseIsTimed ? "duration" : "reps";
+  const availablePresets = PROGRESSION_PRESETS.filter((p) =>
+    p.measures.includes(measure),
+  );
+  const matchedAxes = {
+    ...axes,
+    requiredHits: axes.requiredHits ?? REQUIRED_HITS,
+    hasRange: repRange != null,
+    hasEffortCap: effortCap != null,
+  };
+  const currentPresetId = matchPreset(matchedAxes)?.id ?? null;
+
+  // Layer 2. Built from the live axis values every render, so it describes what
+  // the engine will do rather than what the sheet last wrote.
+  const ruleSentence = describeProgressionRule({
+    advance: axes.advance,
+    incrementKg: increment,
+    incrementReps,
+    targetReps: firstWorkingTargetReps,
+    // Same set, same reasoning: the range the sentence quotes is the one on the
+    // set the lifter thinks of as the target.
+    repRangeMin: repRange?.repRangeMin,
+    repRangeMax: repRange?.repRangeMax,
+    requiredHits: axes.requiredHits ?? REQUIRED_HITS,
+    scope: axes.scope,
+    effortCap,
+    regress: axes.regress,
+    backoffPct: axes.backoffPct,
+    backoffAfter: axes.backoffAfter,
+    readiness: axes.readiness,
+  });
 
   // Increment sections this exercise can ever reach, mirroring the mode filter
   // in the progression sheet. They all render into a single grid cell, so that
@@ -293,10 +403,55 @@ export function WorkoutSetsClient({
     persistToPlan(pending);
   }
 
-  async function handleModeChange(newMode: ProgressionMode) {
-    setMode(newMode);
-    await updateProgramExerciseProgressionMode(programExerciseId, newMode);
+  /**
+   * Write one or more axes, optimistically.
+   *
+   * Reverted on failure rather than left showing a setting the server does not
+   * hold: the sentence underneath is the contract with the lifter, and a
+   * sentence describing a rule that was never saved is worse than no sentence.
+   */
+  async function updateAxes(next: Partial<Axes>) {
+    const previous = axes;
+    const merged = { ...axes, ...next };
+    setAxes(merged);
+    const result = await setProgramExerciseProgression({
+      programExerciseId,
+      ...next,
+      ...(next.requiredHits !== undefined ? { requiredHits: next.requiredHits } : {}),
+    });
+    if (!result.success) {
+      setAxes(previous);
+      return;
+    }
     router.refresh();
+  }
+
+  /**
+   * Layer 1: pick a named scheme and every axis moves together.
+   *
+   * Autoregulated is the one preset that needs something outside the axes —
+   * a cap on the sets — so picking it supplies a default rather than landing
+   * on a scheme whose defining feature is unset. Everything else is exactly
+   * the axis values in the preset table.
+   */
+  async function handlePresetChange(preset: ProgressionPreset) {
+    await updateAxes(preset.axes);
+    if (preset.requiresEffortCap === true && effortCap == null) {
+      await handleSetDefaults({ targetRir: 2 });
+    }
+    if (preset.requiresRange === false && repRange != null) {
+      await handleSetDefaults({ repRangeMin: null, repRangeMax: null });
+    }
+  }
+
+  /** Rep range and effort cap, written across every working set of the slot. */
+  async function handleSetDefaults(next: {
+    repRangeMin?: number | null;
+    repRangeMax?: number | null;
+    targetRir?: number | null;
+  }) {
+    const result = await setProgramExerciseSetDefaults({ programExerciseId, ...next });
+    if (result.success) router.refresh();
   }
 
   // null clears the override so the exercise's intrinsic type is inherited.
@@ -310,20 +465,6 @@ export function WorkoutSetsClient({
     setIncrement(newIncrement);
     setCustomKgInput("");
     await updateProgramExerciseIncrement(programExerciseId, newIncrement);
-    router.refresh();
-  }
-
-  async function handleRequiredHitsChange(hits: number) {
-    const previous = requiredHits;
-    setRequiredHits(hits);
-    const result = await setProgramExerciseRequiredHits({
-      programExerciseId,
-      requiredHits: hits,
-    });
-    if (!result.success) {
-      setRequiredHits(previous); // revert — the gate never actually moved
-      return;
-    }
     router.refresh();
   }
 
@@ -357,16 +498,15 @@ export function WorkoutSetsClient({
     );
   }
 
-  function modeBadgeLabel(): string {
-    switch (mode) {
-      case "none":      return "No progression";
-      case "manual":    return "Manual";
-      case "weight":    return increment != null && increment > 0 ? `+${increment}kg` : "Weight";
-      case "smart":     return increment != null && increment > 0 ? `+${increment}kg · smart` : "Smart";
-      case "reps":      return incrementReps > 0 ? `+${incrementReps} rep` : "Reps";
-      case "time":      return incrementReps > 0 ? `+${incrementReps}s` : "Duration";
-      case "distance":  return incrementReps > 0 ? `+${incrementReps / 1000}km` : "Distance";
-    }
+  /**
+   * The badge on the exercise header: the preset's name, or Custom.
+   *
+   * Derived from the live axis values every render rather than stored. A stored
+   * label is a second copy of state the engine does not read, free to drift out
+   * of step with the settings it claims to describe.
+   */
+  function progressionBadgeLabel(): string {
+    return presetLabel(matchedAxes);
   }
 
   return (
@@ -432,9 +572,9 @@ export function WorkoutSetsClient({
         <button
           aria-label="Progression settings"
           onClick={() => setShowProgressionPicker(true)}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-full bg-muted text-xs font-semibold active:scale-95 transition-all ${mode === "none" ? "text-muted-foreground/40" : "text-muted-foreground"}`}
+          className={`flex items-center gap-1 px-3 py-1.5 rounded-full bg-muted text-xs font-semibold active:scale-95 transition-all ${axes.advance === "none" ? "text-muted-foreground/40" : "text-muted-foreground"}`}
         >
-          {mode !== "none" && "↑ "}{modeBadgeLabel()}
+          {axes.advance !== "none" && "↑ "}{progressionBadgeLabel()}
         </button>
         {isWorkout && bestEstimated1RM != null && (
           <span className="px-3 py-1.5 rounded-full bg-primary/10 text-xs font-semibold text-primary">
@@ -500,7 +640,12 @@ export function WorkoutSetsClient({
       </div>
 
 
-      {/* Unified progression picker */}
+      {/* Progression sheet — three layers.
+          1. The preset: a named scheme, and where most people stop.
+          2. The sentence: what the live axis values actually do, always visible.
+          3. Advanced: every axis, collapsed.
+          The sentence is the contract with the lifter, so it sits between the
+          choice and the detail rather than at the bottom of either. */}
       {showProgressionPicker && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end"
@@ -515,31 +660,476 @@ export function WorkoutSetsClient({
                 Progression
               </p>
               <div className="overflow-y-auto">
-                {/* Mode selector — filter based on exercise type */}
-                {MODE_OPTIONS.filter((opt) => {
-                  if (isRunning) return opt.mode === "manual" || opt.mode === "distance";
-                  if (exerciseIsTimed) return opt.mode === "manual" || opt.mode === "time";
-                  if (opt.mode === "distance" || opt.mode === "time") return false;
-                  return true;
-                }).map((opt) => (
-                  <button
-                    key={opt.mode}
-                    onClick={() => handleModeChange(opt.mode)}
-                    className={`w-full flex items-center justify-between px-4 py-3.5 border-b border-border active:bg-muted/50 transition-colors ${
-                      mode === opt.mode ? "text-primary" : ""
-                    }`}
-                  >
-                    <div className="text-left">
-                      <p className={`text-base font-medium ${mode === opt.mode ? "font-semibold" : ""}`}>
-                        {opt.label}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{opt.description}</p>
+                {/* ── Layer 1: the preset ─────────────────────────────────── */}
+                {availablePresets.map((preset) => {
+                  const selected = preset.id === currentPresetId;
+                  // E-4: double progression at the top of its range needs load
+                  // to add. Offering it with the increment explicitly zeroed
+                  // configures an exercise that can only ever hold. A null
+                  // increment is fine — that means the adaptive ladder, which
+                  // always resolves to something positive.
+                  const blocked =
+                    preset.axes.advance === "double" && increment === 0;
+                  return (
+                    <button
+                      key={preset.id}
+                      disabled={blocked}
+                      onClick={() => handlePresetChange(preset)}
+                      className={`w-full flex items-center justify-between px-4 py-3.5 border-b border-border active:bg-muted/50 transition-colors ${
+                        selected ? "text-primary" : ""
+                      } ${blocked ? "opacity-40" : ""}`}
+                    >
+                      <div className="text-left">
+                        <p className={`text-base font-medium ${selected ? "font-semibold" : ""}`}>
+                          {preset.label}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {blocked
+                            ? "Set a weight increment below to use this"
+                            : preset.description}
+                        </p>
+                      </div>
+                      {selected && <span className="text-primary text-lg">✓</span>}
+                    </button>
+                  );
+                })}
+                {currentPresetId === null && (
+                  <div className="px-4 py-3.5 border-b border-border">
+                    <p className="text-base font-semibold text-primary">Custom</p>
+                    <p className="text-xs text-muted-foreground">
+                      These settings don&apos;t match a named scheme. The rule below
+                      still describes them exactly.
+                    </p>
+                  </div>
+                )}
+
+                {/* ── Layer 2: the sentence ───────────────────────────────── */}
+                {/* Reserved height: it runs one to four lines depending on the
+                    axes, and the sheet grows upward from the bottom edge. */}
+                <div className="px-4 py-3 border-b border-border">
+                  <p className="text-xs text-muted-foreground min-h-[64px]">
+                    {ruleSentence ?? "No suggestions for this exercise."}
+                  </p>
+                </div>
+
+                {/* ── Rep range — the one per-set value double progression
+                    cannot work without. Shown only for the scheme that uses
+                    it; ranges have no meaning for a plank or a run (E-5). */}
+                {axes.advance === "double" && (
+                  <div className="border-t border-border">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
+                      Rep range
+                    </p>
+                    <div className="flex flex-wrap gap-2 px-4 pb-3">
+                      {REP_RANGE_PRESETS.map(([min, max]) => (
+                        <button
+                          key={`${min}-${max}`}
+                          onClick={() =>
+                            handleSetDefaults({ repRangeMin: min, repRangeMax: max })
+                          }
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                            repRange?.repRangeMin === min && repRange?.repRangeMax === max
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {min}–{max}
+                        </button>
+                      ))}
                     </div>
-                    {mode === opt.mode && (
-                      <span className="text-primary text-lg">✓</span>
+                    {repRange == null && (
+                      <p className="text-xs text-amber-600 dark:text-amber-500 px-4 pb-3">
+                        Without a range this behaves as plain weight progression.
+                      </p>
                     )}
+                  </div>
+                )}
+
+                {/* Increment sections — stacked in one grid cell so this area's
+                    height never changes when the scheme does. See incrementSections. */}
+                <div className="grid">
+                {/* Kg increment — shown for the load-bearing schemes */}
+                {incrementSections.includes("weight") && (
+                  <div className={`col-start-1 row-start-1 border-t border-border ${axes.advance === "load" || axes.advance === "double" ? "" : "invisible pointer-events-none"}`}>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
+                      Weight increment
+                    </p>
+                    <div className="flex flex-wrap gap-2 px-4 pb-3">
+                      {KG_INCREMENT_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => handleIncrementChange(preset)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                            increment === preset
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          +{preset}kg
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
+                      <span className="text-base font-medium text-muted-foreground shrink-0">+</span>
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="Custom kg"
+                        value={customKgInput}
+                        onChange={(e) => setCustomKgInput(sanitizeDecimalInput(e.target.value))}
+                        className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
+                      />
+                      <button
+                        onClick={() => {
+                          const val = parseFloat(customKgInput);
+                          if (!isNaN(val) && val >= 0) handleIncrementChange(val);
+                        }}
+                        disabled={!customKgInput || isNaN(parseFloat(customKgInput))}
+                        className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
+                      >
+                        Set
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Rep increment — the rep ladder's step, and double
+                    progression's floor when it climbs inside the range */}
+                {incrementSections.includes("reps") && (
+                  <div className={`col-start-1 row-start-1 border-t border-border ${axes.advance === "reps" ? "" : "invisible pointer-events-none"}`}>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
+                      Rep increment
+                    </p>
+                    <div className="flex gap-2 px-4 pb-3">
+                      {REP_INCREMENT_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => handleIncrementRepsChange(preset)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                            incrementReps === preset
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          +{preset}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
+                      <span className="text-base font-medium text-muted-foreground shrink-0">+</span>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        placeholder="Custom reps"
+                        value={customRepInput}
+                        onChange={(e) => setCustomRepInput(e.target.value)}
+                        className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
+                      />
+                      <button
+                        onClick={() => {
+                          const val = parseInt(customRepInput, 10);
+                          if (!isNaN(val) && val >= 0) handleIncrementRepsChange(val);
+                        }}
+                        disabled={!customRepInput || isNaN(parseInt(customRepInput, 10))}
+                        className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
+                      >
+                        Set
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Duration increment */}
+                {incrementSections.includes("time") && (
+                  <div className={`col-start-1 row-start-1 border-t border-border ${axes.advance === "duration" ? "" : "invisible pointer-events-none"}`}>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
+                      Duration increment
+                    </p>
+                    <div className="flex gap-2 px-4 pb-3">
+                      {[5, 10, 15, 30, 60].map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => handleIncrementRepsChange(preset)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                            incrementReps === preset
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          +{preset}s
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Distance increment */}
+                {incrementSections.includes("distance") && (
+                  <div className={`col-start-1 row-start-1 border-t border-border ${axes.advance === "distance" ? "" : "invisible pointer-events-none"}`}>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
+                      Distance increment
+                    </p>
+                    <div className="flex gap-2 px-4 pb-3">
+                      {DISTANCE_INCREMENT_PRESETS_M.map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => handleIncrementRepsChange(preset)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                            incrementReps === preset
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          +{preset / 1000}km
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                </div>
+
+                {/* Plan opt-in. Always mounted, and greyed rather than
+                    unmounted for the two schemes that never suggest anything,
+                    so switching schemes can't change the sheet's height and
+                    slide the row under the user's finger. */}
+                <div
+                  className={`border-t border-border ${
+                    axes.advance === "none" || axes.advance === "manual"
+                      ? "invisible pointer-events-none"
+                      : ""
+                  }`}
+                >
+                  <button
+                    role="switch"
+                    aria-checked={applyToPlan}
+                    onClick={() => handleApplyToPlanChange(!applyToPlan)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 min-h-[44px] text-left active:bg-muted/50 transition-colors"
+                  >
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-base font-medium">
+                        Apply bumps to the plan
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        Taking a suggestion rewrites these planned sets, so next
+                        session starts at the new numbers
+                      </span>
+                    </span>
+                    <span
+                      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                        applyToPlan ? "bg-primary" : "bg-border"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                          applyToPlan ? "translate-x-[22px]" : "translate-x-0.5"
+                        }`}
+                      />
+                    </span>
                   </button>
-                ))}
+                </div>
+
+                {/* ── Layer 3: Advanced ───────────────────────────────────── */}
+                {/* Nothing is hidden and nothing is mandatory. Opening this and
+                    changing anything relabels the exercise Custom, and the
+                    sentence above updates to match. */}
+                <div
+                  className={`border-t border-border ${
+                    axes.advance === "none" || axes.advance === "manual"
+                      ? "invisible pointer-events-none"
+                      : ""
+                  }`}
+                >
+                  <button
+                    aria-expanded={showAdvanced}
+                    onClick={() => setShowAdvanced((v) => !v)}
+                    className="w-full flex items-center justify-between px-4 py-3 min-h-[44px] text-left active:bg-muted/50 transition-colors"
+                  >
+                    <span className="text-base font-medium">Advanced</span>
+                    <span className="text-muted-foreground text-sm">
+                      {showAdvanced ? "Hide" : "Show"}
+                    </span>
+                  </button>
+
+                  {showAdvanced && (
+                    <>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                        Sessions at target
+                      </p>
+                      <div
+                        role="group"
+                        aria-label="Sessions at target"
+                        className="flex gap-2 px-4 pb-3"
+                      >
+                        {REQUIRED_HITS_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() => updateAxes({ requiredHits: preset })}
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                              (axes.requiredHits ?? REQUIRED_HITS) === preset
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                        Which sets have to clear
+                      </p>
+                      <div
+                        role="group"
+                        aria-label="Which sets have to clear"
+                        className="flex flex-wrap gap-2 px-4 pb-3"
+                      >
+                        {SCOPE_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => updateAxes({ scope: opt.value })}
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                              axes.scope === opt.value
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Axis 3. Opt-in by design: an exercise with no cap
+                          clears on the target alone, and a cap you did not ask
+                          for would block progression on effort you never
+                          logged. Written to every working set; the scope
+                          decides which one the engine reads (D-8). */}
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                        Reps in reserve
+                      </p>
+                      <div
+                        role="group"
+                        aria-label="Reps in reserve"
+                        className="flex flex-wrap gap-2 px-4 pb-1"
+                      >
+                        <button
+                          onClick={() => handleSetDefaults({ targetRir: null })}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                            effortCap == null
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          None
+                        </button>
+                        {EFFORT_CAP_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() => handleSetDefaults({ targetRir: preset })}
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                              effortCap === preset
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground px-4 pb-3">
+                        {effortCap == null
+                          ? "Hitting the target reps is the whole test."
+                          : "Sessions where you don't log effort won't count either way."}
+                      </p>
+
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                        When you keep missing
+                      </p>
+                      <div
+                        role="group"
+                        aria-label="When you keep missing"
+                        className="flex flex-wrap gap-2 px-4 pb-3"
+                      >
+                        <button
+                          onClick={() => updateAxes({ regress: "hold" })}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                            axes.regress === "hold"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          Hold
+                        </button>
+                        {BACKOFF_PCT_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() =>
+                              updateAxes({ regress: "backoff", backoffPct: preset })
+                            }
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                              axes.regress === "backoff" && axes.backoffPct === preset
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            −{preset}%
+                          </button>
+                        ))}
+                      </div>
+
+                      {axes.regress === "backoff" && (
+                        <>
+                          <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                            After this many short workouts
+                          </p>
+                          <div
+                            role="group"
+                            aria-label="After this many short workouts"
+                            className="flex gap-2 px-4 pb-3"
+                          >
+                            {Array.from({ length: MAX_REQUIRED_HITS }, (_, i) => i + 1).map(
+                              (preset) => (
+                                <button
+                                  key={preset}
+                                  onClick={() => updateAxes({ backoffAfter: preset })}
+                                  className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                                    axes.backoffAfter === preset
+                                      ? "bg-primary text-primary-foreground"
+                                      : "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {preset}
+                                </button>
+                              ),
+                            )}
+                          </div>
+                        </>
+                      )}
+
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                        On a low-readiness day
+                      </p>
+                      <div
+                        role="group"
+                        aria-label="On a low-readiness day"
+                        className="flex flex-wrap gap-2 px-4 pb-3"
+                      >
+                        {READINESS_OPTIONS.map((opt) => (
+                          <button
+                            key={opt.value}
+                            onClick={() => updateAxes({ readiness: opt.value })}
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                              axes.readiness === opt.value
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
 
                 {/* Exercise-type override — strength only. "Default" inherits the
                     exercise's intrinsic type; pick another to override it here. */}
@@ -585,226 +1175,6 @@ export function WorkoutSetsClient({
                   </div>
                 )}
 
-                {/* Increment sections — stacked in one grid cell so this area's
-                    height never changes when the mode does. See incrementSections. */}
-                <div className="grid">
-                {/* Kg increment — shown for weight and smart modes */}
-                {incrementSections.includes("weight") && (
-                  <div className={`col-start-1 row-start-1 border-t border-border ${mode === "weight" || mode === "smart" ? "" : "invisible pointer-events-none"}`}>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
-                      Weight increment
-                    </p>
-                    <div className="flex flex-wrap gap-2 px-4 pb-3">
-                      {KG_INCREMENT_PRESETS.map((preset) => (
-                        <button
-                          key={preset}
-                          onClick={() => handleIncrementChange(preset)}
-                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                            increment === preset
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          +{preset}kg
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
-                      <span className="text-base font-medium text-muted-foreground shrink-0">+</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="Custom kg"
-                        value={customKgInput}
-                        onChange={(e) => setCustomKgInput(sanitizeDecimalInput(e.target.value))}
-                        className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
-                      />
-                      <button
-                        onClick={() => {
-                          const val = parseFloat(customKgInput);
-                          if (!isNaN(val) && val >= 0) handleIncrementChange(val);
-                        }}
-                        disabled={!customKgInput || isNaN(parseFloat(customKgInput))}
-                        className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
-                      >
-                        Set
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Rep increment — shown for reps mode */}
-                {incrementSections.includes("reps") && (
-                  <div className={`col-start-1 row-start-1 border-t border-border ${mode === "reps" ? "" : "invisible pointer-events-none"}`}>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
-                      Rep increment
-                    </p>
-                    <div className="flex gap-2 px-4 pb-3">
-                      {REP_INCREMENT_PRESETS.map((preset) => (
-                        <button
-                          key={preset}
-                          onClick={() => handleIncrementRepsChange(preset)}
-                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                            incrementReps === preset
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          +{preset}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
-                      <span className="text-base font-medium text-muted-foreground shrink-0">+</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Custom reps"
-                        value={customRepInput}
-                        onChange={(e) => setCustomRepInput(e.target.value)}
-                        className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
-                      />
-                      <button
-                        onClick={() => {
-                          const val = parseInt(customRepInput, 10);
-                          if (!isNaN(val) && val >= 0) handleIncrementRepsChange(val);
-                        }}
-                        disabled={!customRepInput || isNaN(parseInt(customRepInput, 10))}
-                        className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
-                      >
-                        Set
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Duration increment — shown for time mode */}
-                {incrementSections.includes("time") && (
-                  <div className={`col-start-1 row-start-1 border-t border-border ${mode === "time" ? "" : "invisible pointer-events-none"}`}>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
-                      Duration increment
-                    </p>
-                    <div className="flex gap-2 px-4 pb-3">
-                      {[5, 10, 15, 30, 60].map((preset) => (
-                        <button
-                          key={preset}
-                          onClick={() => handleIncrementRepsChange(preset)}
-                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                            incrementReps === preset
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          +{preset}s
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Distance increment — shown for distance mode (running) */}
-                {incrementSections.includes("distance") && (
-                  <div className={`col-start-1 row-start-1 border-t border-border ${mode === "distance" ? "" : "invisible pointer-events-none"}`}>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
-                      Distance increment
-                    </p>
-                    <div className="flex gap-2 px-4 pb-3">
-                      {DISTANCE_INCREMENT_PRESETS_M.map((preset) => (
-                        <button
-                          key={preset}
-                          onClick={() => handleIncrementRepsChange(preset)}
-                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                            incrementReps === preset
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          +{preset / 1000}km
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                </div>
-
-                {/* Gate + plan opt-in. Always mounted, and greyed rather than
-                    unmounted for the two modes that never suggest anything, so
-                    switching modes can't change the sheet's height and slide
-                    the row under the user's finger. */}
-                <div
-                  className={`border-t border-border ${
-                    mode === "none" || mode === "manual"
-                      ? "invisible pointer-events-none"
-                      : ""
-                  }`}
-                >
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
-                    Sessions at target
-                  </p>
-                  <div
-                    role="group"
-                    aria-label="Sessions at target"
-                    className="flex gap-2 px-4 pb-2"
-                  >
-                    {REQUIRED_HITS_PRESETS.map((preset) => (
-                      <button
-                        key={preset}
-                        onClick={() => handleRequiredHitsChange(preset)}
-                        className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                          (requiredHits ?? REQUIRED_HITS) === preset
-                            ? "bg-primary text-primary-foreground"
-                            : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Reserved height: the sentence runs one to three lines
-                      depending on mode, and the sheet grows upward. */}
-                  <p className="text-xs text-muted-foreground px-4 pb-3 min-h-[48px]">
-                    {describeProgressionRule({
-                      mode,
-                      incrementKg: increment,
-                      incrementReps,
-                      targetReps: firstWorkingTargetReps,
-                      // Same set, same reasoning: the range the sentence
-                      // quotes is the one on the set the lifter thinks of as
-                      // the target.
-                      repRangeMin: firstWorkingSet?.repRangeMin,
-                      repRangeMax: firstWorkingSet?.repRangeMax,
-                      requiredHits: requiredHits ?? REQUIRED_HITS,
-                      scope: progressionScope,
-                    })}
-                  </p>
-                  <button
-                    role="switch"
-                    aria-checked={applyToPlan}
-                    onClick={() => handleApplyToPlanChange(!applyToPlan)}
-                    className="w-full flex items-center justify-between gap-3 px-4 py-3 min-h-[44px] border-t border-border text-left active:bg-muted/50 transition-colors"
-                  >
-                    <span className="flex-1 min-w-0">
-                      <span className="block text-base font-medium">
-                        Apply bumps to the plan
-                      </span>
-                      <span className="block text-xs text-muted-foreground">
-                        Taking a suggestion rewrites these planned sets, so next
-                        session starts at the new numbers
-                      </span>
-                    </span>
-                    <span
-                      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
-                        applyToPlan ? "bg-primary" : "bg-border"
-                      }`}
-                    >
-                      <span
-                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
-                          applyToPlan ? "translate-x-[22px]" : "translate-x-0.5"
-                        }`}
-                      />
-                    </span>
-                  </button>
-                </div>
                 {/* Scroll room so custom inputs stay above the keyboard */}
                 <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
               </div>

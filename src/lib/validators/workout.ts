@@ -20,7 +20,18 @@
  * ```
  */
 
-import { MAX_REQUIRED_HITS, MIN_REQUIRED_HITS } from "@/lib/utils/progression";
+import {
+  MAX_BACKOFF_AFTER,
+  MAX_BACKOFF_PCT,
+  MAX_REQUIRED_HITS,
+  MIN_BACKOFF_AFTER,
+  MIN_BACKOFF_PCT,
+  MIN_REQUIRED_HITS,
+  PROGRESSION_ADVANCES,
+  PROGRESSION_READINESSES,
+  PROGRESSION_REGRESSES,
+  PROGRESSION_SCOPES,
+} from "@/lib/utils/progression";
 import { z } from "zod";
 
 export const WORKOUT_FEELINGS = ["Tired", "OK", "Good", "Awesome"] as const;
@@ -228,15 +239,37 @@ export const setProgramExerciseTypeSchema = z.object({
 // How many qualifying sessions this exercise needs before a bump is suggested.
 // null restores the shared REQUIRED_HITS default. The ceiling is the consensus
 // window — asking for more hits than the window holds is unsatisfiable.
-export const setProgramExerciseRequiredHitsSchema = z.object({
-  programExerciseId: z.number().int().positive(),
-  requiredHits: z
-    .number()
-    .int()
-    .min(MIN_REQUIRED_HITS)
-    .max(MAX_REQUIRED_HITS)
-    .nullable(),
-});
+// The progression axes, written together. Every axis is optional so the sheet
+// can send one control's change, and the action writes only what it is given —
+// but they share a validator because they share a config stamp: any of them
+// changes how history is judged, and the stamp is what stops the dot count
+// moving under the lifter when they touch a setting (E-13).
+export const setProgramExerciseProgressionSchema = z
+  .object({
+    programExerciseId: z.number().int().positive(),
+    advance: z.enum(PROGRESSION_ADVANCES).optional(),
+    scope: z.enum(PROGRESSION_SCOPES).optional(),
+    requiredHits: z
+      .number()
+      .int()
+      .min(MIN_REQUIRED_HITS)
+      .max(MAX_REQUIRED_HITS)
+      .nullable()
+      .optional(),
+    regress: z.enum(PROGRESSION_REGRESSES).optional(),
+    backoffPct: z.number().int().min(MIN_BACKOFF_PCT).max(MAX_BACKOFF_PCT).optional(),
+    backoffAfter: z
+      .number()
+      .int()
+      .min(MIN_BACKOFF_AFTER)
+      .max(MAX_BACKOFF_AFTER)
+      .optional(),
+    readiness: z.enum(PROGRESSION_READINESSES).optional(),
+  })
+  .refine(
+    (v) => Object.keys(v).length > 1,
+    "At least one axis must be given",
+  );
 
 // Opt-in: accepted suggestions also rewrite the planned sets.
 export const setProgramExerciseApplyToPlanSchema = z.object({
@@ -302,6 +335,31 @@ const repRangeIsWellFormed = <T extends {
 
 const REP_RANGE_MESSAGE =
   "A rep range needs both a minimum and a maximum, with min ≤ target ≤ max";
+
+// The two per-set progression values the exercise sheet sets uniformly across
+// a slot: the rep range double progression works inside, and the effort cap
+// axis 3 gates on. Both live on program_sets because a top set and its
+// back-offs can legitimately differ — SetEditView still edits them one set at
+// a time — but picking a preset means one thing for the whole exercise, so the
+// sheet writes every working set at once.
+export const setProgramExerciseSetDefaultsSchema = z
+  .object({
+    programExerciseId: z.number().int().positive(),
+    // Both null clears the range back to a fixed target. Half a range is not a
+    // weaker range: the reset needs a bottom to drop to and a top to climb to.
+    repRangeMin: z.number().int().positive().max(1000).nullable().optional(),
+    repRangeMax: z.number().int().positive().max(1000).nullable().optional(),
+    // Null clears the cap, which puts the exercise back on target-only clearing.
+    targetRir: z.number().int().min(0).max(5).nullable().optional(),
+  })
+  .refine(
+    (v) => (v.repRangeMin == null) === (v.repRangeMax == null),
+    { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] },
+  )
+  .refine(
+    (v) => v.repRangeMin == null || v.repRangeMax == null || v.repRangeMin <= v.repRangeMax,
+    { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] },
+  );
 
 // The fields, unrefined. Both schemas below add the rep-range check
 // themselves: zod refuses to `.omit()` from a schema that carries one, so the
