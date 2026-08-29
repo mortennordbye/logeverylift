@@ -1,6 +1,6 @@
 # Progression revamp: plan
 
-> **Status:** approved. All ten decisions (`D-1` to `D-10`) decided 2026-08-29 and written up in section 12 with their binding consequences. Section 14 is a hardening pass (three prerequisites, twelve specified edge cases); section 15 is the traced blast radius outside the engine (fourteen impacts, three of which break outright). Nothing blocks the build.
+> **Status:** approved. All ten decisions (`D-1` to `D-10`) decided 2026-08-29 and written up in section 12 with their binding consequences. Section 14 is a hardening pass (three prerequisites, twelve specified edge cases); section 15 is the traced blast radius outside the engine (fourteen consumers checked, three of which break outright). Nothing blocks the build.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
 > **Closes:** audit findings `A1`-`A11` and spec divergences `D1`-`D8` in [`../BACKLOG.md`](../BACKLOG.md)
@@ -592,6 +592,8 @@ The numbers become correct, but "my volume fell off a cliff" is the reaction, an
 
 **B-12. The demo user shares tables with real users.** Anything seeded is visible in the demo account. Seed data should exercise the new schemes (a fixed-target exercise, a rep-range exercise, one capped, one not) so the presets are demonstrable, not just implemented.
 
-**B-13. `ExportedProgram` round-trips progression settings.** The export/import types in `types/workout.ts` and `importProgramSchema` carry the per-exercise settings. Same requirement as `B-7`: accept the legacy shape for a release, and never reject an export a user made last month.
+**B-13. The export format uses its own compact keys for progression settings.** `ExportedProgram` (`types/workout.ts:399-423`) carries the per-exercise settings, and the export/import code shortens the column names: `progressionMode` is emitted as `mode` and `overloadIncrementKg` as `incKg`, with defaults applied on the way out (`programs.ts:856-858`, `:917-919`) and expanded back on the way in (`:1070-1072`). So phase 5 changes a **wire format**, not just a column.
 
-**B-14. Onboarding explains progression.** `OnboardingTutorial.tsx` references the modes. Phase 5 must update the copy, or new users are taught a vocabulary the app no longer uses.
+*Required:* map the legacy `mode` value through the same table as section 10's migration on import, keep emitting something an old client can read for at least one release, and never reject an export a user made last month. Same requirement as `B-7`, and note the two formats are separate code paths that must both be updated.
+
+**B-14. Onboarding does *not* mention progression.** Checked and clear: `OnboardingTutorial.tsx` matches a search for "smart" only through the `Smartphone` icon import. No copy to update. Recorded because it is the obvious next place to look and the answer is no.
