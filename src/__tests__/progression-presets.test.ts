@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   PROGRESSION_PRESETS,
+  defaultRepRangeFor,
   matchPreset,
   presetLabel,
   toAxes,
@@ -92,5 +93,34 @@ describe("progression presets", () => {
         toAxes({ ...defaults, advance: "load", requiredHits: 1, backoffPct: 20 }),
       ),
     ).toBe("Custom");
+  });
+});
+
+describe("defaultRepRangeFor", () => {
+  it("keeps the current target as the top of a canonical range", () => {
+    expect(defaultRepRangeFor(12)).toEqual([8, 12]);
+    expect(defaultRepRangeFor(10)).toEqual([6, 10]);
+    expect(defaultRepRangeFor(8)).toEqual([5, 8]);
+    expect(defaultRepRangeFor(20)).toEqual([12, 20]);
+  });
+
+  it("never picks a range whose bottom sits above the target", () => {
+    // The server clamps target_reps into the range it is given, so a range
+    // starting above the target would silently raise the prescription. A
+    // preset that hands you harder sets is worse than one that reads Custom.
+    for (const target of [1, 2, 3, 4, 5, 7, 9, 11, 13, 25, 40]) {
+      const [min, max] = defaultRepRangeFor(target);
+      expect(min).toBeLessThanOrEqual(target);
+      expect(max).toBeGreaterThanOrEqual(target);
+      expect(min).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it("falls back to a window under the target when nothing offered reaches it", () => {
+    expect(defaultRepRangeFor(30)).toEqual([26, 30]);
+  });
+
+  it("assumes a middling target when the set has none", () => {
+    expect(defaultRepRangeFor(null)).toEqual([6, 10]);
   });
 });

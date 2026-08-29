@@ -222,3 +222,35 @@ export function toAxes(input: {
     hasEffortCap: input.hasEffortCap,
   };
 }
+
+/** The ranges people actually run. Anything else goes in through set editing. */
+export const REP_RANGE_PRESETS: readonly (readonly [number, number])[] = [
+  [5, 8],
+  [6, 8],
+  [6, 10],
+  [8, 12],
+  [10, 15],
+  [12, 20],
+];
+
+/**
+ * A range to start double progression from, chosen around the target the set
+ * already prescribes.
+ *
+ * Picking a double-progression preset on an exercise with no range would
+ * otherwise land it on the scheme with its subject missing: it behaves as plain
+ * load progression, and the badge reads Custom the instant the lifter picked it
+ * by name. So one is seeded, from the same list the sheet offers, and they can
+ * change it in the row underneath.
+ *
+ * The chosen range must **contain** the current target, not merely reach it.
+ * A range whose bottom sits above the target makes the server clamp the target
+ * up to it, which raises the prescription — a preset that silently gives you
+ * harder sets is worse than one that leaves you on Custom.
+ */
+export function defaultRepRangeFor(targetReps: number | null): [number, number] {
+  const target = targetReps ?? 10;
+  const fit = REP_RANGE_PRESETS.find(([min, max]) => max >= target && min <= target);
+  if (fit) return [fit[0], fit[1]];
+  return [Math.max(1, target - 4), target];
+}

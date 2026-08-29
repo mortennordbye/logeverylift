@@ -38,6 +38,8 @@ import {
 } from "@/lib/utils/progression";
 import {
   PROGRESSION_PRESETS,
+  REP_RANGE_PRESETS,
+  defaultRepRangeFor,
   matchPreset,
   presetLabel,
   type ProgressionPreset,
@@ -61,15 +63,7 @@ const EMPTY_SET_IDS: ReadonlySet<number> = new Set<number>();
 const REP_INCREMENT_PRESETS = [1, 2, 3] as const;
 const DISTANCE_INCREMENT_PRESETS_M = [500, 1000, 2000] as const;
 const BACKOFF_PCT_PRESETS = [5, 10, 15, 20] as const;
-/** The ranges people actually run. Anything else goes in through set editing. */
-const REP_RANGE_PRESETS: readonly (readonly [number, number])[] = [
-  [5, 8],
-  [6, 8],
-  [6, 10],
-  [8, 12],
-  [10, 15],
-  [12, 20],
-];
+
 const EFFORT_CAP_PRESETS = [0, 1, 2, 3, 4] as const;
 
 /** Every axis the sheet writes, held together so the sentence can quote them all. */
@@ -437,13 +431,32 @@ export function WorkoutSetsClient({
    * the axis values in the preset table.
    */
   async function handlePresetChange(preset: ProgressionPreset) {
-    await updateAxes(preset.axes);
+    // Both per-set defaults go in one write, so the preset lands complete
+    // rather than in a state its own name does not match.
+    const defaults: {
+      repRangeMin?: number | null;
+      repRangeMax?: number | null;
+      targetRir?: number | null;
+    } = {};
     if (preset.requiresEffortCap === true && effortCap == null) {
-      await handleSetDefaults({ targetRir: 2 });
+      defaults.targetRir = 2;
     }
     if (preset.requiresRange === false && repRange != null) {
-      await handleSetDefaults({ repRangeMin: null, repRangeMax: null });
+      defaults.repRangeMin = null;
+      defaults.repRangeMax = null;
     }
+    // A double-progression preset with no range is the scheme with its subject
+    // missing: it behaves as plain load progression, and the badge would read
+    // Custom the instant the lifter picked it by name. Seed a range around the
+    // target they already have, from the same list the sheet offers, so one
+    // tap produces the scheme — and they can change it in the row below.
+    if (preset.requiresRange === true && repRange == null) {
+      const [min, max] = defaultRepRangeFor(firstWorkingTargetReps);
+      defaults.repRangeMin = min;
+      defaults.repRangeMax = max;
+    }
+    await updateAxes(preset.axes);
+    if (Object.keys(defaults).length > 0) await handleSetDefaults(defaults);
   }
 
   /** Rep range and effort cap, written across every working set of the slot. */
