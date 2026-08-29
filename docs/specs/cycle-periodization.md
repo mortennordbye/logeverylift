@@ -1,10 +1,10 @@
 # Cycle periodization
 
 > **Status:** implemented
-> **Last verified:** 2026-08-25 against `91c1646`
+> **Last verified:** 2026-08-29 against `47aacbc`
 > **Source of truth:** `src/lib/utils/periodization.ts`, `src/lib/actions/training-cycles.ts` (`getActiveCycleForUser`, `getCyclePeriodization`, `getProgramPeriodization`, `computeCycleAdaptation`, `syncPeriodizedTargets`)
 >
-> Stale check: `git log 91c1646..HEAD -- src/lib/utils/periodization.ts src/lib/actions/training-cycles.ts`
+> Stale check: `git log 47aacbc..HEAD -- src/lib/utils/periodization.ts src/lib/actions/training-cycles.ts`
 
 Cycle periodization decides how hard *this week* should be, relative to the hardest week of the block, and then rewrites the plan to say so.
 
