@@ -1444,7 +1444,14 @@ function SortableSetRow({
                     applied={!retryWeightPending || isCompleted}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
-                    {retryWeightPending ? "↑" : "✓"} {suggestion.suggestedWeightKg}kg — retry
+                    {/* Same as the progressed chip: a retry is measured against
+                        history, so it can still sit below the weight on the row. */}
+                    {!retryWeightPending
+                      ? "✓"
+                      : suggestion.suggestedWeightKg > currentWeight
+                      ? "↑"
+                      : "↓"}{" "}
+                    {suggestion.suggestedWeightKg}kg — retry
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "retry" && suggestion.suggestedReps !== undefined && (
@@ -1453,7 +1460,12 @@ function SortableSetRow({
                     applied={!retryRepsPending || isCompleted}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, suggestion.suggestedReps)}
                   >
-                    {retryRepsPending ? "↑" : "✓"} {suggestion.suggestedReps} reps — retry
+                    {!retryRepsPending
+                      ? "✓"
+                      : (suggestion.suggestedReps ?? 0) > currentReps
+                      ? "↑"
+                      : "↓"}{" "}
+                    {suggestion.suggestedReps} reps — retry
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "progressed-reps" && !hasSmartAdjustment && suggestion.suggestedReps !== undefined && (
