@@ -103,6 +103,16 @@ export default async function PrsPage() {
                   <p className="text-xs text-muted-foreground">
                     {prTypeLabel(pr)} · {formatAchievedAt(pr.achievedAt)}
                   </p>
+                  {/* D-10: this record was computed from reps that were claimed
+                      by a tap rather than reported, because it predates honest
+                      rep logging. It is kept and it still counts — the point is
+                      that a record you cannot beat has a visible reason instead
+                      of reading as a plateau. */}
+                  {pr.unverified && (
+                    <p className="text-[10px] text-muted-foreground/70">
+                      Set before reps were logged individually
+                    </p>
+                  )}
                 </div>
                 <div className="text-right shrink-0">
                   <p className="font-semibold tabular-nums">

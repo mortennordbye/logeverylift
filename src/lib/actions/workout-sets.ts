@@ -33,7 +33,7 @@ import {
     type Discipline,
 } from "@/lib/utils/discipline";
 import { parseUserGoals } from "@/lib/utils/goals";
-import { rpeFromRir } from "@/lib/utils/rir";
+import { rirFromRpe, rpeFromRir } from "@/lib/utils/rir";
 import { requireSession } from "@/lib/utils/session";
 import {
     logWorkoutSetSchema,
@@ -441,6 +441,9 @@ export async function logWorkoutSet(
         setId: set.id,
         weightKg,
         actualReps,
+        // A logged RIR, or the one derived from a legacy RPE. Null means the
+        // lifter said nothing, which gates the 1RM record out entirely.
+        rir: setValues.rir ?? (setValues.rpe != null ? rirFromRpe(setValues.rpe) : null),
       });
     }
     // Endurance PRs (swim/bike/run): distance + pace-per-bracket. Independent of
@@ -613,6 +616,7 @@ async function detectAndRecordPRs({
   setId,
   weightKg,
   actualReps,
+  rir,
 }: {
   userId: string;
   exerciseId: number;
@@ -620,6 +624,8 @@ async function detectAndRecordPRs({
   setId: number;
   weightKg: number;
   actualReps: number;
+  /** Logged reps in reserve, or null when the lifter reported nothing. */
+  rir: number | null;
 }): Promise<PRResult[]> {
   const newPRs: PRResult[] = [];
   const now = new Date();
@@ -664,8 +670,17 @@ async function detectAndRecordPRs({
       });
     }
 
-    // 2. Estimated 1RM PR — Epley formula, valid for 2–12 reps
-    if (actualReps >= 2 && actualReps <= 12) {
+    // 2. Estimated 1RM PR — Epley formula, valid for 2–12 reps *on a near-max
+    //    set*. A11: Epley on a set the lifter stopped four reps short of
+    //    failure is not a 1RM estimate, it is arithmetic on a submaximal
+    //    number, and this is the figure people screenshot. The displayed
+    //    estimate gained this guard in phase 5; the stored record is the half
+    //    that stayed ungated, and a record set from a sandbagged set is one
+    //    honest logging may never beat.
+    //
+    //    Silence does not qualify. Under D-2 an unreported effort is unknown,
+    //    not a moderate one, so a set with no RIR sets no 1RM record.
+    if (actualReps >= 2 && actualReps <= 12 && rir != null && rir <= 3) {
       const new1RM = estimate1RM(weightKg, actualReps);
       const [current1RMPR] = await db
         .select()

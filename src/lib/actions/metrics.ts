@@ -3,6 +3,7 @@
 import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { exercisePrs, exercises, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
+import { isUnverifiedPr } from "@/lib/utils/pr-provenance";
 import { requireSession } from "@/lib/utils/session";
 import {
   DISCIPLINES,
@@ -61,6 +62,12 @@ export type PrFeedEntry = {
   bracket: string | null;
   achievedAt: string; // ISO timestamp
   isCurrent: boolean; // true when supersededAt is null
+  /**
+   * The record was derived from reps that were claimed rather than reported —
+   * it predates honest rep logging (`D-10`). Display only: it still stands and
+   * beating it still counts.
+   */
+  unverified: boolean;
 };
 
 export type MuscleBalance = {
@@ -1206,6 +1213,7 @@ export async function getRecentPRs(
       bracket: r.bracket ?? null,
       achievedAt: r.achievedAt.toISOString(),
       isCurrent: r.supersededAt == null,
+      unverified: isUnverifiedPr(r.prType, r.achievedAt.toISOString()),
     }));
     return { success: true, data };
   } catch (err) {
