@@ -1,13 +1,13 @@
 # Progression revamp: plan
 
-> **Status:** approved. All seven decisions (`D-1` to `D-7`) decided 2026-08-29 and written up in section 12 with their binding consequences. Nothing blocks the build.
+> **Status:** approved. All nine decisions (`D-1` to `D-9`) decided 2026-08-29 and written up in section 12 with their binding consequences. Section 14 is a hardening pass: three prerequisites and twelve specified edge cases. Nothing blocks the build.
 > **Written:** 2026-08-29 against `197dea1`
 > **Supersedes on completion:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md), rewritten at the end of phase 5
 > **Closes:** audit findings `A1`-`A11` and spec divergences `D1`-`D8` in [`../BACKLOG.md`](../BACKLOG.md)
 
 Progression is the reason this app exists rather than a notes file. It is also the part with the least honest data behind it. This plan rebuilds it as one machine with a small number of settings, so that every progression scheme a lifter actually runs is the same engine with different values, and the app can say in one sentence what it will do next.
 
-Nothing here is a code change yet. Section 12 holds the seven decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
+Nothing here is a code change yet. Section 12 holds the nine decisions this plan refused to make on its own; all are now answered, each with the consequences the build must honour. Nothing in this document is a guess, and nothing outside section 12 assumes an answer to a question section 12 asks.
 
 ---
 
@@ -21,12 +21,12 @@ This document is the complete brief. It assumes no conversation history. Read it
 
 **Read in this order:**
 
-1. This file, sections 1 to 13.
+1. This file, sections 1 to 14. **Section 14 is not optional**: it holds three prerequisites (`P-1` to `P-3`) that block phases, including a live data-loss bug, plus twelve edge cases specified in advance.
 2. [`specs/smart-incrementation.md`](specs/smart-incrementation.md) for how the current engine behaves. It is accurate about the code and stays the reference until phase 5 rewrites it.
 3. `src/lib/utils/progression.ts` (the engine), `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`, the history query), `src/components/features/WorkoutSetsClient.tsx` and `WorkoutSetsList.tsx` (both consumers).
 4. `BACKLOG.md`, section "Progression engine audit", for the detail behind each finding.
 
-**Decisions: all seven are made.** Read section 12 in full before phase 1, not just the phase you are on. Each carries binding consequences the build must honour, several of which are not derivable from the one-line answer. Build to them and do not relitigate them; if one turns out to be wrong, say so and get it changed there rather than working around it in code.
+**Decisions: all nine are made.** Read section 12 in full before phase 1, not just the phase you are on. Each carries binding consequences the build must honour, several of which are not derivable from the one-line answer. Build to them and do not relitigate them; if one turns out to be wrong, say so and get it changed there rather than working around it in code.
 
 The short form:
 
@@ -39,6 +39,8 @@ The short form:
 | `D-5` | Stale after 21 days, and a re-approach proposes the last logged load minus 10%. |
 | `D-6` | Delete the cycle's strength-phase branch. Progression owns `target_reps`. Preserve the research in the cycle spec. |
 | `D-7` | Scope `all` means literally every working set. No `n_of_m`. |
+| `D-8` | With a cap, the last set carrying logged effort speaks for the session. |
+| `D-9` | A partially logged session is unknown: no gate credit, no back-off credit. |
 
 **Then:** build phase by phase from section 11, one phase per branch. `pnpm verify` after each. The smoke pass from `CLAUDE.md` after phases 2, 5 and 6. Do not start a later phase before the earlier one is merged; the phases are ordered by data dependency, not preference. `D-6` is independent of all of them and can be done at any point, including first, as a self-contained cleanup.
 
@@ -73,7 +75,7 @@ One machine. Eight axes. Everything else in this document is either a value for 
 |---|---|---|---|
 | 1 | **Measure** | `reps` / `duration` / `distance` | What the set is prescribed in. Derived from the exercise, never chosen directly. |
 | 2 | **Target** | fixed value, or range `min`-`max` | What you are trying to clear today. |
-| 3 | **Effort cap** | none, or RIR 0-5 | Whether clearing also requires reps left in reserve. |
+| 3 | **Effort cap** | none, or RIR 0-5, **per set** | Whether clearing also requires reps left in reserve. Lives on `program_sets.target_rir`, so a top set and its back-offs can carry different caps. |
 | 4 | **Scope** | `all` / `first` / `last` / `set` | Which sets must clear for the *session* to count. |
 | 5 | **Gate** | 1-5 sessions | How many qualifying sessions inside the 5-session window before anything moves. |
 | 6 | **Advance** | `load` / `reps` / `double` / `duration` / `distance` / `none` | What moves when the gate is met. |
@@ -328,13 +330,15 @@ Historical `workout_sets` rows keep `rpe = 7` from before the change. The engine
 
 Each phase ships on its own, is verifiable on its own, and leaves the app working. `pnpm verify` after every phase; the smoke pass in `CLAUDE.md` after any phase touching the set list (2, 5, 6).
 
+**Phase 0: prerequisites.** `P-2` (the duplicate-slot data loss) and `P-1` (`set_type` on `workout_sets`) from section 14, plus `D-6`'s cycle-branch deletion. All three are independent of the engine and of each other, and `P-2` is losing data today. Doing them first means phase 3 is not blocked behind a schema change to the busiest write path in the app.
+
 **Phase 1: honest effort.** Make `rpe` nullable, stop forging 7, treat null as unknown in the existing engine per `D-2`. Migration plus a small engine change. Verifiable: an uncapped exercise with no effort logged behaves exactly as before (target-only clearing, `D-1`); the fabricated confidence is gone. Add the `held-unknown` reason code to the engine and both switch statements in this phase, even though no exercise can carry a cap until phase 5, so the code path exists before anything depends on it.
 
 **Phase 2: capture.** Long-press miss sheet, the reps-correction fix, offline queue coverage. No engine change. Verifiable by e2e: log a short set, assert `actual_reps` is what you entered and `target_reps` did not move.
 
-**Phase 3: session windows and scope.** Rewrite the history query to session-grouped with a per-exercise window function (closes `D6`), add `progression_scope`, implement clearance per session. This is the phase that delivers 4a. Verifiable by unit tests over the pipeline plus the 4a table as a fixture.
+**Phase 3: session windows and scope.** **Blocked on `P-1` and `P-2` (section 14); do those first, in their own change.** Then rewrite the history query to session-grouped with a per-exercise window function (closes `SI-D6`), add `progression_scope`, implement clearance per session including the `D-8` and `D-9` rules. This is the phase that delivers 4a. Verifiable by unit tests over the pipeline with the 4a table as a literal fixture (`E-11`).
 
-**Phase 4: rep ranges and double progression.** Range columns, validator, `advance: double` with the reset step. Delivers 4b, tested against that table.
+**Phase 4: rep ranges and double progression.** Range columns, validator, `advance: double` with the reset step, and the `E-1` floor exemption that lets the reset actually write. Delivers 4b, tested against that table (`E-11`). `E-1` is the most likely regression in the plan: test it before writing the feature.
 
 **Phase 5: axes, presets, and the sheet.** Remaining axis columns, preset mapping, the extended sentence, the three-layer sheet, the dot detail view. Retire `progression_mode`. Rewrite the `SI` spec against the new engine.
 
@@ -344,7 +348,7 @@ Phases 1 and 2 are worth doing even if the rest is never built: they make the ex
 
 ---
 
-## 12. Decisions needed before phase 1
+## 12. Decisions
 
 These are open. Each has a recommendation and a reason, and none is assumed anywhere above.
 
@@ -354,7 +358,7 @@ These are open. Each has a recommendation and a reason, and none is assumed anyw
 Binding consequences for the build:
 - An exercise with `target_rir = NULL` clears on target alone. Effort is still recorded when supplied, and still shown, but never blocks.
 - An exercise with a cap clears only when the set met its target **and** logged RIR is greater than or equal to the cap. RIR 2 against a cap of 2 clears; RIR 1 does not.
-- The cap is per set (`program_sets.target_rir`), so a top set and its back-offs can carry different caps. Under scope `all`, every working set is judged against its own cap.
+- The cap is per set (`program_sets.target_rir`), so a top set and its back-offs can carry different caps. Under scope `all` the aspiration is that every working set is judged against its own cap; **`D-8` states the operative rule** for the normal case where effort is only partially logged. Read them together.
 - This replaces the current absolute ladder (`SI-10`: RPE 8 counts only with an extra rep) for capped exercises. Uncapped exercises keep target-only clearing; the old ladder is retired rather than kept as a third path.
 
 **D-2. What does an unlogged effort mean when a cap is prescribed?**
@@ -412,6 +416,28 @@ Binding consequences for the build:
 - The dot detail view (section 8) carries the weight here. When an exercise is not progressing, "set 4 was short in 3 of the last 5" has to be visible on screen, or strictness reads as the app being broken. Treat that view as part of this decision rather than a nice-to-have.
 - Revisit only with logged evidence, once real rep data exists (phase 2 onward). If exercises are demonstrably stalling on a single trailing set, `n_of_m` is an additive change to axis 4.
 
+
+**D-8. A per-set effort cap, against a prompt that only asks about the last set.**
+**Decided (2026-08-29): the last set with logged effort speaks for the session.**
+
+`D-1` judges each set against its own cap; section 6 prompts once per exercise. Taken literally together, sets 1 to 3 of a capped 4x12 would always be effort-unknown, so under `D-2` the session would never clear. This resolves it.
+
+Binding consequences for the build:
+- A capped session clears when **every working set met its target** (per `D-7`) **and** the last working set carrying logged effort satisfies its own cap.
+- If no working set has logged effort, the session is `unknown` per `D-2`. The prompt existing is what makes this rare rather than normal.
+- Effort logged on an earlier set (via the long-press sheet, section 6 change 2) is still stored and still shown; it just does not override the last set for the clearance test. If the last set has no effort but set 2 does, set 2's effort is used, since it is the last one carrying any.
+- This narrows `D-1` rather than contradicting it: per-set caps still exist and are still displayed per set, and a lifter who logs effort on every set gets exactly the per-set behaviour. The rule only decides what happens when effort is partially supplied, which is the normal case.
+- **Amend `D-1`'s third bullet accordingly.** It says "under scope `all`, every working set is judged against its own cap". That is the aspiration; this is the operative rule.
+
+**D-9. What does a partially logged session mean?**
+**Decided (2026-08-29): unknown. Neither a clear nor a failure.**
+
+Binding consequences for the build:
+- A session with fewer logged working sets than the plan prescribes is `unknown`: it does not increment the gate and does not increment the back-off streak, but it does consume a slot in the 5-session window (identical treatment to `D-2`).
+- "Fewer than prescribed" is measured against the working sets that existed **in that session** (`E-9`), not against today's plan. Editing 4x12 down to 3x12 does not retroactively complete past sessions.
+- The dot detail view (`E-8`) shows "3 of 4 sets logged" for these, so a stalled exercise explains itself. Add `logged`/`prescribed` counts to the `sessions` array in `E-8`.
+- Deliberately forgiving: cutting a session short usually has nothing to do with whether the load is right, and punishing it with a back-off would make the engine wrong in exactly the situation a lifter is least able to argue with it.
+- The interaction to watch: a lifter who habitually drops the last set will now sit permanently at `unknown` and never progress. That is visible in the dot detail view rather than silent, which is the point, but it is the most likely source of "why is nothing happening" reports. If it shows up, the answer is to edit the prescription to 3 sets, not to loosen this rule.
 ---
 
 ## 13. What this closes
@@ -433,3 +459,65 @@ The specs themselves label their tables plain `D1`-`D8`. Prefix them when writin
 **Cycle-periodization spec divergence:** `PZ-D3` (strength phase has no producer), closed by decision `D-6`.
 
 **Stays open:** `SI-D7`, the inert global increment controls in Settings. It is a Settings question, not a progression-engine one, and this plan does not touch it.
+
+---
+
+## 14. Pitfalls, prerequisites and edge cases
+
+A hardening pass over the plan above, done before any code was written. Everything here is either a **prerequisite** that must land before the phase that depends on it, or an **edge case** whose behaviour is specified now so it is not invented under pressure later. Two genuinely open judgement calls became decisions `D-8` and `D-9`.
+
+### Prerequisites
+
+**P-1. A logged set does not record whether it was a warm-up. Blocks phase 3.**
+
+`workout_sets` has no `set_type` column. `set_number` is the positional index across *all* sets including warm-ups (`WorkoutSetsList.tsx:341`), and warm-ups are logged like any other set. Today this is survivable because progression keys on `exercise_id + set_number` and simply skips non-working *program* sets.
+
+Session-scoped clearance (`D-7`, every working set must clear) cannot work this way. To ask "did every working set clear in the session three weeks ago" you would have to join back to `program_sets` by `set_number` and read today's `set_type`, which is wrong the moment the plan changed. Sets can be added, deleted and drag-reordered (`set-mapping.ts`), so the historical join is not reliable.
+
+*Required:* add `set_type` to `workout_sets`, written at log time from the program set. Logs must be self-describing; a historical session's meaning cannot depend on the current blueprint. Backfill existing rows by joining to `program_sets` on `set_number` as a best effort, accepting that pre-migration rows may be slightly wrong, since they are only read for five sessions of history.
+
+*While you are there:* `set_number` should keep counting warm-ups (do not renumber), because renumbering would break the `(session, exercise, set_number)` identity of every existing row.
+
+**P-2. The same exercise twice in one program silently destroys logged data. Blocks phase 3, and is a live bug today.**
+
+Nothing stops a program holding two `program_exercises` slots for the same exercise, which is a normal thing to want (heavy bench, then a back-off bench). But `workout_sets` is uniquely indexed on `(session_id, exercise_id, set_number)` and `logSet` uses `onConflictDoUpdate` (`workout-sets.ts:222-247`). So logging set 1 of the second slot **overwrites set 1 of the first slot**. The heavy set's weight, reps and effort are gone, replaced by the back-off's.
+
+The `onConflictDoUpdate` is correct for its intended purpose (re-logging a set must overwrite, and offline replays must be idempotent). The identity is what is wrong: a logged set is identified by exercise and position, when it should be identified by the plan slot it came from.
+
+*Required:* add `program_exercise_id` (and ideally `program_set_id`) to `workout_sets`, and move the unique index to `(session_id, program_exercise_id, set_number)`, keeping `exercise_id` for cross-program queries like PRs. This also makes session-scoped clearance exact instead of inferred, and it is the same change `P-1` wants.
+
+*Recorded separately in `BACKLOG.md` as a standalone bug*, because it is losing data today regardless of whether this plan proceeds.
+
+**P-3. The logging payload changes shape while old clients are still installed.**
+
+This is a PWA; cached bundles keep calling the old Server Action for a while, and the offline queue can hold payloads written by a previous version. Phase 1 makes `rpe` nullable and stops sending 7; phase 2 sends real `actual_reps`.
+
+*Required:* the validator accepts both shapes for at least one release. `rpe` becomes optional rather than removed, and a payload that still carries `rpe: 7` with no `rir` is stored as-is. Do **not** treat a legacy `rpe: 7` as "unknown" retroactively: it is indistinguishable from a real logged 7, and rewriting history to make the new engine look better is worse than the imprecision. See section 10.
+
+### Specified edge cases
+
+These have a defensible answer, so the plan states it rather than raising a decision.
+
+**E-1. `reset` must be exempt from the rep floor.** Double progression's reset step raises load and *lowers* `target_reps` back to `rep_range_min`. The plan ratchet's rule (`SI-37`) is that only a back-off lowers the plan. `reset` must be added to that exemption for the rep dimension while still raising load, or phase 4's headline behaviour is blocked by phase 0's bug fix. Test this explicitly; it is the single most likely regression in the whole plan.
+
+**E-2. `re-approach` may lower the plan.** It is a back-off by another name (`D-5`), so it is exempt from the floor exactly as `backoff` is.
+
+**E-3. Under scope `all`, an advance applies uniformly to every working set.** Not per set. On 4x12 the whole exercise moves to 62.5 together, which is the entire point of `D-3`. Under scope `set` the current per-set behaviour is retained. Under `first` and `last`, the scope decides *whether* the session cleared; the advance still applies to all working sets, because a top set moving while its back-offs stay is a plan nobody wrote.
+
+**E-4. `advance: double` requires a positive load increment.** At `rep_range_max` with no load to add, the reset cannot happen and the exercise would sit at the top of its range forever. The sheet must not offer `double` without an increment, and the engine holds with `held-unknown`'s sibling message ("no load increment set") rather than silently climbing past the range the user configured. Bodyweight work uses `advance: reps` and no range, which is what `SI-D5` was really asking for.
+
+**E-5. Ranges apply to reps only.** `duration` and `distance` take a fixed target. A range plus `advance: double` has no meaning for a plank or a run, and section 3's table should be read as fixed-target for those two presets. This narrows what phase 4 has to build.
+
+**E-6. `was_easy` bypasses the gate at session level.** Under scope `all`, an easy verdict on one set does not carry the session. The rule becomes: the session cleared, and at least one of the scope-determining sets was marked easy. This preserves `SI-13`'s intent without letting one easy set speak for four.
+
+**E-7. Readiness `reduce` reuses the `backoff` reason code** with `readinessModulated: true`, rather than adding a tenth code. Both consumers already branch on `backoff`, and the distinction is a display concern (the chip says why), not a different write.
+
+**E-8. The dot detail view needs data the suggestion does not carry today.** `SetSuggestion` has `hitsAchieved` and `hitsRequired` but no per-session breakdown. Add `sessions: { date, status, shortfall? }[]` covering the window, where status is `cleared` / `missed` / `unknown`. Without it, `D-7`'s strictness has no explanation on screen, and `D-7` explicitly depends on that view existing.
+
+**E-9. A session's clearance is judged against what was logged in it, never against the current plan.** If a 4x12 exercise is later edited to 3x12, the four-set sessions in the window are still four-set sessions. This follows from `P-1` and is why the log must be self-describing.
+
+**E-10. Cross-programme history stays separate.** The history query filters by `program_id`. Bench in "Push 1" and bench in "Push 2" progress independently, and that stays true. It is defensible (different slots, different prescriptions) but it has never been written down, so it is written down here.
+
+**E-11. Test fixtures come from sections 4a and 4b.** Both worked examples are session-by-session tables and should be encoded literally as unit-test fixtures, asserting the suggestion and the dot count at every step. If the code disagrees with those tables, the code is wrong.
+
+**E-12. Rollback.** Every migration is additive (new nullable columns, one column made nullable), so a code rollback needs no down-migration. The exception is `D-3`'s scope migration, which changes behaviour rather than shape: record the previous `progression_mode` values before overwriting, so behaviour can be restored without guessing.
