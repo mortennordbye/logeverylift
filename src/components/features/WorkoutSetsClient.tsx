@@ -46,7 +46,22 @@ import {
 } from "@/lib/utils/progression-presets";
 import type { Discipline } from "@/lib/utils/discipline";
 import type { ProgramSet } from "@/types/workout";
-import { ChevronLeftIcon, Plus } from "lucide-react";
+import {
+  AlignEndVerticalIcon,
+  CheckCheckIcon,
+  ChevronLeftIcon,
+  ChevronsUpIcon,
+  CircleSlashIcon,
+  DumbbellIcon,
+  GaugeIcon,
+  HandIcon,
+  MoonIcon,
+  Plus,
+  Repeat2Icon,
+  RulerIcon,
+  TimerIcon,
+  TrendingDownIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -65,6 +80,24 @@ const DISTANCE_INCREMENT_PRESETS_M = [500, 1000, 2000] as const;
 const BACKOFF_PCT_PRESETS = [5, 10, 15, 20] as const;
 
 const EFFORT_CAP_PRESETS = [0, 1, 2, 3, 4] as const;
+
+/**
+ * The glyph on a preset row says what *moves*, so it maps to the advance axis
+ * rather than to the preset. Five glyphs cover eight schemes, which is the
+ * point: three rows share the dumbbell because all three add weight, and the
+ * list sorts itself into weight schemes, range schemes and no-suggestion
+ * schemes before the labels are read. Keying it to the preset instead would
+ * need a new entry per scheme and would group nothing.
+ */
+const ADVANCE_ICON: Record<ProgressionAdvance, typeof DumbbellIcon> = {
+  load: DumbbellIcon,
+  double: Repeat2Icon,
+  reps: ChevronsUpIcon,
+  duration: TimerIcon,
+  distance: RulerIcon,
+  manual: HandIcon,
+  none: CircleSlashIcon,
+};
 
 /** Every axis the sheet writes, held together so the sentence can quote them all. */
 type Axes = {
@@ -160,6 +193,8 @@ export function WorkoutSetsClient({
   const [typeOverride, setTypeOverride] = useState<string | null>(initialTypeOverride);
   const [applyToPlan, setApplyToPlan] = useState(initialApplyToPlan);
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showCustomKg, setShowCustomKg] = useState(false);
+  const [showCustomReps, setShowCustomReps] = useState(false);
   const [axes, setAxes] = useState<Axes>(() => {
     const isRunningEx =
       exerciseCategory === "cardio" && !exerciseIsTimed;
@@ -253,7 +288,23 @@ export function WorkoutSetsClient({
     hasRange: repRange != null,
     hasEffortCap: effortCap != null,
   };
-  const currentPresetId = matchPreset(matchedAxes)?.id ?? null;
+  const matchedPreset = matchPreset(matchedAxes);
+  const currentPresetId = matchedPreset?.id ?? null;
+  /** The header quotes this, so it has to be the object and not just the id. */
+  const selectedPreset = matchedPreset ?? null;
+
+  /**
+   * The per-set parameters a scheme cannot work without, surfaced beside the
+   * scheme instead of under Advanced. They share one grid cell for the same
+   * reason the increment sections do: only one can ever apply, and stacking
+   * them keeps this area a constant height whichever is showing.
+   *
+   * Both are reps-only, so a timed or running exercise renders neither and the
+   * slot collapses to nothing.
+   */
+  const showRepRange = axes.advance === "double";
+  const showEffortCap = selectedPreset?.requiresEffortCap === true || effortCap != null;
+  const hasConditionalSlot = showRepRange || showEffortCap;
 
   // Layer 2. Built from the live axis values every render, so it describes what
   // the engine will do rather than what the sheet last wrote.
@@ -676,7 +727,7 @@ export function WorkoutSetsClient({
       {showProgressionPicker && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end"
-          onClick={() => { setShowProgressionPicker(false); setCustomKgInput(""); setCustomRepInput(""); }}
+          onClick={() => { setShowProgressionPicker(false); setCustomKgInput(""); setCustomRepInput(""); setShowCustomKg(false); setShowCustomReps(false); }}
         >
           <div
             className="w-full px-4 pb-8 space-y-2"
@@ -686,6 +737,33 @@ export function WorkoutSetsClient({
               <p className="text-center text-sm font-semibold text-muted-foreground pt-4 pb-2 shrink-0">
                 Progression
               </p>
+              {/* Layer 2, pinned. The sentence is the contract with the lifter,
+                  so it sits above the scroll rather than inside it — eight
+                  preset rows are taller than the sheet, and in the list it was
+                  never on screen without a scroll. Both lines reserve their
+                  height: a header that grows moves the frame it exists to hold
+                  still. */}
+              <div className="px-4 pb-3 border-b border-border shrink-0">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground pb-1">
+                  What this does
+                </p>
+                <p className="text-sm font-medium min-h-[40px]">
+                  {selectedPreset?.description ?? "These settings don't match a named scheme."}
+                </p>
+                {/* A fixed box, not a minimum. The sentence runs three to
+                    five lines depending on the axes, and the header is
+                    `shrink-0` inside a capped sheet — so a header that grows
+                    shrinks the scroller and slides every row down, which is
+                    the shift this pinning exists to remove. Measured at 20px
+                    before this. An unusually long rule scrolls inside the box
+                    rather than resizing it; nothing is truncated. */}
+                <p
+                  data-testid="progression-rule"
+                  className="text-xs text-muted-foreground h-[68px] overflow-y-auto pt-1"
+                >
+                  {ruleSentence ?? "No suggestions for this exercise."}
+                </p>
+              </div>
               <div className="overflow-y-auto">
                 {/* ── Layer 1: the preset ─────────────────────────────────── */}
                 {availablePresets.map((preset) => {
@@ -697,84 +775,123 @@ export function WorkoutSetsClient({
                   // always resolves to something positive.
                   const blocked =
                     preset.axes.advance === "double" && increment === 0;
+                  const Glyph = ADVANCE_ICON[preset.axes.advance];
                   return (
                     <button
                       key={preset.id}
                       disabled={blocked}
+                      title={blocked ? "Set a weight increment below to use this" : preset.description}
                       onClick={() => handlePresetChange(preset)}
-                      className={`w-full flex items-center justify-between px-4 py-3.5 border-b border-border active:bg-muted/50 transition-colors ${
+                      className={`w-full flex items-center justify-between gap-3 px-4 h-12 border-b border-border active:bg-muted/50 transition-colors ${
                         selected ? "text-primary" : ""
                       } ${blocked ? "opacity-40" : ""}`}
                     >
-                      <div className="text-left">
-                        <p className={`text-base font-medium ${selected ? "font-semibold" : ""}`}>
+                      {/* A fixed row height, and no description on the row: the
+                          description lives in the pinned header, so choosing a
+                          scheme cannot change any row's height and throw the
+                          list up under the thumb. */}
+                      <span className="flex items-center gap-3 min-w-0">
+                        <Glyph className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+                        <span className={`text-base truncate ${selected ? "font-semibold" : "font-medium"}`}>
                           {preset.label}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {blocked
-                            ? "Set a weight increment below to use this"
-                            : preset.description}
-                        </p>
-                      </div>
-                      {selected && <span className="text-primary text-lg">✓</span>}
+                        </span>
+                      </span>
+                      {selected && <span className="text-primary text-lg leading-none">✓</span>}
                     </button>
                   );
                 })}
                 {currentPresetId === null && (
-                  <div className="px-4 py-3.5 border-b border-border">
+                  <div className="flex items-center px-4 h-12 border-b border-border">
                     <p className="text-base font-semibold text-primary">Custom</p>
-                    <p className="text-xs text-muted-foreground">
-                      These settings don&apos;t match a named scheme. The rule below
-                      still describes them exactly.
-                    </p>
                   </div>
                 )}
 
-                {/* ── Layer 2: the sentence ───────────────────────────────── */}
-                {/* Reserved height: it runs one to four lines depending on the
-                    axes, and the sheet grows upward from the bottom edge. */}
-                <div className="px-4 py-3 border-b border-border">
-                  {/* Addressable on its own: the sentence quotes the same words
-                      the preset descriptions above it use, so a test matching on
-                      text alone cannot tell them apart. */}
-                  <p
-                    data-testid="progression-rule"
-                    className="text-xs text-muted-foreground min-h-[64px]"
-                  >
-                    {ruleSentence ?? "No suggestions for this exercise."}
-                  </p>
-                </div>
+                {/* ── The scheme's own parameter ───────────────────────────
+                    Rep range for double progression, reps in reserve for an
+                    autoregulated scheme. Both belong beside the scheme that
+                    needs them rather than under Advanced: reps in reserve is
+                    the whole of what "Autoregulated" means, and picking that
+                    preset writes a cap of 2 the lifter could not otherwise see.
+                    Stacked in one grid cell so this area's height never changes
+                    when the scheme does — the same reservation the increment
+                    sections use below. Neither applies to a plank or a run
+                    (E-5), so the slot collapses entirely there. */}
+                {hasConditionalSlot && (
+                  <div className="grid border-t border-border">
+                    <div className={`col-start-1 row-start-1 ${showRepRange ? "" : "opacity-0 pointer-events-none"}`}>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1 flex items-center gap-1.5">
+                        <Repeat2Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                        Rep range
+                      </p>
+                      <div className="flex flex-wrap gap-2 px-4 pb-3">
+                        {REP_RANGE_PRESETS.map(([min, max]) => (
+                          <button
+                            key={`${min}-${max}`}
+                            onClick={() =>
+                              handleSetDefaults({ repRangeMin: min, repRangeMax: max })
+                            }
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                              repRange?.repRangeMin === min && repRange?.repRangeMax === max
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {min}–{max}
+                          </button>
+                        ))}
+                      </div>
+                      {repRange == null && showRepRange && (
+                        <p className="text-xs text-amber-600 dark:text-amber-500 px-4 pb-3">
+                          Without a range this behaves as plain weight progression.
+                        </p>
+                      )}
+                    </div>
 
-                {/* ── Rep range — the one per-set value double progression
-                    cannot work without. Shown only for the scheme that uses
-                    it; ranges have no meaning for a plank or a run (E-5). */}
-                {axes.advance === "double" && (
-                  <div className="border-t border-border">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
-                      Rep range
-                    </p>
-                    <div className="flex flex-wrap gap-2 px-4 pb-3">
-                      {REP_RANGE_PRESETS.map(([min, max]) => (
+                    {/* Axis 3. Opt-in by design: an exercise with no cap clears
+                        on the target alone, and a cap nobody asked for would
+                        block progression on effort that was never logged.
+                        Written to every working set; the scope decides which one
+                        the engine reads (D-8). */}
+                    <div className={`col-start-1 row-start-1 ${showRepRange ? "opacity-0 pointer-events-none" : ""}`}>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1 flex items-center gap-1.5">
+                        <GaugeIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                        Reps in reserve
+                      </p>
+                      <div
+                        role="group"
+                        aria-label="Reps in reserve"
+                        className="flex flex-wrap gap-2 px-4 pb-1"
+                      >
                         <button
-                          key={`${min}-${max}`}
-                          onClick={() =>
-                            handleSetDefaults({ repRangeMin: min, repRangeMax: max })
-                          }
+                          onClick={() => handleSetDefaults({ targetRir: null })}
                           className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                            repRange?.repRangeMin === min && repRange?.repRangeMax === max
+                            effortCap == null
                               ? "bg-primary text-primary-foreground"
                               : "bg-muted text-muted-foreground"
                           }`}
                         >
-                          {min}–{max}
+                          None
                         </button>
-                      ))}
-                    </div>
-                    {repRange == null && (
-                      <p className="text-xs text-amber-600 dark:text-amber-500 px-4 pb-3">
-                        Without a range this behaves as plain weight progression.
+                        {EFFORT_CAP_PRESETS.map((preset) => (
+                          <button
+                            key={preset}
+                            onClick={() => handleSetDefaults({ targetRir: preset })}
+                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                              effortCap === preset
+                                ? "bg-primary text-primary-foreground"
+                                : "bg-muted text-muted-foreground"
+                            }`}
+                          >
+                            {preset}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-xs text-muted-foreground px-4 pb-3">
+                        {effortCap == null
+                          ? "Hitting the target reps is the whole test."
+                          : "Sessions where you don't log effort won't count either way."}
                       </p>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -801,28 +918,45 @@ export function WorkoutSetsClient({
                           +{preset}kg
                         </button>
                       ))}
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
-                      <span className="text-base font-medium text-muted-foreground shrink-0">+</span>
-                      <input
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="Custom kg"
-                        value={customKgInput}
-                        onChange={(e) => setCustomKgInput(sanitizeDecimalInput(e.target.value))}
-                        className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
-                      />
+                      {/* A chip that reveals the input, rather than an input
+                          mounted forever for the least-used value. */}
                       <button
-                        onClick={() => {
-                          const val = parseFloat(customKgInput);
-                          if (!isNaN(val) && val >= 0) handleIncrementChange(val);
-                        }}
-                        disabled={!customKgInput || isNaN(parseFloat(customKgInput))}
-                        className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
+                        onClick={() => setShowCustomKg((v) => !v)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                          increment != null && !KG_INCREMENT_PRESETS.includes(increment as never)
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
                       >
-                        Set
+                        {increment != null && !KG_INCREMENT_PRESETS.includes(increment as never)
+                          ? `+${increment}kg`
+                          : "Custom…"}
                       </button>
                     </div>
+                    {showCustomKg && (
+                      <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
+                        <span className="text-base font-medium text-muted-foreground shrink-0">+</span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          autoFocus
+                          placeholder="Custom kg"
+                          value={customKgInput}
+                          onChange={(e) => setCustomKgInput(sanitizeDecimalInput(e.target.value))}
+                          className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
+                        />
+                        <button
+                          onClick={() => {
+                            const val = parseFloat(customKgInput);
+                            if (!isNaN(val) && val >= 0) handleIncrementChange(val);
+                          }}
+                          disabled={!customKgInput || isNaN(parseFloat(customKgInput))}
+                          className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
+                        >
+                          Set
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -847,28 +981,43 @@ export function WorkoutSetsClient({
                           +{preset}
                         </button>
                       ))}
-                    </div>
-                    <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
-                      <span className="text-base font-medium text-muted-foreground shrink-0">+</span>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        placeholder="Custom reps"
-                        value={customRepInput}
-                        onChange={(e) => setCustomRepInput(e.target.value)}
-                        className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
-                      />
                       <button
-                        onClick={() => {
-                          const val = parseInt(customRepInput, 10);
-                          if (!isNaN(val) && val >= 0) handleIncrementRepsChange(val);
-                        }}
-                        disabled={!customRepInput || isNaN(parseInt(customRepInput, 10))}
-                        className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
+                        onClick={() => setShowCustomReps((v) => !v)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                          !REP_INCREMENT_PRESETS.includes(incrementReps as never) && incrementReps > 0
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
                       >
-                        Set
+                        {!REP_INCREMENT_PRESETS.includes(incrementReps as never) && incrementReps > 0
+                          ? `+${incrementReps}`
+                          : "Custom…"}
                       </button>
                     </div>
+                    {showCustomReps && (
+                      <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
+                        <span className="text-base font-medium text-muted-foreground shrink-0">+</span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          autoFocus
+                          placeholder="Custom reps"
+                          value={customRepInput}
+                          onChange={(e) => setCustomRepInput(e.target.value)}
+                          className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
+                        />
+                        <button
+                          onClick={() => {
+                            const val = parseInt(customRepInput, 10);
+                            if (!isNaN(val) && val >= 0) handleIncrementRepsChange(val);
+                          }}
+                          disabled={!customRepInput || isNaN(parseInt(customRepInput, 10))}
+                          className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
+                        >
+                          Set
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -928,7 +1077,7 @@ export function WorkoutSetsClient({
                 <div
                   className={`border-t border-border ${
                     axes.advance === "none" || axes.advance === "manual"
-                      ? "invisible pointer-events-none"
+                      ? "opacity-40 pointer-events-none"
                       : ""
                   }`}
                 >
@@ -968,7 +1117,7 @@ export function WorkoutSetsClient({
                 <div
                   className={`border-t border-border ${
                     axes.advance === "none" || axes.advance === "manual"
-                      ? "invisible pointer-events-none"
+                      ? "opacity-40 pointer-events-none"
                       : ""
                   }`}
                 >
@@ -985,7 +1134,8 @@ export function WorkoutSetsClient({
 
                   {showAdvanced && (
                     <>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
+                        <CheckCheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         Sessions at target
                       </p>
                       <div
@@ -1003,12 +1153,13 @@ export function WorkoutSetsClient({
                                 : "bg-muted text-muted-foreground"
                             }`}
                           >
-                            {preset}
+                            {preset} {preset === 1 ? "session" : "sessions"}
                           </button>
                         ))}
                       </div>
 
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
+                        <AlignEndVerticalIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         Which sets have to clear
                       </p>
                       <div
@@ -1031,50 +1182,9 @@ export function WorkoutSetsClient({
                         ))}
                       </div>
 
-                      {/* Axis 3. Opt-in by design: an exercise with no cap
-                          clears on the target alone, and a cap you did not ask
-                          for would block progression on effort you never
-                          logged. Written to every working set; the scope
-                          decides which one the engine reads (D-8). */}
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
-                        Reps in reserve
-                      </p>
-                      <div
-                        role="group"
-                        aria-label="Reps in reserve"
-                        className="flex flex-wrap gap-2 px-4 pb-1"
-                      >
-                        <button
-                          onClick={() => handleSetDefaults({ targetRir: null })}
-                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                            effortCap == null
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          None
-                        </button>
-                        {EFFORT_CAP_PRESETS.map((preset) => (
-                          <button
-                            key={preset}
-                            onClick={() => handleSetDefaults({ targetRir: preset })}
-                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                              effortCap === preset
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {preset}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-xs text-muted-foreground px-4 pb-3">
-                        {effortCap == null
-                          ? "Hitting the target reps is the whole test."
-                          : "Sessions where you don't log effort won't count either way."}
-                      </p>
 
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
+                        <TrendingDownIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         When you keep missing
                       </p>
                       <div
@@ -1111,7 +1221,8 @@ export function WorkoutSetsClient({
 
                       {axes.regress === "backoff" && (
                         <>
-                          <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                          <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
+                            <TrendingDownIcon className="h-3.5 w-3.5" aria-hidden="true" />
                             After this many short workouts
                           </p>
                           <div
@@ -1130,7 +1241,7 @@ export function WorkoutSetsClient({
                                       : "bg-muted text-muted-foreground"
                                   }`}
                                 >
-                                  {preset}
+                                  {preset} short
                                 </button>
                               ),
                             )}
@@ -1138,7 +1249,8 @@ export function WorkoutSetsClient({
                         </>
                       )}
 
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1">
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
+                        <MoonIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         On a low-readiness day
                       </p>
                       <div
@@ -1164,12 +1276,18 @@ export function WorkoutSetsClient({
                   )}
                 </div>
 
-                {/* Exercise-type override — strength only. "Default" inherits the
-                    exercise's intrinsic type; pick another to override it here. */}
+                {/* Exercise-type override — strength only. Not a progression
+                    setting: it is here because it decides how coarse an
+                    increment the ladder may propose, so it sits directly under
+                    the increments and says so. "Default" inherits the
+                    exercise's intrinsic type. */}
                 {!isRunning && !exerciseIsTimed && (
                   <div className="border-t border-border">
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-0.5">
                       Type{exerciseTypeDefault ? ` · default ${EXERCISE_TYPE_LABELS[exerciseTypeDefault as ExerciseType]}` : ""}
+                    </p>
+                    <p className="text-xs text-muted-foreground px-4 pb-2">
+                      Sets how coarse an increment gets suggested.
                     </p>
                     <div className="flex flex-wrap gap-2 px-4 pb-3">
                       <button
@@ -1214,10 +1332,10 @@ export function WorkoutSetsClient({
             </div>
             <div className="bg-card rounded-2xl overflow-hidden">
               <button
-                onClick={() => { setShowProgressionPicker(false); setCustomKgInput(""); setCustomRepInput(""); }}
+                onClick={() => { setShowProgressionPicker(false); setCustomKgInput(""); setCustomRepInput(""); setShowCustomKg(false); setShowCustomReps(false); }}
                 className="w-full flex items-center justify-center py-4 text-base font-semibold text-primary active:bg-muted/50 transition-colors"
               >
-                Cancel
+                Done
               </button>
             </div>
           </div>
