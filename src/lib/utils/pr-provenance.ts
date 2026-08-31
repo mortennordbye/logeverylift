@@ -31,8 +31,13 @@
  * unverified, which understates the app's confidence. Being early is not — it
  * would present assumed numbers as measured ones, which is the thing being
  * fixed.
+ *
+ * Set to the day after the intended deploy, so that a deploy landing at any
+ * hour of that day still has every record the old code produced behind the
+ * cutover. **If the deploy slips past this date, move it forward**; left
+ * behind, it is early, which is the direction this comment warns about.
  */
-export const HONEST_REPS_FROM = "2026-08-29";
+export const HONEST_REPS_FROM = "2026-09-01";
 
 /** The record types computed from `actual_reps` rather than from the load. */
 const DERIVED_PR_TYPES = new Set(["estimated_1rm", "reps_at_weight"]);
