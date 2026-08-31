@@ -14,8 +14,8 @@ with no conversation history.
 Short version: the engine is being rebuilt as one machine with configurable
 settings, in seven phases, built in the order `0, 1, 3, 2, 4, 5, 6`. All eleven
 design decisions are already made and recorded in its section 12 — build to
-them rather than re-asking. The work lives on branch `phase-6/the-rest`,
-which carries all seven phases and is pushed, open against `main`.
+them rather than re-asking. All seven phases are merged to `main` (PR #34,
+squashed), so branch off `main` for anything new.
 
 Do not start from `docs/specs/smart-incrementation.md` alone: it accurately
 describes the engine as it is today, which the plan is replacing.

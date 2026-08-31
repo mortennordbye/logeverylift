@@ -1,6 +1,6 @@
 # Progression revamp: plan
 
-> **Status:** built, smoke-tested, e2e-tested and **pushed 2026-08-31** as one branch, `phase-6/the-rest`, carrying all 70 commits. The `CLAUDE.md` smoke pass has now been run end to end against a real database and found one bug, since fixed; the release notes are written ([`releases/progression-rebuild.md`](releases/progression-rebuild.md)). The e2e suite has run too — 7 of 10, the three failures triaged: one was the spec's own, two are pre-existing and predate this plan. `HONEST_REPS_FROM` is set to the release date. What remains is the review, the merge, and publishing the release notes with the deploy. See §0 "Build state".
+> **Status:** built, smoke-tested, e2e-tested, and **merged to `main` on 2026-08-31** as [PR #34](https://github.com/mortennordbye/logeverylift/pull/34), squashed into a single commit. The `CLAUDE.md` smoke pass has now been run end to end against a real database and found one bug, since fixed; the release notes are written ([`releases/progression-rebuild.md`](releases/progression-rebuild.md)). The e2e suite has run too — 7 of 10, the three failures triaged: one was the spec's own, two are pre-existing and predate this plan. `HONEST_REPS_FROM` is set to the release date. What remains is publishing the release notes with the deploy. See §0 "Build state".
 > **Design status:** approved, all eleven decisions (`D-1` to `D-11`) decided. Revised 2026-08-29 after an independent design review and a line-by-line fact-check against the code; roughly thirty corrections, several of which would have broken the build. `D-8` was reopened on review and re-decided; `D-11` was added. Section 14: three prerequisites, nineteen edge cases. Section 15: twenty-three consumers outside the engine.
 > **Written:** 2026-08-29 against `197dea1`
 > **Superseded:** the `SI` rules in [`specs/smart-incrementation.md`](specs/smart-incrementation.md) were rewritten against the axes in phases 5 and 6. That spec, not this plan, is the reference for how the engine behaves.
@@ -12,13 +12,13 @@ Section 12 holds the eleven decisions this plan refused to make on its own; all 
 
 **This document is written to be picked up cold, with no memory of the session before it.** Everything a session needs to know about what has already happened is in §0, and everything a session learns that the next one would need is written back into §0 before it finishes. If you are reading this with no context, you are the intended reader and nothing is missing.
 
-**The building is finished.** All seven phases are written, tested, committed and pushed as a single branch awaiting review. If you are here to work, your job is almost certainly one of the things in §0's "What to do next" — not another phase.
+**The building is finished and merged.** All seven phases are written, tested, and on `main`. If you are here to work, your job is almost certainly one of the things in §0's "What to do next" — not another phase.
 
 ---
 
 ## 0. Start here
 
-**You are picking up a rebuilt progressive-overload engine that is finished and pushed, waiting on review and deploy.** This document is the complete brief and assumes no conversation history. It is long because the engine is the reason the app exists, because two independent reviews found about thirty defects in an earlier draft that read as finished, and because most of it is now a record of decisions someone will otherwise re-litigate.
+**You are picking up a rebuilt progressive-overload engine that is merged and deploying.** This document is the complete brief and assumes no conversation history. It is long because the engine is the reason the app exists, because two independent reviews found about thirty defects in an earlier draft that read as finished, and because most of it is now a record of decisions someone will otherwise re-litigate.
 
 Read "What to do next" first. The rest of §0 is what you need in order to do it safely.
 
@@ -30,7 +30,7 @@ Three things remain, and none of them is code.
 
 2. **Publish the release notes with the deploy** ([`releases/progression-rebuild.md`](releases/progression-rebuild.md)). They are written and they are not optional. Six separate numbers move on the first load after this ships — volume falls, increments change size, some exercises stop progressing and others start — and every one of them looks like a regression to the person seeing it. A number that moves with an explanation is a fix; the same number moving without one is a bug report.
 
-3. ~~**Push, and decide how.**~~ **Done 2026-08-31: pushed as one release.** The eight stacked branches went up as the tip alone, `phase-6/the-rest`, which carries all 70 commits, and it is open against `main` as [PR #34](https://github.com/mortennordbye/logeverylift/pull/34). What is left is the review and the merge. `0046`-`0051` run in order on the first boot after the deploy, and the entrypoint runs them automatically — nobody needs to run a migration by hand.
+3. ~~**Push, and decide how.**~~ **Done 2026-08-31: merged as one release.** The eight stacked branches went up as the tip alone, `phase-6/the-rest`, and merged through [PR #34](https://github.com/mortennordbye/logeverylift/pull/34). The repo allows only squash merges, so **`main` carries the whole rebuild as one commit**; the phase-by-phase history exists only in the eight local branches and in the closed PR. If you need to know which phase introduced a line, `git log` on `main` cannot tell you and those branches can. `0046`-`0051` run in order on the first boot after the deploy, and the entrypoint runs them automatically — nobody needs to run a migration by hand.
 
 Two known bugs are **deliberately** not fixed, both with `BACKLOG.md` entries: un-logging a set logged through the miss sheet does nothing (phase 2's, caught by its own never-run spec), and `page-transition.spec.ts` hangs on a bottom-sheet backdrop. Both predate this plan — verified, not assumed. Do not let either block the push; neither is a regression from it.
 
@@ -48,9 +48,9 @@ Phases are listed in **build order**, which is not numeric order. The swap is de
 | **2** | Capture: the miss sheet and the reps-correction fix | **Done.** Branch `phase-2/capture`, 4 commits. No migration. |
 | **4** | Rep ranges and double progression | **Done.** Branch `phase-4/rep-ranges`, 5 commits. Migration `0050`. |
 | **5** | Axes, presets, and the sheet | **Done.** Branch `phase-5/axes-and-presets`, 9 commits. Migration `0051`. |
-| **6** | The rest | **Done.** Branch `phase-6/the-rest`, 14 commits. No migration. |
+| **6** | The rest | **Done.** Branch `phase-6/the-rest`, 16 commits. No migration. |
 
-**Branches.** Each is stacked on the one before it. **Only the tip is pushed**, and it carries every commit below it; the seven under it stay local, as landmarks for where each phase began:
+**Branches.** Each is stacked on the one before it. Only the tip was ever pushed, and GitHub deleted it on merge, so **all eight now exist only locally** — they are the sole record of which phase did what, since `main` holds one squashed commit. The counts are as of the merge:
 
 | Branch | Commits | Carries |
 |---|---|---|
@@ -61,9 +61,9 @@ Phases are listed in **build order**, which is not numeric order. The swap is de
 | `phase-2/capture` | 4 | — |
 | `phase-4/rep-ranges` | 5 | Migration `0050` |
 | `phase-5/axes-and-presets` | 9 | Migration `0051` |
-| `phase-6/the-rest` | 14 | The ship commits: the cutover date and this record |
+| `phase-6/the-rest` | 16 | The ship commits: the cutover date, the push and this record |
 
-70 commits off `main`. Because nothing was pushed while the work was in progress, each phase branched off the previous phase's branch rather than off `main`; `phase-6/the-rest` is the tip, carries everything, and is the only one on the remote.
+72 commits off the `main` that preceded them, `9bd2bde`. Because nothing was pushed while the work was in progress, each phase branched off the previous phase's branch rather than off `main`; `phase-6/the-rest` is the tip and carries everything. Do not expect these counts to hold if the doc is edited again — a commit that states the count cannot include itself, and this table has drifted twice for exactly that reason.
 
 ### What has actually been verified
 
@@ -191,7 +191,7 @@ Facts a cold session must not re-derive, re-decide, or accidentally undo. Each i
 
 **All seven phases are built, so the checklist below is history.** It is kept because the same discipline applies to anything that touches the engine next, and because it is the only reason §0 can be trusted at all: every line in "What is already true" is there because someone wrote it down at the moment they learned it.
 
-If you change the engine, update §0 the same way — the settled fact, and the thing a later change might undo by accident. The branches are pushed now, so a change goes on a branch off `phase-6/the-rest` until it merges, and off `main` after.
+If you change the engine, update §0 the same way — the settled fact, and the thing a later change might undo by accident. This is merged now, so a change branches off `main` like any other.
 
 The original checklist, which still describes what good looks like:
 
