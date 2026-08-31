@@ -59,7 +59,10 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   // ── Layer 3: an individual axis, and the relabel to Custom ────────────────
   await openAdvanced();
   await expect(gate()).toBeVisible({ timeout: 5_000 });
-  await tapAndSave(page, gate().getByRole("button", { name: "3", exact: true }), {
+  // The chips carry their unit now: "3 sessions" counts clears, and the
+  // back-off group's "3 short" counts misses. They used to be bare numbers,
+  // adjacent and identical-looking, meaning opposite things.
+  await tapAndSave(page, gate().getByRole("button", { name: "3 sessions", exact: true }), {
     bodyIncludes: '"requiredHits":3',
   });
   await expect(rule()).toContainText(/3 sessions in a row/, { timeout: 5_000 });
