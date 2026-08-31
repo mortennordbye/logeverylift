@@ -165,7 +165,16 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
                             : "—"}
                         </span>
                         <span className="text-muted-foreground w-16 text-right">
-                          {set.rir != null ? `RIR ${set.rir}` : `RPE ${set.rpe}`}
+                          {/* Three states, not two: effort logged as RIR, effort
+                              logged as a bare RPE (older rows and logged runs),
+                              or no effort logged at all. The last used to render
+                              as "RPE 7" for every set, which was the app talking,
+                              not the lifter. */}
+                          {set.rir != null
+                            ? `RIR ${set.rir}`
+                            : set.rpe != null
+                            ? `RPE ${set.rpe}`
+                            : ""}
                         </span>
                       </div>
                       {set.notes && (

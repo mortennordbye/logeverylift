@@ -251,14 +251,15 @@ describe("buildTriathlonPlan", () => {
     }
   });
 
-  it("maps the spec's smart mode to weight so flat reps stay static", () => {
+  it("maps the spec's smart mode to plain load so flat reps stay static", () => {
     const plan = buildTriathlonPlan({ weeks: 24, goal: "build" });
     const ex = plan.days.flatMap((d) => d.exercises);
-    // Compound strength lifts progress on weight (never smart) with a positive increment.
+    // Compound strength lifts add load with a positive increment. The smart
+    // scheme this refused is retired outright now (D-4).
     const compounds = ex.filter((e) => e.exerciseType === "compound");
     expect(compounds.length).toBeGreaterThan(0);
     for (const e of compounds) {
-      expect(e.progressionMode).toBe("weight");
+      expect(e.progressionAdvance).toBe("load");
       expect(e.overloadIncrementKg).toBeGreaterThan(0);
     }
   });

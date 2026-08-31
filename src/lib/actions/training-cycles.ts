@@ -12,12 +12,12 @@ import {
   computeAdaptationFactor,
   deloadCadenceForLevel,
   intervalPhaseRecipe,
+  meanLoggedRpe,
   periodizedLoad,
   phaseLabel,
   phaseLayout,
   scaledDistance,
   scaledDuration,
-  strengthPhaseRecipe,
   type AthleteLevel,
   type TrainingGoal,
   type TrainingPhase,
@@ -512,15 +512,17 @@ async function computeCycleAdaptation(
   // rpe is RIR-derived (rpe = 10 − rir) for sets logged with Reps In Reserve,
   // so this average is a real effort signal — the avgRpe ≤ 6 "push" condition in
   // computeAdaptationFactor corresponds to averaging ≥ 4 reps in reserve.
+  //
+  // Sets with no logged effort are dropped, not counted as zero: the average is
+  // "how hard the logged sets were", and a week where nobody answered stays the
+  // no-signal case (null) that leaves the block neutral.
   let avgRpe: number | null = null;
   if (recent.length > 0) {
     const rpeRows = await db
       .select({ rpe: workoutSets.rpe })
       .from(workoutSets)
       .where(inArray(workoutSets.sessionId, recent.map((r) => r.id)));
-    if (rpeRows.length > 0) {
-      avgRpe = rpeRows.reduce((a, r) => a + r.rpe, 0) / rpeRows.length;
-    }
+    avgRpe = meanLoggedRpe(rpeRows.map((r) => r.rpe));
   }
 
   return computeAdaptationFactor({ adherence, avgReadiness, avgRpe });
@@ -575,8 +577,6 @@ async function syncPeriodizedTargets(
           or(
             isNotNull(programSets.peakDistanceMeters),
             isNotNull(programSets.peakDurationSeconds),
-            // Main strength lifts periodize their reps/rest by phase too.
-            eq(programSets.sessionRole, "strength"),
           ),
         ),
       );
@@ -588,7 +588,6 @@ async function syncPeriodizedTargets(
             distanceMeters?: number;
             durationSeconds?: number;
             targetHeartRateZone?: number;
-            targetReps?: number;
             restTimeSeconds?: number;
           } = {};
           if (ps.peakDistance != null) update.distanceMeters = scaledDistance(ps.peakDistance, effective);
@@ -597,12 +596,6 @@ async function syncPeriodizedTargets(
           if (ps.sessionRole === "work") {
             update.targetHeartRateZone = recipe.zone;
             update.restTimeSeconds = recipe.restSeconds;
-          }
-          // Main strength lifts move reps/rest by phase (load stays athlete-entered).
-          if (ps.sessionRole === "strength") {
-            const s = strengthPhaseRecipe(phase);
-            update.targetReps = s.reps;
-            update.restTimeSeconds = s.restSeconds;
           }
           return db.update(programSets).set(update).where(eq(programSets.id, ps.id));
         }),

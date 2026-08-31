@@ -13,6 +13,7 @@ import {
   buildTriathlonPlan,
   planExerciseNames,
   type PlanExercise,
+  type PlanProgressionAdvance,
 } from "@/lib/utils/triathlon-plan";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
@@ -163,6 +164,14 @@ export async function generateTriathlonPlan(
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+/** The retired mode each advance corresponds to. See E-12 on the staged retirement. */
+const LEGACY_MODE_FOR_ADVANCE: Record<PlanProgressionAdvance, string> = {
+  manual: "manual",
+  distance: "distance",
+  load: "weight",
+  reps: "reps",
+};
+
 async function insertPlanExercise(
   tx: Tx,
   programId: number,
@@ -176,7 +185,10 @@ async function insertPlanExercise(
       programId,
       exerciseId,
       orderIndex,
-      progressionMode: ex.progressionMode,
+      progressionAdvance: ex.progressionAdvance,
+      // Still written while the column exists, so a share or an export of a
+      // generated plan carries something a pre-axes client can read.
+      progressionMode: LEGACY_MODE_FOR_ADVANCE[ex.progressionAdvance],
       overloadIncrementReps: ex.overloadIncrementReps,
       overloadIncrementKg:
         ex.overloadIncrementKg != null ? String(ex.overloadIncrementKg) : null,

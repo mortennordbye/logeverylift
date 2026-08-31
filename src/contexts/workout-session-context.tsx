@@ -12,9 +12,14 @@ type SetOverride = {
   distanceMeters?: number;
   /** Free-text per-set note captured in SetEditView; flushed on logWorkoutSet. */
   notes?: string | null;
-  /** Set was attempted but not completed at target — logs isFailed + a lower actualReps. */
+  /** Set was taken to failure — logs isFailed and forces RIR 0. */
   isFailed?: boolean;
-  /** Reps actually achieved on a failed set (0..target). Only meaningful when isFailed. */
+  /**
+   * Reps actually achieved. Set by the miss sheet and by the set editor's reps
+   * field during a workout; absent means "the target, as claimed by the tap".
+   * Independent of isFailed: coming up short is not the same as going to
+   * failure, and only the second one implies RIR 0.
+   */
   actualReps?: number;
   /** Target hit and it felt easy — asks next session's suggestion to bump the load. */
   wasEasy?: boolean;

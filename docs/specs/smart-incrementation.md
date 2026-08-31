@@ -1,10 +1,12 @@
 # Smart incrementation
 
 > **Status:** implemented
-> **Last verified:** 2026-08-24 against `3a09857`
-> **Source of truth:** `src/lib/utils/progression.ts`, `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`), `src/lib/actions/programs.ts` (`applyProgressionToPlan` + the settings actions), `src/lib/validators/workout.ts`, `src/components/features/{WorkoutSetsClient,WorkoutSetsList,SetEditView}.tsx`
+> **Last verified:** 2026-08-29 against `8c3fd1b`
+> **Source of truth:** `src/lib/utils/progression.ts`, `src/lib/utils/progression-presets.ts`, `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`), `src/lib/actions/programs.ts` (`applyProgressionToPlan` + the settings actions), `src/lib/validators/workout.ts`, `src/components/features/{WorkoutSetsClient,WorkoutSetsList,SetEditView}.tsx`
 >
-> Stale check: `git log 3a09857..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
+> Stale check: `git log 8c3fd1b..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
+>
+> **Rewritten 2026-08-29 by phases 5 and 6 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md)**, which completed the rebuild. The engine is now one machine reading eight configurable axes; `progressionMode` is retired and unread. What changed here: the seven modes became the advance axis (SI-22 to SI-31), the effort cap became real (SI-10), the back-off and readiness rules became settings rather than constants (SI-17, SI-21), duration and distance advance from the target rather than from what was achieved (SI-29, SI-30), an anchored set is never an advance target (SI-30a), and the rate rule (SI-41) and the provenance section below are stated for the first time. Phase 6 then rewrote the increment ladder's order and added its granularity rule (SI-3, SI-4a), added staleness (SI-14a), gated the 1RM record (SI-42), and made a missing rep increment mean one rep rather than none (SI-28).
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
 
@@ -17,9 +19,14 @@ Rule prefix: **`SI`**.
 - **Suggestion** — the `SetSuggestion` returned by `buildSuggestion`. Advisory. Recomputed from logged history every time the page loads, so a lost one costs nothing.
 - **Session override** — the accepted value, held client-side in `WorkoutSessionContext` and flushed into `workout_sets` on log. Affects today only.
 - **Plan** — `program_sets`, the blueprint. Only `applyProgressionToPlan` writes here, and only for opted-in exercises. See [`../workout-and-sets.md`](../workout-and-sets.md) for blueprint-vs-log.
-- **Hit** — a logged set that reached its target. **Confident hit** — a hit that also had effort in reserve (SI-10). Only confident hits count toward progression.
-- **Window** — how many past sessions are looked at (`CONSENSUS_WINDOW`, 5). **Gate** — how many confident hits inside that window are needed (`requiredHits`, default 2). The window is fixed; the gate is per-exercise.
-- **Base weight** — the weight on the *most recent logged set*, not the planned weight. Everything is computed relative to it.
+- **Hit** — a logged set that reached its target. That is the whole test; effort does not qualify it (SI-10).
+- **Clear** — a *session* verdict, not a set one: every set the exercise's scope names was a hit (SI-7a). A session that did not answer the question is **unknown**, which is neither a clear nor a miss (SI-7b).
+- **Scope** — which sets decide that verdict: `all`, `first`, `last` or `set`, on `program_exercises.progression_scope`, defaulting to `all`. Axis 4.
+- **Advance** — what moves when the gate is met: `load`, `reps`, `double`, `duration`, `distance`, or `manual`/`none` for the two that move nothing. On `program_exercises.progression_advance`. Axis 6, and the replacement for `progressionMode`, which mixed this question with "what scheme is running" and so could not tell a fixed 12 reps apart from a 6-8 range.
+- **Effort cap** — a prescribed reps-in-reserve floor on `program_sets.target_rir`. Axis 3. Named a cap in the UI and the column but tested as `logged RIR >= target_rir`, so it is a **minimum reserve**. Null on almost everything, and null means the exercise clears on the target alone.
+- **Preset** — a named set of axis values (`progression-presets.ts`). Derived at render time by matching the live axes, never stored: a stored preset would be display-only state the engine does not read, free to drift from the axes it duplicates. Anything matching no preset is **Custom**.
+- **Window** — how many past sessions are looked at (`CONSENSUS_WINDOW`, 5), per exercise slot. **Gate** — how many clears *in a row* inside that window are needed (`requiredHits`, default 2). The window is fixed; the gate is per-exercise.
+- **Base weight** — the weight on this set's *most recent logged row*, not the planned weight. Distinct from the **current load**, which under scope `all` is the heaviest working set of the last session and is what an advance is computed from (SI-11a).
 
 ## Scope boundary
 
@@ -29,14 +36,42 @@ The two are independent and easy to confuse, because they share words and even a
 
 ## Inputs
 
-Per-exercise settings on `program_exercises`: `progressionMode`, `overloadIncrementKg`, `overloadIncrementReps`, `progressionRequiredHits`, `progressionApplyToPlan`, `exerciseType`. Per-set on `program_sets`: `setType`, `targetReps`, `durationSeconds`, `distanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it), `wasEasy`, `isFailed`. Schema detail is in [`../data-model.md`](../data-model.md).
+Per-exercise settings on `program_exercises`: the six axis columns (`progressionAdvance`, `progressionScope`, `progressionRequiredHits`, `progressionRegress`, `progressionBackoffPct`, `progressionBackoffAfter`, `progressionReadiness`), plus `overloadIncrementKg`, `overloadIncrementReps`, `progressionApplyToPlan`, `exerciseType` and `progressionConfigAt`. Per-set on `program_sets`: `setType`, `targetReps`, `repRangeMin`, `repRangeMax`, `targetRir`, `durationSeconds`, `distanceMeters`, and the cycle anchors `peakDurationSeconds` and `peakDistanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it, and both null when the lifter reported nothing), `wasEasy`, `isFailed`. Also from `workout_sets`, and load-bearing for SI-7a to SI-7c: `programExerciseId` (which plan slot the row belongs to), `setType` and `prescribedWorkingSets`, all snapshotted at log time so a session describes itself rather than being re-read against today's plan. Schema detail is in [`../data-model.md`](../data-model.md).
+
+`progressionMode` is **not** an input. The column still exists and is still written, so a share, an export or a cached client that predates the axes has something to read, but no progression code reads it. It goes a release after this one.
 
 Two non-obvious ones:
 
 - **`overloadIncrementKg IS NULL` means "the user has never chosen an increment"**, which is what switches on the adaptive ladder (SI-1). The column deliberately has no default; migration `0017` dropped it and nulled out every stored `2.50` precisely so that "2.5" could mean an explicit choice. Do not give this column a default.
-- **`overloadIncrementReps` does double duty**: reps in rep-based modes, **seconds** in `time` mode, **metres** in `distance` mode (SI-32).
+- **`overloadIncrementReps` does double duty**: reps in rep-based advances, **seconds** under `duration`, **metres** under `distance` (SI-32).
 
 Readiness (1–5) comes from the active, uncompleted session. User `goals` and `experienceLevel` come from the profile.
+
+## Inputs — provenance
+
+Every rule below is stated over a value, and until this section none of them said where the value came from. That gap is what `A9` names: an engine judged against numbers nobody traced is an engine that can be confidently wrong. **Each row is what actually writes the column, not what ought to.**
+
+| Input | Written by | Provenance |
+|---|---|---|
+| `workout_sets.actual_reps` | a short tap on the set toggle; the miss sheet (long press); the set editor's reps field during a workout; *Mark set as failed*; the exercise-level checkmark | **Claimed, then measured.** A short tap writes the target — an affirmative claim the lifter made by tapping a "done" control. Every other path writes a count the lifter typed. Nothing infers it. |
+| `workout_sets.rir` | the miss sheet; the effort prompt under a capped exercise; *Mark set as failed* (0) | **Reported only.** Silence is stored as null and never filled in. A `?? 7` anywhere in a read is the bug phase 1 removed. |
+| `workout_sets.rpe` | derived from `rir` at log time (`rpeFromRir`) | **Derived, or legacy.** Rows predating RIR carry a directly-logged RPE, and rows written by the old forging path carry a real 7 that is indistinguishable from a reported one. Not rewritten — see SI-10. |
+| `workout_sets.was_easy` | the set editor's "felt easy" control | **Reported.** Mutually exclusive with `is_failed`; the editor clears one when the other is set. |
+| `workout_sets.set_type`, `prescribed_working_sets` | snapshotted from the plan slot at log time | **Measured at the time.** Deliberately not re-derived from today's plan: a session three weeks old is not described by a blueprint edited since (SI-7b, `E-9`). |
+| `workout_sets.weight_kg` | the plan, or a session override the lifter accepted or typed | **Claimed.** The engine reads it as what was lifted; nothing verifies it. |
+| `program_sets.target_reps` | the plan; the set editor outside a workout; the ratchet, when the exercise opted in | **Prescribed.** Under `double` it is also *moved by the engine* between the range bounds, which is the one place a suggestion changes what a later session is judged against. |
+| `program_sets.target_rir` | the set editor; the progression sheet, across every working set | **Prescribed.** Opt-in, and null on everything that predates the sheet. |
+| `program_exercises.progression_*` | the progression sheet; a preset; sharing, import and MCP | **Configured.** Migration `0051` backfilled the axes from the retired mode; nothing was inferred from history. |
+| `workout_sessions.readiness` | the pre-workout check-in | **Reported**, and only from the *active* session (SI-8). |
+| `workout_sessions.feeling` | the post-workout check-in | **Reported.** Only `Tired` is load-bearing (SI-7c). |
+| `users.goals`, `users.experience_level` | the profile | **Configured**, and only ever used to size an increment (SI-2, SI-3). |
+| `exercises.movement_pattern`, `exercise_type` | the exercise library, with a per-program override | **Configured**, and the override wins (SI-5). |
+
+Three things follow, and each of them was a live bug at some point in this engine's history:
+
+- **A claim and a measurement are different, and the engine may not promote one to the other.** Tapping "done" claims the prescription. It does not report an effort, a fatigue level, or a rep count anyone counted.
+- **Silence is not a value.** Every nullable input above means "not reported" when null, and no read may substitute a default for it. The one place silence *does* change a verdict is an effort cap, where it makes the session unknown rather than cleared (SI-10a) — inert, not assumed.
+- **The engine reads history, and under `double` it also writes what history will be judged against.** That loop is deliberate and bounded by the configured range (SI-28a, SI-41), but it is the only one, and anything new that closes another needs the same argument.
 
 ## Increment sizing — SI-1…6
 
@@ -54,11 +89,11 @@ When the user's goals include `endurance` and no explicit increment is set, the 
 *Why:* endurance work wants small, frequent steps; load-zone scaling would hand a 100 kg squat a 5 kg jump that the training intent doesn't want.
 *Covered by:* none.
 
-### SI-3 — Experience level overrides the ladder for beginners and advanced only
-`beginner` → 5 kg. `advanced` → 1.25 kg. `intermediate` is deliberately **not** handled here and falls through to SI-4.
+### SI-3 — Experience level modifies the load zone; it does not replace it
+Applied **after** SI-4, to the number SI-4 produced. `beginner` doubles it, `advanced` halves it, `intermediate` leaves it alone.
 
-*Why:* beginners adapt fast enough that small jumps waste sessions; advanced lifters need fine steps. Intermediate has no single right answer, so load-zone scaling is a better guess than a flat number.
-*Covered by:* `progressive-suggestions.test.ts` — "uses beginner default of 5kg…", "uses advanced default of 1.25kg…".
+*Why:* this rule used to return before SI-4 was ever reached, so anyone with a filled-in profile never got load-zone scaling at all — a beginner was handed 5 kg on lateral raises and an advanced lifter 1.25 kg on a 200 kg deadlift. The zone is the part that knows a 20 kg lift and a 200 kg lift are different; the profile only knows how fast this person adapts, which is a multiplier. Intermediate stays unmodified because it has no single right answer and the zone is a better guess than a flat adjustment. Closes `A3`'s first half.
+*Covered by:* `progressive-suggestions.test.ts` — the "experience modifies the zone" block.
 
 ### SI-4 — Otherwise the increment scales with current load and movement size
 
@@ -71,6 +106,12 @@ When the user's goals include `endurance` and no explicit increment is set, the 
 
 *Why:* a fixed increment is either unliftable at the bottom or trivial at the top. Percentage-of-load is the real intent; these bands approximate it in numbers that match actual plates.
 *Covered by:* none directly — exercised indirectly throughout the suite.
+
+### SI-4a — The result snaps to a step the equipment can load
+`barbell` 2.5 kg, `dumbbell` 2 kg, `machine` and `cable` 1.25 kg, `kettlebell` 4 kg. The increment is rounded to a multiple of that step and floored at one of them. An exercise whose equipment is `bodyweight`, `bands`, unrecognised, or **not recorded at all** is not snapped.
+
+*Why:* 1.25 kg on a barbell is 0.625 kg a side, which almost nobody owns. The number reads precise, cannot be loaded, and the lifter rounds it themselves until the plan and the bar disagree about what the session was. The unclassified exemption matters as much as the rule: most of the library carries no equipment, and defaulting them to a step would coarsen every one of them on no evidence — the opposite of the problem this solves. Closes `A3`'s second half.
+*Covered by:* `progressive-suggestions.test.ts` — the "loadable granularity" block.
 
 ### SI-5 — "Compound" is resolved from exercise type, with a movement-pattern fallback
 When a resolved `exerciseType` exists, compound means exactly `exerciseType === "compound"`. When it is null, fall back to the movement pattern being one of `squat`, `hinge`, `push`, `pull`.
@@ -88,16 +129,40 @@ The new weight is `roundToNearest(base + increment, increment)`, so it lands on 
 
 Whether a bump is earned at all.
 
-### SI-7 — The window is the 5 most recent sessions for that exercise *and set number*
-History is keyed on `exerciseId + setNumber`, so set 1 progresses independently of set 3.
+### SI-7 — The window is the 5 most recent sessions for that exercise slot
+History is keyed on `program_exercise_id` — the plan slot — and grouped into sessions, each carrying every working set logged against that slot. All the slot's working sets are judged against the same window.
 
-*Why:* the top set and a back-off set are different prescriptions and drift apart legitimately.
-*Covered by:* implicitly by every `buildSuggestion` test.
+The rank is computed per slot in SQL, so a programme with many exercises cannot starve the later ones; the previous query took a single global row limit and bucketed client-side, which gave uneven set counts uneven windows.
 
-### SI-8 — Only completed, non-"Tired" sessions enter the window
-Sessions still in progress are excluded, and so is any session the lifter marked `feeling = 'Tired'`.
+*Why:* "did the workout clear?" is a question about a session. Keying on `exerciseId + setNumber` asked it of one set at a time, so on a 4x12 each set banked its own count and the plan could ratchet to 62.5 / 60 / 60 / 60 with no session having ever cleared. Scope `set` (SI-7a) is where that independence still lives, for exercises whose sets genuinely differ.
+*Covered by:* `progressive-suggestions.test.ts` — the "worked example 4a" and "scope decides which sets have to clear" blocks.
 
-*Why:* two consequences worth stating outright. Excluding the live session means **marking a set easy never affects today — only the next session**. Excluding Tired sessions stops a bad-day miss from counting toward a deload the lifter doesn't need.
+### SI-7a — Scope names the sets that decide whether a session cleared
+`all` (the default) reads every working set the plan prescribed; `first` reads the first; `last` reads the last; `set` reads that set alone, which is the pre-session behaviour retained per exercise.
+
+A session **cleared** when every set the scope names was a hit (SI-9). `all` is literal: no "N of M" tolerance.
+
+*Why:* a top-set prescription and a straight-set prescription are different questions, and one setting is enough to tell them apart. Strict `all` is deliberate — loosening later is recoverable, tightening changes progression under people mid-programme.
+*Covered by:* `progressive-suggestions.test.ts` — the "scope decides which sets have to clear" block.
+
+### SI-7b — A session that cannot answer the question is unknown, not missed
+When a set the scope names has no logged row, the session is **unknown**. Under scope `all` that is exactly "fewer working sets logged than the plan prescribed at the time", measured against `workout_sets.prescribed_working_sets` and never against today's plan. When the snapshot is null (pre-migration rows) the count is not checked.
+
+An unknown session is inert in both directions: it does not bank a clear, it does not reset the run of clears, and it does not count toward a back-off. It still consumes a slot in the window.
+
+*Why:* cutting a session short usually says nothing about whether the load is right, and a back-off would be the engine at its most wrong in the situation a lifter is least able to argue with. Treating it as inert rather than forgiving matters too — if it reset the gate, an honest gap would erase banked progress; if it counted, skipping the hard last set would be strictly better than grinding it.
+*Covered by:* `progressive-suggestions.test.ts` — the "a partly logged session is unknown" block.
+
+### SI-7c — A Tired session's misses are held harmless, its clears are not
+A session marked `feeling = 'Tired'` that did not clear is recorded as unknown (SI-7b). One that cleared counts normally, and either way it supplies the base weight and the "Last: …" line.
+
+*Why:* the previous rule dropped Tired sessions from the window outright, which removed their *successful* sets from the count too and left the lifter reading numbers from weeks ago. Honest self-reporting froze progression, which is the opposite of what the exclusion was for.
+*Covered by:* `progressive-suggestions.test.ts` — the "a Tired session's misses are held harmless" block.
+
+### SI-8 — Only completed sessions enter the window
+Sessions still in progress are excluded. Tired sessions are no longer filtered out here; SI-7c handles them.
+
+*Why:* excluding the live session means **marking a set easy never affects today — only the next session**.
 *Covered by:* none — this filter lives in the SQL of `getProgressiveSuggestions`, which the unit suite doesn't reach.
 
 ### SI-9 — A set met its target when it reached the target reps
@@ -106,13 +171,29 @@ The target is the row's own `targetReps`, falling back to the program's. With no
 *Why:* open-ended sets ("AMRAP") shouldn't be permanently ineligible for progression just because nothing was prescribed.
 *Covered by:* `progressive-suggestions.test.ts` — "returns true for null targets when reps > 0…", "returns false for null targets when actualReps = 0…".
 
-### SI-10 — A confident hit is a hit with reserve left
-On top of SI-9: RPE ≤ 7 counts; RPE 8 counts only if the lifter did *more* than the target; RPE 9–10 never counts. Missing RPE is treated as 7.
+### SI-10 — Effort decides clearing only where a cap is prescribed
+An exercise with no effort cap clears on the target alone, whatever the lifter reported about how hard it was — including nothing.
 
-Because `rpe = 10 − rir`, this reads in RIR terms as: RIR ≥ 3 counts, RIR 2 counts only with an extra rep, RIR 0–1 never.
+Where a cap **is** prescribed, a session clears only when the deciding set met its target *and* its logged RIR is greater than or equal to the cap. RIR 2 against a cap of 2 clears; RIR 1 does not, and that is a **miss**, not a hold: the reps were there and the reserve was not.
 
-*Why:* hitting the target at a maximal grind is not evidence you can hold more weight. Treating a missing RPE as neutral keeps pre-RIR history usable instead of freezing those exercises.
-*Covered by:* `progressive-suggestions.test.ts` — the `isConfidentHit` block; "holds when all sessions are RPE 9-10 hits".
+There used to be an absolute ladder on top of SI-9 instead: RPE ≤ 7 counted, RPE 8 counted only with an extra rep, RPE 9–10 never counted, and a missing value was read as 7. It is retired.
+
+*Why:* the ladder had two faults, and the second is the serious one. It judged every exercise against a threshold nobody had chosen, and reading a missing value as 7 turned silence into evidence — with the old logging path writing 7 on every tap, every logged set was a confident hit. The cap is the same idea with both faults removed: opt-in, so nobody is blocked by a setting they did not choose, and compared against what was actually logged.
+*Covered by:* `progressive-suggestions.test.ts` — the `metTargetReps` block and the "effort cap" block.
+
+### SI-10a — A cap with no effort logged makes the session unknown
+When a cap is prescribed and the deciding set carries no effort at all, the session is **unknown** (SI-7b): it banks nothing, resets nothing, and still consumes a window slot. The suggestion is `held-unknown`, which the UI renders distinctly from `held`.
+
+The order matters: the target question is asked first, so a session that missed its reps is a plain miss whatever its effort says. A cap makes clearing stricter and can never rescue a miss.
+
+*Why:* treating silence as a clear is the RPE-7 default in a new costume. Treating it as a failure would deload someone for not answering a prompt. "You have not told me how hard that was" and "you have not cleared it enough times" are different messages, and rendering both as `held` is how the old UI left people guessing.
+*Covered by:* `progressive-suggestions.test.ts` — "holds as unknown, not as a miss, when no effort was logged".
+
+### SI-10b — The set that decides clearing also decides effort
+Under scope `all` the effort cap is read from the **last** working set, where reserve is lowest by design. Under `first`, `last` or `set` it is the one set the scope names. Effort logged on other sets is stored and shown but never substitutes.
+
+*Why:* the earlier rule — "the last set carrying logged effort speaks for the session" — contradicted scope `first` by letting two different sets adjudicate one session, and on a top-set prescription it read the back-off's looser floor instead of the top set's. One set decides both questions, and it is the set the scope already named.
+*Covered by:* `progressive-suggestions.test.ts` — "reads the cap off the set the scope names — last, under scope all", "reads the first set's effort under scope first".
 
 ### SI-11 — In weight-bearing modes, a hit only counts at the current load or heavier
 Hits logged below the base weight are excluded from the count.
@@ -120,7 +201,7 @@ Hits logged below the base weight are excluded from the count.
 *Why:* without this, hits from *before* the last bump keep counting after it, so `80 hit → 80 hit → 82.5 missed` suggests 85 and the load runs away from the lifter. Double progression means "hit the target twice at **this** weight, then move". Harmless while a suggestion was only a chip; not harmless once it can write to the plan.
 *Covered by:* `progressive-suggestions.test.ts` — the "hits must be at the current weight" block.
 
-### SI-12 — The gate is 2 confident hits, overridable per exercise between 1 and 5
+### SI-12 — The gate is 2 hits, overridable per exercise between 1 and 5
 `progressionRequiredHits` overrides the default; null restores it. The validator clamps to 1…`CONSENSUS_WINDOW`.
 
 *Why:* one good session can be luck. The ceiling is the window itself — asking for more hits than the window can hold would be unsatisfiable, so it is rejected at the edge rather than silently freezing the exercise.
@@ -147,12 +228,13 @@ The order below **is** the behaviour. Each step wins outright over everything un
 | # | Step | Wins over | Result |
 |---|---|---|---|
 | SI-15 | No history | everything | `null` — no chip |
-| SI-16 | Mode `none` | everything below | `null` — no chip |
-| SI-17 | Deload | retry, mode, easy | `deload` |
-| SI-18 | Retry (weight) | mode, easy | `retry` |
-| SI-19 | Retry (reps) | mode, easy | `retry` |
-| SI-20 | Mode branch | — | `progressed*` / `held` / `manual` |
-| SI-21 | Low readiness | any `progressed*` | `held-readiness` |
+| SI-16 | Advance `none` | everything below | `null` — no chip |
+| SI-14a | Staleness | back-off, retry, advance, easy | `re-approach` |
+| SI-17 | Back-off | retry, advance, easy | `deload` |
+| SI-18 | Retry (weight) | advance, easy | `retry` |
+| SI-19 | Retry (reps) | advance, easy | `retry` |
+| SI-20 | Advance branch | — | `progressed*` / `reset` / `held*` / `manual` |
+| SI-21 | Low readiness | any advance | `held-readiness` or `deload` |
 
 ### SI-15 — No history means no suggestion
 With nothing logged for this exercise and set number, return nothing at all.
@@ -160,17 +242,33 @@ With nothing logged for this exercise and set number, return nothing at all.
 *Why:* every number in a suggestion is derived from the last logged set. There is no honest guess to make from zero rows.
 *Covered by:* `progressive-suggestions.test.ts` — "returns null with empty rows".
 
-### SI-16 — Mode `none` produces no suggestion object
+### SI-16 — Advance `none` produces no suggestion object
 Distinct from `manual`, which produces a suggestion carrying the current weight and a `manual` reason.
 
-*Why:* `none` means "don't show me anything here"; `manual` means "show me where I am, but don't propose changes". The UI renders a badge for the second and nothing for the first.
+*Why:* `none` means "don't show me anything here"; `manual` means "show me where I am, but don't propose changes". The UI renders a badge for the second and nothing for the first. `manual` is on the advance axis for exactly this reason and is not in the plan's section 5 list: no other column carries the difference between the two.
 *Covered by:* none.
 
-### SI-17 — Three straight misses with no confident hit is a deload
-In `weight`, `smart` and `reps` modes only: when the 3 most recent sessions all missed their target *and* the window holds zero confident hits, suggest 90% of base weight, snapped to the increment grid.
+### SI-14a — An exercise not logged for long enough offers a re-approach
+When the most recent session for a slot is older than the exercise's staleness threshold and the base weight is above zero, suggest the last logged load less one back-off (`progressionBackoffPct`, floored at one increment) and stop. The reason is `re-approach`.
 
-*Why:* repeated failure at a load is a signal to back off and re-approach, not to keep grinding. The "no confident hits anywhere in the window" clause stops a single bad patch from overriding evidence the weight is manageable.
-*Covered by:* `progressive-suggestions.test.ts` — the "deload detection" block; "yields to a deload — three misses outrank an easy verdict".
+The threshold is **21 days, or 2.5x the exercise's own median gap between sessions, whichever is longer**. The median needs at least two sessions; with fewer, the flat 21 days is all there is.
+
+Advances only. `manual` still reports what was done last time — exactly what someone coming back wants to see — and `none` shows nothing either way.
+
+*Why:* the window is the last five sessions whenever they happened, so after three months away the gate was still satisfied by sessions from before the break and the first session back opened with "+2.5 kg" on a weight the lifter had not touched since spring. Detraining was invisible; the date the engine carried was used only to print "Last: …" (`A10`).
+
+It is asked **before** the back-off deliberately. A layoff and a stall want opposite responses — one says the load is too heavy for you, the other says nothing about the load at all — and three missed sessions followed by a three-month break is not a plateau.
+
+The median clause is `E-19`, and it is not a refinement: measured absolutely, an exercise deliberately trained on a three-week rotation sits permanently stale and is offered -10% every single session, which is the engine punishing someone for following their own programme.
+*Covered by:* `progressive-suggestions.test.ts` — the "staleness" and `staleThresholdDays` blocks.
+
+### SI-17 — A run of misses with no clear anywhere in the window backs off
+Axis 7 decides whether this fires. With `progressionRegress = 'backoff'` (the default for load schemes), when the last `progressionBackoffAfter` sessions all missed *and* the window holds zero qualifying clears, suggest `progressionBackoffPct` off the base weight, snapped to the increment grid and floored at one increment. With `'hold'`, nothing fires.
+
+Two structural limits, both deliberate: only the load-bearing advances (`load`, `double`, `reps`) can back off at all, because a back-off cuts a weight and a plank has none; and at zero load it is a no-op rather than a suggestion to lift 0 kg.
+
+*Why:* repeated failure at a load is a signal to back off and re-approach, not to keep grinding. The "no clears anywhere in the window" clause stops a single bad patch from overriding evidence the weight is manageable — without it, one rep short on set 4 three sessions running deloads all four sets by 10%, which is the normal state of a 4x12 block and not a stall. It would also make *skipping* set 4 strictly better than grinding it. The floor exists because percentage cuts compound: a lift that keeps missing would otherwise be walked below an empty bar one 10% step at a time.
+*Covered by:* `progressive-suggestions.test.ts` — the "deload detection" and "regress axis" blocks; "yields to a deload — three misses outrank an easy verdict".
 
 ### SI-18 — A one-off drop in weight is offered back, an intentional deload is not
 When the previous session was heavier than the most recent one, suggest returning to the previous weight — **unless** that drop followed 2 or more consecutive misses, which marks it as a deliberate deload.
@@ -184,16 +282,18 @@ When the previous session used the same weight but more reps, suggest matching t
 *Why:* the same reason as SI-18 in the rep dimension — reclaim the ground already held before adding more.
 *Covered by:* `progressive-suggestions.test.ts` — "suggests previous reps when same weight but fewer reps last session".
 
-### SI-20 — Otherwise the mode decides
+### SI-20 — Otherwise the advance decides
 See SI-22…33 below.
 
-### SI-21 — Readiness of 1 or 2 holds every progression
-Any `progressed*` outcome is downgraded to `held-readiness` at the base weight, flagged `readinessModulated`. Runs *after* the mode branch and *before* the easy flag, so **a low-readiness day holds the load whether or not the last set felt easy**.
+### SI-21 — Readiness of 1 or 2 does what axis 8 says
+`hold` (the default) downgrades any advance to `held-readiness` at the base weight. `ignore` passes it through untouched. `reduce` proposes a back-off instead, reusing the `deload` reason with `readinessModulated` set rather than adding a tenth code for what is a display distinction. All three clear every suggested value and run *after* the advance branch and *before* the easy flag, so **a low-readiness day holds the load whether or not the last set felt easy**.
 
-*Why:* the lifter has said they are under-recovered before touching a bar. That outranks historical evidence, including their own easy verdict from a previous session.
-*Covered by:* `progressive-suggestions.test.ts` — the "readiness modulation" block; "yields to low readiness — an easy verdict does not force a bump today".
+*Why:* the lifter has said they are under-recovered before touching a bar, and that outranks historical evidence including their own easy verdict. It is an axis rather than a constant because the right answer differs by exercise: an accessory can afford to ignore it, and a heavy compound is where `reduce` earns its place.
+*Covered by:* `progressive-suggestions.test.ts` — the "readiness modulation" and "readiness axis" blocks; "yields to low readiness — an easy verdict does not force a bump today".
 
-## The seven modes — SI-22…33
+## The advance axis — SI-22…33
+
+Six values, and a seventh (`manual`) that moves nothing. Two rules that used to live here are gone: SI-26 and SI-27 described `smart`, which is retired outright (`D-4`).
 
 ### SI-22 — `none`
 No suggestion (SI-16).
@@ -204,72 +304,108 @@ Always a `manual` suggestion at the current weight. Never proposes a change.
 *Why:* keeps "last time you did X" visible without any autoregulation.
 *Covered by:* `progressive-suggestions.test.ts` — "does not deload in manual mode".
 
-### SI-24 — `weight`
-When progression is earned and the increment is positive, suggest `base + increment` snapped to the grid; otherwise `held` at base.
+### SI-24 — `load`
+When progression is earned and the increment is positive, suggest `currentLoad + increment` snapped to the grid; otherwise `held` at base. `currentLoad` under scope `all` is the heaviest working set of the last session, not the lightest and not this set's (SI-11a).
 
 *Covered by:* `progressive-suggestions.test.ts` — the consensus-gate block; "progresses by weight as normal when baseWeight > 0".
 
-### SI-25 — `weight` and `smart` fall back to reps at zero weight
-When base weight is 0 (bodyweight), suggest `target + repIncrement` instead. If no rep increment is configured or there is no rep target, the outcome is `held`.
+### SI-25 — `load` falls back to reps at zero weight
+When base weight is 0 (bodyweight), suggest `target + repIncrement` instead, capped by `repRangeMax` when the set carries one. With no rep target at all, or already at the ceiling, the outcome is `held`. As in SI-28, a missing rep increment means one rep.
 
-*Why:* there is no kg to add to a chin-up. The `held` fallback is honest about having nothing to propose rather than inventing a number. See divergence **D5** — the practical effect of the default is that bodyweight exercises never progress until a rep increment is set.
+*Why:* there is no kg to add to a chin-up. The `held` fallback is honest about having nothing to propose rather than inventing a number, and it now only fires where there is genuinely nothing to say.
 *Covered by:* `progressive-suggestions.test.ts` — the "bodyweight fallback" block.
 
-### SI-26 — `smart` adds weight and re-estimates the rep target
-As `weight`, plus an Epley-derived `adjustedRepsForWeight` telling the lifter how many reps the heavier load is worth.
+### SI-26 — Retired: `smart` and its rep re-estimate
+`smart` mode added weight and attached an Epley-derived rep cut for the heavier load, on a suggestion field of its own. Both are deleted (`D-4`): the cut only ever lowered, only fired on a near-max set in the 2–12 range, and was a rough approximation of the rep drop `double` does properly. `smart` exercises were migrated to plain `load`; none silently became double progression, because no set they left behind carries a rep range.
 
-*Covered by:* `progressive-suggestions.test.ts` — the "smart mode" block.
+The number is kept as a rule number rather than reused, so references to SI-26 elsewhere do not silently point at something else.
 
-### SI-27 — The rep re-estimate is guarded, and only ever lowers the target
-Computed only when base weight > 0, the last set was 2–12 reps, the last set was RPE ≥ 7, and the new weight is above the old. Applied only when the estimate is *below* the current target.
+### SI-27 — The 1RM estimate is display-only, and needs logged effort
+`estimated1RM` is attached to a suggestion when the base weight is above zero, the reference set was 2–12 reps, and its logged RIR is 3 or better. Nothing reads it but the badge.
 
-*Why:* Epley is unreliable outside 2–12 reps and meaningless on a sub-maximal set, which is not on the curve. Only lowering avoids the absurd result of a heavier weight being prescribed for *more* reps.
-*Covered by:* `progressive-suggestions.test.ts` — "skips adjustedRepsForWeight on sub-max sets (RPE < 7)…", "…when weight is 0…", "…for actualReps > 12…".
+*Why:* Epley is unreliable outside 2–12 reps and meaningless on a set the lifter stopped four reps short of failure. It carried no effort gate at all until this phase, so a displayed 1RM could come from a set the code itself treated as off-curve — and with effort no longer forged, "nothing logged" now means no estimate rather than an estimate built on an assumed 7. Closes divergence `D1`.
+*Covered by:* `progressive-suggestions.test.ts` — the "estimated 1RM" block.
 
 ### SI-28 — `reps`
-Suggest `target + repIncrement` at the same weight. Holds when there is no rep target to add to.
+Suggest `target + repIncrement` at the same weight, clamped to `repRangeMax` when the set carries one, and holding once the target is already there. Holds when there is no rep target to add to. **A missing rep increment means one rep, not none.**
 
-*Why:* with no target, there is no safe number to increment — guessing from the last performance would ratchet on a single good day.
-*Covered by:* `progressive-suggestions.test.ts` — the "reps mode" block.
+*Why:* with no target, there is no safe number to increment — guessing from the last performance would ratchet on a single good day. The ceiling is what stops a rep ladder climbing 8, 9, 10 … 40 with nothing to convert the reps into.
 
-### SI-29 — `time`
-Suggest `lastDuration + secondsIncrement`, defaulting to 10s when unconfigured. Requires the most recent set to have met the target duration.
+The one-rep default closes `SI-D5`. `overloadIncrementReps` defaults to `0` and nothing in the app ever set it, so every rep advance was gated behind a value nobody had chosen and a bodyweight exercise could not progress out of the box — the **Rep ladder** preset made the setting reachable, which is not the same as fixing the default. One rep is the smallest move the dimension has, so it is the only honest fallback.
+*Covered by:* `progressive-suggestions.test.ts` — the "reps mode" block; "a rep ladder stops at the top of its range".
 
-*Covered by:* `progressive-suggestions.test.ts` — the "time mode" block; "defaults to 10s increment when overloadIncrementReps is 0".
+### SI-28a — `double` climbs the reps, then buys the next range with load
+The prescription is `targetReps` as the plan holds it today, and it moves inside `[repRangeMin, repRangeMax]`.
+
+- Below `repRangeMax`: suggest `targetReps` = the reps the **binding set** of the last cleared session actually did, capped at `repRangeMax`, with a floor of one rep increment. Same weight, reason `progressed-reps`.
+- At `repRangeMax`: suggest `currentLoad + increment` snapped to the grid, with `targetReps` back to `repRangeMin`. Reason `reset`.
+
+Clearing, the window and the gate are exactly as they are for every other mode: the session clears when every set the scope names met the target in force that day.
+
+*Why:* climbing to what was achieved rather than one rep per session keeps the prescription from lagging a lifter who can already do the top of the range — 12/10/9 against a target of 8 takes the target to 9, and 12/12/12 takes it to the top in one step.
+*Covered by:* `progressive-suggestions.test.ts` — "worked example 4b", "double progression, the rest of the range".
+
+### SI-28b — `double` holds rather than climbing past its own range
+At `repRangeMax` with no load to add — a zero increment, or a bodyweight exercise — the suggestion is `held`. With no range configured at all, `double` behaves as `weight`.
+
+*Why:* the reset is the only way out of the top of the range, so without an increment there is nothing to buy it with; climbing past a range the lifter configured would be answering a question they did not ask. Nothing can currently configure `double` without a range — the preset picker writes both — so the fallback is a safety net, not a supported shape.
+*Covered by:* `progressive-suggestions.test.ts` — "holds at the top of the range when there is no load to add", "holds at the top of the range for a bodyweight exercise", "falls back to load progression when no range is configured".
+
+### SI-29 — `duration`
+Suggest **`targetDuration` + secondsIncrement**, defaulting to 10s when unconfigured.
+
+*Why:* the increment is added to the target, not to what was held. Beating a 60s target by 30s used to make 90s the new prescription, so one good session permanently reset what counted as clearing and the plan ratcheted away from the lifter on their best day. Half of `A5`.
+*Covered by:* `progressive-suggestions.test.ts` — the "time mode" block; "adds the increment to the target, not to what was held".
 
 ### SI-30 — `distance`
-Suggest `lastDistance + metresIncrement`, defaulting to 500 m. Requires the most recent set to have met the target distance. Weight is always reported as 0.
+Suggest **`targetDistance` + metresIncrement**, defaulting to 500 m. Weight is always reported as 0.
 
-*Covered by:* `progressive-suggestions.test.ts` — the "distance mode" blocks.
+*Why:* the same as SI-29 — beating a 5 km target by 200 m used to make 5.2 km the prescription.
+*Covered by:* `progressive-suggestions.test.ts` — the "distance mode" blocks; "adds the increment to the target".
 
-### SI-31 — Timed and distance work uses a plain RPE ≤ 8 gate
-These modes count any target-meeting session at RPE ≤ 8 as a hit — they do not apply the extra-rep clause (SI-10) or the at-current-load clause (SI-11).
+### SI-30a — An anchored set is never an advance target
+A set carrying `peakDurationSeconds` or `peakDistanceMeters` gets `held-anchored` and no suggested value, whatever the window says.
 
-*Why:* "one more rep than target" has no meaning for a hold or a run, and there is no load to compare against.
-*Covered by:* `progressive-suggestions.test.ts` — "time mode RPE confidence", "distance mode RPE confidence".
+The rule sentence says so too, ahead of every other clause: an anchored exercise reads "your training cycle sets these targets week by week, so progression leaves them alone" rather than quoting an increment it will never apply.
+
+*Why:* the training cycle rewrites those columns weekly from the peak anchor (`PZ` rules in [`cycle-periodization.md`](cycle-periodization.md)). A progression write there is overwritten at best and fights the periodization at worst, and the lifter would watch a number they did not set move twice. The other half of `A5`, and the boundary the two engines were always supposed to keep.
+*Covered by:* `progressive-suggestions.test.ts` — "never writes an anchored duration — the cycle owns it", "never writes an anchored distance either".
+
+### SI-31 — Timed and distance work counts any target-meeting session
+These advances count any session that met the target as a clear — they do not apply the at-current-load clause (SI-11). They carried their own RPE ≤ 8 filter until SI-10's ladder was retired; it went with it.
+
+*Why:* there is no load to compare a hold or a run against.
+*Covered by:* `progressive-suggestions.test.ts` — "time mode effort", "distance mode effort".
 
 ### SI-32 — `overloadIncrementReps` carries three different units
-Reps in rep-based modes, seconds in `time`, metres in `distance`. One column, three meanings, disambiguated only by `progressionMode`.
+Reps in rep-based advances, seconds under `duration`, metres under `distance`. One column, three meanings, disambiguated only by the advance axis.
 
-*Why:* recorded because it is a trap, not because it is good. Anything reading this column must know the mode first.
-*Covered by:* the mode blocks above.
+*Why:* recorded because it is a trap, not because it is good. Anything reading this column must know the advance first. Splitting it is a separate migration and was deliberately out of scope for the rebuild.
+*Covered by:* the advance blocks above.
 
 ### SI-33 — The `reason` code is the contract
-Nine values, and both consumers (the chip UI and the ratchet) branch on them exhaustively.
+Fourteen values. "Both consumers" is wrong and has been since it was written: **eight sites across four files** branch on a reason, and a new code has to be walked through all of them in the change that adds it — the render switch, the sibling-apply dedup, the `*Pending` computations, the readiness downgrade, the `easyOverride` prefix match, the insight's exercise status, its `progressedCount` filter, and the stagnating headline's `heldCount` filter.
 
 | Reason | Meaning | Ratchet writes? |
 |---|---|---|
-| `progressed` | More weight | ✓ weight (+ rep cut if any) |
+| `progressed` | More weight | ✓ weight |
 | `progressed-reps` | More reps | ✓ reps, only upward |
+| `reset` | Double progression: more load, reps back to the bottom of the range | ✓ weight **and** reps, the reps unfloored |
 | `progressed-time` | Longer hold | ✓ duration |
 | `progressed-distance` | Further | ✓ distance |
-| `deload` | Back off 10% | ✓ weight |
+| `deload` | Back off, or a low-readiness reduction (`E-7`) | ✓ weight |
+| `re-approach` | Not logged in long enough that the window describes someone else (SI-14a) | ✓ weight, unfloored |
 | `retry` | Reclaim a previous value | ✓ weight or reps |
 | `held` | Gate not met | — |
 | `held-readiness` | Earned, suppressed by readiness | — |
-| `manual` | Mode is manual | — |
+| `held-unknown` | An effort cap is prescribed and no effort was logged | — |
+| `held-no-increment` | `double` at the top of its range with no load to add (`E-4`) | — |
+| `held-anchored` | The training cycle owns this set's target (SI-30a) | — |
+| `manual` | Advance is manual | — |
 
-*Why:* a new reason code that either consumer doesn't handle silently becomes a no-op. Add one only alongside both switch statements.
+**The family is still named `progressed*`, not `advanced*`, and that is deliberate.** Two of the eight sites match on the string prefix rather than the full value, so a rename would make them match nothing — the `easyOverride` flag and the readiness modulation would silently stop firing, with no type error. The names are internal; the safety is not.
+
+*Why:* a new reason code a consumer doesn't handle silently becomes a no-op, or worse — the two insight sites end in catch-alls, so an unhandled code reports as *stalled* on the dashboard.
 *Covered by:* `progressive-suggestions.test.ts` — the `pendingProgressions` block.
 
 ## The plan ratchet — SI-34…40
@@ -292,11 +428,19 @@ Pending sets are matched against their *current* values with any live session ov
 *Why:* the number a set was logged at is history, not a plan. Warm-ups are excluded per SI-14.
 *Covered by:* `progressive-suggestions.test.ts` — "skips completed sets…", "skips warm-up sets".
 
-### SI-37 — Only actionable reasons write; a rep target is never lowered
-`held`, `held-readiness` and `manual` produce nothing. `progressed-reps` writes only when the suggestion is above the current target. `deload` does write — a downward move is still a move.
+### SI-37 — Only actionable reasons write, and only a deload lowers the plan
+Every `held*` reason and `manual` produce nothing. Every other reason writes only when its value lands **strictly above** what the plan already holds, in whichever dimension it moves. Three exceptions: `deload`, because backing off is the whole point of it; `re-approach`, which is a back-off by another name (`E-2`); and `reset`'s **rep** write, because dropping the target to the bottom of the range is the other half of raising the load and a floor there blocks double progression outright (`E-1`). `reset`'s load write keeps the floor — a reset that would land below the planned weight is a downgrade with the reps thrown in, so it writes nothing at all.
 
-*Why:* holding is a decision to leave the plan alone. The rep floor stops a suggestion built from a weaker session from quietly reducing the prescription.
-*Covered by:* `progressive-suggestions.test.ts` — "ignores held, held-readiness and manual suggestions", "does not lower a rep target that is already higher", "includes deloads…".
+*Why:* base values come from the most recent *logged* set, not the planned one (see **Base weight**), so after one lighter session a `progressed` suggestion can land **below** the planned number. Unfloored, the ratchet writes it and the "↑" chip silently downgrades the programme: plan 80 kg, two hit sessions at 75, plan rewritten to 77.5. `retry` needs the same floor for a different reason — it reclaims a weight held in a recent session, which says nothing about the plan, so when the plan is already higher there is nothing to reclaim there.
+
+Two things make this easy to get wrong, both of which it was:
+
+- **The floor is measured against the plan, not against today's values.** `pendingProgressions` receives override-folded sets, because "has the lifter already taken this?" is a question about today. "Would this lower the plan?" is a question about the blueprint, and answering it against the override-folded value re-opens the hole whenever the lifter has hand-edited today's set — plan 80, dropped to 70, a 75 suggestion reads as an increase. Hence the separate `planned` field. Both conditions apply: the first keeps the chip settling to a tick once tapped, the second is the floor.
+- **There are two consumers and they must not each implement it.** `pendingProgressions` backs the exercise-level apply-all chip; the per-set chip goes through `applySuggestion` in `WorkoutSetsClient`. That function used to build its own payload, and had drifted — no floor, and it wrote the carried-along weight for a rep retry, which the engine does not. It now derives its write from `pendingProgressions` for the single set, so the rule has one implementation.
+
+Display follows the same rule: the chip's arrow is derived from the comparison rather than the reason, so a below-plan `progressed` value renders `↓`, not `↑`. It is still offered for the live session — a session override reflects what was actually lifted and is legitimately allowed to go down.
+
+*Covered by:* `progressive-suggestions.test.ts` — "ignores held, held-readiness and manual suggestions", "writes the reset's lower rep target, which the floor would otherwise block", "refuses a reset whose load sits below the plan", "does not lower a rep target that is already higher", "does not lower a planned weight that is already higher", "does not lower a planned duration…", "does not lower a planned distance…", "does not let a retry lower the plan either", "floors against the plan, not today's override", "still progresses above the plan when today's set was dropped", "still deloads below a planned weight — the floor is progressions only".
 
 ### SI-38 — The server re-reads the opt-in flag, and opting out is a success
 `applyProgressionToPlan` re-checks `progressionApplyToPlan` and returns success without writing when it is off.
@@ -316,22 +460,65 @@ Failures are swallowed; the live workout route is not revalidated after a succes
 *Why:* the session override has already landed, so the lifter's current set is unaffected either way, and a lost write self-heals — the next suggestion is recomputed from logged history and comes back on its own. Refreshing the list mid-set would move the UI under the lifter's finger for no visible change. Surfacing an error mid-lift over a plan edit that self-heals would be worse than the failure.
 *Covered by:* none.
 
+## Personal records — SI-42
+
+### SI-42 — An estimated-1RM record needs a near-max set, and older ones are flagged
+A new `estimated_1rm` record is written only when the set was 2–12 reps **and** its logged RIR is 3 or better. A set with no effort logged sets no record.
+
+Records of the two **derived** types — `estimated_1rm` and `reps_at_weight`, both computed from `actual_reps` — that were achieved before `HONEST_REPS_FROM` are marked `unverified` and rendered as "set before reps were logged individually". They are not deleted, not recomputed, and still count: beating one is a real PR. Heaviest-weight records carry no flag, having never been assumption-based.
+
+*Why:* Epley over a set the lifter stopped four reps short of failure is arithmetic on a submaximal number, not a 1RM estimate, and this is the figure people screenshot — the worst place for the app to be confidently wrong. The displayed estimate gained this guard with `SI-D1`; the stored record was the half that stayed ungated (`A11`).
+
+The flag is `D-10`, and it is display-only by decision. Before honest logging a tap wrote `actualReps = targetReps`, so a lifter who ground out 6 of a prescribed 8 was credited with 8 and could be shown a trophy they did not earn. Those records may now be unbeatable — but rewriting a user's record history to make the new engine look better would be the same dishonesty the rebuild exists to remove, and an unbeatable record with a visible reason is better than one that reads as a plateau. The cutover is a constant rather than a column, which needs checking at deploy: late over-flags and understates the app's confidence, early presents assumed numbers as measured ones.
+*Covered by:* `pr-provenance.test.ts` — the `isUnverifiedPr` block. The effort gate itself is inside `detectAndRecordPRs`, a Server Action helper with no action-level test.
+
+## Rate — SI-41
+
+### SI-40a — A session logged before the rules changed is inert
+`program_exercises.progression_config_at` records when a judging rule last moved — an axis, the rep range, or an effort cap. A session in the window whose date precedes it is **unknown** (SI-7b) with reason `reconfigured`: it banks nothing, resets nothing, and still supplies the base weight and the "Last: …" line. The increments and the plan opt-in deliberately do not stamp it; they change what an advance writes, not what counts as a clear.
+
+Comparison is by date, not timestamp, so a session logged earlier on the day of the change still counts.
+
+*Why:* without it, switching preset or scope re-scores five sessions of history under the new rule and the dot count moves for reasons nothing on screen explains — a lifter asks a question about a setting and their progress appears to change as a result (`E-13`). **Inert rather than dropped** matters just as much: dropping them empties the window, and an empty window returns no suggestion at all, so changing a setting would delete the chip, the dots and the last-session numbers the lifter was reading.
+*Covered by:* `progressive-suggestions.test.ts` — the "config stamp" block.
+
+### SI-41 — One step per session, in one dimension
+A suggestion is computed once per session, and it may never propose more than **one step** in the dimension it moves:
+
+| Advance | Step | Bound |
+|---|---|---|
+| `load` | one increment above `currentLoad` | the increment (SI-1…6) |
+| `reps` | one rep increment above the current target | `repRangeMax` when the set has one (SI-28) |
+| `double`, climbing | the reps the binding set actually did | `repRangeMax` — a bound the lifter configured |
+| `double`, resetting | one load increment, reps to `repRangeMin` | the increment |
+| `duration` / `distance` | one increment above the **target** | the increment |
+| `deload` | one `progressionBackoffPct` cut | floored at one increment (SI-17) |
+| `retry` | a value from a session in the window | something the lifter already did |
+| `re-approach` | one back-off below the last logged load | floored at one increment (SI-14a) |
+
+Two rows are exceptions to "one increment", and both are bounded by something outside the engine's own output. `double`'s climb can move several reps at once, but only up to a range the lifter chose, and it exists because moving one rep per session leaves the prescription permanently lagging someone who can already do the top of the range. `retry` can move further still, but only back to a number that is already in the log.
+
+Nothing compounds within a session, and nothing accumulates across skipped ones: five clearing sessions in a row propose the same single increment as two do, because the gate is consecutive and the window is bounded by the last load change (SI-11).
+
+*Why:* this rule is stated because nothing stated it, and its absence is what let two separate ratchets through. Duration and distance advanced from what was *achieved* rather than the target, so beating a hold by 30 seconds moved the plan by 30 seconds (SI-29). An early draft of `double` climbed one rep per session against `actualReps >= target`, which meant a lifter doing 12/10/9 against a target of 8 cleared and advanced by exactly one however far past they went. Both are the same failure: an advance sized by performance rather than by a configured step. If a future advance cannot state its step and its bound in one row of the table above, it is not finished.
+*Covered by:* `progressive-suggestions.test.ts` — the "one step per session" block.
+
 ## Divergences (intent vs code)
 
-Verified against `progression.ts` and `workout-sets.ts` at `3a09857` on 2026-08-24.
+Verified against `progression.ts` and `workout-sets.ts` at `8c3fd1b` on 2026-08-29.
 
 | # | Rule | Intended | Actual | Status |
 |---|---|---|---|---|
-| D1 | SI-27 | The Epley estimate is only trustworthy on a near-max set, so anything derived from it should share that guard | `estimated1RM` is attached to every suggestion with **no RPE gate** (`progression.ts:419`), while `adjustedRepsForWeight` requires RPE ≥ 7 for the same formula (`:615-621`). A displayed 1RM can come from a set the code itself treats as off-curve | open |
-| D2 | SI-21 | A held-readiness suggestion proposes no change at all | The downgrade clears `suggestedReps`, `suggestedDurationSeconds` and `suggestedDistanceMeters` but **not** `adjustedRepsForWeight` (`:708-717`), so a held smart suggestion can still carry a rep cut. The ratchet ignores it (SI-37), so this is display-only today | open |
-| D3 | SI-17 | Deload eligibility is a deliberate per-mode choice | `canDeload` covers `weight\|smart\|reps` (`:473`); timed and distance work can never deload. The adjacent comment says "not manual, not time" and omits `distance`, so it is unclear whether the exclusion was decided or inherited | open — intent needed |
-| D4 | SI-29, SI-30 | The gate is the window, consistently across modes | `time` and `distance` additionally require the **most recent** row to meet target (`:667`, `:690`) on top of consensus. Weight modes have no such requirement. Undocumented asymmetry | open — intent needed |
-| D5 | SI-25 | Bodyweight exercises progress by reps | The rep fallback needs `overloadIncrementReps > 0`, and that column defaults to `0` (`schema/programs.ts:61`). Out of the box a bodyweight exercise returns `held` forever | open |
-| D6 | SI-7 | Each exercise+set-number key gets its own 5-session window | The history query applies `LIMIT programData.length * CONSENSUS_WINDOW` **globally**, ordered by session (`workout-sets.ts:1236`). The budget is an average, not a per-key guarantee, so some keys can be starved on programmes with uneven set counts | open |
+| D1 | SI-27 | The Epley estimate is only trustworthy on a near-max set, so anything derived from it should share that guard | **Closed.** `estimated1RM` now requires a logged RIR of 3 or better, and the rep cut that had the guard is deleted with `smart` | closed |
+| D2 | SI-21 | A held-readiness suggestion proposes no change at all | **Closed** by deleting the smart rep-cut field it leaked through | closed |
+| D3 | SI-17 | Deload eligibility is a deliberate per-mode choice | **Closed.** It is axis 7 now, chosen per exercise. The structural limit that remains — only load-bearing advances can back off — is stated in SI-17 and is not an accident | closed |
+| D4 | SI-29, SI-30 | The gate is the window, consistently across advances | **Closed.** The extra "most recent session must meet target" requirement is gone; `duration` and `distance` use the same gate as everything else | closed |
+| D5 | SI-25, SI-28 | Bodyweight exercises progress by reps | **Closed.** A missing rep increment means one rep. The column still defaults to `0`, deliberately — that is what "unset" looks like, and the engine now reads it as such rather than as "no progression" | closed |
+| D6 | SI-7 | Each exercise slot gets its own 5-session window | **Closed** in phase 3 by the per-slot `DENSE_RANK` | closed |
 | D7 | SI-1 | Settings offers a global "Weight Increment" and "Rep Increment" | They persist only to `localStorage` (`defaultIncrementKg` / `defaultIncrementReps`) and **no progression code reads them** — the controls are inert. Noted in [`../gotchas.md`](../gotchas.md#settings-live-in-two-stores) | open — intent needed |
-| D8 | SI-12, SI-34 | Generated programmes carry the same settings as hand-built ones | `ai-prompt.ts` never mentions `progressionRequiredHits` or `progressionApplyToPlan` (and offers only `manual`/`weight`/`smart`/`reps`), so generated plans silently take the defaults | open |
+| D8 | SI-12, SI-34 | Generated programmes carry the same settings as hand-built ones | **Closed.** The prompt describes the advance axis, the gate and the effort cap, and shows a worked rep-range exercise. `progressionApplyToPlan` is still not offered, and that is deliberate: the ratchet rewrites a lifter's plan, and a generator opting them into it is not a default anyone chose (SI-34) | closed |
 
-All eight are tracked in `BACKLOG.md` under **Smart-progression UX (deferred long-term)**, one entry per row (D1–D2 and D3–D4 are paired, since each pair shares a decision). D3, D4 and D7 need an intent decision before any code changes — the spec cannot state a rule for them until then.
+Only **D7** remains, and it is tracked in `BACKLOG.md` under **Smart-progression UX (deferred long-term)**. It needs an intent decision before any code changes — the spec cannot state a rule for it until then, and it is a Settings question rather than an engine one.
 
 Already tracked in `BACKLOG.md` rather than repeated here: base weight coming from history rather than the plan (§ Smart-progression UX — "`latest.weightKg` vs program-planned weight quirk"), and `isFailed` not being treated as a hard failure (§ New features — "Surface failed sets in history & metrics").
 
@@ -341,9 +528,12 @@ Rules with no automated test:
 
 | Rule | Why it is untested |
 |---|---|
-| SI-2 | Endurance-goal increment — no case in the suite |
+| SI-2 | Endurance-goal increment — covered indirectly by "still lets an explicit increment and an endurance goal win outright" |
 | SI-8 | The window filter lives in SQL; the unit suite starts from pre-fetched rows |
-| SI-16 | Mode `none` returning null |
+| SI-16 | Advance `none` returning null |
 | SI-38, SI-39, SI-40 | Server-side ratchet guards — no action-level test exists |
+| SI-42's effort gate | Inside `detectAndRecordPRs`, a Server Action helper. Its flag half is covered |
 
-Everything else maps to a case in `src/__tests__/progressive-suggestions.test.ts`, named in the *Covered by* line under each rule. `e2e/progression-settings.spec.ts` covers SI-12 and SI-34 end to end, and doubles as the check that migration `0045` has been applied — a unit test cannot catch a missing migration, and the production symptom is a 500 on tapping a gate pill.
+One thing the unit suite structurally cannot reach, and it has no other test: **the effort cap's resolution against the scope.** `buildSuggestion` takes `effortCap` already resolved; the code that picks *which* set's `target_rir` that is lives in `getProgressiveSuggestions`, beside the query. SI-10b is tested through the resolved value, not through the resolution.
+
+Everything else maps to a case in `src/__tests__/progressive-suggestions.test.ts` or `progression-presets.test.ts`, named in the *Covered by* line under each rule. `e2e/progression-settings.spec.ts` covers the preset, the gate, the scope and SI-34 end to end, and doubles as the check that migration `0051` has been applied — a unit test cannot catch a missing migration, and the production symptom is a 500 on tapping a pill.

@@ -23,8 +23,23 @@ import {
   workoutSessions,
   workoutSets,
 } from "../src/db/schema";
+import { rpeFromRir } from "../src/lib/utils/rir";
 
 const FORCE = process.argv.includes("--force");
+
+/**
+ * Effort for one seeded set, logged about two-thirds of the time.
+ *
+ * A tap on the set toggle records that the set happened, not how hard it was,
+ * so seeded history has to contain unknowns too — otherwise the demo account is
+ * the only place where every set carries an effort value and the code paths that
+ * handle a missing one never run locally.
+ */
+function seededEffort(intendedRir: number): { rir: number | null; rpe: number | null } {
+  if (Math.random() < 0.35) return { rir: null, rpe: null };
+  const rir = Math.max(0, Math.min(5, intendedRir));
+  return { rir, rpe: rpeFromRir(rir) };
+}
 
 // ── Program definitions ────────────────────────────────────────────────────
 
@@ -37,10 +52,19 @@ type SetBlueprint = {
   targetReps?: number;
   weightKg?: number;
   durationSeconds?: number;
+  // Double progression's range. The seeded programme carries exactly one
+  // exercise with it, because until the preset picker lands (phase 5 of
+  // docs/progression-revamp-plan.md) nothing in the app can configure a range,
+  // and a scheme nobody can see is a scheme nobody tests.
+  repRangeMin?: number;
+  repRangeMax?: number;
+  targetRir?: number;
 };
 
 type ExerciseBlueprint = {
   name: string;
+  /** Axis 6. Defaults to the column default ("manual") when absent. */
+  progressionAdvance?: string;
   sets: SetBlueprint[];
 };
 
@@ -54,7 +78,10 @@ const PROGRAMS: ProgramBlueprint[] = [
     name: "Push Pull Legs A",
     exercises: [
       {
+        // Plain load progression, the common case: fixed reps, no cap, clears
+        // on the target alone.
         name: "Bench Press",
+        progressionAdvance: "load",
         sets: [
           { setNumber: 1, targetReps: 8, weightKg: 80, restTimeSeconds: 90 },
           { setNumber: 2, targetReps: 8, weightKg: 80, restTimeSeconds: 90 },
@@ -63,19 +90,26 @@ const PROGRAMS: ProgramBlueprint[] = [
         ],
       },
       {
+        // The capped one. Seeded effort is only logged about two thirds of the
+        // time, so this exercise actually produces unknown sessions and the
+        // "log effort to progress" path is reachable in a dev account.
         name: "Incline Dumbbell Press",
+        progressionAdvance: "load",
         sets: [
-          { setNumber: 1, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
-          { setNumber: 2, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
-          { setNumber: 3, targetReps: 10, weightKg: 30, restTimeSeconds: 75 },
+          { setNumber: 1, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
+          { setNumber: 2, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
+          { setNumber: 3, targetReps: 10, weightKg: 30, restTimeSeconds: 75, targetRir: 2 },
         ],
       },
       {
         name: "Tricep Pushdown",
+        // The demonstrable double-progression exercise: work 8 up to 12, then
+        // add load and drop back to 8.
+        progressionAdvance: "double",
         sets: [
-          { setNumber: 1, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
-          { setNumber: 2, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
-          { setNumber: 3, targetReps: 12, weightKg: 25, restTimeSeconds: 60 },
+          { setNumber: 1, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
+          { setNumber: 2, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
+          { setNumber: 3, targetReps: 12, weightKg: 25, restTimeSeconds: 60, repRangeMin: 8, repRangeMax: 12 },
         ],
       },
     ],
@@ -209,7 +243,15 @@ async function seedFake() {
   const createdPrograms: Array<{
     id: number;
     blueprint: ProgramBlueprint;
-    exerciseMap: Map<string, { programExerciseId: number; blueprint: ExerciseBlueprint }>;
+    exerciseMap: Map<
+      string,
+      {
+        programExerciseId: number;
+        blueprint: ExerciseBlueprint;
+        /** program_sets.id per set number — workout_sets records the slot it was logged against. */
+        setIdByNumber: Map<number, number>;
+      }
+    >;
   }> = [];
 
   for (const blueprint of PROGRAMS) {
@@ -220,7 +262,11 @@ async function seedFake() {
 
     const exerciseMap = new Map<
       string,
-      { programExerciseId: number; blueprint: ExerciseBlueprint }
+      {
+        programExerciseId: number;
+        blueprint: ExerciseBlueprint;
+        setIdByNumber: Map<number, number>;
+      }
     >();
 
     for (let i = 0; i < blueprint.exercises.length; i++) {
@@ -230,23 +276,37 @@ async function seedFake() {
 
       const [pe] = await db
         .insert(programExercises)
-        .values({ programId: program.id, exerciseId, orderIndex: i })
+        .values({
+          programId: program.id,
+          exerciseId,
+          orderIndex: i,
+          ...(exBlueprint.progressionAdvance
+            ? { progressionAdvance: exBlueprint.progressionAdvance }
+            : {}),
+        })
         .returning({ id: programExercises.id });
 
-      await db.insert(programSets).values(
-        exBlueprint.sets.map((s) => ({
-          programExerciseId: pe.id,
-          setNumber: s.setNumber,
-          targetReps: s.targetReps ?? null,
-          weightKg: s.weightKg?.toString() ?? null,
-          durationSeconds: s.durationSeconds ?? null,
-          restTimeSeconds: s.restTimeSeconds,
-        }))
-      );
+      const insertedSets = await db
+        .insert(programSets)
+        .values(
+          exBlueprint.sets.map((s) => ({
+            programExerciseId: pe.id,
+            setNumber: s.setNumber,
+            targetReps: s.targetReps ?? null,
+            weightKg: s.weightKg?.toString() ?? null,
+            durationSeconds: s.durationSeconds ?? null,
+            restTimeSeconds: s.restTimeSeconds,
+            targetRir: s.targetRir ?? null,
+            repRangeMin: s.repRangeMin ?? null,
+            repRangeMax: s.repRangeMax ?? null,
+          }))
+        )
+        .returning({ id: programSets.id, setNumber: programSets.setNumber });
 
       exerciseMap.set(exBlueprint.name, {
         programExerciseId: pe.id,
         blueprint: exBlueprint,
+        setIdByNumber: new Map(insertedSets.map((ps) => [ps.setNumber, ps.id])),
       });
     }
 
@@ -334,8 +394,17 @@ async function seedFake() {
         const exerciseId = exerciseIdByName.get(exBlueprint.name);
         if (!exerciseId) continue;
 
-        for (const setBlueprint of exBlueprint.sets) {
-          const rpe = 6 + Math.floor(Math.random() * 3); // 6, 7, or 8
+        // Roughly one exercise in eight loses its last set. An account where
+        // every session logs every prescribed set never exercises the
+        // "unknown" verdict the session gate hangs on, so the dot detail view
+        // has nothing to explain locally.
+        const dropsLastSet =
+          exBlueprint.sets.length > 1 && Math.random() < 0.12;
+
+        for (const [setIndex, setBlueprint] of exBlueprint.sets.entries()) {
+          if (dropsLastSet && setIndex === exBlueprint.sets.length - 1) continue;
+          const effort = seededEffort(2 + Math.floor(Math.random() * 3)); // RIR 2-4
+          const slot = prog.exerciseMap.get(exBlueprint.name);
 
           // A timed set has no reps or load to vary — jitter the hold instead.
           // actualReps and weightKg are NOT NULL, so they record 1 x 0kg.
@@ -348,6 +417,10 @@ async function seedFake() {
           await db.insert(workoutSets).values({
             sessionId: session.id,
             exerciseId,
+            programExerciseId: slot?.programExerciseId ?? null,
+            programSetId: slot?.setIdByNumber.get(setBlueprint.setNumber) ?? null,
+            setType: "working",
+            prescribedWorkingSets: exBlueprint.sets.length,
             setNumber: setBlueprint.setNumber,
             targetReps: setBlueprint.targetReps ?? null,
             actualReps,
@@ -355,7 +428,8 @@ async function seedFake() {
             durationSeconds: isTimedSet
               ? Math.max(10, Math.round(jitter(setBlueprint.durationSeconds!, 5)))
               : null,
-            rpe,
+            rir: effort.rir,
+            rpe: effort.rpe,
             restTimeSeconds: setBlueprint.restTimeSeconds,
             isCompleted: true,
           });

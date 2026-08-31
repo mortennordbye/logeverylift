@@ -5,9 +5,10 @@
  * exercise represent the *peak* (race-prep) week. `periodizedLoad` returns the
  * multiplier to apply to those peak distances for a given week of the block, so
  * volume ramps Base → Build → Peak, then tapers into race week, with a lighter
- * deload week every ~4th week. Strength is periodized in parallel — see
- * `strengthPhaseRecipe` — moving from an anatomical-adaptation base to heavy,
- * low-rep max strength, then a low-volume taper.
+ * deload week every ~4th week. Strength is deliberately *not* periodized here:
+ * it runs flat for the whole block and its reps belong to the progression
+ * engine. See "Strength periodization: considered, not implemented" in
+ * docs/specs/cycle-periodization.md.
  *
  *  - goal "maintain": flat 1.0 every week (hold fitness, no race peak/taper).
  *  - goal "build":    the curve described above.
@@ -215,38 +216,6 @@ export function intervalPhaseRecipe(phase: TrainingPhase): {
   }
 }
 
-/**
- * Phase-specific prescription for a triathlon strength session's main barbell
- * lifts. Strength periodizes alongside endurance (Rønnestad & Mujika 2014;
- * Beattie 2017): an anatomical-adaptation base of higher reps at moderate load
- * progresses to heavy, low-rep max strength — the principal driver of improved
- * economy in endurance athletes — then a low-volume taper that preserves the
- * neuromuscular gain without adding fatigue. Reps fall and rest lengthens as
- * load rises. The active cycle's weekly sync applies this to sets tagged
- * sessionRole = "strength"; plyometric and core accessories are not periodized.
- * Working-set count is held constant (the sync rewrites rows, not their count),
- * so the volume change rides on reps. Load stays athlete-entered — they pick a
- * weight that makes the target reps hard, which is the intensity prescription.
- */
-export function strengthPhaseRecipe(phase: TrainingPhase): {
-  reps: number;
-  restSeconds: number;
-  intent: string;
-} {
-  switch (phase) {
-    case "base":
-      return { reps: 12, restSeconds: 90, intent: "Anatomical adaptation" };
-    case "build":
-      return { reps: 5, restSeconds: 180, intent: "Max strength" };
-    case "peak":
-      return { reps: 4, restSeconds: 180, intent: "Strength-power" };
-    case "taper":
-      return { reps: 3, restSeconds: 180, intent: "Sharpen — hold intensity, cut volume" };
-    case "maintain":
-      return { reps: 6, restSeconds: 150, intent: "Maintenance" };
-  }
-}
-
 /** Signals for the no-wearable performance nudge, drawn from recent sessions. */
 export type AdaptationSignals = {
   /** Fraction of the past week's scheduled sessions actually completed (0–1). */
@@ -263,6 +232,21 @@ export type Adaptation = {
   /** Human reason for the summary; empty when no adjustment. */
   note: string;
 };
+
+/**
+ * Mean of the effort values that were actually logged, or null when none were.
+ *
+ * Null means "not logged", and it has to be dropped rather than folded in:
+ * summing straight through coerces null to 0, so [8, null, 6] averages to 4.67
+ * instead of 7. That is not a harmless imprecision — it drags the mean under the
+ * avgRpe ≤ 6 threshold in computeAdaptationFactor, which *raises* weekly volume
+ * by 5% for someone whose only sin was not reporting how hard the week felt.
+ */
+export function meanLoggedRpe(values: Array<number | null>): number | null {
+  const logged = values.filter((v): v is number => v != null);
+  if (logged.length === 0) return null;
+  return logged.reduce((a, b) => a + b, 0) / logged.length;
+}
 
 /**
  * No-wearable performance adaptation. Eases the block when the athlete is behind

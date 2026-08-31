@@ -19,6 +19,7 @@ A **map** answers *where does this live and how does it flow*; it changes when t
 | [data-model.md](data-model.md) | DB tables, the core domain graph, key columns & the non-obvious ones (derived `rpe`, type override, peak anchors) |
 | [workout-and-sets.md](workout-and-sets.md) | Program set (blueprint) vs logged set, the SetEditView's two modes, RIR (logged vs target), exercise type, failed sets, how effort feeds progression |
 | [cycles-and-plans.md](cycles-and-plans.md) | Training cycles & slots, the triathlon plan generator (Workout A/B + endurance week), periodization & no-wearable adaptation |
+| [progression-revamp-plan.md](progression-revamp-plan.md) | **Plan, not a map.** The full design for rebuilding progressive overload as one configurable engine: the eight axes, the schemes it must cover, data model, capture, UI, migration and build order. Start at section 0. |
 | [gotchas.md](gotchas.md) | The traps that bit us — Turbopack cache corruption, local-DB migration, fail-safes for deleted entities, E2E creds |
 | [OPERATIONS.md](OPERATIONS.md) | Prod ops runbook (health probes, boot order, env, rate limits) |
 
@@ -28,7 +29,7 @@ Behaviour specs — numbered, citable rules stating what a feature is meant to d
 
 | Spec | What it covers | Last verified |
 |---|---|---|
-| [specs/smart-incrementation.md](specs/smart-incrementation.md) | Progressive overload: increment sizing, the confidence & consensus gates, deload, retry, readiness, felt-easy, the seven progression modes, the plan ratchet | 2026-08-24 @ `3a09857` |
+| [specs/smart-incrementation.md](specs/smart-incrementation.md) | Progressive overload: increment sizing, the confidence & consensus gates, deload, retry, readiness, felt-easy, the seven progression modes, the plan ratchet. **Being rebuilt** — see [progression-revamp-plan.md](progression-revamp-plan.md) | 2026-08-29 @ `f77d528` |
 | [specs/cycle-periodization.md](specs/cycle-periodization.md) | Block-level volume periodization: the ramp/deload/taper curve, deload cadence, the ACWR guardrail, phase prescriptions, the no-wearable adaptation nudge, and the weekly sync that writes derived targets onto the plan | 2026-08-25 @ `91c1646` |
 
 ## Conventions recap (the short version — full text in CLAUDE.md)

@@ -36,7 +36,7 @@ Two files:
 | 6 Sat | Long Run |
 | 7 Sun | Long Bike + Brick Run |
 
-Strength is a **flat, RIR-capped hypertrophy/maintenance block**: same target reps across working sets, no phase re-prescription (no `sessionRole: "strength"`), `weightKg: 0` (athlete loads to the target reps at the prescribed RIR), `weight` mode (the spec's `smart` is mapped to `weight` so reps stay static). Per-exercise type + per-set `targetRir` are set by the generator. Pallof Press is a **timed isometric hold** (`isTimed`, `durationSeconds`).
+Strength is a **flat, RIR-capped hypertrophy/maintenance block**: same target reps across working sets, no phase re-prescription (strength sets carry no `sessionRole` at all), `weightKg: 0` (athlete loads to the target reps at the prescribed RIR), `weight` mode (the spec's `smart` is mapped to `weight` so reps stay static). Per-exercise type + per-set `targetRir` are set by the generator. Pallof Press is a **timed isometric hold** (`isTimed`, `durationSeconds`).
 
 **Rest days:** `restDays` is an array of 1–2 days (1=Mon…7=Sun); `TriathlonPlanForm` defaults to `[5, 6]` (Fri + Sat). Rest days do **not** simply blank whatever session sits there. Each session has an importance rank (most→least: long bike+brick on Sun, long run on Sat, the two strength days, bike+swim, run intervals, recovery swim); with N rest days the N least-important sessions drop, and any surviving session whose natural weekday became a rest day slides onto a freed training day. So the default Fri+Sat rest drops the recovery swim + run intervals, relocates the Saturday long run onto the freed Tuesday slot, and keeps the long bike+brick on Sunday. Because key sessions relocate rather than vanish, no rest-day choice can silently wipe a strength or long session — but if you change the day layout or the `importance` map in `buildTriathlonPlan`, re-check which sessions drop first.
 
@@ -50,7 +50,7 @@ Sessions are built from structured segments (`sessionFrom`, `intervalRun`, `swim
 
 - `periodizedLoad(week, totalWeeks, goal, deloadCadence)` → the volume curve (phase + multiplier); `phaseLayout`, `deloadCadenceForLevel`, taper/deload factors.
 - `uncoupledAcwr(weeklyLoads)` — acute:chronic workload injury guardrail.
-- `intervalPhaseRecipe`/`strengthPhaseRecipe` — phase-aware zone/rest (used by the *endurance* sessions; strength is now flat).
+- `intervalPhaseRecipe` — phase-aware zone/rest for the *endurance* interval sets. Strength has no phase recipe: it runs flat, and its reps belong to the progression engine (see "Strength periodization: considered, not implemented" in [specs/cycle-periodization.md](specs/cycle-periodization.md)).
 - **No-wearable adaptation:** `computeAdaptationFactor({ adherence, avgReadiness, avgRpe })` → a ±band (90–105%). Wired in `computeCycleAdaptation` (`training-cycles.ts`), which averages real `workout_sets.rpe` (now RIR-derived) over the last 7 days, then `syncPeriodizedTargets` rewrites the week's endurance targets. Idempotent per week via `lastSyncedWeek`.
 - It's **algorithmic, not an LLM.** The separate LLM path (`ai-generate.ts` + `ai-prompt.ts`, Gemini/OpenRouter) generates one-off strength programs and does **not** consume the adaptation factor.
 

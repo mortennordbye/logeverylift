@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Active work: the progression rebuild
+
+If you are asked to work on progressive overload, progression suggestions, the
+increment engine, rep ranges, RIR/effort logging, or anything under
+`src/lib/utils/progression.ts`, **read
+[`docs/progression-revamp-plan.md`](docs/progression-revamp-plan.md) first,
+starting at section 0.** It is a complete build brief written to be picked up
+with no conversation history.
+
+Short version: the engine is being rebuilt as one machine with configurable
+settings, in seven phases, built in the order `0, 1, 3, 2, 4, 5, 6`. All eleven
+design decisions are already made and recorded in its section 12 — build to
+them rather than re-asking. All seven phases are merged to `main` (PR #34,
+squashed), so branch off `main` for anything new.
+
+Do not start from `docs/specs/smart-incrementation.md` alone: it accurately
+describes the engine as it is today, which the plan is replacing.
+
 ## Working approach
 
 These guidelines bias toward caution over speed. For trivial tasks, use judgment.
@@ -109,6 +127,15 @@ pnpm test src/__tests__/format.test.ts -t "name" # Single test by name
 Run `pnpm verify` from the host. It runs `tsc --noEmit`, `eslint`, and the Vitest suite. If anything fails, fix it and re-run before declaring the task done.
 
 Do not skip this even when the change "looks obviously correct" — the bugs that slip through are the unexpected ones.
+
+`pnpm verify` includes `pnpm check:docs`, which verifies the `file:line` citations and symbol names in `docs/` and `BACKLOG.md` against the actual code. It exists because a design doc in this repo cited a function that had never existed, and two review passes missed it. Prose is not type-checked; this makes the checkable part of it fail the build.
+
+Rules it cannot enforce, which still apply when writing docs:
+
+- **Never cite a file you have not opened at that line.** A `grep -l` hit tells you a file matched a word, not why.
+- **Run the check instead of reasoning about it** when it is runnable. `node -e` settles a question about JS semantics in one line; reasoning about it is how `null` coercion gets written up as `NaN`.
+- **Verify a finding before relaying it as fact**, including one from a subagent or a review. Repeating someone else's claim in your own voice makes it yours.
+- Point-in-time audits opt out with `<!-- doc-claims: skip -->`, since their citations describe the code as measured.
 
 A pre-push git hook (lefthook) runs `pnpm verify` automatically — install it once with `pnpm install` (the `prepare` script wires it up). Pre-commit is intentionally empty so commits stay fast for AI loops.
 

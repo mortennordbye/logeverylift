@@ -9,6 +9,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exercise-type";
+import type { ProgressionAdvance } from "@/lib/utils/progression";
 import { requireSession } from "@/lib/utils/session";
 import {
   addExerciseToProgramSchema,
@@ -21,7 +22,8 @@ import {
   reorderProgramExercisesSchema,
   reorderProgramSetsSchema,
   setProgramExerciseApplyToPlanSchema,
-  setProgramExerciseRequiredHitsSchema,
+  setProgramExerciseProgressionSchema,
+  setProgramExerciseSetDefaultsSchema,
   setProgramExerciseTypeSchema,
   updateProgramSchema,
   updateProgramSetSchema,
@@ -358,49 +360,6 @@ export async function setProgramExerciseType(
 }
 
 /**
- * How many qualifying sessions this exercise needs before a bump is suggested.
- * Pass null to fall back to the shared REQUIRED_HITS default.
- */
-export async function setProgramExerciseRequiredHits(
-  data: unknown,
-): Promise<ActionResult<void>> {
-  const auth = await requireSession();
-  const validation = setProgramExerciseRequiredHitsSchema.safeParse(data);
-  if (!validation.success) {
-    return {
-      success: false,
-      error: "Invalid input",
-      fieldErrors: validation.error.flatten().fieldErrors,
-    };
-  }
-  const { programExerciseId, requiredHits } = validation.data;
-  try {
-    const [check] = await db
-      .select({ userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
-      return { success: false, error: "Not found" };
-    }
-    const [pe] = await db
-      .update(programExercises)
-      .set({ progressionRequiredHits: requiredHits })
-      .where(eq(programExercises.id, programExerciseId))
-      .returning({ programId: programExercises.programId });
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
-    }
-    return { success: true, data: undefined };
-  } catch (err) {
-    console.error("[setProgramExerciseRequiredHits] failed", err);
-    return { success: false, error: "Failed to update progression gate" };
-  }
-}
-
-/**
  * Opt in (or out of) rewriting the planned sets when a suggestion is accepted.
  */
 export async function setProgramExerciseApplyToPlan(
@@ -576,17 +535,67 @@ export async function updateProgramExerciseIncrementReps(
   }
 }
 
-const VALID_PROGRESSION_MODES = ["none", "manual", "weight", "smart", "reps", "time", "distance"] as const;
-type ProgressionMode = (typeof VALID_PROGRESSION_MODES)[number];
+/**
+ * The mode value that corresponds to an advance.
+ *
+ * `progression_mode` is retired and nothing reads it, but it is kept populated
+ * for one release (E-12): program sharing and export both still emit it, and a
+ * client or an export written before the axes existed has nothing else to read.
+ * It is written here so those wire formats never go stale rather than because
+ * the engine cares.
+ */
+/**
+ * The inverse, for reading a payload written before the axes existed. Kept
+ * beside its twin so the two cannot drift; migration 0051 applies the same
+ * table to the rows already in the database.
+ */
+const ADVANCE_FOR_LEGACY_MODE: Record<string, ProgressionAdvance> = {
+  none: "none",
+  manual: "manual",
+  weight: "load",
+  // D-4: smart is retired and becomes plain load progression. It never becomes
+  // double progression — no set it left behind has a rep range, and inventing
+  // one would change the prescription.
+  smart: "load",
+  reps: "reps",
+  double: "double",
+  time: "duration",
+  distance: "distance",
+};
 
-export async function updateProgramExerciseProgressionMode(
-  programExerciseId: number,
-  mode: string,
+const LEGACY_MODE_FOR_ADVANCE: Record<ProgressionAdvance, string> = {
+  none: "none",
+  manual: "manual",
+  load: "weight",
+  reps: "reps",
+  double: "double",
+  duration: "time",
+  distance: "distance",
+};
+
+/**
+ * Write one or more progression axes for an exercise.
+ *
+ * Every axis here changes how the window is *judged*, so the write stamps
+ * `progressionConfigAt` and the engine drops sessions logged before it. Without
+ * that, switching preset or scope re-scores five sessions of history under the
+ * new rule and the dot count moves for reasons the lifter cannot see (E-13).
+ * The increments and the plan opt-in deliberately do not stamp it: they change
+ * what an advance writes, not what counts as a clear.
+ */
+export async function setProgramExerciseProgression(
+  data: unknown,
 ): Promise<ActionResult<void>> {
   const auth = await requireSession();
-  if (!VALID_PROGRESSION_MODES.includes(mode as ProgressionMode)) {
-    return { success: false, error: "Invalid progression mode" };
+  const validation = setProgramExerciseProgressionSchema.safeParse(data);
+  if (!validation.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: validation.error.flatten().fieldErrors,
+    };
   }
+  const { programExerciseId, ...axes } = validation.data;
   try {
     const [check] = await db
       .select({ userId: programs.userId })
@@ -597,9 +606,26 @@ export async function updateProgramExerciseProgressionMode(
     if (!check || check.userId !== auth.user.id) {
       return { success: false, error: "Not found" };
     }
+
+    const updates: Record<string, unknown> = { progressionConfigAt: new Date() };
+    if (axes.advance !== undefined) {
+      updates.progressionAdvance = axes.advance;
+      updates.progressionMode = LEGACY_MODE_FOR_ADVANCE[axes.advance];
+    }
+    if (axes.scope !== undefined) updates.progressionScope = axes.scope;
+    if (axes.requiredHits !== undefined)
+      updates.progressionRequiredHits = axes.requiredHits;
+    if (axes.regress !== undefined) updates.progressionRegress = axes.regress;
+    if (axes.backoffPct !== undefined)
+      updates.progressionBackoffPct = axes.backoffPct;
+    if (axes.backoffAfter !== undefined)
+      updates.progressionBackoffAfter = axes.backoffAfter;
+    if (axes.readiness !== undefined)
+      updates.progressionReadiness = axes.readiness;
+
     const [pe] = await db
       .update(programExercises)
-      .set({ progressionMode: mode })
+      .set(updates)
       .where(eq(programExercises.id, programExerciseId))
       .returning({ programId: programExercises.programId });
     if (pe) {
@@ -608,7 +634,90 @@ export async function updateProgramExerciseProgressionMode(
     }
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[setProgramExerciseProgression] failed", err);
+    return { success: false, error: "Failed to update progression" };
+  }
+}
+
+/**
+ * Set the rep range and the effort cap across every working set of a slot.
+ *
+ * Both live on `program_sets` because a top set and its back-offs can carry
+ * different values, and SetEditView still edits them one set at a time. The
+ * exercise sheet writes them together because picking a preset is a statement
+ * about the exercise: "work 6 to 8 reps" is not a claim about set 2 alone.
+ *
+ * A new range clamps each set's `target_reps` into it. Without that the write
+ * leaves the prescription outside the bounds it was just given, which the set
+ * validator would reject on the next edit and the engine would have to correct
+ * behind the lifter's back.
+ */
+export async function setProgramExerciseSetDefaults(
+  data: unknown,
+): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+  const validation = setProgramExerciseSetDefaultsSchema.safeParse(data);
+  if (!validation.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: validation.error.flatten().fieldErrors,
+    };
+  }
+  const { programExerciseId, repRangeMin, repRangeMax, targetRir } =
+    validation.data;
+  try {
+    const [check] = await db
+      .select({ userId: programs.userId, programId: programExercises.programId })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programExercises.id, programExerciseId))
+      .limit(1);
+    if (!check || check.userId !== auth.user.id) {
+      return { success: false, error: "Not found" };
+    }
+
+    const working = await db
+      .select({ id: programSets.id, targetReps: programSets.targetReps })
+      .from(programSets)
+      .where(
+        and(
+          eq(programSets.programExerciseId, programExerciseId),
+          eq(programSets.setType, "working"),
+        ),
+      );
+
+    for (const set of working) {
+      const updates: Record<string, unknown> = {};
+      if (repRangeMin !== undefined) updates.repRangeMin = repRangeMin;
+      if (repRangeMax !== undefined) updates.repRangeMax = repRangeMax;
+      if (targetRir !== undefined) updates.targetRir = targetRir;
+      if (
+        repRangeMin != null &&
+        repRangeMax != null &&
+        set.targetReps != null &&
+        (set.targetReps < repRangeMin || set.targetReps > repRangeMax)
+      ) {
+        updates.targetReps = Math.min(Math.max(set.targetReps, repRangeMin), repRangeMax);
+      }
+      if (Object.keys(updates).length === 0) continue;
+      await db.update(programSets).set(updates).where(eq(programSets.id, set.id));
+    }
+
+    // Both of these change how a session is judged — the range is what an
+    // advance measures against, the cap is axis 3 — so they stamp the config
+    // clock like the axes on the exercise do (E-13).
+    await db
+      .update(programExercises)
+      .set({ progressionConfigAt: new Date() })
+      .where(eq(programExercises.id, programExerciseId));
+
+    revalidatePath(`/programs/${check.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${check.programId}/exercises/${programExerciseId}`);
+    return { success: true, data: undefined };
+  } catch (err) {
+    console.error("[setProgramExerciseSetDefaults] failed", err);
+    return { success: false, error: "Failed to update the sets" };
   }
 }
 
@@ -855,8 +964,17 @@ export async function exportProgram(
         notes: pe.notes ?? null,
         incKg: Number(pe.overloadIncrementKg ?? 2.5),
         incReps: pe.overloadIncrementReps ?? 0,
+        // `mode` is still emitted so an export opened by a client that
+        // predates the axes still restores a scheme rather than defaulting to
+        // manual. It goes when the column does, a release later.
         mode: pe.progressionMode ?? "manual",
         hits: pe.progressionRequiredHits ?? null,
+        adv: pe.progressionAdvance,
+        scope: pe.progressionScope,
+        regress: pe.progressionRegress,
+        backPct: pe.progressionBackoffPct,
+        backAfter: pe.progressionBackoffAfter,
+        readiness: pe.progressionReadiness,
         applyToPlan: pe.progressionApplyToPlan ?? false,
         exercise: {
           name: pe.exercise.name,
@@ -878,6 +996,8 @@ export async function exportProgram(
           type: s.setType ?? "working",
           rir: s.targetRir ?? null,
           startDelay: s.startDelaySeconds ?? null,
+          repMin: s.repRangeMin ?? null,
+          repMax: s.repRangeMax ?? null,
         })),
       })),
     },
@@ -918,6 +1038,12 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
             incReps: pe.overloadIncrementReps ?? 0,
             mode: pe.progressionMode ?? "manual",
             hits: pe.progressionRequiredHits ?? null,
+            adv: pe.progressionAdvance,
+            scope: pe.progressionScope,
+            regress: pe.progressionRegress,
+            backPct: pe.progressionBackoffPct,
+            backAfter: pe.progressionBackoffAfter,
+            readiness: pe.progressionReadiness,
             applyToPlan: pe.progressionApplyToPlan ?? false,
             exercise: {
               name: pe.exercise.name,
@@ -939,6 +1065,8 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
               type: s.setType ?? "working",
               rir: s.targetRir ?? null,
               startDelay: s.startDelaySeconds ?? null,
+              repMin: s.repRangeMin ?? null,
+              repMax: s.repRangeMax ?? null,
             })),
           })),
         })),
@@ -1069,8 +1197,26 @@ export async function importProgram(
               notes: slot.notes ?? undefined,
               overloadIncrementKg: slot.incKg.toString(),
               overloadIncrementReps: slot.incReps,
-              progressionMode: slot.mode,
+              // The axis wins when the payload carries one, and the retired
+              // column is written from it so the two do not disagree — a share
+              // or an export of this program still emits the mode, and a
+              // pre-axes client reads nothing else.
+              progressionMode:
+                slot.adv != null ? LEGACY_MODE_FOR_ADVANCE[slot.adv] : slot.mode,
               progressionRequiredHits: slot.hits ?? null,
+              // An export predating the axes carries only `mode`, so it is
+              // mapped through the same table as migration 0051 rather than
+              // arriving on the defaults. Section 10 of the progression plan.
+              progressionAdvance: slot.adv ?? ADVANCE_FOR_LEGACY_MODE[slot.mode],
+              ...(slot.scope != null ? { progressionScope: slot.scope } : {}),
+              ...(slot.regress != null ? { progressionRegress: slot.regress } : {}),
+              ...(slot.backPct != null ? { progressionBackoffPct: slot.backPct } : {}),
+              ...(slot.backAfter != null
+                ? { progressionBackoffAfter: slot.backAfter }
+                : {}),
+              ...(slot.readiness != null
+                ? { progressionReadiness: slot.readiness }
+                : {}),
               progressionApplyToPlan: slot.applyToPlan ?? false,
               exerciseType: overrideType,
             })
@@ -1089,6 +1235,11 @@ export async function importProgram(
                 setType: s.type,
                 targetRir: s.rir ?? undefined,
                 startDelaySeconds: s.startDelay ?? undefined,
+                // Half a range is not a range: the engine needs both bounds,
+                // so a truncated pair is dropped rather than half-restored.
+                ...(s.repMin != null && s.repMax != null
+                  ? { repRangeMin: s.repMin, repRangeMax: s.repMax }
+                  : {}),
               })),
             );
           }

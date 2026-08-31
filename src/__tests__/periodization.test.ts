@@ -4,10 +4,10 @@ import {
   deloadCadenceForLevel,
   formatPeriodizationSummary,
   intervalPhaseRecipe,
+  meanLoggedRpe,
   periodizedLoad,
   phaseLayout,
   scaledDuration,
-  strengthPhaseRecipe,
   uncoupledAcwr,
   type PeriodizationSummaryInput,
   type TrainingGoal,
@@ -137,29 +137,26 @@ describe("intervalPhaseRecipe — quality session evolves by phase", () => {
   });
 });
 
-describe("strengthPhaseRecipe — strength periodizes alongside endurance", () => {
-  it("drops reps as load rises base → build → peak → taper", () => {
-    expect(strengthPhaseRecipe("base").reps).toBeGreaterThan(strengthPhaseRecipe("build").reps);
-    expect(strengthPhaseRecipe("build").reps).toBeGreaterThanOrEqual(strengthPhaseRecipe("peak").reps);
-    expect(strengthPhaseRecipe("peak").reps).toBeGreaterThanOrEqual(strengthPhaseRecipe("taper").reps);
+describe("meanLoggedRpe", () => {
+  it("averages only the sets that reported effort", () => {
+    expect(meanLoggedRpe([8, null, 6])).toBe(7);
   });
 
-  it("cuts taper to low-rep work while holding heavy intensity (long rest)", () => {
-    expect(strengthPhaseRecipe("taper").reps).toBeLessThanOrEqual(3);
-    expect(strengthPhaseRecipe("taper").restSeconds).toBeGreaterThanOrEqual(150);
+  it("returns null when nothing was logged, which keeps the block neutral", () => {
+    expect(meanLoggedRpe([null, null])).toBeNull();
+    expect(meanLoggedRpe([])).toBeNull();
+    expect(
+      computeAdaptationFactor({ adherence: 1, avgReadiness: 4.5, avgRpe: meanLoggedRpe([null, null]) }).pct,
+    ).toBe(105); // the no-signal branch, unchanged
   });
 
-  it("gives the heavy max-strength block longer rest than the adaptation base", () => {
-    expect(strengthPhaseRecipe("build").restSeconds).toBeGreaterThan(strengthPhaseRecipe("base").restSeconds);
-  });
-
-  it("covers every phase with a positive rep and rest prescription", () => {
-    for (const phase of ["base", "build", "peak", "taper", "maintain"] as const) {
-      const r = strengthPhaseRecipe(phase);
-      expect(r.reps).toBeGreaterThan(0);
-      expect(r.restSeconds).toBeGreaterThan(0);
-      expect(r.intent.length).toBeGreaterThan(0);
-    }
+  it("does not let unlogged sets boost the week's volume", () => {
+    // Summing straight through coerces null to 0: [8, null, 6] would average
+    // 4.67, slip under the avgRpe ≤ 6 "comfortable" branch, and add 5% volume
+    // for someone who simply stopped answering the effort prompt.
+    const week = { adherence: 1, avgReadiness: 4.5 };
+    expect(computeAdaptationFactor({ ...week, avgRpe: meanLoggedRpe([8, null, 6]) }).pct).toBe(100);
+    expect(computeAdaptationFactor({ ...week, avgRpe: (8 + 0 + 6) / 3 }).pct).toBe(105); // the bug
   });
 });
 

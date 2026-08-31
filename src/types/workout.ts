@@ -160,15 +160,25 @@ export type ActiveCycleInfo = {
  *   "progressed"        — weight progression suggested
  *   "progressed-reps"   — rep count progression suggested
  *   "progressed-time"   — duration progression suggested (time mode)
- *   "held"              — not enough confident hits to progress; hold current weight
+ *   "held"              — not enough hits to progress; hold current weight
  *   "held-readiness"    — would have progressed, but readiness ≤ 2 today
+ *   "held-unknown"      — an effort cap is prescribed and no effort was logged,
+ *                         so the session is neither a clear nor a miss. A
+ *                         different message from "held": the app is missing an
+ *                         answer, not waiting for more sessions. No exercise can
+ *                         carry a cap yet, so nothing emits this — the consumers
+ *                         handle it now so the engine can emit it later.
+ *   "reset"             — double progression's load-up-reps-down step: every
+ *                         set reached the top of the rep range, so the load
+ *                         rises and the target drops back to the bottom of it.
+ *                         The one suggestion that deliberately lowers a number
+ *                         in the plan besides a deload (E-1).
  *   "deload"            — 3+ consecutive failures detected; 10% weight reduction suggested
  *   "manual"            — progression mode is manual; no suggestion
  */
 export type SetSuggestion = {
   suggestedWeightKg: number;
   suggestedReps?: number;
-  adjustedRepsForWeight?: number; // 1RM-estimated reps at new weight (smart mode)
   suggestedDurationSeconds?: number; // time mode: suggested new duration
   suggestedDistanceMeters?: number; // distance mode: suggested new target distance
   basedOnWeightKg: number; // last logged weight (raw, no rounding)
@@ -178,10 +188,30 @@ export type SetSuggestion = {
   basedOnFeeling: string; // last session feeling
   basedOnDate: string; // last session date
   basedOnRpe?: number; // last logged RPE (optional — null for old sessions)
-  basedOnHitCount?: number; // how many of the last CONSENSUS_WINDOW sessions hit target with confidence
-  reason: "progressed" | "held" | "held-readiness" | "manual" | "progressed-reps" | "deload" | "progressed-time" | "progressed-distance" | "retry";
+  basedOnHitCount?: number; // how many of the last CONSENSUS_WINDOW sessions hit the target
+  /**
+   * Why the engine landed where it did. A string union, and deliberately still
+   * named `progressed*` rather than `advanced*`: two sites match on the prefix
+   * rather than the full value, and a rename would make them match nothing
+   * with no type error to catch it.
+   *
+   * The three held* variants past plain `held` all mean "nothing is moving",
+   * and they exist because the reasons are not interchangeable to the person
+   * reading the chip:
+   *   held-readiness    — you said you were flat today
+   *   held-unknown      — a cap is prescribed and you did not say how hard it was
+   *   held-no-increment — double progression at the top of its range with no
+   *                       load to add, so the reset it needs cannot happen (E-4)
+   *   held-anchored     — the training cycle owns this set's target (A5)
+   *
+   * `re-approach` is the odd one out and the only reason besides `deload` and
+   * `reset` that lowers a number: the exercise has not been logged in long
+   * enough that the window describes a lifter who no longer exists, so it
+   * proposes coming back under the last load rather than on top of it.
+   */
+  reason: "progressed" | "held" | "held-readiness" | "held-unknown" | "held-no-increment" | "held-anchored" | "manual" | "progressed-reps" | "reset" | "deload" | "re-approach" | "progressed-time" | "progressed-distance" | "retry";
   // ─── Enriched fields (populated by getProgressiveSuggestions) ───────────────
-  /** How many confident hits have been recorded in the current consensus window. */
+  /** How many target-meeting sessions have been recorded in the current consensus window. */
   hitsAchieved: number;
   /**
    * Hits required to trigger progression — the exercise's
@@ -201,12 +231,51 @@ export type SetSuggestion = {
   readinessModulated: boolean;
   /**
    * True when the progression fired off an explicit "felt easy" verdict on the
-   * last set rather than the usual two confident hits. Only ever set on a
+   * last set rather than the usual two hits. Only ever set on a
    * "progressed*" reason.
    */
   easyOverride?: boolean;
   /** Exercise name — populated by getProgressiveSuggestions for insight bucketing. */
   exerciseName?: string;
+  /**
+   * The consensus window session by session, newest first — what the dots are
+   * counting. Without it a strict scope reads as the app being broken: "set 4
+   * was one rep short in three of the last five" has to be visible on screen,
+   * not inferable only from a mental model of the engine.
+   *
+   *   cleared — every set the scope reads met its target
+   *   missed  — one of them fell short (by `shortfall` reps, when reps are the
+   *             measure; timed and distance sets log no target to measure against)
+   *   unknown — the session did not answer the question: fewer sets logged than
+   *             the plan prescribed, a session the lifter marked Tired that
+   *             fell short, or an effort cap with no effort logged against it.
+   *             Neither banks a clear nor counts toward a back-off, and
+   *             `unknownReason` says which of the three it was.
+   */
+  sessions?: SuggestionSession[];
+};
+
+/** One session in the consensus window, as the dot detail view renders it. */
+export type SuggestionSession = {
+  date: string;
+  status: "cleared" | "missed" | "unknown";
+  /** Reps short on the worst set the scope reads. Rep-based sets only. */
+  shortfall?: number;
+  /** Working sets logged for this exercise in that session. */
+  loggedSets: number;
+  /** Working sets the plan prescribed at the time. Null on pre-migration rows. */
+  prescribedSets: number | null;
+  /** Session feeling, so a Tired session can say why it did not count. */
+  feeling: string | null;
+  /**
+   * Why an unknown session is unknown. "partial" means fewer working sets were
+   * logged than prescribed, "effort" that a cap was prescribed and nothing was
+   * reported against it, "tired" that it fell short on a Tired day, and
+   * "reconfigured" that it predates the last change to the progression rules.
+   */
+  unknownReason?: "partial" | "effort" | "tired" | "reconfigured";
+  /** Missed on the effort cap rather than on reps: the targets were met. */
+  effortShort?: boolean;
 };
 
 // ─── Personal Records ─────────────────────────────────────────────────────────
@@ -389,7 +458,8 @@ export type ExportedSessions = {
       distanceMeters: number | null;
       inclinePercent: number | null;
       heartRateZone: number | null;
-      rpe: number;
+      /** Null when the lifter logged no effort for the set. */
+      rpe: number | null;
       restTimeSeconds: number;
       isCompleted: boolean;
     }>;
@@ -406,9 +476,25 @@ export type ExportedProgram = {
       notes: string | null;
       incKg: number;
       incReps: number;
+      /**
+       * The retired progression mode. Still emitted so an export opened by a
+       * client that predates the axes restores a scheme rather than defaulting
+       * to manual, and still read on import when `adv` is absent.
+       */
       mode: string;
       /** Sessions at target before a bump. Null = the shared default. */
       hits?: number | null;
+      /**
+       * The progression axes. All optional: an export written before they
+       * existed carries none of them, and the import maps its `mode` through
+       * the same table migration 0051 uses.
+       */
+      adv?: string;
+      scope?: string;
+      regress?: string;
+      backPct?: number;
+      backAfter?: number;
+      readiness?: string;
       /** Whether accepting a bump rewrites the planned sets. */
       applyToPlan?: boolean;
       exercise: {
@@ -430,6 +516,9 @@ export type ExportedProgram = {
         type?: string;
         rir?: number | null;
         startDelay?: number | null;
+        /** Double progression's rep range. Absent on exports that predate it. */
+        repMin?: number | null;
+        repMax?: number | null;
       }>;
     }>;
   };

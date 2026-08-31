@@ -20,7 +20,18 @@
  * ```
  */
 
-import { MAX_REQUIRED_HITS, MIN_REQUIRED_HITS } from "@/lib/utils/progression";
+import {
+  MAX_BACKOFF_AFTER,
+  MAX_BACKOFF_PCT,
+  MAX_REQUIRED_HITS,
+  MIN_BACKOFF_AFTER,
+  MIN_BACKOFF_PCT,
+  MIN_REQUIRED_HITS,
+  PROGRESSION_ADVANCES,
+  PROGRESSION_READINESSES,
+  PROGRESSION_REGRESSES,
+  PROGRESSION_SCOPES,
+} from "@/lib/utils/progression";
 import { z } from "zod";
 
 export const WORKOUT_FEELINGS = ["Tired", "OK", "Good", "Awesome"] as const;
@@ -55,7 +66,7 @@ export const createWorkoutSessionSchema = z.object({
  *
  * Validates individual set data during a workout.
  *
- * RPE (Rate of Perceived Exertion) must be 1-10:
+ * RPE (Rate of Perceived Exertion), when supplied, must be 1-10:
  * - 10: Maximum effort, no reps left
  * - 9: 1 rep in reserve (RIR)
  * - 8: 2-3 reps in reserve
@@ -69,6 +80,12 @@ export const logWorkoutSetSchema = z.object({
     .int()
     .positive("Exercise ID must be a positive integer"),
   setNumber: z.number().int().positive("Set number must be a positive integer"),
+  // The program_sets row this set was logged against. Optional because a client
+  // cached from before this shipped, or a replay queued by one, will not send
+  // it; the server falls back to resolving the slot from the exercise. Present,
+  // it is the exact identity — the only thing that can tell two slots for the
+  // same exercise apart.
+  programSetId: z.number().int().positive().optional(),
   targetReps: z
     .number()
     .int()
@@ -86,11 +103,18 @@ export const logWorkoutSetSchema = z.object({
   // Reps In Reserve — the primary effort input (0 = to failure, 5 = 5+ left).
   // When present, the server derives rpe from it (rpe = clamp(10 - rir, 1, 10)).
   rir: z.number().int().min(0).max(5).optional(),
+  // Optional, and absent means "the lifter did not say how hard it was". The
+  // toggle used to send 7 on every tap, which is a claim nobody made; it now
+  // sends nothing. Still accepted because a bundle cached before this shipped —
+  // and every payload already sitting in the offline queue — still sends 7, and
+  // a legacy 7 is stored as a real 7 rather than rewritten to unknown: the two
+  // are indistinguishable on the wire and history is not ours to edit.
   rpe: z
     .number()
     .int()
     .min(1, "RPE must be at least 1")
-    .max(10, "RPE must be at most 10"),
+    .max(10, "RPE must be at most 10")
+    .optional(),
   restTimeSeconds: z
     .number()
     .int()
@@ -112,7 +136,7 @@ export const logWorkoutSetSchema = z.object({
  * Un-log Workout Set Schema
  *
  * Validates the identity of a logged set the user is un-completing. The set is
- * addressed the same way logWorkoutSet writes it: by (session, exercise,
+ * addressed the same way logWorkoutSet writes it: by (session, plan slot,
  * setNumber), which is the table's unique key.
  */
 export const unlogWorkoutSetSchema = z.object({
@@ -122,6 +146,9 @@ export const unlogWorkoutSetSchema = z.object({
     .int()
     .positive("Exercise ID must be a positive integer"),
   setNumber: z.number().int().positive("Set number must be a positive integer"),
+  // Same optionality and same purpose as on logWorkoutSetSchema: without it,
+  // un-logging set 1 of the second slot deletes set 1 of the first.
+  programSetId: z.number().int().positive().optional(),
 });
 
 /**
@@ -212,15 +239,37 @@ export const setProgramExerciseTypeSchema = z.object({
 // How many qualifying sessions this exercise needs before a bump is suggested.
 // null restores the shared REQUIRED_HITS default. The ceiling is the consensus
 // window — asking for more hits than the window holds is unsatisfiable.
-export const setProgramExerciseRequiredHitsSchema = z.object({
-  programExerciseId: z.number().int().positive(),
-  requiredHits: z
-    .number()
-    .int()
-    .min(MIN_REQUIRED_HITS)
-    .max(MAX_REQUIRED_HITS)
-    .nullable(),
-});
+// The progression axes, written together. Every axis is optional so the sheet
+// can send one control's change, and the action writes only what it is given —
+// but they share a validator because they share a config stamp: any of them
+// changes how history is judged, and the stamp is what stops the dot count
+// moving under the lifter when they touch a setting (E-13).
+export const setProgramExerciseProgressionSchema = z
+  .object({
+    programExerciseId: z.number().int().positive(),
+    advance: z.enum(PROGRESSION_ADVANCES).optional(),
+    scope: z.enum(PROGRESSION_SCOPES).optional(),
+    requiredHits: z
+      .number()
+      .int()
+      .min(MIN_REQUIRED_HITS)
+      .max(MAX_REQUIRED_HITS)
+      .nullable()
+      .optional(),
+    regress: z.enum(PROGRESSION_REGRESSES).optional(),
+    backoffPct: z.number().int().min(MIN_BACKOFF_PCT).max(MAX_BACKOFF_PCT).optional(),
+    backoffAfter: z
+      .number()
+      .int()
+      .min(MIN_BACKOFF_AFTER)
+      .max(MAX_BACKOFF_AFTER)
+      .optional(),
+    readiness: z.enum(PROGRESSION_READINESSES).optional(),
+  })
+  .refine(
+    (v) => Object.keys(v).length > 1,
+    "At least one axis must be given",
+  );
 
 // Opt-in: accepted suggestions also rewrite the planned sets.
 export const setProgramExerciseApplyToPlanSchema = z.object({
@@ -259,10 +308,69 @@ export const applyProgressionToPlanSchema = z.object({
 export const SET_TYPES = ["working", "warmup"] as const;
 export type SetType = (typeof SET_TYPES)[number];
 
-export const addProgramSetSchema = z.object({
+/**
+ * A rep range is both bounds or neither, and it has to contain the target.
+ *
+ * Half a range is not a weaker range, it is a set the engine cannot read: the
+ * reset step needs a bottom to drop to and a top to climb to, and with one of
+ * them missing double progression either never resets or never advances.
+ * Applied to both the add and update schemas — the update path is the one a
+ * preset picker will use, and it can arrive with one bound already stored.
+ */
+const repRangeIsWellFormed = <T extends {
+  repRangeMin?: number | null;
+  repRangeMax?: number | null;
+  targetReps?: number | null;
+}>(v: T) => {
+  const { repRangeMin: min, repRangeMax: max } = v;
+  if (min == null && max == null) return true;
+  if (min == null || max == null) return false;
+  if (min > max) return false;
+  // The target is the prescription for today and lives inside the range, when
+  // the same write carries it. A write that moves only the target against a
+  // stored range is not checked here — the engine clamps to the range on every
+  // advance, so an out-of-range target corrects itself on the next session.
+  return v.targetReps == null || (v.targetReps >= min && v.targetReps <= max);
+};
+
+const REP_RANGE_MESSAGE =
+  "A rep range needs both a minimum and a maximum, with min ≤ target ≤ max";
+
+// The two per-set progression values the exercise sheet sets uniformly across
+// a slot: the rep range double progression works inside, and the effort cap
+// axis 3 gates on. Both live on program_sets because a top set and its
+// back-offs can legitimately differ — SetEditView still edits them one set at
+// a time — but picking a preset means one thing for the whole exercise, so the
+// sheet writes every working set at once.
+export const setProgramExerciseSetDefaultsSchema = z
+  .object({
+    programExerciseId: z.number().int().positive(),
+    // Both null clears the range back to a fixed target. Half a range is not a
+    // weaker range: the reset needs a bottom to drop to and a top to climb to.
+    repRangeMin: z.number().int().positive().max(1000).nullable().optional(),
+    repRangeMax: z.number().int().positive().max(1000).nullable().optional(),
+    // Null clears the cap, which puts the exercise back on target-only clearing.
+    targetRir: z.number().int().min(0).max(5).nullable().optional(),
+  })
+  .refine(
+    (v) => (v.repRangeMin == null) === (v.repRangeMax == null),
+    { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] },
+  )
+  .refine(
+    (v) => v.repRangeMin == null || v.repRangeMax == null || v.repRangeMin <= v.repRangeMax,
+    { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] },
+  );
+
+// The fields, unrefined. Both schemas below add the rep-range check
+// themselves: zod refuses to `.omit()` from a schema that carries one, so the
+// update schema has to derive from the plain object and re-apply it.
+const programSetFields = z.object({
   programExerciseId: z.number().int().positive(),
   setNumber: z.number().int().positive(),
   targetReps: z.number().int().positive().optional(),
+  // Double progression's range. Both null = a fixed target (E-5: reps only).
+  repRangeMin: z.number().int().positive().max(1000).optional(),
+  repRangeMax: z.number().int().positive().max(1000).optional(),
   weightKg: z.number().min(0).max(1000).optional(),
   durationSeconds: z.number().int().min(0).optional(),
   distanceMeters: z.number().int().min(0).optional(),
@@ -277,7 +385,12 @@ export const addProgramSetSchema = z.object({
   startDelaySeconds: z.number().int().min(0).max(60).optional(),
 });
 
-export const updateProgramSetSchema = addProgramSetSchema
+export const addProgramSetSchema = programSetFields.refine(repRangeIsWellFormed, {
+  message: REP_RANGE_MESSAGE,
+  path: ["repRangeMin"],
+});
+
+export const updateProgramSetSchema = programSetFields
   .omit({ programExerciseId: true, setNumber: true })
   .extend({
     id: z.number().int().positive(),
@@ -295,7 +408,11 @@ export const updateProgramSetSchema = addProgramSetSchema
     // endurance set's mode is switched. Null clears the anchor.
     peakDistanceMeters: z.number().int().min(0).nullable().optional(),
     peakDurationSeconds: z.number().int().min(0).nullable().optional(),
-  });
+    // Null on either clears the range back to a fixed target.
+    repRangeMin: z.number().int().positive().max(1000).nullable().optional(),
+    repRangeMax: z.number().int().positive().max(1000).nullable().optional(),
+  })
+  .refine(repRangeIsWellFormed, { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] });
 
 export const removeExerciseFromProgramSchema = z.object({
   programExerciseId: z.number().int().positive(),
@@ -336,8 +453,13 @@ const importProgramEntrySchema = z.object({
           notes: z.string().max(500).nullable().optional(),
           incKg: z.number().min(0).max(100).catch(2.5),
           incReps: z.number().int().min(0).max(100).catch(0),
+          // The retired mode. Still accepted, and still the only progression
+          // key an export written before the axes carries, so an import maps it
+          // through section 10's table when `adv` is absent. "smart" is gone as
+          // a scheme (D-4) but must still parse: a user's year-old export is not
+          // theirs to have rejected.
           mode: z
-            .enum(["none", "manual", "weight", "smart", "reps", "time", "distance"])
+            .enum(["none", "manual", "weight", "smart", "double", "reps", "time", "distance"])
             .catch("manual"),
           // Added after v1 payloads existed — absent means "use the defaults".
           hits: z
@@ -348,6 +470,27 @@ const importProgramEntrySchema = z.object({
             .nullable()
             .optional()
             .catch(null),
+          // The axes, all optional for the same reason: an older export has
+          // none of them, and the defaults an absent key falls back to are the
+          // ones the mode it does carry maps to.
+          adv: z.enum(PROGRESSION_ADVANCES).optional().catch(undefined),
+          scope: z.enum(PROGRESSION_SCOPES).optional().catch(undefined),
+          regress: z.enum(PROGRESSION_REGRESSES).optional().catch(undefined),
+          backPct: z
+            .number()
+            .int()
+            .min(MIN_BACKOFF_PCT)
+            .max(MAX_BACKOFF_PCT)
+            .optional()
+            .catch(undefined),
+          backAfter: z
+            .number()
+            .int()
+            .min(MIN_BACKOFF_AFTER)
+            .max(MAX_BACKOFF_AFTER)
+            .optional()
+            .catch(undefined),
+          readiness: z.enum(PROGRESSION_READINESSES).optional().catch(undefined),
           applyToPlan: z.boolean().optional().catch(false),
           exercise: z.object({
             name: z.string().min(1).max(100),
@@ -422,6 +565,10 @@ const importProgramEntrySchema = z.object({
               type: z.enum(SET_TYPES).catch("working"),
               rir: z.number().int().min(0).max(5).nullable().optional().catch(null),
               startDelay: z.number().int().min(0).max(60).nullable().optional().catch(null),
+              // Optional, so an export made before rep ranges existed still
+              // imports — the same both-shapes rule the logging payload follows.
+              repMin: z.number().int().positive().max(1000).nullable().optional().catch(null),
+              repMax: z.number().int().positive().max(1000).nullable().optional().catch(null),
             }),
           ),
         }),

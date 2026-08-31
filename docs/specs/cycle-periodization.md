@@ -1,10 +1,10 @@
 # Cycle periodization
 
 > **Status:** implemented
-> **Last verified:** 2026-08-25 against `91c1646`
+> **Last verified:** 2026-08-29 against `47aacbc`
 > **Source of truth:** `src/lib/utils/periodization.ts`, `src/lib/actions/training-cycles.ts` (`getActiveCycleForUser`, `getCyclePeriodization`, `getProgramPeriodization`, `computeCycleAdaptation`, `syncPeriodizedTargets`)
 >
-> Stale check: `git log 91c1646..HEAD -- src/lib/utils/periodization.ts src/lib/actions/training-cycles.ts`
+> Stale check: `git log 47aacbc..HEAD -- src/lib/utils/periodization.ts src/lib/actions/training-cycles.ts`
 
 Cycle periodization decides how hard *this week* should be, relative to the hardest week of the block, and then rewrites the plan to say so.
 
@@ -20,7 +20,7 @@ Rule prefix: **`PZ`**.
 - **Curve** — the multiplier as a function of week, produced by `periodizedLoad`. Pure; no DB.
 - **Sync** — `syncPeriodizedTargets`, the one function that writes derived targets back onto `program_sets`.
 - **Nudge** — the no-wearable adaptation percent (90-105) from `computeAdaptationFactor`. It scales the curve; it never replaces it.
-- **Session role** — `program_sets.session_role`, a structural tag (`"work"`, and see PZ-33) marking sets whose *prescription*, not just volume, changes by phase.
+- **Session role** — `program_sets.session_role`, a structural tag marking sets whose *prescription*, not just volume, changes by phase. `"work"` is the only value anything writes or reads.
 
 ## Scope boundary
 
@@ -147,7 +147,7 @@ No week ever prescribes above peak or below `MIN_MULTIPLIER` (0.3).
 *Why:* same reason at time-mode granularity. 30 s is the smallest step that still reads as a deliberate prescription.
 *Covered by:* `periodization.test.ts` — "scales a peak duration by the multiplier, rounded to 30 s", "rounds to the nearest 30 s step", "never goes below 30 s".
 
-## Phase prescriptions — PZ-16…19
+## Phase prescriptions — PZ-16…17 (PZ-18, PZ-19 retired)
 
 Volume is not the only thing that moves across a block. Two recipes change *what* a session asks for, keyed on phase.
 
@@ -163,17 +163,8 @@ Rest between work reps never decreases as the prescribed zone rises.
 *Why:* the point of a hard rep is that it is hard. Cutting recovery as intensity rises converts an interval session into a tempo session at the exact phase where the distinction matters most.
 *Covered by:* `periodization.test.ts` — "gives harder reps more recovery".
 
-### PZ-18 — Strength reps fall and rest lengthens as the block progresses
-`strengthPhaseRecipe` prescribes 12 reps / 90 s in base, 5 / 180 s in build, 4 / 180 s in peak, 3 / 180 s in taper, and 6 / 150 s for maintain. Every phase returns a positive rep count and rest.
-
-*Why:* endurance athletes gain economy from heavy, low-rep max-strength work, but arriving there cold injures people — so the block opens with an anatomical-adaptation base at moderate load and higher reps. The taper cuts volume (3 reps) while holding intensity (180 s rest), which preserves the neuromuscular adaptation without adding fatigue.
-*Covered by:* `periodization.test.ts` — "drops reps as load rises base → build → peak → taper", "cuts taper to low-rep work while holding heavy intensity (long rest)", "gives the heavy max-strength block longer rest than the adaptation base", "covers every phase with a positive rep and rest prescription".
-
-### PZ-19 — Strength intensity stays athlete-entered, and the set count never moves
-The strength recipe prescribes reps and rest only. It never writes `weightKg`, and the sync rewrites existing rows rather than adding or removing them.
-
-*Why:* the rep target *is* the intensity prescription — the athlete picks a load that makes those reps hard, which self-calibrates to their current strength without the app needing a 1RM. Holding the set count constant means the whole volume change rides on reps, which keeps the change legible and keeps the sync from having to reconcile set ordering.
-*Covered by:* `none`.
+### PZ-18, PZ-19 — retired
+These two rules described strength phase re-prescription. The mechanism was deleted rather than implemented; the reasoning is kept in [Strength periodization: considered, not implemented](#strength-periodization-considered-not-implemented). The numbers are retired rather than reused, so every other `PZ` reference keeps its meaning.
 
 ## Performance adaptation — PZ-20…25
 
@@ -248,10 +239,10 @@ Nothing runs on a schedule. Until the athlete opens a page that calls `getActive
 *Why:* the app has no scheduler, and adding one for a write that only matters when someone is looking would be a large amount of infrastructure for no user-visible gain. The consequence is accepted: the plan is correct from the moment it is read, not from midnight.
 *Covered by:* `none`.
 
-### PZ-30 — The sync selects sets by anchor or by session role
-A row is rewritten when it has a distance anchor, a duration anchor, or a `sessionRole` marking it for phase re-prescription. Everything else in the cycle is left alone.
+### PZ-30 — The sync selects sets by anchor
+A row is rewritten only when it has a distance anchor or a duration anchor. Everything else in the cycle is left alone, `sessionRole` included: the role decides *what* is rewritten on a selected row (PZ-32), never *whether* the row is selected.
 
-*Why:* the anchors are what identify a periodized set; the role tag is what identifies a set whose prescription changes even though its volume is not anchored. Plyometric and core accessories deliberately match neither, so they stay constant across the block.
+*Why:* the anchors are what identify a periodized set. Interval work reps carry an anchor anyway, so selecting on the role as well only ever admitted rows the strength branch wanted — and that branch is gone. Plyometric, core and strength accessories carry no anchor, so they stay constant across the block.
 *Covered by:* `none`.
 
 ### PZ-31 — Both anchors scale independently when both are present
@@ -264,11 +255,8 @@ A distance anchor sets `distanceMeters`; a duration anchor sets `durationSeconds
 *Why:* this is how PZ-16 reaches the athlete. The target zone and inter-rep rest are the prescription; rewriting them is what makes the quality session actually change character across the block.
 *Covered by:* `none`.
 
-### PZ-33 — A `"strength"` set takes its target reps and rest from the strength recipe
-*Why:* this is the intended delivery path for PZ-18.
-
-**This rule has no producer today.** Nothing in the repository writes `sessionRole = "strength"` — see the Divergences table. The rule states the intent the sync branch was written for; it does not describe live behaviour.
-*Covered by:* `none`.
+### PZ-33 — retired
+This rule was the delivery path for PZ-18 and is retired with it. `sessionRole = "strength"` never had a producer and the sync branch that read it has been deleted; see [Strength periodization: considered, not implemented](#strength-periodization-considered-not-implemented).
 
 ### PZ-34 — The stamp is written even when nothing else was
 `lastSyncedWeek`, `adaptationPct`, and `adaptationNote` are updated unconditionally at the end of the sync, including for a cycle with no programs and no matching sets.
@@ -342,6 +330,28 @@ When the last sync recorded a nudge, its human reason is appended to the note. A
 *Why:* the app has no scheduler (PZ-29), so "the block is over" has to be discovered on read like everything else. Returning null in the same call keeps the home screen from rendering one last frame of a finished cycle.
 *Covered by:* `none`.
 
+## Strength periodization: considered, not implemented
+
+Retired rules PZ-18, PZ-19 and PZ-33 described a strength block whose reps and rest moved by phase, delivered by a *strengthPhaseRecipe* helper in `periodization.ts` and a `sessionRole = "strength"` branch in `syncPeriodizedTargets`. Both were deleted, along with the tag, on 2026-08-29. Nothing ever wrote the tag, so the branch never ran; and rep targets now belong to the progression engine outright, which cannot share the column with a second writer (`docs/progression-revamp-plan.md`, decision `D-6`).
+
+The research behind the design is worth more than the code was, so it is recorded here rather than lost with the function.
+
+**The prescription it would have written**, per phase, for a triathlete's main barbell lifts:
+
+| Phase | Reps | Rest | Intent |
+|---|---|---|---|
+| base | 12 | 90 s | Anatomical adaptation |
+| build | 5 | 180 s | Max strength |
+| peak | 4 | 180 s | Strength-power |
+| taper | 3 | 180 s | Sharpen — hold intensity, cut volume |
+| maintain | 6 | 150 s | Maintenance |
+
+**Why that shape.** Endurance athletes gain running and cycling economy from heavy, low-rep max-strength work rather than from strength-endurance circuits (Rønnestad & Mujika 2014, *Optimizing strength training for running and cycling endurance performance*; Beattie et al. 2017, *The effect of strength training on performance indicators in distance runners*). Arriving at heavy triples cold injures people, so the block opens with an anatomical-adaptation base at moderate load and higher reps, and reps fall as rest lengthens. The taper cuts volume (3 reps) while holding intensity (180 s rest), which preserves the neuromuscular adaptation without adding fatigue. Load stays athlete-entered throughout: the rep target *is* the intensity prescription, which self-calibrates without the app needing a 1RM.
+
+**Why it is not implemented.** The triathlon generator makes the opposite choice deliberately, and its reasoning supersedes the above for this app's use: strength runs flat, in fixed rep ranges with an RIR cap, with no phase re-prescription and no top-set pyramiding, *to spare the CNS so the endurance quality sessions are not compromised* (`src/lib/utils/triathlon-plan.ts`). Three hard endurance sessions and three strength sessions in one week is already the constraint; adding a heavy-triples phase on top of it spends recovery the swim, bike and run need. The economy stimulus is taken at a fixed rep target instead.
+
+Reviving this means resolving the `target_reps` ownership question first, not just restoring the function.
+
 ## Divergences (intent vs code)
 
 Verified against `periodization.ts`, `training-cycles.ts`, `page.tsx` and `SetEditView.tsx` at `91c1646` on 2026-08-25. D1 and D2 were confirmed by executing the week arithmetic under three timezones.
@@ -350,14 +360,14 @@ Verified against `periodization.ts`, `training-cycles.ts`, `page.tsx` and `SetEd
 |---|---|---|---|---|
 | D1 | PZ-39 | The reported week of an active cycle is between 1 and the block length | `startDate` is a `date` column read as a `YYYY-MM-DD` string, so `new Date(startDate)` is **UTC midnight** while `today` is **local midnight**. In any timezone ahead of UTC the difference is negative on the block's own start date: `currentWeek` computes as **0** and every later week boundary lands a day late. `getActiveCycleForUser` does not clamp (`training-cycles.ts:168`), so `/` renders "Week 0/24" and its progress bar computes to −4.2% (`page.tsx:105` clamps only the upper bound); `/new-workout` shows the same 0. `getCyclePeriodization` *does* clamp (`:411`) and `CyclesListClient` measures from the current instant rather than local midnight, so both say "Week 1" on that day — three screens, two answers | open |
 | D2 | PZ-2, PZ-39 | The last day of a block is the last day inside it | Same root cause at the other end. Auto-completion fires only on `today > endDate` (`:157`), and `endDate` derives from the same UTC-parsed start. Under `TZ=UTC` a 24-week block admits a 169th day on which `currentWeek` is **25**, unclamped — `/` renders "Week 25/24" and the sync stamps `lastSyncedWeek = 25`. Timezones behind UTC complete a day earlier and never show it | open |
-| D3 | PZ-33 | Main strength lifts periodize their reps and rest by phase | Nothing writes `sessionRole = "strength"`. The generator tags only interval `"work"` sets (`triathlon-plan.ts:239`), `sessionRole` appears in no validator, and the schema comment (`schema/programs.ts:119-121`) documents only `"work"`. The branch at `training-cycles.ts:602` is unreachable, so strength is flat for the whole block — which is what the generator builds and its tests assert. The docblocks at `periodization.ts:218` and `triathlon-plan.ts:12` still describe the periodized version | open |
+| D3 | PZ-33 | Main strength lifts periodize their reps and rest by phase | **Closed 2026-08-29** by deleting the mechanism rather than building a producer for it. The *strengthPhaseRecipe* helper, the `sessionRole = "strength"` branch in `syncPeriodizedTargets` and both stale docblocks are gone; rules PZ-18, PZ-19 and PZ-33 are retired and the reasoning is preserved above. Strength is flat for the whole block, which is what the generator already built and its tests already asserted | closed |
 | D4 | PZ-29, PZ-40 | What a page shows for a week matches what the plan holds for that week | On the first visit of a new cycle-week the workout page's `Promise.all` (`programs/[id]/workout/page.tsx:28`) starts `getProgramWithExercises` — reading `program_sets` — concurrently with `getWorkoutInsight`, whose nested `getActiveCycleForUser` performs the sync. The render shows last week's targets under this week's header. `/cycles/[id]` never triggers a sync at all, so it can report a new week's phase against the previous week's `adaptationPct`. Both self-correct on the next load | open |
 | D5 | PZ-38 | A periodized cycle reports its periodization | The gate queries `peakDistanceMeters` only (`training-cycles.ts:398`), while the sync selects on either anchor (`:576-577`). A cycle whose sets have all been switched to time mode (PZ-37) keeps being synced from its duration anchors but reports null, so the cycle page and the in-workout header silently lose their summary | open |
 | D6 | PZ-28 | Changing the block's shape re-derives its targets | `updateTrainingCycle` can change `durationWeeks` — which changes `phaseLayout`, and therefore every week's multiplier and phase — without clearing `lastSyncedWeek` (`:689-693`). The old week's targets stand until the next week boundary | open |
 | D7 | PZ-2 | Every block length the generator can produce can be edited | `createTrainingCycleSchema` and `updateTrainingCycleSchema` accept only 4, 6, 8, 10, 12, 16 weeks, but the generator's `ALLOWED_WEEKS` (`triathlon-plan.ts:100`) also permits 24, 36 and 52. A 24-week block can be generated and then never have its duration edited — the action returns "Invalid input" | open |
 | D8 | PZ-36 | Undecided | Editing an anchored set's distance *in distance mode* writes the value but leaves the anchor (`SetEditView.tsx:250-253`), so the next sync reverts it silently — while a **mode switch** on the same set does re-anchor (`:256`). Whether a direct edit should re-anchor, warn, or revert silently has never been decided | open — intent needed |
 
-All eight are tracked in `BACKLOG.md` under **Cycle periodization (spec divergences)**, one entry per row except D1–D2, which share a root cause and a fix. D8 needs an intent decision before any code change — the spec cannot state a rule for it until then.
+Seven remain open and are tracked in `BACKLOG.md` under **Cycle periodization (spec divergences)**, one entry per row except D1–D2, which share a root cause and a fix. D3 is closed. D8 needs an intent decision before any code change — the spec cannot state a rule for it until then.
 
 Already tracked in `BACKLOG.md` rather than repeated here: the absence of objective recovery signals feeding PZ-20…24 (§ New features — "Wearable-based autoregulation (Tier B) for triathlon plans").
 
@@ -382,8 +392,8 @@ Already tracked in `BACKLOG.md` rather than repeated here: the absence of object
 | PZ-15 | `periodization.test.ts` — "scales a peak duration by the multiplier, rounded to 30 s", "rounds to the nearest 30 s step", "never goes below 30 s" |
 | PZ-16 | `periodization.test.ts` — "ramps the work-rep zone aerobic → threshold → VO₂ across the block" |
 | PZ-17 | `periodization.test.ts` — "gives harder reps more recovery" |
-| PZ-18 | `periodization.test.ts` — "drops reps as load rises base → build → peak → taper", "cuts taper to low-rep work while holding heavy intensity (long rest)", "gives the heavy max-strength block longer rest than the adaptation base", "covers every phase with a positive rep and rest prescription" |
-| PZ-19 | none |
+| PZ-18 | retired |
+| PZ-19 | retired |
 | PZ-20 | `periodization.test.ts` — "never moves beyond a tight ±band" |
 | PZ-21 | `periodization.test.ts` — "eases when behind on the plan" |
 | PZ-22 | `periodization.test.ts` — "eases when readiness is low" |
@@ -397,7 +407,7 @@ Already tracked in `BACKLOG.md` rather than repeated here: the absence of object
 | PZ-30 | none |
 | PZ-31 | none |
 | PZ-32 | none |
-| PZ-33 | none |
+| PZ-33 | retired |
 | PZ-34 | none |
 | PZ-35 | none |
 | PZ-36 | none |

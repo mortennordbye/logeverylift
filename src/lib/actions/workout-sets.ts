@@ -33,7 +33,7 @@ import {
     type Discipline,
 } from "@/lib/utils/discipline";
 import { parseUserGoals } from "@/lib/utils/goals";
-import { rpeFromRir } from "@/lib/utils/rir";
+import { rirFromRpe, rpeFromRir } from "@/lib/utils/rir";
 import { requireSession } from "@/lib/utils/session";
 import {
     logWorkoutSetSchema,
@@ -44,8 +44,9 @@ import {
     buildSuggestion,
     CONSENSUS_WINDOW,
     estimate1RM,
+    toScope,
 } from "@/lib/utils/progression";
-import type { HistoryRow, ProgramSetData } from "@/lib/utils/progression";
+import type { ProgramSetData, SessionHistory } from "@/lib/utils/progression";
 import type {
     ActionResult,
     ActiveCycleInfo,
@@ -59,14 +60,174 @@ import type {
     WorkoutSetWithExercise,
     WorkoutStats,
 } from "@/types/workout";
-import { and, desc, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+
+/**
+ * The plan slot a logged set belongs to.
+ *
+ * A program may hold the same exercise twice (heavy bench, then a back-off
+ * bench). `workout_sets` used to be keyed on (session, exercise, setNumber), so
+ * logging set 1 of the second slot overwrote set 1 of the first and the heavy
+ * set's weight, reps and effort were gone. The slot is the identity; the
+ * exercise is not.
+ *
+ * `programSetId` is resolved server-side rather than trusted from the payload:
+ * it decides which row a write lands on, and a slot belonging to another
+ * program must never be written into this session.
+ */
+type PlanSlot = {
+  programExerciseId: number;
+  programSetId: number | null;
+  /** "working" | "warmup", snapshotted onto the row so the log describes itself. */
+  setType: string;
+  /** Working sets the slot prescribes right now. Null when the slot has none. */
+  prescribedWorkingSets: number | null;
+};
+
+/**
+ * Working sets currently prescribed by the slot that owns the row being
+ * selected. Correlated rather than joined so it does not multiply the outer
+ * rows, and inlined here so resolving a slot stays one round trip on the
+ * hottest write path in the app.
+ */
+function workingSetCount(slotIdColumn: string) {
+  return sql<number>`(
+    SELECT COUNT(*)::int FROM "program_sets" wsc
+    WHERE wsc."program_exercise_id" = ${sql.raw(slotIdColumn)}
+      AND wsc."set_type" = 'working'
+  )`;
+}
+
+/**
+ * Resolve the plan slot for a set being logged into `session`.
+ *
+ * Returns `{ slot: null }` when there is nothing to resolve (an unprogrammed
+ * session, or a program set deleted since the payload was queued). That is not
+ * an error: the workout still happened and the row is still written, it just
+ * carries no slot and is history-only from then on.
+ *
+ * Returns `{ error }` only when the caller named a slot that exists but belongs
+ * to a different program.
+ */
+async function resolvePlanSlot(
+  programId: number | null,
+  exerciseId: number,
+  setNumber: number,
+  programSetId: number | undefined,
+): Promise<{ slot: PlanSlot | null; error?: string }> {
+  if (programId == null) return { slot: null };
+
+  if (programSetId != null) {
+    const [row] = await db
+      .select({
+        programSetId: programSets.id,
+        programExerciseId: programSets.programExerciseId,
+        programId: programExercises.programId,
+        setType: programSets.setType,
+        prescribedWorkingSets: workingSetCount('"program_sets"."program_exercise_id"'),
+      })
+      .from(programSets)
+      .innerJoin(
+        programExercises,
+        eq(programExercises.id, programSets.programExerciseId),
+      )
+      .where(eq(programSets.id, programSetId))
+      .limit(1);
+    if (row) {
+      if (row.programId !== programId) {
+        return { slot: null, error: "Set does not belong to this program" };
+      }
+      return {
+        slot: {
+          programExerciseId: row.programExerciseId,
+          programSetId: row.programSetId,
+          setType: row.setType,
+          prescribedWorkingSets: row.prescribedWorkingSets || null,
+        },
+      };
+    }
+    // Fall through: the set was deleted from the program after the payload was
+    // queued. Resolve what we can from the exercise rather than dropping the
+    // write.
+  }
+
+  // Legacy payload (a bundle cached before programSetId shipped, or a replay
+  // queued by one). Resolving by exercise is ambiguous when the program holds
+  // that exercise twice, which is the bug this column exists to fix — the
+  // lowest slot id reproduces the previous behaviour rather than inventing a
+  // new one.
+  const [row] = await db
+    .select({
+      programExerciseId: programExercises.id,
+      programSetId: programSets.id,
+      setType: programSets.setType,
+      prescribedWorkingSets: workingSetCount('"program_exercises"."id"'),
+    })
+    .from(programExercises)
+    .leftJoin(
+      programSets,
+      and(
+        eq(programSets.programExerciseId, programExercises.id),
+        eq(programSets.setNumber, setNumber),
+      ),
+    )
+    .where(
+      and(
+        eq(programExercises.programId, programId),
+        eq(programExercises.exerciseId, exerciseId),
+      ),
+    )
+    .orderBy(programExercises.id)
+    .limit(1);
+
+  if (!row) return { slot: null };
+  return {
+    slot: {
+      programExerciseId: row.programExerciseId,
+      programSetId: row.programSetId,
+      // The left join misses when the plan has no set at that position, which
+      // says nothing about whether the set logged there was a warm-up. Default
+      // to the common case rather than guessing.
+      setType: row.setType ?? "working",
+      prescribedWorkingSets: row.prescribedWorkingSets || null,
+    },
+  };
+}
+
+/**
+ * Match the one `workout_sets` row a set edit addresses, within a session.
+ *
+ * Prefers the plan slot. Falls back to the exercise for rows the migration
+ * could not backfill a slot onto, and for slots deleted since — those still
+ * carry the exercise, so an un-log or a note edit on them keeps working.
+ */
+function setRowKey(slot: PlanSlot | null, exerciseId: number, setNumber: number) {
+  return and(
+    eq(workoutSets.setNumber, setNumber),
+    slot
+      ? or(
+          eq(workoutSets.programExerciseId, slot.programExerciseId),
+          and(
+            isNull(workoutSets.programExerciseId),
+            eq(workoutSets.exerciseId, exerciseId),
+          ),
+        )
+      : eq(workoutSets.exerciseId, exerciseId),
+  );
+}
 
 /**
  * Resolve the program_set.id values for every completed workout_set in the
  * given active session. Used on workout-page mount to rehydrate the in-memory
  * `completedSetIds` set — necessary because that state lives only in React and
  * is lost when iOS evicts the PWA's JS context after backgrounding.
+ *
+ * Reads the slot the set was logged against. This used to re-derive it by
+ * joining program_exercises on exercise_id, which returned both slots' set ids
+ * when a program held the same exercise twice — ticking sets the user had not
+ * done. A pre-migration row with no slot is skipped: its set renders unticked
+ * and re-logging it is idempotent.
  */
 export async function getActiveSessionCompletedProgramSetIds(
   sessionId: number,
@@ -74,31 +235,18 @@ export async function getActiveSessionCompletedProgramSetIds(
   const auth = await requireSession();
   try {
     const rows = await db
-      .select({ id: programSets.id })
+      .select({ id: workoutSets.programSetId })
       .from(workoutSets)
       .innerJoin(workoutSessions, eq(workoutSets.sessionId, workoutSessions.id))
-      .innerJoin(
-        programExercises,
-        and(
-          eq(programExercises.programId, workoutSessions.programId),
-          eq(programExercises.exerciseId, workoutSets.exerciseId),
-        ),
-      )
-      .innerJoin(
-        programSets,
-        and(
-          eq(programSets.programExerciseId, programExercises.id),
-          eq(programSets.setNumber, workoutSets.setNumber),
-        ),
-      )
       .where(
         and(
           eq(workoutSets.sessionId, sessionId),
           eq(workoutSessions.userId, auth.user.id),
           eq(workoutSets.isCompleted, true),
+          isNotNull(workoutSets.programSetId),
         ),
       );
-    return { success: true, data: rows.map((r) => r.id) };
+    return { success: true, data: rows.map((r) => r.id!) };
   } catch (error) {
     console.error("[getActiveSessionCompletedProgramSetIds] failed", error);
     return { success: false, error: "Failed to fetch completed sets" };
@@ -139,6 +287,7 @@ export async function logWorkoutSet(
       sessionId,
       exerciseId,
       setNumber,
+      programSetId,
       targetReps,
       actualReps,
       weightKg,
@@ -157,8 +306,13 @@ export async function logWorkoutSet(
 
     // RIR is the primary effort input; derive RPE from it so all downstream
     // RPE-based progression/adaptation keeps working. Fall back to the supplied
-    // RPE for callers that don't report RIR yet (e.g. logged runs).
-    const effectiveRpe = rir != null ? rpeFromRir(rir) : rpe;
+    // RPE for callers that report effort without RIR (e.g. logged runs).
+    //
+    // Null when neither was supplied: the lifter tapped the set done and said
+    // nothing about how hard it was. That is stored as unknown, not as a
+    // middling 7 — inventing an effort value is what made every logged set read
+    // as a confident hit.
+    const effectiveRpe = rir != null ? rpeFromRir(rir) : (rpe ?? null);
 
     // Verify the session belongs to the authenticated user
     const [session] = await db
@@ -169,6 +323,23 @@ export async function logWorkoutSet(
     if (!session || session.userId !== auth.user.id) {
       return { success: false, error: "Unauthorized" };
     }
+
+    // Which plan slot this row belongs to. Resolved before the write because it
+    // is part of the row's identity: the upsert below conflicts on it.
+    const resolved = await resolvePlanSlot(
+      session.programId,
+      exerciseId,
+      setNumber,
+      programSetId,
+    );
+    if (resolved.error) {
+      console.error("[logWorkoutSet] slot_program_mismatch", {
+        sessionId,
+        programSetId,
+      });
+      return { success: false, error: resolved.error };
+    }
+    const slot = resolved.slot;
 
     // Timed exercises must record a duration. Without this guard, a quick-tap
     // completion (no override, program had no planned duration) silently logs
@@ -191,10 +362,15 @@ export async function logWorkoutSet(
       }
     }
 
-    // Upsert on the (session, exercise, set_number) unique key. A plain insert
+    // Upsert on the (session, plan slot, set_number) unique key. A plain insert
     // would throw on the second write for the same set, which the caller then
     // had to treat as success — silently discarding the user's corrected
     // weight/reps/RIR. Re-logging a set must overwrite it.
+    //
+    // When the slot could not be resolved the key holds a null and Postgres
+    // treats it as distinct, so nothing conflicts and the row is inserted. That
+    // only happens for an unprogrammed session or a set deleted from the plan
+    // mid-workout; both are better recorded twice than lost.
     //
     // Replays from the offline queue land here too and are idempotent: the row
     // is rewritten with the same values, and PR detection below only inserts
@@ -202,6 +378,10 @@ export async function logWorkoutSet(
     const setValues = {
       sessionId,
       exerciseId,
+      programExerciseId: slot?.programExerciseId ?? null,
+      programSetId: slot?.programSetId ?? null,
+      setType: slot?.setType ?? "working",
+      prescribedWorkingSets: slot?.prescribedWorkingSets ?? null,
       setNumber,
       targetReps,
       actualReps,
@@ -224,12 +404,15 @@ export async function logWorkoutSet(
       .onConflictDoUpdate({
         target: [
           workoutSets.sessionId,
-          workoutSets.exerciseId,
+          workoutSets.programExerciseId,
           workoutSets.setNumber,
         ],
         // createdAt is deliberately not updated — it stays the time the set was
         // first logged.
         set: {
+          programSetId: setValues.programSetId,
+          setType: setValues.setType,
+          prescribedWorkingSets: setValues.prescribedWorkingSets,
           targetReps: setValues.targetReps ?? null,
           actualReps: setValues.actualReps,
           weightKg: setValues.weightKg,
@@ -258,6 +441,9 @@ export async function logWorkoutSet(
         setId: set.id,
         weightKg,
         actualReps,
+        // A logged RIR, or the one derived from a legacy RPE. Null means the
+        // lifter said nothing, which gates the 1RM record out entirely.
+        rir: setValues.rir ?? (setValues.rpe != null ? rirFromRpe(setValues.rpe) : null),
       });
     }
     // Endurance PRs (swim/bike/run): distance + pace-per-bracket. Independent of
@@ -299,7 +485,7 @@ export async function logWorkoutSet(
 /**
  * Un-log a workout set
  *
- * Removes the row written by logWorkoutSet for (session, exercise, setNumber).
+ * Removes the row written by logWorkoutSet for (session, plan slot, setNumber).
  * The row is deleted rather than flagged is_completed = false because the
  * metrics aggregates filter on workout_sessions.isCompleted, not on the set
  * flag — a lingering row would keep counting toward volume.
@@ -321,11 +507,11 @@ export async function unlogWorkoutSet(
       fieldErrors: validation.error.flatten().fieldErrors,
     };
   }
-  const { sessionId, exerciseId, setNumber } = validation.data;
+  const { sessionId, exerciseId, setNumber, programSetId } = validation.data;
 
   try {
     const [session] = await db
-      .select({ userId: workoutSessions.userId })
+      .select({ userId: workoutSessions.userId, programId: workoutSessions.programId })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, sessionId))
       .limit(1);
@@ -333,16 +519,24 @@ export async function unlogWorkoutSet(
       return { success: false, error: "Unauthorized" };
     }
 
+    const resolved = await resolvePlanSlot(
+      session.programId,
+      exerciseId,
+      setNumber,
+      programSetId,
+    );
+    if (resolved.error) {
+      console.error("[unlogWorkoutSet] slot_program_mismatch", {
+        sessionId,
+        programSetId,
+      });
+      return { success: false, error: resolved.error };
+    }
+
     const [existing] = await db
       .select({ id: workoutSets.id })
       .from(workoutSets)
-      .where(
-        and(
-          eq(workoutSets.sessionId, sessionId),
-          eq(workoutSets.exerciseId, exerciseId),
-          eq(workoutSets.setNumber, setNumber),
-        ),
-      )
+      .where(and(eq(workoutSets.sessionId, sessionId), setRowKey(resolved.slot, exerciseId, setNumber)))
       .limit(1);
 
     // Already absent — the user un-logged a set that never reached the server
@@ -422,6 +616,7 @@ async function detectAndRecordPRs({
   setId,
   weightKg,
   actualReps,
+  rir,
 }: {
   userId: string;
   exerciseId: number;
@@ -429,6 +624,8 @@ async function detectAndRecordPRs({
   setId: number;
   weightKg: number;
   actualReps: number;
+  /** Logged reps in reserve, or null when the lifter reported nothing. */
+  rir: number | null;
 }): Promise<PRResult[]> {
   const newPRs: PRResult[] = [];
   const now = new Date();
@@ -473,8 +670,17 @@ async function detectAndRecordPRs({
       });
     }
 
-    // 2. Estimated 1RM PR — Epley formula, valid for 2–12 reps
-    if (actualReps >= 2 && actualReps <= 12) {
+    // 2. Estimated 1RM PR — Epley formula, valid for 2–12 reps *on a near-max
+    //    set*. A11: Epley on a set the lifter stopped four reps short of
+    //    failure is not a 1RM estimate, it is arithmetic on a submaximal
+    //    number, and this is the figure people screenshot. The displayed
+    //    estimate gained this guard in phase 5; the stored record is the half
+    //    that stayed ungated, and a record set from a sandbagged set is one
+    //    honest logging may never beat.
+    //
+    //    Silence does not qualify. Under D-2 an unreported effort is unknown,
+    //    not a moderate one, so a set with no RIR sets no 1RM record.
+    if (actualReps >= 2 && actualReps <= 12 && rir != null && rir <= 3) {
       const new1RM = estimate1RM(weightKg, actualReps);
       const [current1RMPR] = await db
         .select()
@@ -1059,7 +1265,7 @@ export async function getSessionDetail(
  * Attach (or replace) a free-text note on an already-logged workout set.
  * Used by SetEditView when the lifter taps a completed set to record an
  * observation ("shoulder twinge", "felt easy"). Resolves the workout_sets
- * row by (sessionId, exerciseId, setNumber). If no row exists yet, returns
+ * row by (sessionId, plan slot, setNumber). If no row exists yet, returns
  * `success: true` without writing — the override carries the note forward
  * on the next `logWorkoutSet` call.
  */
@@ -1068,6 +1274,7 @@ export async function updateWorkoutSetNotes(
     sessionId: number;
     exerciseId: number;
     setNumber: number;
+    programSetId?: number;
     notes: string | null;
   },
 ): Promise<ActionResult<undefined>> {
@@ -1078,12 +1285,25 @@ export async function updateWorkoutSetNotes(
     }
     // Verify the session belongs to the user before touching anything
     const [session] = await db
-      .select({ userId: workoutSessions.userId })
+      .select({ userId: workoutSessions.userId, programId: workoutSessions.programId })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, data.sessionId))
       .limit(1);
     if (!session || session.userId !== auth.user.id) {
       return { success: false, error: "Unauthorized" };
+    }
+    const resolved = await resolvePlanSlot(
+      session.programId,
+      data.exerciseId,
+      data.setNumber,
+      data.programSetId,
+    );
+    if (resolved.error) {
+      console.error("[updateWorkoutSetNotes] slot_program_mismatch", {
+        sessionId: data.sessionId,
+        programSetId: data.programSetId,
+      });
+      return { success: false, error: resolved.error };
     }
     await db
       .update(workoutSets)
@@ -1091,8 +1311,7 @@ export async function updateWorkoutSetNotes(
       .where(
         and(
           eq(workoutSets.sessionId, data.sessionId),
-          eq(workoutSets.exerciseId, data.exerciseId),
-          eq(workoutSets.setNumber, data.setNumber),
+          setRowKey(resolved.slot, data.exerciseId, data.setNumber),
         ),
       );
     revalidatePath(`/history`);
@@ -1106,16 +1325,24 @@ export async function updateWorkoutSetNotes(
 /**
  * Calculate progressive overload suggestions for every set in a program.
  *
- * For each program_set, we examine recent completed sessions (excluding "Tired"
- * sessions) and apply multi-session consensus logic:
- * - Requires REQUIRED_HITS confident hits within the last CONSENSUS_WINDOW sessions
- *   to trigger a progression (prevents single-fluke advances).
- * - RPE gates confidence: RPE 9-10 sets are not counted as confident hits.
- * - 3+ consecutive failures trigger a 10% deload suggestion.
- * - If no history exists for a set, it is omitted (caller uses the program default).
+ * The window is the last CONSENSUS_WINDOW completed *sessions* per plan slot,
+ * each carrying every working set logged in it. It used to be the last N rows
+ * for one exercise + set number, which had two defects this query fixes:
  *
- * NULL feeling (old sessions recorded before the column existed) is treated
- * as valid — only explicit "Tired" entries are excluded.
+ *  - Each set of a 4x12 banked its own count, so the plan could ratchet to
+ *    62.5 / 60 / 60 / 60 with no session ever having cleared. "Did the workout
+ *    clear?" is a question about a session, and it was never asked.
+ *  - A single global LIMIT across every set of every exercise starved the
+ *    window on large programs: the sets of the most recent exercises consumed
+ *    it and the rest got nothing. The DENSE_RANK partitions per slot, so each
+ *    exercise gets its own five sessions regardless of how many there are.
+ *
+ * Two filters are load-bearing. **In-progress sessions are excluded**, which is
+ * what makes an "easy" verdict affect the next workout rather than the current
+ * one. **Tired sessions are no longer excluded here**: the blanket exclusion
+ * froze progression and showed stale numbers for anyone who reported fatigue
+ * honestly. The engine holds a Tired session's misses harmless instead, and
+ * still counts its clears.
  */
 export async function getProgressiveSuggestions(
   programId: number,
@@ -1138,17 +1365,35 @@ export async function getProgressiveSuggestions(
     const programData = await db
       .select({
         programSetId: programSets.id,
+        programExerciseId: programExercises.id,
         setNumber: programSets.setNumber,
         targetReps: programSets.targetReps,
+        repRangeMin: programSets.repRangeMin,
+        repRangeMax: programSets.repRangeMax,
         durationSeconds: programSets.durationSeconds,
         distanceMeters: programSets.distanceMeters,
         setType: programSets.setType,
+        // The effort cap — axis 3. Selected at last: it has existed and been
+        // rendered in set summaries for a year, and no progression code has
+        // ever read it, so D-1's gate had nothing to gate on (B-22).
+        targetRir: programSets.targetRir,
+        peakDurationSeconds: programSets.peakDurationSeconds,
+        peakDistanceMeters: programSets.peakDistanceMeters,
         exerciseId: programExercises.exerciseId,
         overloadIncrementKg: programExercises.overloadIncrementKg,
         overloadIncrementReps: programExercises.overloadIncrementReps,
-        progressionMode: programExercises.progressionMode,
+        progressionScope: programExercises.progressionScope,
         progressionRequiredHits: programExercises.progressionRequiredHits,
+        progressionAdvance: programExercises.progressionAdvance,
+        progressionRegress: programExercises.progressionRegress,
+        progressionBackoffPct: programExercises.progressionBackoffPct,
+        progressionBackoffAfter: programExercises.progressionBackoffAfter,
+        progressionReadiness: programExercises.progressionReadiness,
+        progressionConfigAt: programExercises.progressionConfigAt,
         movementPattern: exercises.movementPattern,
+        // The smallest step this equipment can load — an increment it cannot
+        // make is a number the lifter has to round themselves (A3).
+        equipment: exercises.equipment,
         // Resolve override ?? default in JS below (Drizzle returns both columns).
         exerciseTypeOverride: programExercises.exerciseType,
         exerciseTypeDefault: exercises.exerciseType,
@@ -1165,8 +1410,6 @@ export async function getProgressiveSuggestions(
     if (programData.length === 0) {
       return { success: true, data: {} };
     }
-
-    const exerciseIds = [...new Set(programData.map((r) => r.exerciseId))];
 
     // Step 2: fetch user profile and current session readiness in parallel
     const [userProfile, activeSession] = await Promise.all([
@@ -1192,6 +1435,10 @@ export async function getProgressiveSuggestions(
     ]);
 
     const readiness = activeSession?.readiness ?? null;
+    // Today, as the plain date the sessions are stored in. The engine takes it
+    // as an argument rather than reading the clock, so it stays a pure function
+    // and a test fixture can sit three months after its own history.
+    const today = new Date().toISOString().slice(0, 10);
 
     // buildSuggestion only special-cases an "endurance" goal (smaller increments);
     // derive it from the user's goals array (endurance wins, else the first goal).
@@ -1203,13 +1450,21 @@ export async function getProgressiveSuggestions(
         }
       : null;
 
-    // Step 3: fetch history, excluding Tired sessions
-    // NULL feeling (pre-feature sessions) is kept via IS DISTINCT FROM.
-    // Limit to CONSENSUS_WINDOW rows per exercise+setNumber to avoid full scans
-    // on accounts with hundreds of sessions.
-    const history = await db
+    // Step 3: rank each slot's completed sessions independently, then keep the
+    // most recent CONSENSUS_WINDOW of them. DENSE_RANK over session start time
+    // gives every session its own rank (session id breaks ties), so two
+    // sessions on the same day consume two slots of the window — the window
+    // counts sessions, not days.
+    //
+    // Warm-ups are excluded on the row's own snapshotted set_type rather than
+    // by joining back to program_sets, because today's plan does not describe a
+    // session from three weeks ago. Rows whose slot could not be resolved are
+    // dropped by the inner join, as are rows logged against a slot whose
+    // exercise has since been swapped — those belong to the previous exercise
+    // and would otherwise be read as this one's history.
+    const ranked = db
       .select({
-        exerciseId: workoutSets.exerciseId,
+        programExerciseId: workoutSets.programExerciseId,
         setNumber: workoutSets.setNumber,
         actualReps: workoutSets.actualReps,
         targetReps: workoutSets.targetReps,
@@ -1217,47 +1472,127 @@ export async function getProgressiveSuggestions(
         durationSeconds: workoutSets.durationSeconds,
         distanceMeters: workoutSets.distanceMeters,
         rpe: workoutSets.rpe,
+        rir: workoutSets.rir,
         wasEasy: workoutSets.wasEasy,
+        prescribedWorkingSets: workoutSets.prescribedWorkingSets,
+        sessionId: workoutSessions.id,
         feeling: workoutSessions.feeling,
         date: workoutSessions.date,
+        sessionRank: sql<number>`DENSE_RANK() OVER (
+          PARTITION BY ${workoutSets.programExerciseId}
+          ORDER BY ${workoutSessions.startTime} DESC, ${workoutSessions.id} DESC
+        )`.as("session_rank"),
       })
       .from(workoutSets)
       .innerJoin(workoutSessions, eq(workoutSets.sessionId, workoutSessions.id))
+      .innerJoin(
+        programExercises,
+        eq(programExercises.id, workoutSets.programExerciseId),
+      )
       .where(
         and(
           eq(workoutSessions.userId, userId),
           eq(workoutSessions.programId, programId),
           eq(workoutSessions.isCompleted, true),
-          sql`${workoutSessions.feeling} IS DISTINCT FROM 'Tired'`,
-          inArray(workoutSets.exerciseId, exerciseIds),
+          eq(programExercises.programId, programId),
+          eq(programExercises.exerciseId, workoutSets.exerciseId),
+          eq(workoutSets.setType, "working"),
         ),
       )
-      .orderBy(desc(workoutSessions.startTime), desc(workoutSets.id))
-      .limit(programData.length * CONSENSUS_WINDOW);
+      .as("ranked");
 
-    // Step 4: group history rows per exerciseId+setNumber (most-recent-first)
-    const historyPerKey = new Map<string, HistoryRow[]>();
+    const history = await db
+      .select()
+      .from(ranked)
+      .where(lte(ranked.sessionRank, CONSENSUS_WINDOW))
+      .orderBy(ranked.sessionRank, ranked.setNumber);
+
+    // Step 4: fold the rows into one window of sessions per slot. Rows arrive
+    // in rank order and, within a session, in set order, so appending in place
+    // keeps both orderings without a second sort.
+    const windows = new Map<number, SessionHistory[]>();
+    const openSessions = new Map<string, SessionHistory>();
     for (const row of history) {
-      const key = `${row.exerciseId}-${row.setNumber}`;
-      if (!historyPerKey.has(key)) historyPerKey.set(key, []);
-      const list = historyPerKey.get(key)!;
-      if (list.length < CONSENSUS_WINDOW) list.push(row as HistoryRow);
+      const slotId = row.programExerciseId;
+      if (slotId == null) continue;
+      const key = `${slotId}-${row.sessionId}`;
+      let session = openSessions.get(key);
+      if (!session) {
+        session = {
+          date: row.date,
+          feeling: row.feeling,
+          sets: [],
+          prescribedWorkingSets: row.prescribedWorkingSets,
+        };
+        openSessions.set(key, session);
+        const list = windows.get(slotId);
+        if (list) list.push(session);
+        else windows.set(slotId, [session]);
+      }
+      // Rows of one session normally agree. They disagree only when the plan
+      // changed mid-session, and the larger count is the safe reading: it can
+      // make a session unknown, which is inert, where the smaller could make a
+      // short session read as a clear.
+      if (
+        row.prescribedWorkingSets != null &&
+        (session.prescribedWorkingSets == null ||
+          row.prescribedWorkingSets > session.prescribedWorkingSets)
+      ) {
+        session.prescribedWorkingSets = row.prescribedWorkingSets;
+      }
+      session.sets.push({
+        setNumber: row.setNumber,
+        actualReps: row.actualReps,
+        targetReps: row.targetReps,
+        weightKg: row.weightKg,
+        durationSeconds: row.durationSeconds,
+        distanceMeters: row.distanceMeters,
+        rpe: row.rpe,
+        rir: row.rir,
+        wasEasy: row.wasEasy,
+      });
     }
 
-    // Step 5: build suggestion for each program set using the pure helper
+    // Step 5: build suggestion for each program set using the pure helper.
+    // Every working set of a slot is judged against the same window and the
+    // same scope, so under scope "all" one advance moves the whole exercise.
     const suggestions: Record<number, SetSuggestion> = {};
 
+    // D-8: the set the scope names decides clearing *and* effort, so the cap
+    // the engine judges against is that set's, not each set's own. Resolve it
+    // once per slot from the slot's working sets, in set order.
+    const workingBySlot = new Map<number, typeof programData>();
     for (const ps of programData) {
-      const key = `${ps.exerciseId}-${ps.setNumber}`;
-      const rows = historyPerKey.get(key) ?? [];
+      if (ps.setType && ps.setType !== "working") continue;
+      const list = workingBySlot.get(ps.programExerciseId);
+      if (list) list.push(ps);
+      else workingBySlot.set(ps.programExerciseId, [ps]);
+    }
+    for (const list of workingBySlot.values()) {
+      list.sort((a, b) => a.setNumber - b.setNumber);
+    }
 
+    for (const ps of programData) {
       // Any set marked anything other than "working" is excluded from
       // progression entirely.
       if (ps.setType && ps.setType !== "working") continue;
 
+      const sessions = windows.get(ps.programExerciseId) ?? [];
+
+      const working = workingBySlot.get(ps.programExerciseId) ?? [];
+      const scope = toScope(ps.progressionScope);
+      const capSet =
+        scope === "first"
+          ? working[0]
+          : scope === "set"
+            ? ps
+            : working[working.length - 1];
+
       const psData: ProgramSetData = {
         programSetId: ps.programSetId,
         setNumber: ps.setNumber,
+        repRangeMin: ps.repRangeMin,
+        repRangeMax: ps.repRangeMax,
         targetReps: ps.targetReps,
         durationSeconds: ps.durationSeconds,
         distanceMeters: ps.distanceMeters,
@@ -1265,13 +1600,29 @@ export async function getProgressiveSuggestions(
         exerciseId: ps.exerciseId,
         overloadIncrementKg: ps.overloadIncrementKg,
         overloadIncrementReps: ps.overloadIncrementReps,
-        progressionMode: ps.progressionMode,
+        scope: ps.progressionScope,
         requiredHits: ps.progressionRequiredHits,
+        advance: ps.progressionAdvance,
+        regress: ps.progressionRegress,
+        backoffPct: ps.progressionBackoffPct,
+        backoffAfter: ps.progressionBackoffAfter,
+        readiness: ps.progressionReadiness,
+        effortCap: capSet?.targetRir ?? null,
+        // E-13. Compared against the session's own plain date, so the
+        // granularity is a day: a session logged earlier on the day the setting
+        // changed still counts. The engine holds anything older inert rather
+        // than re-judging it under a rule that did not apply at the time.
+        configChangedAt: ps.progressionConfigAt
+          ? ps.progressionConfigAt.toISOString().slice(0, 10)
+          : null,
+        peakDurationSeconds: ps.peakDurationSeconds,
+        peakDistanceMeters: ps.peakDistanceMeters,
         movementPattern: ps.movementPattern,
         exerciseType: ps.exerciseTypeOverride ?? ps.exerciseTypeDefault,
+        equipment: ps.equipment,
         exerciseName: ps.exerciseName,
       };
-      const suggestion = buildSuggestion(rows, psData, profile, readiness);
+      const suggestion = buildSuggestion(sessions, psData, profile, readiness, today);
       if (suggestion) {
         suggestions[ps.programSetId] = suggestion;
       }
@@ -1393,6 +1744,12 @@ export async function getWorkoutInsight(
     // Count distinct exercises in the most recent completed session that
     // had at least one set logged at RPE ≥ 9 — the conservative "you got
     // cooked across multiple lifts" signal for mid-cycle deload nudges.
+    //
+    // Sets with no logged effort are excluded (null fails the comparison), so
+    // the count is of exercises the lifter *said* were near-max. That is the
+    // right reading for a nudge that tells someone to back off: silence is not
+    // evidence of a hard session. The count is lower than it used to be, when
+    // every tap wrote a 7 and only explicit RIR 0-1 could reach 9.
     db
       .select({
         cookedExerciseCount: sql<number>`COUNT(DISTINCT ${workoutSets.exerciseId})`,
@@ -1433,11 +1790,22 @@ export async function getWorkoutInsight(
     let status: ExerciseInsight["status"];
     if (sug.reason === "deload") {
       status = "deloading";
+    } else if (sug.reason === "re-approach") {
+      // Not "deloading". The pill would report a plateau remedy for someone
+      // who has simply been away, and "re-approach" means the opposite of a
+      // stall — this is the first session back, not the fourth failed one.
+      status = "held";
     } else if (sug.sessionsUntilDeload === 1) {
       status = "near_deload";
-    } else if (sug.reason === "progressed" || sug.reason === "progressed-reps" || sug.reason === "progressed-time" || sug.reason === "progressed-distance") {
+    } else if (sug.reason === "progressed" || sug.reason === "progressed-reps" || sug.reason === "reset" || sug.reason === "progressed-time" || sug.reason === "progressed-distance") {
+      // "reset" is progress: the load went up. The reps dropping back to the
+      // bottom of the range is the price of it, not a stall.
       status = "progressing";
     } else {
+      // Every held* reason lands here deliberately: the load is being held,
+      // which is what the pill reports. Why it is held — missing effort, no
+      // increment to add, or the cycle owning the target — is the set row's
+      // job to say, not four more pill states.
       status = "held";
     }
     // Keep worst status: deloading > near_deload > held > progressing
@@ -1510,7 +1878,22 @@ export async function getWorkoutInsight(
   }
 
   // ── Priority 3: stagnating — >50% sets held for 3+ sessions ────────────────
-  const tracked = suggestions.filter((s) => s.reason !== "manual");
+  // "held-anchored" joins "manual" outside the sample entirely: the training
+  // cycle prescribes those targets weekly, so progression proposes nothing for
+  // them and counting them would drag every endurance block toward "stagnating".
+  const tracked = suggestions.filter(
+    (s) =>
+      s.reason !== "manual" &&
+      s.reason !== "held-anchored" &&
+      // A layoff is not a plateau. Counting a re-approach here would tell
+      // someone coming back after three months to try drop sets.
+      s.reason !== "re-approach",
+  );
+  // "held-unknown" and "held-no-increment" are deliberately not counted: the
+  // remedy this insight offers (slow eccentrics, drop sets, a small deload) is
+  // advice for a plateau, and an exercise waiting on an unanswered effort
+  // prompt or on a missing increment has not shown one — it is waiting on a
+  // setting, and the set row already says which.
   const heldCount = tracked.filter((s) => s.reason === "held" || s.reason === "held-readiness").length;
   const isStagnating = sessionCount >= 3 && tracked.length > 0 && heldCount / tracked.length > 0.5;
 
@@ -1530,6 +1913,7 @@ export async function getWorkoutInsight(
     (s) =>
       s.reason === "progressed" ||
       s.reason === "progressed-reps" ||
+      s.reason === "reset" ||
       s.reason === "progressed-time" ||
       s.reason === "progressed-distance",
   ).length;

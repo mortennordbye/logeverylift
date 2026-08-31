@@ -1,5 +1,7 @@
 # UI audit — in-workout feel, inputs, and layout shift
 
+<!-- doc-claims: skip — a point-in-time audit; its file:line refs describe the code as measured, not as it is now. -->
+
 Working document. Each finding is independently actionable: **what**, **where**
 (file:line), **evidence**, **proposed fix**.
 

@@ -138,7 +138,8 @@ For rotation-based cycles (programs cycle in order regardless of which day of th
 Each exercise entry:
 {
   "idx": 0,
-  "mode": "weight",
+  "adv": "load",
+  "hits": 2,
   "incKg": 2.5,
   "incReps": 0,
   "exercise": {
@@ -156,6 +157,20 @@ Each exercise entry:
   ]
 }
 
+A rep-range exercise instead — the standard hypertrophy scheme. "repMin"/"repMax"
+are required for "adv": "double", and "reps" is the prescription today, which the
+app moves between the bounds:
+{
+  "idx": 1,
+  "adv": "double",
+  "hits": 1,
+  "incKg": 2.5,
+  "exercise": { "name": "Tricep Pushdown", "category": "strength", "area": "upper_body", "muscle": "triceps", "equipment": "cable", "pattern": "push", "type": "isolation" },
+  "sets": [
+    { "n": 1, "reps": 12, "kg": 25, "rest": 60, "repMin": 8, "repMax": 12 }
+  ]
+}
+
 Rules:
 - Do NOT generate rest day programs. Omit rest days from cycle slots entirely.
 - category: "strength", "cardio", or "flexibility"
@@ -164,7 +179,9 @@ Rules:
 - equipment: "barbell", "dumbbell", "machine", "cable", "bodyweight", "kettlebell", "bands", or "other"
 - pattern: "push", "pull", "hinge", "squat", "carry", "rotation", "isometric", or "cardio"
 - type: the exercise's ROLE IN THIS PROGRAM — "compound" (multi-joint main lifts — squat, bench, deadlift, OHP, rows, pull-ups), "isolation" (single-joint, one muscle — curls, raises, extensions), "accessory" (a compound/isolation movement used here as support work for a main lift), "plyometric" (explosive — box jumps, clapping push-ups), or "isometric" (static holds — planks, wall sits). Use "accessory" when a movement supports a main lift in this program even if it's compound elsewhere (e.g. an incline press accessory to a flat bench).
-- mode: "manual" (default — no auto-progression suggestions), "weight" (auto-suggest weight increases for compound lifts where progressive overload is the main driver), "smart" (weight + estimated rep adjustment, only for true working compounds at RPE 7+), or "reps" (bodyweight or rep-only progression). Default to "manual" for warm-ups, accessory/isolation work (type "accessory"/"isolation"), machines you don't push hard, and anything where auto-suggestions would be noise.
+- adv: what the app should move when the target is met. "manual" (default — shows the last session's numbers and proposes nothing), "load" (add weight: compound lifts where progressive overload is the main driver), "double" (work a rep range, add reps to the top of it, then add weight and drop back — the standard hypertrophy scheme, and it REQUIRES "repMin"/"repMax" on every working set), "reps" (add reps at the same weight: bodyweight work with no load to add — chin-ups, push-ups), "duration" (hold longer: planks, carries), "distance" (go further: running, rowing), or "none" (no suggestions at all). Default to "manual" for warm-ups, machines you don't push hard, and anything where auto-suggestions would be noise; prefer "double" over "load" for accessory and isolation work, which is where rep ranges belong.
+- hits: how many sessions in a row at target before the app suggests a bump. 1 for linear progression and for "double" (its reset already lands you at the bottom of the range, so a higher gate banks a clear it did not earn), 2 for everything else. Omit to take the default.
+- rir: optional, per set — the reps in reserve the athlete should stop with (0-5). Setting it means the app will NOT count a session until they log how hard it was, so use it only where autoregulation is the point of the exercise, and never on warm-ups.
 - kg: use 0 for bodyweight, null if unknown
 - rest: rest between sets in seconds (e.g. 90)
 - type: "working" (default — counts toward progression) or "warmup" (excluded from auto-progression suggestions). Use "warmup" for the first 1–2 light sets of compound lifts (squat, bench, deadlift, OHP, rows). Omit for accessories and isolation work — they don't need warmup sets in the program.
@@ -174,7 +191,7 @@ Rules:
 - prog in cycle slots must exactly match a name in the "programs" array
 - Exercise order: always list compound (type "compound") exercises before accessory/isolation (type "accessory"/"isolation") exercises within a program; finish with isometric core work where appropriate
 - Starting weights: use ~75% of 1RM for 3–5 rep sets, ~70% for 6–8 reps, ~65% for 8–12 reps, ~60% for 12–15 reps. Estimate for exercises without PR data using body weight as reference where appropriate.
-- Periodization: for beginner/novice experience levels use linear progression (same weight each session, add weight only when top of rep range is hit consistently). For intermediate/advanced use undulating periodization (vary rep ranges across sessions or programs, e.g. heavy/medium/light days).
+- Periodization: for beginner/novice experience levels use linear progression ("adv": "load" with "hits": 1). For intermediate/advanced use undulating periodization (vary rep ranges across sessions or programs, e.g. heavy/medium/light days) and prefer "adv": "double" on the accessory work.
 - Weekly volume: aim for 10–20 working sets per muscle group per week across all programs in the cycle combined. Avoid both under-training (< 10 sets) and junk volume (> 20 sets).${equipmentRule}${frequencyRule}${durationRule}
 ${exerciseListText}
 IMPORTANT: The list above contains exercises already in my library. Use those exact names whenever possible — only invent a new exercise name if the exercise genuinely does not exist in the list.

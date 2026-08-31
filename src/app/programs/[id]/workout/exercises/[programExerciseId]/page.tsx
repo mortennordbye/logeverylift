@@ -30,7 +30,6 @@ export default async function WorkoutExerciseSetsPage({ params }: Props) {
   if (!pe) notFound();
 
   const suggestions = suggestionsResult.success ? suggestionsResult.data : {};
-  const progressionMode = (pe.progressionMode ?? "manual") as "manual" | "weight" | "smart" | "reps" | "time" | "distance";
 
   return (
     <WorkoutSetsClient
@@ -46,8 +45,13 @@ export default async function WorkoutExerciseSetsPage({ params }: Props) {
       suggestions={suggestions}
       overloadIncrementKg={pe.overloadIncrementKg != null ? Number(pe.overloadIncrementKg) : null}
       overloadIncrementReps={Number(pe.overloadIncrementReps ?? 0)}
-      progressionMode={progressionMode}
+      progressionAdvance={pe.progressionAdvance}
       progressionRequiredHits={pe.progressionRequiredHits}
+      progressionScope={pe.progressionScope}
+      progressionRegress={pe.progressionRegress}
+      progressionBackoffPct={pe.progressionBackoffPct}
+      progressionBackoffAfter={pe.progressionBackoffAfter}
+      progressionReadiness={pe.progressionReadiness}
       progressionApplyToPlan={pe.progressionApplyToPlan}
       exerciseTypeDefault={pe.exercise.exerciseType}
       exerciseTypeOverride={pe.exerciseType}

@@ -2,24 +2,25 @@ import { test, expect } from "@playwright/test";
 import { openFirstExercise, openWorkout, tapAndSave } from "./helpers";
 
 /**
- * Per-exercise progression gate and the plan opt-in.
+ * The progression sheet's three layers, end to end.
  *
- * Covers the two settings that only exist server-side: how many sessions at
- * target are needed before a bump is suggested, and whether taking a bump
- * rewrites the planned sets. Both are columns on program_exercises, so this
- * spec also fails loudly if the migration hasn't been applied — a unit test
- * can't catch that, and the symptom in production is a 500 on tapping a pill.
+ * Covers the settings that only exist server-side — the preset's axis values,
+ * the gate, and whether taking a bump rewrites the planned sets — so this spec
+ * also fails loudly if a migration hasn't been applied. A unit test can't catch
+ * that, and the symptom in production is a 500 on tapping a pill.
  *
- * The rule sentence is asserted alongside them because it is built from the
- * live settings: if it doesn't move when the gate does, the sheet is lying
- * about what the app will actually do.
+ * The rule sentence is asserted alongside them because it is generated from the
+ * live axis values: if it doesn't move when a control does, the sheet is lying
+ * about what the app will actually do, which is the one thing layer 2 exists to
+ * prevent.
  *
- * Restores both settings at the end so re-runs start from the same state.
+ * Restores the exercise to Load, confirmed with the plan opt-in off at the end,
+ * so re-runs start from the same state. These settings live on a shared program.
  */
-test("progression gate and plan opt-in persist across a reload", async ({ page }) => {
-  // Four settings writes, each waited out to completion, plus two reloads and
-  // the sheet reopening after each — more than the default 30s budget.
-  test.setTimeout(90_000);
+test("preset, gate and plan opt-in persist across a reload", async ({ page }) => {
+  // Several settings writes, each waited out to completion, plus two reloads
+  // and the sheet reopening after each — more than the default 30s budget.
+  test.setTimeout(120_000);
   await openWorkout(page);
   await openFirstExercise(page);
 
@@ -29,29 +30,51 @@ test("progression gate and plan opt-in persist across a reload", async ({ page }
       timeout: 5_000,
     });
   };
+  const openAdvanced = async () => {
+    const toggle = page.getByRole("button", { name: "Advanced" });
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+      await toggle.click();
+    }
+  };
   const gate = () => page.getByRole("group", { name: "Sessions at target" });
+  // Layer 2, addressed directly. The sentence quotes the same words the preset
+  // descriptions do — "the first set" appears in both — so matching on text
+  // alone resolves to two elements and fails on strict mode.
+  const rule = () => page.getByTestId("progression-rule");
 
   await openSheet();
 
-  // Weight mode: reps stay put, only the load moves. Also the only mode where
-  // the gate copy mentions a rep target.
-  await tapAndSave(page, page.getByRole("button", { name: /^Weight/ }), {
-    bodyIncludes: '"weight"',
+  // ── Layer 1: the preset writes every axis in one tap ──────────────────────
+  // Load, confirmed is fixed reps, gate 2, back off 10% after 3.
+  await tapAndSave(page, page.getByRole("button", { name: /^Load, confirmed/ }), {
+    bodyIncludes: '"advance":"load"',
   });
 
-  await expect(gate()).toBeVisible({ timeout: 5_000 });
-
-  // The rule sentence quotes the live gate.
-  await expect(page.getByText(/2 of the last 5 sessions/)).toBeVisible({
+  // ── Layer 2: the sentence quotes the axes it just wrote ───────────────────
+  await expect(rule()).toContainText(/2 sessions in a row/, { timeout: 5_000 });
+  await expect(rule()).toContainText(/Back off 10% after 3 workouts/, {
     timeout: 5_000,
   });
 
+  // ── Layer 3: an individual axis, and the relabel to Custom ────────────────
+  await openAdvanced();
+  await expect(gate()).toBeVisible({ timeout: 5_000 });
   await tapAndSave(page, gate().getByRole("button", { name: "3", exact: true }), {
     bodyIncludes: '"requiredHits":3',
   });
-  await expect(page.getByText(/3 of the last 5 sessions/)).toBeVisible({
+  await expect(rule()).toContainText(/3 sessions in a row/, { timeout: 5_000 });
+  // A gate of 3 matches no preset, so the badge says so. This is the whole
+  // point of deriving the label rather than storing it.
+  await expect(page.getByText("Custom", { exact: true }).first()).toBeVisible({
     timeout: 5_000,
   });
+
+  // Scope, which had no control at all until this phase.
+  const scope = () => page.getByRole("group", { name: "Which sets have to clear" });
+  await tapAndSave(page, scope().getByRole("button", { name: "First set" }), {
+    bodyIncludes: '"scope":"first"',
+  });
+  await expect(rule()).toContainText(/the first set/, { timeout: 5_000 });
 
   const applyToPlan = page.getByRole("switch");
   await expect(applyToPlan).toHaveAttribute("aria-checked", "false");
@@ -62,23 +85,21 @@ test("progression gate and plan opt-in persist across a reload", async ({ page }
   // still set below came back out of the database.
   await page.reload();
   await openSheet();
-  await expect(page.getByText(/3 of the last 5 sessions/)).toBeVisible({
-    timeout: 5_000,
-  });
+  await expect(rule()).toContainText(/3 sessions in a row/, { timeout: 5_000 });
+  await expect(rule()).toContainText(/the first set/, { timeout: 5_000 });
   await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "true");
 
-  // Restore, and prove the restore itself persisted — these settings live on
-  // the shared program, so a silent failure here leaks into every later run.
+  // Restore, and prove the restore itself persisted — a silent failure here
+  // leaks into every later run.
   await tapAndSave(page, page.getByRole("switch"), {
     bodyIncludes: '"applyToPlan":false',
   });
-  await tapAndSave(page, gate().getByRole("button", { name: "2", exact: true }), {
-    bodyIncludes: '"requiredHits":2',
+  await tapAndSave(page, page.getByRole("button", { name: /^Load, confirmed/ }), {
+    bodyIncludes: '"advance":"load"',
   });
   await page.reload();
   await openSheet();
-  await expect(page.getByText(/2 of the last 5 sessions/)).toBeVisible({
-    timeout: 5_000,
-  });
+  await expect(rule()).toContainText(/2 sessions in a row/, { timeout: 5_000 });
+  await expect(rule()).toContainText(/every set/, { timeout: 5_000 });
   await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "false");
 });

@@ -324,7 +324,7 @@ export async function exportAllSessions(): Promise<ActionResult<ExportedSessions
         distanceMeters: r.distanceMeters ?? null,
         inclinePercent: r.inclinePercent ?? null,
         heartRateZone: r.heartRateZone ?? null,
-        rpe: r.rpe,
+        rpe: r.rpe ?? null,
         restTimeSeconds: r.restTimeSeconds,
         isCompleted: r.isCompleted,
       });

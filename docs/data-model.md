@@ -25,7 +25,8 @@ The shared library (system rows have `userId IS NULL`; custom rows are user-owne
 
 ### `programs` / `program_exercises` / `program_sets` — `src/db/schema/programs.ts`
 - `programs.createdByCycleId` → `training_cycles` (cascade). Set when a generator built the program; null for hand-built. Cascade-delete cleans generated programs when their cycle is deleted.
-- `program_exercises.progressionMode` — `none|manual|weight|smart|reps|time|distance` (plain text).
+- `program_exercises.progressionAdvance` — `none|manual|load|reps|double|duration|distance` (plain text). What moves when the progression gate is met. Alongside it: `progressionScope`, `progressionRequiredHits`, `progressionRegress`, `progressionBackoffPct`, `progressionBackoffAfter`, `progressionReadiness`, and `progressionConfigAt` (when the judging rules last changed — sessions logged before it are dropped from the window).
+- `program_exercises.progressionMode` — `none|manual|weight|smart|double|reps|time|distance` (plain text). **Retired and unread.** Still written and still carried by sharing and export so a client that predates the axes has something to restore from; it goes a release after them.
 - `program_exercises.exerciseType` — **per-program override** of the exercise's type (null = inherit the exercise default). Resolved type = `programExercise.exerciseType ?? exercise.exerciseType` (`resolveExerciseType` in `src/lib/utils/exercise-type.ts`).
 - `program_sets` — the per-set blueprint: `targetReps`, `weightKg`, `durationSeconds`, `distanceMeters`, `inclinePercent`, `targetHeartRateZone`, `restTimeSeconds`, `setType` (`working|warmup`), **`targetRir`** (prescribed RIR cap), `sessionRole` (`"work"` = a hard interval rep the cycle phase-swaps), and the periodization anchors `peakDistanceMeters` / `peakDurationSeconds`.
 
