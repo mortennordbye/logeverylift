@@ -148,7 +148,7 @@ Before suggesting `git push` for any change that touches a **critical flow** —
 **Skip if:** the change is doc-only (CLAUDE.md, BACKLOG.md, comments), test-only, dependency bump with no code touch, or a `chore:` purely about formatting / lint silencing. Say "skipping smoke — change is X" so the skip is visible.
 
 **Prereqs (verify before starting):**
-- Dev server reachable at `http://localhost:3000`. If not, ask the user to run `make dev` first; do not start it autonomously.
+- Dev server reachable at `http://localhost:3000`. If not, start it yourself with `make dev` (approved 2026-09-07 — no need to ask first).
 - `E2E_USER_EMAIL` and `E2E_USER_PASSWORD` — the test-account credentials live in `.env.local` (gitignored) under those keys. Read them from there (e.g. `set -a; . ./.env.local; set +a`) rather than asking the user. Only ask if `.env.local` is absent or the keys are missing.
 
 **Tools:** `mcp__playwright__browser_navigate`, `browser_snapshot`, `browser_click`, `browser_fill_form`, `browser_wait_for`, `browser_take_screenshot`, `browser_console_messages`. Save any failure screenshot to `.playwright-mcp/<flow>-fail.png` (folder is gitignored).
