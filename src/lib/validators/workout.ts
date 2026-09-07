@@ -277,6 +277,12 @@ export const setProgramExerciseApplyToPlanSchema = z.object({
   applyToPlan: z.boolean(),
 });
 
+// Opt-out: never show the post-set effort prompt for this exercise.
+export const setProgramExerciseSuppressEffortPromptSchema = z.object({
+  programExerciseId: z.number().int().positive(),
+  suppressEffortPrompt: z.boolean(),
+});
+
 // Batch-apply accepted suggestions to a slot's planned sets. Every entry must
 // carry at least one value, otherwise it is a no-op row that would only widen
 // the write surface.

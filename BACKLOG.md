@@ -72,6 +72,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Concrete user feedback that the per-set badges are still too noisy now that warm-ups are filtered and the apply propagates.
 - **Touchpoints:** `src/components/features/WorkoutSetsList.tsx:1415-1635`.
 
+### Effort-prompt suppression doesn't round-trip through export/import
+- **What:** `progressionSuppressEffortPrompt` (the "Skip the effort prompt" toggle, SI-43 in `docs/specs/smart-incrementation.md`) isn't included in the JSON export/import format, unlike its sibling `progressionApplyToPlan` which is explicitly round-tripped (`src/lib/actions/programs.ts:1021,1090,1263`, `src/lib/validators/workout.ts:500`). An imported program silently defaults the flag to `false` (prompt shown) regardless of what the exporter had set.
+- **Why deferred:** Degrades gracefully — worst case is the prompt reappears on import, not silent data loss — and adding it means touching the export/import Zod schema plus its round-trip test (`src/__tests__/validators.test.ts:674-695` covers `applyToPlan`'s case) for a flag that just shipped and has no usage signal yet.
+- **Unblocked by:** Confirmation the toggle sees real use; then add it next to `progressionApplyToPlan` in the same three call sites plus the import schema and its test.
+- **Touchpoints:** `src/lib/actions/programs.ts` (`exportProgram`, `exportAllPrograms`, `importProgram`), `src/lib/validators/workout.ts:500`, `src/__tests__/validators.test.ts:674-695`.
+
 ### Logged weight vs program-planned weight quirk
 - **What:** `buildSuggestion` takes `baseWeight` from the last logged session (`src/lib/utils/progression.ts:699`), not the program's planned weight. If a user logs a one-off heavy single, the next suggestion is built off that single — which then usually shows "held" because the consensus gate kicks in. Surprising in edge cases.
 - **Why deferred:** Rare in practice; the consensus gate masks most surprise. Tier 1 changes don't make it worse.

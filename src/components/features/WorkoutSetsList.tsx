@@ -81,6 +81,7 @@ type WorkoutSetsListProps = {
   suggestions?: Record<number, SetSuggestionDisplay>;
   onApplySuggestion?: (setId: number, weightKg: number, adjustedReps?: number, durationSeconds?: number, distanceMeters?: number) => void;
   onApplyRepSuggestion?: (setId: number, reps: number) => void;
+  hideEffortPrompt?: boolean;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -105,6 +106,7 @@ export function WorkoutSetsList({
   suggestions,
   onApplySuggestion,
   onApplyRepSuggestion,
+  hideEffortPrompt = false,
 }: WorkoutSetsListProps) {
   const router = useRouter();
   const workoutSession = useWorkoutSession();
@@ -287,9 +289,13 @@ export function WorkoutSetsList({
    * logged, and only while that set carries no effort. Until it is answered
    * the session is `unknown` — neither a clear nor a miss — so the prompt is
    * the thing standing between the lifter and their dots moving, and it says so.
+   *
+   * It can also be hidden per-exercise regardless of the cap (`hideEffortPrompt`) —
+   * either the lifter opted out explicitly, or the exercise isn't using the
+   * progression engine at all.
    */
   const effortPrompt = (() => {
-    if (!isWorkout || effortSkipped) return null;
+    if (!isWorkout || effortSkipped || hideEffortPrompt) return null;
     const working = flatItems.filter(
       (i): i is SetFlatItem => i.type === "set" && (i.set.setType ?? "working") === "working",
     );

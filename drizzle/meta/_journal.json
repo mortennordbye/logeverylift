@@ -365,6 +365,13 @@
       "when": 1788022966655,
       "tag": "0051_progression_axes",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1788023000000,
+      "tag": "0052_progression_suppress_effort_prompt",
+      "breakpoints": true
     }
   ]
 }

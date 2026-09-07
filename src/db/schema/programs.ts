@@ -117,6 +117,15 @@ export const programExercises = pgTable("program_exercises", {
   progressionApplyToPlan: boolean("progression_apply_to_plan")
     .notNull()
     .default(false),
+  // Opt-out: never show the post-set effort prompt for this exercise, even
+  // when a targetRir cap is prescribed on its sets. Independent of the cap
+  // itself — the cap can still gate progression/grading, this only silences
+  // the UI nudge to log it. Does not stamp progressionConfigAt, same reason
+  // as progressionApplyToPlan above: it changes what is asked, not what
+  // counts as a clear.
+  progressionSuppressEffortPrompt: boolean("progression_suppress_effort_prompt")
+    .notNull()
+    .default(false),
   // Per-program override of the exercise's intrinsic type — e.g. a compound
   // bench press used as accessory work in this program. Null = inherit the
   // exercise's default (resolved type = this ?? exercise.exerciseType).

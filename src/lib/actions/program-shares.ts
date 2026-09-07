@@ -207,6 +207,7 @@ export async function copySharedProgram(
             progressionMode: pe.progressionMode ?? "manual",
             progressionRequiredHits: pe.progressionRequiredHits ?? null,
             progressionApplyToPlan: pe.progressionApplyToPlan ?? false,
+            progressionSuppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
             // The axes. Without them a shared program arrives on the defaults —
             // manual, back off 10% after 3 — whatever scheme its author was
             // actually running, which is the same failure the rep range had.

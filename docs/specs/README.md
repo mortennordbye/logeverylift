@@ -62,5 +62,5 @@ Fill the Divergences table *last* — writing a rule down is what makes you chec
 
 | Spec | Covers | Last verified |
 |---|---|---|
-| [smart-incrementation.md](smart-incrementation.md) | Progressive overload: increment sizing, the confidence/consensus gates, deload, retry, readiness, felt-easy, the seven progression modes, the plan ratchet | 2026-08-24 @ `3a09857` |
+| [smart-incrementation.md](smart-incrementation.md) | Progressive overload: increment sizing, the confidence/consensus gates, deload, retry, readiness, felt-easy, the eight configurable axes, the plan ratchet | 2026-09-07 @ `94a8048` |
 | [cycle-periodization.md](cycle-periodization.md) | Block-level volume periodization: the ramp/deload/taper curve, deload cadence, the ACWR guardrail, interval and strength phase prescriptions, the no-wearable adaptation nudge, the weekly sync | 2026-08-25 @ `91c1646` |

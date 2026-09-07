@@ -7,6 +7,7 @@ import {
   setProgramExerciseApplyToPlan,
   setProgramExerciseProgression,
   setProgramExerciseSetDefaults,
+  setProgramExerciseSuppressEffortPrompt,
   setProgramExerciseType,
   updateProgramExerciseIncrement,
   updateProgramExerciseIncrementReps,
@@ -150,6 +151,8 @@ type Props = {
   progressionReadiness?: string | null;
   /** Opt-in: accepting a bump also rewrites the planned sets. */
   progressionApplyToPlan?: boolean;
+  /** Opt-out: never show the post-set effort prompt for this exercise. */
+  progressionSuppressEffortPrompt?: boolean;
   /** Exercise's intrinsic type (the default shown when there's no override). */
   exerciseTypeDefault?: string | null;
   /** Per-program override of the exercise type; null = inherit the default. */
@@ -178,6 +181,7 @@ export function WorkoutSetsClient({
   progressionBackoffAfter: initialBackoffAfter = null,
   progressionReadiness: initialReadiness = null,
   progressionApplyToPlan: initialApplyToPlan = false,
+  progressionSuppressEffortPrompt: initialSuppressEffortPrompt = false,
   exerciseTypeDefault = null,
   exerciseTypeOverride: initialTypeOverride = null,
   initialEditing = false,
@@ -192,6 +196,9 @@ export function WorkoutSetsClient({
   const [incrementReps, setIncrementReps] = useState(initialIncrementReps);
   const [typeOverride, setTypeOverride] = useState<string | null>(initialTypeOverride);
   const [applyToPlan, setApplyToPlan] = useState(initialApplyToPlan);
+  const [suppressEffortPrompt, setSuppressEffortPrompt] = useState(
+    initialSuppressEffortPrompt,
+  );
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showCustomKg, setShowCustomKg] = useState(false);
   const [showCustomReps, setShowCustomReps] = useState(false);
@@ -558,6 +565,19 @@ export function WorkoutSetsClient({
     router.refresh();
   }
 
+  async function handleSuppressEffortPromptChange(next: boolean) {
+    setSuppressEffortPrompt(next);
+    const result = await setProgramExerciseSuppressEffortPrompt({
+      programExerciseId,
+      suppressEffortPrompt: next,
+    });
+    if (!result.success) {
+      setSuppressEffortPrompt(!next);
+      return;
+    }
+    router.refresh();
+  }
+
   async function handleIncrementRepsChange(newIncrement: number) {
     setIncrementReps(newIncrement);
     setCustomRepInput("");
@@ -713,6 +733,7 @@ export function WorkoutSetsClient({
             suggestions={suggestions}
             onApplySuggestion={isWorkout ? applySuggestion : undefined}
             onApplyRepSuggestion={isWorkout ? applyRepSuggestion : undefined}
+            hideEffortPrompt={suppressEffortPrompt || axes.advance === "none"}
           />
         )}
       </div>
@@ -1104,6 +1125,45 @@ export function WorkoutSetsClient({
                       <span
                         className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
                           applyToPlan ? "translate-x-[22px]" : "translate-x-0.5"
+                        }`}
+                      />
+                    </span>
+                  </button>
+                </div>
+
+                {/* Effort-prompt opt-out. Unlike the plan opt-in above, this
+                    stays fully active regardless of scheme — it's meant to
+                    cover exercises with no progression engagement at all. */}
+                <div className="border-t border-border">
+                  <button
+                    role="switch"
+                    aria-checked={suppressEffortPrompt}
+                    onClick={() => handleSuppressEffortPromptChange(!suppressEffortPrompt)}
+                    className="w-full flex items-center justify-between gap-3 px-4 py-3 min-h-[44px] text-left active:bg-muted/50 transition-colors"
+                  >
+                    <span className="flex-1 min-w-0">
+                      <span className="block text-base font-medium">
+                        Skip the effort prompt
+                      </span>
+                      <span className="block text-xs text-muted-foreground">
+                        Never ask how much was left after the last set, even
+                        if this exercise has an effort cap
+                      </span>
+                      {suppressEffortPrompt && axes.advance !== "none" && (
+                        <span className="block text-xs text-muted-foreground mt-1">
+                          Progress on this exercise may stay pending — nothing
+                          will supply the effort data it&apos;s waiting on
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                        suppressEffortPrompt ? "bg-primary" : "bg-border"
+                      }`}
+                    >
+                      <span
+                        className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                          suppressEffortPrompt ? "translate-x-[22px]" : "translate-x-0.5"
                         }`}
                       />
                     </span>
