@@ -24,6 +24,7 @@ import {
   setProgramExerciseApplyToPlanSchema,
   setProgramExerciseProgressionSchema,
   setProgramExerciseSetDefaultsSchema,
+  setProgramExerciseSuppressEffortPromptSchema,
   setProgramExerciseTypeSchema,
   updateProgramSchema,
   updateProgramSetSchema,
@@ -398,6 +399,48 @@ export async function setProgramExerciseApplyToPlan(
   } catch (err) {
     console.error("[setProgramExerciseApplyToPlan] failed", err);
     return { success: false, error: "Failed to update plan setting" };
+  }
+}
+
+/**
+ * Opt out (or back in) of the post-set effort prompt for this exercise slot.
+ */
+export async function setProgramExerciseSuppressEffortPrompt(
+  data: unknown,
+): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+  const validation = setProgramExerciseSuppressEffortPromptSchema.safeParse(data);
+  if (!validation.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: validation.error.flatten().fieldErrors,
+    };
+  }
+  const { programExerciseId, suppressEffortPrompt } = validation.data;
+  try {
+    const [check] = await db
+      .select({ userId: programs.userId })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programExercises.id, programExerciseId))
+      .limit(1);
+    if (!check || check.userId !== auth.user.id) {
+      return { success: false, error: "Not found" };
+    }
+    const [pe] = await db
+      .update(programExercises)
+      .set({ progressionSuppressEffortPrompt: suppressEffortPrompt })
+      .where(eq(programExercises.id, programExerciseId))
+      .returning({ programId: programExercises.programId });
+    if (pe) {
+      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
+      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
+    }
+    return { success: true, data: undefined };
+  } catch (err) {
+    console.error("[setProgramExerciseSuppressEffortPrompt] failed", err);
+    return { success: false, error: "Failed to update effort prompt setting" };
   }
 }
 

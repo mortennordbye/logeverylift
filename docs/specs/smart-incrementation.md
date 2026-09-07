@@ -1,12 +1,14 @@
 # Smart incrementation
 
 > **Status:** implemented
-> **Last verified:** 2026-08-29 against `8c3fd1b`
+> **Last verified:** 2026-09-07 against `94a8048`
 > **Source of truth:** `src/lib/utils/progression.ts`, `src/lib/utils/progression-presets.ts`, `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`), `src/lib/actions/programs.ts` (`applyProgressionToPlan` + the settings actions), `src/lib/validators/workout.ts`, `src/components/features/{WorkoutSetsClient,WorkoutSetsList,SetEditView}.tsx`
 >
-> Stale check: `git log 8c3fd1b..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
+> Stale check: `git log 94a8048..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
 >
 > **Rewritten 2026-08-29 by phases 5 and 6 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md)**, which completed the rebuild. The engine is now one machine reading eight configurable axes; `progressionMode` is retired and unread. What changed here: the seven modes became the advance axis (SI-22 to SI-31), the effort cap became real (SI-10), the back-off and readiness rules became settings rather than constants (SI-17, SI-21), duration and distance advance from the target rather than from what was achieved (SI-29, SI-30), an anchored set is never an advance target (SI-30a), and the rate rule (SI-41) and the provenance section below are stated for the first time. Phase 6 then rewrote the increment ladder's order and added its granularity rule (SI-3, SI-4a), added staleness (SI-14a), gated the 1RM record (SI-42), and made a missing rep increment mean one rep rather than none (SI-28).
+>
+> **2026-09-07:** added SI-43 and SI-43a — the effort prompt can now be hidden per-exercise (explicit opt-out, or automatically when the advance axis is `none`), independent of the `targetRir` cap.
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
 
@@ -36,7 +38,7 @@ The two are independent and easy to confuse, because they share words and even a
 
 ## Inputs
 
-Per-exercise settings on `program_exercises`: the six axis columns (`progressionAdvance`, `progressionScope`, `progressionRequiredHits`, `progressionRegress`, `progressionBackoffPct`, `progressionBackoffAfter`, `progressionReadiness`), plus `overloadIncrementKg`, `overloadIncrementReps`, `progressionApplyToPlan`, `exerciseType` and `progressionConfigAt`. Per-set on `program_sets`: `setType`, `targetReps`, `repRangeMin`, `repRangeMax`, `targetRir`, `durationSeconds`, `distanceMeters`, and the cycle anchors `peakDurationSeconds` and `peakDistanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it, and both null when the lifter reported nothing), `wasEasy`, `isFailed`. Also from `workout_sets`, and load-bearing for SI-7a to SI-7c: `programExerciseId` (which plan slot the row belongs to), `setType` and `prescribedWorkingSets`, all snapshotted at log time so a session describes itself rather than being re-read against today's plan. Schema detail is in [`../data-model.md`](../data-model.md).
+Per-exercise settings on `program_exercises`: the six axis columns (`progressionAdvance`, `progressionScope`, `progressionRequiredHits`, `progressionRegress`, `progressionBackoffPct`, `progressionBackoffAfter`, `progressionReadiness`), plus `overloadIncrementKg`, `overloadIncrementReps`, `progressionApplyToPlan`, `progressionSuppressEffortPrompt`, `exerciseType` and `progressionConfigAt`. Per-set on `program_sets`: `setType`, `targetReps`, `repRangeMin`, `repRangeMax`, `targetRir`, `durationSeconds`, `distanceMeters`, and the cycle anchors `peakDurationSeconds` and `peakDistanceMeters`. Effort from `workout_sets`: `rir` (with `rpe` derived from it, and both null when the lifter reported nothing), `wasEasy`, `isFailed`. Also from `workout_sets`, and load-bearing for SI-7a to SI-7c: `programExerciseId` (which plan slot the row belongs to), `setType` and `prescribedWorkingSets`, all snapshotted at log time so a session describes itself rather than being re-read against today's plan. Schema detail is in [`../data-model.md`](../data-model.md).
 
 `progressionMode` is **not** an input. The column still exists and is still written, so a share, an export or a cached client that predates the axes has something to read, but no progression code reads it. It goes a release after this one.
 
@@ -194,6 +196,20 @@ Under scope `all` the effort cap is read from the **last** working set, where re
 
 *Why:* the earlier rule — "the last set carrying logged effort speaks for the session" — contradicted scope `first` by letting two different sets adjudicate one session, and on a top-set prescription it read the back-off's looser floor instead of the top set's. One set decides both questions, and it is the set the scope already named.
 *Covered by:* `progressive-suggestions.test.ts` — "reads the cap off the set the scope names — last, under scope all", "reads the first set's effort under scope first".
+
+### SI-43 — The effort prompt can be hidden per-exercise, independent of the cap
+`WorkoutSetsList` renders the effort prompt only when `hideEffortPrompt` is false (`WorkoutSetsList.tsx:298`), on top of the existing per-set gate (`targetRir` prescribed, last working set logged, no effort logged yet). `WorkoutSetsClient` computes that flag as `suppressEffortPrompt || axes.advance === "none"` (`WorkoutSetsClient.tsx:736`): either the lifter explicitly opted out via the "Skip the effort prompt" toggle (`progressionApplyToPlan`'s sibling column, `progressionSuppressEffortPrompt`), or the exercise isn't using the advance axis at all (SI-16), in which case nothing was ever going to read the answer.
+
+This only silences the UI nudge. It does not change SI-10/SI-10a: a cap still decides clearing exactly as before, for any effort that does get logged some other way (the miss sheet's RIR chips).
+
+*Why:* SI-10's opt-in principle — "nobody is blocked by a setting they did not choose" — was previously expressed only through the cap itself. An exercise with no progression engagement could still carry a stale cap and get nagged anyway; an exercise with active progression could have a lifter who simply doesn't want to answer. Both are opt-outs the cap alone couldn't express.
+*Covered by:* none.
+
+### SI-43a — Suppressing the prompt while a cap and an active advance both stand leaves the exercise permanently unknown
+Turning the toggle on for an exercise that still has `progressionAdvance` other than `none` and a `targetRir` cap prescribed does not touch the cap or the advance — it only stops anything from ever supplying the RIR that SI-10 reads. Per SI-10a, every session on that exercise's deciding set then resolves to `unknown`, indefinitely: never a clear, never a miss.
+
+*Why:* this is a real, and easy to miss, interaction rather than a bug — the toggle is explicitly an opt-out of being asked, and SI-10a already treats unanswered effort as inert rather than assumed. Stated here so the two rules aren't read as contradicting each other.
+*Covered by:* none.
 
 ### SI-11 — In weight-bearing modes, a hit only counts at the current load or heavier
 Hits logged below the base weight are excluded from the count.
@@ -532,6 +548,7 @@ Rules with no automated test:
 | SI-8 | The window filter lives in SQL; the unit suite starts from pre-fetched rows |
 | SI-16 | Advance `none` returning null |
 | SI-38, SI-39, SI-40 | Server-side ratchet guards — no action-level test exists |
+| SI-43, SI-43a | UI-level gating in `WorkoutSetsList`/`WorkoutSetsClient` — no component test exists for either file |
 | SI-42's effort gate | Inside `detectAndRecordPRs`, a Server Action helper. Its flag half is covered |
 
 One thing the unit suite structurally cannot reach, and it has no other test: **the effort cap's resolution against the scope.** `buildSuggestion` takes `effortCap` already resolved; the code that picks *which* set's `target_rir` that is lives in `getProgressiveSuggestions`, beside the query. SI-10b is tested through the resolved value, not through the resolution.
