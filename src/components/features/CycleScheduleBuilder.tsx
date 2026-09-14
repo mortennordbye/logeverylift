@@ -52,11 +52,15 @@ function ProgramPicker({
   onToggleAuto,
 }: {
   programs: Program[];
-  onSelect: (programId: number, label: string) => void;
+  /** `autoComplete` is the switch's current value, saved with the program. */
+  onSelect: (programId: number, label: string, autoComplete: boolean) => void;
   onRest: () => void;
   onCancel: () => void;
   autoComplete?: boolean;
-  /** Present only when the slot already has a program. */
+  /**
+   * Saves the switch immediately. Present only when the slot already has a
+   * program; otherwise the value rides along with the program picked next.
+   */
   onToggleAuto?: (next: boolean) => void;
 }) {
   const [auto, setAuto] = useState(autoComplete ?? false);
@@ -74,7 +78,7 @@ function ProgramPicker({
           </button>
         </div>
 
-        {onToggleAuto && (
+        {programs.length > 0 && (
           <div className="flex items-center justify-between gap-3 px-4 py-2 mb-1 rounded-xl bg-muted min-h-[44px]">
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium">Complete automatically</p>
@@ -88,7 +92,7 @@ function ProgramPicker({
               aria-label="Toggle complete automatically"
               onClick={() => {
                 setAuto(!auto);
-                onToggleAuto(!auto);
+                onToggleAuto?.(!auto);
               }}
               className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
                 auto ? "bg-primary" : "bg-border"
@@ -115,7 +119,7 @@ function ProgramPicker({
         {programs.map((p) => (
           <button
             key={p.id}
-            onClick={() => onSelect(p.id, p.name)}
+            onClick={() => onSelect(p.id, p.name, auto)}
             className="flex items-center px-4 py-3 rounded-xl text-sm font-medium active:bg-muted transition-colors"
           >
             {p.name}
@@ -150,13 +154,14 @@ function DayOfWeekBuilder({
     cycle.slots.map((s) => [s.dayOfWeek!, s]),
   );
 
-  async function handleSelectProgram(programId: number, label: string) {
+  async function handleSelectProgram(programId: number, label: string, autoComplete: boolean) {
     if (pickerDay === null) return;
     await upsertCycleSlot({
       trainingCycleId: cycle.id,
       dayOfWeek: pickerDay,
       programId,
       label,
+      autoComplete,
     });
     setPickerDay(null);
     router.refresh();
@@ -347,13 +352,14 @@ function RotationBuilder({
     router.refresh();
   }
 
-  async function handleSelectProgram(programId: number, label: string) {
+  async function handleSelectProgram(programId: number, label: string, autoComplete: boolean) {
     if (!editingSlot) return;
     await upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: editingSlot.orderIndex ?? undefined,
       programId,
       label,
+      autoComplete,
     });
     setEditingSlot(null);
     router.refresh();
