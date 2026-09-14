@@ -37,7 +37,7 @@ The committed `drizzle/*.sql` is still the source of truth for prod (`db:migrate
 ## Settings live in two stores
 
 User-facing "settings" are split, and picking the wrong store silently fails:
-- **Client-only prefs → localStorage** via `theme-provider.tsx` (`useTheme`): theme, accentColor, weeklyGoal, defaultIncrementKg/Reps, uiScale. `SettingsClient.tsx` reads/writes them through the context; the server never sees them.
+- **Client-only prefs → localStorage** via `theme-provider.tsx` (`useTheme`): theme, accentColor, weeklyGoal, uiScale. `SettingsClient.tsx` reads/writes them through the context; the server never sees them.
 - **Server-read prefs → a `users` DB column**: `showActivityToFriends`, `missedWorkoutsEnabled`, etc. — anything a Server Component or Server Action must honour.
 
 **The trap:** the home page (`src/app/page.tsx`) and `getActiveCycleForUser` are server-side. A setting that gates server-rendered output (e.g. the missed-workout off-switch) **must** be a DB column. Add it to `theme-provider`/localStorage like the other settings and the server never sees it — the toggle does nothing.

@@ -14,10 +14,6 @@ interface ThemeContextValue {
   setCustomAccentHex: (hex: string) => void;
   weeklyGoal: number;
   setWeeklyGoal: (n: number) => void;
-  defaultIncrementKg: number;
-  setDefaultIncrementKg: (n: number) => void;
-  defaultIncrementReps: number;
-  setDefaultIncrementReps: (n: number) => void;
   uiScale: number;
   setUiScale: (scale: number) => void;
 }
@@ -53,8 +49,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [accentColor, setAccentColorState] = useState<AccentColor>("blue");
   const [customAccentHex, setCustomAccentHexState] = useState("#5B8FFF");
   const [weeklyGoal, setWeeklyGoalState] = useState(4);
-  const [defaultIncrementKg, setDefaultIncrementKgState] = useState(2.5);
-  const [defaultIncrementReps, setDefaultIncrementRepsState] = useState(0);
   const [uiScale, setUiScaleState] = useState(1);
 
   const applyAccentColor = (color: AccentColor, currentTheme: Theme, hexOverride?: string) => {
@@ -76,16 +70,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const storedAccent = (localStorage.getItem("accentColor") as AccentColor | null) ?? "blue";
     const storedCustomHex = localStorage.getItem("customAccentHex") ?? "#5B8FFF";
     const storedGoal = localStorage.getItem("weeklyGoal");
-    const storedIncrementKg = localStorage.getItem("defaultIncrementKg");
-    const storedIncrementReps = localStorage.getItem("defaultIncrementReps");
     const storedUiScale = localStorage.getItem("uiScale");
 
     setTheme(storedTheme);
     setAccentColorState(storedAccent);
     setCustomAccentHexState(storedCustomHex);
     setWeeklyGoalState(storedGoal ? Number(storedGoal) : 4);
-    setDefaultIncrementKgState(storedIncrementKg ? Number(storedIncrementKg) : 2.5);
-    setDefaultIncrementRepsState(storedIncrementReps ? Number(storedIncrementReps) : 0);
     const parsedScale = storedUiScale ? Number(storedUiScale) : 1;
     setUiScaleState(parsedScale);
     document.documentElement.style.zoom = String(parsedScale);
@@ -134,20 +124,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const setDefaultIncrementKg = (n: number) => {
-    setDefaultIncrementKgState(n);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("defaultIncrementKg", String(n));
-    }
-  };
-
-  const setDefaultIncrementReps = (n: number) => {
-    setDefaultIncrementRepsState(n);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("defaultIncrementReps", String(n));
-    }
-  };
-
   const setUiScale = (scale: number) => {
     setUiScaleState(scale);
     if (typeof window !== "undefined") {
@@ -158,7 +134,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <ThemeContext.Provider
-      value={{ theme, toggleTheme, accentColor, setAccentColor, customAccentHex, setCustomAccentHex, weeklyGoal, setWeeklyGoal, defaultIncrementKg, setDefaultIncrementKg, defaultIncrementReps, setDefaultIncrementReps, uiScale, setUiScale }}
+      value={{ theme, toggleTheme, accentColor, setAccentColor, customAccentHex, setCustomAccentHex, weeklyGoal, setWeeklyGoal, uiScale, setUiScale }}
     >
       {children}
     </ThemeContext.Provider>

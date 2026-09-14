@@ -231,17 +231,23 @@ export function WorkoutSetsList({
 
   // ── Persist helpers ─────────────────────────────────────────────────────────
 
+  // Rest values this list has written, by set id. The loaded `sets` lag a write
+  // until router.refresh() lands, so diffing against them alone skipped an edit
+  // made in that window: changing a rest back looked like no change.
+  const savedRests = useRef<Map<number, number>>(new Map());
+
   async function saveCurrentState(items: FlatItem[]) {
     const { orderedSetIds, restAssignments } = computeMapping(items);
     if (orderedSetIds.length > 0) {
       await reorderProgramSets(programExerciseId, orderedSetIds);
     }
 
-    // Build a map of current DB values so we only write sets whose rest changed
+    // What the database holds as far as this list knows: its own last write,
+    // else the loaded value. Only sets whose rest differs are written.
     const currentRests = new Map<number, number>(
       items
         .filter((i): i is SetFlatItem => i.type === "set")
-        .map((i) => [i.set.id, Number(i.set.restTimeSeconds)]),
+        .map((i) => [i.set.id, savedRests.current.get(i.set.id) ?? Number(i.set.restTimeSeconds)]),
     );
 
     const changed = Array.from(restAssignments.entries()).filter(
@@ -249,6 +255,7 @@ export function WorkoutSetsList({
     );
 
     if (changed.length > 0) {
+      for (const [setId, seconds] of changed) savedRests.current.set(setId, seconds);
       await Promise.all(
         changed.map(([setId, seconds]) =>
           updateProgramSet({ id: setId, restTimeSeconds: seconds }),

@@ -531,10 +531,10 @@ Verified against `progression.ts` and `workout-sets.ts` at `8c3fd1b` on 2026-08-
 | D4 | SI-29, SI-30 | The gate is the window, consistently across advances | **Closed.** The extra "most recent session must meet target" requirement is gone; `duration` and `distance` use the same gate as everything else | closed |
 | D5 | SI-25, SI-28 | Bodyweight exercises progress by reps | **Closed.** A missing rep increment means one rep. The column still defaults to `0`, deliberately — that is what "unset" looks like, and the engine now reads it as such rather than as "no progression" | closed |
 | D6 | SI-7 | Each exercise slot gets its own 5-session window | **Closed** in phase 3 by the per-slot `DENSE_RANK` | closed |
-| D7 | SI-1 | Settings offers a global "Weight Increment" and "Rep Increment" | They persist only to `localStorage` (`defaultIncrementKg` / `defaultIncrementReps`) and **no progression code reads them** — the controls are inert. Noted in [`../gotchas.md`](../gotchas.md#settings-live-in-two-stores) | open — intent needed |
+| D7 | SI-1 | The only increment is the per-exercise one | **Closed 2026-09-14** by removing the controls. Settings used to offer a global "Weight Increment" and "Rep Increment" that persisted only to `localStorage` and that no progression code read. The per-exercise increment, and the automatic choice when it is unset, are the whole story | closed |
 | D8 | SI-12, SI-34 | Generated programmes carry the same settings as hand-built ones | **Closed.** The prompt describes the advance axis, the gate and the effort cap, and shows a worked rep-range exercise. `progressionApplyToPlan` is still not offered, and that is deliberate: the ratchet rewrites a lifter's plan, and a generator opting them into it is not a default anyone chose (SI-34) | closed |
 
-Only **D7** remains, and it is tracked in `BACKLOG.md` under **Smart-progression UX (deferred long-term)**. It needs an intent decision before any code changes — the spec cannot state a rule for it until then, and it is a Settings question rather than an engine one.
+All divergences are closed.
 
 Already tracked in `BACKLOG.md` rather than repeated here: base weight coming from history rather than the plan (§ Smart-progression UX — "`latest.weightKg` vs program-planned weight quirk"), and `isFailed` not being treated as a hard failure (§ New features — "Surface failed sets in history & metrics").
 
