@@ -254,3 +254,44 @@ export function defaultRepRangeFor(targetReps: number | null): [number, number] 
   if (fit) return [fit[0], fit[1]];
   return [Math.max(1, target - 4), target];
 }
+
+/**
+ * The per-set values picking a preset writes alongside its axes, so it lands
+ * complete rather than in a state its own name does not match.
+ *
+ * A preset that forbids a range or a cap clears one left behind by the last
+ * scheme. Without that, picking Autoregulated and then anything else kept the
+ * cap on the sets, and the new preset read Custom the moment it was picked.
+ * The cap is cleared when *any* working set carries one, since the write goes
+ * across every working set and the next scope may read a different one.
+ */
+export function presetSetDefaults(
+  preset: ProgressionPreset,
+  current: {
+    hasRange: boolean;
+    /** The cap on the set the current scope reads. */
+    effortCap: number | null;
+    anySetCapped: boolean;
+    targetReps: number | null;
+  },
+): { repRangeMin?: number | null; repRangeMax?: number | null; targetRir?: number | null } {
+  const defaults: { repRangeMin?: number | null; repRangeMax?: number | null; targetRir?: number | null } = {};
+  if (preset.requiresEffortCap === true && current.effortCap == null) {
+    defaults.targetRir = 2;
+  }
+  if (preset.requiresEffortCap === false && current.anySetCapped) {
+    defaults.targetRir = null;
+  }
+  if (preset.requiresRange === false && current.hasRange) {
+    defaults.repRangeMin = null;
+    defaults.repRangeMax = null;
+  }
+  // A double-progression preset with no range is the scheme with its subject
+  // missing, so one is seeded around the target the lifter already has.
+  if (preset.requiresRange === true && !current.hasRange) {
+    const [min, max] = defaultRepRangeFor(current.targetReps);
+    defaults.repRangeMin = min;
+    defaults.repRangeMax = max;
+  }
+  return defaults;
+}

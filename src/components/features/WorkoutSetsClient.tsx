@@ -40,9 +40,9 @@ import {
 import {
   PROGRESSION_PRESETS,
   REP_RANGE_PRESETS,
-  defaultRepRangeFor,
   matchPreset,
   presetLabel,
+  presetSetDefaults,
   type ProgressionPreset,
 } from "@/lib/utils/progression-presets";
 import type { Discipline } from "@/lib/utils/discipline";
@@ -502,28 +502,12 @@ export function WorkoutSetsClient({
   async function handlePresetChange(preset: ProgressionPreset) {
     // Both per-set defaults go in one write, so the preset lands complete
     // rather than in a state its own name does not match.
-    const defaults: {
-      repRangeMin?: number | null;
-      repRangeMax?: number | null;
-      targetRir?: number | null;
-    } = {};
-    if (preset.requiresEffortCap === true && effortCap == null) {
-      defaults.targetRir = 2;
-    }
-    if (preset.requiresRange === false && repRange != null) {
-      defaults.repRangeMin = null;
-      defaults.repRangeMax = null;
-    }
-    // A double-progression preset with no range is the scheme with its subject
-    // missing: it behaves as plain load progression, and the badge would read
-    // Custom the instant the lifter picked it by name. Seed a range around the
-    // target they already have, from the same list the sheet offers, so one
-    // tap produces the scheme — and they can change it in the row below.
-    if (preset.requiresRange === true && repRange == null) {
-      const [min, max] = defaultRepRangeFor(firstWorkingTargetReps);
-      defaults.repRangeMin = min;
-      defaults.repRangeMax = max;
-    }
+    const defaults = presetSetDefaults(preset, {
+      hasRange: repRange != null,
+      effortCap,
+      anySetCapped: workingSets.some((s) => s.targetRir != null),
+      targetReps: firstWorkingTargetReps,
+    });
     await updateAxes(preset.axes);
     if (Object.keys(defaults).length > 0) await handleSetDefaults(defaults);
   }
