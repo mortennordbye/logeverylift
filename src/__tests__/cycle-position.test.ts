@@ -1,9 +1,75 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  addDays,
+  cycleWeek,
   findDayOfWeekMissed,
+  parseDateStr,
   resolveRotation,
+  toDateStr,
   walkRotation,
 } from "@/lib/utils/cycle-position";
+
+// One timezone ahead of UTC, one behind, and UTC itself. Node applies a changed
+// process.env.TZ to every Date created afterwards.
+describe.each(["Europe/Oslo", "America/New_York", "UTC"])("cycle week arithmetic in %s", (tz) => {
+  const originalTz = process.env.TZ;
+  beforeEach(() => {
+    process.env.TZ = tz;
+  });
+  afterEach(() => {
+    if (originalTz === undefined) delete process.env.TZ;
+    else process.env.TZ = originalTz;
+  });
+
+  // A 24-week block from Mon 2 Mar 2026: 168 days, last day Sun 16 Aug. Both US
+  // (8 Mar) and EU (29 Mar) DST changes fall inside it.
+  const weeks = 24;
+
+  it("reads a date column as that calendar day at local midnight", () => {
+    const start = parseDateStr("2026-03-02");
+    expect(toDateStr(start)).toBe("2026-03-02");
+    expect(start.getHours()).toBe(0);
+  });
+
+  it("is week 1 on the start day, whatever the time", () => {
+    const start = parseDateStr("2026-03-02");
+    expect(cycleWeek(start, weeks, parseDateStr("2026-03-02"))).toMatchObject({
+      currentWeek: 1,
+      elapsedDays: 0,
+      isOver: false,
+    });
+    expect(cycleWeek(start, weeks, new Date(2026, 2, 2, 23, 30)).currentWeek).toBe(1);
+  });
+
+  it("starts week 2 on day 7, across a DST change", () => {
+    const start = parseDateStr("2026-03-02");
+    expect(cycleWeek(start, weeks, parseDateStr("2026-03-08")).currentWeek).toBe(1);
+    expect(cycleWeek(start, weeks, parseDateStr("2026-03-09")).currentWeek).toBe(2);
+    expect(cycleWeek(start, weeks, parseDateStr("2026-03-30")).currentWeek).toBe(5);
+  });
+
+  it("is the final week, not over, on the last day", () => {
+    const start = parseDateStr("2026-03-02");
+    expect(cycleWeek(start, weeks, parseDateStr("2026-08-16"))).toMatchObject({
+      currentWeek: 24,
+      elapsedDays: 167,
+      isOver: false,
+    });
+  });
+
+  it("is over on the day after, and never reports a week past the block", () => {
+    const start = parseDateStr("2026-03-02");
+    const result = cycleWeek(start, weeks, parseDateStr("2026-08-17"));
+    expect(result.isOver).toBe(true);
+    expect(result.currentWeek).toBe(24);
+    expect(toDateStr(result.endDate)).toBe("2026-08-17");
+  });
+
+  it("never reports week 0 before the start", () => {
+    const start = parseDateStr("2026-03-02");
+    expect(cycleWeek(start, weeks, addDays(start, -1)).currentWeek).toBe(1);
+  });
+});
 
 // Slots are minimal SlotLike objects matching the helper signature.
 type Slot = {

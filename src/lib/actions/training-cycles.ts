@@ -42,8 +42,10 @@ import type {
 import {
   autoCompleteDue,
   autoDayKey,
+  cycleWeek,
   findDayOfWeekMissed,
   jsDayToDow,
+  parseDateStr,
   resolveRotation,
   toDateStr,
 } from "@/lib/utils/cycle-position";
@@ -141,33 +143,27 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
       return { success: true, data: null };
     }
 
-    const startDate = new Date(cycle.startDate!);
+    const startDate = parseDateStr(cycle.startDate!);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const endDate = new Date(startDate);
-    endDate.setDate(endDate.getDate() + cycle.durationWeeks * 7);
-    const endDateStr = endDate.toISOString().split("T")[0];
+    const { currentWeek, endDate, isOver } = cycleWeek(startDate, cycle.durationWeeks, today);
+    const endDateStr = toDateStr(endDate);
 
-    // Auto-complete if past end date.
+    // Auto-complete once the block is over.
     //
     // No revalidatePath here: this is a read, and it is called from Server
     // Components during render, where revalidatePath is not allowed. It was
     // also pointless — the caller is rendering right now and already sees the
     // post-update result returned below, and every route that shows cycle
     // state resolves its data per request.
-    if (today > endDate) {
+    if (isOver) {
       await db
         .update(trainingCycles)
         .set({ status: "completed" })
         .where(eq(trainingCycles.id, cycle.id));
       return { success: true, data: null };
     }
-
-    const daysSinceStart = Math.floor(
-      (today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24),
-    );
-    const currentWeek = Math.floor(daysSinceStart / 7) + 1;
 
     const slots = cycle.slots as TrainingCycleWithSlots["slots"];
 
@@ -495,6 +491,15 @@ export async function setMissedWorkoutsEnabled(
   }
 }
 
+/**
+ * A set is periodized when it carries either peak anchor. Shared by the sync and
+ * the periodization summary so the two cannot disagree about which cycles count.
+ */
+const hasPeakAnchor = or(
+  isNotNull(programSets.peakDistanceMeters),
+  isNotNull(programSets.peakDurationSeconds),
+);
+
 export type CyclePeriodization = {
   goal: TrainingGoal;
   currentWeek: number;
@@ -539,7 +544,7 @@ export async function getCyclePeriodization(
       .where(
         and(
           inArray(programExercises.programId, programIds),
-          isNotNull(programSets.peakDistanceMeters),
+          hasPeakAnchor,
         ),
       )
       .limit(1);
@@ -548,11 +553,7 @@ export async function getCyclePeriodization(
     const totalWeeks = cycle.durationWeeks;
     let currentWeek = 1;
     if (cycle.status === "active" && cycle.startDate) {
-      const start = new Date(cycle.startDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const days = Math.floor((today.getTime() - start.getTime()) / 86_400_000);
-      currentWeek = Math.min(totalWeeks, Math.max(1, Math.floor(days / 7) + 1));
+      currentWeek = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, new Date()).currentWeek;
     } else if (cycle.status === "completed") {
       currentWeek = totalWeeks;
     }
@@ -718,10 +719,7 @@ async function syncPeriodizedTargets(
       .where(
         and(
           inArray(programExercises.programId, programIds),
-          or(
-            isNotNull(programSets.peakDistanceMeters),
-            isNotNull(programSets.peakDurationSeconds),
-          ),
+          hasPeakAnchor,
         ),
       );
 
@@ -811,11 +809,8 @@ export async function updateTrainingCycle(
 
     // Guard: disallow shortening an active cycle past its elapsed time
     if (rest.durationWeeks && existing.status === "active" && existing.startDate) {
-      const start = new Date(existing.startDate);
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const elapsed = Math.floor((today.getTime() - start.getTime()) / 86400000);
-      if (rest.durationWeeks * 7 <= elapsed) {
+      const { isOver } = cycleWeek(parseDateStr(existing.startDate), rest.durationWeeks, new Date());
+      if (isOver) {
         return {
           success: false,
           error: "New duration would end the cycle immediately — choose a longer duration",
@@ -823,9 +818,17 @@ export async function updateTrainingCycle(
       }
     }
 
+    // A new block length moves every week's phase and multiplier. Clearing the
+    // sync stamp makes the next read re-derive this week's targets.
+    const durationChanged =
+      rest.durationWeeks !== undefined && rest.durationWeeks !== existing.durationWeeks;
+
     const [cycle] = await db
       .update(trainingCycles)
-      .set(rest as Partial<typeof trainingCycles.$inferInsert>)
+      .set({
+        ...rest,
+        ...(durationChanged && { lastSyncedWeek: null }),
+      } as Partial<typeof trainingCycles.$inferInsert>)
       .where(eq(trainingCycles.id, id))
       .returning();
 
@@ -894,7 +897,7 @@ export async function startTrainingCycle(
         ),
       );
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = toDateStr(new Date());
     const [cycle] = await db
       .update(trainingCycles)
       .set({ status: "active", startDate: today })
@@ -939,7 +942,7 @@ export async function restartTrainingCycle(
         ),
       );
 
-    const today = new Date().toISOString().split("T")[0];
+    const today = toDateStr(new Date());
     const [cycle] = await db
       .update(trainingCycles)
       .set({ status: "active", startDate: today })
@@ -1149,6 +1152,7 @@ export async function importCycle(
           orderIndex: slot.idx,
           label: slot.label,
           notes: slot.notes,
+          autoComplete: slot.auto ?? false,
         });
       }
     });

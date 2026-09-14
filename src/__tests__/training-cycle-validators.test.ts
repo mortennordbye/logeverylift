@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   createTrainingCycleSchema,
+  importCycleSchema,
   reorderCycleSlotsSchema,
   updateTrainingCycleSchema,
   upsertCycleSlotSchema,
 } from "@/lib/validators/training-cycles";
+import { snapWeeks } from "@/lib/utils/triathlon-plan";
 
 // ─── createTrainingCycleSchema ────────────────────────────────────────────────
 
@@ -24,13 +26,13 @@ describe("createTrainingCycleSchema", () => {
   });
 
   it("accepts all valid durationWeeks values", () => {
-    for (const weeks of [4, 6, 8, 10, 12, 16]) {
+    for (const weeks of [4, 6, 8, 10, 12, 16, 24, 36, 52]) {
       expect(createTrainingCycleSchema.safeParse({ ...valid, durationWeeks: weeks }).success).toBe(true);
     }
   });
 
   it("rejects invalid durationWeeks values", () => {
-    for (const weeks of [3, 5, 7, 14, 100]) {
+    for (const weeks of [3, 5, 7, 14, 20, 100]) {
       expect(createTrainingCycleSchema.safeParse({ ...valid, durationWeeks: weeks }).success).toBe(false);
     }
   });
@@ -105,6 +107,32 @@ describe("updateTrainingCycleSchema", () => {
   it("rejects invalid durationWeeks", () => {
     expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: 5 }).success).toBe(false);
     expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: 100 }).success).toBe(false);
+  });
+
+  it("accepts every block length the triathlon generator can produce", () => {
+    for (const weeks of [1, 20, 30, 45, 100].map(snapWeeks)) {
+      expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: weeks }).success).toBe(true);
+    }
+  });
+});
+
+// ─── importCycleSchema ────────────────────────────────────────────────────────
+
+describe("importCycleSchema", () => {
+  const valid = { name: "Ironman", weeks: 24, slots: [{ prog: "Swim", day: 2 }] };
+
+  it("accepts a long block", () => {
+    expect(importCycleSchema.safeParse(valid).success).toBe(true);
+  });
+
+  it("accepts an auto-complete flag on a slot", () => {
+    const result = importCycleSchema.safeParse({ ...valid, slots: [{ prog: "Swim", day: 2, auto: true }] });
+    expect(result.success && result.data.slots[0].auto).toBe(true);
+  });
+
+  it("leaves auto unset when omitted", () => {
+    const result = importCycleSchema.safeParse(valid);
+    expect(result.success && result.data.slots[0].auto).toBeUndefined();
   });
 });
 

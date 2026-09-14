@@ -5,6 +5,7 @@ import { WorkoutInsightBanner } from "@/components/features/WorkoutInsightBanner
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/actions/workout-sets";
+import { parseDateStr } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
 import Link from "next/link";
 
@@ -113,7 +114,7 @@ export default async function Home() {
     ? Math.min(((info.currentWeek - 1) / info.cycle.durationWeeks) * 100, 100)
     : 0;
   const endFormatted = info
-    ? new Date(info.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    ? parseDateStr(info.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
     : null;
 
   return (

@@ -286,10 +286,10 @@ When an anchored set's mode is switched, the entered value becomes the new ancho
 
 ## Reporting — PZ-38…43
 
-### PZ-38 — A cycle with no distance anchor reports no periodization
-`getCyclePeriodization` returns null when the cycle has no slots with programs, or when no set in those programs has a `peakDistanceMeters`. Callers render nothing rather than an empty summary.
+### PZ-38 — A cycle with no peak anchor reports no periodization
+`getCyclePeriodization` returns null when the cycle has no slots with programs, or when no set in those programs has a distance or duration anchor. The check uses the same predicate the sync selects on (PZ-30), so a cycle is reported exactly when it is synced. Callers render nothing rather than an empty summary.
 
-*Why:* most cycles are ordinary weekly schedules with no block structure at all, and a "Week 3 of 12 · 80% of peak" header on one would be meaningless. See the Divergences table for the duration-anchored case this gate misses.
+*Why:* most cycles are ordinary weekly schedules with no block structure at all, and a "Week 3 of 12 · 80% of peak" header on one would be meaningless.
 *Covered by:* `none`.
 
 ### PZ-39 — The reported week depends on cycle status
@@ -358,16 +358,16 @@ Verified against `periodization.ts`, `training-cycles.ts`, `page.tsx` and `SetEd
 
 | # | Rule | Intended | Actual | Status |
 |---|---|---|---|---|
-| D1 | PZ-39 | The reported week of an active cycle is between 1 and the block length | `startDate` is a `date` column read as a `YYYY-MM-DD` string, so `new Date(startDate)` is **UTC midnight** while `today` is **local midnight**. In any timezone ahead of UTC the difference is negative on the block's own start date: `currentWeek` computes as **0** and every later week boundary lands a day late. `getActiveCycleForUser` does not clamp (`training-cycles.ts:168`), so `/` renders "Week 0/24" and its progress bar computes to −4.2% (`page.tsx:105` clamps only the upper bound); `/new-workout` shows the same 0. `getCyclePeriodization` *does* clamp (`:411`) and `CyclesListClient` measures from the current instant rather than local midnight, so both say "Week 1" on that day — three screens, two answers | open |
-| D2 | PZ-2, PZ-39 | The last day of a block is the last day inside it | Same root cause at the other end. Auto-completion fires only on `today > endDate` (`:157`), and `endDate` derives from the same UTC-parsed start. Under `TZ=UTC` a 24-week block admits a 169th day on which `currentWeek` is **25**, unclamped — `/` renders "Week 25/24" and the sync stamps `lastSyncedWeek = 25`. Timezones behind UTC complete a day earlier and never show it | open |
+| D1 | PZ-39 | The reported week of an active cycle is between 1 and the block length | **Closed 2026-09-14.** `startDate` used to be parsed as UTC midnight and compared against local midnight, so a timezone ahead of UTC showed "Week 0" on the start day and three screens disagreed. It is now parsed as a local date (`parseDateStr`), and every week derivation goes through `cycleWeek` in `cycle-position.ts`, which clamps to 1..N: `getActiveCycleForUser`, `getCyclePeriodization`, the shorten guard in `updateTrainingCycle` and the MCP tool, and `CyclesListClient`. Start dates are written in the same local frame (`toDateStr`). Pinned under Oslo, New York and UTC in `cycle-position.test.ts` | closed |
+| D2 | PZ-2, PZ-39 | The last day of a block is the last day inside it | **Closed 2026-09-14** with D1. `cycleWeek` reports the block over from `startDate + durationWeeks x 7` onward, so the day after the last day completes the cycle instead of reporting "Week 25/24" | closed |
 | D3 | PZ-33 | Main strength lifts periodize their reps and rest by phase | **Closed 2026-08-29** by deleting the mechanism rather than building a producer for it. The *strengthPhaseRecipe* helper, the `sessionRole = "strength"` branch in `syncPeriodizedTargets` and both stale docblocks are gone; rules PZ-18, PZ-19 and PZ-33 are retired and the reasoning is preserved above. Strength is flat for the whole block, which is what the generator already built and its tests already asserted | closed |
 | D4 | PZ-29, PZ-40 | What a page shows for a week matches what the plan holds for that week | On the first visit of a new cycle-week the workout page's `Promise.all` (`programs/[id]/workout/page.tsx:28`) starts `getProgramWithExercises` — reading `program_sets` — concurrently with `getWorkoutInsight`, whose nested `getActiveCycleForUser` performs the sync. The render shows last week's targets under this week's header. `/cycles/[id]` never triggers a sync at all, so it can report a new week's phase against the previous week's `adaptationPct`. Both self-correct on the next load | open |
-| D5 | PZ-38 | A periodized cycle reports its periodization | The gate queries `peakDistanceMeters` only (`training-cycles.ts:398`), while the sync selects on either anchor (`:576-577`). A cycle whose sets have all been switched to time mode (PZ-37) keeps being synced from its duration anchors but reports null, so the cycle page and the in-workout header silently lose their summary | open |
-| D6 | PZ-28 | Changing the block's shape re-derives its targets | `updateTrainingCycle` can change `durationWeeks` — which changes `phaseLayout`, and therefore every week's multiplier and phase — without clearing `lastSyncedWeek` (`:689-693`). The old week's targets stand until the next week boundary | open |
-| D7 | PZ-2 | Every block length the generator can produce can be edited | `createTrainingCycleSchema` and `updateTrainingCycleSchema` accept only 4, 6, 8, 10, 12, 16 weeks, but the generator's `ALLOWED_WEEKS` (`triathlon-plan.ts:100`) also permits 24, 36 and 52. A 24-week block can be generated and then never have its duration edited — the action returns "Invalid input" | open |
+| D5 | PZ-38 | A periodized cycle reports its periodization | **Closed 2026-09-14.** The gate used to check the distance anchor only, so a cycle switched entirely to time mode was synced but reported null. The gate and the sync now share one predicate, `hasPeakAnchor`. Not covered by a test: the action has no database test harness | closed |
+| D6 | PZ-28 | Changing the block's shape re-derives its targets | **Closed 2026-09-14.** `updateTrainingCycle` and the MCP `manage_training_cycle` update clear `lastSyncedWeek` when `durationWeeks` changes, so the next read re-syncs. Not extended to `upsertCycleSlot`: a program assigned to a slot mid-week still waits for the next week boundary | closed |
+| D7 | PZ-2 | Every block length the generator can produce can be edited | **Closed 2026-09-14.** `CYCLE_DURATION_WEEKS` in `validators/training-cycles.ts` is the one list. The create, update and import schemas, the MCP tool, both cycle forms and the generator's `snapWeeks` all read it, so a generated 24, 36 or 52-week block can be edited | closed |
 | D8 | PZ-36 | Undecided | Editing an anchored set's distance *in distance mode* writes the value but leaves the anchor (`SetEditView.tsx:250-253`), so the next sync reverts it silently — while a **mode switch** on the same set does re-anchor (`:256`). Whether a direct edit should re-anchor, warn, or revert silently has never been decided | open — intent needed |
 
-Seven remain open and are tracked in `BACKLOG.md` under **Cycle periodization (spec divergences)**, one entry per row except D1–D2, which share a root cause and a fix. D3 is closed. D8 needs an intent decision before any code change — the spec cannot state a rule for it until then.
+Two remain open, D4 and D8, and are tracked in `BACKLOG.md` under **Cycle periodization (spec divergences)**. D8 needs an intent decision before any code change — the spec cannot state a rule for it until then. The rest are closed.
 
 Already tracked in `BACKLOG.md` rather than repeated here: the absence of objective recovery signals feeding PZ-20…24 (§ New features — "Wearable-based autoregulation (Tier B) for triathlon plans").
 
@@ -413,11 +413,11 @@ Already tracked in `BACKLOG.md` rather than repeated here: the absence of object
 | PZ-36 | none |
 | PZ-37 | none |
 | PZ-38 | none |
-| PZ-39 | none |
+| PZ-39 | `cycle-position.test.ts` — "is week 1 on the start day, whatever the time", "is over on the day after, and never reports a week past the block", "never reports week 0 before the start" (the week arithmetic only; the status branches are untested) |
 | PZ-40 | none |
 | PZ-41 | none |
 | PZ-42 | `periodization.test.ts` — "describes a ramping build week with weeks-until-peak and percent", "flags deload weeks in the headline", "singularizes the week unit when peak is one week away", "announces taper countdown once at peak", "describes the taper phase", "holds steady for maintain goal" |
 | PZ-43 | `periodization.test.ts` — "appends the no-wearable adaptation note when present" |
-| PZ-44 | none |
+| PZ-44 | `cycle-position.test.ts` — "is the final week, not over, on the last day", "is over on the day after, and never reports a week past the block" (when the block ends; the write is untested) |
 
 The pure curve (PZ-1…24, PZ-42, PZ-43) is well covered. **Everything the sync and the reporting actions do — PZ-25…41 and PZ-44, the entire write path — has no test at all.** Four of the seven divergences above live in that untested region, which is not a coincidence.

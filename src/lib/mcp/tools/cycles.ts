@@ -8,16 +8,17 @@
 import { db } from "@/db";
 import { programs, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
+import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
+import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
-const ALLOWED_WEEKS = [4, 6, 8, 10, 12, 16];
 const durationWeeks = z
   .number()
   .int()
-  .refine((v) => ALLOWED_WEEKS.includes(v), {
-    message: "Duration must be 4, 6, 8, 10, 12, or 16 weeks",
+  .refine((v) => CYCLE_DURATION_WEEKS.includes(v), {
+    message: `Duration must be one of ${CYCLE_DURATION_WEEKS.join(", ")} weeks`,
   });
 const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
 
@@ -84,7 +85,7 @@ export function registerCycleTools(server: McpServer, userId: string) {
     {
       description: [
         "Create, update, delete, or start a training cycle.",
-        "operation='create': requires name and durationWeeks (4/6/8/10/12/16); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage.",
+        `operation='create': requires name and durationWeeks (${CYCLE_DURATION_WEEKS.join("/")}); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage.`,
         "operation='update': requires cycleId; any of name, durationWeeks, endAction, endMessage, status ('draft'|'active'|'completed') are applied.",
         "operation='delete': requires cycleId.",
         "operation='start': requires cycleId — marks it active (completing any other active cycle) and sets startDate to today.",
@@ -141,11 +142,8 @@ export function registerCycleTools(server: McpServer, userId: string) {
 
           // Don't let an active cycle be shortened past its elapsed time.
           if (args.durationWeeks && existing.status === "active" && existing.startDate) {
-            const start = new Date(existing.startDate);
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const elapsed = Math.floor((today.getTime() - start.getTime()) / 86400000);
-            if (args.durationWeeks * 7 <= elapsed) {
+            const { isOver } = cycleWeek(parseDateStr(existing.startDate), args.durationWeeks, new Date());
+            if (isOver) {
               return fail(
                 "New duration would end the cycle immediately — choose a longer duration",
               );
@@ -155,6 +153,11 @@ export function registerCycleTools(server: McpServer, userId: string) {
           const updates: Record<string, unknown> = {};
           if (args.name !== undefined) updates.name = args.name;
           if (args.durationWeeks !== undefined) updates.durationWeeks = args.durationWeeks;
+          // A new block length changes every week's targets; clearing the sync
+          // stamp makes the next read re-derive them.
+          if (args.durationWeeks !== undefined && args.durationWeeks !== existing.durationWeeks) {
+            updates.lastSyncedWeek = null;
+          }
           if (args.endAction !== undefined) updates.endAction = args.endAction;
           if (args.endMessage !== undefined) updates.endMessage = args.endMessage;
           if (args.status !== undefined) updates.status = args.status;
@@ -182,7 +185,7 @@ export function registerCycleTools(server: McpServer, userId: string) {
         const owner = await cycleOwner(startCycleId);
         if (!owner || owner.userId !== userId) return fail("Training cycle not found");
 
-        const today = new Date().toISOString().split("T")[0];
+        const today = toDateStr(new Date());
         // Deactivate any current active cycle and activate the target in one
         // transaction, so a partial failure can't leave the user with zero (or
         // two) active cycles. The activate is re-scoped to userId as defense.
@@ -222,7 +225,7 @@ export function registerCycleTools(server: McpServer, userId: string) {
     {
       description: [
         "Upsert or remove a slot in a training cycle.",
-        "operation='upsert': requires trainingCycleId and either dayOfWeek (1=Mon..7=Sun, for day_of_week cycles) or orderIndex (1,2,3.. for rotation cycles); optional label, programId (the program to run; null to clear), notes. An existing slot at that day/position is updated, otherwise a new one is created.",
+        "operation='upsert': requires trainingCycleId and either dayOfWeek (1=Mon..7=Sun, for day_of_week cycles) or orderIndex (1,2,3.. for rotation cycles); optional label, programId (the program to run; null to clear), notes, autoComplete (true for a day tracked outside the app, which then completes itself; omit to leave unchanged). An existing slot at that day/position is updated, otherwise a new one is created.",
         "operation='remove': requires slotId and cycleId.",
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
@@ -236,6 +239,7 @@ export function registerCycleTools(server: McpServer, userId: string) {
         label: z.string().max(100).nullable().optional(),
         programId: z.number().int().positive().nullable().optional(),
         notes: z.string().max(500).nullable().optional(),
+        autoComplete: z.boolean().optional(),
       },
     },
     async (args) => {
@@ -285,6 +289,7 @@ export function registerCycleTools(server: McpServer, userId: string) {
             label: args.label ?? null,
             programId: args.programId ?? null,
             notes: args.notes ?? null,
+            ...(args.autoComplete !== undefined && { autoComplete: args.autoComplete }),
           };
 
           let existingSlot = null;
