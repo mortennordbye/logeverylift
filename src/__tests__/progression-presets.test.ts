@@ -4,6 +4,7 @@ import {
   defaultRepRangeFor,
   matchPreset,
   presetLabel,
+  presetSetDefaults,
   toAxes,
 } from "@/lib/utils/progression-presets";
 
@@ -122,5 +123,62 @@ describe("defaultRepRangeFor", () => {
 
   it("assumes a middling target when the set has none", () => {
     expect(defaultRepRangeFor(null)).toEqual([6, 10]);
+  });
+});
+
+describe("presetSetDefaults", () => {
+  const preset = (id: string) => PROGRESSION_PRESETS.find((p) => p.id === id)!;
+
+  it("clears a cap left behind when the new preset forbids one", () => {
+    // Autoregulated seeds a cap of 2. Picking a double-progression preset
+    // afterwards used to keep it, and the sheet read Custom on the spot.
+    expect(
+      presetSetDefaults(preset("double-top-set"), {
+        hasRange: true,
+        effortCap: 2,
+        anySetCapped: true,
+        targetReps: 8,
+      }),
+    ).toEqual({ targetRir: null });
+  });
+
+  it("leaves the cap alone for presets that do not care", () => {
+    for (const id of ["manual", "off"]) {
+      expect(
+        presetSetDefaults(preset(id), {
+          hasRange: false,
+          effortCap: 2,
+          anySetCapped: true,
+          targetReps: 8,
+        }),
+      ).toEqual({});
+    }
+  });
+
+  it("every preset picked from any starting state matches itself afterwards", () => {
+    // The whole contract of picking a preset: one tap, and the label is that
+    // preset. Cover a leftover range and a leftover cap in every combination.
+    const starts = [
+      { hasRange: false, capped: false },
+      { hasRange: true, capped: false },
+      { hasRange: false, capped: true },
+      { hasRange: true, capped: true },
+    ];
+    for (const p of PROGRESSION_PRESETS) {
+      for (const start of starts) {
+        const written = presetSetDefaults(p, {
+          hasRange: start.hasRange,
+          effortCap: start.capped ? 2 : null,
+          anySetCapped: start.capped,
+          targetReps: 8,
+        });
+        const hasRange =
+          written.repRangeMin !== undefined ? written.repRangeMin != null : start.hasRange;
+        const hasEffortCap =
+          written.targetRir !== undefined ? written.targetRir != null : start.capped;
+        const axes = toAxes({ ...defaults, ...p.axes, hasRange, hasEffortCap });
+        expect(matchPreset(axes)?.id, `${p.id} from ${JSON.stringify(start)}`).toBe(p.id);
+      }
+    }
   });
 });
