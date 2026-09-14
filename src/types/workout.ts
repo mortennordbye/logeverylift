@@ -392,6 +392,8 @@ export type FriendActivityItem = {
   date: string;
   startTime: Date | null;
   programName: string | null;
+  /** "auto" = a cycle day completed automatically (tracked outside the app). */
+  source: WorkoutSession["source"];
   durationMinutes: number;
   setCount: number;
   exerciseCount: number;

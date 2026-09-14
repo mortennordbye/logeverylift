@@ -1,4 +1,5 @@
 import { DeclineMakeupButton } from "@/components/features/DeclineMakeupButton";
+import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
 import { WeeklyGoalProgress } from "@/components/features/WeeklyGoalProgress";
 import { WorkoutInsightBanner } from "@/components/features/WorkoutInsightBanner";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
@@ -69,6 +70,13 @@ export default async function Home() {
   const todayStr = toDateStr(new Date());
   const weekDates = getThisWeekDates();
   const completedToday = completedDates.has(todayStr);
+  // Today's session written by the cycle for a day tracked outside the app.
+  const todayAutoSession =
+    todayProgram && sessionsResult.success
+      ? (sessionsResult.data.find(
+          (s) => s.date === todayStr && s.source === "auto" && s.programId === todayProgram.id,
+        ) ?? null)
+      : null;
 
   const isRestDay = info !== null && info.todaySlot !== null && !todayProgram;
 
@@ -141,7 +149,7 @@ export default async function Home() {
                   <svg className="w-3 h-3" viewBox="0 0 12 12" fill="none">
                     <path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  Done
+                  {todayAutoSession ? "Done · automatic" : "Done"}
                 </span>
               )}
               {!completedToday && rotationOverdueDays > 0 && todayProgram && (
@@ -159,7 +167,7 @@ export default async function Home() {
                     prefetch={true}
                     className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground active:opacity-70"
                   >
-                    Do Again
+                    {todayAutoSession ? "Log in app" : "Do Again"}
                   </Link>
                 ) : (
                   <Link
@@ -170,6 +178,7 @@ export default async function Home() {
                     Start Today&apos;s Workout
                   </Link>
                 )}
+                {todayAutoSession && <SkipAutoDayButton sessionId={todayAutoSession.id} />}
                 <Link
                   href="/new-workout"
                   className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground active:opacity-70"

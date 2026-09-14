@@ -85,7 +85,14 @@ export type PlanDay = {
   label: string;
   /** Empty = rest day (no program created for this slot). */
   exercises: PlanExercise[];
+  /**
+   * Swim/bike/run-only day, usually recorded on a watch rather than in the app.
+   * Persisted as the slot's autoComplete so the day counts as done by itself.
+   */
+  autoComplete: boolean;
 };
+
+const ENDURANCE_EXERCISES = new Set(["Swim", "Bike", "Run"]);
 
 export type PlanBlueprint = {
   cycleName: string;
@@ -296,7 +303,7 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
     ]);
   };
 
-  const days: PlanDay[] = [
+  const days: Omit<PlanDay, "autoComplete">[] = [
     {
       dayOfWeek: 1,
       label: "Workout A — Squat & Horizontal",
@@ -382,7 +389,10 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
     durationWeeks,
     goal,
     level,
-    days,
+    days: days.map((d) => ({
+      ...d,
+      autoComplete: d.exercises.length > 0 && d.exercises.every((ex) => ENDURANCE_EXERCISES.has(ex.name)),
+    })),
   };
 }
 

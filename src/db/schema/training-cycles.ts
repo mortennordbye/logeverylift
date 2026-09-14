@@ -10,6 +10,7 @@
  */
 
 import {
+  boolean,
   date,
   index,
   integer,
@@ -92,6 +93,10 @@ export const trainingCycleSlots = pgTable(
       onDelete: "set null",
     }),
     notes: text("notes"),
+    // Days tracked outside the app (e.g. a run recorded on a Garmin). When on,
+    // getActiveCycleForUser writes a completed source='auto' session for the day
+    // so it counts as done without being logged here.
+    autoComplete: boolean("auto_complete").default(false).notNull(),
   },
   (t) => [
     unique("uniq_cycle_day").on(t.trainingCycleId, t.dayOfWeek),

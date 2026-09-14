@@ -1122,6 +1122,7 @@ export async function getCompletedSessions(
         isCompleted: workoutSessions.isCompleted,
         readiness: workoutSessions.readiness,
         intendedDate: workoutSessions.intendedDate,
+        source: workoutSessions.source,
         programName: programs.name,
         setCount: sql<number>`COUNT(${workoutSets.id})`,
         exerciseCount: sql<number>`COUNT(DISTINCT ${workoutSets.exerciseId})`,
@@ -1151,6 +1152,7 @@ export async function getCompletedSessions(
         workoutSessions.isCompleted,
         workoutSessions.readiness,
         workoutSessions.intendedDate,
+        workoutSessions.source,
         programs.name,
       )
       .orderBy(desc(workoutSessions.startTime));
@@ -1164,8 +1166,9 @@ export async function getCompletedSessions(
         exerciseCount: Number(row.exerciseCount),
         totalVolumeKg: Number(row.totalVolumeKg),
         exerciseNames: row.exerciseNames ?? [],
+        // Auto-completed cycle days have no real duration.
         durationMinutes:
-          row.endTime && row.startTime
+          row.source !== "auto" && row.endTime && row.startTime
             ? Math.max(
                 1,
                 Math.round(
@@ -1203,6 +1206,7 @@ export async function getSessionDetail(
           isCompleted: workoutSessions.isCompleted,
           readiness: workoutSessions.readiness,
           intendedDate: workoutSessions.intendedDate,
+          source: workoutSessions.source,
           programName: programs.name,
         })
         .from(workoutSessions)

@@ -140,6 +140,7 @@ export async function generateTriathlonPlan(
           dayOfWeek: day.dayOfWeek,
           label: day.label,
           programId: program.id,
+          autoComplete: day.autoComplete,
         });
       }
 

@@ -22,7 +22,7 @@ import {
   type TrainingGoal,
   type TrainingPhase,
 } from "@/lib/utils/periodization";
-import { requireSession } from "@/lib/utils/session";
+import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
   createTrainingCycleSchema,
   importCycleSchema,
@@ -40,6 +40,8 @@ import type {
   TrainingCycleWithSlots,
 } from "@/types/workout";
 import {
+  autoCompleteDue,
+  autoDayKey,
   findDayOfWeekMissed,
   jsDayToDow,
   resolveRotation,
@@ -191,17 +193,23 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     let todaySlot: TrainingCycleSlotWithProgram | null = null;
     let missedSlots: MissedSlot[] = [];
 
+    // Days tracked outside the app (slot.autoComplete) get a completed
+    // source='auto' session written here, before the missed logic reads
+    // sessions, so they count as done everywhere a completed session counts.
+    const hasAutoSlots = slots.some((s) => s.autoComplete);
+
     if (cycle.scheduleType === "day_of_week") {
       const dayOfWeek = jsDayToDow(today.getDay());
       todaySlot = slots.find((s) => s.dayOfWeek === dayOfWeek) ?? null;
 
-      if (missedEnabled) {
+      if (missedEnabled || hasAutoSlots) {
         // Look back up to 7 days for missed active slots (bounded by startDate).
         const lookbackStart = new Date(today);
         lookbackStart.setDate(lookbackStart.getDate() - 7);
         const windowStart = lookbackStart < startDate ? startDate : lookbackStart;
         const sessions = await db
           .select({
+            programId: workoutSessions.programId,
             date: workoutSessions.date,
             intendedDate: workoutSessions.intendedDate,
           })
@@ -216,9 +224,14 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
         // A slot is satisfied by a session logged on its date OR by a make-up
         // session that points back to it via intendedDate.
         const completedDates = new Set<string>();
+        const loggedKeys = new Set<string>();
         for (const s of sessions) {
           completedDates.add(s.date);
           if (s.intendedDate) completedDates.add(s.intendedDate);
+          if (s.programId != null) {
+            loggedKeys.add(autoDayKey(s.programId, s.date));
+            if (s.intendedDate) loggedKeys.add(autoDayKey(s.programId, s.intendedDate));
+          }
         }
 
         // Declined missed days — filtered out so they stop nagging.
@@ -228,20 +241,36 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
           .where(eq(dismissedMakeups.userId, userId));
         const dismissedDates = new Set(dismissed.map((d) => d.date));
 
-        const missed = findDayOfWeekMissed(startDate, slots, completedDates, today, 7);
-        missedSlots = missed
-          .filter((m) => !dismissedDates.has(m.date))
-          .map((m) => {
-            const slot = slotById.get(m.slotId);
-            return slot ? { date: m.date, slot } : null;
-          })
-          .filter((x): x is MissedSlot => x !== null);
+        if (hasAutoSlots) {
+          const due = autoCompleteDue({
+            scheduleType: "day_of_week",
+            startDate,
+            slots,
+            todaySlotId: null,
+            loggedKeys,
+            skippedDates: dismissedDates,
+            today,
+          });
+          await insertAutoSessions(userId, due);
+          for (const d of due) completedDates.add(d.date);
+        }
+
+        if (missedEnabled) {
+          const missed = findDayOfWeekMissed(startDate, slots, completedDates, today, 7);
+          missedSlots = missed
+            .filter((m) => !dismissedDates.has(m.date))
+            .map((m) => {
+              const slot = slotById.get(m.slotId);
+              return slot ? { date: m.date, slot } : null;
+            })
+            .filter((x): x is MissedSlot => x !== null);
+        }
       }
     } else {
       // Rotation: walk forward from startDate, advancing position per-slot.
       // todaySlot is always needed; the missed list is gated on the opt-out.
       const sessions = await db
-        .select({ date: workoutSessions.date })
+        .select({ programId: workoutSessions.programId, date: workoutSessions.date })
         .from(workoutSessions)
         .where(
           and(
@@ -258,6 +287,31 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
         today,
       );
       todaySlot = todaySlotId != null ? (slotById.get(todaySlotId) ?? null) : null;
+
+      // The walk never consumes today, so writing today's auto session doesn't
+      // change todaySlot or missed; the rotation advances on its own tomorrow.
+      if (todaySlot?.autoComplete) {
+        const todayStr = toDateStr(today);
+        const dismissed = await db
+          .select({ date: dismissedMakeups.date })
+          .from(dismissedMakeups)
+          .where(and(eq(dismissedMakeups.userId, userId), eq(dismissedMakeups.date, todayStr)));
+        const due = autoCompleteDue({
+          scheduleType: "rotation",
+          startDate,
+          slots,
+          todaySlotId: todaySlot.id,
+          loggedKeys: new Set(
+            sessions
+              .filter((s) => s.programId != null)
+              .map((s) => autoDayKey(s.programId!, s.date)),
+          ),
+          skippedDates: new Set(dismissed.map((d) => d.date)),
+          today,
+        });
+        await insertAutoSessions(userId, due);
+      }
+
       if (missedEnabled) {
         missedSlots = missed
           .map((m) => {
@@ -280,6 +334,96 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     };
   } catch (err) {
     return { success: false, error: String(err) };
+  }
+}
+
+/**
+ * Write the completed source='auto' sessions for cycle days tracked outside the
+ * app. Timed at noon on the day so startTime-keyed counts (weekly goal, streak)
+ * and date-keyed ones agree. The uniq_ws_auto_day partial index turns a
+ * concurrent duplicate into a no-op.
+ */
+async function insertAutoSessions(
+  userId: string,
+  due: { date: string; programId: number }[],
+): Promise<void> {
+  if (due.length === 0) return;
+  await db
+    .insert(workoutSessions)
+    .values(
+      due.map((d) => {
+        const at = new Date(`${d.date}T12:00:00`);
+        return {
+          userId,
+          programId: d.programId,
+          date: d.date,
+          startTime: at,
+          endTime: at,
+          isCompleted: true,
+          source: "auto" as const,
+        };
+      }),
+    )
+    .onConflictDoNothing();
+}
+
+const skipAutoCompletedDaySchema = z.object({
+  sessionId: z.number().int().positive(),
+});
+
+/**
+ * "I skipped it" on an auto-completed cycle day. Deletes the auto session and
+ * records the date in dismissed_makeups, so getActiveCycleForUser neither
+ * recreates it nor flags it as missed.
+ */
+export async function skipAutoCompletedDay(
+  data: unknown,
+): Promise<ActionResult<null>> {
+  const auth = await requireSession();
+  const parsed = skipAutoCompletedDaySchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+
+  try {
+    const [existing] = await db
+      .select({
+        userId: workoutSessions.userId,
+        date: workoutSessions.date,
+        source: workoutSessions.source,
+      })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.id, parsed.data.sessionId));
+    assertOwner(existing, auth.user.id);
+    if (existing.source !== "auto") {
+      return { success: false, error: "Only automatic days can be skipped" };
+    }
+
+    await db.transaction(async (tx) => {
+      await tx
+        .delete(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.id, parsed.data.sessionId),
+            eq(workoutSessions.userId, auth.user.id),
+          ),
+        );
+      await tx
+        .insert(dismissedMakeups)
+        .values({ userId: auth.user.id, date: existing.date })
+        .onConflictDoNothing();
+    });
+    revalidatePath("/");
+    revalidatePath("/history");
+    return { success: true, data: null };
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { success: false, error: e.message };
+    console.error("[skipAutoCompletedDay] failed", e);
+    return { success: false, error: "Failed to skip day" };
   }
 }
 

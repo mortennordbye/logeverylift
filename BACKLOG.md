@@ -22,6 +22,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A user reporting that make-up sessions look wrong in the history view.
 - **Touchpoints:** `src/lib/actions/workout-sets.ts` (history query already selects `intendedDate`), `src/components/features/` history row component.
 
+### Auto-complete days from cycle import and MCP tools
+- **What:** A cycle slot's `autoComplete` flag (day tracked outside the app, completes itself) can only be set in the cycle editor or by the triathlon generator. `importCycle` and the MCP cycle tools create slots without it, so those days default to off.
+- **Why deferred:** Agreed out of scope for the first cut; the editor toggle covers imported cycles.
+- **Unblocked by:** Someone importing or AI-generating hybrid cycles and wanting the flag set up front. Add an optional field to `importCycleSchema` and the MCP slot input, and pass it through on insert.
+- **Touchpoints:** `src/lib/validators/training-cycles.ts` (`importCycleSchema`), `src/lib/actions/training-cycles.ts` (`importCycle`), `src/lib/mcp/tools/cycles.ts`.
+
 ### Two workouts in one day — rotation walker edge case
 - **What:** `walkRotation` in `src/lib/utils/cycle-position.ts` consumes at most one completed session per calendar day. If a user logs two workouts on the same date, the second one doesn't advance the rotation cursor.
 - **Why deferred:** Vanishingly rare in practice; the previous modulo-counter version had the inverse limitation (double-counted, arguably more wrong).

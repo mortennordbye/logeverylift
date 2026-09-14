@@ -152,6 +152,65 @@ export function resolveRotation(
   };
 }
 
+type AutoSlotLike = SlotLike & { autoComplete: boolean };
+
+/** Key for "a completed session for this program on this date". */
+export function autoDayKey(programId: number, date: string): string {
+  return `${programId}|${date}`;
+}
+
+/**
+ * Cycle days marked autoComplete (tracked outside the app, e.g. on a Garmin)
+ * that still need a completed session written for them.
+ *
+ * Day-of-week mode: today plus the previous `lookbackDays` days, bounded by
+ * startDate (the same window findDayOfWeekMissed uses). Rotation mode: only
+ * today's slot. The walk never consumes today, so once today's session exists
+ * the rotation advances on its own tomorrow.
+ *
+ * A day is left alone when a completed session for its program already exists
+ * on that date (`loggedKeys`, built with autoDayKey) or the user dismissed the
+ * date ("I skipped it").
+ */
+export function autoCompleteDue(params: {
+  scheduleType: "day_of_week" | "rotation";
+  startDate: Date;
+  slots: AutoSlotLike[];
+  todaySlotId: number | null;
+  loggedKeys: Set<string>;
+  skippedDates: Set<string>;
+  today: Date;
+  lookbackDays?: number;
+}): { date: string; programId: number }[] {
+  const { scheduleType, slots, todaySlotId, loggedKeys, skippedDates } = params;
+  const start = startOfDay(params.startDate);
+  const end = startOfDay(params.today);
+
+  const due: { date: string; programId: number }[] = [];
+  const consider = (slot: AutoSlotLike | undefined, d: Date) => {
+    if (!slot || !slot.autoComplete || slot.programId === null) return;
+    const dateStr = toDateStr(d);
+    if (skippedDates.has(dateStr)) return;
+    if (loggedKeys.has(autoDayKey(slot.programId, dateStr))) return;
+    due.push({ date: dateStr, programId: slot.programId });
+  };
+
+  if (scheduleType === "rotation") {
+    if (end.getTime() >= start.getTime()) {
+      consider(slots.find((s) => s.id === todaySlotId), end);
+    }
+    return due;
+  }
+
+  const lookbackDays = params.lookbackDays ?? 7;
+  for (let offset = lookbackDays; offset >= 0; offset--) {
+    const d = addDays(end, -offset);
+    if (d.getTime() < start.getTime()) continue;
+    consider(slots.find((s) => s.dayOfWeek === jsDayToDow(d.getDay())), d);
+  }
+  return due;
+}
+
 /**
  * Compute missed active workouts for day-of-week mode in the window
  * [max(startDate, today - lookbackDays), today).

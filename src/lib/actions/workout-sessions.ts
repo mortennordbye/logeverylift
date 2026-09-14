@@ -149,6 +149,21 @@ export async function completeWorkoutSession(
       .where(eq(workoutSessions.id, sessionId))
       .returning();
 
+    // Logging a day the cycle already auto-completed replaces the auto row, so
+    // the day isn't counted twice.
+    if (session.programId != null) {
+      await db
+        .delete(workoutSessions)
+        .where(
+          and(
+            eq(workoutSessions.userId, auth.user.id),
+            eq(workoutSessions.programId, session.programId),
+            eq(workoutSessions.date, session.date),
+            eq(workoutSessions.source, "auto"),
+          ),
+        );
+    }
+
     // Session detail lives at /history/[sessionId]; `/workout` does not exist.
     revalidatePath(`/history/${sessionId}`);
     revalidatePath("/history");

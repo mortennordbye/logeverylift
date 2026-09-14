@@ -190,6 +190,7 @@ function ActivityFeedCard({ item }: { item: FriendActivityItem }) {
             </div>
             <p className="text-sm text-muted-foreground truncate">
               {item.programName ?? "Workout"}
+              {item.source === "auto" && " · automatic"}
               {item.durationMinutes > 0 && ` · ${item.durationMinutes}min`}
               {item.feeling && ` ${FEELING_EMOJI[item.feeling] ?? ""}`}
             </p>

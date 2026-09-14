@@ -48,12 +48,19 @@ function ProgramPicker({
   onSelect,
   onRest,
   onCancel,
+  autoComplete,
+  onToggleAuto,
 }: {
   programs: Program[];
   onSelect: (programId: number, label: string) => void;
   onRest: () => void;
   onCancel: () => void;
+  autoComplete?: boolean;
+  /** Present only when the slot already has a program. */
+  onToggleAuto?: (next: boolean) => void;
 }) {
+  const [auto, setAuto] = useState(autoComplete ?? false);
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end bg-black/40">
       <div className="bg-background rounded-t-3xl p-4 flex flex-col gap-1 max-h-[70vh] overflow-y-auto">
@@ -66,6 +73,35 @@ function ProgramPicker({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {onToggleAuto && (
+          <div className="flex items-center justify-between gap-3 px-4 py-2 mb-1 rounded-xl bg-muted min-h-[44px]">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium">Complete automatically</p>
+              <p className="text-xs text-muted-foreground">
+                For days you track elsewhere, e.g. on Garmin
+              </p>
+            </div>
+            <button
+              role="switch"
+              aria-checked={auto}
+              aria-label="Toggle complete automatically"
+              onClick={() => {
+                setAuto(!auto);
+                onToggleAuto(!auto);
+              }}
+              className={`relative h-7 w-12 shrink-0 rounded-full transition-colors ${
+                auto ? "bg-primary" : "bg-border"
+              }`}
+            >
+              <span
+                className={`absolute left-0 top-0.5 h-6 w-6 rounded-full bg-white shadow transition-transform ${
+                  auto ? "translate-x-[22px]" : "translate-x-0.5"
+                }`}
+              />
+            </button>
+          </div>
+        )}
 
         {/* Rest option */}
         <button
@@ -126,6 +162,18 @@ function DayOfWeekBuilder({
     router.refresh();
   }
 
+  async function handleToggleAuto(next: boolean) {
+    if (pickerDay === null) return;
+    await upsertCycleSlot({
+      trainingCycleId: cycle.id,
+      dayOfWeek: pickerDay,
+      autoComplete: next,
+    });
+    router.refresh();
+  }
+
+  const pickerSlot = pickerDay !== null ? slotByDay[pickerDay] : undefined;
+
   async function handleRest() {
     if (pickerDay === null) return;
     const existing = slotByDay[pickerDay];
@@ -160,6 +208,11 @@ function DayOfWeekBuilder({
               >
                 {slot?.program ? slot.program.name : "— Rest —"}
               </span>
+              {slot?.program && slot.autoComplete && (
+                <span className="text-xs font-semibold text-emerald-600 bg-emerald-500/15 px-2 py-0.5 rounded-full shrink-0">
+                  Auto
+                </span>
+              )}
             </button>
           );
         })}
@@ -171,6 +224,8 @@ function DayOfWeekBuilder({
           onSelect={handleSelectProgram}
           onRest={handleRest}
           onCancel={() => setPickerDay(null)}
+          autoComplete={pickerSlot?.autoComplete}
+          onToggleAuto={pickerSlot?.programId != null ? handleToggleAuto : undefined}
         />
       )}
     </>
@@ -227,6 +282,12 @@ function SortableSlotRow({
       >
         {slot.program ? slot.program.name : slot.label ?? "— Rest —"}
       </button>
+
+      {slot.program && slot.autoComplete && (
+        <span className="text-xs font-semibold text-emerald-600 bg-emerald-500/15 px-2 py-0.5 rounded-full shrink-0">
+          Auto
+        </span>
+      )}
 
       <button
         onClick={() => onRemove(slot)}
@@ -295,6 +356,16 @@ function RotationBuilder({
       label,
     });
     setEditingSlot(null);
+    router.refresh();
+  }
+
+  async function handleToggleAuto(next: boolean) {
+    if (!editingSlot) return;
+    await upsertCycleSlot({
+      trainingCycleId: cycle.id,
+      orderIndex: editingSlot.orderIndex ?? undefined,
+      autoComplete: next,
+    });
     router.refresh();
   }
 
@@ -370,6 +441,8 @@ function RotationBuilder({
           onSelect={handleSelectProgram}
           onRest={handleRest}
           onCancel={() => setEditingSlot(null)}
+          autoComplete={editingSlot.autoComplete}
+          onToggleAuto={editingSlot.programId != null ? handleToggleAuto : undefined}
         />
       )}
     </>
