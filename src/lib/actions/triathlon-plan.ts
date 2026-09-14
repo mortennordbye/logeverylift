@@ -41,8 +41,8 @@ const ENSURED_EXERCISES = [
   { name: "Pendlay Row", category: "strength", isTimed: false, bodyArea: "upper_body", muscleGroup: "back", equipment: "barbell", movementPattern: "pull", discipline: null, exerciseType: "compound" },
   { name: "Bulgarian Split Squat", category: "strength", isTimed: false, bodyArea: "lower_body", muscleGroup: "quads", equipment: "dumbbell", movementPattern: "squat", discipline: null, exerciseType: "compound" },
   { name: "Seated Calf Raise", category: "strength", isTimed: false, bodyArea: "lower_body", muscleGroup: "calves", equipment: "machine", movementPattern: "push", discipline: null, exerciseType: "isolation" },
-  // Pallof is pressed for reps here, not held, so it is not timed.
-  { name: "Pallof Press", category: "strength", isTimed: false, bodyArea: "core", muscleGroup: "abs", equipment: "cable", movementPattern: "isometric", discipline: null, exerciseType: "isometric" },
+  // A timed hold, kept separate from Pallof Press so that row can stay rep-based.
+  { name: "Pallof Hold", category: "strength", isTimed: true, bodyArea: "core", muscleGroup: "abs", equipment: "cable", movementPattern: "isometric", discipline: null, exerciseType: "isometric" },
   // Workout B — Hinge & Vertical
   { name: "Romanian Deadlift", category: "strength", isTimed: false, bodyArea: "lower_body", muscleGroup: "hamstrings", equipment: "barbell", movementPattern: "hinge", discipline: null, exerciseType: "compound" },
   { name: "Pull-up", category: "strength", isTimed: false, bodyArea: "upper_body", muscleGroup: "back", equipment: "bodyweight", movementPattern: "pull", discipline: null, exerciseType: "compound" },
@@ -163,6 +163,7 @@ const LEGACY_MODE_FOR_ADVANCE: Record<PlanProgressionAdvance, string> = {
   distance: "distance",
   load: "weight",
   reps: "reps",
+  duration: "time",
 };
 
 async function insertPlanExercise(
@@ -198,6 +199,7 @@ async function insertPlanExercise(
       targetReps: s.targetReps ?? null,
       weightKg: s.weightKg != null ? String(s.weightKg) : null,
       durationSeconds: s.durationSeconds ?? null,
+      startDelaySeconds: s.startDelaySeconds ?? null,
       distanceMeters: s.distanceMeters ?? null,
       peakDistanceMeters: s.peakDistanceMeters ?? null,
       targetHeartRateZone: s.targetHeartRateZone ?? null,
