@@ -2,6 +2,7 @@
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteTrainingCycle, deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
+import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import type { TrainingCycle } from "@/types/workout";
 import { Check, PlusIcon } from "lucide-react";
 import Link from "next/link";
@@ -12,19 +13,14 @@ import { useEffect, useState } from "react";
 
 function formatEndDate(cycle: TrainingCycle): string {
   if (!cycle.startDate) return "";
-  const start = new Date(cycle.startDate);
-  const end = new Date(start);
-  end.setDate(end.getDate() + cycle.durationWeeks * 7);
-  return end.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const { endDate } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, new Date());
+  return endDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function getWeekProgress(cycle: TrainingCycle): { currentWeek: number; progressPct: number } {
   if (!cycle.startDate) return { currentWeek: 0, progressPct: 0 };
-  const start = new Date(cycle.startDate);
-  const today = new Date();
-  const days = Math.floor((today.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-  const currentWeek = Math.min(Math.floor(days / 7) + 1, cycle.durationWeeks);
-  const progressPct = Math.min((days / (cycle.durationWeeks * 7)) * 100, 100);
+  const { currentWeek, elapsedDays } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, new Date());
+  const progressPct = Math.min((Math.max(elapsedDays, 0) / (cycle.durationWeeks * 7)) * 100, 100);
   return { currentWeek, progressPct };
 }
 

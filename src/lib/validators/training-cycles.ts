@@ -4,11 +4,16 @@ const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
 const scheduleTypeEnum = z.enum(["day_of_week", "rotation"]);
 const statusEnum = z.enum(["draft", "active", "completed"]);
 
+/** Every block length a cycle can have, including the triathlon generator's long blocks. */
+export const CYCLE_DURATION_WEEKS = [4, 6, 8, 10, 12, 16, 24, 36, 52];
+
+const durationWeeks = z.number().int().refine((v) => CYCLE_DURATION_WEEKS.includes(v), {
+  message: `Duration must be one of ${CYCLE_DURATION_WEEKS.join(", ")} weeks`,
+});
+
 export const createTrainingCycleSchema = z.object({
   name: z.string().min(1).max(100),
-  durationWeeks: z.number().int().refine((v) => [4, 6, 8, 10, 12, 16].includes(v), {
-    message: "Duration must be 4, 6, 8, 10, 12, or 16 weeks",
-  }),
+  durationWeeks,
   scheduleType: scheduleTypeEnum.default("day_of_week"),
   endAction: endActionEnum.default("none"),
   endMessage: z.string().max(500).optional(),
@@ -17,13 +22,7 @@ export const createTrainingCycleSchema = z.object({
 export const updateTrainingCycleSchema = z.object({
   id: z.number().int().positive(),
   name: z.string().min(1).max(100).optional(),
-  durationWeeks: z
-    .number()
-    .int()
-    .refine((v) => [4, 6, 8, 10, 12, 16].includes(v), {
-      message: "Duration must be 4, 6, 8, 10, 12, or 16 weeks",
-    })
-    .optional(),
+  durationWeeks: durationWeeks.optional(),
   endAction: endActionEnum.optional(),
   endMessage: z.string().max(500).nullable().optional(),
   status: statusEnum.optional(),
@@ -49,9 +48,7 @@ export const reorderCycleSlotsSchema = z.object({
 
 export const importCycleSchema = z.object({
   name: z.string().min(1).max(100),
-  weeks: z.number().int().refine((v) => [4, 6, 8, 10, 12, 16].includes(v), {
-    message: "Duration must be 4, 6, 8, 10, 12, or 16 weeks",
-  }),
+  weeks: durationWeeks,
   sched: scheduleTypeEnum.default("day_of_week"),
   endAction: endActionEnum.optional(),
   endMessage: z.string().max(500).optional(),
@@ -61,6 +58,8 @@ export const importCycleSchema = z.object({
     idx: z.number().int().positive().optional(),
     label: z.string().max(100).optional(),
     notes: z.string().max(500).optional(),
+    // Day tracked outside the app: completes itself (see autoCompleteDue).
+    auto: z.boolean().optional(),
   })).min(1).max(20),
 });
 

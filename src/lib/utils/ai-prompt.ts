@@ -188,6 +188,7 @@ Rules:
 - idx: 0-based index for exercise order within each program
 - weeks must be one of: 4, 6, 8, 10, 12, 16
 - day: 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 7=Sun
+- auto: optional on a cycle slot. true for a day the athlete tracks outside the app (a run or ride on a watch); the app then marks that day complete on its own. Omit it for days trained in the app.
 - prog in cycle slots must exactly match a name in the "programs" array
 - Exercise order: always list compound (type "compound") exercises before accessory/isolation (type "accessory"/"isolation") exercises within a program; finish with isometric core work where appropriate
 - Starting weights: use ~75% of 1RM for 3–5 rep sets, ~70% for 6–8 reps, ~65% for 8–12 reps, ~60% for 12–15 reps. Estimate for exercises without PR data using body weight as reference where appropriate.

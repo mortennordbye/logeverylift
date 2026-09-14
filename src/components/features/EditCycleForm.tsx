@@ -1,11 +1,12 @@
 "use client";
 
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
+import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-const DURATION_OPTIONS = [4, 6, 8, 10, 12, 16];
+const DURATION_OPTIONS = CYCLE_DURATION_WEEKS;
 
 const END_ACTION_OPTIONS = [
   { value: "none", label: "None" },

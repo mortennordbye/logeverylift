@@ -31,6 +31,7 @@ import {
   type AthleteLevel,
   type TrainingGoal,
 } from "@/lib/utils/periodization";
+import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 
 /**
  * What the plan asks each exercise to progress — the advance axis, restricted
@@ -117,8 +118,6 @@ export type BuildTriathlonPlanParams = {
   level?: AthleteLevel;
 };
 
-const ALLOWED_WEEKS = [4, 6, 8, 10, 12, 16, 24, 36, 52];
-
 /** Peak (race-prep) per-session distances in meters for each endurance slot. */
 type PeakVolumes = {
   swimLong: number;
@@ -153,7 +152,7 @@ const LEVEL_LABELS: Record<AthleteLevel, string> = {
 
 /** Snap an arbitrary week count to the nearest cycle-supported value. */
 export function snapWeeks(weeks: number): number {
-  return ALLOWED_WEEKS.reduce((best, v) =>
+  return CYCLE_DURATION_WEEKS.reduce((best, v) =>
     Math.abs(v - weeks) < Math.abs(best - weeks) ? v : best,
   );
 }

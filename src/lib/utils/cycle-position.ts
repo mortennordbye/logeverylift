@@ -43,6 +43,37 @@ export function toDateStr(d: Date): string {
 }
 
 /**
+ * Parse a `YYYY-MM-DD` date column as local midnight. `new Date(str)` parses it
+ * as UTC midnight, which lands on the previous day in any timezone behind UTC.
+ */
+export function parseDateStr(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+}
+
+/**
+ * Where `today` falls in a block of `durationWeeks` weeks starting on
+ * `startDate`. Days are counted between local midnights and rounded, so a DST
+ * change inside the range does not lose a day. `endDate` is the first day after
+ * the block, and the block is over from that day on. `currentWeek` is clamped
+ * to [1, durationWeeks].
+ */
+export function cycleWeek(
+  startDate: Date,
+  durationWeeks: number,
+  today: Date,
+): { currentWeek: number; elapsedDays: number; endDate: Date; isOver: boolean } {
+  const start = startOfDay(startDate);
+  const elapsedDays = Math.round((startOfDay(today).getTime() - start.getTime()) / MS_PER_DAY);
+  return {
+    currentWeek: Math.min(durationWeeks, Math.max(1, Math.floor(elapsedDays / 7) + 1)),
+    elapsedDays,
+    endDate: addDays(start, durationWeeks * 7),
+    isOver: elapsedDays >= durationWeeks * 7,
+  };
+}
+
+/**
  * Convert JS day-of-week (0=Sun…6=Sat) to our convention (1=Mon…7=Sun).
  */
 export function jsDayToDow(jsDay: number): number {
