@@ -41,15 +41,15 @@ const ENSURED_EXERCISES = [
   { name: "Pendlay Row", category: "strength", isTimed: false, bodyArea: "upper_body", muscleGroup: "back", equipment: "barbell", movementPattern: "pull", discipline: null, exerciseType: "compound" },
   { name: "Bulgarian Split Squat", category: "strength", isTimed: false, bodyArea: "lower_body", muscleGroup: "quads", equipment: "dumbbell", movementPattern: "squat", discipline: null, exerciseType: "compound" },
   { name: "Seated Calf Raise", category: "strength", isTimed: false, bodyArea: "lower_body", muscleGroup: "calves", equipment: "machine", movementPattern: "push", discipline: null, exerciseType: "isolation" },
-  // Pallof is a static anti-rotation hold → timed set (durationSeconds), so isTimed.
-  { name: "Pallof Press", category: "strength", isTimed: true, bodyArea: "core", muscleGroup: "abs", equipment: "cable", movementPattern: "isometric", discipline: null, exerciseType: "isometric" },
+  // Pallof is pressed for reps here, not held, so it is not timed.
+  { name: "Pallof Press", category: "strength", isTimed: false, bodyArea: "core", muscleGroup: "abs", equipment: "cable", movementPattern: "isometric", discipline: null, exerciseType: "isometric" },
   // Workout B — Hinge & Vertical
   { name: "Romanian Deadlift", category: "strength", isTimed: false, bodyArea: "lower_body", muscleGroup: "hamstrings", equipment: "barbell", movementPattern: "hinge", discipline: null, exerciseType: "compound" },
-  { name: "Weighted Pull-up", category: "strength", isTimed: false, bodyArea: "upper_body", muscleGroup: "back", equipment: "bodyweight", movementPattern: "pull", discipline: null, exerciseType: "compound" },
+  { name: "Pull-up", category: "strength", isTimed: false, bodyArea: "upper_body", muscleGroup: "back", equipment: "bodyweight", movementPattern: "pull", discipline: null, exerciseType: "compound" },
   { name: "Dumbbell Shoulder Press", category: "strength", isTimed: false, bodyArea: "upper_body", muscleGroup: "shoulders", equipment: "dumbbell", movementPattern: "push", discipline: null, exerciseType: "compound" },
   { name: "Seated Leg Curl", category: "strength", isTimed: false, bodyArea: "lower_body", muscleGroup: "hamstrings", equipment: "machine", movementPattern: "pull", discipline: null, exerciseType: "isolation" },
   { name: "Face Pull", category: "strength", isTimed: false, bodyArea: "upper_body", muscleGroup: "shoulders", equipment: "cable", movementPattern: "pull", discipline: null, exerciseType: "isolation" },
-  { name: "Ab Wheel Rollout", category: "strength", isTimed: false, bodyArea: "core", muscleGroup: "abs", equipment: "other", movementPattern: "isometric", discipline: null, exerciseType: "isometric" },
+  { name: "Cable Crunch", category: "strength", isTimed: false, bodyArea: "core", muscleGroup: "abs", equipment: "cable", movementPattern: "pull", discipline: null, exerciseType: "isolation" },
 ] as const;
 
 const ENDURANCE_NAMES = ["Swim", "Bike", "Run"] as const;
@@ -85,13 +85,6 @@ export async function generateTriathlonPlan(
         .set({ discipline })
         .where(and(eq(exercises.name, name), isNull(exercises.discipline)));
     }
-
-    // Pallof Press is a static hold (timed). A pre-existing rep-based row would
-    // render without a timer, so ensure it's flagged timed.
-    await db
-      .update(exercises)
-      .set({ isTimed: true })
-      .where(and(eq(exercises.name, "Pallof Press"), eq(exercises.isTimed, false)));
 
     // Resolve names → ids.
     const rows = await db
