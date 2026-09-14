@@ -25,7 +25,10 @@ export default function NewCyclePage() {
         <h1 className="text-3xl font-bold tracking-tight">New Cycle</h1>
       </div>
 
-      <div className="px-4 pb-nav-safe" style={{ minHeight: "calc(100dvh + var(--kb-height, 0px))" }}>
+      {/* shrink-0: in this flex column an explicit minHeight lets the box shrink to
+          exactly that height, swallowing pb-nav-safe and leaving the Create Cycle
+          button under the fixed bottom nav. */}
+      <div className="px-4 pb-nav-safe shrink-0" style={{ minHeight: "calc(100dvh + var(--kb-height, 0px))" }}>
         <CreateCycleForm />
       </div>
     </div>
