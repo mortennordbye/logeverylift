@@ -114,6 +114,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Choosing per shape between a data migration and a preset-table change that gives today's behaviour a name. For (2), also decide whether the engine should apply the same snap the sheet does, so the two cannot disagree.
 - **Touchpoints:** `src/lib/utils/progression-presets.ts` (`PROGRESSION_PRESETS`, `matchPreset`), `src/components/features/WorkoutSetsClient.tsx:205` (the advance snap), `src/lib/utils/progression.ts:1159` (a non-duration advance is judged on reps), `drizzle/0051_progression_axes.sql`.
 
+### A timed set cannot plan or progress weight
+- **What:** A weighted hold (Pallof Hold against a cable, a loaded carry) can only progress its time. Saving a timed set from the program editor writes duration, rest and start delay but not weight, the set row renders only the time, and the `duration` advance suggests a longer hold, never more load. Weight can still be entered during a workout and is logged.
+- **Why deferred:** Pallof Hold shipped on the `duration` advance, which the engine supports today. Weight on timed sets needs a new judging rule (hold the target time at this weight, then add weight) plus editor and row changes.
+- **Unblocked by:** Deciding whether a weighted hold should progress weight at a fixed time, time at a fixed weight, or alternate. Then: write `weightKg` in the timed branch of the program-edit save, show it on the timed row, and add a load step to the `duration` case in the engine.
+- **Touchpoints:** `src/components/features/SetEditView.tsx:292` (timed save omits weight), `src/components/features/WorkoutSetsList.tsx:1717` (timed row shows time only), `src/lib/utils/progression.ts:1517` (the `duration` case).
+
 ## Cycle periodization (spec divergences)
 
 Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spec pass (2026-08-25 @ `91c1646`). Rule IDs are `PZ-n`; divergence IDs `D1`-`D8` are the rows of that spec's Divergences table.

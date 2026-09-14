@@ -208,7 +208,7 @@ describe("buildTriathlonPlan", () => {
     for (const n of [
       // Workout A — Squat & Horizontal
       "Front Squat", "Dumbbell Bench Press", "Pendlay Row", "Bulgarian Split Squat",
-      "Seated Calf Raise", "Pallof Press",
+      "Seated Calf Raise", "Pallof Hold",
       // Workout B — Hinge & Vertical
       "Romanian Deadlift", "Pull-up", "Dumbbell Shoulder Press",
       "Seated Leg Curl", "Face Pull", "Cable Crunch",
@@ -224,7 +224,7 @@ describe("buildTriathlonPlan", () => {
     );
     expect(byName.get("Front Squat")).toBe("compound");
     expect(byName.get("Seated Calf Raise")).toBe("isolation");
-    expect(byName.get("Pallof Press")).toBe("isometric");
+    expect(byName.get("Pallof Hold")).toBe("isometric");
     expect(byName.get("Cable Crunch")).toBe("isolation");
     // Endurance exercises carry no strength type.
     expect(byName.get("Swim")).toBeUndefined();
@@ -238,19 +238,19 @@ describe("buildTriathlonPlan", () => {
     expect(strength.length).toBeGreaterThan(0);
     for (const e of strength) {
       const working = e.sets.filter((s) => s.setType !== "warmup");
-      // Flat: every working set shares one target reps value.
-      const reps = working.map((s) => s.targetReps);
-      expect(new Set(reps).size).toBe(1);
+      // Flat: every working set shares one target (reps, or seconds for a hold).
+      const targets = working.map((s) => s.targetReps ?? s.durationSeconds);
+      expect(new Set(targets).size).toBe(1);
       // No cap: a cap would gate progression on logged effort (D-1).
       expect(working.every((s) => s.targetRir == null)).toBe(true);
     }
   });
 
-  it("runs every strength lift as Load, confirmed", () => {
+  it("runs every rep-based strength lift as Load, confirmed", () => {
     const plan = buildTriathlonPlan({ weeks: 24, goal: "build" });
     const strength = plan.days
       .flatMap((d) => d.exercises)
-      .filter((e) => e.exerciseType != null);
+      .filter((e) => e.exerciseType != null && e.sets.every((s) => s.durationSeconds == null));
     expect(strength.length).toBeGreaterThan(0);
     // Load with a positive increment and no gate override, so the default
     // two-session gate applies. The smart scheme this generator refused is
@@ -270,12 +270,20 @@ describe("buildTriathlonPlan", () => {
     expect(working.every((s) => s.targetReps === 8)).toBe(true);
   });
 
-  it("presses Pallof Press for reps rather than holding it", () => {
-    // A weighted hold has no measure the engine can add load against.
+  it("holds Pallof Hold for time, with a start delay, and progresses the hold", () => {
     const plan = buildTriathlonPlan({ weeks: 12 });
-    const pallof = plan.days.flatMap((d) => d.exercises).find((e) => e.name === "Pallof Press")!;
-    expect(pallof.sets).toHaveLength(2);
-    expect(pallof.sets.every((s) => s.targetReps === 10 && s.durationSeconds == null)).toBe(true);
+    const exercises = plan.days.flatMap((d) => d.exercises);
+    // The timed variant replaces the rep-based one; Pallof Press stays rep-based
+    // for programs that press it.
+    expect(exercises.some((e) => e.name === "Pallof Press")).toBe(false);
+    const hold = exercises.find((e) => e.name === "Pallof Hold")!;
+    expect(hold.progressionAdvance).toBe("duration");
+    expect(hold.sets).toHaveLength(2);
+    expect(
+      hold.sets.every(
+        (s) => s.durationSeconds === 30 && s.startDelaySeconds === 5 && s.targetReps == null,
+      ),
+    ).toBe(true);
   });
 
   it("keeps both swims after dropping to two strength days", () => {

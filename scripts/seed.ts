@@ -138,6 +138,7 @@ const EXERCISES = [
   { name: "Hollow Hold",           category: "strength", isCustom: false, isTimed: true, bodyArea: "core",       muscleGroup: "abs",        equipment: "bodyweight", movementPattern: "isometric" },
   { name: "Dead Bug",              category: "strength", isCustom: false, bodyArea: "core",       muscleGroup: "abs",        equipment: "bodyweight", movementPattern: "isometric" },
   { name: "Pallof Press",          category: "strength", isCustom: false, bodyArea: "core",       muscleGroup: "abs",        equipment: "cable",      movementPattern: "isometric" },
+  { name: "Pallof Hold",           category: "strength", isCustom: false, isTimed: true, bodyArea: "core",       muscleGroup: "abs",        equipment: "cable",      movementPattern: "isometric" },
   { name: "Ab Wheel Rollout",      category: "strength", isCustom: false, bodyArea: "core",       muscleGroup: "abs",        equipment: "other",      movementPattern: "isometric" },
   { name: "Hanging Leg Raise",     category: "strength", isCustom: false, bodyArea: "core",       muscleGroup: "abs",        equipment: "bodyweight", movementPattern: "pull" },
   { name: "Leg Raise",             category: "strength", isCustom: false, bodyArea: "core",       muscleGroup: "abs",        equipment: "bodyweight", movementPattern: "pull" },

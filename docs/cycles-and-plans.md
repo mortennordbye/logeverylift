@@ -28,7 +28,7 @@ Two files:
 
 | Day | Session |
 |---|---|
-| 1 Mon | **Workout A** — Squat & Horizontal (Front Squat, DB Bench, Pendlay Row, Bulgarian Split Squat, Seated Calf Raise, Pallof Press) |
+| 1 Mon | **Workout A** — Squat & Horizontal (Front Squat, DB Bench, Pendlay Row, Bulgarian Split Squat, Seated Calf Raise, Pallof Hold) |
 | 2 Tue | Run — Threshold Intervals |
 | 3 Wed | Bike — Endurance + Swim |
 | 4 Thu | **Workout B** — Hinge & Vertical (RDL, Pull-up, DB Shoulder Press, Seated Leg Curl, Face Pull, Cable Crunch) |
@@ -36,7 +36,7 @@ Two files:
 | 6 Sat | Long Run |
 | 7 Sun | Long Bike + Brick Run |
 
-Strength is a **flat hypertrophy/maintenance block**: same target reps across working sets, no phase re-prescription (strength sets carry no `sessionRole` at all), `weightKg: 0` (athlete loads to the target reps). Every lift runs **Load, confirmed**: the `load` advance with a positive kg increment, the default two-session gate and no `targetRir` cap, so it adds weight after two sessions in a row at the same weight and reps. Per-exercise type is set by the generator. Pallof Press is pressed for **reps**, not held: a weighted hold has no measure the engine can add load against, and the shared exercise row is rep-based for other programs.
+Strength is a **flat hypertrophy/maintenance block**: same target reps across working sets, no phase re-prescription (strength sets carry no `sessionRole` at all), `weightKg: 0` (athlete loads to the target reps). Every rep-based lift runs **Load, confirmed**: the `load` advance with a positive kg increment, the default two-session gate and no `targetRir` cap, so it adds weight after two sessions in a row at the same weight and reps. Per-exercise type is set by the generator. **Pallof Hold** is the one timed hold: 2 × 30 s with a 5 s `startDelaySeconds`, on the `duration` advance, so the hold gets longer on the same gate. It is a separate exercise from Pallof Press because `isTimed` lives on the shared row and other programs press Pallof Press for reps. Migration `0053` adds it to existing databases.
 
 **Rest days:** `restDays` is an array of 1–2 days (1=Mon…7=Sun); `TriathlonPlanForm` defaults to `[5, 6]` (Fri + Sat). Rest days do **not** simply blank whatever session sits there. Each session has an importance rank (most→least: long bike+brick on Sun, long run on Sat, the two strength days, bike+swim, run intervals, recovery swim); with N rest days the N least-important sessions drop, and any surviving session whose natural weekday became a rest day slides onto a freed training day. So the default Fri+Sat rest drops the recovery swim + run intervals, relocates the Saturday long run onto the freed Tuesday slot, and keeps the long bike+brick on Sunday. Because key sessions relocate rather than vanish, no rest-day choice can silently wipe a strength or long session — but if you change the day layout or the `importance` map in `buildTriathlonPlan`, re-check which sessions drop first.
 

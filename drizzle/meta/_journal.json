@@ -372,6 +372,13 @@
       "when": 1788023000000,
       "tag": "0052_progression_suppress_effort_prompt",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1789394853782,
+      "tag": "0053_pallof_hold",
+      "breakpoints": true
     }
   ]
 }

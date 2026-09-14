@@ -34,15 +34,16 @@ import {
 
 /**
  * What the plan asks each exercise to progress — the advance axis, restricted
- * to the four the generator uses.
+ * to the five the generator uses.
  *
- * Named after axis 6 rather than the retired mode. Every strength lift runs
- * "Load, confirmed": `load` with the default two-session gate and no RIR cap,
- * so a lift adds weight after two sessions in a row at the same weight and
- * reps. With D-1 live a cap would also gate progression on logged effort,
- * which the lifter has to remember to log; the block asks for reps only.
+ * Named after axis 6 rather than the retired mode. Every rep-based strength
+ * lift runs "Load, confirmed": `load` with the default two-session gate and no
+ * RIR cap, so a lift adds weight after two sessions in a row at the same weight
+ * and reps. With D-1 live a cap would also gate progression on logged effort,
+ * which the lifter has to remember to log; the block asks for reps only. The
+ * one timed hold runs `duration` on the same gate, so the hold gets longer.
  */
-export type PlanProgressionAdvance = "manual" | "distance" | "load" | "reps";
+export type PlanProgressionAdvance = "manual" | "distance" | "load" | "reps" | "duration";
 
 export type PlanSet = {
   targetReps?: number;
@@ -51,6 +52,8 @@ export type PlanSet = {
   /** Peak (race-prep) distance this endurance set ramps toward. */
   peakDistanceMeters?: number;
   durationSeconds?: number;
+  /** Prep time before a timed set's countdown starts. Not part of the logged duration. */
+  startDelaySeconds?: number;
   /** Target HR zone (1–5) — drives the polarized 80/20 intensity prescription. */
   targetHeartRateZone?: number;
   /** "work" = a hard interval rep the active cycle phase-swaps (zone/rest) by block phase. */
@@ -175,7 +178,9 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   // strictly-static rep scheme. It is retired outright now (D-4), and this
   // generator having refused it years earlier is part of why.
   type StrengthSetSpec = {
-    reps: number;
+    reps?: number;
+    durationSeconds?: number;
+    startDelaySeconds?: number;
     rest: number;
     warmup?: boolean;
   };
@@ -193,6 +198,8 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
     overloadIncrementKg: incrementKg,
     sets: sets.map((s) => ({
       targetReps: s.reps,
+      durationSeconds: s.durationSeconds,
+      startDelaySeconds: s.startDelaySeconds,
       weightKg: 0,
       restTimeSeconds: s.rest,
       setType: s.warmup ? "warmup" : "working",
@@ -201,18 +208,24 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
 
   const W = (reps: number, rest: number): StrengthSetSpec => ({ reps, rest });
   const WU = (reps: number): StrengthSetSpec => ({ reps, rest: 90, warmup: true });
+  const HOLD = (seconds: number, delay: number, rest: number): StrengthSetSpec => ({
+    durationSeconds: seconds,
+    startDelaySeconds: delay,
+    rest,
+  });
 
   // Workout A — Squat & Horizontal: quad drive for the bike, horizontal push/pull to
-  // reverse aero hunch, anti-rotation trunk stability. Pallof Press is pressed for
-  // reps against the cable rather than held: a weighted hold has no measure the
-  // engine can add load against, and reps on a fixed weight do.
+  // reverse aero hunch, anti-rotation trunk stability. Pallof Hold is its own timed
+  // exercise rather than a timed Pallof Press: `isTimed` lives on the shared row,
+  // and other programs press Pallof Press for reps. The delay is time to step out
+  // and set the cable before the countdown.
   const workoutA: PlanExercise[] = [
     lift("Front Squat", "load", "compound", [WU(8), W(8, 150), W(8, 150), W(8, 150)], INC_COMPOUND),
     lift("Dumbbell Bench Press", "load", "compound", [WU(10), W(10, 150), W(10, 150), W(10, 150)], INC_COMPOUND),
     lift("Pendlay Row", "load", "compound", [W(10, 150), W(10, 150), W(10, 150)], INC_COMPOUND),
     lift("Bulgarian Split Squat", "load", "compound", [W(10, 90), W(10, 90)], INC_ISOLATION),
     lift("Seated Calf Raise", "load", "isolation", [W(15, 90), W(15, 90)], INC_ISOLATION),
-    lift("Pallof Press", "load", "isometric", [W(10, 60), W(10, 60)], INC_ISOLATION),
+    lift("Pallof Hold", "duration", "isometric", [HOLD(30, 5, 60), HOLD(30, 5, 60)]),
   ];
 
   // Workout B — Hinge & Vertical: posterior chain for run power, vertical pull for the
