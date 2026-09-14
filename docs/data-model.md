@@ -21,7 +21,7 @@ workout_sessions ──< workout_sets ──> exercises              (the LOG: w
 ### `exercises` — `src/db/schema/exercises.ts`
 The shared library (system rows have `userId IS NULL`; custom rows are user-owned). The demo user shares tables with real users, so **every read/write filters by `userId` or `userId IS NULL`**.
 - Enum-ish `text` columns: `category`, `bodyArea`, `muscleGroup`, `equipment`, `movementPattern`, `discipline` (swim/bike/run, null for non-tri), **`exerciseType`** (compound/accessory/isolation/plyometric/isometric — the intrinsic default).
-- `isTimed` — true for holds/cardio (drives the timed-set UI). e.g. Pallof Press is timed.
+- `isTimed` — true for holds/cardio (drives the timed-set UI). It is on the shared row, so flipping it changes every program that uses the exercise.
 
 ### `programs` / `program_exercises` / `program_sets` — `src/db/schema/programs.ts`
 - `programs.createdByCycleId` → `training_cycles` (cascade). Set when a generator built the program; null for hand-built. Cascade-delete cleans generated programs when their cycle is deleted.

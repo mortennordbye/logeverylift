@@ -210,8 +210,8 @@ describe("buildTriathlonPlan", () => {
       "Front Squat", "Dumbbell Bench Press", "Pendlay Row", "Bulgarian Split Squat",
       "Seated Calf Raise", "Pallof Press",
       // Workout B — Hinge & Vertical
-      "Romanian Deadlift", "Weighted Pull-up", "Dumbbell Shoulder Press",
-      "Seated Leg Curl", "Face Pull", "Ab Wheel Rollout",
+      "Romanian Deadlift", "Pull-up", "Dumbbell Shoulder Press",
+      "Seated Leg Curl", "Face Pull", "Cable Crunch",
     ]) {
       expect(names).toContain(n);
     }
@@ -225,12 +225,12 @@ describe("buildTriathlonPlan", () => {
     expect(byName.get("Front Squat")).toBe("compound");
     expect(byName.get("Seated Calf Raise")).toBe("isolation");
     expect(byName.get("Pallof Press")).toBe("isometric");
-    expect(byName.get("Ab Wheel Rollout")).toBe("isometric");
+    expect(byName.get("Cable Crunch")).toBe("isolation");
     // Endurance exercises carry no strength type.
     expect(byName.get("Swim")).toBeUndefined();
   });
 
-  it("runs flat straight sets capped at the prescribed RIR", () => {
+  it("runs flat straight sets with no RIR cap", () => {
     const plan = buildTriathlonPlan({ weeks: 12 });
     const strength = plan.days
       .flatMap((d) => d.exercises)
@@ -238,27 +238,24 @@ describe("buildTriathlonPlan", () => {
     expect(strength.length).toBeGreaterThan(0);
     for (const e of strength) {
       const working = e.sets.filter((s) => s.setType !== "warmup");
-      // Flat: every working set shares one target reps value (or all are timed holds).
+      // Flat: every working set shares one target reps value.
       const reps = working.map((s) => s.targetReps);
       expect(new Set(reps).size).toBe(1);
-      // Rep-based working sets carry an RIR cap; isometric holds don't.
-      for (const s of working) {
-        if (s.durationSeconds == null) {
-          expect(s.targetRir).toBeGreaterThanOrEqual(1);
-          expect(s.targetRir).toBeLessThanOrEqual(5);
-        }
-      }
+      // No cap: a cap would gate progression on logged effort (D-1).
+      expect(working.every((s) => s.targetRir == null)).toBe(true);
     }
   });
 
-  it("maps the spec's smart mode to plain load so flat reps stay static", () => {
+  it("runs every strength lift as Load, confirmed", () => {
     const plan = buildTriathlonPlan({ weeks: 24, goal: "build" });
-    const ex = plan.days.flatMap((d) => d.exercises);
-    // Compound strength lifts add load with a positive increment. The smart
-    // scheme this refused is retired outright now (D-4).
-    const compounds = ex.filter((e) => e.exerciseType === "compound");
-    expect(compounds.length).toBeGreaterThan(0);
-    for (const e of compounds) {
+    const strength = plan.days
+      .flatMap((d) => d.exercises)
+      .filter((e) => e.exerciseType != null);
+    expect(strength.length).toBeGreaterThan(0);
+    // Load with a positive increment and no gate override, so the default
+    // two-session gate applies. The smart scheme this generator refused is
+    // retired outright now (D-4).
+    for (const e of strength) {
       expect(e.progressionAdvance).toBe("load");
       expect(e.overloadIncrementKg).toBeGreaterThan(0);
     }
@@ -270,13 +267,15 @@ describe("buildTriathlonPlan", () => {
     expect(frontSquat.sets[0].setType).toBe("warmup");
     const working = frontSquat.sets.filter((s) => s.setType !== "warmup");
     expect(working).toHaveLength(3);
-    expect(working.every((s) => s.targetReps === 8 && s.targetRir === 2)).toBe(true);
+    expect(working.every((s) => s.targetReps === 8)).toBe(true);
   });
 
-  it("models Pallof Press as timed isometric holds (no reps)", () => {
+  it("presses Pallof Press for reps rather than holding it", () => {
+    // A weighted hold has no measure the engine can add load against.
     const plan = buildTriathlonPlan({ weeks: 12 });
     const pallof = plan.days.flatMap((d) => d.exercises).find((e) => e.name === "Pallof Press")!;
-    expect(pallof.sets.every((s) => s.durationSeconds === 15 && s.targetReps == null)).toBe(true);
+    expect(pallof.sets).toHaveLength(2);
+    expect(pallof.sets.every((s) => s.targetReps === 10 && s.durationSeconds == null)).toBe(true);
   });
 
   it("keeps both swims after dropping to two strength days", () => {

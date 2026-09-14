@@ -36,11 +36,11 @@ import {
  * What the plan asks each exercise to progress — the advance axis, restricted
  * to the four the generator uses.
  *
- * Named after axis 6 rather than the retired mode. Its strength block caps RIR
- * on every working set, and with D-1 live those caps now gate progression: an
- * exercise here only advances when the reps came with the reserve the plan
- * prescribed. That is what the caps were always for, and it is the intended
- * behaviour, but it is a change to plans this generator produces.
+ * Named after axis 6 rather than the retired mode. Every strength lift runs
+ * "Load, confirmed": `load` with the default two-session gate and no RIR cap,
+ * so a lift adds weight after two sessions in a row at the same weight and
+ * reps. With D-1 live a cap would also gate progression on logged effort,
+ * which the lifter has to remember to log; the block asks for reps only.
  */
 export type PlanProgressionAdvance = "manual" | "distance" | "load" | "reps";
 
@@ -165,21 +165,19 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   const INC_COMPOUND = 2.5;
   const INC_ISOLATION = 1.25;
 
-  // ── Strength block (flat straight sets, RIR-capped) ─────────────────────────
+  // ── Strength block (flat straight sets) ─────────────────────────────────────
   // A maintenance/hypertrophy block run alongside the endurance load. Sets are
   // FLAT — the same target reps across every working set, no phase re-prescription
   // (no sessionRole at all) and no top-set pyramiding — to spare the CNS so the
   // endurance quality sessions aren't compromised. Weight is left at 0 for the
-  // athlete to load to the target reps at the prescribed RIR cap. The spec's `smart`
-  // scheme is mapped to `load`: smart nudged reps via a 1RM estimate, which would
-  // break the strictly-static rep scheme. It is retired outright now (D-4), and
-  // this generator having refused it years earlier is part of why.
+  // athlete to load to the target reps. The spec's `smart` scheme is mapped to
+  // `load`: smart nudged reps via a 1RM estimate, which would break the
+  // strictly-static rep scheme. It is retired outright now (D-4), and this
+  // generator having refused it years earlier is part of why.
   type StrengthSetSpec = {
-    reps?: number;
-    durationSeconds?: number;
+    reps: number;
     rest: number;
     warmup?: boolean;
-    targetRir?: number;
   };
   const lift = (
     name: string,
@@ -194,39 +192,38 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
     overloadIncrementReps: 0,
     overloadIncrementKg: incrementKg,
     sets: sets.map((s) => ({
-      targetReps: s.durationSeconds != null ? undefined : s.reps,
-      durationSeconds: s.durationSeconds,
+      targetReps: s.reps,
       weightKg: 0,
       restTimeSeconds: s.rest,
       setType: s.warmup ? "warmup" : "working",
-      targetRir: s.targetRir,
     })),
   });
 
-  const W = (reps: number, rest: number, targetRir?: number): StrengthSetSpec => ({ reps, rest, targetRir });
+  const W = (reps: number, rest: number): StrengthSetSpec => ({ reps, rest });
   const WU = (reps: number): StrengthSetSpec => ({ reps, rest: 90, warmup: true });
-  const HOLD = (rest: number): StrengthSetSpec => ({ durationSeconds: 15, rest });
 
   // Workout A — Squat & Horizontal: quad drive for the bike, horizontal push/pull to
-  // reverse aero hunch, anti-rotation trunk stability.
+  // reverse aero hunch, anti-rotation trunk stability. Pallof Press is pressed for
+  // reps against the cable rather than held: a weighted hold has no measure the
+  // engine can add load against, and reps on a fixed weight do.
   const workoutA: PlanExercise[] = [
-    lift("Front Squat", "load", "compound", [WU(8), W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
-    lift("Dumbbell Bench Press", "load", "compound", [WU(10), W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
-    lift("Pendlay Row", "load", "compound", [W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
-    lift("Bulgarian Split Squat", "load", "compound", [W(10, 90, 2), W(10, 90, 2)], INC_ISOLATION),
-    lift("Seated Calf Raise", "manual", "isolation", [W(15, 90, 1), W(15, 90, 1)]),
-    lift("Pallof Press", "manual", "isometric", [HOLD(60), HOLD(60), HOLD(60)]),
+    lift("Front Squat", "load", "compound", [WU(8), W(8, 150), W(8, 150), W(8, 150)], INC_COMPOUND),
+    lift("Dumbbell Bench Press", "load", "compound", [WU(10), W(10, 150), W(10, 150), W(10, 150)], INC_COMPOUND),
+    lift("Pendlay Row", "load", "compound", [W(10, 150), W(10, 150), W(10, 150)], INC_COMPOUND),
+    lift("Bulgarian Split Squat", "load", "compound", [W(10, 90), W(10, 90)], INC_ISOLATION),
+    lift("Seated Calf Raise", "load", "isolation", [W(15, 90), W(15, 90)], INC_ISOLATION),
+    lift("Pallof Press", "load", "isometric", [W(10, 60), W(10, 60)], INC_ISOLATION),
   ];
 
   // Workout B — Hinge & Vertical: posterior chain for run power, vertical pull for the
-  // swim catch, structural shoulder/rotator-cuff longevity, anti-extension core.
+  // swim catch, structural shoulder/rotator-cuff longevity, trunk flexion.
   const workoutB: PlanExercise[] = [
-    lift("Romanian Deadlift", "load", "compound", [WU(8), W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
-    lift("Weighted Pull-up", "load", "compound", [W(8, 150, 2), W(8, 150, 2), W(8, 150, 2)], INC_COMPOUND),
-    lift("Dumbbell Shoulder Press", "load", "compound", [W(10, 150, 2), W(10, 150, 2), W(10, 150, 2)], INC_COMPOUND),
-    lift("Seated Leg Curl", "manual", "isolation", [W(12, 90, 1), W(12, 90, 1)]),
-    lift("Face Pull", "manual", "isolation", [W(15, 90, 1), W(15, 90, 1)]),
-    lift("Ab Wheel Rollout", "manual", "isometric", [W(10, 60, 1), W(10, 60, 1)]),
+    lift("Romanian Deadlift", "load", "compound", [WU(8), W(8, 150), W(8, 150), W(8, 150)], INC_COMPOUND),
+    lift("Pull-up", "load", "compound", [W(8, 150), W(8, 150), W(8, 150)], INC_COMPOUND),
+    lift("Dumbbell Shoulder Press", "load", "compound", [W(10, 150), W(10, 150), W(10, 150)], INC_COMPOUND),
+    lift("Seated Leg Curl", "load", "isolation", [W(12, 90), W(12, 90)], INC_ISOLATION),
+    lift("Face Pull", "load", "isolation", [W(15, 90), W(15, 90)], INC_ISOLATION),
+    lift("Cable Crunch", "load", "isolation", [W(15, 120), W(15, 120)], INC_ISOLATION),
   ];
 
   // Each session is built from structured segments — not one distance blob — so it
