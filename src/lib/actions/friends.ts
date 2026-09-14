@@ -372,6 +372,7 @@ export async function getFriendsActivityFeed(): Promise<ActionResult<FriendActiv
         startTime: workoutSessions.startTime,
         endTime: workoutSessions.endTime,
         programName: programs.name,
+        source: workoutSessions.source,
         feeling: workoutSessions.feeling,
         setCount: count(workoutSets.id),
         exerciseCount: sql<number>`count(distinct ${workoutSets.exerciseId})`,
@@ -417,6 +418,7 @@ export async function getFriendsActivityFeed(): Promise<ActionResult<FriendActiv
         workoutSessions.startTime,
         workoutSessions.endTime,
         programs.name,
+        workoutSessions.source,
         workoutSessions.feeling,
       )
       .orderBy(sql`${workoutSessions.startTime} desc`)
@@ -504,8 +506,9 @@ export async function getFriendsActivityFeed(): Promise<ActionResult<FriendActiv
     }
 
     const data: FriendActivityItem[] = rows.map((r) => {
+      // Auto-completed cycle days have no real duration.
       const durationMinutes =
-        r.endTime && r.startTime
+        r.source !== "auto" && r.endTime && r.startTime
           ? Math.max(1, Math.round((r.endTime.getTime() - r.startTime.getTime()) / 60000))
           : 0;
 
@@ -524,6 +527,7 @@ export async function getFriendsActivityFeed(): Promise<ActionResult<FriendActiv
         date: r.date,
         startTime: r.startTime,
         programName: r.programName ?? null,
+        source: r.source,
         durationMinutes,
         setCount: Number(r.setCount),
         exerciseCount: Number(r.exerciseCount),

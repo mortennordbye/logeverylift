@@ -31,7 +31,9 @@ import {
     serial,
     text,
     timestamp,
+    uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { programs } from "./programs";
 import { users } from "./users";
 
@@ -61,6 +63,14 @@ export const workoutSessions = pgTable("workout_sessions", {
   // prompt. Null for normal sessions. Lets the missed-workout logic treat a
   // make-up logged today as satisfying the original missed day.
   intendedDate: date("intended_date"),
+  // "auto" = written by the app for a cycle day marked autoComplete (tracked
+  // outside the app). Such a session has no sets and zero duration.
+  source: text("source", { enum: ["app", "auto"] }).default("app").notNull(),
 }, (t) => [
   index("idx_ws_user_completed_start").on(t.userId, t.isCompleted, t.startTime),
+  // At most one auto session per program per day, so concurrent renders of
+  // getActiveCycleForUser can't double-insert.
+  uniqueIndex("uniq_ws_auto_day")
+    .on(t.userId, t.programId, t.date)
+    .where(sql`${t.source} = 'auto'`),
 ]);

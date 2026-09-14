@@ -1303,9 +1303,11 @@ export async function getSummaryStats(): Promise<ActionResult<SummaryStats>> {
       db
         .select({
           totalSessions: sql<number>`COUNT(*)`,
+          // Auto-completed cycle days have zero duration; keep them out of the
+          // average while still counting them as sessions.
           avgDurationMinutes: sql<number>`AVG(
             EXTRACT(EPOCH FROM (${workoutSessions.endTime} - ${workoutSessions.startTime})) / 60
-          )`,
+          ) FILTER (WHERE ${workoutSessions.source} <> 'auto')`,
         })
         .from(workoutSessions)
         .where(

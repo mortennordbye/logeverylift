@@ -87,7 +87,11 @@ export function HistoryClient({ sessions }: { sessions: SessionWithStats[] }) {
                     )}
                   </div>
                   <div className="flex gap-2 mt-3 flex-wrap">
-                    {session.setCount === 0 ? (
+                    {session.source === "auto" ? (
+                      <span className="text-xs font-semibold text-emerald-600 bg-emerald-500/15 rounded-full px-2.5 py-1">
+                        Done · automatic
+                      </span>
+                    ) : session.setCount === 0 ? (
                       <span className="text-xs text-muted-foreground/60 italic px-0.5">
                         No sets tracked
                       </span>

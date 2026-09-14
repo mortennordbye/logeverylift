@@ -38,6 +38,8 @@ export const upsertCycleSlotSchema = z.object({
   label: z.string().max(100).optional(),
   programId: z.number().int().positive().nullable().optional(),
   notes: z.string().max(500).optional(),
+  // Day tracked outside the app: completes itself (see autoCompleteDue).
+  autoComplete: z.boolean().optional(),
 });
 
 export const reorderCycleSlotsSchema = z.object({
