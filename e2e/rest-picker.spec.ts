@@ -49,11 +49,7 @@ test("rest-time picker saves the selected preset", async ({ page }) => {
   await expect(restRow).toHaveText("REST 05:00");
   expect(originalLabel).not.toBe("REST 05:00"); // sanity: actually changed
 
-  // The label above is optimistic. Reload to (a) prove the write actually
-  // persisted and (b) refresh the client's diff base — saveCurrentState only
-  // writes rests that differ from the last-fetched DB values, so restoring
-  // before router.refresh() lands is silently skipped and leaks 05:00 into
-  // the shared program (which then breaks every later run's sanity check).
+  // The label above is optimistic. Reload to prove the write actually persisted.
   await page.reload();
   await expect(restRow).toHaveText("REST 05:00");
 
@@ -75,6 +71,61 @@ test("rest-time picker saves the selected preset", async ({ page }) => {
     restRow,
     "rest time must be restored, or it leaks into every later run",
   ).toHaveText(originalLabel);
+});
+
+/**
+ * A second rest edit made before the first save's refresh lands.
+ *
+ * The list used to diff a save against the values it had loaded, which lag a
+ * write until router.refresh() returns. Changing a rest and changing it back
+ * inside that window looked like "no change": the label showed the original,
+ * the database kept 05:00. The refresh is held back here so the window is
+ * guaranteed rather than a race.
+ */
+test("a rest edit made before the refresh lands still persists", async ({ page }) => {
+  await openWorkout(page);
+  await openFirstExercise(page);
+
+  const restRow = page.getByText(/^REST \d{2}:\d{2}$/).first();
+  await expect(restRow).toBeVisible();
+  const originalLabel = (await restRow.textContent())?.trim() ?? "";
+  expect(originalLabel).not.toBe("REST 05:00");
+  const originalButton = preserveLabelToButton(parseRestLabel(originalLabel));
+
+  let holdRefresh = true;
+  await page.route("**/*", async (route) => {
+    if (holdRefresh && route.request().headers()["rsc"] === "1") {
+      await new Promise((resolve) => setTimeout(resolve, 4_000));
+    }
+    await route.continue().catch(() => {});
+  });
+
+  try {
+    await restRow.click();
+    await page.getByRole("button", { name: "5 m" }).click();
+    await tapAndSave(page, page.getByRole("button", { name: "Done" }));
+    await expect(restRow).toHaveText("REST 05:00");
+
+    await restRow.click();
+    await page.getByRole("button", { name: originalButton }).click();
+    await tapAndSave(page, page.getByRole("button", { name: "Done" }));
+    await expect(restRow).toHaveText(originalLabel);
+  } finally {
+    holdRefresh = false;
+  }
+
+  await page.reload();
+  await expect(restRow).toBeVisible();
+  const persisted = (await restRow.textContent())?.trim();
+  if (persisted !== originalLabel) {
+    // Put the shared program back before failing, or every later run starts
+    // from 05:00. A reload first means this edit diffs against fresh values.
+    await restRow.click();
+    await page.getByRole("button", { name: originalButton }).click();
+    await tapAndSave(page, page.getByRole("button", { name: "Done" }));
+    await page.reload();
+  }
+  expect(persisted, "the second edit must reach the database").toBe(originalLabel);
 });
 
 function parseRestLabel(label: string): number {

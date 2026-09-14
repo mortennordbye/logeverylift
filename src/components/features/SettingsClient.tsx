@@ -5,7 +5,6 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { setMissedWorkoutsEnabled } from "@/lib/actions/training-cycles";
 import { exportAllSessions } from "@/lib/actions/workout-sessions";
 import { requestNotificationPermission } from "@/lib/notifications";
-import { sanitizeDecimalInput } from "@/lib/utils/format";
 import { Bell, BookOpen, CheckIcon, ChevronLeft, ChevronRight, Download, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -19,13 +18,6 @@ const accentColors = [
 ] as const;
 
 const UI_SCALE_PRESETS = [0.85, 0.9, 0.95, 1.0, 1.1, 1.2, 1.25] as const;
-const KG_INCREMENT_PRESETS = [0, 1, 2.5, 5, 10] as const;
-const REP_INCREMENT_PRESETS = [0, 1, 2, 3] as const;
-
-const isKgPreset = (v: number): v is typeof KG_INCREMENT_PRESETS[number] =>
-  (KG_INCREMENT_PRESETS as readonly number[]).includes(v);
-const isRepPreset = (v: number): v is typeof REP_INCREMENT_PRESETS[number] =>
-  (REP_INCREMENT_PRESETS as readonly number[]).includes(v);
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -201,28 +193,9 @@ export function SettingsClient({
     accentColor, setAccentColor,
     customAccentHex, setCustomAccentHex,
     weeklyGoal, setWeeklyGoal,
-    defaultIncrementKg, setDefaultIncrementKg,
-    defaultIncrementReps, setDefaultIncrementReps,
     uiScale, setUiScale,
   } = useTheme();
   const colorInputRef = useRef<HTMLInputElement>(null);
-
-  // String buffer for the custom increment so partial decimals ("7." / "1,")
-  // survive while typing; the parsed number is committed on blur. Resyncs during
-  // render when defaultIncrementKg changes externally (preset tap or hydration).
-  const [incrementStr, setIncrementStr] = useState(() =>
-    isKgPreset(defaultIncrementKg) ? "" : String(defaultIncrementKg),
-  );
-  const [prevIncrementKg, setPrevIncrementKg] = useState(defaultIncrementKg);
-  if (prevIncrementKg !== defaultIncrementKg) {
-    setPrevIncrementKg(defaultIncrementKg);
-    setIncrementStr(isKgPreset(defaultIncrementKg) ? "" : String(defaultIncrementKg));
-  }
-
-  const presetBtn = (active: boolean) =>
-    `h-11 min-w-[44px] px-3 rounded-xl text-sm font-semibold active:scale-95 transition-colors ${
-      active ? "bg-primary text-primary-foreground" : "bg-background text-foreground"
-    }`;
 
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
@@ -321,75 +294,6 @@ export function SettingsClient({
                     {n}
                   </button>
                 ))}
-              </div>
-            </Row>
-
-            <Row>
-              <RowLabel>Weight Increment</RowLabel>
-              <RowDescription>How much to increase weight when you hit your target reps</RowDescription>
-              <div className="flex gap-2">
-                {KG_INCREMENT_PRESETS.map((n) => (
-                  <button key={n} onClick={() => setDefaultIncrementKg(n)} className={presetBtn(defaultIncrementKg === n)}>
-                    {n === 0 ? "—" : `+${n}`}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-3 mt-3">
-                <span className="text-xs text-muted-foreground">Custom</span>
-                <input
-                  type="text"
-                  inputMode="decimal"
-                  placeholder="e.g. 7.5"
-                  value={incrementStr}
-                  onChange={(e) => setIncrementStr(sanitizeDecimalInput(e.target.value))}
-                  onBlur={() => {
-                    const v = parseFloat(incrementStr);
-                    if (!isNaN(v) && v >= 0) setDefaultIncrementKg(v);
-                  }}
-                  className={`h-9 w-24 rounded-xl text-sm font-semibold text-center border-0 outline-none appearance-none ${
-                    !isKgPreset(defaultIncrementKg)
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-foreground"
-                  }`}
-                />
-                {!isKgPreset(defaultIncrementKg) && (
-                  <span className="text-xs text-muted-foreground">kg</span>
-                )}
-              </div>
-            </Row>
-
-            <Row>
-              <RowLabel>Rep Increment</RowLabel>
-              <RowDescription>Extra reps to add each progression cycle</RowDescription>
-              <div className="flex gap-2">
-                {REP_INCREMENT_PRESETS.map((n) => (
-                  <button key={n} onClick={() => setDefaultIncrementReps(n)} className={presetBtn(defaultIncrementReps === n)}>
-                    {n === 0 ? "—" : `+${n}`}
-                  </button>
-                ))}
-              </div>
-              <div className="flex items-center gap-3 mt-3">
-                <span className="text-xs text-muted-foreground">Custom</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min="0"
-                  step="1"
-                  placeholder="e.g. 5"
-                  value={isRepPreset(defaultIncrementReps) ? "" : defaultIncrementReps}
-                  onChange={(e) => {
-                    const v = parseInt(e.target.value, 10);
-                    if (!isNaN(v) && v >= 0) setDefaultIncrementReps(v);
-                  }}
-                  className={`h-9 w-24 rounded-xl text-sm font-semibold text-center border-0 outline-none appearance-none ${
-                    !isRepPreset(defaultIncrementReps)
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-background text-foreground"
-                  }`}
-                />
-                {!isRepPreset(defaultIncrementReps) && (
-                  <span className="text-xs text-muted-foreground">reps</span>
-                )}
               </div>
             </Row>
 

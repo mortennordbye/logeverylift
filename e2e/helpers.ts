@@ -168,11 +168,11 @@ export async function openWorkout(page: Page): Promise<void> {
 /**
  * Tap the first exercise on the workout page and wait for its set list.
  *
- * Why this isn't just `.click()`: dismissing the readiness sheet calls
- * `confirmReadiness`, which runs a Server Action and a `router.refresh()`. A
- * tap that lands while that refresh is re-rendering the list is accepted by the
- * anchor — `defaultPrevented` is true, so React had hydrated — but the App
- * Router navigation never commits and the user stays on the workout page.
+ * Why this isn't just `.click()`: under WebKit, a tap that lands just after the
+ * readiness sheet closes is accepted by the anchor — `defaultPrevented` is
+ * true, so React had hydrated — but the App Router navigation never commits and
+ * the user stays on the workout page. The cause is not known; it did not
+ * reproduce in iOS Simulator Safari (see BACKLOG.md).
  *
  * Verified with a throwaway diagnostic: clicking immediately after
  * `openWorkout` left `page.url()` unchanged, while inserting a single
