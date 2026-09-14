@@ -1590,8 +1590,11 @@ function SortableSetRow({
   useEffect(() => cancelLongPress, []);
 
   const startLongPress = () => {
-    if (!canLongPress) return;
+    // Reset on every press, before the guard. The sheet's backdrop usually
+    // takes the release, so the click that would clear the flag never reaches
+    // this button; left set, it swallowed the next tap on the now-logged set.
     longPressFired.current = false;
+    if (!canLongPress) return;
     longPressTimer.current = setTimeout(() => {
       longPressFired.current = true;
       haptics.tap();
