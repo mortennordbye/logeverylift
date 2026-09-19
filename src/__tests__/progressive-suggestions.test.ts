@@ -11,6 +11,7 @@ import {
   REQUIRED_HITS,
   STALE_DAYS,
   staleThresholdDays,
+  uniformTargetReps,
 } from "@/lib/utils/progression";
 import type {
   LoggedSet,
@@ -728,6 +729,109 @@ describe("buildSuggestion — hits must be at the current weight", () => {
   });
 });
 
+// ─── A raised rep target re-judges history (SI-9a) ───────────────────────────
+
+describe("buildSuggestion — a changed rep target re-judges past sessions", () => {
+  it("keeps the clears when the log already shows the new number", () => {
+    // Two sessions prescribed 6 in which the lifter did 8 anyway. Levelling the
+    // plan to 8 asks the new question of the log, and the answer is yes — so
+    // the gate stays met and the bump survives the edit.
+    const rows = makeSessions(2, { targetReps: 6, actualReps: 8 });
+    const result = buildSuggestion(rows, makePs({ targetReps: 8 }), null);
+    expect(result?.reason).toBe("progressed");
+    expect(result?.suggestedWeightKg).toBeCloseTo(82.5);
+  });
+
+  it("stops counting a session that only reached the old target", () => {
+    const rows = makeSessions(2, { targetReps: 6, actualReps: 6 });
+    const result = buildSuggestion(rows, makePs({ targetReps: 8 }), null);
+    expect(result?.reason).not.toBe("progressed");
+    // Inert, not a miss: the reason it fell short is the rule change.
+    expect(result?.sessions?.[0]).toMatchObject({
+      status: "unknown",
+      unknownReason: "reconfigured",
+    });
+    expect(result?.hitsAchieved).toBe(0);
+  });
+
+  it("does not turn those sessions into misses, so no back-off follows", () => {
+    // DELOAD_THRESHOLD sessions that all cleared the 6 they were logged under.
+    // Raising the target to 8 must leave them inert, not stack up a deload —
+    // the lifter was never trying for 8.
+    const rows = makeSessions(DELOAD_THRESHOLD, { targetReps: 6, actualReps: 6 });
+    const result = buildSuggestion(rows, makePs({ targetReps: 8 }), null);
+    expect(result?.reason).not.toBe("deload");
+  });
+
+  it("still deloads on genuine misses against the target of the day", () => {
+    const rows = makeSessions(DELOAD_THRESHOLD, { targetReps: 8, actualReps: 5, rpe: 9 });
+    const result = buildSuggestion(rows, makePs({ targetReps: 8 }), null);
+    expect(result?.reason).toBe("deload");
+  });
+
+  it("a lowered target does not manufacture a clear out of a past miss", () => {
+    // Logged against 8 and short of it. Dropping the plan to 6 must not hand
+    // back two clears the lifter never earned — the bar stays the harder of the
+    // two numbers.
+    const rows = makeSessions(2, { targetReps: 8, actualReps: 6 });
+    const result = buildSuggestion(rows, makePs({ targetReps: 6 }), null);
+    expect(result?.reason).not.toBe("progressed");
+  });
+
+  it("is inert only where the shortfall is the rule change, not the lifter", () => {
+    // One set cleared 8, the other fell short of the 6 it was logged under.
+    // That is a real miss and stays one, whatever the plan now asks.
+    const rows = [
+      makeMultiSession([
+        { setNumber: 1, targetReps: 6, actualReps: 8 },
+        { setNumber: 2, targetReps: 6, actualReps: 4 },
+      ]),
+    ];
+    const result = buildSuggestion(rows, makePs({ targetReps: 8, setNumber: 1 }), null);
+    expect(result?.sessions?.[0]).toMatchObject({ status: "missed" });
+  });
+});
+
+// ─── uniformTargetReps ───────────────────────────────────────────────────────
+
+describe("uniformTargetReps", () => {
+  it("returns the target when every working set asks for it", () => {
+    expect(uniformTargetReps([{ targetReps: 8 }, { targetReps: 8 }])).toBe(8);
+  });
+
+  it("returns null when the sets disagree — the 8/6/6 case", () => {
+    // The sheet used to read the first working set and promise "every set hits
+    // 8 reps" while two of the three were prescribed 6.
+    expect(
+      uniformTargetReps([{ targetReps: 8 }, { targetReps: 6 }, { targetReps: 6 }]),
+    ).toBeNull();
+  });
+
+  it("ignores warm-ups, which prescribe their own reps (SI-14)", () => {
+    expect(
+      uniformTargetReps([
+        { setType: "warmup", targetReps: 15 },
+        { targetReps: 8 },
+        { targetReps: 8 },
+      ]),
+    ).toBe(8);
+  });
+
+  it("treats a missing set type as working", () => {
+    expect(uniformTargetReps([{ targetReps: 8 }, { setType: null, targetReps: 6 }])).toBeNull();
+  });
+
+  it("returns null for an open-ended target, which quotes no number", () => {
+    expect(uniformTargetReps([{ targetReps: null }, { targetReps: 8 }])).toBeNull();
+    expect(uniformTargetReps([{ targetReps: 8 }, { targetReps: null }])).toBeNull();
+  });
+
+  it("returns null with no working sets at all", () => {
+    expect(uniformTargetReps([])).toBeNull();
+    expect(uniformTargetReps([{ setType: "warmup", targetReps: 10 }])).toBeNull();
+  });
+});
+
 // ─── describeProgressionRule ──────────────────────────────────────────────────
 
 describe("describeProgressionRule", () => {
@@ -781,6 +885,19 @@ describe("describeProgressionRule", () => {
     expect(describeProgressionRule({ ...base, targetReps: null })).toContain(
       "the target reps",
     );
+  });
+
+  it("falls back to a generic target on the reps advance too", () => {
+    // The caller passes null when the working sets disagree (SI-9a), and a rep
+    // ladder is the one scheme that manufactures that state on its own.
+    const text = describeProgressionRule({
+      ...base,
+      advance: "reps",
+      incrementReps: 1,
+      targetReps: null,
+    })!;
+    expect(text).toContain("the target reps");
+    expect(text).not.toContain("null");
   });
 
   it("describes double progression as the climb and the reset", () => {

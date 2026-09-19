@@ -342,12 +342,12 @@ const repRangeIsWellFormed = <T extends {
 const REP_RANGE_MESSAGE =
   "A rep range needs both a minimum and a maximum, with min ≤ target ≤ max";
 
-// The two per-set progression values the exercise sheet sets uniformly across
-// a slot: the rep range double progression works inside, and the effort cap
-// axis 3 gates on. Both live on program_sets because a top set and its
-// back-offs can legitimately differ — SetEditView still edits them one set at
-// a time — but picking a preset means one thing for the whole exercise, so the
-// sheet writes every working set at once.
+// The three per-set progression values the exercise sheet sets uniformly across
+// a slot: the fixed rep target, the rep range double progression works inside,
+// and the effort cap axis 3 gates on. All three live on program_sets because a
+// top set and its back-offs can legitimately differ — SetEditView still edits
+// them one set at a time — but picking a preset means one thing for the whole
+// exercise, so the sheet writes every working set at once.
 export const setProgramExerciseSetDefaultsSchema = z
   .object({
     programExerciseId: z.number().int().positive(),
@@ -357,15 +357,14 @@ export const setProgramExerciseSetDefaultsSchema = z
     repRangeMax: z.number().int().positive().max(1000).nullable().optional(),
     // Null clears the cap, which puts the exercise back on target-only clearing.
     targetRir: z.number().int().min(0).max(5).nullable().optional(),
+    // Not nullable: the sheet offers numbers, and clearing a target back to
+    // open-ended (SI-9) stays a per-set decision in SetEditView.
+    targetReps: z.number().int().positive().max(1000).optional(),
   })
-  .refine(
-    (v) => (v.repRangeMin == null) === (v.repRangeMax == null),
-    { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] },
-  )
-  .refine(
-    (v) => v.repRangeMin == null || v.repRangeMax == null || v.repRangeMin <= v.repRangeMax,
-    { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] },
-  );
+  // The shared predicate asserts the same two clauses the two hand-rolled
+  // refines did, and adds "min ≤ target ≤ max" now that one payload can carry
+  // a range and a target together.
+  .refine(repRangeIsWellFormed, { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] });
 
 // The fields, unrefined. Both schemas below add the rep-range check
 // themselves: zod refuses to `.omit()` from a schema that carries one, so the

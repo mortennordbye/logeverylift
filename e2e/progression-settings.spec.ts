@@ -14,8 +14,9 @@ import { openFirstExercise, openWorkout, tapAndSave } from "./helpers";
  * about what the app will actually do, which is the one thing layer 2 exists to
  * prevent.
  *
- * Restores the exercise to Load, confirmed with the plan opt-in off at the end,
- * so re-runs start from the same state. These settings live on a shared program.
+ * Restores the exercise to Load, confirmed with the plan opt-in off and its
+ * original rep target at the end, so re-runs start from the same state. These
+ * settings live on a shared program.
  */
 test("preset, gate and plan opt-in persist across a reload", async ({ page }) => {
   // Several settings writes, each waited out to completion, plus two reloads
@@ -55,6 +56,27 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   await expect(rule()).toContainText(/Back off 10% after 3 workouts/, {
     timeout: 5_000,
   });
+
+  // ── The rep target, which only this sheet can write during a workout ──────
+  // SetEditView's reps field records what was *achieved* mid-session, so an
+  // exercise whose sets asked for different numbers could not be levelled from
+  // the workout at all. Captured first so the shared program goes back as it
+  // came; the sentence only quotes a number when every working set agrees.
+  const originalTarget = Number(
+    (await rule().innerText()).match(/hits (\d+) reps/)?.[1],
+  );
+  const targetReps = () => page.getByRole("group", { name: "Target reps" });
+  await expect(targetReps()).toBeVisible({ timeout: 5_000 });
+  await tapAndSave(page, targetReps().getByRole("button", { name: "8", exact: true }), {
+    bodyIncludes: '"targetReps":8',
+  });
+  await expect(rule()).toContainText(/hits 8 reps/, { timeout: 5_000 });
+  // A second value, so the assertion above can't pass on a target that was
+  // already 8 before the tap.
+  await tapAndSave(page, targetReps().getByRole("button", { name: "10", exact: true }), {
+    bodyIncludes: '"targetReps":10',
+  });
+  await expect(rule()).toContainText(/hits 10 reps/, { timeout: 5_000 });
 
   // ── Layer 3: an individual axis, and the relabel to Custom ────────────────
   await openAdvanced();
@@ -100,6 +122,17 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   await tapAndSave(page, page.getByRole("button", { name: /^Load, confirmed/ }), {
     bodyIncludes: '"advance":"load"',
   });
+  // Only a value the chip row actually offers can be tapped back; a custom
+  // target would need the Custom… input, and the seed does not use one.
+  if ([5, 6, 8, 10, 12, 15].includes(originalTarget)) {
+    await tapAndSave(
+      page,
+      page
+        .getByRole("group", { name: "Target reps" })
+        .getByRole("button", { name: String(originalTarget), exact: true }),
+      { bodyIncludes: `"targetReps":${originalTarget}` },
+    );
+  }
   await page.reload();
   await openSheet();
   await expect(rule()).toContainText(/2 sessions in a row/, { timeout: 5_000 });

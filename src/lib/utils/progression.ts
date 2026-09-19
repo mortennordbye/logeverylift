@@ -553,12 +553,18 @@ export function decidingSets(
  * Self-reported fatigue used to exclude the session from the window entirely,
  * which froze progression and showed stale numbers; its clears now count
  * normally and only its misses are held harmless.
+ *
+ * A verdict may also come back `stale`: the set reached the target it was
+ * logged under, but the plan has since asked for more (SI-9a). A session whose
+ * only failures are stale is **unknown**, not missed — the lifter was never
+ * trying for the new number, so it is no evidence either way and must not feed
+ * the back-off counter.
  */
 export function evaluateSession(
   session: SessionHistory,
   scope: ProgressionScope,
   setNumber: number,
-  judge: (set: LoggedSet) => { cleared: boolean; shortfall?: number },
+  judge: (set: LoggedSet) => { cleared: boolean; shortfall?: number; stale?: boolean },
   effortCap?: number | null,
   configChangedAt?: string | null,
 ): SessionOutcome {
@@ -618,6 +624,12 @@ export function evaluateSession(
   // A6: a Tired session's misses are held harmless — its clears still count and
   // it still supplies the "Last:" numbers. D-2: silence where a cap was asked
   // for is unknown, not a failure. Both land on the same inert status.
+  // SI-9a: every set that fell short did so only because the plan now asks for
+  // more than it did then. Asked before Tired, because the reason is the rule
+  // change and not the lifter.
+  const staleOnly =
+    !targetsMet && verdicts.every((v) => v.cleared || v.stale === true);
+
   let status: SessionStatus;
   let unknownReason: SessionOutcome["unknownReason"];
   if (cleared) {
@@ -625,6 +637,9 @@ export function evaluateSession(
   } else if (targetsMet && effortUnknown) {
     status = "unknown";
     unknownReason = "effort";
+  } else if (staleOnly) {
+    status = "unknown";
+    unknownReason = "reconfigured";
   } else if (session.feeling === "Tired") {
     status = "unknown";
     unknownReason = "tired";
@@ -751,6 +766,28 @@ export function countConsecutiveMisses(outcomes: SessionOutcome[]): number {
 }
 
 // ─── Rule description ───────────────────────────────────────────────────────
+
+/**
+ * The one rep target this exercise prescribes, or null when its sets disagree.
+ *
+ * The rule sentence quotes this number, and it can only quote one the whole
+ * slot actually asks for. An 8/6/6 prescription used to be read off the first
+ * working set, so the sheet promised "+2.5kg once every set hits 8 reps" while
+ * two of the three sets asked for 6. Null falls back to "the target reps",
+ * which is true of any spread.
+ *
+ * Warm-ups are excluded (SI-14): a warm-up prescribing 15 says nothing about
+ * what the working sets are being judged against.
+ */
+export function uniformTargetReps(
+  sets: readonly { setType?: string | null; targetReps?: number | null }[],
+): number | null {
+  const working = sets.filter((s) => (s.setType ?? "working") === "working");
+  if (working.length === 0) return null;
+  const first = working[0].targetReps ?? null;
+  if (first == null) return null;
+  return working.every((s) => s.targetReps === first) ? first : null;
+}
 
 /**
  * One or two plain sentences describing what this exercise's progression will
@@ -1156,7 +1193,7 @@ export function buildSuggestion(
   // Did a logged set reach the target this mode measures, and by how much did
   // it fall short? Only reps carry a logged target, so only reps report a
   // shortfall — a timed set records what was held, never what was asked for.
-  const judge = (r: LoggedSet): { cleared: boolean; shortfall?: number } => {
+  const judge = (r: LoggedSet): { cleared: boolean; shortfall?: number; stale?: boolean } => {
     if (advance === "duration") {
       const target = ps.durationSeconds ?? r.durationSeconds;
       return { cleared: target != null && (r.durationSeconds ?? 0) >= target };
@@ -1165,7 +1202,16 @@ export function buildSuggestion(
       const target = ps.distanceMeters ?? r.distanceMeters;
       return { cleared: target != null && (r.distanceMeters ?? 0) >= target };
     }
-    if (metTargetReps(r, ps.targetReps)) return { cleared: true };
+    if (metTargetReps(r, ps.targetReps)) {
+      // SI-9a. The set cleared the bar it was logged under; the plan may since
+      // have been raised. Re-ask the question of the log instead of discarding
+      // the session, so a lifter who was already doing 8s against a target of 6
+      // keeps the clears they earned when they level the target to 8.
+      if (ps.targetReps != null && r.actualReps < ps.targetReps) {
+        return { cleared: false, stale: true };
+      }
+      return { cleared: true };
+    }
     const target = r.targetReps ?? ps.targetReps;
     return {
       cleared: false,

@@ -1,10 +1,10 @@
 # Smart incrementation
 
 > **Status:** implemented
-> **Last verified:** 2026-09-07 against `94a8048`
+> **Last verified:** 2026-09-19 against `6b2976d`
 > **Source of truth:** `src/lib/utils/progression.ts`, `src/lib/utils/progression-presets.ts`, `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`), `src/lib/actions/programs.ts` (`applyProgressionToPlan` + the settings actions), `src/lib/validators/workout.ts`, `src/components/features/{WorkoutSetsClient,WorkoutSetsList,SetEditView}.tsx`
 >
-> Stale check: `git log 94a8048..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
+> Stale check: `git log 6b2976d..HEAD -- src/lib/utils/progression.ts src/lib/actions/workout-sets.ts`
 >
 > **Rewritten 2026-08-29 by phases 5 and 6 of [`../progression-revamp-plan.md`](../progression-revamp-plan.md)**, which completed the rebuild. The engine is now one machine reading eight configurable axes; `progressionMode` is retired and unread. What changed here: the seven modes became the advance axis (SI-22 to SI-31), the effort cap became real (SI-10), the back-off and readiness rules became settings rather than constants (SI-17, SI-21), duration and distance advance from the target rather than from what was achieved (SI-29, SI-30), an anchored set is never an advance target (SI-30a), and the rate rule (SI-41) and the provenance section below are stated for the first time. Phase 6 then rewrote the increment ladder's order and added its granularity rule (SI-3, SI-4a), added staleness (SI-14a), gated the 1RM record (SI-42), and made a missing rep increment mean one rep rather than none (SI-28).
 >
@@ -172,6 +172,18 @@ The target is the row's own `targetReps`, falling back to the program's. With no
 
 *Why:* open-ended sets ("AMRAP") shouldn't be permanently ineligible for progression just because nothing was prescribed.
 *Covered by:* `progressive-suggestions.test.ts` — "returns true for null targets when reps > 0…", "returns false for null targets when actualReps = 0…".
+
+### SI-9a — The rep target is per set, written per exercise, and re-judged when it moves
+The prescription lives on each `program_sets` row, so a top set and its back-offs may legitimately ask for different numbers. Three rules follow from that:
+
+**The progression sheet writes one target across every working set of the slot.** `setProgramExerciseSetDefaults` does it, beside the rep range and the effort cap, and warm-ups are untouched (SI-14). During a workout this is the *only* surface that writes a prescription: `SetEditView`'s reps field records what was achieved there, so an exercise whose sets drifted apart had nowhere to be levelled.
+
+**The rule sentence quotes a number only when every working set agrees.** `uniformTargetReps` returns null for a spread, and `describeProgressionRule` then says "the target reps".
+
+**A target that moves re-judges the window instead of invalidating it.** A logged set is measured against the harder of the target it was logged under and the target the plan asks now. A set that cleared its own target but falls short of a raised one is `stale`, and a session whose only shortfalls are stale is **unknown** with reason `reconfigured` — inert, not a miss. Writing a target therefore does not stamp `progression_config_at`; the rep range and the effort cap still do (SI-40a).
+
+*Why:* a Pull-up prescribed 8/6/6 was read off the first working set, so the sheet promised "+2.5kg once every set hits 8 reps" while two of the three sets asked for 6 — the engine cleared the exercise on evidence the sentence never described, and there was no way to correct it without leaving the workout. Re-judging rather than discarding is what makes the correction affordable: `workout_sets.actual_reps` already records what was done, so a lifter who was doing 8s against a target of 6 keeps the clears they earned. Taking the *harder* of the two numbers is what stops the reverse — cutting a target cannot hand back clears for sessions that missed the number in force at the time.
+*Covered by:* `progressive-suggestions.test.ts` — the `uniformTargetReps` block and "buildSuggestion — a changed rep target re-judges past sessions"; `validators.test.ts` — the `setProgramExerciseSetDefaultsSchema` block; `e2e/progression-settings.spec.ts` — the rep-target section.
 
 ### SI-10 — Effort decides clearing only where a cap is prescribed
 An exercise with no effort cap clears on the target alone, whatever the lifter reported about how hard it was — including nothing.
@@ -492,6 +504,8 @@ The flag is `D-10`, and it is display-only by decision. Before honest logging a 
 
 ### SI-40a — A session logged before the rules changed is inert
 `program_exercises.progression_config_at` records when a judging rule last moved — an axis, the rep range, or an effort cap. A session in the window whose date precedes it is **unknown** (SI-7b) with reason `reconfigured`: it banks nothing, resets nothing, and still supplies the base weight and the "Last: …" line. The increments and the plan opt-in deliberately do not stamp it; they change what an advance writes, not what counts as a clear.
+
+Two writes that look like they should stamp it do not. A write that changes **nothing** — tapping the chip that is already lit — leaves the clock alone, because otherwise confirming a setting silently empties the window. And a **rep target** is re-judged from the log rather than discarded (SI-9a), so it never needs the stamp.
 
 Comparison is by date, not timestamp, so a session logged earlier on the day of the change still counts.
 
