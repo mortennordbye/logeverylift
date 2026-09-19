@@ -683,17 +683,22 @@ export async function setProgramExerciseProgression(
 }
 
 /**
- * Set the rep range and the effort cap across every working set of a slot.
+ * Set the rep target, the rep range and the effort cap across every working set
+ * of a slot.
  *
- * Both live on `program_sets` because a top set and its back-offs can carry
- * different values, and SetEditView still edits them one set at a time. The
- * exercise sheet writes them together because picking a preset is a statement
- * about the exercise: "work 6 to 8 reps" is not a claim about set 2 alone.
+ * All three live on `program_sets` because a top set and its back-offs can
+ * carry different values, and SetEditView still edits them one set at a time.
+ * The exercise sheet writes them together because picking a preset is a
+ * statement about the exercise: "work 6 to 8 reps" is not a claim about set 2
+ * alone. The rep target is here for the same reason and for one more: during a
+ * workout this sheet is the *only* surface that can write a prescription, since
+ * SetEditView's reps field records what was achieved there (SI-9a).
  *
- * A new range clamps each set's `target_reps` into it. Without that the write
- * leaves the prescription outside the bounds it was just given, which the set
- * validator would reject on the next edit and the engine would have to correct
- * behind the lifter's back.
+ * The target is clamped into whatever range the set will carry after this
+ * write. Without that the prescription lands outside the bounds it was just
+ * given, which the set validator would reject on the next edit and the engine
+ * would have to correct behind the lifter's back — and a target above a stored
+ * `rep_range_max` parks a rep ladder above its own ceiling for good.
  */
 export async function setProgramExerciseSetDefaults(
   data: unknown,
@@ -707,7 +712,7 @@ export async function setProgramExerciseSetDefaults(
       fieldErrors: validation.error.flatten().fieldErrors,
     };
   }
-  const { programExerciseId, repRangeMin, repRangeMax, targetRir } =
+  const { programExerciseId, repRangeMin, repRangeMax, targetRir, targetReps } =
     validation.data;
   try {
     const [check] = await db
@@ -721,7 +726,13 @@ export async function setProgramExerciseSetDefaults(
     }
 
     const working = await db
-      .select({ id: programSets.id, targetReps: programSets.targetReps })
+      .select({
+        id: programSets.id,
+        targetReps: programSets.targetReps,
+        repRangeMin: programSets.repRangeMin,
+        repRangeMax: programSets.repRangeMax,
+        targetRir: programSets.targetRir,
+      })
       .from(programSets)
       .where(
         and(
@@ -730,30 +741,54 @@ export async function setProgramExerciseSetDefaults(
         ),
       );
 
+    // Did any write actually move a value? Tapping the chip that is already lit
+    // used to stamp the clock all the same, silently wiping every banked clear
+    // older than today and taking a pending "+2.5kg" with it (SI-40a).
+    let judgingRuleChanged = false;
+
     for (const set of working) {
       const updates: Record<string, unknown> = {};
       if (repRangeMin !== undefined) updates.repRangeMin = repRangeMin;
       if (repRangeMax !== undefined) updates.repRangeMax = repRangeMax;
       if (targetRir !== undefined) updates.targetRir = targetRir;
-      if (
-        repRangeMin != null &&
-        repRangeMax != null &&
-        set.targetReps != null &&
-        (set.targetReps < repRangeMin || set.targetReps > repRangeMax)
-      ) {
-        updates.targetReps = Math.min(Math.max(set.targetReps, repRangeMin), repRangeMax);
+      if (targetReps !== undefined) updates.targetReps = targetReps;
+
+      // The range this set will carry once the write lands, and the target that
+      // has to live inside it. Reading the incoming values is what stops a
+      // same-write pair landing outside each other; falling back to the stored
+      // range is what stops a sheet-written target from freezing a rep ladder
+      // above its ceiling.
+      const min = repRangeMin !== undefined ? repRangeMin : set.repRangeMin;
+      const max = repRangeMax !== undefined ? repRangeMax : set.repRangeMax;
+      const next = targetReps !== undefined ? targetReps : set.targetReps;
+      if (min != null && max != null && next != null && (next < min || next > max)) {
+        updates.targetReps = Math.min(Math.max(next, min), max);
       }
       if (Object.keys(updates).length === 0) continue;
+
+      // A rep-target move is the one change the log can answer retroactively:
+      // the engine re-judges past sessions against the new number rather than
+      // discarding them (SI-9a), so it does not touch the clock. Everything
+      // else here changes how a session is read in ways the log cannot.
+      if (
+        (updates.repRangeMin !== undefined && updates.repRangeMin !== set.repRangeMin) ||
+        (updates.repRangeMax !== undefined && updates.repRangeMax !== set.repRangeMax) ||
+        (updates.targetRir !== undefined && updates.targetRir !== set.targetRir)
+      ) {
+        judgingRuleChanged = true;
+      }
+
       await db.update(programSets).set(updates).where(eq(programSets.id, set.id));
     }
 
-    // Both of these change how a session is judged — the range is what an
-    // advance measures against, the cap is axis 3 — so they stamp the config
-    // clock like the axes on the exercise do (E-13).
-    await db
-      .update(programExercises)
-      .set({ progressionConfigAt: new Date() })
-      .where(eq(programExercises.id, programExerciseId));
+    // E-13: a session logged under a rule that has since changed cannot answer
+    // today's question. Stamped only when a rule actually moved.
+    if (judgingRuleChanged) {
+      await db
+        .update(programExercises)
+        .set({ progressionConfigAt: new Date() })
+        .where(eq(programExercises.id, programExerciseId));
+    }
 
     revalidatePath(`/programs/${check.programId}/workout/exercises/${programExerciseId}`);
     revalidatePath(`/programs/${check.programId}/exercises/${programExerciseId}`);

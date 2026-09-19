@@ -12,6 +12,7 @@ import {
   removeExerciseFromProgramSchema,
   reorderProgramExercisesSchema,
   reorderProgramSetsSchema,
+  setProgramExerciseSetDefaultsSchema,
   unlogWorkoutSetSchema,
   updateProgramSetSchema,
   workoutHistoryQuerySchema,
@@ -394,6 +395,79 @@ describe("updateProgramSetSchema", () => {
 
   it("accepts durationSeconds field", () => {
     expect(updateProgramSetSchema.safeParse({ id: 1, durationSeconds: 90 }).success).toBe(true);
+  });
+});
+
+// ─── setProgramExerciseSetDefaultsSchema ──────────────────────────────────────
+
+describe("setProgramExerciseSetDefaultsSchema", () => {
+  const valid = { programExerciseId: 1 };
+
+  it("accepts a bare target, which the progression sheet writes on its own", () => {
+    expect(
+      setProgramExerciseSetDefaultsSchema.safeParse({ ...valid, targetReps: 8 }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a target that is not a positive whole number of reps", () => {
+    for (const targetReps of [0, -1, 1001, 8.5]) {
+      expect(
+        setProgramExerciseSetDefaultsSchema.safeParse({ ...valid, targetReps }).success,
+      ).toBe(false);
+    }
+  });
+
+  it("still rejects half a rep range", () => {
+    // The guard for swapping the two hand-rolled refines for the shared
+    // predicate: a range needs both bounds or the engine cannot read it.
+    expect(
+      setProgramExerciseSetDefaultsSchema.safeParse({ ...valid, repRangeMin: 6 }).success,
+    ).toBe(false);
+    expect(
+      setProgramExerciseSetDefaultsSchema.safeParse({ ...valid, repRangeMax: 10 }).success,
+    ).toBe(false);
+  });
+
+  it("still rejects an inverted rep range", () => {
+    expect(
+      setProgramExerciseSetDefaultsSchema.safeParse({
+        ...valid,
+        repRangeMin: 10,
+        repRangeMax: 6,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("accepts clearing the range with both bounds null", () => {
+    expect(
+      setProgramExerciseSetDefaultsSchema.safeParse({
+        ...valid,
+        repRangeMin: null,
+        repRangeMax: null,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts a target inside a range written in the same payload", () => {
+    expect(
+      setProgramExerciseSetDefaultsSchema.safeParse({
+        ...valid,
+        repRangeMin: 6,
+        repRangeMax: 10,
+        targetReps: 8,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("rejects a target outside a range written in the same payload", () => {
+    expect(
+      setProgramExerciseSetDefaultsSchema.safeParse({
+        ...valid,
+        repRangeMin: 6,
+        repRangeMax: 10,
+        targetReps: 12,
+      }).success,
+    ).toBe(false);
   });
 });
 

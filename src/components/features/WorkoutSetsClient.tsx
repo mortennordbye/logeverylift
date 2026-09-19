@@ -36,6 +36,7 @@ import {
   toRegress,
   toScope,
   type ProgressionScope,
+  uniformTargetReps,
 } from "@/lib/utils/progression";
 import {
   PROGRESSION_PRESETS,
@@ -81,6 +82,22 @@ const DISTANCE_INCREMENT_PRESETS_M = [500, 1000, 2000] as const;
 const BACKOFF_PCT_PRESETS = [5, 10, 15, 20] as const;
 
 const EFFORT_CAP_PRESETS = [0, 1, 2, 3, 4] as const;
+
+/**
+ * Fixed rep targets, the shoulders of REP_RANGE_PRESETS. Unlike the rep range
+ * this row carries a Custom… escape: during a workout the sheet is the only
+ * surface that writes a prescription, so "anything else goes in through set
+ * editing" has nowhere to send a lifter who works in 9s (SI-9a).
+ */
+const TARGET_REPS_PRESETS = [5, 6, 8, 10, 12, 15] as const;
+
+/** "8", "8 and 6", "8, 6 and 6" — the spread, read out in set order. */
+function formatTargetList(values: (number | null | undefined)[]): string {
+  const labels = values.map((v) => (v == null ? "any" : String(v)));
+  if (labels.length === 0) return "";
+  if (labels.length === 1) return labels[0];
+  return `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}`;
+}
 
 /**
  * The glyph on a preset row says what *moves*, so it maps to the advance axis
@@ -202,6 +219,8 @@ export function WorkoutSetsClient({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showCustomKg, setShowCustomKg] = useState(false);
   const [showCustomReps, setShowCustomReps] = useState(false);
+  const [customTargetRepsInput, setCustomTargetRepsInput] = useState("");
+  const [showCustomTargetReps, setShowCustomTargetReps] = useState(false);
   const [axes, setAxes] = useState<Axes>(() => {
     const isRunningEx =
       exerciseCategory === "cardio" && !exerciseIsTimed;
@@ -258,14 +277,22 @@ export function WorkoutSetsClient({
 
   const isRunning = (exerciseCategory === "cardio" && !exerciseIsTimed) || exerciseDiscipline != null;
 
-  // The rule sentence quotes a rep target; the first working set is the one the
-  // lifter thinks of as "the" target. Null when there is nothing to quote yet.
-  const firstWorkingSet =
-    sets.find((s) => (s.setType ?? "working") === "working" && s.targetReps != null) ??
-    null;
-  const firstWorkingTargetReps = firstWorkingSet?.targetReps ?? null;
-
+  // Seeds a preset's default rep range, which has to contain the prescription
+  // it is given. The *lowest* working target, so the range the preset picks can
+  // only ever clamp a set down — seeding off the first set's 12 against a 6-rep
+  // back-off had the server clamp that set up to 8.
   const workingSets = sets.filter((s) => (s.setType ?? "working") === "working");
+  const lowestWorkingTargetReps = workingSets.reduce<number | null>(
+    (low, s) =>
+      s.targetReps == null ? low : low == null ? s.targetReps : Math.min(low, s.targetReps),
+    null,
+  );
+
+  // The rule sentence quotes a rep target, and it may only quote one every
+  // working set actually asks for (SI-9a). Null when they disagree, which
+  // describeProgressionRule renders as "the target reps".
+  const targetReps = uniformTargetReps(sets);
+  const workingTargets = workingSets.map((s) => s.targetReps);
   // The range the sheet edits and the sentence quotes. Read off the first
   // working set that carries one — the sheet writes them all together, so they
   // agree unless somebody edited one set by hand.
@@ -309,9 +336,13 @@ export function WorkoutSetsClient({
    * Both are reps-only, so a timed or running exercise renders neither and the
    * slot collapses to nothing.
    */
-  const showRepRange = axes.advance === "double";
+  const isRepsMeasure = measure === "reps";
+  const showRepRange = isRepsMeasure && axes.advance === "double";
+  // Every reps scheme that isn't double progression prescribes a fixed number,
+  // Autoregulated included — it gates on effort *on top of* a fixed target.
+  const showTargetReps = isRepsMeasure && !showRepRange;
   const showEffortCap = selectedPreset?.requiresEffortCap === true || effortCap != null;
-  const hasConditionalSlot = showRepRange || showEffortCap;
+  const hasConditionalSlot = isRepsMeasure || showEffortCap;
 
   // Layer 2. Built from the live axis values every render, so it describes what
   // the engine will do rather than what the sheet last wrote.
@@ -319,7 +350,7 @@ export function WorkoutSetsClient({
     advance: axes.advance,
     incrementKg: increment,
     incrementReps,
-    targetReps: firstWorkingTargetReps,
+    targetReps,
     // Same set, same reasoning: the range the sentence quotes is the one on the
     // set the lifter thinks of as the target.
     repRangeMin: repRange?.repRangeMin,
@@ -506,20 +537,30 @@ export function WorkoutSetsClient({
       hasRange: repRange != null,
       effortCap,
       anySetCapped: workingSets.some((s) => s.targetRir != null),
-      targetReps: firstWorkingTargetReps,
+      targetReps: lowestWorkingTargetReps,
     });
     await updateAxes(preset.axes);
     if (Object.keys(defaults).length > 0) await handleSetDefaults(defaults);
   }
 
-  /** Rep range and effort cap, written across every working set of the slot. */
+  /**
+   * Rep target, rep range and effort cap, written across every working set of
+   * the slot.
+   */
   async function handleSetDefaults(next: {
     repRangeMin?: number | null;
     repRangeMax?: number | null;
     targetRir?: number | null;
+    targetReps?: number;
   }) {
     const result = await setProgramExerciseSetDefaults({ programExerciseId, ...next });
     if (result.success) router.refresh();
+  }
+
+  async function handleTargetRepsChange(next: number) {
+    setShowCustomTargetReps(false);
+    setCustomTargetRepsInput("");
+    await handleSetDefaults({ targetReps: next });
   }
 
   // null clears the override so the exercise's intrinsic type is inherited.
@@ -732,7 +773,7 @@ export function WorkoutSetsClient({
       {showProgressionPicker && (
         <div
           className="fixed inset-0 bg-black/50 z-50 flex items-end"
-          onClick={() => { setShowProgressionPicker(false); setCustomKgInput(""); setCustomRepInput(""); setShowCustomKg(false); setShowCustomReps(false); }}
+          onClick={() => { setShowProgressionPicker(false); setCustomKgInput(""); setCustomRepInput(""); setCustomTargetRepsInput(""); setShowCustomKg(false); setShowCustomReps(false); setShowCustomTargetReps(false); }}
         >
           <div
             className="w-full px-4 pb-8 space-y-2"
@@ -811,92 +852,201 @@ export function WorkoutSetsClient({
                   </div>
                 )}
 
-                {/* ── The scheme's own parameter ───────────────────────────
-                    Rep range for double progression, reps in reserve for an
-                    autoregulated scheme. Both belong beside the scheme that
-                    needs them rather than under Advanced: reps in reserve is
-                    the whole of what "Autoregulated" means, and picking that
-                    preset writes a cap of 2 the lifter could not otherwise see.
-                    Stacked in one grid cell so this area's height never changes
-                    when the scheme does — the same reservation the increment
-                    sections use below. Neither applies to a plank or a run
-                    (E-5), so the slot collapses entirely there. */}
+                {/* ── The scheme's own parameters ──────────────────────────
+                    Row 1 is what the scheme prescribes — a rep range for double
+                    progression, a fixed target for every other reps scheme. The
+                    two are mutually exclusive on the advance, so they stack in
+                    one grid cell and this area's height never changes when the
+                    scheme does, the same reservation the increment sections use
+                    below. Row 2 is reps in reserve, which belongs beside the
+                    scheme rather than under Advanced — it is the whole of what
+                    "Autoregulated" means, and picking that preset writes a cap
+                    of 2 the lifter could not otherwise see. It gets its own row
+                    because Autoregulated needs a fixed target *and* a cap, and
+                    sharing the cell left one of them unreachable.
+
+                    Row 1 is reserved for the whole of a reps exercise and row 2
+                    whenever a cap is in play, so tapping between presets never
+                    materialises a block under the thumb. Neither applies to a
+                    plank or a run (E-5), so the slot collapses there. */}
                 {hasConditionalSlot && (
                   <div className="grid border-t border-border">
-                    <div className={`col-start-1 row-start-1 ${showRepRange ? "" : "opacity-0 pointer-events-none"}`}>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1 flex items-center gap-1.5">
-                        <Repeat2Icon className="h-3.5 w-3.5" aria-hidden="true" />
-                        Rep range
-                      </p>
-                      <div className="flex flex-wrap gap-2 px-4 pb-3">
-                        {REP_RANGE_PRESETS.map(([min, max]) => (
+                    {isRepsMeasure && (
+                      <>
+                      <div className={`col-start-1 row-start-1 ${showRepRange ? "" : "opacity-0 pointer-events-none"}`}>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1 flex items-center gap-1.5">
+                          <Repeat2Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                          Rep range
+                        </p>
+                        <div className="flex flex-wrap gap-2 px-4 pb-3">
+                          {REP_RANGE_PRESETS.map(([min, max]) => (
+                            <button
+                              key={`${min}-${max}`}
+                              onClick={() =>
+                                handleSetDefaults({ repRangeMin: min, repRangeMax: max })
+                              }
+                              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                                repRange?.repRangeMin === min && repRange?.repRangeMax === max
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {min}–{max}
+                            </button>
+                          ))}
+                        </div>
+                        {repRange == null && showRepRange && (
+                          <p className="text-xs text-amber-600 dark:text-amber-500 px-4 pb-3">
+                            Without a range this behaves as plain weight progression.
+                          </p>
+                        )}
+                      </div>
+
+                      {/* The fixed prescription, and the only place a workout can
+                          write one: SetEditView's reps field records what was
+                          *achieved* there, so an exercise whose sets drifted apart
+                          had nowhere to be levelled (SI-9a). Tapping a number is
+                          the level action — it writes every working set — so there
+                          is no separate "level them" button. */}
+                      <div className={`col-start-1 row-start-1 ${showTargetReps ? "" : "opacity-0 pointer-events-none"}`}>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1 flex items-center gap-1.5">
+                          <ChevronsUpIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          Target reps
+                        </p>
+                        <div
+                          role="group"
+                          aria-label="Target reps"
+                          className="flex flex-wrap gap-2 px-4 pb-3"
+                        >
+                          {TARGET_REPS_PRESETS.map((preset) => (
+                            <button
+                              key={preset}
+                              onClick={() => handleTargetRepsChange(preset)}
+                              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                                targetReps === preset
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {preset}
+                            </button>
+                          ))}
                           <button
-                            key={`${min}-${max}`}
-                            onClick={() =>
-                              handleSetDefaults({ repRangeMin: min, repRangeMax: max })
-                            }
+                            onClick={() => setShowCustomTargetReps((v) => !v)}
                             className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                              repRange?.repRangeMin === min && repRange?.repRangeMax === max
+                              targetReps != null &&
+                              !TARGET_REPS_PRESETS.includes(targetReps as never)
                                 ? "bg-primary text-primary-foreground"
                                 : "bg-muted text-muted-foreground"
                             }`}
                           >
-                            {min}–{max}
+                            {targetReps != null &&
+                            !TARGET_REPS_PRESETS.includes(targetReps as never)
+                              ? String(targetReps)
+                              : "Custom…"}
                           </button>
-                        ))}
-                      </div>
-                      {repRange == null && showRepRange && (
-                        <p className="text-xs text-amber-600 dark:text-amber-500 px-4 pb-3">
-                          Without a range this behaves as plain weight progression.
+                        </div>
+                        {showCustomTargetReps && (
+                          <div className="flex items-center gap-3 px-4 py-3 border-t border-border">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              autoFocus
+                              placeholder="Custom reps"
+                              value={customTargetRepsInput}
+                              onChange={(e) => setCustomTargetRepsInput(e.target.value)}
+                              className="flex-1 min-w-0 bg-transparent text-base font-medium outline-none placeholder:text-muted-foreground/50"
+                            />
+                            <button
+                              onClick={() => {
+                                const val = parseInt(customTargetRepsInput, 10);
+                                if (!isNaN(val) && val > 0) handleTargetRepsChange(val);
+                              }}
+                              disabled={
+                                !customTargetRepsInput ||
+                                isNaN(parseInt(customTargetRepsInput, 10)) ||
+                                parseInt(customTargetRepsInput, 10) <= 0
+                              }
+                              className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
+                            >
+                              Set
+                            </button>
+                          </div>
+                        )}
+                        {/* A fixed box, not a minimum: the message swaps when the
+                            sets stop disagreeing, and a growing note would shove
+                            the rows below it mid-tap. */}
+                        <p
+                          className={`text-xs px-4 pb-3 h-[2.75rem] overflow-hidden ${
+                            targetReps == null
+                              ? "text-amber-600 dark:text-amber-500"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {targetReps == null
+                            ? `Your sets ask for ${formatTargetList(workingTargets)}. Tap a number to use it on every set.`
+                            : "Raising this re-checks earlier sessions against the new number."}
                         </p>
-                      )}
-                    </div>
+                      </div>
+                      </>
+                    )}
 
                     {/* Axis 3. Opt-in by design: an exercise with no cap clears
                         on the target alone, and a cap nobody asked for would
                         block progression on effort that was never logged.
                         Written to every working set; the scope decides which one
-                        the engine reads (D-8). */}
-                    <div className={`col-start-1 row-start-1 ${showRepRange ? "opacity-0 pointer-events-none" : ""}`}>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1 flex items-center gap-1.5">
-                        <GaugeIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                        Reps in reserve
-                      </p>
-                      <div
-                        role="group"
-                        aria-label="Reps in reserve"
-                        className="flex flex-wrap gap-2 px-4 pb-1"
-                      >
-                        <button
-                          onClick={() => handleSetDefaults({ targetRir: null })}
-                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                            effortCap == null
-                              ? "bg-primary text-primary-foreground"
-                              : "bg-muted text-muted-foreground"
-                          }`}
+                        the engine reads (D-8). Its own row: it stacks *under*
+                        the scheme's parameter rather than replacing it, because
+                        Autoregulated prescribes a fixed target *and* a cap, and
+                        sharing one cell left whichever lost unreachable.
+
+                        Mounted only when it applies, unlike row 1. Reserving it
+                        permanently put ~130px of dead space under every ordinary
+                        reps exercise to spare the one preset tap that grows the
+                        sheet — and that tap grows it *below* the preset list, so
+                        nothing moves under the thumb. */}
+                    {showEffortCap && (
+                      <div className="col-start-1 row-start-2">
+                        <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1 flex items-center gap-1.5">
+                          <GaugeIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                          Reps in reserve
+                        </p>
+                        <div
+                          role="group"
+                          aria-label="Reps in reserve"
+                          className="flex flex-wrap gap-2 px-4 pb-1"
                         >
-                          None
-                        </button>
-                        {EFFORT_CAP_PRESETS.map((preset) => (
                           <button
-                            key={preset}
-                            onClick={() => handleSetDefaults({ targetRir: preset })}
+                            onClick={() => handleSetDefaults({ targetRir: null })}
                             className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                              effortCap === preset
+                              effortCap == null
                                 ? "bg-primary text-primary-foreground"
                                 : "bg-muted text-muted-foreground"
                             }`}
                           >
-                            {preset}
+                            None
                           </button>
-                        ))}
+                          {EFFORT_CAP_PRESETS.map((preset) => (
+                            <button
+                              key={preset}
+                              onClick={() => handleSetDefaults({ targetRir: preset })}
+                              className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                                effortCap === preset
+                                  ? "bg-primary text-primary-foreground"
+                                  : "bg-muted text-muted-foreground"
+                              }`}
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-xs text-muted-foreground px-4 pb-3">
+                          {effortCap == null
+                            ? "Hitting the target reps is the whole test."
+                            : "Sessions where you don't log effort won't count either way."}
+                        </p>
                       </div>
-                      <p className="text-xs text-muted-foreground px-4 pb-3">
-                        {effortCap == null
-                          ? "Hitting the target reps is the whole test."
-                          : "Sessions where you don't log effort won't count either way."}
-                      </p>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -1376,7 +1526,7 @@ export function WorkoutSetsClient({
             </div>
             <div className="bg-card rounded-2xl overflow-hidden">
               <button
-                onClick={() => { setShowProgressionPicker(false); setCustomKgInput(""); setCustomRepInput(""); setShowCustomKg(false); setShowCustomReps(false); }}
+                onClick={() => { setShowProgressionPicker(false); setCustomKgInput(""); setCustomRepInput(""); setCustomTargetRepsInput(""); setShowCustomKg(false); setShowCustomReps(false); setShowCustomTargetReps(false); }}
                 className="w-full flex items-center justify-center py-4 text-base font-semibold text-primary active:bg-muted/50 transition-colors"
               >
                 Done
