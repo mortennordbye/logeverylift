@@ -34,10 +34,15 @@ Thumbs.db
 coverage
 .nyc_output
 
-# Documentation
+# Documentation — kept out of the build context entirely. `COPY . .` in the
+# builder stage would otherwise make a doc edit change a layer, busting the
+# cache and producing a new image for a change that ships no code. Nothing
+# under src/ or scripts/ reads a markdown file.
 README.md
 DEPLOYMENT.md
 LICENSE
+*.md
+docs/
 
 # Docker
 Dockerfile
