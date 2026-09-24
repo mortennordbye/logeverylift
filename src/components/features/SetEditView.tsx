@@ -276,7 +276,9 @@ export function SetEditView({
         await updateProgramSet({ id: set.id, distanceMeters: null, durationSeconds: duration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor });
       }
     } else if (isWorkout) {
-      // During a workout, changes apply to the active session only — never write back to the program
+      // During a workout, changes apply to the active session only — never write back to
+      // the program, with one exception below: a reps number typed here that differs from
+      // the plan is a deliberate correction, not routine performance variance.
       if (isTimed) {
         // Always write startDelaySeconds: setOverride replaces the whole record,
         // and 0 must beat a program-level delay in the ?? fallback chain.
@@ -286,7 +288,16 @@ export function SetEditView({
         // A failed set was taken to failure, so RIR is 0 regardless of the picker.
         workoutSession?.setOverride(set.id, { targetReps: plannedReps, weightKg: weight, notes: noteValue, isFailed: true, actualReps: reps, rir: 0 });
       } else {
-        workoutSession?.setOverride(set.id, { targetReps: plannedReps, weightKg: weight, notes: noteValue, actualReps: reps, rir: rir ?? undefined, wasEasy: easy });
+        // Re-prescribe the set so the target matches what was actually
+        // confirmed — otherwise the plan is stuck on a number the lifter has
+        // already shown they've moved past. The override's targetReps must
+        // follow suit: it wins over the (now stale, until the next fetch)
+        // program_sets row in the list's display, so leaving it at
+        // plannedReps would keep showing the old target with a "done" badge.
+        workoutSession?.setOverride(set.id, { targetReps: reps, weightKg: weight, notes: noteValue, actualReps: reps, rir: rir ?? undefined, wasEasy: easy });
+        if (reps !== plannedReps) {
+          void updateProgramSet({ id: set.id, targetReps: reps });
+        }
       }
     } else if (isTimed) {
       await updateProgramSet({ id: set.id, durationSeconds: duration, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null });
