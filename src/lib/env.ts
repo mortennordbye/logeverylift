@@ -24,7 +24,15 @@ const envSchema = z.object({
   // freshly-deployed server pods ("Failed to find Server Action" errors).
   // Set to a stable 32-byte base64 value (`openssl rand -base64 32`) and
   // never rotate. Required in production; warned-on if missing.
-  NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY: z.string().optional(),
+  //
+  // The name matters: Next 16 reads NEXT_SERVER_ACTIONS_ENCRYPTION_KEY. The
+  // older NEXT_PRIVATE_ prefix is not read at all, so setting that one looks
+  // like a mitigation while doing nothing. Verified by building twice: with
+  // this variable the action IDs are identical, without it they share none.
+  //
+  // This warning only covers runtime. What actually fixes the IDs is having
+  // the variable set during `next build` — see the Dockerfile's secret mount.
+  NEXT_SERVER_ACTIONS_ENCRYPTION_KEY: z.string().optional(),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -46,8 +54,8 @@ function loadEnv(): Env {
       ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
       ADMIN_NAME: process.env.ADMIN_NAME,
       SENTRY_DSN: process.env.SENTRY_DSN,
-      NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY:
-        process.env.NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY,
+      NEXT_SERVER_ACTIONS_ENCRYPTION_KEY:
+        process.env.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY,
     });
   }
 
@@ -75,10 +83,10 @@ function loadEnv(): Env {
 
   if (
     parsed.data.NODE_ENV === "production" &&
-    !parsed.data.NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY
+    !parsed.data.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY
   ) {
     console.warn(
-      "[env] NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY is unset in production. " +
+      "[env] NEXT_SERVER_ACTIONS_ENCRYPTION_KEY is unset in production. " +
         "Server Action IDs will be re-randomized every build, causing 'Failed to find Server Action' " +
         "errors in PWA users with cached bundles. Set a stable 32-byte base64 value " +
         "(openssl rand -base64 32) and never rotate it.",

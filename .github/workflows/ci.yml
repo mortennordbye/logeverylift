@@ -7,6 +7,20 @@ on:
       - main
     tags:
       - "v*"
+    # A documentation-only push must not produce an image. Every image pushed
+    # from main gets a `0.0.N` tag, which Kargo promotes and ArgoCD rolls out —
+    # restarting the pod. In-flight PWA sessions then hold client chunks whose
+    # Server Action IDs the new server may not recognise, so a docs commit can
+    # break someone mid-workout for no shipped change.
+    #
+    # Semantics: the run is skipped only when EVERY changed path matches. A
+    # commit touching both a doc and `src/` still builds. `pull_request` is
+    # deliberately left unfiltered so docs PRs are still typechecked and tested.
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - ".claude/**"
+      - "LICENSE"
   workflow_dispatch:
 
 # Least privilege by default; the build job opts into packages:write.
@@ -86,6 +100,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # A pushed image with a build-specific Server Action key breaks every
+      # in-flight PWA session on the next deploy, silently — the failed writes
+      # land in the replay queue, retry 5x and get dropped. Fail loudly here
+      # instead of discovering it from a user mid-workout.
+      - name: Require a stable Server Action key for pushed images
+        if: github.event_name != 'pull_request'
+        env:
+          SERVER_ACTIONS_KEY: ${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
+        run: |
+          if [ -z "$SERVER_ACTIONS_KEY" ]; then
+            echo "::error::NEXT_SERVER_ACTIONS_ENCRYPTION_KEY is not set as a repository secret."
+            echo "::error::It must match the value in the logeverylift-secret k8s Secret exactly."
+            exit 1
+          fi
+
       - name: Extract metadata (tags, labels)
         id: meta
         uses: docker/metadata-action@v6
@@ -107,6 +136,11 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Consumed by the builder stage via `--mount=type=secret`. Keeps
+          # Server Action IDs identical across builds, so a deploy doesn't
+          # invalidate the action IDs a cached PWA bundle is still calling.
+          secrets: |
+            server_actions_key=${{ secrets.NEXT_SERVER_ACTIONS_ENCRYPTION_KEY }}
           # Layer cache in the GitHub Actions cache backend: pnpm install only
           # re-runs when package.json/pnpm-lock.yaml change. mode=max also
           # caches intermediate stages (deps/builder), not just the final image.
