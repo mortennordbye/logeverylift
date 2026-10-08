@@ -1578,6 +1578,10 @@ function SortableSetRow({
     // In program view mode (not editing, not workout) — do nothing
   };
 
+  // Logged short of the target: shown as "7/8", and no load bump is offered on it.
+  const missedReps =
+    overrideActualReps != null && set.targetReps != null && overrideActualReps < set.targetReps;
+
   // Long-press the toggle to open the miss sheet. Only for a strength set
   // that has not been logged: a timed set's control is a play button, and a
   // logged set is corrected in the editor, which is where the notes are.
@@ -1741,7 +1745,11 @@ function SortableSetRow({
             {/* The prescription still reads as the prescription; what was
                 actually done sits beside it. Without this a set logged short
                 looks identical to one that went to plan. */}
-            {overrideActualReps != null && overrideActualReps !== set.targetReps && (
+            {missedReps ? (
+              <span className="text-sm text-amber-600 dark:text-amber-500 font-normal ml-1.5">
+                · {overrideActualReps}/{set.targetReps}
+              </span>
+            ) : overrideActualReps != null && overrideActualReps !== set.targetReps && (
               <span className="text-sm text-muted-foreground font-normal ml-1.5">
                 · {overrideActualReps} done
               </span>
@@ -1879,7 +1887,7 @@ function SortableSetRow({
               </div>
               {/* Second line: action buttons + readiness label */}
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                {suggestion.reason === "progressed" && (
+                {suggestion.reason === "progressed" && !missedReps && (
                   <SuggestionChip
                     tone="primary"
                     applied={!weightPending || isCompleted}
