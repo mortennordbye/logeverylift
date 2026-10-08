@@ -242,11 +242,12 @@ export function SetEditView({
     setSaving(true);
     const trimmedNote = notes.trim();
     const noteValue = trimmedNote.length > 0 ? trimmedNote : null;
-    // During a workout the reps field records what was achieved and the
-    // prescription stands: correcting "I got 6, not 8" used to write 6 into
-    // targetReps, so the set then logged a perfect hit against a target the
-    // lifter had just lowered, and the engine never saw the miss. In
-    // program-edit mode the same field is the prescription.
+    // During a workout the reps field records what was achieved. Fewer reps
+    // than planned is a miss and the prescription stands: writing 7 into
+    // targetReps would log a perfect hit against a target the lifter had just
+    // lowered, and the engine would never see the miss. More reps than planned
+    // re-prescribes the set (below). In program-edit mode the same field is the
+    // prescription.
     const plannedReps = override?.targetReps ?? set.targetReps ?? reps;
     const targetRepsValue = isWorkout ? plannedReps : reps;
 
@@ -287,6 +288,10 @@ export function SetEditView({
         // Failed: keep the program target as the goal, record the achieved reps.
         // A failed set was taken to failure, so RIR is 0 regardless of the picker.
         workoutSession?.setOverride(set.id, { targetReps: plannedReps, weightKg: weight, notes: noteValue, isFailed: true, actualReps: reps, rir: 0 });
+      } else if (reps < plannedReps) {
+        // Short of the target: keep it as the goal and record the reps achieved,
+        // so the row reads as a miss and the engine resets the clear count.
+        workoutSession?.setOverride(set.id, { targetReps: plannedReps, weightKg: weight, notes: noteValue, actualReps: reps, rir: rir ?? undefined, wasEasy: easy });
       } else {
         // Re-prescribe the set so the target matches what was actually
         // confirmed — otherwise the plan is stuck on a number the lifter has
