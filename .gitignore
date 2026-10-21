@@ -61,6 +61,10 @@ Thumbs.db
 /e2e/.auth/
 /playwright-report/
 /test-results/
+# Serwist writes the service worker into public/ during `next build`; the e2e
+# server builds on the host, so the output lands in the working tree.
+/public/sw.js
+/public/swe-worker-*.js
 # Local audit reports (not committed)
 /audit/
 # Scratch notes and screenshots dropped at the repo root. Root-anchored, so

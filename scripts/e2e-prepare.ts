@@ -1,0 +1,47 @@
+/**
+ * Prepare the e2e database: create it if missing, migrate, seed the exercise
+ * library and create the e2e user.
+ *
+ * Run by Playwright's webServer before it starts the production build (see
+ * playwright.config.ts), so `pnpm test:e2e` needs nothing but a Postgres to
+ * point at. Each spec then resets the user's own data (e2e/fixtures/reset.ts).
+ *
+ * Refuses any database whose name does not end in `_test`. The reset deletes
+ * the e2e user's programs and history on every spec, and a DATABASE_URL left
+ * pointing at the dev database or a tunnel to prod must fail here rather than
+ * be wiped.
+ */
+
+import { execFileSync } from "node:child_process";
+import pg from "pg";
+import { assertTestDatabase } from "./lib/test-database";
+
+async function main() {
+  const url = assertTestDatabase(process.env.DATABASE_URL);
+  const dbName = url.pathname.slice(1);
+
+  const admin = new URL(url);
+  admin.pathname = "/postgres";
+  const client = new pg.Client({ connectionString: admin.toString() });
+  await client.connect();
+  try {
+    const { rowCount } = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [dbName]);
+    if (!rowCount) {
+      // Identifier, not a parameter: CREATE DATABASE takes no bind values. The
+      // name already passed assertTestDatabase's character check.
+      await client.query(`CREATE DATABASE "${dbName}"`);
+      console.log(`Created database ${dbName}`);
+    }
+  } finally {
+    await client.end();
+  }
+
+  for (const script of ["scripts/migrate.ts", "scripts/seed.ts", "scripts/create-e2e-user.ts"]) {
+    execFileSync("pnpm", ["exec", "tsx", script], { stdio: "inherit", env: process.env });
+  }
+}
+
+main().catch((err) => {
+  console.error("[e2e-prepare] failed:", err instanceof Error ? err.message : err);
+  process.exit(1);
+});

@@ -25,7 +25,8 @@
     "typecheck": "tsc --noEmit",
     "verify": "pnpm typecheck && pnpm lint && pnpm check:docs && pnpm test",
     "test:e2e": "playwright test",
-    "verify:full": "pnpm verify && pnpm test:e2e",
+    "e2e:serve": "bash scripts/e2e-serve.sh",
+    "verify:full": "make verify-full",
     "test:coverage": "vitest run --coverage",
     "prepare": "lefthook install || true",
     "check:docs": "tsx scripts/check-doc-claims.ts"

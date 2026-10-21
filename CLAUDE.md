@@ -139,7 +139,7 @@ Rules it cannot enforce, which still apply when writing docs:
 
 A pre-push git hook (lefthook) runs `pnpm verify` automatically — install it once with `pnpm install` (the `prepare` script wires it up). Pre-commit is intentionally empty so commits stay fast for AI loops.
 
-For changes that touch a critical user flow (workout logging, rest picker, set editing, drag-reorder, login), additionally run `pnpm verify:full` — it adds Playwright e2e on top of `verify`. Requires the dev server running at `localhost:3000` and `E2E_USER_EMAIL`/`E2E_USER_PASSWORD` env vars set to a test account. Specs live in `e2e/`; add a new one when you ship a critical flow that doesn't have coverage.
+For changes that touch a critical user flow (workout logging, rest picker, set editing, drag-reorder, login), additionally run `make e2e` (or `make verify-full` for both). It needs only the compose Postgres up: Playwright prepares a separate `logeverylift_test` database, builds the app and serves the production build on port 3917, and resets the e2e user's data before every spec, on WebKit and Chromium. CI runs the same suite on every PR and the image only builds when it passes. Specs live in `e2e/` and import `test` from `e2e/fixtures/test.ts`, which also fails a spec on any uncaught page exception; add a spec when you ship a critical flow that doesn't have coverage.
 
 ## Pre-deploy smoke pass (Playwright MCP)
 

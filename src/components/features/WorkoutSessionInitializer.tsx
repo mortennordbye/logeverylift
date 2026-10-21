@@ -36,8 +36,11 @@ export function WorkoutSessionInitializer({ programId }: { programId: number }) 
     if (sessionId == null || !hydrateCompletedSetIds) return;
     let ignore = false;
     const pull = async () => {
-      const result = await getActiveSessionCompletedProgramSetIds(sessionId);
-      if (ignore || !result.success) return;
+      // A Server Action rejects (rather than returning an error) when the
+      // request never reaches the server — offline, or the fetch is cut off by
+      // a navigation. Keep the toggles we have; the next foreground re-pulls.
+      const result = await getActiveSessionCompletedProgramSetIds(sessionId).catch(() => null);
+      if (ignore || !result?.success) return;
       hydrateCompletedSetIds(new Set(result.data));
     };
     void pull();
@@ -93,13 +96,15 @@ export function WorkoutSessionInitializer({ programId }: { programId: number }) 
 
     const startFreshSession = async () => {
       const startTime = new Date();
+      // Unreachable server: leave the session unset, and the next mount of the
+      // workout layout tries again.
       const result = await createWorkoutSession({
         date: toDateString(startTime),
         startTime: startTime.toISOString(),
         programId,
         intendedDate,
-      });
-      if (result.success) {
+      }).catch(() => null);
+      if (result?.success) {
         workoutSession?.setActiveWorkout(
           programId,
           startTime.toISOString(),
@@ -123,8 +128,8 @@ export function WorkoutSessionInitializer({ programId }: { programId: number }) 
       const sessionId = storedSessionId;
       workoutSession?.setActiveWorkout(programId, storedStart, sessionId);
       void (async () => {
-        const check = await isSessionResumable({ sessionId, programId });
-        if (check.success && !check.data) await startFreshSession();
+        const check = await isSessionResumable({ sessionId, programId }).catch(() => null);
+        if (check?.success && !check.data) await startFreshSession();
       })();
       return;
     }

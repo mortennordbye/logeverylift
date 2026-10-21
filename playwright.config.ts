@@ -3,29 +3,68 @@ import { defineConfig, devices } from "@playwright/test";
 /**
  * Playwright config for end-to-end tests of LogEveryLift.
  *
- * Tests assume the dev server is already running at http://localhost:3000.
- * Start it with `make dev` before running `pnpm verify:full` or
- * `pnpm exec playwright test`.
+ * `pnpm test:e2e` is self-contained: the webServer below prepares a dedicated
+ * test database (scripts/e2e-prepare.ts), builds the app and serves the
+ * production build on port 3917. Only a Postgres is needed, reachable at
+ * E2E_DATABASE_URL; `make e2e` points it at the compose database. The database
+ * name must end in `_test`, because every spec resets the e2e user's data
+ * (e2e/fixtures/reset.ts).
  *
- * Auth credentials must be provided via environment variables:
- *   E2E_USER_EMAIL — email of an existing test user
- *   E2E_USER_PASSWORD — that user's password
+ * A production build rather than the dev server: it is what ships, it has the
+ * service worker, and taps no longer race on-demand compilation, which was
+ * behind most of the suite's flakiness.
  *
- * The `setup` project logs in once and stores cookies in
- * `e2e/.auth/user.json`; all other tests reuse that storage state, so we
- * don't pay the login cost in every test.
+ * Two engines: WebKit is what iOS ships, Chromium is the Android and desktop
+ * PWA. The `setup` project logs in once; the rest reuse its storage state.
  */
+// Off the usual dev ports so a forwarded service or the dev server is never
+// mistaken for this one (reuseExistingServer would happily test it).
+const PORT = Number(process.env.E2E_PORT ?? 3917);
+const baseURL = `http://127.0.0.1:${PORT}`;
+// No default outside CI: on a laptop, localhost:5432 can be anything (a
+// tunnel to a remote database, another project's Postgres), and the prepare
+// step creates a database on whatever server it reaches. `make e2e` finds the
+// compose Postgres and sets this.
+const databaseUrl =
+  process.env.E2E_DATABASE_URL ??
+  (process.env.CI ? "postgresql://postgres:postgres@localhost:5432/logeverylift_test" : undefined);
+if (!databaseUrl) {
+  throw new Error("Set E2E_DATABASE_URL to a *_test database, or run `make e2e`.");
+}
+
+// The reset fixture runs in the test workers and reads DATABASE_URL.
+process.env.DATABASE_URL = databaseUrl;
+
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
+  // One worker: every spec shares the e2e user and resets it before running.
   workers: 1,
-  reporter: process.env.CI ? "list" : "list",
+  reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+  },
+  webServer: {
+    command: "pnpm e2e:serve",
+    url: `${baseURL}/login`,
+    reuseExistingServer: !process.env.CI,
+    timeout: 600_000,
+    stdout: "pipe",
+    env: {
+      NODE_ENV: "production",
+      PORT: String(PORT),
+      // The standalone server binds to HOSTNAME, which macOS sets to the
+      // machine name.
+      HOSTNAME: "127.0.0.1",
+      DATABASE_URL: databaseUrl,
+      BETTER_AUTH_URL: baseURL,
+      BETTER_AUTH_SECRET: "e2e-only-auth-secret-never-used-outside-tests",
+      NEXT_TELEMETRY_DISABLED: "1",
+    },
   },
   projects: [
     {
@@ -34,10 +73,18 @@ export default defineConfig({
       use: { ...devices["iPhone 14 Pro"] },
     },
     {
-      name: "mobile",
+      name: "webkit",
       dependencies: ["setup"],
       use: {
         ...devices["iPhone 14 Pro"],
+        storageState: "e2e/.auth/user.json",
+      },
+    },
+    {
+      name: "chromium",
+      dependencies: ["setup"],
+      use: {
+        ...devices["Pixel 7"],
         storageState: "e2e/.auth/user.json",
       },
     },

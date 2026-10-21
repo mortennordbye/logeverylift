@@ -1,17 +1,12 @@
 import { test as setup, expect } from "@playwright/test";
 import path from "path";
+import { E2E_USER_EMAIL, E2E_USER_PASSWORD } from "./fixtures/env";
 
 const authFile = path.join(__dirname, ".auth/user.json");
 
 setup("authenticate", async ({ page }) => {
-  const email = process.env.E2E_USER_EMAIL;
-  const password = process.env.E2E_USER_PASSWORD;
-  if (!email || !password) {
-    throw new Error(
-      "E2E_USER_EMAIL and E2E_USER_PASSWORD must be set to run e2e tests. " +
-        "Use a test account, not a real user.",
-    );
-  }
+  const email = E2E_USER_EMAIL;
+  const password = E2E_USER_PASSWORD;
 
   // Sign-in is rate limited, and this project runs once per suite invocation —
   // so a developer re-running the specs a few times in a row gets throttled and

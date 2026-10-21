@@ -55,7 +55,7 @@ If you add a route that the app's own nav/persistence can point at, give it the 
 
 ## E2E / smoke credentials
 
-`E2E_USER_EMAIL` / `E2E_USER_PASSWORD` live in `.env.local` (gitignored). Source it (`set -a; . ./.env.local; set +a`) before the Playwright smoke pass — don't prompt for them.
+The Playwright suite needs none: `make e2e` creates `e2e@workout.local` in its own test database (`scripts/e2e-prepare.ts`, defaults in `e2e/fixtures/env.ts`). For the manual MCP smoke pass against the dev server, `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` live in `.env.local` (gitignored) if set there; source it (`set -a; . ./.env.local; set +a`) rather than prompting.
 
 ## E2E needs WebKit, and its installer can hang
 
@@ -66,6 +66,8 @@ D=~/Library/Caches/ms-playwright/webkit-2272   # the revision the installer asks
 mkdir -p "$D" && curl -sSL -o /tmp/webkit.zip https://cdn.playwright.dev/dbazure/download/playwright/builds/webkit/2272/webkit-mac-15-arm64.zip
 unzip -q /tmp/webkit.zip -d "$D" && touch "$D/INSTALLATION_COMPLETE" "$D/DEPENDENCIES_VALIDATED"
 ```
+
+Chromium's headless shell hangs the same way. `DEBUG=pw:install pnpm exec playwright install --dry-run chromium-headless-shell` prints the revision and URL (on 2026-10-21: `chromium_headless_shell-1217`, `https://cdn.playwright.dev/builds/cft/147.0.7727.15/mac-arm64/chrome-headless-shell-mac-arm64.zip`); unpack it into that directory and touch the same two marker files.
 
 ## Server Action results: `success:false` conflates not-found and errors
 
