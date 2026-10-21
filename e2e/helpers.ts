@@ -140,7 +140,10 @@ async function programWorkoutHrefs(page: Page): Promise<string[]> {
   // whole suite finds no links three days a week and reports it as "element(s)
   // not found" — a missing prerequisite dressed up as a regression.
   const showAll = page.getByRole("button", { name: "Different program" });
-  if (await showAll.isVisible({ timeout: 5_000 }).catch(() => false)) {
+  // waitFor, not isVisible: isVisible ignores its timeout and answers at once,
+  // so a cycle card still rendering read as "no card" and the list stayed
+  // collapsed on scheduled days.
+  if (await showAll.waitFor({ state: "visible", timeout: 5_000 }).then(() => true, () => false)) {
     await showAll.click();
   }
   const links = page.locator('a[href^="/programs/"][href$="/workout"]');
