@@ -1,6 +1,6 @@
 # AI Setup: plan
 
-> **Status:** all seven phases built 2026-10-21 (phases 3 to 5 as one PR); 1 to 6 merged and deployed, 7 in review.
+> **Status:** done. All seven phases merged and deployed 2026-10-21 (phases 3 to 5 as one PR). Nothing is left to build; follow-ups are in `BACKLOG.md`.
 > **Written against:** `main` at `0eeda3a` plus the unmerged branch `feat/ai-structured-generation` (`30f6863`, `fa88295`).
 
 This document is written to be picked up with no conversation history. Read section 0 first, and update it before you finish a session.
@@ -23,7 +23,7 @@ AI Setup builds a user's programs and training cycle. Until now it led with a la
 | 4 | AI edit action, cache table, free-model guard | merged, PR #72 |
 | 5 | AI edit UI: chips and a short box | merged, PR #72 |
 | 6 | One-week check-in and revision | merged, PR #73 |
-| 7 | Live check on free models | built, branch `ai/7-live-check` |
+| 7 | Live check on free models | merged, PR #74 |
 
 Build in order. Each phase is its own branch off `main` and its own PR, merged before the next one starts. Exception: phases 3, 4 and 5 shipped as one PR, because the page and the action it calls change together and splitting them would have removed the background-wait handling in phase 3 only to restore it in phase 5.
 

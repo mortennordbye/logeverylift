@@ -11,7 +11,7 @@ import { EDIT_CHIP_IDS, EDIT_TEXT_MAX, type EditChipId, type EditRequest } from 
 import { parseDateStr } from "@/lib/utils/cycle-position";
 import { SESSION_MINUTES, TEMPLATE_LEVELS, type TemplateParams } from "@/lib/utils/plan-templates";
 
-export const CHECKIN_AFTER_DAYS = 7;
+const CHECKIN_AFTER_DAYS = 7;
 export const CHECKIN_NOTE_MAX = 300;
 
 export const CHECKIN_ISSUES = [

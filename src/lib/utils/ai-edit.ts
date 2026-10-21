@@ -57,8 +57,7 @@ export const EDIT_CHIPS = [
 export type EditChipId = (typeof EDIT_CHIPS)[number]["id"];
 export const EDIT_CHIP_IDS = EDIT_CHIPS.map((chip) => chip.id) as [EditChipId, ...EditChipId[]];
 
-export const AGE_BANDS = ["under_25", "25_34", "35_44", "45_54", "55_64", "65_plus"] as const;
-export type AgeBand = (typeof AGE_BANDS)[number] | "unspecified";
+export type AgeBand = "under_25" | "25_34" | "35_44" | "45_54" | "55_64" | "65_plus" | "unspecified";
 
 export function ageBand(birthYear: number | null, year: number): AgeBand {
   if (!birthYear || birthYear > year) return "unspecified";
