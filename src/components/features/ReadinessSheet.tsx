@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const LEVELS = [
   { value: 1, label: "Drained", emoji: "😴" },
@@ -33,16 +33,27 @@ export function ReadinessSheet({ onConfirm }: Props) {
     return () => clearTimeout(t);
   }, []);
 
+  // The parent passes a new onConfirm on every render, and it re-renders every
+  // second for its elapsed-time clock. With onConfirm in the effect's deps,
+  // each of those renders cancelled the pending one-second tick and started
+  // it over, so the countdown advanced only when the two timers happened to
+  // fall in the right order, and could sit at 4s with the overlay blocking the
+  // workout. Read the latest callback from a ref instead.
+  const onConfirmRef = useRef(onConfirm);
+  useEffect(() => {
+    onConfirmRef.current = onConfirm;
+  });
+
   // Auto-dismiss after 4 seconds with neutral score
   useEffect(() => {
     if (!visible) return;
     if (countdown <= 0) {
-      onConfirm(3);
+      onConfirmRef.current(3);
       return;
     }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [visible, countdown, onConfirm]);
+  }, [visible, countdown]);
 
   const handleSelect = (level: number) => {
     setVisible(false);

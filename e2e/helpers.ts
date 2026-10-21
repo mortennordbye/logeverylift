@@ -124,11 +124,30 @@ export async function tapAndSave(
  * real detach and not an opacity-0 element Playwright would still call visible.
  */
 async function dismissReadinessSheet(page: Page) {
+  // The sheet is triggered by the session going live, which is a Server Action
+  // round trip after hydration and can take longer than any fixed probe on a
+  // slow runner. Wait for the session itself, then for the sheet's 300ms delay.
+  await waitForLiveSession(page);
   const skipBtn = page.getByRole("button", { name: "Skip" });
   if (await skipBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
     await skipBtn.click();
   }
   await expect(skipBtn).toBeHidden({ timeout: 10_000 });
+}
+
+/** Wait until the workout layout has created or restored its session. */
+export async function waitForLiveSession(page: Page): Promise<void> {
+  await page.waitForFunction(
+    () => {
+      try {
+        return JSON.parse(localStorage.getItem("activeWorkout") ?? "{}").sessionId != null;
+      } catch {
+        return false;
+      }
+    },
+    undefined,
+    { timeout: 15_000 },
+  );
 }
 
 /** Every program's workout href, in picker order. */
