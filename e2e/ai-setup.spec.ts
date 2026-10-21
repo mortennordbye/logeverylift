@@ -1,4 +1,5 @@
-import { test, expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures/test";
 
 /**
  * AI Setup: building a plan from picks, importing it, and the parts of the AI

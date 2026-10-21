@@ -150,12 +150,6 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Unblocked by:** Deciding whether the carry should persist to the program or only to the session. If program: keep the write, add an optimistic override alongside it and drop the `router.refresh()`. If session-only: replace the write with `setOverride`.
 - **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (`toggleSet`, the auto-carry block), `src/components/features/WorkoutSetsClient.tsx` (`applySuggestion` — the optimistic pattern to copy).
 
-### `create-admin` / `create-e2e-user` scripts cannot create an account
-- **What:** Both scripts call `auth.api.signUpEmail`, which `src/lib/auth.ts` disables via `emailAndPassword.disableSignUp: true` (accounts are meant to come from `registerWithToken`). Both fail with *"Email and password sign up is not enabled"*, so a fresh database cannot be bootstrapped with a login by the documented route — which blocks the `verify:full` / smoke-pass prerequisites on any new environment. Worked around locally by creating the user through `auth.$context.internalAdapter` (create user + credential account with `ctx.password.hash`).
-- **Why deferred:** Found while setting up an environment for the UI audit; unrelated to that work and it needs a decision on which path these scripts should use.
-- **Unblocked by:** Deciding the intended bootstrap path — either switch both scripts to the admin plugin's `createUser` / the internal adapter, or have them mint an invite token and go through `registerWithToken` like a real signup.
-- **Touchpoints:** `scripts/create-admin.ts:20`, `scripts/create-e2e-user.ts:30`, `src/lib/auth.ts` (`disableSignUp`), `src/lib/actions/invite-tokens.ts` (`registerWithToken`).
-
 ### SetEditView seeds its fields from overrides via `useState` initialisers
 - **What:** `SetEditView` reads `workoutSession.overrides[set.id]` in `useState(...)` initialisers (reps, weight, duration, notes, failed, rir). Those run once. Overrides are restored from localStorage in a mount effect on a provider above, so on a **cold load of the set-edit URL** the initialisers may run before the overrides exist, leaving the editor showing program values while the set list shows adjusted ones. Not observed in the audit — the case wasn't exercised — but the ordering that caused the hydration mismatch fixed in this pass (see `useRenderedOverrides`) is the same ordering that would cause it.
 - **Why deferred:** Unverified, and it is a correctness question about override initialisation rather than the layout-shift brief.
@@ -265,12 +259,6 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Why deferred:** No time right now; the verified high-severity items are already fixed and `pnpm verify` is green.
 - **Unblocked by:** Running `/security-review` (or `/code-review high`) over the current branch diff before/after merge, and optionally addressing the lower-severity residuals captured in the entries above (cookieCache revocation lag, weight float dedup, reaction privacy flag).
 - **Touchpoints:** whole MCP + auth surface — `src/lib/mcp/`, `src/app/api/[transport]/`, `src/lib/actions/`, `src/lib/auth.ts`, `src/middleware.ts`, `src/lib/env.ts`.
-
-### The rep-target e2e case has never been executed
-- **What:** `e2e/progression-settings.spec.ts` gained a section that taps the Target reps chips, asserts the rule sentence follows, and restores the original target in the teardown. It type-checks and lints, but no run has ever exercised it: the local WebKit binary is not installed (`browserType.launch: Executable doesn't exist at .../webkit-2272`), and `mobile` is the only non-setup project.
-- **Why deferred:** The same missing binary already blocks the whole suite locally, so this is not specific to the new case. The behaviour it covers was verified by hand instead — an 8/6/6/6 Bench Press levelled to 8/8/8/8 in the database from one chip tap, with the sentence following it — and the pure halves (`uniformTargetReps`, the re-judge branch, the schema) are covered by Vitest.
-- **Unblocked by:** `npx playwright install webkit`, then `npx playwright test e2e/progression-settings.spec.ts --project=mobile`. Watch the teardown in particular: it only restores a target the chip row actually offers, so a seed that ever uses a custom target would leave the shared program changed.
-- **Touchpoints:** `e2e/progression-settings.spec.ts` (the rep-target section and its restore), `e2e/helpers.ts` (`tapAndSave`), `playwright.config.ts`.
 
 ### Playwright WebKit: a tap right after the readiness sheet closes was dropped, not seen on iOS
 - **What:** Under Playwright's WebKit, a tap on an in-app `<Link>` shortly after the readiness sheet closed was accepted by the anchor but the navigation never committed (exercise row → set list, and set row → set editor). The retries in `openFirstExercise` / `openFirstSetEditor` exist for it. The cause first written down for it no longer matches the code: `confirmReadiness` does not call `router.refresh()`, and `setSessionReadiness` does not revalidate.

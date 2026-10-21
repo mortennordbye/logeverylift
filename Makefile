@@ -19,12 +19,12 @@ RUN_ENV := NODE_ENV=$(if $(PROD),production,development)
 .DEFAULT_GOAL := help
 
 .PHONY: help dev logs down clean \
-        test test-watch typecheck lint verify verify-full build \
+        test test-watch typecheck lint verify verify-full e2e build \
         db-push db-generate db-migrate db-seed db-seed-fake db-reset-user db-studio \
         create-admin
 
 help: ## List available targets
-	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
 	  | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 	@echo ""
 	@echo "  dev flags (set to 1):  PROD  CLEAN  SKIP_BUILD  TEST"
@@ -80,8 +80,17 @@ lint: ## Run ESLint (local)
 verify: ## typecheck + lint + tests (run before pushing)
 	pnpm verify
 
-verify-full: ## verify + Playwright e2e (needs dev server up)
-	pnpm verify:full
+verify-full: ## verify + Playwright e2e (needs the compose Postgres up)
+	$(MAKE) verify
+	$(MAKE) e2e
+
+# Playwright builds and serves its own production server against a separate
+# logeverylift_test database on the compose Postgres, so the dev server and dev
+# data are untouched. Pass a filter through ARGS, e.g. make e2e ARGS=drag.
+e2e: ## Playwright e2e on WebKit + Chromium (needs the compose Postgres up)
+	@port=$$($(COMPOSE) port postgres 5432 | sed 's/.*://'); \
+	  if [ -z "$$port" ]; then echo "Postgres is not running: start it with make dev"; exit 1; fi; \
+	  E2E_DATABASE_URL=postgresql://postgres:postgres@localhost:$$port/logeverylift_test pnpm test:e2e $(ARGS)
 
 build: ## Production build check (in container)
 	$(COMPOSE) exec app pnpm build
