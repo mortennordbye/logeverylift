@@ -4,6 +4,7 @@ import { authClient } from "@/lib/auth-client";
 import { updateActivityPrivacy } from "@/lib/actions/friends";
 import { updateUserProfile } from "@/lib/actions/profile";
 import type { Goal } from "@/lib/utils/goals";
+import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { CheckCircle2, KeyRound, LogOut } from "lucide-react";
 import { useState } from "react";
@@ -24,6 +25,7 @@ interface AccountClientProps {
   name: string;
   email: string;
   role: string;
+  invited: boolean;
   profile: UserProfile;
   showActivityToFriends: boolean;
 }
@@ -177,7 +179,7 @@ function NumberRow({
   );
 }
 
-export function AccountClient({ name, email, role, profile: initialProfile, showActivityToFriends: initialActivityPrivacy }: AccountClientProps) {
+export function AccountClient({ name, email, role, invited, profile: initialProfile, showActivityToFriends: initialActivityPrivacy }: AccountClientProps) {
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -263,25 +265,30 @@ export function AccountClient({ name, email, role, profile: initialProfile, show
         <div>
           <SectionLabel>Profile</SectionLabel>
           <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
-            <div className="px-4 py-3.5 flex items-center gap-3">
-              <div className="shrink-0">
-                <p className="text-xs text-muted-foreground mb-0.5">Name</p>
-              </div>
+            <label className="px-4 min-h-[52px] flex items-center justify-between gap-3">
+              <span className="text-sm text-muted-foreground shrink-0">Name</span>
               <input
                 type="text"
                 value={profile.name}
                 onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
-                className="flex-1 min-w-0 rounded-lg bg-muted px-3 py-2 text-sm text-right outline-none focus:ring-2 ring-primary"
+                placeholder="Your name"
+                className="flex-1 min-w-0 self-stretch bg-transparent text-sm font-medium text-right outline-none placeholder:text-muted-foreground"
               />
+            </label>
+            <div className="px-4 min-h-[52px] flex items-center justify-between gap-3">
+              <span className="text-sm text-muted-foreground shrink-0">Email</span>
+              <span className="text-sm font-medium truncate">{email}</span>
             </div>
-            <div className="px-4 py-3.5">
-              <p className="text-xs text-muted-foreground mb-0.5">Email</p>
-              <p className="text-sm font-medium">{email}</p>
+            <div className="px-4 min-h-[52px] flex items-center justify-between gap-3">
+              <span className="text-sm text-muted-foreground shrink-0">Role</span>
+              <span className="text-sm font-medium capitalize">{role}</span>
             </div>
-            <div className="px-4 py-3.5">
-              <p className="text-xs text-muted-foreground mb-0.5">Role</p>
-              <p className="text-sm font-medium capitalize">{role}</p>
-            </div>
+            {invited && (
+              <div className="px-4 min-h-[52px] flex items-center justify-between gap-3">
+                <span className="text-sm text-muted-foreground shrink-0">Joined</span>
+                <InvitedBadge compact />
+              </div>
+            )}
           </div>
         </div>
 
