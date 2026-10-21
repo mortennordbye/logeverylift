@@ -22,12 +22,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A request for 7-day training. Then add a 7-day split to `autoSplit` (for example push/pull/legs twice plus a conditioning or mobility day), add 7 to `TEMPLATE_DAYS`, and extend the combination tests.
 - **Touchpoints:** `src/lib/utils/plan-templates.ts` (`TEMPLATE_DAYS`, `autoSplit`, `SPLIT_DAYS`), `src/__tests__/plan-templates.test.ts`.
 
-### Live-verify AI Setup's tool and JSON-mode paths and the repair turn
-- **What:** The structured-generation client was checked live only partly: `openrouter/free` returned a valid plan with `json_schema`, the text path parsed, and 429/503/404 handling moved on correctly. The `tool` and `json_object` modes timed out or were rate-limited on every free model tried, and the repair turn (feeding validation issues back) has never run against a real model.
-- **Why deferred:** Free models were busy or slow during the session, and the user asked to stop live calls to avoid any spend.
-- **Unblocked by:** A quiet moment on a free model that lists `tools` and `response_format` (the admin AI Models "Test" button shows which mode answers), then one generation per mode with a deliberately failing constraint to force a repair.
-- **Touchpoints:** `src/lib/llm.ts` (`callModel`), `src/lib/actions/ai-generate.ts` (`generateWithModel`), `src/lib/utils/llm-response.ts` (`readChatCompletion`).
-
 ### Sport-specific endurance fields (pool length, bike power/cadence, swim stroke)
 - **What:** The set editor captures distance/duration/incline/HR-zone only. Triathletes often want pool length, swim stroke, or bike power/cadence. The schema has no columns for these.
 - **Why deferred:** Not needed to log and track the three disciplines; add when a concrete need appears.

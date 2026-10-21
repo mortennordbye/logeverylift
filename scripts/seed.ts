@@ -7,10 +7,12 @@ import { inArray } from "drizzle-orm";
 // Free OpenRouter models change often; AI Setup skips any that are no longer
 // listed, and the admin "Test" button shows which still answer.
 const AI_MODELS = [
-  { modelId: "openrouter/free",                        label: "Free Models Router (auto)",      priority: 1 },
-  { modelId: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super 120B (free)",  priority: 2 },
-  { modelId: "google/gemma-4-31b-it:free",             label: "Gemma 4 31B (free)",            priority: 3 },
+  // Order from scripts/ai-smoke.ts runs (2026-10-21): fastest valid edits first.
+  { modelId: "minimax/minimax-m3.1-flash:free",        label: "MiniMax M3.1 Flash (free)",     priority: 1 },
+  { modelId: "openrouter/free",                        label: "Free Models Router (auto)",      priority: 2 },
+  { modelId: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra 550B (free)",  priority: 3 },
   { modelId: "nvidia/nemotron-3.5-super-vl:free",      label: "Nemotron 3.5 Super (free)",     priority: 4 },
+  { modelId: "google/gemma-4-31b-it:free",             label: "Gemma 4 31B (free)",            priority: 5 },
 ] as const;
 
 const EXERCISES = [
