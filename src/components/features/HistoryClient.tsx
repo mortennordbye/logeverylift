@@ -69,11 +69,11 @@ export function HistoryClient({ sessions }: { sessions: SessionWithStats[] }) {
         ) : (
           <div className="space-y-3 pb-nav-safe">
             {filtered.map((session) => (
-              <Link key={session.id} href={`/history/${session.id}`}>
+              <Link key={session.id} href={`/history/${session.id}`} className="block">
                 <div className="bg-card rounded-2xl p-4 active:bg-muted/50 transition-colors">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-semibold">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold truncate">
                         {session.programName ?? "Ad hoc workout"}
                       </p>
                       <p className="text-sm text-muted-foreground mt-0.5">
@@ -81,7 +81,7 @@ export function HistoryClient({ sessions }: { sessions: SessionWithStats[] }) {
                       </p>
                     </div>
                     {session.durationMinutes > 0 && (
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm text-muted-foreground tabular-nums shrink-0">
                         {formatDuration(session.durationMinutes)}
                       </span>
                     )}
