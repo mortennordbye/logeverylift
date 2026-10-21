@@ -4,14 +4,13 @@ import { aiModelConfigs } from "../src/db/schema/ai-model-configs";
 import { exerciseTypeFromPattern } from "../src/lib/utils/exercise-type";
 import { inArray } from "drizzle-orm";
 
+// Free OpenRouter models change often; AI Setup skips any that are no longer
+// listed, and the admin "Test" button shows which still answer.
 const AI_MODELS = [
-  { modelId: "openai/gpt-oss-120b:free",               label: "OpenAI OSS 120B (free)",        priority: 1 },
+  { modelId: "openrouter/free",                        label: "Free Models Router (auto)",      priority: 1 },
   { modelId: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super 120B (free)",  priority: 2 },
-  { modelId: "openrouter/free",                        label: "Free Models Router (auto)",      priority: 3 },
-  { modelId: "google/gemma-4-31b-it:free",             label: "Gemma 4 31B (free)",            priority: 4 },
-  { modelId: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (free)",          priority: 5 },
-  { modelId: "nousresearch/hermes-3-llama-3.1-405b:free", label: "Hermes 3 405B (free)",       priority: 6 },
-  { modelId: "qwen/qwen3-coder:free",                  label: "Qwen3 Coder 480B (free)",       priority: 7 },
+  { modelId: "google/gemma-4-31b-it:free",             label: "Gemma 4 31B (free)",            priority: 3 },
+  { modelId: "nvidia/nemotron-3.5-super-vl:free",      label: "Nemotron 3.5 Super (free)",     priority: 4 },
 ] as const;
 
 const EXERCISES = [

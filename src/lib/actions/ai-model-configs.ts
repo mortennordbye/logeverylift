@@ -3,6 +3,9 @@
 import { db } from "@/db";
 import { aiModelConfigs } from "@/db/schema/ai-model-configs";
 import { env } from "@/lib/env";
+import { callModel, capabilitiesFor, type LlmMessage } from "@/lib/llm";
+import { parsePlanText } from "@/lib/utils/ai-plan";
+import type { OutputMode } from "@/lib/utils/llm-response";
 import { ForbiddenError, requireAdmin, requireSession } from "@/lib/utils/session";
 import { asc, eq } from "drizzle-orm";
 
@@ -53,7 +56,12 @@ export async function moveAiModel(id: number, direction: "up" | "down"): Promise
   }
 }
 
-export async function testAiModel(modelId: string): Promise<ActionResult<{ latencyMs: number }>> {
+/**
+ * Asks the model for a tiny structured reply through the same client AI Setup
+ * uses, and reports which output mode worked. A model OpenRouter no longer
+ * lists fails here instead of silently costing a slot in every generation.
+ */
+export async function testAiModel(modelId: string): Promise<ActionResult<{ latencyMs: number; mode: OutputMode }>> {
   try {
     await requireAdmin();
   } catch (err) {
@@ -62,71 +70,55 @@ export async function testAiModel(modelId: string): Promise<ActionResult<{ laten
   }
 
   const row = await db
-    .select({ provider: aiModelConfigs.provider })
+    .select({ label: aiModelConfigs.label, provider: aiModelConfigs.provider })
     .from(aiModelConfigs)
     .where(eq(aiModelConfigs.modelId, modelId))
     .then((rows) => rows[0]);
-  const provider = row?.provider ?? "openrouter";
+  const model = { modelId, label: row?.label ?? modelId, provider: row?.provider ?? "openrouter" };
 
-  const isGoogle = provider === "google";
-  const apiKey = isGoogle ? env.GOOGLE_API_KEY : env.OPENROUTER_API_KEY;
-  if (!apiKey)
+  const capabilities = await capabilitiesFor(model);
+  if (!capabilities) {
+    const keyMissing = model.provider === "google" ? !env.GOOGLE_API_KEY : !env.OPENROUTER_API_KEY;
     return {
       success: false,
-      error: isGoogle ? "GOOGLE_API_KEY is not configured." : "OPENROUTER_API_KEY is not configured.",
+      error: keyMissing
+        ? `${model.provider === "google" ? "GOOGLE_API_KEY" : "OPENROUTER_API_KEY"} is not configured.`
+        : "Not listed by OpenRouter any more. Remove it or pick a current model.",
     };
-
-  const start = Date.now();
-  try {
-    let response: Response;
-    if (isGoogle) {
-      // Native Gemini API — AQ. key format requires ?key= param
-      response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: 'Reply with only this exact JSON and nothing else: {"ok":true}' }] }],
-            generationConfig: { temperature: 0, maxOutputTokens: 32 },
-          }),
-        },
-      );
-    } else {
-      response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": env.BETTER_AUTH_URL,
-          "X-Title": "LogEveryLift AI Setup",
-        },
-        body: JSON.stringify({
-          model: modelId,
-          messages: [{ role: "user", content: 'Reply with only this exact JSON and nothing else: {"ok":true}' }],
-          temperature: 0,
-          max_tokens: 32,
-        }),
-      });
-    }
-
-    const latencyMs = Date.now() - start;
-
-    if (!response.ok) {
-      const body = await response.text();
-      return { success: false, error: `HTTP ${response.status}: ${body.slice(0, 120)}` };
-    }
-
-    const data = await response.json();
-    const text: string = isGoogle
-      ? (data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "")
-      : (data?.choices?.[0]?.message?.content ?? "");
-    if (!text) return { success: false, error: "Empty response from model." };
-
-    return { success: true, data: { latencyMs } };
-  } catch (err) {
-    return { success: false, error: String(err) };
   }
+
+  const spec = {
+    name: "report_status",
+    description: "Report that you are working.",
+    schema: {
+      type: "object",
+      properties: { ok: { type: "boolean" } },
+      required: ["ok"],
+      additionalProperties: false,
+    },
+  };
+  const start = Date.now();
+  let lastError = "No output mode worked.";
+  for (const mode of capabilities.modes) {
+    const messages: LlmMessage[] = [
+      {
+        role: "user",
+        content: mode === "tool"
+          ? 'Call the "report_status" tool with {"ok": true}.'
+          : 'Reply with only this JSON and nothing else: {"ok": true}',
+      },
+    ];
+    const result = await callModel(model, messages, { mode, spec, capabilities, temperature: 0, maxTokens: 256 });
+    if (!result.ok) {
+      lastError = result.detail;
+      if (result.reason === "unsupported") continue;
+      return { success: false, error: lastError };
+    }
+    const value = parsePlanText(result.text) as { ok?: unknown } | null;
+    if (value?.ok === true) return { success: true, data: { latencyMs: Date.now() - start, mode } };
+    lastError = `Unexpected reply (${mode}): ${result.text.slice(0, 80)}`;
+  }
+  return { success: false, error: lastError };
 }
 
 export async function addAiModel(modelId: string, label: string, provider = "openrouter"): Promise<ActionResult> {

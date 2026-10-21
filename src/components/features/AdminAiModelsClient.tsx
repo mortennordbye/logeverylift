@@ -13,7 +13,15 @@ import { Bot, ChevronDown, ChevronLeft, ChevronUp, Plus, Trash2 } from "lucide-r
 import Link from "next/link";
 import { useState } from "react";
 
-type TestResult = { ok: true; latencyMs: number } | { ok: false; error: string };
+// How the model returned structure in the test, best first.
+const MODE_LABELS: Record<string, string> = {
+  json_schema: "schema enforced",
+  tool: "tool call",
+  json_object: "JSON mode",
+  text: "plain text",
+};
+
+type TestResult = { ok: true; latencyMs: number; mode: string } | { ok: false; error: string };
 
 export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelConfig[] }) {
   const [models, setModels] = useState(initialModels);
@@ -51,7 +59,7 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
     const result = await testAiModel(modelId);
     setTestResults((r) => ({
       ...r,
-      [id]: result.success ? { ok: true, latencyMs: result.data.latencyMs } : { ok: false, error: result.error },
+      [id]: result.success ? { ok: true, latencyMs: result.data.latencyMs, mode: result.data.mode } : { ok: false, error: result.error },
     }));
     setTesting((t) => ({ ...t, [id]: false }));
   }
@@ -155,7 +163,7 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
                   </button>
                   {result && (
                     <span className={`text-xs ${result.ok ? "text-emerald-500" : "text-destructive"}`}>
-                      {result.ok ? `✓ ${result.latencyMs}ms` : `✗ ${result.error}`}
+                      {result.ok ? `✓ ${result.latencyMs}ms · ${MODE_LABELS[result.mode] ?? result.mode}` : `✗ ${result.error}`}
                     </span>
                   )}
                   <button
