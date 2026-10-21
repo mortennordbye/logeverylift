@@ -59,7 +59,7 @@ const COPY = {
     signIn: "Logg inn",
     iconAlt: "LogEveryLift-appikon",
     badge: "Tidlig tilgang er åpen",
-    heading: ["Logg hvert løft.", "Vit hva som kommer."],
+    heading: ["Log every lift.", "Vit hva som kommer."],
     intro:
       "Bli en av de første som trener med AI-bygde programmer og en smart progresjonsmotor som forteller deg nøyaktig hva du skal legge på stanga neste økt.",
     cta: "Få tidlig tilgang",
@@ -112,32 +112,21 @@ export default async function WelcomePage({ searchParams }: Props) {
       />
       <div className="relative mx-auto max-w-6xl px-4 pb-28 lg:pb-12">
         <header className="flex h-16 items-center justify-between">
-          <span className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
-            <Image src="/icon-192x192.png" alt="" width={44} height={44} className="rounded-[12px]" />
-            LogEveryLift
-          </span>
-          <div className="flex items-center gap-3">
-            <nav aria-label="Language" className="flex rounded-xl border border-border p-1 text-sm font-semibold">
-              {(["en", "no"] as const).map((l) => (
-                <Link
-                  key={l}
-                  href={l === "no" ? "/welcome?lang=no" : "/welcome"}
-                  aria-current={l === lang ? "true" : undefined}
-                  className={`flex min-h-9 min-w-11 items-center justify-center rounded-lg px-2 active:opacity-70 ${
-                    l === lang ? "bg-primary/15 text-primary" : "text-muted-foreground"
-                  }`}
-                >
-                  {l === "no" ? "NO" : "EN"}
-                </Link>
-              ))}
-            </nav>
-            <Link
-              href="/login"
-              className="hidden lg:inline-flex min-h-11 items-center rounded-xl border border-border px-5 font-semibold active:opacity-70"
-            >
-              {t.signIn}
-            </Link>
-          </div>
+          <span className="text-xl font-extrabold tracking-tight">LogEveryLift</span>
+          <nav aria-label="Language" className="flex rounded-xl border border-border p-1 text-sm font-semibold">
+            {(["en", "no"] as const).map((l) => (
+              <Link
+                key={l}
+                href={l === "no" ? "/welcome?lang=no" : "/welcome"}
+                aria-current={l === lang ? "true" : undefined}
+                className={`flex min-h-9 min-w-11 items-center justify-center rounded-lg px-2 active:opacity-70 ${
+                  l === lang ? "bg-primary/15 text-primary" : "text-muted-foreground"
+                }`}
+              >
+                {l === "no" ? "NO" : "EN"}
+              </Link>
+            ))}
+          </nav>
         </header>
 
         <section className="grid gap-10 pt-8 pb-14 lg:grid-cols-[1.4fr_0.8fr_1fr] lg:items-center lg:py-20">
