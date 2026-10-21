@@ -42,7 +42,10 @@ export default async function WelcomePage() {
       />
       <div className="relative mx-auto max-w-6xl px-4 pb-28 lg:pb-12">
         <header className="flex h-16 items-center justify-between">
-          <span className="text-xl font-extrabold tracking-tight">LogEveryLift</span>
+          <span className="flex items-center gap-2.5 text-xl font-extrabold tracking-tight">
+            <Image src="/icon-192x192.png" alt="" width={36} height={36} className="rounded-[10px]" />
+            LogEveryLift
+          </span>
           <Link
             href="/login"
             className="hidden lg:inline-flex min-h-11 items-center rounded-xl border border-border px-5 font-semibold active:opacity-70"
@@ -58,9 +61,9 @@ export default async function WelcomePage() {
               Early access is open
             </span>
             <h1 className="text-[44px] leading-[1.02] font-extrabold tracking-tight lg:text-5xl">
-              The training log
+              Log every lift.
               <br />
-              that thinks ahead.
+              <span className="text-primary">Know the next one.</span>
             </h1>
             <p className="mt-4 max-w-[36ch] text-lg text-muted-foreground">
               Be one of the first to train with AI-built programs and a smart
@@ -134,8 +137,17 @@ export default async function WelcomePage() {
         </div>
 
         <section className="mt-12 rounded-3xl border border-border bg-card p-6 lg:p-8">
-          <h2 className="text-2xl font-bold tracking-tight">No app store needed</h2>
-          <p className="mt-2 max-w-[60ch] text-muted-foreground">
+          <div className="flex items-center gap-4">
+            <Image
+              src="/icon-192x192.png"
+              alt="LogEveryLift app icon"
+              width={64}
+              height={64}
+              className="rounded-[16px]"
+            />
+            <h2 className="text-2xl font-bold tracking-tight">No app store needed</h2>
+          </div>
+          <p className="mt-4 max-w-[60ch] text-muted-foreground">
             For now, LogEveryLift is a web app (a PWA). Add it to your home
             screen and it opens full screen like a native app, keeps working
             offline in the gym and syncs your sets when you&apos;re back online.
@@ -151,7 +163,8 @@ export default async function WelcomePage() {
           </div>
         </section>
 
-        <footer className="mt-14 border-t border-border pt-8 text-sm text-muted-foreground">
+        <footer className="mt-14 flex items-center gap-2 border-t border-border pt-8 text-sm text-muted-foreground">
+          <Image src="/icon-192x192.png" alt="" width={20} height={20} className="rounded-[5px]" />
           LogEveryLift · Open source under Apache 2.0 ·{" "}
           <a href="https://github.com/mortennordbye/logeverylift" className="text-primary">
             GitHub
