@@ -1,4 +1,5 @@
 import { AccountClient } from "@/components/features/AccountClient";
+import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { parseUserGoals } from "@/lib/utils/goals";
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
@@ -22,6 +23,11 @@ export default async function AccountPage() {
 
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">Account</h1>
+        {user?.invitedById && (
+          <div className="mt-2">
+            <InvitedBadge />
+          </div>
+        )}
       </div>
 
       <AccountClient

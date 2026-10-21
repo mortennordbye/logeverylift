@@ -4,6 +4,8 @@ import type { NextRequest } from "next/server";
 const PUBLIC_PATHS = [
   "/login",
   "/signup",
+  "/welcome",
+  "/screenshots/",
   "/api/auth",
   "/api/health",
   "/api/ready",
@@ -43,6 +45,11 @@ export function middleware(request: NextRequest) {
     request.cookies.get("__Secure-better-auth.session_token");
 
   if (!sessionToken) {
+    // The bare domain is the public showcase; deep links go to login and
+    // return to where they were headed.
+    if (pathname === "/") {
+      return NextResponse.redirect(new URL("/welcome", request.url));
+    }
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("from", pathname);
     return NextResponse.redirect(loginUrl);

@@ -67,6 +67,7 @@ export async function searchUsers(query: unknown): Promise<ActionResult<UserSear
         name: users.name,
         email: users.email,
         image: users.image,
+        invitedById: users.invitedById,
       })
       .from(users)
       .where(
@@ -109,7 +110,8 @@ export async function searchUsers(query: unknown): Promise<ActionResult<UserSear
         // "declined" rows are treated as "none" so either party can retry
       }
 
-      return { ...u, friendshipStatus, friendshipId };
+      const { invitedById, ...rest } = u;
+      return { ...rest, invitedByFounder: invitedById !== null, friendshipStatus, friendshipId };
     });
 
     return { success: true, data: results };
@@ -312,6 +314,7 @@ export async function getFriends(): Promise<ActionResult<FriendWithActivity[]>> 
         userId: friend.id,
         name: friend.name,
         image: friend.image,
+        invitedByFounder: friend.invitedById !== null,
         workedOutToday,
         streak,
       };

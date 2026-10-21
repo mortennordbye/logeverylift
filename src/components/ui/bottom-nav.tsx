@@ -58,7 +58,7 @@ export function BottomNav() {
     return subscribeAiGenerating(check);
   }, []);
 
-  if (pathname === "/login" || pathname === "/signup") return null;
+  if (pathname === "/login" || pathname === "/signup" || pathname === "/welcome") return null;
 
   const isActive = (label: string, href: string) => {
     if (label === "Workout") {

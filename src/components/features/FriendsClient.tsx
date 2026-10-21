@@ -1,5 +1,6 @@
 "use client";
 
+import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { respondToFriendRequest, removeFriend } from "@/lib/actions/friends";
 import { WorkoutReactions } from "@/components/features/WorkoutReactions";
 import type { FriendActivityItem, FriendWithActivity, LeaderboardEntry, PendingRequest, ReceivedNudge } from "@/types/workout";
@@ -95,6 +96,7 @@ function FriendRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-medium truncate">{friend.name}</p>
+            {friend.invitedByFounder && <InvitedBadge compact />}
             {friend.streak >= 3 && (
               <span className="text-xs font-semibold text-orange-500 shrink-0">
                 🔥{friend.streak}

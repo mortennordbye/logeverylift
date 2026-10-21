@@ -1,5 +1,6 @@
 "use client";
 
+import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { removeFriend, respondToFriendRequest, sendFriendRequest, sendNudge } from "@/lib/actions/friends";
 import type { FriendProfileStats, FriendSessionCard } from "@/types/workout";
 import { Check, Dumbbell, Loader2, UserCheck, UserMinus, UserPlus } from "lucide-react";
@@ -12,6 +13,7 @@ interface Profile {
   id: string;
   name: string;
   image: string | null;
+  invitedByFounder: boolean;
   workedOutToday: boolean | null;
 }
 
@@ -147,6 +149,7 @@ export function PublicProfileClient({
 
         {/* Streak + activity badges */}
         <div className="flex items-center gap-2 flex-wrap justify-center">
+          {profile.invitedByFounder && <InvitedBadge />}
           {profileStats && profileStats.streak >= 2 && (
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-sm font-medium">
               <span>{streakLabel(profileStats.streak)}</span>

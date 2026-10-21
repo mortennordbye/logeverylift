@@ -107,7 +107,7 @@ function LoginFormContent() {
       </button>
 
       <p className="text-center text-sm text-muted-foreground">
-        Have an invite?{" "}
+        New here?{" "}
         <Link href="/signup" className="text-primary font-medium">
           Create account
         </Link>

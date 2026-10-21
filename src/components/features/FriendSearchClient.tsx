@@ -1,5 +1,6 @@
 "use client";
 
+import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { removeFriend, respondToFriendRequest, searchUsers, sendFriendRequest } from "@/lib/actions/friends";
 import type { UserSearchResult } from "@/types/workout";
 import { Check, Loader2, Search, UserCheck, UserPlus, X } from "lucide-react";
@@ -162,7 +163,10 @@ export function FriendSearchClient() {
               <div key={user.id} className="flex items-center gap-3 px-4 py-3">
                 <Avatar name={user.name} image={user.image} />
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium truncate">{user.name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium truncate">{user.name}</p>
+                    {user.invitedByFounder && <InvitedBadge compact />}
+                  </div>
                   <p className="text-sm text-muted-foreground truncate">{user.email}</p>
                 </div>
                 <ActionButton
