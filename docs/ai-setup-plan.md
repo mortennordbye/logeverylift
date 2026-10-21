@@ -1,6 +1,6 @@
 # AI Setup: plan
 
-> **Status:** planned 2026-10-21. Phase 1 in progress.
+> **Status:** phases 1 and 2 merged 2026-10-21; phase 3 next.
 > **Written against:** `main` at `0eeda3a` plus the unmerged branch `feat/ai-structured-generation` (`30f6863`, `fa88295`).
 
 This document is written to be picked up with no conversation history. Read section 0 first, and update it before you finish a session.
@@ -17,8 +17,8 @@ AI Setup builds a user's programs and training cycle. Until now it led with a la
 
 | Phase | What | State |
 |---|---|---|
-| 1 | Land `feat/ai-structured-generation` | not started |
-| 2 | More inputs in the plan builder | not started |
+| 1 | Land `feat/ai-structured-generation` | merged, PR #69 (CodeQL follow-up: PR #70) |
+| 2 | More inputs in the plan builder | merged, branch `ai/2-template-inputs` |
 | 3 | Picks-first page, text box removed | not started |
 | 4 | AI edit action, cache table, free-model guard | not started |
 | 5 | AI edit UI: chips and a short box | not started |
@@ -76,8 +76,8 @@ The plan builder runs in the browser. That stays.
 
 All in `src/lib/utils/plan-templates.ts`, pure functions, no UI. `TemplateParams` gains four fields, each with a default that reproduces today's output exactly, so the existing tests pass unchanged.
 
-**Session length** (`30 | 45 | 60 | 90` minutes, default `60`).
-Add an estimate of a session's minutes: per working set, about 45 seconds of work plus the prescribed rest, plus a fixed warm-up allowance. If a session runs over, drop slots from the end, lowest role first (`core`, then `isolation`, then `accessory`), then take one set off `secondary`. Never drop `main`. With 90 minutes, add one set to `accessory` and `isolation` roles, capped at the existing 4-set limit.
+**Session length** (`30 | 45 | 60 | 90` minutes; absent means no limit).
+`estimateSessionMinutes`: per set, 45 seconds of work (or the hold time) plus its rest, plus a minute per exercise to set up. Sessions of 30 and 45 minutes cap rest (main lifts 120/150 s, everything else 60/90 s). If a session still runs over, `fitToTime` cuts in this order until it fits: drop the last non-priority `core`, `isolation`, then `accessory` slot; take a working set off `secondary`, then `main` (never below 2); take extra sets off priority slots (never below 2); drop a `secondary` slot. A main lift is never dropped. With 90 minutes, add one set to `accessory` and `isolation` roles, capped at the existing 4-set limit. Every combination fits its limit and keeps at least 3 exercises per session at 30 and 45 minutes, 4 from 60.
 
 **Split preference** (`auto | full_body | upper_lower | ppl`, default `auto`).
 `auto` is today's `splitFor`. The others work for these day counts, and the UI disables any other combination:
