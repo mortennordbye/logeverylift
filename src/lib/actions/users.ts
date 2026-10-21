@@ -1,8 +1,11 @@
 "use server";
 
+import { db } from "@/db";
+import { users } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
+import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { z } from "zod";
 
@@ -19,6 +22,7 @@ export type UserRow = {
   email: string;
   role: string | null;
   createdAt: Date;
+  invitedById: string | null;
 };
 
 export async function listUsers(): Promise<ActionResult<UserRow[]>> {
@@ -38,6 +42,7 @@ export async function listUsers(): Promise<ActionResult<UserRow[]>> {
       email: u.email,
       role: (u as { role?: string }).role ?? "user",
       createdAt: u.createdAt,
+      invitedById: (u as { invitedById?: string | null }).invitedById ?? null,
     }));
     return { success: true, data: users };
   } catch (err) {
@@ -64,6 +69,12 @@ export async function createUser(data: unknown): Promise<ActionResult<UserRow>> 
       headers: await headers(),
     });
     const u = result.user as { id: string; name: string; email: string; role?: string; createdAt: Date };
+    // An admin adding someone directly is an invite too. Admin accounts are
+    // not credited, matching the backfill in drizzle/0055_invited_by.sql.
+    const invitedById = role === "user" ? session.user.id : null;
+    if (invitedById) {
+      await db.update(users).set({ invitedById }).where(eq(users.id, u.id));
+    }
     return {
       success: true,
       data: {
@@ -72,6 +83,7 @@ export async function createUser(data: unknown): Promise<ActionResult<UserRow>> 
         email: u.email,
         role: u.role ?? "user",
         createdAt: u.createdAt,
+        invitedById,
       },
     };
   } catch (err) {

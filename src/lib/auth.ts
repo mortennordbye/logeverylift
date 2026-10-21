@@ -27,11 +27,17 @@ export const auth = betterAuth({
     },
   }),
   emailAndPassword: {
+    // Open self-signup through POST /api/auth/sign-up/email, rate limited per
+    // IP in src/app/api/auth/[...all]/route.ts. The admin plugin marks `role`
+    // as non-input, so a signup cannot ask for admin.
     enabled: true,
-    // Closes the public POST /api/auth/sign-up/email endpoint. Accounts are
-    // created only through registerWithToken (invite-tokens.ts), which calls
-    // the admin plugin's createUser server-side after checking the token.
-    disableSignUp: true,
+  },
+  user: {
+    additionalFields: {
+      // Written server-side only (registerWithToken, admin createUser);
+      // input: false keeps a public sign-up from claiming an inviter.
+      invitedById: { type: "string", required: false, input: false },
+    },
   },
   session: {
     // 30 days — refreshed on each request so active users stay logged in

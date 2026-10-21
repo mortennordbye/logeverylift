@@ -1,5 +1,6 @@
 "use client";
 
+import { InvitedBadge } from "@/components/features/InvitedBadge";
 import {
   createUser,
   listUsers,
@@ -181,6 +182,11 @@ export function UserManagement() {
                   }`}>
                     {user.role ?? "user"}
                   </span>
+                  {user.invitedById && (
+                    <span className="ml-1.5">
+                      <InvitedBadge compact />
+                    </span>
+                  )}
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button

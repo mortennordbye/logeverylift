@@ -1,4 +1,4 @@
-import { boolean, integer, pgTable, real, text, timestamp } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, real, text, timestamp, type AnyPgColumn } from "drizzle-orm/pg-core";
 
 export const users = pgTable("user", {
   id: text("id").primaryKey(),
@@ -25,4 +25,9 @@ export const users = pgTable("user", {
   // When false, the home screen stops surfacing missed-workout / overdue prompts
   // (the "Missed this week" make-up card and the rotation "X days overdue" badge).
   missedWorkoutsEnabled: boolean("missed_workouts_enabled").notNull().default(true),
+  // The admin whose invite (token or direct account creation) let this user in.
+  // Null for open self-signups. Drives the "Invited by founder" badge.
+  invitedById: text("invited_by_id").references((): AnyPgColumn => users.id, {
+    onDelete: "set null",
+  }),
 });

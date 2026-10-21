@@ -1,7 +1,7 @@
 "use server";
 
 import { db } from "@/db";
-import { inviteTokens } from "@/db/schema";
+import { inviteTokens, users } from "@/db/schema";
 import { auth } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { ForbiddenError, requireAdmin } from "@/lib/utils/session";
@@ -100,10 +100,10 @@ export async function registerWithToken(
       return { success: false, error: "This invite token has already been used" };
     }
 
-    // Create the user via the admin plugin. Public sign-up is disabled
-    // (auth.ts), so this is the only account-creation path. Called without
-    // headers/request, createUser skips its admin-session check — the invite
-    // token is the gate. It does not create a session; SignupForm signs in
+    // Create the user via the admin plugin. Called without headers/request,
+    // createUser skips its admin-session check — the invite token is the
+    // gate. Open sign-up also exists (auth.ts); this path is kept so invited
+    // accounts are counted against their token. It does not create a session; SignupForm signs in
     // afterwards with authClient.signIn.email.
     const result = await auth.api.createUser({
       body: {
@@ -117,7 +117,11 @@ export async function registerWithToken(
       return { success: false, error: "Failed to create account" };
     }
 
-    // Increment token usage after successful account creation
+    // Credit the token's creator as the inviter, then count the use.
+    await db
+      .update(users)
+      .set({ invitedById: row.createdBy })
+      .where(eq(users.id, result.user.id));
     await db
       .update(inviteTokens)
       .set({ usedCount: row.usedCount + 1 })

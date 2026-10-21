@@ -83,6 +83,7 @@ export default async function PublicProfilePage({
           id: targetUser.id,
           name: targetUser.name,
           image: targetUser.image,
+          invitedByFounder: targetUser.invitedById !== null,
           workedOutToday,
         }}
         friendshipStatus={friendshipStatus}

@@ -327,6 +327,7 @@ export type UserSearchResult = {
   name: string;
   email: string;
   image: string | null;
+  invitedByFounder: boolean;
   friendshipStatus: "none" | "pending_sent" | "pending_received" | "accepted";
   friendshipId: number | null;
 };
@@ -336,6 +337,7 @@ export type FriendWithActivity = {
   userId: string;
   name: string;
   image: string | null;
+  invitedByFounder: boolean;
   workedOutToday: boolean | null; // null = friend has activity privacy on
   streak: number; // 0 = no current streak or privacy off
 };
