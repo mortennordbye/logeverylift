@@ -7,7 +7,7 @@
  */
 
 import { db } from "@/db";
-import { exercises, programExercises, programSets, programs } from "@/db/schema";
+import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exercise-type";
 import type { ProgressionAdvance } from "@/lib/utils/progression";
 import { requireSession } from "@/lib/utils/session";
@@ -803,9 +803,12 @@ export async function reorderProgramExercises(
     if (!prog || prog.userId !== auth.user.id) {
       return { success: false, error: "Program not found" };
     }
-    await Promise.all(
-      validation.data.orderedIds.map((id, index) =>
-        db
+    // One transaction: a failure part-way through would otherwise leave two
+    // exercises sharing an index, and the order the user sees after a reload
+    // would be neither the old one nor the new one.
+    await db.transaction(async (tx) => {
+      for (const [index, id] of validation.data.orderedIds.entries()) {
+        await tx
           .update(programExercises)
           .set({ orderIndex: index })
           .where(
@@ -813,13 +816,14 @@ export async function reorderProgramExercises(
               eq(programExercises.id, id),
               eq(programExercises.programId, validation.data.programId),
             ),
-          ),
-      ),
-    );
+          );
+      }
+    });
     revalidatePath(`/programs/${validation.data.programId}`);
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[reorderProgramExercises] failed", err);
+    return { success: false, error: "Failed to reorder exercises" };
   }
 }
 
@@ -968,9 +972,17 @@ export async function reorderProgramSets(
     if (!peCheck || peCheck.userId !== auth.user.id) {
       return { success: false, error: "Not found" };
     }
-    await Promise.all(
-      validation.data.orderedIds.map((id, index) =>
-        db
+    await db.transaction(async (tx) => {
+      // Workouts still in progress for this user. Their logged rows record the
+      // position each set was logged at, and the set list sends positions in
+      // the new order from here on, so the rows move with their sets. Finished
+      // sessions are history and keep the order they were done in.
+      const openSessions = tx
+        .select({ id: workoutSessions.id })
+        .from(workoutSessions)
+        .where(and(eq(workoutSessions.userId, auth.user.id), eq(workoutSessions.isCompleted, false)));
+      for (const [index, id] of validation.data.orderedIds.entries()) {
+        await tx
           .update(programSets)
           .set({ setNumber: index + 1 })
           .where(
@@ -978,9 +990,13 @@ export async function reorderProgramSets(
               eq(programSets.id, id),
               eq(programSets.programExerciseId, validation.data.programExerciseId),
             ),
-          ),
-      ),
-    );
+          );
+        await tx
+          .update(workoutSets)
+          .set({ setNumber: index + 1 })
+          .where(and(eq(workoutSets.programSetId, id), inArray(workoutSets.sessionId, openSessions)));
+      }
+    });
     const [pe] = await db
       .select({ programId: programExercises.programId })
       .from(programExercises)
@@ -996,7 +1012,8 @@ export async function reorderProgramSets(
     }
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[reorderProgramSets] failed", err);
+    return { success: false, error: "Failed to reorder sets" };
   }
 }
 

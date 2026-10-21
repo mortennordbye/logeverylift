@@ -114,17 +114,21 @@ make dev CLEAN=1      # Force clean build
 
 Run `make help` for the full target list (db tasks, verify, clean, logs).
 
-**Tests run locally** (no Docker needed):
+**Tests run locally:**
 ```bash
-pnpm test                                        # Run all tests once
-pnpm test:watch                                  # Watch mode
+pnpm test                                        # Unit tests once (no Docker needed)
+pnpm test:watch                                  # Unit tests, watch mode
 pnpm test src/__tests__/format.test.ts           # Single file
 pnpm test src/__tests__/format.test.ts -t "name" # Single test by name
+pnpm test:int                                    # Integration: Server Actions against a real Postgres
+make e2e                                         # Playwright, WebKit + Chromium
 ```
+
+`pnpm test:int` and `make e2e` need the compose Postgres running (`make dev`); each creates its own `*_test` database on it and never touches the dev data. Integration tests live in `src/__tests__/integration/`: they call Server Actions directly, with only the session (`asUser`) and Next's cache faked, so the SQL runs for real. Use them for anything that writes more than one row, keys an upsert, or checks ownership.
 
 ## Before reporting a task complete
 
-Run `pnpm verify` from the host. It runs `tsc --noEmit`, `eslint`, and the Vitest suite. If anything fails, fix it and re-run before declaring the task done.
+Run `pnpm verify` from the host. It runs `tsc --noEmit`, `eslint`, the doc-claims check, and the unit and integration suites. If anything fails, fix it and re-run before declaring the task done.
 
 Do not skip this even when the change "looks obviously correct" — the bugs that slip through are the unexpected ones.
 

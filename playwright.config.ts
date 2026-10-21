@@ -1,13 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
+import { testDatabaseUrl } from "./scripts/lib/local-test-db";
 
 /**
  * Playwright config for end-to-end tests of LogEveryLift.
  *
  * `pnpm test:e2e` is self-contained: the webServer below prepares a dedicated
  * test database (scripts/e2e-prepare.ts), builds the app and serves the
- * production build on port 3917. Only a Postgres is needed, reachable at
- * E2E_DATABASE_URL; `make e2e` points it at the compose database. The database
- * name must end in `_test`, because every spec resets the e2e user's data
+ * production build on port 3917. Only a Postgres is needed: the compose one
+ * locally, the service container in CI, or E2E_DATABASE_URL. The database name
+ * must end in `_test`, because every spec resets the e2e user's data
  * (e2e/fixtures/reset.ts).
  *
  * A production build rather than the dev server: it is what ships, it has the
@@ -21,16 +22,7 @@ import { defineConfig, devices } from "@playwright/test";
 // mistaken for this one (reuseExistingServer would happily test it).
 const PORT = Number(process.env.E2E_PORT ?? 3917);
 const baseURL = `http://127.0.0.1:${PORT}`;
-// No default outside CI: on a laptop, localhost:5432 can be anything (a
-// tunnel to a remote database, another project's Postgres), and the prepare
-// step creates a database on whatever server it reaches. `make e2e` finds the
-// compose Postgres and sets this.
-const databaseUrl =
-  process.env.E2E_DATABASE_URL ??
-  (process.env.CI ? "postgresql://postgres:postgres@localhost:5432/logeverylift_test" : undefined);
-if (!databaseUrl) {
-  throw new Error("Set E2E_DATABASE_URL to a *_test database, or run `make e2e`.");
-}
+const databaseUrl = testDatabaseUrl("logeverylift_test", process.env.E2E_DATABASE_URL);
 
 // The reset fixture runs in the test workers and reads DATABASE_URL.
 process.env.DATABASE_URL = databaseUrl;
