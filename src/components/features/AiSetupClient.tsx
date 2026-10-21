@@ -5,9 +5,18 @@ import { generateWorkoutPlan } from "@/lib/actions/ai-generate";
 import { importProgram } from "@/lib/actions/programs";
 import { importCycle } from "@/lib/actions/training-cycles";
 import { aiGeneratingStartedAt, isAiGenerating, setAiGenerating } from "@/lib/utils/ai-generating";
+import { matchLibraryNames, toImportPayload, uniqueProgramNames } from "@/lib/utils/ai-plan";
 import { buildManualClipboardPrompt, type PrData, type PromptOptions } from "@/lib/utils/ai-prompt";
+import {
+  buildTemplatePlan,
+  TEMPLATE_DAYS,
+  templateDefaults,
+  type TemplateGoal,
+  type TemplateLevel,
+  type TemplateParams,
+} from "@/lib/utils/plan-templates";
 import type { Exercise } from "@/types/workout";
-import { Check, ChevronDown, Clipboard, Copy, Dumbbell, RefreshCw, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Clipboard, Copy, Dumbbell, RefreshCw, Sparkles, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
@@ -22,6 +31,51 @@ type UserProfile = {
   goals: string[];
   experienceLevel: string | null;
 };
+
+const GOAL_OPTIONS: { value: TemplateGoal; label: string }[] = [
+  { value: "strength", label: "Strength" },
+  { value: "muscle_gain", label: "Build muscle" },
+  { value: "general_fitness", label: "General fitness" },
+  { value: "weight_loss", label: "Lose fat" },
+  { value: "endurance", label: "Endurance" },
+];
+
+const LEVEL_OPTIONS: { value: TemplateLevel; label: string }[] = [
+  { value: "beginner", label: "Beginner" },
+  { value: "intermediate", label: "Intermediate" },
+  { value: "advanced", label: "Advanced" },
+];
+
+function Chips<T extends string>({
+  label,
+  options,
+  value,
+  onChange,
+}: {
+  label: string;
+  options: { value: T; label: string }[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div role="radiogroup" aria-label={label} className="flex flex-wrap gap-2">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          type="button"
+          role="radio"
+          aria-checked={value === o.value}
+          onClick={() => onChange(o.value)}
+          className={`min-h-[44px] rounded-full px-4 text-sm font-medium active:opacity-70 ${
+            value === o.value ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 type PreviewProgram = { name: string; exercises: unknown[] };
 type PreviewCycle = { name: string; weeks: number; sched: string };
@@ -132,9 +186,12 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
 
   // Automatic flow state
   const [autoDescription, setAutoDescription] = useState("");
-  const [daysPerWeek, setDaysPerWeek] = useState<number | undefined>(undefined);
-  const [equipment, setEquipment] = useState<PromptOptions["equipment"]>("full_gym");
-  const [cycleDurationWeeks, setCycleDurationWeeks] = useState<PromptOptions["cycleDurationWeeks"]>(undefined);
+  const defaults = templateDefaults(userProfile.goals, userProfile.experienceLevel);
+  const [goal, setGoal] = useState<TemplateGoal>(defaults.goal);
+  const [level, setLevel] = useState<TemplateLevel>(defaults.level);
+  const [daysPerWeek, setDaysPerWeek] = useState<TemplateParams["daysPerWeek"]>(3);
+  const [equipment, setEquipment] = useState<NonNullable<PromptOptions["equipment"]>>("full_gym");
+  const [cycleDurationWeeks, setCycleDurationWeeks] = useState<TemplateParams["weeks"]>(8);
   const [autoStatus, setAutoStatus] = useState<"idle" | "asking" | "waiting" | "preview" | "importing" | "error">("idle");
   const [autoError, setAutoError] = useState<string | null>(null);
   const [returnError, setReturnError] = useState<string | null>(null);
@@ -318,12 +375,32 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     }
   }
 
+  // Ready-made plan from the picks: built here, no AI call, nothing counted.
+  function handleBuildTemplate() {
+    const lifts = Object.fromEntries(
+      prs.flatMap((pr) => {
+        const kg = pr.estimated1rm ?? pr.maxWeight;
+        return kg ? [[pr.exerciseName, kg]] : [];
+      }),
+    );
+    const plan = buildTemplatePlan(
+      { goal, level, daysPerWeek, equipment, weeks: cycleDurationWeeks },
+      { bodyWeightKg: userProfile.weightKg, sex: userProfile.gender, lifts },
+    );
+    const payload = toImportPayload(
+      uniqueProgramNames(matchLibraryNames(plan, exercises.map((e) => e.name)), existingProgramNames),
+    );
+    setAutoError(null);
+    setPendingJson(payload);
+    setAutoStatus("preview");
+  }
+
   async function handleGenerate() {
     if (!autoDescription.trim() || AUTO_BUSY) return;
     setAutoStatus("asking");
     setAutoError(null);
 
-    const promise = generateWorkoutPlan(autoDescription, { daysPerWeek, equipment, cycleDurationWeeks });
+    const promise = generateWorkoutPlan(autoDescription, { daysPerWeek, equipment, cycleDurationWeeks, goal, experience: level });
     generationPromise.current = promise;
 
     // Set key immediately so bottom nav knows generation is active
@@ -517,86 +594,105 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
           />
         </div>
       ) : (
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            Auto-generate with AI
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Describe what you&apos;re looking for and the app will build your programs automatically.
-          </p>
-          <textarea
-            value={autoDescription}
-            onChange={(e) => {
-              setAutoDescription(e.target.value);
-              setAutoError(null);
-            }}
-            placeholder="e.g. 3-day push/pull/legs, intermediate lifter, progressive overload on the big lifts…"
-            rows={4}
-            className="w-full rounded-xl bg-muted px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary resize-none"
-          />
-          <div className="flex gap-2">
-            <select
-              value={daysPerWeek ?? ""}
-              onChange={(e) => setDaysPerWeek(e.target.value ? Number(e.target.value) : undefined)}
-              className="flex-1 rounded-xl bg-muted px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">Days/week (any)</option>
-              {[2, 3, 4, 5, 6, 7].map((d) => (
-                <option key={d} value={d}>{d} days/week</option>
-              ))}
-            </select>
-            <select
-              value={equipment}
-              onChange={(e) => setEquipment(e.target.value as PromptOptions["equipment"])}
-              className="flex-1 rounded-xl bg-muted px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="full_gym">Full gym</option>
-              <option value="barbell">Barbell + rack</option>
-              <option value="dumbbells">Dumbbells only</option>
-              <option value="bodyweight">Bodyweight only</option>
-            </select>
-          </div>
-          <div className="flex gap-2">
-            <select
-              value={cycleDurationWeeks ?? ""}
-              onChange={(e) => setCycleDurationWeeks(e.target.value ? Number(e.target.value) as PromptOptions["cycleDurationWeeks"] : undefined)}
-              className="w-full rounded-xl bg-muted px-3 py-2.5 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
-            >
-              <option value="">Cycle length (AI decides)</option>
-              {([4, 6, 8, 10, 12, 16] as const).map((w) => (
-                <option key={w} value={w}>{w} weeks</option>
-              ))}
-            </select>
-          </div>
-          {returnError && (
-            <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex flex-col gap-1">
-              <p className="text-xs font-semibold text-destructive">Last generation failed</p>
-              <p className="text-xs text-destructive/80">{returnError}</p>
-              <button
-                type="button"
-                onClick={() => setReturnError(null)}
-                className="text-xs text-destructive underline underline-offset-2 text-left mt-0.5 active:opacity-70"
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Build your plan
+            </p>
+            <Chips label="Goal" options={GOAL_OPTIONS} value={goal} onChange={setGoal} />
+            <Chips label="Experience" options={LEVEL_OPTIONS} value={level} onChange={setLevel} />
+            <div className="flex gap-2">
+              <select
+                aria-label="Days per week"
+                value={daysPerWeek}
+                onChange={(e) => setDaysPerWeek(Number(e.target.value) as TemplateParams["daysPerWeek"])}
+                className="flex-1 min-h-[44px] rounded-xl bg-muted px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
               >
-                Dismiss
-              </button>
+                {TEMPLATE_DAYS.map((d) => (
+                  <option key={d} value={d}>{d} days/week</option>
+                ))}
+              </select>
+              <select
+                aria-label="Equipment"
+                value={equipment}
+                onChange={(e) => setEquipment(e.target.value as NonNullable<PromptOptions["equipment"]>)}
+                className="flex-1 min-h-[44px] rounded-xl bg-muted px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+              >
+                <option value="full_gym">Full gym</option>
+                <option value="barbell">Barbell + rack</option>
+                <option value="dumbbells">Dumbbells only</option>
+                <option value="bodyweight">Bodyweight only</option>
+              </select>
             </div>
-          )}
-          {autoError && <p className="text-xs text-destructive">{autoError}</p>}
-          <p className="text-xs text-muted-foreground">
-            {dailyLimit === Infinity ? "Unlimited generations (admin)" : `${remaining} of ${dailyLimit} generations remaining today`}
-          </p>
-          <p className="text-xs text-muted-foreground">
-            This is 100% free. AI models can take <strong>1–3 minutes</strong> — you don&apos;t need to wait on this page.
-          </p>
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={!autoDescription.trim() || AUTO_BUSY || remaining <= 0}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
-          >
-            <Sparkles className="w-4 h-4" />
-            Generate
-          </button>
+            <select
+              aria-label="Cycle length"
+              value={cycleDurationWeeks}
+              onChange={(e) => setCycleDurationWeeks(Number(e.target.value) as TemplateParams["weeks"])}
+              className="w-full min-h-[44px] rounded-xl bg-muted px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary"
+            >
+              {([4, 6, 8, 10, 12, 16] as const).map((w) => (
+                <option key={w} value={w}>{w}-week cycle</option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleBuildTemplate}
+              disabled={AUTO_BUSY}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
+            >
+              <Zap className="w-4 h-4" />
+              Build my plan
+            </button>
+            <p className="text-xs text-muted-foreground">
+              Ready instantly. A proven split for your picks, with starting weights from your logged lifts. You can review it before anything is created.
+            </p>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Customize with AI
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Want something specific, like a sport, an injury to work around, or 7 days a week? Describe it and the AI builds it using the picks above.
+            </p>
+            <textarea
+              value={autoDescription}
+              onChange={(e) => {
+                setAutoDescription(e.target.value);
+                setAutoError(null);
+              }}
+              placeholder="e.g. strength for rugby, no overhead pressing because of my shoulder…"
+              rows={3}
+              className="w-full rounded-xl bg-muted px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary resize-none"
+            />
+            {returnError && (
+              <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex flex-col gap-1">
+                <p className="text-xs font-semibold text-destructive">Last generation failed</p>
+                <p className="text-xs text-destructive/80">{returnError}</p>
+                <button
+                  type="button"
+                  onClick={() => setReturnError(null)}
+                  className="text-xs text-destructive underline underline-offset-2 text-left mt-0.5 active:opacity-70"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+            {autoError && <p className="text-xs text-destructive">{autoError}</p>}
+            <p className="text-xs text-muted-foreground">
+              {dailyLimit === Infinity ? "Unlimited generations (admin)" : `${remaining} of ${dailyLimit} AI generations remaining today`}
+              {" · "}Free, but AI models can take <strong>1–3 minutes</strong>.
+            </p>
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={!autoDescription.trim() || AUTO_BUSY || remaining <= 0}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-muted text-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4" />
+              Customize with AI
+            </button>
+          </div>
         </div>
       )}
 

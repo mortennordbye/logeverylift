@@ -11,10 +11,12 @@ import { getAllExercises } from "@/lib/actions/exercises";
 import { env } from "@/lib/env";
 import { callModel, capabilitiesFor, type LlmMessage, type LlmModel, type OutputSpec } from "@/lib/llm";
 import {
+  AI_CYCLE_WEEKS,
   aiPlanJsonSchema,
   matchLibraryNames,
   parsePlanText,
   toImportPayload,
+  uniqueProgramNames,
   validatePlan,
   type AiPlan,
   type AiPlanConstraints,
@@ -27,8 +29,10 @@ import {
   type PromptOptions,
 } from "@/lib/utils/ai-prompt";
 import { parseUserGoals } from "@/lib/utils/goals";
+import { TEMPLATE_GOALS, TEMPLATE_LEVELS } from "@/lib/utils/plan-templates";
 import { requireSession } from "@/lib/utils/session";
 import { and, asc, count, eq, gte, isNull } from "drizzle-orm";
+import { z } from "zod";
 
 const DAILY_LIMIT = 5;
 
@@ -70,6 +74,14 @@ function startOfToday(): Date {
   d.setHours(0, 0, 0, 0);
   return d;
 }
+
+const generateOptionsSchema = z.object({
+  daysPerWeek: z.number().int().min(1).max(7).optional(),
+  equipment: z.enum(["full_gym", "barbell", "dumbbells", "bodyweight"]).optional(),
+  cycleDurationWeeks: z.union(AI_CYCLE_WEEKS.map((w) => z.literal(w))).optional(),
+  goal: z.enum(TEMPLATE_GOALS).optional(),
+  experience: z.enum(TEMPLATE_LEVELS).optional(),
+});
 
 const PLAN_SPEC = (): OutputSpec => ({
   name: PLAN_TOOL_NAME,
@@ -197,10 +209,14 @@ export async function getAiRateLimitStatus(): Promise<ActionResult<RateLimitInfo
 
 export async function generateWorkoutPlan(
   userDescription: string,
-  options: PromptOptions = {},
+  rawOptions: unknown = {},
 ): Promise<ActionResult<AiGenerateResult>> {
   const auth = await requireSession();
   const userId = auth.user.id;
+
+  const parsedOptions = generateOptionsSchema.safeParse(rawOptions);
+  if (!parsedOptions.success) return { success: false, error: "Invalid options." };
+  const options: PromptOptions = parsedOptions.data;
 
   const trimmed = userDescription.trim();
   if (!trimmed) return { success: false, error: "Please describe your training goals." };
@@ -300,7 +316,9 @@ export async function generateWorkoutPlan(
     };
   }
 
-  const parsed = toImportPayload(matchLibraryNames(plan, exerciseList.map((e) => e.name)));
+  const parsed = toImportPayload(
+    uniqueProgramNames(matchLibraryNames(plan, exerciseList.map((e) => e.name)), existingProgramNames),
+  );
 
   // Record usage only after a plan that passed validation
   try {

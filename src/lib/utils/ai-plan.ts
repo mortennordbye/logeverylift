@@ -355,6 +355,29 @@ export function matchLibraryNames(plan: AiPlan, libraryNames: string[]): AiPlan 
   };
 }
 
+/**
+ * Renames programs that clash with the athlete's existing ones ("Push" →
+ * "Push 2"), slots included. Import links cycle slots to programs by name, so
+ * a clash would wire the new cycle to the old program.
+ */
+export function uniqueProgramNames(plan: AiPlan, existingNames: string[]): AiPlan {
+  const taken = new Set(existingNames.map((n) => n.toLowerCase()));
+  const renames = new Map<string, string>();
+  for (const program of plan.programs) {
+    let name = program.name;
+    for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${program.name} ${n}`;
+    taken.add(name.toLowerCase());
+    renames.set(program.name.toLowerCase(), name);
+  }
+  return {
+    programs: plan.programs.map((p) => ({ ...p, name: renames.get(p.name.toLowerCase())! })),
+    cycle: plan.cycle && {
+      ...plan.cycle,
+      slots: plan.cycle.slots.map((s) => ({ ...s, prog: renames.get(s.prog.toLowerCase()) ?? s.prog })),
+    },
+  };
+}
+
 /** Converts a validated plan to the payload importProgram / importCycle take. */
 export function toImportPayload(plan: AiPlan) {
   // Slots name programs case-insensitively in checkPlan; import matches exactly.

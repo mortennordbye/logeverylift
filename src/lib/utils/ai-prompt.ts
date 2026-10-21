@@ -11,6 +11,9 @@ export type PromptOptions = {
   daysPerWeek?: number;
   equipment?: "full_gym" | "barbell" | "dumbbells" | "bodyweight";
   cycleDurationWeeks?: 4 | 6 | 8 | 10 | 12 | 16;
+  /** AI Setup's goal and experience picks; override the profile when set. */
+  goal?: string;
+  experience?: string;
 };
 
 type UserProfile = {
@@ -254,8 +257,10 @@ export function buildGenerationInput(
   options: PromptOptions = {},
 ): GenerationInput {
   const athlete: GenerationInput["athlete"] = {};
-  if (userProfile.experienceLevel) athlete.experience = userProfile.experienceLevel;
-  if (userProfile.goals.length > 0) athlete.goals = userProfile.goals;
+  const experience = options.experience ?? userProfile.experienceLevel;
+  if (experience) athlete.experience = experience;
+  const goals = options.goal ? [options.goal] : userProfile.goals;
+  if (goals.length > 0) athlete.goals = goals;
   if (userProfile.birthYear) athlete.age = new Date().getFullYear() - userProfile.birthYear;
   if (userProfile.gender && userProfile.gender !== "prefer_not_to_say") athlete.sex = userProfile.gender;
   if (userProfile.heightCm) athlete.heightCm = userProfile.heightCm;
