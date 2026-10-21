@@ -13,7 +13,7 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const publicDir = join(__dirname, "..", "public");
 
-// Icon source: a cast-iron "LOG EVERY LIFT · 20 KG" plate on a bar, on a dark
+// Icon source: a cast-iron "LOG EVERY LIFT · 20 KG" plate on a bar, on a navy
 // studio background. Edit scripts/icon.svg, then rerun this.
 // The lettering uses Helvetica Neue, so render on macOS to match the committed PNGs.
 const iconSvg = readFileSync(join(__dirname, "icon.svg"));
