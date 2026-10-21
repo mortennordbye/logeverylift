@@ -16,6 +16,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Deciding whether Norwegian should extend past the front page. If yes, introduce i18n (or a `lang` prop on `LoginForm`) and pass the welcome page's language through to `/login` and `/signup`.
 - **Touchpoints:** `src/app/welcome/page.tsx` (`COPY`), `src/components/features/LoginForm.tsx`.
 
+### Live-verify AI Setup's tool and JSON-mode paths and the repair turn
+- **What:** The structured-generation client was checked live only partly: `openrouter/free` returned a valid plan with `json_schema`, the text path parsed, and 429/503/404 handling moved on correctly. The `tool` and `json_object` modes timed out or were rate-limited on every free model tried, and the repair turn (feeding validation issues back) has never run against a real model.
+- **Why deferred:** Free models were busy or slow during the session, and the user asked to stop live calls to avoid any spend.
+- **Unblocked by:** A quiet moment on a free model that lists `tools` and `response_format` (the admin AI Models "Test" button shows which mode answers), then one generation per mode with a deliberately failing constraint to force a repair.
+- **Touchpoints:** `src/lib/llm.ts` (`callModel`), `src/lib/actions/ai-generate.ts` (`generateWithModel`), `src/lib/utils/llm-response.ts` (`readChatCompletion`).
+
 ### Sport-specific endurance fields (pool length, bike power/cadence, swim stroke)
 - **What:** The set editor captures distance/duration/incline/HR-zone only. Triathletes often want pool length, swim stroke, or bike power/cadence. The schema has no columns for these.
 - **Why deferred:** Not needed to log and track the three disciplines; add when a concrete need appears.

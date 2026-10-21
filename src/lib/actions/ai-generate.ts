@@ -9,19 +9,49 @@ import { programs } from "@/db/schema/programs";
 import { users } from "@/db/schema/users";
 import { getAllExercises } from "@/lib/actions/exercises";
 import { env } from "@/lib/env";
-import { buildAiSystemPrompt, type PrData, type PromptOptions } from "@/lib/utils/ai-prompt";
+import { callModel, capabilitiesFor, type LlmMessage, type LlmModel, type OutputSpec } from "@/lib/llm";
+import {
+  AI_CYCLE_WEEKS,
+  aiPlanJsonSchema,
+  matchLibraryNames,
+  parsePlanText,
+  toImportPayload,
+  uniqueProgramNames,
+  validatePlan,
+  type AiPlan,
+  type AiPlanConstraints,
+} from "@/lib/utils/ai-plan";
+import {
+  buildGenerationInput,
+  buildGenerationMessages,
+  PLAN_TOOL_NAME,
+  type PrData,
+  type PromptOptions,
+} from "@/lib/utils/ai-prompt";
 import { parseUserGoals } from "@/lib/utils/goals";
+import { TEMPLATE_GOALS, TEMPLATE_LEVELS } from "@/lib/utils/plan-templates";
 import { requireSession } from "@/lib/utils/session";
 import { and, asc, count, eq, gte, isNull } from "drizzle-orm";
+import { z } from "zod";
 
 const DAILY_LIMIT = 5;
 
-const DEFAULT_MODELS = [
+// Used only when the ai_model_configs table is empty. Free OpenRouter models
+// come and go; ones no longer listed are skipped at call time.
+const DEFAULT_MODELS: LlmModel[] = [
   { modelId: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Google AI)", provider: "google" },
-  { modelId: "google/gemini-2.0-flash-exp:free", label: "Gemini 2.0 Flash (free)", provider: "openrouter" },
-  { modelId: "deepseek/deepseek-chat-v3-0324:free", label: "DeepSeek V3 (free)", provider: "openrouter" },
-  { modelId: "meta-llama/llama-3.3-70b-instruct:free", label: "Llama 3.3 70B (free)", provider: "openrouter" },
+  { modelId: "openrouter/free", label: "Free Models Router (auto)", provider: "openrouter" },
+  { modelId: "nvidia/nemotron-3-super-120b-a12b:free", label: "Nemotron 3 Super 120B (free)", provider: "openrouter" },
+  { modelId: "google/gemma-4-31b-it:free", label: "Gemma 4 31B (free)", provider: "openrouter" },
 ];
+
+// Whole-request budget across models and retries; the client tells the user
+// generation can take a few minutes.
+const GENERATION_DEADLINE_MS = 300_000;
+const CALL_TIMEOUT_MS = 180_000;
+// Not worth starting a call with less than this left.
+const MIN_CALL_MS = 20_000;
+const MAX_OUTPUT_TOKENS = 24_000;
 
 type ActionResult<T = undefined> =
   | { success: true; data: T }
@@ -45,113 +75,102 @@ function startOfToday(): Date {
   return d;
 }
 
-function extractJson(raw: string): string {
-  const text = raw.trim();
-  const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
-  if (codeBlockMatch) return codeBlockMatch[1].trim();
-  const firstBrace = text.indexOf("{");
-  const lastBrace = text.lastIndexOf("}");
-  if (firstBrace !== -1 && lastBrace > firstBrace) return text.slice(firstBrace, lastBrace + 1);
-  return text;
+const generateOptionsSchema = z.object({
+  daysPerWeek: z.number().int().min(1).max(7).optional(),
+  equipment: z.enum(["full_gym", "barbell", "dumbbells", "bodyweight"]).optional(),
+  cycleDurationWeeks: z.union(AI_CYCLE_WEEKS.map((w) => z.literal(w))).optional(),
+  goal: z.enum(TEMPLATE_GOALS).optional(),
+  experience: z.enum(TEMPLATE_LEVELS).optional(),
+});
+
+const PLAN_SPEC = (): OutputSpec => ({
+  name: PLAN_TOOL_NAME,
+  description: "Submit the athlete's complete training setup: programs and the cycle that schedules them.",
+  schema: aiPlanJsonSchema(),
+});
+
+function repairRequest(issues: string[], truncated: boolean, delivery: "json" | "tool"): string {
+  const lines = truncated
+    ? ["Your reply was cut off before the JSON ended. Return a more compact plan (fewer exercises or sets) so it fits.", ...issues]
+    : issues;
+  return `That plan can't be imported yet. Fix these problems and return the complete corrected plan:\n${lines
+    .map((l) => `- ${l}`)
+    .join("\n")}\n${delivery === "tool" ? `Call the "${PLAN_TOOL_NAME}" tool again with the full plan.` : "Reply with only the corrected JSON object."}`;
 }
 
-function tryParse(text: string): unknown | null {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
+type Attempt = { plan: AiPlan } | { failure: "rate_limited" | "unavailable" | "invalid" };
+
+/**
+ * One model: best supported output mode first, downgrading when the provider
+ * rejects a mode. A response that fails validation gets one repair turn with
+ * the exact problems; after that the caller moves on to the next model.
+ */
+async function generateWithModel(
+  model: LlmModel,
+  buildMessages: (delivery: "json" | "tool") => LlmMessage[],
+  constraints: AiPlanConstraints,
+  deadline: number,
+): Promise<Attempt> {
+  const capabilities = await capabilitiesFor(model);
+  if (!capabilities) {
+    console.warn(`[AI] ${model.label} skipped: not available (no API key, or no longer listed by the provider)`);
+    return { failure: "unavailable" };
   }
-}
+  const spec = PLAN_SPEC();
 
-type Model = { modelId: string; label: string; provider: string };
-type Message = { role: string; content: string };
+  for (const mode of capabilities.modes) {
+    if (deadline - Date.now() < MIN_CALL_MS) return { failure: "unavailable" };
+    const delivery = mode === "tool" ? "tool" : "json";
+    const messages = buildMessages(delivery);
+    const call = (msgs: LlmMessage[], temperature: number) =>
+      callModel(model, msgs, {
+        mode,
+        spec,
+        capabilities,
+        temperature,
+        maxTokens: MAX_OUTPUT_TOKENS,
+        timeoutMs: Math.min(CALL_TIMEOUT_MS, deadline - Date.now()),
+      });
 
-// Calls a model and returns the text response, or null on any failure.
-async function callModel(model: Model, messages: Message[], temperature: number, maxTokens: number): Promise<string | null> {
-  try {
-    if (model.provider === "google") {
-      // Native Gemini API — the AQ. key format requires ?key= param, not Bearer token
-      const apiKey = env.GOOGLE_API_KEY;
-      if (!apiKey) return null;
-
-      const systemMsg = messages.find((m) => m.role === "system")?.content ?? "";
-      const chatMessages = messages.filter((m) => m.role !== "system");
-
-      const geminiBody: Record<string, unknown> = {
-        contents: chatMessages.map((m) => ({
-          role: m.role === "assistant" ? "model" : "user",
-          parts: [{ text: m.content }],
-        })),
-        generationConfig: { temperature, maxOutputTokens: maxTokens },
-      };
-      if (systemMsg) geminiBody.systemInstruction = { parts: [{ text: systemMsg }] };
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model.modelId}:generateContent?key=${apiKey}`,
-        { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(geminiBody) },
-      );
-      if (!response.ok) {
-        const err = await response.text();
-        console.warn(`[AI] ${model.label} failed (HTTP ${response.status}):`, err.slice(0, 200));
-        return null;
-      }
-      const data = await response.json();
-      const parts: { text?: string; thought?: boolean }[] = data?.candidates?.[0]?.content?.parts ?? [];
-      const finishReason = data?.candidates?.[0]?.finishReason;
-      // Find the actual response part (skip thought parts from thinking models)
-      const text = parts.find((p) => !p.thought)?.text ?? null;
-      if (!text) console.warn(`[AI] ${model.label} empty response — parts: ${parts.length}, finish: ${finishReason}, error: ${JSON.stringify(data?.error)}`);
-      return text ?? null;
+    const first = await call(messages, 0.4);
+    if (!first.ok) {
+      console.warn(`[AI] ${model.label} (${mode}) ${first.reason}: ${first.detail}`);
+      if (first.reason === "unsupported") continue;
+      return { failure: first.reason };
     }
 
-    // OpenRouter (OpenAI-compatible)
-    const apiKey = env.OPENROUTER_API_KEY;
-    if (!apiKey) return null;
-    const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-        "HTTP-Referer": env.BETTER_AUTH_URL,
-        "X-Title": "LogEveryLift AI Setup",
-      },
-      body: JSON.stringify({ model: model.modelId, messages, temperature, max_tokens: maxTokens }),
-    });
-    if (!response.ok) {
-      const err = await response.text();
-      console.warn(`[AI] ${model.label} failed (HTTP ${response.status}):`, err.slice(0, 200));
-      return null;
+    const checked = validatePlan(parsePlanText(first.text), constraints);
+    if (checked.ok) {
+      console.log(`[AI] ${model.label} (${mode}) produced a valid plan`);
+      return { plan: checked.plan };
     }
-    const data = await response.json();
-    return (data?.choices?.[0]?.message?.content as string) ?? null;
-  } catch (err) {
-    console.warn(`[AI] ${model.label} threw:`, err);
-    return null;
+    console.warn(`[AI] ${model.label} (${mode}) invalid plan, repairing: ${checked.issues.slice(0, 3).join(" | ")}`);
+    if (deadline - Date.now() < MIN_CALL_MS) return { failure: "invalid" };
+
+    const second = await call(
+      [
+        ...messages,
+        { role: "assistant", content: first.text.slice(0, 40_000) },
+        { role: "user", content: repairRequest(checked.issues, first.truncated, delivery) },
+      ],
+      0.1,
+    );
+    if (!second.ok) {
+      console.warn(`[AI] ${model.label} (${mode}) repair ${second.reason}: ${second.detail}`);
+      return { failure: second.reason === "rate_limited" ? "rate_limited" : "invalid" };
+    }
+    const repaired = validatePlan(parsePlanText(second.text), constraints);
+    if (repaired.ok) {
+      console.log(`[AI] ${model.label} (${mode}) repaired successfully`);
+      return { plan: repaired.plan };
+    }
+    console.warn(`[AI] ${model.label} (${mode}) repair still invalid: ${repaired.issues.slice(0, 3).join(" | ")}`);
+    return { failure: "invalid" };
   }
+  return { failure: "unavailable" };
 }
 
-async function tryRepair(
-  model: Model,
-  brokenText: string,
-  originalUserMessage: string,
-  systemPrompt: string,
-): Promise<unknown | null> {
-  const text = await callModel(
-    model,
-    [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: originalUserMessage },
-      { role: "assistant", content: brokenText },
-      { role: "user", content: "Your response was not valid JSON. Return only the corrected JSON, nothing else. No markdown, no explanation." },
-    ],
-    0.1,
-    16384,
-  );
-  if (!text) return null;
-  return tryParse(extractJson(text));
-}
-
-async function getEnabledModels(): Promise<{ modelId: string; label: string; provider: string }[]> {
+async function getEnabledModels(): Promise<LlmModel[]> {
   try {
     const rows = await db
       .select({ modelId: aiModelConfigs.modelId, label: aiModelConfigs.label, provider: aiModelConfigs.provider })
@@ -190,10 +209,14 @@ export async function getAiRateLimitStatus(): Promise<ActionResult<RateLimitInfo
 
 export async function generateWorkoutPlan(
   userDescription: string,
-  options: PromptOptions = {},
+  rawOptions: unknown = {},
 ): Promise<ActionResult<AiGenerateResult>> {
   const auth = await requireSession();
   const userId = auth.user.id;
+
+  const parsedOptions = generateOptionsSchema.safeParse(rawOptions);
+  if (!parsedOptions.success) return { success: false, error: "Invalid options." };
+  const options: PromptOptions = parsedOptions.data;
 
   const trimmed = userDescription.trim();
   if (!trimmed) return { success: false, error: "Please describe your training goals." };
@@ -255,61 +278,49 @@ export async function generateWorkoutPlan(
 
   const existingProgramNames = userPrograms.map((p) => p.name);
 
-  const systemPrompt = `${buildAiSystemPrompt(userProfile, exerciseList, prs, existingProgramNames, options)}
-
-Generate the full plan based on the training goals the user describes. Output only the raw JSON — no explanation, no markdown, no code block.`;
-
   if (!env.OPENROUTER_API_KEY && !env.GOOGLE_API_KEY) {
     return { success: false, error: "AI generation is not configured on this server." };
   }
 
-  // Try each model in priority order, falling through on failure or invalid JSON
-  let parsed: unknown | null = null;
+  const input = buildGenerationInput(trimmed, userProfile, exerciseList, prs, existingProgramNames, options);
+  const constraints: AiPlanConstraints = {
+    daysPerWeek: options.daysPerWeek,
+    cycleDurationWeeks: options.cycleDurationWeeks,
+  };
+  const schema = aiPlanJsonSchema();
+  const buildMessages = (delivery: "json" | "tool") => buildGenerationMessages(input, options, schema, delivery);
+  const deadline = Date.now() + GENERATION_DEADLINE_MS;
+
+  let plan: AiPlan | null = null;
   let modelUsed = "";
+  const failures: string[] = [];
 
   for (const model of models) {
-    if (model.provider === "google" && !env.GOOGLE_API_KEY) continue;
-    if (model.provider !== "google" && !env.OPENROUTER_API_KEY) continue;
-
-    const text = await callModel(
-      model,
-      [{ role: "system", content: systemPrompt }, { role: "user", content: trimmed }],
-      0.4,
-      16384,
-    );
-
-    if (!text) {
-      console.warn(`[AI] ${model.label} returned no text`);
-      continue;
-    }
-
-    const attempt = tryParse(extractJson(text));
-    if (attempt !== null) {
-      parsed = attempt;
+    if (deadline - Date.now() < MIN_CALL_MS) break;
+    const attempt = await generateWithModel(model, buildMessages, constraints, deadline);
+    if ("plan" in attempt) {
+      plan = attempt.plan;
       modelUsed = model.modelId;
       break;
     }
-
-    console.warn(`[AI] ${model.label} returned unparseable JSON, attempting repair`);
-    const repaired = await tryRepair(model, text, trimmed, systemPrompt);
-    if (repaired !== null) {
-      console.log(`[AI] ${model.label} repaired successfully`);
-      parsed = repaired;
-      modelUsed = model.modelId;
-      break;
-    }
-
-    console.warn(`[AI] ${model.label} repair failed, trying next model`);
+    failures.push(attempt.failure);
   }
 
-  if (parsed === null) {
+  if (plan === null) {
+    const allBusy = failures.length > 0 && failures.every((f) => f === "rate_limited");
     return {
       success: false,
-      error: "All AI models are currently unavailable. Please try again in a moment.",
+      error: allBusy
+        ? "The AI models are busy right now. Please try again in a minute."
+        : "The AI couldn't produce a usable plan right now. Please try again, or use the manual flow below.",
     };
   }
 
-  // Record usage only after a successful parse
+  const parsed = toImportPayload(
+    uniqueProgramNames(matchLibraryNames(plan, exerciseList.map((e) => e.name)), existingProgramNames),
+  );
+
+  // Record usage only after a plan that passed validation
   try {
     await db.insert(aiGenerations).values({ userId });
   } catch (err) {
