@@ -1101,7 +1101,7 @@ export async function reorderCycleSlots(
 
 export async function importCycle(
   data: unknown,
-): Promise<ActionResult<{ cycleName: string; unresolvedPrograms: string[] }>> {
+): Promise<ActionResult<{ cycleId: number; cycleName: string; unresolvedPrograms: string[] }>> {
   const auth = await requireSession();
 
   const parsed = importCycleSchema.safeParse(data);
@@ -1138,7 +1138,7 @@ export async function importCycle(
   )];
 
   try {
-    await db.transaction(async (tx) => {
+    const cycleId = await db.transaction(async (tx) => {
       const [cycle] = await tx
         .insert(trainingCycles)
         .values({ ...cycleFields, userId: auth.user.id })
@@ -1155,11 +1155,12 @@ export async function importCycle(
           autoComplete: slot.auto ?? false,
         });
       }
+      return cycle.id;
     });
 
     revalidatePath("/cycles");
     revalidatePath("/");
-    return { success: true, data: { cycleName: cycleFields.name, unresolvedPrograms } };
+    return { success: true, data: { cycleId, cycleName: cycleFields.name, unresolvedPrograms } };
   } catch (err) {
     return { success: false, error: String(err) };
   }

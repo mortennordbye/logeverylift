@@ -1,6 +1,6 @@
 # AI Setup: plan
 
-> **Status:** phases 1 and 2 merged 2026-10-21; phases 3 to 5 built together (one PR); phase 6 next.
+> **Status:** phases 1 to 5 merged 2026-10-21 (phases 3 to 5 as one PR); phase 6 built; phase 7 next.
 > **Written against:** `main` at `0eeda3a` plus the unmerged branch `feat/ai-structured-generation` (`30f6863`, `fa88295`).
 
 This document is written to be picked up with no conversation history. Read section 0 first, and update it before you finish a session.
@@ -19,10 +19,10 @@ AI Setup builds a user's programs and training cycle. Until now it led with a la
 |---|---|---|
 | 1 | Land `feat/ai-structured-generation` | merged, PR #69 (CodeQL follow-up: PR #70) |
 | 2 | More inputs in the plan builder | merged, branch `ai/2-template-inputs` |
-| 3 | Picks-first page, text box removed | built, branch `ai/3-picks-page-and-edits` |
-| 4 | AI edit action, cache table, free-model guard | built, same branch |
-| 5 | AI edit UI: chips and a short box | built, same branch |
-| 6 | One-week check-in and revision | not started |
+| 3 | Picks-first page, text box removed | merged, PR #72 |
+| 4 | AI edit action, cache table, free-model guard | merged, PR #72 |
+| 5 | AI edit UI: chips and a short box | merged, PR #72 |
+| 6 | One-week check-in and revision | built, branch `ai/6-checkin` |
 | 7 | Live check on free models | not started |
 
 Build in order. Each phase is its own branch off `main` and its own PR, merged before the next one starts. Exception: phases 3, 4 and 5 shipped as one PR, because the page and the action it calls change together and splitting them would have removed the background-wait handling in phase 3 only to restore it in phase 5.
@@ -198,7 +198,7 @@ Pick-based fixes stay free. Only the last two go to a model, through `editPlanWi
 
 **The revised plan.** "See a revised plan" opens AI Setup with the picks prefilled and the fix applied, showing the usual preview. Import works as it does today: new programs (names deduplicated) and a draft cycle the user starts from the cycles page. The new row gets `revision_of` set, so it gets its own check-in a week later. No new cycle-switching logic.
 
-**Server actions** (in a new `src/lib/actions/ai-checkin.ts`, following the `CLAUDE.md` template): `getPendingCheckin()` and `answerCheckin(input)`. Both read `userId` from the session and filter by it.
+**Server actions** in `src/lib/actions/ai-checkin.ts`, following the `CLAUDE.md` template: `recordAiSetupImport`, `getPendingCheckin`, `answerCheckin` and `getRevision`. All read `userId` from the session and check ownership. The rules live in `src/lib/utils/ai-checkin.ts`: `checkinDue` and `revisionFor`. A pick already at its limit (30 minutes, beginner, advanced) turns into an AI request instead ("Make each session shorter"). A revision carries the original AI edit forward, so the athlete keeps what they asked for before.
 
 **Tests:** the "when to ask" rule (draft cycle, active under 7 days, active 7+ days, completed, deleted); each issue maps to the right fix; another user's row can't be answered.
 

@@ -400,6 +400,13 @@
       "when": 1792600678851,
       "tag": "0056_ai_plan_cache",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1792602368133,
+      "tag": "0057_ai_setup_plans",
+      "breakpoints": true
     }
   ]
 }
