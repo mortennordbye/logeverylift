@@ -37,5 +37,3 @@ export async function getSystemExercises(): Promise<Exercise[]> {
     .orderBy(asc(exercises.name));
 }
 
-/** Tag to pass to `revalidateTag` if system exercises ever become editable. */
-export const SYSTEM_EXERCISES_TAG = "exercises:system";

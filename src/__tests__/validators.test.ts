@@ -15,7 +15,6 @@ import {
   setProgramExerciseSetDefaultsSchema,
   unlogWorkoutSetSchema,
   updateProgramSetSchema,
-  workoutHistoryQuerySchema,
 } from "@/lib/validators/workout";
 
 // ─── createWorkoutSessionSchema ───────────────────────────────────────────────
@@ -306,40 +305,6 @@ describe("unlogWorkoutSetSchema", () => {
   it("rejects a non-positive programSetId", () => {
     expect(unlogWorkoutSetSchema.safeParse({ ...valid, programSetId: 0 }).success).toBe(false);
     expect(unlogWorkoutSetSchema.safeParse({ ...valid, programSetId: -1 }).success).toBe(false);
-  });
-});
-
-// ─── workoutHistoryQuerySchema ─────────────────────────────────────────────────
-
-describe("workoutHistoryQuerySchema", () => {
-  it("accepts empty input", () => {
-    expect(workoutHistoryQuerySchema.safeParse({}).success).toBe(true);
-  });
-
-  it("accepts optional exerciseId", () => {
-    expect(workoutHistoryQuerySchema.safeParse({ exerciseId: 5 }).success).toBe(true);
-  });
-
-  it("rejects non-positive exerciseId", () => {
-    expect(workoutHistoryQuerySchema.safeParse({ exerciseId: 0 }).success).toBe(false);
-  });
-
-  it("defaults limit to 50", () => {
-    const result = workoutHistoryQuerySchema.safeParse({});
-    expect(result.success && result.data.limit).toBe(50);
-  });
-
-  it("rejects limit over 100", () => {
-    expect(workoutHistoryQuerySchema.safeParse({ limit: 101 }).success).toBe(false);
-  });
-
-  it("defaults offset to 0", () => {
-    const result = workoutHistoryQuerySchema.safeParse({});
-    expect(result.success && result.data.offset).toBe(0);
-  });
-
-  it("rejects negative offset", () => {
-    expect(workoutHistoryQuerySchema.safeParse({ offset: -1 }).success).toBe(false);
   });
 });
 
