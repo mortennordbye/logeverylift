@@ -9,6 +9,7 @@ import {
   testAiModel,
 } from "@/lib/actions/ai-model-configs";
 import type { AiModelConfig } from "@/db/schema/ai-model-configs";
+import { isFreeModel } from "@/lib/utils/llm-response";
 import { Bot, ChevronDown, ChevronLeft, ChevronUp, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -97,7 +98,7 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">AI Models</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Models are tried in priority order. The first available one is used.
+          Models are tried in priority order. The first available one is used. AI Setup only calls free models (OpenRouter &quot;:free&quot; models, the free router, and Gemini) and skips the rest.
         </p>
       </div>
 
@@ -137,6 +138,9 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
                       {model.label}
                     </div>
                     <div className="text-xs text-muted-foreground font-mono truncate">{model.modelId}</div>
+                    {!isFreeModel(model) && (
+                      <div className="text-xs text-amber-600 dark:text-amber-400">Not free: AI Setup skips it</div>
+                    )}
                   </div>
 
                   {/* Enable toggle */}

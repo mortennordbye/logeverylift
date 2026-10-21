@@ -40,6 +40,14 @@ Listed in `.env.example`. `src/lib/env.ts` is the source of truth and will refus
 
 Limits reset on container restart — known limitation of in-memory.
 
+## AI Setup models and spend
+
+AI Setup builds plans without a model. Only "Edit with AI" calls one, and only a free one: `isFreeModel` (`src/lib/utils/llm-response.ts`) allows OpenRouter models ending in `:free`, `openrouter/free`, and any Gemini model. Other rows in Admin → AI Models are skipped with a warning in the logs.
+
+- **OpenRouter** (`OPENROUTER_API_KEY`): free models cost nothing, but are rate-limited and come and go. Remove rows the admin "Test" button reports as no longer listed.
+- **Gemini** (`GOOGLE_API_KEY`): the code can't see billing, so Gemini is only free if the key belongs to a Google AI Studio project **without billing enabled** (free tier). With billing on, Gemini calls are charged. Leave `GOOGLE_API_KEY` unset to rule this out.
+- **Limits:** each user gets 5 new AI edits per day (admins exempt). Edits are cached in `ai_plan_cache`, shared between users, and a cache hit is free and uncounted. The cache key includes `TEMPLATE_VERSION`, so bumping it starts a fresh cache; old rows can be deleted with `DELETE FROM ai_plan_cache WHERE template_version < <current>`.
+
 ## Database
 
 - Postgres connection pool in `src/db/index.ts`: `max=20`, `idleTimeoutMillis=30s`, `connectionTimeoutMillis=5s`.

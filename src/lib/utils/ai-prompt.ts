@@ -1,5 +1,7 @@
-import { AI_EXAMPLES } from "@/lib/utils/ai-examples";
-import { MAX_EXERCISES_PER_PROGRAM, MAX_SETS_PER_EXERCISE } from "@/lib/utils/ai-plan";
+import { editInstructions, type EditRequest, type GenericProfile } from "@/lib/utils/ai-edit";
+import { AI_EDIT_EXAMPLES } from "@/lib/utils/ai-examples";
+import { MAX_EXERCISES_PER_PROGRAM, MAX_SETS_PER_EXERCISE, type AiPlan } from "@/lib/utils/ai-plan";
+import { equipmentAllowed, type TemplateParams } from "@/lib/utils/plan-templates";
 
 export type PrData = {
   exerciseName: string;
@@ -11,9 +13,6 @@ export type PromptOptions = {
   daysPerWeek?: number;
   equipment?: "full_gym" | "barbell" | "dumbbells" | "bodyweight";
   cycleDurationWeeks?: 4 | 6 | 8 | 10 | 12 | 16;
-  /** AI Setup's goal and experience picks; override the profile when set. */
-  goal?: string;
-  experience?: string;
 };
 
 type UserProfile = {
@@ -220,107 +219,86 @@ export function buildManualClipboardPrompt(userProfile: UserProfile, exercises: 
 First ask me one question: "What kind of training are you looking for? Tell me your goals, how many days a week you can train, and whether you want a structured weekly schedule or just standalone programs." Use my answer to generate everything. Then output only the raw JSON — no explanation, no markdown, no code block.`;
 }
 
-// ─── Automatic generation (structured) ───────────────────────────────────────
+// ─── AI edits (structured) ───────────────────────────────────────────────────
 
-/** The athlete's request and context, sent to the model as JSON. */
-export type GenerationInput = {
-  request: string;
-  athlete: {
-    experience?: string;
-    goals?: string[];
-    age?: number;
-    sex?: string;
-    heightCm?: number;
-    bodyWeightKg?: number;
+/** An edit request and its context, sent to the model as JSON. */
+export type EditInput = {
+  athlete: GenericProfile;
+  picks: {
+    daysPerWeek: number;
+    equipment: NonNullable<PromptOptions["equipment"]>;
+    cycleWeeks: TemplateParams["weeks"];
+    sessionMinutes: number | null;
+    priorityMuscles: string[];
+    avoidJoints: string[];
   };
-  constraints: {
-    daysPerWeek?: number;
-    equipment?: NonNullable<PromptOptions["equipment"]>;
-    cycleWeeks?: PromptOptions["cycleDurationWeeks"];
-  };
-  currentLifts: { exercise: string; e1rmKg?: number; maxKg?: number }[];
-  existingPrograms: string[];
-  /** "Name (muscle, equipment, pattern, type)" — the manual prompt's format. */
-  exerciseLibrary: string[];
+  request: string[];
+  /** "Name (muscle, equipment, pattern, type)", filtered to the equipment pick. */
+  allowedExercises: string[];
+  plan: AiPlan;
 };
 
 export type GenerationMessage = { role: "system" | "user" | "assistant"; content: string };
 
 export const PLAN_TOOL_NAME = "submit_training_setup";
 
-export function buildGenerationInput(
-  request: string,
-  userProfile: UserProfile,
+export function buildEditInput(
+  athlete: GenericProfile,
+  picks: TemplateParams,
+  request: EditRequest,
   exercises: Exercise[],
-  prs: PrData[] = [],
-  existingProgramNames: string[] = [],
-  options: PromptOptions = {},
-): GenerationInput {
-  const athlete: GenerationInput["athlete"] = {};
-  const experience = options.experience ?? userProfile.experienceLevel;
-  if (experience) athlete.experience = experience;
-  const goals = options.goal ? [options.goal] : userProfile.goals;
-  if (goals.length > 0) athlete.goals = goals;
-  if (userProfile.birthYear) athlete.age = new Date().getFullYear() - userProfile.birthYear;
-  if (userProfile.gender && userProfile.gender !== "prefer_not_to_say") athlete.sex = userProfile.gender;
-  if (userProfile.heightCm) athlete.heightCm = userProfile.heightCm;
-  if (userProfile.weightKg) athlete.bodyWeightKg = userProfile.weightKg;
-
-  const constraints: GenerationInput["constraints"] = {};
-  if (options.daysPerWeek) constraints.daysPerWeek = options.daysPerWeek;
-  if (options.equipment) constraints.equipment = options.equipment;
-  if (options.cycleDurationWeeks) constraints.cycleWeeks = options.cycleDurationWeeks;
-
+  plan: AiPlan,
+): EditInput {
   return {
-    request,
     athlete,
-    constraints,
-    currentLifts: prs.flatMap((pr): GenerationInput["currentLifts"] =>
-      pr.estimated1rm
-        ? [{ exercise: pr.exerciseName, e1rmKg: pr.estimated1rm }]
-        : pr.maxWeight
-          ? [{ exercise: pr.exerciseName, maxKg: pr.maxWeight }]
-          : [],
-    ),
-    existingPrograms: existingProgramNames,
-    exerciseLibrary: exercises.map(
-      (e) => `${e.name} (${[e.muscleGroup, e.equipment, e.movementPattern, e.exerciseType].filter(Boolean).join(", ")})`,
-    ),
+    picks: {
+      daysPerWeek: picks.daysPerWeek,
+      equipment: picks.equipment,
+      cycleWeeks: picks.weeks,
+      sessionMinutes: picks.sessionMinutes ?? null,
+      priorityMuscles: picks.priorities ?? [],
+      avoidJoints: picks.avoid ?? [],
+    },
+    request: editInstructions(request),
+    allowedExercises: exercises
+      .filter((e) => !e.equipment || isEquipment(e.equipment) && equipmentAllowed(picks.equipment, e.equipment))
+      .map((e) => `${e.name} (${[e.muscleGroup, e.equipment, e.movementPattern, e.exerciseType].filter(Boolean).join(", ")})`),
+    plan,
   };
 }
 
-function formatGenerationInput(input: GenerationInput): string {
-  return `Build my training setup. My request and context:\n${JSON.stringify(input)}`;
+const EQUIPMENT_VALUES = ["barbell", "dumbbell", "machine", "cable", "bodyweight", "kettlebell", "bands", "other"] as const;
+function isEquipment(value: string): value is (typeof EQUIPMENT_VALUES)[number] {
+  return (EQUIPMENT_VALUES as readonly string[]).includes(value);
+}
+
+function formatEditInput(input: EditInput): string {
+  return `Edit my training plan. My request and context:\n${JSON.stringify(input)}`;
 }
 
 /**
- * System prompt for automatic generation. `delivery` is how the plan comes
- * back: as the whole reply ("json") or as the arguments of PLAN_TOOL_NAME.
- * The schema is always included — enforced providers ignore the duplicate,
- * everyone else needs it.
+ * System prompt for an AI edit. `delivery` is how the plan comes back: as the
+ * whole reply ("json") or as the arguments of PLAN_TOOL_NAME. The schema is
+ * always included — enforced providers ignore the duplicate, everyone else
+ * needs it.
  */
-export function buildGenerationSystemPrompt(
-  options: PromptOptions,
-  schema: Record<string, unknown>,
-  delivery: "json" | "tool",
-): string {
-  const equipment = options.equipment ? EQUIPMENT_LABELS[options.equipment] : null;
-  return `You are an experienced strength coach who programs training in the LogEveryLift app. You receive the athlete's request and context as JSON and return a complete training setup as JSON.
+export function buildEditSystemPrompt(schema: Record<string, unknown>, delivery: "json" | "tool"): string {
+  return `You are an experienced strength coach editing a training plan in the LogEveryLift app. You receive JSON with "athlete" (age band, gender, goals, experience), "picks" (what the plan was built from), "request" (the changes the athlete wants), "allowedExercises" (the exercise library, already limited to their equipment) and "plan" (the current plan). Return the complete edited plan as JSON.
 
-What to build:
-- One program per distinct training day (for example "Push", "Pull", "Legs"), and a cycle that schedules them. Set "cycle" to null only when the athlete explicitly wants standalone programs and set no frequency or cycle length.
-- Never create rest-day programs; leave rest days out of the cycle.
-- Use names from "exerciseLibrary" spelled exactly as listed. Only use another exercise when nothing in the library fits.
-- Do not recreate anything in "existingPrograms"; build complementary work instead.
-- Use "currentLifts" and "bodyWeightKg" for realistic starting weights.${equipment ? `\n- Equipment available: ${equipment}.` : ""}
+Rules:
+- Change only what the request asks for. Keep every other program, exercise, set and cycle slot exactly as it is, including names and order.
+- Keep the cycle's training days and "weeks". The athlete changes frequency and cycle length with their picks, not here.
+- Use names from "allowedExercises" spelled exactly as listed. Only use another exercise when nothing listed fits, and only with equipment that "picks.equipment" allows (${Object.entries(EQUIPMENT_LABELS).map(([k, v]) => `${k}: ${v}`).join("; ")}).
+- Don't add exercises that load the joints in "picks.avoidJoints". Keep extra work for "picks.priorityMuscles".
+- When "picks.sessionMinutes" is set, keep each session within it: a set takes about 45 seconds plus its rest.
+- Leave "kg" null on every set of a loaded exercise; the app sets the athlete's starting weights. Use 0 for bodyweight exercises.
 
 Field guide:
 - Exercise fields "category", "area", "muscle", "equipment" and "pattern" describe the exercise. "role" is its role in this program: "compound" (multi-joint main lift), "accessory" (supports a main lift), "isolation" (single joint), "plyometric" (explosive) or "isometric" (static hold).
-- Sets: "type" is "warmup" for the first 1–2 light sets of a main compound lift and "working" for everything else. Strength sets set "reps" and "kg" (0 for bodyweight, null only when you cannot estimate). Timed holds set "durSec" with "reps" null; distance work sets "distM". "rest" is in seconds. "repMin"/"repMax" are the rep range for "double", otherwise null.
+- Sets: "type" is "warmup" for the first 1–2 light sets of a main compound lift and "working" for everything else. Strength sets set "reps". Timed work sets "durSec" with "reps" null; distance work sets "distM". "rest" is in seconds. "repMin"/"repMax" are the rep range for "double", otherwise null.
 - "incKg" is the weight step when progressing (2.5 for barbell lifts, 1–2 for dumbbells, null for bodyweight). "incReps" is the rep step for "reps" (usually 1), otherwise null.
-- Cycle: "weeks" is one of 4, 6, 8, 10, 12, 16. With "sched": "day_of_week" every slot has "day" (1=Mon … 7=Sun) and "idx" null. With "sched": "rotation" every slot has "idx" (1, 2, 3 …) and "day" null, and the programs repeat in order whatever the weekday. "auto" is true only for days tracked outside the app (a run recorded on a watch). "prog" must be exactly one of the program names.
+- Cycle: with "sched": "day_of_week" every slot has "day" (1=Mon … 7=Sun) and "idx" null. "prog" must be exactly one of the program names.
 ${PROGRESSION_RULES}
-${coachingRules(options)}
 - Size: at most ${MAX_EXERCISES_PER_PROGRAM} exercises per program and ${MAX_SETS_PER_EXERCISE} sets per exercise, warm-ups included.
 
 Output:
@@ -335,18 +313,17 @@ ${JSON.stringify(schema)}`;
  * The full conversation: system prompt, the worked examples as prior turns,
  * then this athlete's request.
  */
-export function buildGenerationMessages(
-  input: GenerationInput,
-  options: PromptOptions,
+export function buildEditMessages(
+  input: EditInput,
   schema: Record<string, unknown>,
   delivery: "json" | "tool",
 ): GenerationMessage[] {
   return [
-    { role: "system", content: buildGenerationSystemPrompt(options, schema, delivery) },
-    ...AI_EXAMPLES.flatMap((example): GenerationMessage[] => [
-      { role: "user", content: formatGenerationInput(example.input) },
+    { role: "system", content: buildEditSystemPrompt(schema, delivery) },
+    ...AI_EDIT_EXAMPLES.flatMap((example): GenerationMessage[] => [
+      { role: "user", content: formatEditInput(example.input) },
       { role: "assistant", content: JSON.stringify(example.output) },
     ]),
-    { role: "user", content: formatGenerationInput(input) },
+    { role: "user", content: formatEditInput(input) },
   ];
 }

@@ -420,7 +420,7 @@ function schemeFor(role: Role, params: TemplateParams): Scheme {
   return { ...base, rest: Math.min(base.rest, role === "main" ? cap.main : cap.other) };
 }
 
-function prescribe(candidate: Candidate, role: Role, params: TemplateParams, athlete: TemplateAthlete): Exercise {
+function prescribe(candidate: Candidate, role: Role, params: TemplateParams): Exercise {
   const base = schemeFor(role, params);
   // Advanced lifters get one more set on the big lifts; beginners keep isolation light.
   // Long sessions add a set to accessory and isolation work.
@@ -458,19 +458,18 @@ function prescribe(candidate: Candidate, role: Role, params: TemplateParams, ath
     };
   }
 
-  const kg = roundLoad(oneRepMax(candidate, params.level, athlete) * intensity(base.repMin), candidate.equipment);
+  // Loads stay null here; fillStartingWeights sets them for the athlete.
   // Fixed-rep load progression for beginners' main lifts and every strength
   // main lift; a rep range with double progression for everything else.
   const linear = role === "main" && (params.level === "beginner" || params.goal === "strength");
   const working: PlanSet[] = Array.from({ length: sets }, () => ({
     ...emptySet(base.rest),
     reps: base.repMin,
-    kg,
     ...(!linear && { repMin: base.repMin, repMax: base.repMax }),
   }));
   const warmup: PlanSet[] =
     role === "main" && candidate.equipment === "barbell"
-      ? [{ ...emptySet(60), type: "warmup", reps: 5, kg: roundLoad(kg * 0.5, "barbell") }]
+      ? [{ ...emptySet(60), type: "warmup", reps: 5 }]
       : [];
   const lowerBarbell = candidate.equipment === "barbell" && candidate.area === "lower_body";
 
@@ -482,6 +481,133 @@ function prescribe(candidate: Candidate, role: Role, params: TemplateParams, ath
     incReps: null,
     sets: [...warmup, ...working],
   };
+}
+
+// Loaded exercises in the seeded library that no template slot uses, so a
+// model's swap still starts near a sensible weight. Same unit as Candidate.ratio:
+// intermediate male 1RM as a fraction of body weight, per hand for dumbbells.
+const LIBRARY_RATIOS: Record<string, number> = {
+  "Decline Bench Press|barbell": 1.05,
+  "Close-Grip Bench Press|barbell": 0.85,
+  "Cable Crossover|cable": 0.15,
+  "Pec Deck Machine|machine": 0.6,
+  "Pendlay Row|barbell": 0.75,
+  "T-Bar Row|barbell": 0.75,
+  "Single-Arm Cable Row|cable": 0.35,
+  "Lat Pushdown|cable": 0.35,
+  "Renegade Row|dumbbell": 0.2,
+  "Arnold Press|dumbbell": 0.22,
+  "Machine Shoulder Press|machine": 0.6,
+  "Front Raise|dumbbell": 0.1,
+  "Bent-Over Lateral Raise|dumbbell": 0.08,
+  "Shrugs|barbell": 1.2,
+  "Landmine Lateral Raise|barbell": 0.15,
+  "EZ Bar Curl|barbell": 0.35,
+  "Hammer Curl|dumbbell": 0.16,
+  "Incline Dumbbell Curl|dumbbell": 0.12,
+  "Concentration Curl|dumbbell": 0.12,
+  "Spider Curl|dumbbell": 0.12,
+  "Preacher Curl|barbell": 0.3,
+  "Reverse Curl|barbell": 0.25,
+  "Cable Overhead Extension|cable": 0.3,
+  "Kickback|dumbbell": 0.08,
+  "Wrist Curl|dumbbell": 0.12,
+  "Reverse Wrist Curl|dumbbell": 0.08,
+  "Hack Squat|machine": 1.5,
+  "Goblet Squat|kettlebell": 0.35,
+  "Stiff-Leg Deadlift|barbell": 1.0,
+  "Good Morning|barbell": 0.6,
+  "Lying Leg Curl|machine": 0.5,
+  "Seated Leg Curl|machine": 0.55,
+  "Sumo Deadlift|barbell": 1.5,
+  "Hip Abduction Machine|machine": 0.8,
+  "Seated Calf Raise|machine": 0.8,
+  "Donkey Calf Raise|machine": 1.0,
+  "Pallof Press|cable": 0.15,
+  "Pallof Hold|cable": 0.15,
+  "Cable Crunch|cable": 0.5,
+  "Reverse Hyper|machine": 0.3,
+  "Farmer's Carry|dumbbell": 0.5,
+  "Kettlebell Swing|kettlebell": 0.3,
+  "Turkish Get-Up|kettlebell": 0.2,
+  "Power Clean|barbell": 0.8,
+  "Clean and Press|barbell": 0.6,
+  "Push Press|barbell": 0.75,
+  "Thruster|barbell": 0.55,
+  "Snatch|barbell": 0.6,
+};
+
+// Every known exercise by name and equipment, for its body-weight ratio.
+const CANDIDATES = new Map<string, Candidate>();
+for (const list of Object.values(SLOTS)) {
+  for (const cand of list as Candidate[]) {
+    const key = `${cand.name}|${cand.equipment}`;
+    if (!CANDIDATES.has(key)) CANDIDATES.set(key, cand);
+  }
+}
+for (const [key, ratio] of Object.entries(LIBRARY_RATIOS)) {
+  const [name, equipment] = key.split("|") as [string, Equip];
+  if (!CANDIDATES.has(key)) CANDIDATES.set(key, { name, equipment, area: "full_body", muscle: "full_body", pattern: "push", ratio });
+}
+
+/**
+ * Sets this athlete's starting load on every loaded set whose `kg` is null:
+ * from their estimated 1RM on the lift when known, else from body weight for
+ * exercises the templates or the seeded library know, else the equipment's
+ * lightest load (a custom exercise; the athlete corrects it after one session).
+ * Warm-ups get half the first working load. Bodyweight work gets 0, and
+ * timed or distance sets without reps keep no load. Built plans and AI-edited
+ * plans both go through here, so the two can't drift.
+ */
+export function fillStartingWeights(plan: AiPlan, level: TemplateLevel, athlete: TemplateAthlete): AiPlan {
+  return {
+    ...plan,
+    programs: plan.programs.map((program) => ({
+      ...program,
+      exercises: program.exercises.map((exercise) => {
+        const loaded = exercise.equipment !== "bodyweight" && exercise.equipment !== "bands";
+        const candidate = CANDIDATES.get(`${exercise.name}|${exercise.equipment}`);
+        const known = athlete.lifts[exercise.name];
+        const workingKg = (reps: number) => {
+          const oneRm = known ?? (candidate ? oneRepMax(candidate, level, athlete) : 0);
+          return roundLoad(oneRm * intensity(reps), exercise.equipment);
+        };
+        const firstWorking = exercise.sets.find((s) => s.type === "working" && (s.reps ?? s.repMin) !== null);
+        const firstKg = firstWorking?.kg ?? (firstWorking ? workingKg((firstWorking.reps ?? firstWorking.repMin)!) : null);
+        return {
+          ...exercise,
+          sets: exercise.sets.map((set) => {
+            if (set.kg !== null) return set;
+            if (!loaded) return { ...set, kg: 0 };
+            const reps = set.reps ?? set.repMin;
+            if (reps === null) return set;
+            if (set.type === "warmup") return { ...set, kg: firstKg === null ? FLOOR[exercise.equipment] : roundLoad(firstKg * 0.5, exercise.equipment) };
+            return { ...set, kg: workingKg(reps) };
+          }),
+        };
+      }),
+    })),
+  };
+}
+
+/** The plan with every load cleared, for caching a plan independent of who asked. */
+export function stripWeights(plan: AiPlan): AiPlan {
+  return {
+    ...plan,
+    programs: plan.programs.map((program) => ({
+      ...program,
+      exercises: program.exercises.map((exercise) =>
+        exercise.equipment === "bodyweight" || exercise.equipment === "bands"
+          ? exercise
+          : { ...exercise, sets: exercise.sets.map((set) => ({ ...set, kg: null })) },
+      ),
+    })),
+  };
+}
+
+/** Whether the equipment pick allows this exercise's equipment. */
+export function equipmentAllowed(pick: TemplateEquipment, equipment: Equip): boolean {
+  return ALLOWED[pick].includes(equipment);
 }
 
 function pick(slot: SlotKey, params: TemplateParams, used: Set<string>): Candidate | null {
@@ -528,13 +654,7 @@ function removeWorkingSet(exercise: Exercise): void {
 const workingSets = (exercise: Exercise) => exercise.sets.filter((s) => s.type === "working").length;
 
 /** Extra volume for the priority muscles, as new slots or extra sets. */
-function applyPriorities(
-  entries: Entry[],
-  session: Session,
-  params: TemplateParams,
-  athlete: TemplateAthlete,
-  used: Set<string>,
-): void {
+function applyPriorities(entries: Entry[], session: Session, params: TemplateParams, used: Set<string>): void {
   for (const muscle of params.priorities ?? []) {
     for (const rule of PRIORITY_SLOTS[muscle]) {
       if (!session.slots.some(([slot]) => rule.trains.includes(slot))) continue;
@@ -553,7 +673,7 @@ function applyPriorities(
           slot: rule.add,
           role: "isolation",
           priority: true,
-          exercise: prescribe(candidate, "isolation", params, athlete),
+          exercise: prescribe(candidate, "isolation", params),
         };
         entries.splice(at === -1 ? entries.length : at, 0, entry);
         continue;
@@ -611,14 +731,14 @@ export function buildTemplatePlan(params: TemplateParams, athlete: TemplateAthle
       const candidate = pick(slot, params, used);
       if (!candidate) continue;
       used.add(candidate.name);
-      entries.push({ slot, role, priority: false, exercise: prescribe(candidate, role, params, athlete) });
+      entries.push({ slot, role, priority: false, exercise: prescribe(candidate, role, params) });
     }
-    applyPriorities(entries, session, params, athlete, used);
+    applyPriorities(entries, session, params, used);
     if (params.sessionMinutes) entries = fitToTime(entries, params.sessionMinutes);
     return { name: session.name, exercises: entries.map((e) => e.exercise) };
   });
 
-  return {
+  return fillStartingWeights({
     programs,
     cycle: {
       name: `${params.weeks}-Week ${split.name}`,
@@ -632,7 +752,7 @@ export function buildTemplatePlan(params: TemplateParams, athlete: TemplateAthle
         auto: false,
       })),
     },
-  };
+  }, params.level, athlete);
 }
 
 /** Defaults from the athlete's profile, for preselecting the pickers. */

@@ -121,3 +121,13 @@ export function classifyHttpFailure(status: number, mode: OutputMode, body = "")
   if (status === 404 && /support/i.test(body)) return "unsupported";
   return "unavailable";
 }
+
+/**
+ * Whether calling this model costs nothing: OpenRouter's free models and its
+ * free router. Gemini counts as free; whether it is depends on the API key's
+ * billing setup (docs/OPERATIONS.md). AI Setup refuses every other model.
+ */
+export function isFreeModel(model: { modelId: string; provider: string }): boolean {
+  if (model.provider === "google") return true;
+  return model.provider === "openrouter" && (model.modelId === "openrouter/free" || model.modelId.endsWith(":free"));
+}
