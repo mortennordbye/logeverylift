@@ -18,7 +18,6 @@ const registerWithTokenSchema = z.object({
   password: z.string().min(8).max(200),
 });
 
-const TOKEN_VALIDATE_LIMIT = { windowMs: 15 * 60_000, max: 30 };
 const TOKEN_REGISTER_LIMIT = { windowMs: 60 * 60_000, max: 5 };
 
 async function callerIp(): Promise<string> {
@@ -31,37 +30,6 @@ async function callerIp(): Promise<string> {
 type InviteToken = typeof inviteTokens.$inferSelect;
 
 // ─── Public (no session required) ────────────────────────────────────────────
-
-export async function validateInviteToken(
-  token: string,
-): Promise<ActionResult<{ id: string }>> {
-  const ip = await callerIp();
-  const blocked = checkRateLimit(`invite-validate:${ip}`, TOKEN_VALIDATE_LIMIT);
-  if (blocked) {
-    return { success: false, error: "Too many attempts. Please try again later." };
-  }
-
-  try {
-    const row = await db.query.inviteTokens.findFirst({
-      where: (t, { eq }) => eq(t.token, token.trim()),
-    });
-
-    if (!row) return { success: false, error: "Invalid invite token" };
-
-    if (row.expiresAt && row.expiresAt < new Date()) {
-      return { success: false, error: "This invite token has expired" };
-    }
-
-    if (row.maxUses !== null && row.usedCount >= row.maxUses) {
-      return { success: false, error: "This invite token has already been used" };
-    }
-
-    return { success: true, data: { id: row.id } };
-  } catch (error) {
-    console.error("[validateInviteToken] failed", error);
-    return { success: false, error: "Failed to validate token" };
-  }
-}
 
 export async function registerWithToken(
   token: string,

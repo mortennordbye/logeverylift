@@ -42,14 +42,6 @@ export type ProgramWithExercises = Program & {
 // Composite Types (For Complex Queries)
 // ============================================================================
 
-/**
- * Extended workout set with related exercise and session information.
- * Used when displaying workout history.
- */
-export type WorkoutSetWithExercise = WorkoutSet & {
-  exercise: Exercise;
-};
-
 // ============================================================================
 // Server Action Response Types
 // ============================================================================
@@ -68,16 +60,6 @@ export type ActionResult<T = undefined> =
       error: string;
       fieldErrors?: Record<string, string[]>;
     };
-
-/**
- * Response type for workout history queries.
- * Includes pagination metadata.
- */
-export type WorkoutHistoryResult = {
-  sets: WorkoutSetWithExercise[];
-  totalCount: number;
-  hasMore: boolean;
-};
 
 /**
  * Aggregate workout statistics for the home page dashboard.

@@ -152,22 +152,6 @@ export const unlogWorkoutSetSchema = z.object({
 });
 
 /**
- * Workout History Query Schema
- *
- * Validates parameters for fetching workout history.
- * Used to query past performance for a specific exercise.
- */
-export const workoutHistoryQuerySchema = z.object({
-  exerciseId: z
-    .number()
-    .int()
-    .positive("Exercise ID must be a positive integer")
-    .optional(),
-  limit: z.number().int().positive().max(100).default(50).optional(),
-  offset: z.number().int().min(0).default(0).optional(),
-});
-
-/**
  * Complete Workout Session Schema
  *
  * Validates data when marking a session as complete.

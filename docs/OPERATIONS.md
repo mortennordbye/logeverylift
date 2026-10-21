@@ -35,7 +35,6 @@ Listed in `.env.example`. `src/lib/env.ts` is the source of truth and will refus
 | `POST /api/auth/sign-in/*` | 10 / 15 min per IP |
 | `POST /api/auth/sign-up/*` | 5 / hour per IP |
 | `POST /api/auth/forget-password`, `reset-password` | 5 / hour per IP |
-| `validateInviteToken()` | 30 / 15 min per IP |
 | `registerWithToken()` | 5 / hour per IP |
 
 Limits reset on container restart — known limitation of in-memory.
