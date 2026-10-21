@@ -1,222 +1,104 @@
 /**
- * Worked examples for AI Setup's multi-shot prompt. Each is a full request →
- * plan exchange, sent as prior user/assistant turns so a weak model sees the
- * whole shape done right instead of inferring it from rules.
+ * Worked examples for AI edits, sent as prior user/assistant turns so a weak
+ * model sees a whole edit done right: the plan comes back complete, with only
+ * the requested change, and loads left null.
  *
- * The two cover different ground on purpose: a weekday schedule with load
- * progression, warm-ups and a timed hold; a rotation with rep ranges,
- * bodyweight reps and an equipment limit. Both must pass `validatePlan` with
- * their own constraints (src/__tests__/ai-plan.test.ts checks this).
+ * The plans are built by the template builder, so they always match what a
+ * real request carries. Two edits on purpose: one swaps an exercise in place,
+ * one adds an exercise to every session. src/__tests__/ai-plan.test.ts checks
+ * that each output passes `validatePlan` and changes only what was asked.
  */
 
 import type { AiPlan } from "@/lib/utils/ai-plan";
-import type { GenerationInput } from "@/lib/utils/ai-prompt";
+import type { EditInput } from "@/lib/utils/ai-prompt";
+import { buildTemplatePlan, stripWeights, type TemplateParams } from "@/lib/utils/plan-templates";
 
-export type AiExample = { input: GenerationInput; output: AiPlan };
+export type AiEditExample = { input: EditInput; output: AiPlan };
 
-const set = (
-  reps: number | null,
-  kg: number | null,
-  rest: number,
-  extra: Partial<AiPlan["programs"][number]["exercises"][number]["sets"][number]> = {},
-): AiPlan["programs"][number]["exercises"][number]["sets"][number] => ({
-  type: "working",
-  reps,
-  kg,
-  durSec: null,
-  distM: null,
-  rest,
-  repMin: null,
-  repMax: null,
-  rir: null,
-  ...extra,
-});
+type PlanExercise = AiPlan["programs"][number]["exercises"][number];
 
-export const AI_EXAMPLES: AiExample[] = [
+const athlete = { bodyWeightKg: 80, sex: "male", lifts: {} };
+
+function basePlan(picks: TemplateParams): AiPlan {
+  return stripWeights(buildTemplatePlan(picks, athlete));
+}
+
+function editInput(picks: TemplateParams, request: string[], allowedExercises: string[], plan: AiPlan): EditInput {
+  return {
+    athlete: { ageBand: "25_34", gender: "male", goals: [picks.goal], experience: picks.level },
+    picks: {
+      daysPerWeek: picks.daysPerWeek,
+      equipment: picks.equipment,
+      cycleWeeks: picks.weeks,
+      sessionMinutes: picks.sessionMinutes ?? null,
+      priorityMuscles: picks.priorities ?? [],
+      avoidJoints: picks.avoid ?? [],
+    },
+    request,
+    allowedExercises,
+    plan,
+  };
+}
+
+const swapPicks: TemplateParams = { goal: "general_fitness", level: "beginner", daysPerWeek: 2, equipment: "full_gym", weeks: 8 };
+const swapBase = basePlan(swapPicks);
+const swapOutput: AiPlan = {
+  ...swapBase,
+  programs: swapBase.programs.map((program) => ({
+    ...program,
+    exercises: program.exercises.map(
+      (exercise): PlanExercise =>
+        exercise.name === "Barbell Row" ? { ...exercise, name: "Seated Cable Row", equipment: "cable", incKg: 2.5 } : exercise,
+    ),
+  })),
+};
+
+const finisherPicks: TemplateParams = { goal: "weight_loss", level: "beginner", daysPerWeek: 3, equipment: "bodyweight", weeks: 4 };
+const finisherBase = basePlan(finisherPicks);
+const burpees: PlanExercise = {
+  name: "Burpee", category: "strength", area: "full_body", muscle: "full_body", equipment: "bodyweight",
+  pattern: "push", role: "plyometric", adv: "duration", hits: 2, incKg: null, incReps: null,
+  sets: [{ type: "working", reps: null, kg: 0, durSec: 300, distM: null, rest: 0, repMin: null, repMax: null, rir: null }],
+};
+const finisherOutput: AiPlan = {
+  ...finisherBase,
+  programs: finisherBase.programs.map((program) => ({ ...program, exercises: [...program.exercises, burpees] })),
+};
+
+export const AI_EDIT_EXAMPLES: AiEditExample[] = [
   {
-    input: {
-      request: "I'm new to lifting and want to get stronger. Three days a week at a normal gym.",
-      athlete: { experience: "beginner", goals: ["strength"], bodyWeightKg: 80 },
-      constraints: { daysPerWeek: 3, equipment: "full_gym", cycleWeeks: 8 },
-      currentLifts: [],
-      existingPrograms: [],
-      exerciseLibrary: [
+    input: editInput(
+      swapPicks,
+      [
+        "Replace the exercises the athlete names in their note with alternatives that train the same muscles.",
+        'The athlete\'s note: "no barbell rows please"',
+      ],
+      [
         "Squat (quads, barbell, squat, compound)",
         "Bench Press (chest, barbell, push, compound)",
         "Barbell Row (back, barbell, pull, compound)",
-        "Deadlift (back, barbell, hinge, compound)",
-        "Overhead Press (shoulders, barbell, push, compound)",
+        "Seated Cable Row (back, cable, pull, compound)",
         "Lat Pulldown (back, cable, pull, compound)",
+        "Romanian Deadlift (hamstrings, barbell, hinge, compound)",
         "Plank (abs, bodyweight, isometric, isometric)",
       ],
-    },
-    output: {
-      programs: [
-        {
-          name: "Full Body A",
-          exercises: [
-            {
-              name: "Squat", category: "strength", area: "lower_body", muscle: "quads", equipment: "barbell",
-              pattern: "squat", role: "compound", adv: "load", hits: 1, incKg: 2.5, incReps: null,
-              sets: [set(5, 30, 60, { type: "warmup" }), set(5, 50, 150), set(5, 50, 150), set(5, 50, 150)],
-            },
-            {
-              name: "Bench Press", category: "strength", area: "upper_body", muscle: "chest", equipment: "barbell",
-              pattern: "push", role: "compound", adv: "load", hits: 1, incKg: 2.5, incReps: null,
-              sets: [set(5, 20, 60, { type: "warmup" }), set(5, 40, 120), set(5, 40, 120), set(5, 40, 120)],
-            },
-            {
-              name: "Barbell Row", category: "strength", area: "upper_body", muscle: "back", equipment: "barbell",
-              pattern: "pull", role: "compound", adv: "load", hits: 1, incKg: 2.5, incReps: null,
-              sets: [set(8, 40, 90), set(8, 40, 90), set(8, 40, 90)],
-            },
-            {
-              name: "Plank", category: "strength", area: "core", muscle: "abs", equipment: "bodyweight",
-              pattern: "isometric", role: "isometric", adv: "duration", hits: 2, incKg: null, incReps: null,
-              sets: [set(null, 0, 60, { durSec: 30 }), set(null, 0, 60, { durSec: 30 })],
-            },
-          ],
-        },
-        {
-          name: "Full Body B",
-          exercises: [
-            {
-              name: "Deadlift", category: "strength", area: "lower_body", muscle: "back", equipment: "barbell",
-              pattern: "hinge", role: "compound", adv: "load", hits: 1, incKg: 5, incReps: null,
-              sets: [set(5, 40, 60, { type: "warmup" }), set(5, 60, 180), set(5, 60, 180)],
-            },
-            {
-              name: "Overhead Press", category: "strength", area: "upper_body", muscle: "shoulders", equipment: "barbell",
-              pattern: "push", role: "compound", adv: "load", hits: 1, incKg: 2.5, incReps: null,
-              sets: [set(5, 25, 120), set(5, 25, 120), set(5, 25, 120)],
-            },
-            {
-              name: "Lat Pulldown", category: "strength", area: "upper_body", muscle: "back", equipment: "cable",
-              pattern: "pull", role: "accessory", adv: "double", hits: 1, incKg: 2.5, incReps: null,
-              sets: [
-                set(8, 40, 90, { repMin: 8, repMax: 12 }),
-                set(8, 40, 90, { repMin: 8, repMax: 12 }),
-                set(8, 40, 90, { repMin: 8, repMax: 12 }),
-              ],
-            },
-          ],
-        },
-      ],
-      cycle: {
-        name: "8-Week Beginner Strength",
-        weeks: 8,
-        sched: "day_of_week",
-        slots: [
-          { prog: "Full Body A", day: 1, idx: null, label: null, auto: false },
-          { prog: "Full Body B", day: 3, idx: null, label: null, auto: false },
-          { prog: "Full Body A", day: 5, idx: null, label: null, auto: false },
-        ],
-      },
-    },
+      swapBase,
+    ),
+    output: swapOutput,
   },
   {
-    input: {
-      request: "Build muscle with an upper/lower split. Home gym, dumbbells only, about four sessions a week whenever I can fit them in.",
-      athlete: { experience: "intermediate", goals: ["muscle_gain"], bodyWeightKg: 72 },
-      constraints: { equipment: "dumbbells", cycleWeeks: 6 },
-      currentLifts: [{ exercise: "Dumbbell Bench Press", maxKg: 30 }],
-      existingPrograms: [],
-      exerciseLibrary: [
-        "Dumbbell Bench Press (chest, dumbbell, push, compound)",
-        "Dumbbell Row (back, dumbbell, pull, compound)",
-        "Dumbbell Lateral Raise (shoulders, dumbbell, push, isolation)",
+    input: editInput(
+      finisherPicks,
+      ["Add a short cardio finisher (5 to 10 minutes) as the last exercise of each session."],
+      [
         "Push-up (chest, bodyweight, push, compound)",
-        "Goblet Squat (quads, dumbbell, squat, compound)",
-        "Bulgarian Split Squat (quads, dumbbell, squat, compound)",
-        "Romanian Deadlift (hamstrings, barbell, hinge, compound)",
-        "Side Plank (abs, bodyweight, isometric, isometric)",
+        "Inverted Row (back, bodyweight, pull, compound)",
+        "Bulgarian Split Squat (quads, bodyweight, squat, compound)",
+        "Burpee (full_body, bodyweight, push, plyometric)",
+        "Plank (abs, bodyweight, isometric, isometric)",
       ],
-    },
-    output: {
-      programs: [
-        {
-          name: "Upper",
-          exercises: [
-            {
-              name: "Dumbbell Bench Press", category: "strength", area: "upper_body", muscle: "chest", equipment: "dumbbell",
-              pattern: "push", role: "compound", adv: "double", hits: 1, incKg: 2, incReps: null,
-              sets: [
-                set(8, 22, 120, { repMin: 8, repMax: 12 }),
-                set(8, 22, 120, { repMin: 8, repMax: 12 }),
-                set(8, 22, 120, { repMin: 8, repMax: 12 }),
-              ],
-            },
-            {
-              name: "Dumbbell Row", category: "strength", area: "upper_body", muscle: "back", equipment: "dumbbell",
-              pattern: "pull", role: "compound", adv: "double", hits: 1, incKg: 2, incReps: null,
-              sets: [
-                set(10, 24, 90, { repMin: 10, repMax: 15 }),
-                set(10, 24, 90, { repMin: 10, repMax: 15 }),
-                set(10, 24, 90, { repMin: 10, repMax: 15 }),
-              ],
-            },
-            {
-              name: "Dumbbell Lateral Raise", category: "strength", area: "upper_body", muscle: "shoulders", equipment: "dumbbell",
-              pattern: "push", role: "isolation", adv: "double", hits: 1, incKg: 1, incReps: null,
-              sets: [
-                set(12, 8, 60, { repMin: 12, repMax: 20 }),
-                set(12, 8, 60, { repMin: 12, repMax: 20 }),
-                set(12, 8, 60, { repMin: 12, repMax: 20 }),
-              ],
-            },
-            {
-              name: "Push-up", category: "strength", area: "upper_body", muscle: "chest", equipment: "bodyweight",
-              pattern: "push", role: "accessory", adv: "reps", hits: 2, incKg: null, incReps: 1,
-              sets: [set(15, 0, 60), set(15, 0, 60)],
-            },
-          ],
-        },
-        {
-          name: "Lower",
-          exercises: [
-            {
-              name: "Goblet Squat", category: "strength", area: "lower_body", muscle: "quads", equipment: "dumbbell",
-              pattern: "squat", role: "compound", adv: "double", hits: 1, incKg: 2, incReps: null,
-              sets: [
-                set(10, 26, 120, { repMin: 10, repMax: 15 }),
-                set(10, 26, 120, { repMin: 10, repMax: 15 }),
-                set(10, 26, 120, { repMin: 10, repMax: 15 }),
-              ],
-            },
-            {
-              name: "Romanian Deadlift", category: "strength", area: "lower_body", muscle: "hamstrings", equipment: "dumbbell",
-              pattern: "hinge", role: "compound", adv: "double", hits: 1, incKg: 2, incReps: null,
-              sets: [
-                set(10, 24, 90, { repMin: 10, repMax: 15 }),
-                set(10, 24, 90, { repMin: 10, repMax: 15 }),
-                set(10, 24, 90, { repMin: 10, repMax: 15 }),
-              ],
-            },
-            {
-              name: "Bulgarian Split Squat", category: "strength", area: "lower_body", muscle: "quads", equipment: "dumbbell",
-              pattern: "squat", role: "accessory", adv: "double", hits: 1, incKg: 2, incReps: null,
-              sets: [
-                set(8, 12, 90, { repMin: 8, repMax: 12 }),
-                set(8, 12, 90, { repMin: 8, repMax: 12 }),
-              ],
-            },
-            {
-              name: "Side Plank", category: "strength", area: "core", muscle: "abs", equipment: "bodyweight",
-              pattern: "isometric", role: "isometric", adv: "duration", hits: 2, incKg: null, incReps: null,
-              sets: [set(null, 0, 45, { durSec: 30 }), set(null, 0, 45, { durSec: 30 })],
-            },
-          ],
-        },
-      ],
-      cycle: {
-        name: "6-Week Upper/Lower",
-        weeks: 6,
-        sched: "rotation",
-        slots: [
-          { prog: "Upper", day: null, idx: 1, label: "A", auto: false },
-          { prog: "Lower", day: null, idx: 2, label: "B", auto: false },
-        ],
-      },
-    },
+      finisherBase,
+    ),
+    output: finisherOutput,
   },
 ];

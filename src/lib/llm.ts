@@ -41,7 +41,7 @@ let catalog: { fetchedAt: number; models: Map<string, CatalogEntry> } | null = n
 async function openRouterCatalog(): Promise<Map<string, CatalogEntry> | null> {
   if (catalog && Date.now() - catalog.fetchedAt < CATALOG_TTL_MS) return catalog.models;
   try {
-    const response = await fetch(`${OPENROUTER_URL}/models`, { signal: AbortSignal.timeout(10_000) });
+    const response = await fetch(`${OPENROUTER_URL}/models`, { cache: "no-store", signal: AbortSignal.timeout(10_000) });
     if (!response.ok) return catalog?.models ?? null;
     const data = (await response.json()) as {
       data?: { id: string; supported_parameters?: string[]; top_provider?: { max_completion_tokens?: number | null } }[];
@@ -143,6 +143,8 @@ async function callOpenRouter(model: LlmModel, messages: LlmMessage[], opts: Cal
       "X-Title": "LogEveryLift AI Setup",
     },
     body: JSON.stringify(body),
+    // Model output is never reusable; keep Next.js from trying to cache it.
+    cache: "no-store",
     signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
   });
   return { response, read: readChatCompletion };
@@ -169,7 +171,9 @@ async function callGemini(model: LlmModel, messages: LlmMessage[], opts: CallOpt
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
+      // Model output is never reusable; keep Next.js from trying to cache it.
+    cache: "no-store",
+    signal: AbortSignal.timeout(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
     },
   );
   return { response, read: readGeminiResponse };

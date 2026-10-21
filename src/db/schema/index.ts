@@ -13,6 +13,7 @@
 // Table schemas
 export * from "./ai-generations";
 export * from "./ai-model-configs";
+export * from "./ai-plan-cache";
 export * from "./auth";
 export * from "./custom-weight-usage";
 export * from "./dismissed-makeups";

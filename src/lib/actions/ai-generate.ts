@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { aiGenerations } from "@/db/schema/ai-generations";
 import { aiModelConfigs } from "@/db/schema/ai-model-configs";
+import { aiPlanCache } from "@/db/schema/ai-plan-cache";
 import { exercisePrs } from "@/db/schema/exercise-prs";
 import { exercises } from "@/db/schema/exercises";
 import { programs } from "@/db/schema/programs";
@@ -10,29 +11,30 @@ import { users } from "@/db/schema/users";
 import { getAllExercises } from "@/lib/actions/exercises";
 import { env } from "@/lib/env";
 import { callModel, capabilitiesFor, type LlmMessage, type LlmModel, type OutputSpec } from "@/lib/llm";
+import { checkEdit, editCacheMaterial, genericProfile, normalizeEditRequest } from "@/lib/utils/ai-edit";
 import {
-  AI_CYCLE_WEEKS,
   aiPlanJsonSchema,
   matchLibraryNames,
   parsePlanText,
-  toImportPayload,
   uniqueProgramNames,
   validatePlan,
   type AiPlan,
   type AiPlanConstraints,
 } from "@/lib/utils/ai-plan";
-import {
-  buildGenerationInput,
-  buildGenerationMessages,
-  PLAN_TOOL_NAME,
-  type PrData,
-  type PromptOptions,
-} from "@/lib/utils/ai-prompt";
+import { buildEditInput, buildEditMessages, PLAN_TOOL_NAME } from "@/lib/utils/ai-prompt";
+import { isFreeModel } from "@/lib/utils/llm-response";
 import { parseUserGoals } from "@/lib/utils/goals";
-import { TEMPLATE_GOALS, TEMPLATE_LEVELS } from "@/lib/utils/plan-templates";
+import {
+  buildTemplatePlan,
+  fillStartingWeights,
+  stripWeights,
+  TEMPLATE_VERSION,
+  type TemplateAthlete,
+} from "@/lib/utils/plan-templates";
 import { requireSession } from "@/lib/utils/session";
-import { and, asc, count, eq, gte, isNull } from "drizzle-orm";
-import { z } from "zod";
+import { aiEditSchema } from "@/lib/validators/ai-setup";
+import { createHash } from "crypto";
+import { and, asc, count, eq, gte, isNull, sql } from "drizzle-orm";
 
 const DAILY_LIMIT = 5;
 
@@ -48,7 +50,8 @@ const DEFAULT_MODELS: LlmModel[] = [
 // Whole-request budget across models and retries; the client tells the user
 // generation can take a few minutes.
 const GENERATION_DEADLINE_MS = 300_000;
-const CALL_TIMEOUT_MS = 180_000;
+// Valid edits on free models take about a minute; past two, move to the next model.
+const CALL_TIMEOUT_MS = 120_000;
 // Not worth starting a call with less than this left.
 const MIN_CALL_MS = 20_000;
 const MAX_OUTPUT_TOKENS = 24_000;
@@ -62,11 +65,13 @@ export type RateLimitInfo = {
   dailyLimit: number;
 };
 
-export type AiGenerateResult = {
-  json: unknown;
+export type AiEditResult = {
+  /** The edited plan, with this athlete's starting weights and unique program names. */
+  plan: AiPlan;
+  /** True when a saved result was reused and no model was called. */
+  fromCache: boolean;
   generationsToday: number;
   dailyLimit: number;
-  modelUsed: string;
 };
 
 function startOfToday(): Date {
@@ -74,14 +79,6 @@ function startOfToday(): Date {
   d.setHours(0, 0, 0, 0);
   return d;
 }
-
-const generateOptionsSchema = z.object({
-  daysPerWeek: z.number().int().min(1).max(7).optional(),
-  equipment: z.enum(["full_gym", "barbell", "dumbbells", "bodyweight"]).optional(),
-  cycleDurationWeeks: z.union(AI_CYCLE_WEEKS.map((w) => z.literal(w))).optional(),
-  goal: z.enum(TEMPLATE_GOALS).optional(),
-  experience: z.enum(TEMPLATE_LEVELS).optional(),
-});
 
 const PLAN_SPEC = (): OutputSpec => ({
   name: PLAN_TOOL_NAME,
@@ -109,8 +106,15 @@ async function generateWithModel(
   model: LlmModel,
   buildMessages: (delivery: "json" | "tool") => LlmMessage[],
   constraints: AiPlanConstraints,
+  extraChecks: (plan: AiPlan) => string[],
   deadline: number,
 ): Promise<Attempt> {
+  const check = (text: string) => {
+    const result = validatePlan(parsePlanText(text), constraints);
+    if (!result.ok) return result;
+    const issues = extraChecks(result.plan);
+    return issues.length === 0 ? result : { ok: false as const, issues };
+  };
   const capabilities = await capabilitiesFor(model);
   if (!capabilities) {
     console.warn(`[AI] ${model.label} skipped: not available (no API key, or no longer listed by the provider)`);
@@ -139,7 +143,7 @@ async function generateWithModel(
       return { failure: first.reason };
     }
 
-    const checked = validatePlan(parsePlanText(first.text), constraints);
+    const checked = check(first.text);
     if (checked.ok) {
       console.log(`[AI] ${model.label} (${mode}) produced a valid plan`);
       return { plan: checked.plan };
@@ -159,7 +163,7 @@ async function generateWithModel(
       console.warn(`[AI] ${model.label} (${mode}) repair ${second.reason}: ${second.detail}`);
       return { failure: second.reason === "rate_limited" ? "rate_limited" : "invalid" };
     }
-    const repaired = validatePlan(parsePlanText(second.text), constraints);
+    const repaired = check(second.text);
     if (repaired.ok) {
       console.log(`[AI] ${model.label} (${mode}) repaired successfully`);
       return { plan: repaired.plan };
@@ -170,17 +174,24 @@ async function generateWithModel(
   return { failure: "unavailable" };
 }
 
+/** Enabled models in priority order, free ones only (isFreeModel). */
 async function getEnabledModels(): Promise<LlmModel[]> {
+  let models = DEFAULT_MODELS;
   try {
     const rows = await db
       .select({ modelId: aiModelConfigs.modelId, label: aiModelConfigs.label, provider: aiModelConfigs.provider })
       .from(aiModelConfigs)
       .where(eq(aiModelConfigs.enabled, true))
       .orderBy(asc(aiModelConfigs.priority));
-    return rows.length > 0 ? rows : DEFAULT_MODELS;
-  } catch {
-    return DEFAULT_MODELS;
+    if (rows.length > 0) models = rows;
+  } catch (err) {
+    console.error("[getEnabledModels] failed, using defaults", err);
   }
+  const free = models.filter(isFreeModel);
+  for (const model of models) {
+    if (!isFreeModel(model)) console.warn(`[AI] ${model.modelId} skipped: not a free model`);
+  }
+  return free;
 }
 
 export async function getAiRateLimitStatus(): Promise<ActionResult<RateLimitInfo>> {
@@ -207,130 +218,149 @@ export async function getAiRateLimitStatus(): Promise<ActionResult<RateLimitInfo
   }
 }
 
-export async function generateWorkoutPlan(
-  userDescription: string,
-  rawOptions: unknown = {},
-): Promise<ActionResult<AiGenerateResult>> {
-  const auth = await requireSession();
-  const userId = auth.user.id;
-
-  const parsedOptions = generateOptionsSchema.safeParse(rawOptions);
-  if (!parsedOptions.success) return { success: false, error: "Invalid options." };
-  const options: PromptOptions = parsedOptions.data;
-
-  const trimmed = userDescription.trim();
-  if (!trimmed) return { success: false, error: "Please describe your training goals." };
-  if (trimmed.length > 2000)
-    return { success: false, error: "Description is too long (max 2000 characters)." };
-
-  const isAdmin = auth.user.role === "admin";
-
-  // Rate limit check (admins are exempt)
-  const [{ value: usedToday }] = await db
+async function generationsToday(userId: string): Promise<number> {
+  const [{ value }] = await db
     .select({ value: count() })
     .from(aiGenerations)
     .where(and(eq(aiGenerations.userId, userId), gte(aiGenerations.createdAt, startOfToday())));
+  return Number(value);
+}
 
-  const generationsToday = Number(usedToday);
-  if (!isAdmin && generationsToday >= DAILY_LIMIT) {
-    return {
-      success: false,
-      error: `You've used all ${DAILY_LIMIT} automatic generations for today. Try again tomorrow, or use the manual flow below.`,
-    };
-  }
+/**
+ * Edits the plan built from `picks` as the request asks, on free models only.
+ * A request with the same picks, generic profile and normalized wording
+ * reuses the saved result without calling a model and without counting
+ * toward the daily limit; a model call counts only when it returns a valid plan.
+ */
+export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEditResult>> {
+  const auth = await requireSession();
+  const userId = auth.user.id;
+  const parsed = aiEditSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid request." };
+  const { picks } = parsed.data;
+  const request = normalizeEditRequest(parsed.data.request);
+  const isAdmin = auth.user.role === "admin";
 
-  // Fetch user profile, exercises, PRs, enabled models in parallel
-  const [exerciseResult, user, rawPrs, userPrograms, models] = await Promise.all([
-    getAllExercises(),
-    db.query.users.findFirst({ where: eq(users.id, userId) }),
-    db
-      .select({ exerciseName: exercises.name, prType: exercisePrs.prType, value: exercisePrs.value })
-      .from(exercisePrs)
-      .innerJoin(exercises, eq(exercisePrs.exerciseId, exercises.id))
-      .where(and(eq(exercisePrs.userId, userId), isNull(exercisePrs.supersededAt))),
-    db.select({ name: programs.name }).from(programs).where(eq(programs.userId, userId)),
-    getEnabledModels(),
-  ]);
-
-  if (models.length === 0) {
-    return { success: false, error: "No AI models are enabled. Ask an admin to enable at least one model." };
-  }
-
-  // Deduplicate: one entry per exercise, preferring estimated_1rm over weight
-  const prMap = new Map<string, PrData>();
-  for (const pr of rawPrs) {
-    const entry = prMap.get(pr.exerciseName) ?? { exerciseName: pr.exerciseName };
-    if (pr.prType === "estimated_1rm") entry.estimated1rm = Math.round(Number(pr.value));
-    else if (pr.prType === "weight" && !entry.estimated1rm) entry.maxWeight = Math.round(Number(pr.value));
-    prMap.set(pr.exerciseName, entry);
-  }
-  const prs = Array.from(prMap.values());
-
-  const exerciseList = exerciseResult.success ? exerciseResult.data : [];
-  const userProfile = {
-    gender: user?.gender ?? null,
-    birthYear: user?.birthYear ?? null,
-    heightCm: user?.heightCm ?? null,
-    weightKg: user?.weightKg ?? null,
-    goals: parseUserGoals(user?.goals),
-    experienceLevel: user?.experienceLevel ?? null,
-  };
-
-  const existingProgramNames = userPrograms.map((p) => p.name);
-
-  if (!env.OPENROUTER_API_KEY && !env.GOOGLE_API_KEY) {
-    return { success: false, error: "AI generation is not configured on this server." };
-  }
-
-  const input = buildGenerationInput(trimmed, userProfile, exerciseList, prs, existingProgramNames, options);
-  const constraints: AiPlanConstraints = {
-    daysPerWeek: options.daysPerWeek,
-    cycleDurationWeeks: options.cycleDurationWeeks,
-  };
-  const schema = aiPlanJsonSchema();
-  const buildMessages = (delivery: "json" | "tool") => buildGenerationMessages(input, options, schema, delivery);
-  const deadline = Date.now() + GENERATION_DEADLINE_MS;
-
-  let plan: AiPlan | null = null;
-  let modelUsed = "";
-  const failures: string[] = [];
-
-  for (const model of models) {
-    if (deadline - Date.now() < MIN_CALL_MS) break;
-    const attempt = await generateWithModel(model, buildMessages, constraints, deadline);
-    if ("plan" in attempt) {
-      plan = attempt.plan;
-      modelUsed = model.modelId;
-      break;
-    }
-    failures.push(attempt.failure);
-  }
-
-  if (plan === null) {
-    const allBusy = failures.length > 0 && failures.every((f) => f === "rate_limited");
-    return {
-      success: false,
-      error: allBusy
-        ? "The AI models are busy right now. Please try again in a minute."
-        : "The AI couldn't produce a usable plan right now. Please try again, or use the manual flow below.",
-    };
-  }
-
-  const parsed = toImportPayload(
-    uniqueProgramNames(matchLibraryNames(plan, exerciseList.map((e) => e.name)), existingProgramNames),
-  );
-
-  // Record usage only after a plan that passed validation
   try {
-    await db.insert(aiGenerations).values({ userId });
+    const [user, rawPrs, userPrograms, exerciseResult, usedToday] = await Promise.all([
+      db.query.users.findFirst({ where: eq(users.id, userId) }),
+      db
+        .select({ exerciseName: exercises.name, prType: exercisePrs.prType, value: exercisePrs.value })
+        .from(exercisePrs)
+        .innerJoin(exercises, eq(exercisePrs.exerciseId, exercises.id))
+        .where(and(eq(exercisePrs.userId, userId), isNull(exercisePrs.supersededAt))),
+      db.select({ name: programs.name }).from(programs).where(eq(programs.userId, userId)),
+      getAllExercises(),
+      generationsToday(userId),
+    ]);
+    const dailyLimit = isAdmin ? Infinity : DAILY_LIMIT;
+
+    // Estimated 1RM per exercise, else the best weight: the template builder's input.
+    const lifts: Record<string, number> = {};
+    for (const pr of rawPrs) {
+      if (pr.prType === "estimated_1rm") lifts[pr.exerciseName] = Math.round(Number(pr.value));
+      else if (pr.prType === "weight" && !(pr.exerciseName in lifts)) lifts[pr.exerciseName] = Math.round(Number(pr.value));
+    }
+    const athlete: TemplateAthlete = { bodyWeightKg: user?.weightKg ?? null, sex: user?.gender ?? null, lifts };
+    const profile = genericProfile(
+      {
+        birthYear: user?.birthYear ?? null,
+        gender: user?.gender ?? null,
+        goals: parseUserGoals(user?.goals),
+        experienceLevel: user?.experienceLevel ?? null,
+      },
+      new Date().getFullYear(),
+    );
+    const key = createHash("sha256").update(editCacheMaterial(profile, picks, request)).digest("hex");
+    const constraints: AiPlanConstraints = { daysPerWeek: picks.daysPerWeek, cycleDurationWeeks: picks.weeks };
+
+    let edited: AiPlan | null = null;
+    let fromCache = false;
+    let used = usedToday;
+
+    const [cached] = await db.select({ plan: aiPlanCache.plan }).from(aiPlanCache).where(eq(aiPlanCache.key, key));
+    if (cached) {
+      const check = validatePlan(cached.plan, constraints);
+      if (check.ok) {
+        edited = check.plan;
+        fromCache = true;
+        await db
+          .update(aiPlanCache)
+          .set({ hits: sql`${aiPlanCache.hits} + 1`, lastHitAt: new Date() })
+          .where(eq(aiPlanCache.key, key));
+      } else {
+        console.error("[editPlanWithAi] cached_plan_invalid", { key: key.slice(0, 12) });
+      }
+    }
+
+    if (!edited) {
+      if (!isAdmin && usedToday >= DAILY_LIMIT) {
+        return {
+          success: false,
+          error: `You've used all ${DAILY_LIMIT} AI edits for today. Saved edits still work, and the plan builder is always free.`,
+        };
+      }
+      if (!env.OPENROUTER_API_KEY && !env.GOOGLE_API_KEY) {
+        return { success: false, error: "AI editing is not configured on this server." };
+      }
+      const models = await getEnabledModels();
+      if (models.length === 0) {
+        return { success: false, error: "No free AI models are enabled. Ask an admin to enable one." };
+      }
+
+      const base = stripWeights(buildTemplatePlan(picks, athlete));
+      const library = exerciseResult.success ? exerciseResult.data : [];
+      const input = buildEditInput(profile, picks, request, library, base);
+      const schema = aiPlanJsonSchema();
+      const buildMessages = (delivery: "json" | "tool") => buildEditMessages(input, schema, delivery);
+      const deadline = Date.now() + GENERATION_DEADLINE_MS;
+      const failures: string[] = [];
+      let modelUsed = "";
+
+      for (const model of models) {
+        if (deadline - Date.now() < MIN_CALL_MS) break;
+        const attempt = await generateWithModel(
+          model,
+          buildMessages,
+          constraints,
+          (plan) => checkEdit(plan, picks.equipment),
+          deadline,
+        );
+        if ("plan" in attempt) {
+          edited = stripWeights(attempt.plan);
+          modelUsed = model.modelId;
+          break;
+        }
+        failures.push(attempt.failure);
+      }
+
+      if (!edited) {
+        // Only blame the request when a model answered and the answer didn't hold up.
+        return {
+          success: false,
+          error: failures.includes("invalid")
+            ? "The AI couldn't make that change in a way that fits your picks. Try again, or rephrase the request."
+            : "The free AI models are busy or unavailable right now. Please try again in a few minutes.",
+        };
+      }
+
+      await db
+        .insert(aiPlanCache)
+        .values({ key, templateVersion: TEMPLATE_VERSION, picks: { ...picks, profile }, edit: request, plan: edited, modelUsed })
+        .onConflictDoNothing();
+      await db.insert(aiGenerations).values({ userId });
+      used += 1;
+      console.log(`[AI] edit via ${modelUsed}`);
+    }
+
+    const libraryNames = exerciseResult.success ? exerciseResult.data.map((e) => e.name) : [];
+    const plan = uniqueProgramNames(
+      fillStartingWeights(matchLibraryNames(edited, libraryNames), picks.level, athlete),
+      userPrograms.map((p) => p.name),
+    );
+    return { success: true, data: { plan, fromCache, generationsToday: used, dailyLimit } };
   } catch (err) {
-    console.error("[generateWorkoutPlan] record_failed", err);
+    console.error("[editPlanWithAi] failed", err);
+    return { success: false, error: "Something went wrong while editing the plan. Please try again." };
   }
-
-  console.log(`[AI] Generation successful via ${modelUsed}`);
-
-  return {
-    success: true,
-    data: { json: parsed, generationsToday: generationsToday + 1, dailyLimit: DAILY_LIMIT, modelUsed },
-  };
 }

@@ -393,6 +393,13 @@
       "when": 1792572328910,
       "tag": "0055_invited_by",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1792600678851,
+      "tag": "0056_ai_plan_cache",
+      "breakpoints": true
     }
   ]
 }

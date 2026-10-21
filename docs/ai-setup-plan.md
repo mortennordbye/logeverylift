@@ -1,6 +1,6 @@
 # AI Setup: plan
 
-> **Status:** phases 1 and 2 merged 2026-10-21; phase 3 next.
+> **Status:** phases 1 and 2 merged 2026-10-21; phases 3 to 5 built together (one PR); phase 6 next.
 > **Written against:** `main` at `0eeda3a` plus the unmerged branch `feat/ai-structured-generation` (`30f6863`, `fa88295`).
 
 This document is written to be picked up with no conversation history. Read section 0 first, and update it before you finish a session.
@@ -19,13 +19,13 @@ AI Setup builds a user's programs and training cycle. Until now it led with a la
 |---|---|---|
 | 1 | Land `feat/ai-structured-generation` | merged, PR #69 (CodeQL follow-up: PR #70) |
 | 2 | More inputs in the plan builder | merged, branch `ai/2-template-inputs` |
-| 3 | Picks-first page, text box removed | not started |
-| 4 | AI edit action, cache table, free-model guard | not started |
-| 5 | AI edit UI: chips and a short box | not started |
+| 3 | Picks-first page, text box removed | built, branch `ai/3-picks-page-and-edits` |
+| 4 | AI edit action, cache table, free-model guard | built, same branch |
+| 5 | AI edit UI: chips and a short box | built, same branch |
 | 6 | One-week check-in and revision | not started |
 | 7 | Live check on free models | not started |
 
-Build in order. Each phase is its own branch off `main` and its own PR, merged before the next one starts.
+Build in order. Each phase is its own branch off `main` and its own PR, merged before the next one starts. Exception: phases 3, 4 and 5 shipped as one PR, because the page and the action it calls change together and splitting them would have removed the background-wait handling in phase 3 only to restore it in phase 5.
 
 ### Decisions already made (2026-10-21)
 
@@ -54,7 +54,7 @@ All on `feat/ai-structured-generation`:
 - `src/lib/utils/plan-templates.ts`: `buildTemplatePlan(params, athlete)` builds a full plan from goal, level, days, equipment and weeks. A split is a list of sessions; a session is a list of `[slot, role]` pairs; each slot lists candidate exercises best first, and the first one the equipment allows wins. `prescribe` sets sets/reps/rest/progression from goal and role, and starting weight from the athlete's estimated 1RM or a body-weight ratio. Deterministic.
 - `src/lib/utils/ai-plan.ts`: the `AiPlan` Zod contract, `aiPlanJsonSchema`, `parsePlanText`, `validatePlan` / `checkPlan`, `matchLibraryNames`, `uniqueProgramNames`, `toImportPayload`.
 - `src/lib/llm.ts`: `capabilitiesFor` and `callModel`, picking the best structured-output mode per model.
-- `src/lib/actions/ai-generate.ts`: `generateWorkoutPlan`, with `generateWithModel` doing one call plus one repair turn per model.
+- `src/lib/actions/ai-generate.ts`: from-scratch generation, with `generateWithModel` doing one call plus one repair turn per model. Phase 3 replaced the generation with `editPlanWithAi`.
 - `src/components/features/AiSetupClient.tsx`: chips for goal and experience, "Build my plan", "Customize with AI".
 - `src/__tests__/plan-templates.test.ts`: every one of the 300 base combinations validates and imports.
 
@@ -110,9 +110,9 @@ Each candidate gets an optional `stress` list (for example `Squat` stresses `kne
 
 - Remove the large text box and the from-scratch "Customize with AI" button.
 - The page is the picks, then "Build my plan", then a preview. The new picks are chips, matching the existing `Chips` component. Split chips that don't work for the chosen days are disabled, with the reason shown.
-- The preview lists each program with its exercises and set/rep summary, not just counts, so the user can see what an edit would change. Reuse `buildSetSummary` from `src/lib/utils/format.ts` if it fits the plan shape; if not, a small local formatter.
+- The preview lists each program with its exercises and set/rep summary, not just counts, so the user can see what an edit would change. `buildSetSummary` in `src/lib/utils/format.ts` takes database rows, not the plan shape, so the client has a small local formatter.
 - Import stays as it is.
-- `generateWorkoutPlan` and its prompt builders lose their last UI caller. Remove them in this phase, along with anything that becomes unused, except `buildManualClipboardPrompt` (power-user clipboard, D-8).
+- The from-scratch generation action and its prompt builders lost their last caller and were removed, except `buildManualClipboardPrompt` (power-user clipboard, D-8).
 - Add the 7-day BACKLOG entry (D-7).
 
 Smoke: build and import a plan for a few combinations in the browser. Not a critical flow in `CLAUDE.md` terms, but the import creates programs and a cycle.
@@ -134,19 +134,19 @@ Smoke: build and import a plan for a few combinations in the browser. Not a crit
 
 Not user-owned, so no `user_id`. Insert with `ON CONFLICT DO NOTHING`: two identical misses at once both call a model, and the second insert is dropped. That's acceptable.
 
-**Key.** `TEMPLATE_VERSION`, the generic profile (D-5: age band, gender or "unspecified", goals sorted, experience), the picks in a fixed field order (priority muscles and avoid areas sorted), chip ids sorted, and the text normalized (lowercase, trimmed, whitespace collapsed, trailing punctuation removed). Text only hits on an exact normalized match. Chip-only requests are where most hits will come from.
+**Key.** `TEMPLATE_VERSION`, the generic profile (D-5: age band, gender or "unspecified", goals sorted, experience), the picks in a fixed field order (priority muscles and avoid areas sorted), chip ids in catalogue order, and the text normalized (lowercase, trimmed, whitespace collapsed, trailing punctuation removed). Text only hits on an exact normalized match. Chip-only requests are where most hits will come from.
 
-**Action** `editPlanWithAi(input)` in a new file `src/lib/actions/ai-edit.ts`, following the server action template in `CLAUDE.md`:
+**Action** `editPlanWithAi(input)` in `src/lib/actions/ai-generate.ts`, next to the model loop it reuses. Helpers in `src/lib/utils/ai-edit.ts`, input validation in `src/lib/validators/ai-setup.ts`:
 1. `requireSession()`, Zod-parse picks, chip ids and text (≤200). Read the generic profile from the user row on the server, never from the client.
-2. Rebuild the base plan on the server from the picks with a fixed reference athlete. Never trust a plan from the client.
+2. Rebuild the base plan on the server from the picks, then `stripWeights`. Never trust a plan from the client.
 3. Look up the key. On a hit: bump `hits` and `last_hit_at`, go to step 6.
-4. On a miss: check the daily limit, then call models through `generateWithModel` (moved or shared from `ai-generate.ts`) with the edit prompt (D-5). Constraints for `validatePlan` are the picked days and weeks (D-6).
+4. On a miss: check the daily limit, then call free models through `generateWithModel` with the edit prompt (D-5). Constraints for `validatePlan` are the picked days and weeks (D-6), and `checkEdit` rejects equipment the pick doesn't allow; both feed the repair turn.
 5. On a valid plan: strip weights, insert the cache row, record an `ai_generations` row.
 6. Fill in this user's starting weights (below), run `matchLibraryNames` and `uniqueProgramNames`, return the plan.
 
-**Weights.** The cache holds a plan with `kg` set to null on loaded sets. A new exported function in `plan-templates.ts` fills them for a user: an exercise the user has an estimated 1RM for gets 1RM times the existing `intensity` for its reps; an exercise in the template candidate lists gets the existing body-weight ratio; any other loaded exercise (one the model introduced) gets the equipment floor from `FLOOR` and the user corrects it after the first session. Bodyweight and band exercises stay at 0. `buildTemplatePlan` should use the same function, so the two paths can't drift.
+**Weights.** The cache holds a plan with `kg` set to null on loaded sets. `fillStartingWeights` in `plan-templates.ts` fills them for a user: an exercise the user has an estimated 1RM for gets 1RM times the existing `intensity` for its reps; an exercise in the template candidate lists gets the existing body-weight ratio; any other loaded exercise (one the model introduced) gets the equipment floor from `FLOOR` and the user corrects it after the first session. Bodyweight and band exercises stay at 0. `buildTemplatePlan` uses the same function, so the two paths can't drift. Warm-ups get half the first working load; timed or distance sets without reps get no load.
 
-**Edit prompt** (in `src/lib/utils/ai-prompt.ts`): a system prompt stating the job is to edit, not rewrite, and to keep everything the request doesn't touch; the progression rules already in that file; the generic profile (D-5); the plan as JSON; the request; the allowed exercise names. One short worked example of an edit, in the style of `src/lib/utils/ai-examples.ts`.
+**Edit prompt** (in `src/lib/utils/ai-prompt.ts`): a system prompt stating the job is to edit, not rewrite, and to keep everything the request doesn't touch; the progression rules already in that file; the generic profile (D-5); the plan as JSON; the request; the allowed exercise names. Two worked examples in `src/lib/utils/ai-examples.ts` (a swap and an added finisher), built from the template builder so they always match a real request.
 
 **Free-model guard.** In `getEnabledModels` (`src/lib/actions/ai-generate.ts`), drop any `openrouter` row whose id isn't `openrouter/free` and doesn't end in `:free`, with a `console.warn`. Gemini rows pass; whether Gemini is free depends on the key's billing setup, which goes in `docs/OPERATIONS.md`. The admin AI Models page shows a "not free, will be skipped" note on such rows.
 
@@ -156,7 +156,7 @@ Not user-owned, so no `user_id`. Insert with `ON CONFLICT DO NOTHING`: two ident
 
 Under the preview: a row of chips and a short text box (200 character counter), and an "Edit with AI" button. The result replaces the preview, with "Undo edit" back to the built plan. Show whether the result came from the cache ("instant") or a model ("took 40 s"), and the remaining edits for today. The existing pending-result handling (`AI_PENDING_KEY`) covers a user leaving the page during a model call.
 
-Chips must not duplicate a pick. A starting set: "More variety between days", "Add a cardio finisher", "Add mobility warm-ups", "Prefer machines over free weights", "Fewer exercises, more sets". Each chip is a fixed id plus a fixed English instruction sent to the model.
+Chips must not duplicate a pick: "More variety", "Cardio finisher", "Mobility warm-up", "Prefer machines", "Fewer exercises, more sets", and "Swap exercises I name", which needs the note. Each chip is a fixed id plus a fixed English instruction (`EDIT_CHIPS`). The chip and note selection stays after an edit, so a second edit sends the first request plus the new one, and every result is still keyed by its full request. An edit the athlete asks for may run a session past its length pick (a finisher in a 45-minute session); the preview shows the new estimate rather than rejecting it.
 
 ## 7. Phase 6: one-week check-in and revision
 
@@ -198,7 +198,7 @@ Pick-based fixes stay free. Only the last two go to a model, through `editPlanWi
 
 **The revised plan.** "See a revised plan" opens AI Setup with the picks prefilled and the fix applied, showing the usual preview. Import works as it does today: new programs (names deduplicated) and a draft cycle the user starts from the cycles page. The new row gets `revision_of` set, so it gets its own check-in a week later. No new cycle-switching logic.
 
-**Server actions** (in `src/lib/actions/ai-edit.ts` or a new `ai-checkin.ts`, following the `CLAUDE.md` template): `getPendingCheckin()` and `answerCheckin(input)`. Both read `userId` from the session and filter by it.
+**Server actions** (in a new `src/lib/actions/ai-checkin.ts`, following the `CLAUDE.md` template): `getPendingCheckin()` and `answerCheckin(input)`. Both read `userId` from the session and filter by it.
 
 **Tests:** the "when to ask" rule (draft cycle, active under 7 days, active 7+ days, completed, deleted); each issue maps to the right fix; another user's row can't be answered.
 

@@ -1,4 +1,5 @@
-import { AI_EXAMPLES } from "@/lib/utils/ai-examples";
+import { genericProfile } from "@/lib/utils/ai-edit";
+import { AI_EDIT_EXAMPLES } from "@/lib/utils/ai-examples";
 import {
   aiPlanJsonSchema,
   checkPlan,
@@ -8,7 +9,8 @@ import {
   validatePlan,
   type AiPlan,
 } from "@/lib/utils/ai-plan";
-import { buildGenerationInput, buildGenerationMessages, PLAN_TOOL_NAME } from "@/lib/utils/ai-prompt";
+import { buildEditInput, buildEditMessages, PLAN_TOOL_NAME } from "@/lib/utils/ai-prompt";
+import { buildTemplatePlan, fillStartingWeights, stripWeights } from "@/lib/utils/plan-templates";
 import {
   capabilitiesFromParameters,
   classifyHttpFailure,
@@ -20,24 +22,58 @@ import { importProgramSchema } from "@/lib/validators/workout";
 import { describe, expect, it } from "vitest";
 
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v));
-const example = (i: number): AiPlan => clone(AI_EXAMPLES[i].output);
+const example = (i: number): AiPlan => clone(AI_EDIT_EXAMPLES[i].output);
 const constraintsOf = (i: number) => ({
-  daysPerWeek: AI_EXAMPLES[i].input.constraints.daysPerWeek,
-  cycleDurationWeeks: AI_EXAMPLES[i].input.constraints.cycleWeeks,
+  daysPerWeek: AI_EDIT_EXAMPLES[i].input.picks.daysPerWeek,
+  cycleDurationWeeks: AI_EDIT_EXAMPLES[i].input.picks.cycleWeeks,
 });
+const exerciseNames = (plan: AiPlan) => plan.programs.map((p) => p.exercises.map((e) => e.name));
 
 describe("worked examples", () => {
-  it.each(AI_EXAMPLES.map((_, i) => i))("example %i passes its own validation", (i) => {
+  it.each(AI_EDIT_EXAMPLES.map((_, i) => [i]))("example %i passes its own validation", (i) => {
     const result = validatePlan(example(i), constraintsOf(i));
     expect(result.ok ? [] : result.issues).toEqual([]);
   });
 
-  it.each(AI_EXAMPLES.map((_, i) => i))("example %i converts to a payload the importers accept", (i) => {
-    const payload = toImportPayload(example(i));
+  it.each(AI_EDIT_EXAMPLES.map((_, i) => [i]))("example %i converts to a payload the importers accept once weights are set", (i) => {
+    const filled = fillStartingWeights(example(i), "beginner", { bodyWeightKg: 80, sex: "male", lifts: {} });
+    const payload = toImportPayload(filled);
     expect(importProgramSchema.safeParse(payload).success).toBe(true);
     expect(importCycleSchema.safeParse(payload.cycle).success).toBe(true);
   });
+
+  it.each(AI_EDIT_EXAMPLES.map((_, i) => [i]))("example %i leaves every load null for the app to fill", (i) => {
+    for (const ex of example(i).programs.flatMap((p) => p.exercises)) {
+      const loaded = ex.equipment !== "bodyweight" && ex.equipment !== "bands";
+      for (const set of ex.sets) expect(set.kg).toBe(loaded ? null : 0);
+    }
+  });
+
+  it("the swap example changes one exercise and nothing else", () => {
+    const { input, output } = AI_EDIT_EXAMPLES[0];
+    const before = exerciseNames(input.plan).flat();
+    const after = exerciseNames(output).flat();
+    expect(after.filter((name, i) => name !== before[i])).toEqual(["Seated Cable Row"]);
+    expect(output.cycle).toEqual(input.plan.cycle);
+  });
+
+  it("the finisher example adds one exercise to the end of each session", () => {
+    const { input, output } = AI_EDIT_EXAMPLES[1];
+    output.programs.forEach((program, i) => {
+      expect(program.exercises.slice(0, -1)).toEqual(input.plan.programs[i].exercises);
+      expect(program.exercises.at(-1)!.name).toBe("Burpee");
+    });
+  });
 });
+
+// Plans for the contract tests: a 3-day full body (Mon/Wed/Fri, 8 weeks) and
+// an upper/lower with rep ranges, both straight from the template builder.
+const testAthlete = { bodyWeightKg: 80, sex: "male", lifts: {} };
+const weekly = (): AiPlan =>
+  clone(buildTemplatePlan({ goal: "general_fitness", level: "beginner", daysPerWeek: 3, equipment: "full_gym", weeks: 8 }, testAthlete));
+const ranged = (): AiPlan =>
+  clone(buildTemplatePlan({ goal: "muscle_gain", level: "intermediate", daysPerWeek: 4, equipment: "full_gym", weeks: 8 }, testAthlete));
+const weeklyConstraints = { daysPerWeek: 3, cycleDurationWeeks: 8 as const };
 
 describe("aiPlanJsonSchema", () => {
   const schema = aiPlanJsonSchema();
@@ -146,9 +182,9 @@ describe("validatePlan leniency", () => {
   });
 
   it("reports schema problems with a readable path", () => {
-    const plan = example(0);
+    const plan = weekly();
     (plan.programs[0].exercises[0] as { muscle: string }).muscle = "pecs";
-    const result = validatePlan(plan, constraintsOf(0));
+    const result = validatePlan(plan, weeklyConstraints);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.issues[0]).toMatch(/^programs\[0\]\.exercises\[0\]\.muscle:/);
@@ -161,27 +197,27 @@ describe("validatePlan leniency", () => {
 
 describe("checkPlan", () => {
   it("flags a cycle slot that names no program", () => {
-    const plan = example(0);
+    const plan = weekly();
     plan.cycle!.slots[0].prog = "Full Body C";
     expect(checkPlan(plan).join()).toContain('"Full Body C", which is not one of the programs');
   });
 
   it("matches slot names to programs case-insensitively", () => {
-    const plan = example(0);
+    const plan = weekly();
     plan.cycle!.slots[0].prog = "full body a";
-    expect(checkPlan(plan, constraintsOf(0))).toEqual([]);
+    expect(checkPlan(plan, weeklyConstraints)).toEqual([]);
     expect(toImportPayload(plan).cycle!.slots[0].prog).toBe("Full Body A");
   });
 
   it("requires a rep range on every working set of a double-progression exercise", () => {
-    const plan = example(1);
-    plan.programs[0].exercises[0].sets[1].repMax = null;
+    const plan = ranged();
+    plan.programs[0].exercises[0].sets[2].repMax = null;
     expect(checkPlan(plan).join()).toContain('uses adv "double", which needs repMin and repMax');
   });
 
   it("flags an inverted rep range and a set with no target", () => {
-    const plan = example(1);
-    Object.assign(plan.programs[0].exercises[0].sets[0], { repMin: 12, repMax: 8 });
+    const plan = ranged();
+    Object.assign(plan.programs[0].exercises[0].sets[1], { repMin: 12, repMax: 8 });
     plan.programs[0].exercises[3].sets[0].reps = null;
     const issues = checkPlan(plan).join();
     expect(issues).toContain("repMin (12) is above repMax (8)");
@@ -189,26 +225,29 @@ describe("checkPlan", () => {
   });
 
   it("holds the cycle to the requested frequency and length", () => {
-    const plan = example(0);
+    const plan = weekly();
     const issues = checkPlan(plan, { daysPerWeek: 4, cycleDurationWeeks: 12 }).join();
     expect(issues).toContain("trains 4 days per week, but the cycle has 3 slots");
     expect(issues).toContain('asked for a 12-week cycle, but "weeks" is 8');
   });
 
   it("requires day on weekday slots, unique days, and idx on rotation slots", () => {
-    const weekly = example(0);
-    weekly.cycle!.slots[1].day = 1;
-    expect(checkPlan(weekly).join()).toContain("two slots on the same day");
-    weekly.cycle!.slots[2].day = null;
-    expect(checkPlan(weekly).join()).toContain('every slot needs "day"');
+    const plan = weekly();
+    plan.cycle!.slots[1].day = 1;
+    expect(checkPlan(plan).join()).toContain("two slots on the same day");
+    plan.cycle!.slots[2].day = null;
+    expect(checkPlan(plan).join()).toContain('every slot needs "day"');
 
-    const rotation = example(1);
+    const rotation = weekly();
+    rotation.cycle!.sched = "rotation";
+    rotation.cycle!.slots.forEach((slot, i) => Object.assign(slot, { day: null, idx: i + 1 }));
+    expect(checkPlan(rotation)).toEqual([]);
     rotation.cycle!.slots[0].idx = null;
     expect(checkPlan(rotation).join()).toContain('every slot needs "idx"');
   });
 
   it("requires a cycle when the athlete set a frequency", () => {
-    const plan = example(0);
+    const plan = weekly();
     plan.cycle = null;
     expect(checkPlan(plan, { daysPerWeek: 3 }).join()).toContain('include a "cycle"');
     expect(checkPlan(plan)).toEqual([]);
@@ -217,7 +256,7 @@ describe("checkPlan", () => {
 
 describe("matchLibraryNames", () => {
   it("snaps near-miss names to the library and leaves new exercises alone", () => {
-    const plan = example(0);
+    const plan = weekly();
     plan.programs[0].exercises[0].name = "squat";
     plan.programs[0].exercises[1].name = "Bench-Press";
     plan.programs[0].exercises[2].name = "Pendlay Row";
@@ -226,36 +265,49 @@ describe("matchLibraryNames", () => {
   });
 });
 
-describe("buildGenerationMessages", () => {
-  const input = buildGenerationInput(
-    "Get stronger",
-    { gender: null, birthYear: null, heightCm: null, weightKg: 90, goals: ["strength"], experienceLevel: "advanced" },
-    [{ name: "Squat", muscleGroup: "quads", equipment: "barbell", movementPattern: "squat", exerciseType: "compound" }],
-    [{ exerciseName: "Squat", estimated1rm: 180 }],
-    ["Old Program"],
-    { daysPerWeek: 4, equipment: "full_gym", cycleDurationWeeks: 12 },
+describe("buildEditMessages", () => {
+  const picks = { goal: "strength", level: "advanced", daysPerWeek: 4, equipment: "dumbbells", weeks: 12, avoid: ["knees"] } as const;
+  const profile = genericProfile(
+    { birthYear: 1990, gender: "female", goals: ["strength"], experienceLevel: "advanced" },
+    2026,
+  );
+  const plan = stripWeights(buildTemplatePlan({ ...picks, avoid: [...picks.avoid] }, { bodyWeightKg: 90, sex: "female", lifts: { "Goblet Squat": 120 } }));
+  const input = buildEditInput(
+    profile,
+    { ...picks, avoid: [...picks.avoid] },
+    { chips: ["cardio_finisher"], text: "" },
+    [
+      { name: "Squat", muscleGroup: "quads", equipment: "barbell", movementPattern: "squat", exerciseType: "compound" },
+      { name: "Goblet Squat", muscleGroup: "quads", equipment: "dumbbell", movementPattern: "squat", exerciseType: "compound" },
+      { name: "Burpee", muscleGroup: "full_body", equipment: "bodyweight", movementPattern: "push", exerciseType: "plyometric" },
+    ],
+    plan,
   );
 
   it("sends the request as structured JSON after one turn pair per example", () => {
-    const messages = buildGenerationMessages(input, { daysPerWeek: 4 }, aiPlanJsonSchema(), "json");
-    expect(messages.map((m) => m.role)).toEqual(["system", ...AI_EXAMPLES.flatMap(() => ["user", "assistant"]), "user"]);
+    const messages = buildEditMessages(input, aiPlanJsonSchema(), "json");
+    expect(messages.map((m) => m.role)).toEqual(["system", ...AI_EDIT_EXAMPLES.flatMap(() => ["user", "assistant"]), "user"]);
     const last = messages.at(-1)!.content;
     const json = JSON.parse(last.slice(last.indexOf("{")));
     expect(json).toMatchObject({
-      request: "Get stronger",
-      athlete: { experience: "advanced", goals: ["strength"], bodyWeightKg: 90 },
-      constraints: { daysPerWeek: 4, equipment: "full_gym", cycleWeeks: 12 },
-      currentLifts: [{ exercise: "Squat", e1rmKg: 180 }],
-      existingPrograms: ["Old Program"],
-      exerciseLibrary: ["Squat (quads, barbell, squat, compound)"],
+      athlete: { ageBand: "35_44", gender: "female", goals: ["strength"], experience: "advanced" },
+      picks: { daysPerWeek: 4, equipment: "dumbbells", cycleWeeks: 12, sessionMinutes: null, avoidJoints: ["knees"] },
+      request: ["Add a short cardio finisher (5 to 10 minutes) as the last exercise of each session."],
+      allowedExercises: ["Goblet Squat (quads, dumbbell, squat, compound)", "Burpee (full_body, bodyweight, push, plyometric)"],
     });
+    expect(json.plan).toEqual(plan);
   });
 
-  it("states the frequency constraint and the delivery in the system prompt", () => {
-    const json = buildGenerationMessages(input, { daysPerWeek: 4 }, aiPlanJsonSchema(), "json")[0].content;
-    const tool = buildGenerationMessages(input, { daysPerWeek: 4 }, aiPlanJsonSchema(), "tool")[0].content;
-    expect(json).toContain("EXACTLY 4 training days per week");
+  it("sends no birth year, body weight or lift numbers", () => {
+    const text = buildEditMessages(input, aiPlanJsonSchema(), "json").at(-1)!.content;
+    expect(text).not.toMatch(/1990|birthYear|weightKg|bodyWeightKg|e1rm|estimated1rm|"kg":\s*[1-9]/);
+  });
+
+  it("states the delivery in the system prompt", () => {
+    const json = buildEditMessages(input, aiPlanJsonSchema(), "json")[0].content;
+    const tool = buildEditMessages(input, aiPlanJsonSchema(), "tool")[0].content;
     expect(json).toContain("Reply with exactly one JSON object");
+    expect(json).toContain("Change only what the request asks for");
     expect(tool).toContain(`Call the "${PLAN_TOOL_NAME}" tool`);
   });
 });
