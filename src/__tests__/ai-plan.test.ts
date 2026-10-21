@@ -181,6 +181,24 @@ describe("validatePlan leniency", () => {
     expect(result.plan.cycle).toBeNull();
   });
 
+  it("accepts nested lists and the cycle sent as JSON strings", () => {
+    const plan = weekly();
+    const raw = {
+      programs: JSON.stringify(plan.programs.map((p) => ({ ...p, exercises: JSON.stringify(p.exercises) }))),
+      cycle: JSON.stringify({ ...plan.cycle, slots: JSON.stringify(plan.cycle!.slots) }),
+    };
+    const result = validatePlan(raw, weeklyConstraints);
+    expect(result.ok ? result.plan : result.issues).toEqual(plan);
+    expect(validatePlan({ programs: "[not json" }).ok).toBe(false);
+  });
+
+  it("restores a plan whose cycle was swallowed into a stringified programs list", () => {
+    const plan = weekly();
+    const tail = `${JSON.stringify(plan.programs)}, "cycle": ${JSON.stringify(plan.cycle)}}`;
+    const result = validatePlan(parsePlanText(JSON.stringify({ programs: tail })), weeklyConstraints);
+    expect(result.ok ? result.plan : result.issues).toEqual(plan);
+  });
+
   it("reports schema problems with a readable path", () => {
     const plan = weekly();
     (plan.programs[0].exercises[0] as { muscle: string }).muscle = "pecs";

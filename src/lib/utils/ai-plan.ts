@@ -9,7 +9,8 @@
  * The shape is strict-mode friendly (every key required, absent values are
  * null, no extra keys) and deliberately flatter than the import format, which
  * `toImportPayload` converts to. Parsing is lenient where weak models slip:
- * numeric strings, enum casing and omitted nullable keys are accepted.
+ * numeric strings, enum casing, omitted nullable keys and nested lists sent
+ * as JSON strings are accepted.
  */
 
 import { MAX_REQUIRED_HITS, MIN_REQUIRED_HITS, PROGRESSION_ADVANCES } from "@/lib/utils/progression";
@@ -43,6 +44,17 @@ const token = <T extends z.ZodType>(schema: T) =>
     (v) => (typeof v === "string" ? v.trim().toLowerCase().replace(/[\s-]+/g, "_") : v),
     schema,
   );
+// '[{"name":…}]' → the array. Some models put a nested list or object in a
+// tool call's arguments as a JSON string instead of inline.
+const nested = <T extends z.ZodType>(schema: T) =>
+  z.preprocess((v) => {
+    if (typeof v !== "string" || !/^\s*[[{]/.test(v)) return v;
+    try {
+      return JSON.parse(v);
+    } catch {
+      return v;
+    }
+  }, schema);
 const nullableInt = (min: number, max: number) =>
   num(z.number().int().min(min).max(max).nullable()).default(null);
 
@@ -70,12 +82,12 @@ const aiExerciseSchema = z.object({
   hits: nullableInt(MIN_REQUIRED_HITS, MAX_REQUIRED_HITS),
   incKg: num(z.number().min(0).max(50).nullable()).default(null),
   incReps: nullableInt(0, 20),
-  sets: z.array(aiSetSchema).min(1).max(MAX_SETS_PER_EXERCISE),
+  sets: nested(z.array(aiSetSchema).min(1).max(MAX_SETS_PER_EXERCISE)),
 });
 
 const aiProgramSchema = z.object({
   name: z.string().trim().min(1).max(100),
-  exercises: z.array(aiExerciseSchema).min(1).max(MAX_EXERCISES_PER_PROGRAM),
+  exercises: nested(z.array(aiExerciseSchema).min(1).max(MAX_EXERCISES_PER_PROGRAM)),
 });
 
 const aiSlotSchema = z.object({
@@ -90,12 +102,12 @@ const aiCycleSchema = z.object({
   name: z.string().trim().min(1).max(100),
   weeks: num(z.union(AI_CYCLE_WEEKS.map((w) => z.literal(w)))),
   sched: token(z.enum(["day_of_week", "rotation"])),
-  slots: z.array(aiSlotSchema).min(1).max(14),
+  slots: nested(z.array(aiSlotSchema).min(1).max(14)),
 });
 
 export const aiPlanSchema = z.object({
-  programs: z.array(aiProgramSchema).min(1).max(MAX_PROGRAMS),
-  cycle: aiCycleSchema.nullable().default(null),
+  programs: nested(z.array(aiProgramSchema).min(1).max(MAX_PROGRAMS)),
+  cycle: nested(aiCycleSchema.nullable()).default(null),
 });
 
 export type AiPlan = z.infer<typeof aiPlanSchema>;
@@ -235,7 +247,7 @@ function unwrap(value: unknown, depth = 0): unknown | null {
   if (depth > 3 || value === null || typeof value !== "object") return value ?? null;
   if (Array.isArray(value)) return value.length === 1 ? unwrap(value[0], depth + 1) : value;
   const obj = value as Record<string, unknown>;
-  if ("programs" in obj) return obj;
+  if ("programs" in obj) return spliceStringifiedTail(obj);
   for (const key of ["plan", "setup", "arguments", "parameters", "data", "result", "output"]) {
     const inner = obj[key];
     if (typeof inner === "string") {
@@ -246,6 +258,20 @@ function unwrap(value: unknown, depth = 0): unknown | null {
     }
   }
   return obj;
+}
+
+/**
+ * A model that stringifies "programs" sometimes swallows the rest of the
+ * object with it: `"programs": "[…], \"cycle\": {…}}"`. That string is the
+ * tail of the original JSON, so putting the key back in front restores it.
+ * A string that is already valid JSON is left for the schema to parse.
+ */
+function spliceStringifiedTail(obj: Record<string, unknown>): Record<string, unknown> {
+  const programs = obj.programs;
+  if (typeof programs !== "string" || tryParse(programs) !== null) return obj;
+  const restored = tryParse(`{"programs":${programs}`);
+  if (!restored || typeof restored !== "object" || Array.isArray(restored)) return obj;
+  return { ...obj, ...(restored as Record<string, unknown>) };
 }
 
 /**

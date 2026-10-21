@@ -1,6 +1,6 @@
 # AI Setup: plan
 
-> **Status:** phases 1 to 5 merged 2026-10-21 (phases 3 to 5 as one PR); phase 6 built; phase 7 next.
+> **Status:** all seven phases built 2026-10-21 (phases 3 to 5 as one PR); 1 to 6 merged and deployed, 7 in review.
 > **Written against:** `main` at `0eeda3a` plus the unmerged branch `feat/ai-structured-generation` (`30f6863`, `fa88295`).
 
 This document is written to be picked up with no conversation history. Read section 0 first, and update it before you finish a session.
@@ -18,12 +18,12 @@ AI Setup builds a user's programs and training cycle. Until now it led with a la
 | Phase | What | State |
 |---|---|---|
 | 1 | Land `feat/ai-structured-generation` | merged, PR #69 (CodeQL follow-up: PR #70) |
-| 2 | More inputs in the plan builder | merged, branch `ai/2-template-inputs` |
+| 2 | More inputs in the plan builder | merged, PR #71 |
 | 3 | Picks-first page, text box removed | merged, PR #72 |
 | 4 | AI edit action, cache table, free-model guard | merged, PR #72 |
 | 5 | AI edit UI: chips and a short box | merged, PR #72 |
-| 6 | One-week check-in and revision | built, branch `ai/6-checkin` |
-| 7 | Live check on free models | not started |
+| 6 | One-week check-in and revision | merged, PR #73 |
+| 7 | Live check on free models | built, branch `ai/7-live-check` |
 
 Build in order. Each phase is its own branch off `main` and its own PR, merged before the next one starts. Exception: phases 3, 4 and 5 shipped as one PR, because the page and the action it calls change together and splitting them would have removed the background-wait handling in phase 3 only to restore it in phase 5.
 
@@ -208,9 +208,11 @@ Pick-based fixes stay free. Only the last two go to a model, through `editPlanWi
 
 Closes the BACKLOG entry "Live-verify AI Setup's tool and JSON-mode paths and the repair turn".
 
-- Add `scripts/ai-smoke.ts`: for one model id, run an edit in each output mode the model supports, plus one request built to fail validation (asking for a 7th day) to force the repair turn. Print mode, time, valid or not.
-- Run it against two or three free models. Save the raw responses as test fixtures, so `parsePlanText` and the repair path stay covered without live calls.
-- Fix what breaks, delete the BACKLOG entry.
+- `scripts/ai-smoke.ts` (`pnpm ai:smoke [modelId…]`, run in the app container): for each enabled free model, or the ids given, one edit in each output mode the model supports, then one repair turn, forced by sending a plan with an extra training day as the model's previous answer. Prints mode, time, valid or not. The model loop moved to `src/lib/ai-generation.ts` so the script can drive it without it becoming a server action.
+- Raw responses are saved in `src/__tests__/fixtures/ai-responses/`; `src/__tests__/ai-responses.test.ts` replays them through `parsePlanText`, `validatePlan` and `checkEdit` and expects the result recorded at capture time.
+- Results (2026-10-21, 8 free models): valid edits in every output mode (`json_schema`, `json_object`, `text`, `tool`) and valid repairs in `json_schema` and `tool`. Fastest: MiniMax M3.1 Flash (23 to 25 s); slowest valid: about 110 s. Five models in the old list were unlisted or failing, and were disabled in production and replaced in `scripts/seed.ts` with the ones that passed.
+- Fixed from the run: one model sent the plan's nested lists as JSON strings, once with the cycle swallowed into the `programs` string; `parsePlanText` and the schema now recover both. MiniMax rejects a forced `tool_choice`; the existing downgrade to the next mode handles it.
+- The BACKLOG entry is closed. Re-run `pnpm ai:smoke` in the app container when the model list changes; it rewrites the fixtures.
 
 ---
 
