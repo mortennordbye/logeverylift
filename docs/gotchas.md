@@ -57,6 +57,16 @@ If you add a route that the app's own nav/persistence can point at, give it the 
 
 `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` live in `.env.local` (gitignored). Source it (`set -a; . ./.env.local; set +a`) before the Playwright smoke pass — don't prompt for them.
 
+## E2E needs WebKit, and its installer can hang
+
+The e2e project runs as an iPhone (WebKit). On 2026-10-21, `npx playwright install webkit` (Playwright 1.59, Node 26) downloaded the archive and then hung at "extracting archive" with an empty browser directory, the likely reason the suite was once run on Chromium instead. Install it by hand with the URL the installer prints under `DEBUG=pw:install`:
+
+```bash
+D=~/Library/Caches/ms-playwright/webkit-2272   # the revision the installer asks for
+mkdir -p "$D" && curl -sSL -o /tmp/webkit.zip https://cdn.playwright.dev/dbazure/download/playwright/builds/webkit/2272/webkit-mac-15-arm64.zip
+unzip -q /tmp/webkit.zip -d "$D" && touch "$D/INSTALLATION_COMPLETE" "$D/DEPENDENCIES_VALIDATED"
+```
+
 ## Server Action results: `success:false` conflates not-found and errors
 
 `getProgramWithExercises` returns `{success:false, error:"Program not found"}` for genuine not-found/not-owned, but `{success:false, error:String(err)}` for a transient DB error. When you branch on failure (e.g. to redirect/heal vs preserve state), check the **message** — don't treat all failures the same.

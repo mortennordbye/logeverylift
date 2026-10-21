@@ -101,7 +101,7 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   });
   await expect(rule()).toContainText(/the first set/, { timeout: 5_000 });
 
-  const applyToPlan = page.getByRole("switch");
+  const applyToPlan = page.getByRole("switch", { name: "Apply bumps to the plan" });
   await expect(applyToPlan).toHaveAttribute("aria-checked", "false");
   await tapAndSave(page, applyToPlan, { bodyIncludes: '"applyToPlan":true' });
   await expect(applyToPlan).toHaveAttribute("aria-checked", "true");
@@ -112,11 +112,11 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   await openSheet();
   await expect(rule()).toContainText(/3 sessions in a row/, { timeout: 5_000 });
   await expect(rule()).toContainText(/the first set/, { timeout: 5_000 });
-  await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByRole("switch", { name: "Apply bumps to the plan" })).toHaveAttribute("aria-checked", "true");
 
   // Restore, and prove the restore itself persisted — a silent failure here
   // leaks into every later run.
-  await tapAndSave(page, page.getByRole("switch"), {
+  await tapAndSave(page, page.getByRole("switch", { name: "Apply bumps to the plan" }), {
     bodyIncludes: '"applyToPlan":false',
   });
   await tapAndSave(page, page.getByRole("button", { name: /^Load, confirmed/ }), {
@@ -137,5 +137,5 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   await openSheet();
   await expect(rule()).toContainText(/2 sessions in a row/, { timeout: 5_000 });
   await expect(rule()).toContainText(/every set/, { timeout: 5_000 });
-  await expect(page.getByRole("switch")).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByRole("switch", { name: "Apply bumps to the plan" })).toHaveAttribute("aria-checked", "false");
 });
