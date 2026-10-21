@@ -164,7 +164,7 @@ async function callGemini(model: LlmModel, messages: LlmMessage[], opts: CallOpt
 
   // The AQ. key format needs ?key=, not a Bearer token.
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model.modelId}:generateContent?key=${env.GOOGLE_API_KEY}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model.modelId)}:generateContent?key=${env.GOOGLE_API_KEY}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

@@ -121,8 +121,12 @@ export async function testAiModel(modelId: string): Promise<ActionResult<{ laten
   return { success: false, error: lastError };
 }
 
+// Provider model ids, e.g. "gemini-2.5-flash" or "google/gemma-4-31b-it:free".
+const MODEL_ID_PATTERN = /^[A-Za-z0-9._:/-]{1,200}$/;
+
 export async function addAiModel(modelId: string, label: string, provider = "openrouter"): Promise<ActionResult> {
   if (!modelId.trim() || !label.trim()) return { success: false, error: "Model ID and label are required." };
+  if (!MODEL_ID_PATTERN.test(modelId.trim())) return { success: false, error: "Model ID can only contain letters, digits and . _ : / -" };
   try {
     await requireAdmin();
     const rows = await db.select({ priority: aiModelConfigs.priority }).from(aiModelConfigs).orderBy(asc(aiModelConfigs.priority));
