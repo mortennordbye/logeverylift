@@ -25,7 +25,9 @@ env:
 
 jobs:
   verify:
-    name: Typecheck + lint + tests
+    # This name is a required status check in the repo ruleset; renaming the
+    # job leaves the required check unreported and every PR blocked.
+    name: Typecheck + tests
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
