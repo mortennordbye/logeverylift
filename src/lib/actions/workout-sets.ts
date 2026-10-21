@@ -148,6 +148,11 @@ async function resolvePlanSlot(
     // queued. Resolve what we can from the exercise rather than dropping the
     // write.
   }
+  // The client named a set that no longer exists. The exercise slot below is
+  // still right, but the program set found at this position is a different
+  // set, and claiming it would make this write (or an un-log) land on that
+  // set's row. Keep the row unslotted instead.
+  const namedSetDeleted = programSetId != null;
 
   // Legacy payload (a bundle cached before programSetId shipped, or a replay
   // queued by one). Resolving by exercise is ambiguous when the program holds
@@ -182,11 +187,11 @@ async function resolvePlanSlot(
   return {
     slot: {
       programExerciseId: row.programExerciseId,
-      programSetId: row.programSetId,
+      programSetId: namedSetDeleted ? null : row.programSetId,
       // The left join misses when the plan has no set at that position, which
       // says nothing about whether the set logged there was a warm-up. Default
       // to the common case rather than guessing.
-      setType: row.setType ?? "working",
+      setType: (namedSetDeleted ? null : row.setType) ?? "working",
       prescribedWorkingSets: row.prescribedWorkingSets || null,
     },
   };
@@ -200,6 +205,10 @@ async function resolvePlanSlot(
  * carry the exercise, so an un-log or a note edit on them keeps working.
  */
 function setRowKey(slot: PlanSlot | null, exerciseId: number, setNumber: number) {
+  // A row logged against a program set is that set's row wherever the set now
+  // sits. Matching on the position instead found the wrong row as soon as the
+  // sets were reordered or one was deleted mid-workout.
+  if (slot?.programSetId != null) return eq(workoutSets.programSetId, slot.programSetId);
   return and(
     eq(workoutSets.setNumber, setNumber),
     slot
@@ -359,15 +368,19 @@ export async function logWorkoutSet(
       }
     }
 
-    // Upsert on the (session, plan slot, set_number) unique key. A plain insert
-    // would throw on the second write for the same set, which the caller then
-    // had to treat as success — silently discarding the user's corrected
-    // weight/reps/RIR. Re-logging a set must overwrite it.
+    // Upsert, so a second write for the same set overwrites it rather than
+    // throwing. A plain insert threw on the re-log, which the caller then had
+    // to treat as success, silently discarding the corrected weight/reps/RIR.
     //
-    // When the slot could not be resolved the key holds a null and Postgres
-    // treats it as distinct, so nothing conflicts and the row is inserted. That
-    // only happens for an unprogrammed session or a set deleted from the plan
-    // mid-workout; both are better recorded twice than lost.
+    // The conflict key is the set's identity, and that is its program set, not
+    // its position: positions move when sets are reordered or deleted
+    // mid-workout, and keying on (slot, set_number) made logging the set that
+    // moved into a position overwrite the row of the set that left it. Only a
+    // row with no program set (an unprogrammed session, or a set deleted from
+    // the plan since the write was queued) falls back to the position.
+    //
+    // When that fallback key holds a null too (unprogrammed session) Postgres
+    // treats it as distinct, nothing conflicts and the row is inserted.
     //
     // Replays from the offline queue land here too and are idempotent: the row
     // is rewritten with the same values, and PR detection below only inserts
@@ -395,67 +408,81 @@ export async function logWorkoutSet(
       isFailed,
       wasEasy,
     };
-    const [set] = await db
-      .insert(workoutSets)
-      .values(setValues)
-      .onConflictDoUpdate({
-        target: [
-          workoutSets.sessionId,
-          workoutSets.programExerciseId,
-          workoutSets.setNumber,
-        ],
-        // createdAt is deliberately not updated — it stays the time the set was
-        // first logged.
-        set: {
-          programSetId: setValues.programSetId,
-          setType: setValues.setType,
-          prescribedWorkingSets: setValues.prescribedWorkingSets,
-          targetReps: setValues.targetReps ?? null,
-          actualReps: setValues.actualReps,
-          weightKg: setValues.weightKg,
-          durationSeconds: setValues.durationSeconds ?? null,
-          distanceMeters: setValues.distanceMeters ?? null,
-          inclinePercent: setValues.inclinePercent ?? null,
-          heartRateZone: setValues.heartRateZone ?? null,
-          rir: setValues.rir ?? null,
-          rpe: setValues.rpe,
-          restTimeSeconds: setValues.restTimeSeconds,
-          notes: setValues.notes ?? null,
-          isCompleted: setValues.isCompleted,
-          isFailed: setValues.isFailed,
-          wasEasy: setValues.wasEasy,
-        },
-      })
-      .returning();
+    // One transaction for the row and the records it earns, under a per-user,
+    // per-exercise lock (lockRecords).
+    const { set, newPRs } = await db.transaction(async (tx) => {
+      await lockRecords(tx, auth.user.id, exerciseId);
+      const conflict =
+        setValues.programSetId != null
+          ? { target: [workoutSets.sessionId, workoutSets.programSetId] }
+          : {
+              target: [workoutSets.sessionId, workoutSets.programExerciseId, workoutSets.setNumber],
+              targetWhere: isNull(workoutSets.programSetId),
+            };
+      const [set] = await tx
+        .insert(workoutSets)
+        .values(setValues)
+        .onConflictDoUpdate({
+          ...conflict,
+          // createdAt is deliberately not updated — it stays the time the set was
+          // first logged.
+          set: {
+            programSetId: setValues.programSetId,
+            setNumber: setValues.setNumber,
+            setType: setValues.setType,
+            prescribedWorkingSets: setValues.prescribedWorkingSets,
+            targetReps: setValues.targetReps ?? null,
+            actualReps: setValues.actualReps,
+            weightKg: setValues.weightKg,
+            durationSeconds: setValues.durationSeconds ?? null,
+            distanceMeters: setValues.distanceMeters ?? null,
+            inclinePercent: setValues.inclinePercent ?? null,
+            heartRateZone: setValues.heartRateZone ?? null,
+            rir: setValues.rir ?? null,
+            rpe: setValues.rpe,
+            restTimeSeconds: setValues.restTimeSeconds,
+            notes: setValues.notes ?? null,
+            isCompleted: setValues.isCompleted,
+            isFailed: setValues.isFailed,
+            wasEasy: setValues.wasEasy,
+          },
+        })
+        .returning();
 
-    // PR Detection: check for new records using the authenticated user's ID
-    let newPRs: PRResult[] = [];
-    if (actualReps > 0 && weightKg > 0) {
-      newPRs = await detectAndRecordPRs({
-        userId: auth.user.id,
-        exerciseId,
-        sessionId,
-        setId: set.id,
-        weightKg,
-        actualReps,
-        // A logged RIR, or the one derived from a legacy RPE. Null means the
-        // lifter said nothing, which gates the 1RM record out entirely.
-        rir: setValues.rir ?? (setValues.rpe != null ? rirFromRpe(setValues.rpe) : null),
-      });
-    }
-    // Endurance PRs (swim/bike/run): distance + pace-per-bracket. Independent of
-    // the weight path — endurance sets carry distance, not weight.
-    if (distanceMeters != null && distanceMeters > 0) {
-      const endurancePRs = await detectAndRecordEndurancePRs({
-        userId: auth.user.id,
-        exerciseId,
-        sessionId,
-        setId: set.id,
-        distanceMeters,
-        durationSeconds: durationSeconds ?? 0,
-      });
-      newPRs.push(...endurancePRs);
-    }
+      // A re-log replaces the set's values, so the records the old values earned
+      // go first. Otherwise correcting a mistyped 200 kg to 100 kg left the 200 kg
+      // record standing, and nothing would ever beat it.
+      await rollbackPRsForSet(tx, auth.user.id, set.id);
+
+      // PR Detection: check for new records using the authenticated user's ID
+      const newPRs: PRResult[] = [];
+      if (actualReps > 0 && weightKg > 0) {
+        newPRs.push(...await detectNonCritical(tx, "pr_detection_failed", (sp) => detectAndRecordPRs(sp, {
+          userId: auth.user.id,
+          exerciseId,
+          sessionId,
+          setId: set.id,
+          weightKg,
+          actualReps,
+          // A logged RIR, or the one derived from a legacy RPE. Null means the
+          // lifter said nothing, which gates the 1RM record out entirely.
+          rir: setValues.rir ?? (setValues.rpe != null ? rirFromRpe(setValues.rpe) : null),
+        })));
+      }
+      // Endurance PRs (swim/bike/run): distance + pace-per-bracket. Independent of
+      // the weight path — endurance sets carry distance, not weight.
+      if (distanceMeters != null && distanceMeters > 0) {
+        newPRs.push(...await detectNonCritical(tx, "endurance_pr_detection_failed", (sp) => detectAndRecordEndurancePRs(sp, {
+          userId: auth.user.id,
+          exerciseId,
+          sessionId,
+          setId: set.id,
+          distanceMeters,
+          durationSeconds: durationSeconds ?? 0,
+        })));
+      }
+      return { set, newPRs };
+    });
 
     // `/workout/[sessionId]` is not a route; the screen this write affects is
     // /programs/[id]/workout (and its exercise subtree, covered by the layout
@@ -482,7 +509,8 @@ export async function logWorkoutSet(
 /**
  * Un-log a workout set
  *
- * Removes the row written by logWorkoutSet for (session, plan slot, setNumber).
+ * Removes the row written by logWorkoutSet for that set in the session (its
+ * program set, or its position when it has none).
  * The row is deleted rather than flagged is_completed = false because the
  * metrics aggregates filter on workout_sessions.isCompleted, not on the set
  * flag — a lingering row would keep counting toward volume.
@@ -530,20 +558,22 @@ export async function unlogWorkoutSet(
       return { success: false, error: resolved.error };
     }
 
-    const [existing] = await db
-      .select({ id: workoutSets.id })
-      .from(workoutSets)
-      .where(and(eq(workoutSets.sessionId, sessionId), setRowKey(resolved.slot, exerciseId, setNumber)))
-      .limit(1);
+    await db.transaction(async (tx) => {
+      await lockRecords(tx, auth.user.id, exerciseId);
+      const [existing] = await tx
+        .select({ id: workoutSets.id })
+        .from(workoutSets)
+        .where(and(eq(workoutSets.sessionId, sessionId), setRowKey(resolved.slot, exerciseId, setNumber)))
+        .limit(1);
 
-    // Already absent — the user un-logged a set that never reached the server
-    // (offline queue, failed write). Nothing to do, and reporting success keeps
-    // the replay queue from looping.
-    if (!existing) return { success: true, data: undefined };
+      // Already absent — the user un-logged a set that never reached the server
+      // (offline queue, failed write). Nothing to do, and reporting success keeps
+      // the replay queue from looping.
+      if (!existing) return;
 
-    await rollbackPRsForSet(auth.user.id, existing.id);
-
-    await db.delete(workoutSets).where(eq(workoutSets.id, existing.id));
+      await rollbackPRsForSet(tx, auth.user.id, existing.id);
+      await tx.delete(workoutSets).where(eq(workoutSets.id, existing.id));
+    });
 
     revalidatePath("/history");
 
@@ -558,55 +588,82 @@ export async function unlogWorkoutSet(
 }
 
 /**
- * Undo the PR rows a single set produced.
- *
- * For each PR the set earned: delete it, then un-supersede the record it beat
- * (the most recently superseded row of the same type for that exercise — which
- * is the one this PR displaced, since a PR only supersedes the current record).
+ * Undo the PR rows a single set produced: delete each, and make the record it
+ * beat current again (followed through `supersededById`, so it is exactly the
+ * displaced row, including the right load or pace bracket).
  */
-async function rollbackPRsForSet(userId: string, setId: number): Promise<void> {
-  const earned = await db
-    .select()
+async function rollbackPRsForSet(tx: Tx, userId: string, setId: number): Promise<void> {
+  const earned = await tx
+    .select({ id: exercisePrs.id })
     .from(exercisePrs)
     .where(and(eq(exercisePrs.userId, userId), eq(exercisePrs.setId, setId)));
 
   for (const pr of earned) {
-    await db.delete(exercisePrs).where(eq(exercisePrs.id, pr.id));
-
-    // reps_at_weight PRs are per-load, so the displaced record must match the
-    // same ±0.5 kg bracket used when the PR was detected.
-    const sameBracket =
-      pr.prType === "reps_at_weight" && pr.weightKg != null
-        ? [sql`ABS(CAST(${exercisePrs.weightKg} AS numeric) - ${Number(pr.weightKg)}) <= 0.5`]
-        : [];
-
-    const [displaced] = await db
-      .select({ id: exercisePrs.id })
-      .from(exercisePrs)
-      .where(
-        and(
-          eq(exercisePrs.userId, userId),
-          eq(exercisePrs.exerciseId, pr.exerciseId),
-          eq(exercisePrs.prType, pr.prType),
-          isNotNull(exercisePrs.supersededAt),
-          ...sameBracket,
-        ),
-      )
-      .orderBy(desc(exercisePrs.supersededAt))
-      .limit(1);
-
-    if (displaced) {
-      await db
-        .update(exercisePrs)
-        .set({ supersededAt: null })
-        .where(eq(exercisePrs.id, displaced.id));
-    }
+    // Before the delete: the FK would null the link.
+    await tx
+      .update(exercisePrs)
+      .set({ supersededAt: null, supersededById: null })
+      .where(and(eq(exercisePrs.userId, userId), eq(exercisePrs.supersededById, pr.id)));
+    await tx.delete(exercisePrs).where(eq(exercisePrs.id, pr.id));
   }
+}
+
+/**
+ * Run PR detection in a savepoint. Records are non-critical: if detection
+ * fails, the set is still logged. In a transaction a failed statement aborts
+ * everything after it, so a plain try/catch would let the error take the set
+ * write down with it; rolling back to the savepoint keeps the set.
+ */
+async function detectNonCritical(
+  tx: Tx,
+  tag: string,
+  detect: (sp: Tx) => Promise<PRResult[]>,
+): Promise<PRResult[]> {
+  try {
+    return await tx.transaction(detect);
+  } catch (err) {
+    console.error(`[logWorkoutSet] ${tag}`, err);
+    return [];
+  }
+}
+
+/**
+ * Serialise everything that reads and rewrites one user's records for one
+ * exercise, until the transaction ends.
+ *
+ * Detection is read-the-current-record, then insert-and-supersede. Two logs
+ * for the same exercise at once (catching up earlier sets fires them in
+ * parallel, and so does ticking a whole exercise) both read the same current
+ * record and both inserted a new one, leaving several "current" records.
+ */
+async function lockRecords(tx: Tx, userId: string, exerciseId: number): Promise<void> {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}), ${exerciseId})`);
 }
 
 // ─── PR Detection ─────────────────────────────────────────────────────────────
 
-async function detectAndRecordPRs({
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * Insert a new record and mark the one it beat (if any) as superseded by it.
+ * The link is what un-logging or correcting the set follows to put the old
+ * record back (rollbackPRsForSet).
+ */
+async function recordPR(
+  tx: Tx,
+  beaten: { id: number } | undefined,
+  values: typeof exercisePrs.$inferInsert,
+): Promise<void> {
+  const [inserted] = await tx.insert(exercisePrs).values(values).returning({ id: exercisePrs.id });
+  if (beaten) {
+    await tx
+      .update(exercisePrs)
+      .set({ supersededAt: new Date(), supersededById: inserted.id })
+      .where(and(eq(exercisePrs.id, beaten.id), isNull(exercisePrs.supersededAt)));
+  }
+}
+
+async function detectAndRecordPRs(tx: Tx, {
   userId,
   exerciseId,
   sessionId,
@@ -625,14 +682,12 @@ async function detectAndRecordPRs({
   rir: number | null;
 }): Promise<PRResult[]> {
   const newPRs: PRResult[] = [];
-  const now = new Date();
 
   // Bodyweight / timed sets have no meaningful weight PR — skip entirely
   if (weightKg <= 0) return newPRs;
 
-  try {
-    // 1. Weight PR — heaviest single set ever
-    const [currentWeightPR] = await db
+  // 1. Weight PR — heaviest single set ever
+    const [currentWeightPR] = await tx
       .select()
       .from(exercisePrs)
       .where(
@@ -646,13 +701,7 @@ async function detectAndRecordPRs({
       .limit(1);
 
     if (!currentWeightPR || weightKg > Number(currentWeightPR.value)) {
-      if (currentWeightPR) {
-        await db
-          .update(exercisePrs)
-          .set({ supersededAt: now })
-          .where(and(eq(exercisePrs.id, currentWeightPR.id), isNull(exercisePrs.supersededAt)));
-      }
-      await db.insert(exercisePrs).values({
+      await recordPR(tx, currentWeightPR, {
         userId,
         exerciseId,
         prType: "weight",
@@ -679,7 +728,7 @@ async function detectAndRecordPRs({
     //    not a moderate one, so a set with no RIR sets no 1RM record.
     if (actualReps >= 2 && actualReps <= 12 && rir != null && rir <= 3) {
       const new1RM = estimate1RM(weightKg, actualReps);
-      const [current1RMPR] = await db
+      const [current1RMPR] = await tx
         .select()
         .from(exercisePrs)
         .where(
@@ -693,13 +742,7 @@ async function detectAndRecordPRs({
         .limit(1);
 
       if (!current1RMPR || new1RM > Number(current1RMPR.value)) {
-        if (current1RMPR) {
-          await db
-            .update(exercisePrs)
-            .set({ supersededAt: now })
-            .where(and(eq(exercisePrs.id, current1RMPR.id), isNull(exercisePrs.supersededAt)));
-        }
-        await db.insert(exercisePrs).values({
+        await recordPR(tx, current1RMPR, {
           userId,
           exerciseId,
           prType: "estimated_1rm",
@@ -720,7 +763,7 @@ async function detectAndRecordPRs({
 
     // 3. Reps-at-weight PR — most reps ever at this load (±0.5 kg)
     if (actualReps > 0) {
-      const [currentRepsAtWeightPR] = await db
+      const [currentRepsAtWeightPR] = await tx
         .select()
         .from(exercisePrs)
         .where(
@@ -735,13 +778,7 @@ async function detectAndRecordPRs({
         .limit(1);
 
       if (!currentRepsAtWeightPR || actualReps > Number(currentRepsAtWeightPR.value)) {
-        if (currentRepsAtWeightPR) {
-          await db
-            .update(exercisePrs)
-            .set({ supersededAt: now })
-            .where(and(eq(exercisePrs.id, currentRepsAtWeightPR.id), isNull(exercisePrs.supersededAt)));
-        }
-        await db.insert(exercisePrs).values({
+        await recordPR(tx, currentRepsAtWeightPR, {
           userId,
           exerciseId,
           prType: "reps_at_weight",
@@ -759,11 +796,6 @@ async function detectAndRecordPRs({
         });
       }
     }
-  } catch (err) {
-    // PR detection is non-critical — log and continue
-    console.error("[logWorkoutSet] pr_detection_failed", err);
-  }
-
   return newPRs;
 }
 
@@ -775,7 +807,7 @@ async function detectAndRecordPRs({
  *               effort's distance; faster = lower duration/distance ratio)
  * No-ops for non-discipline exercises. Non-critical — failures are logged.
  */
-async function detectAndRecordEndurancePRs({
+async function detectAndRecordEndurancePRs(tx: Tx, {
   userId,
   exerciseId,
   sessionId,
@@ -793,9 +825,8 @@ async function detectAndRecordEndurancePRs({
   const newPRs: PRResult[] = [];
   if (distanceMeters <= 0) return newPRs;
 
-  try {
-    // Only swim/bike/run exercises carry endurance PRs.
-    const [exercise] = await db
+  // Only swim/bike/run exercises carry endurance PRs.
+    const [exercise] = await tx
       .select({ discipline: exercises.discipline })
       .from(exercises)
       .where(eq(exercises.id, exerciseId))
@@ -803,10 +834,8 @@ async function detectAndRecordEndurancePRs({
     const discipline = exercise?.discipline as Discipline | null | undefined;
     if (!discipline) return newPRs;
 
-    const now = new Date();
-
     // 1. Distance PR — longest single endurance set ever.
-    const [currentDistancePR] = await db
+    const [currentDistancePR] = await tx
       .select()
       .from(exercisePrs)
       .where(
@@ -820,13 +849,7 @@ async function detectAndRecordEndurancePRs({
       .limit(1);
 
     if (!currentDistancePR || distanceMeters > Number(currentDistancePR.value)) {
-      if (currentDistancePR) {
-        await db
-          .update(exercisePrs)
-          .set({ supersededAt: now })
-          .where(and(eq(exercisePrs.id, currentDistancePR.id), isNull(exercisePrs.supersededAt)));
-      }
-      await db.insert(exercisePrs).values({
+      await recordPR(tx, currentDistancePR, {
         userId,
         exerciseId,
         prType: "distance",
@@ -847,7 +870,7 @@ async function detectAndRecordEndurancePRs({
     if (durationSeconds > 0) {
       const newPace = paceSecondsPerMeter(durationSeconds, distanceMeters);
       for (const bracket of matchingPaceBrackets(discipline, distanceMeters)) {
-        const [currentPacePR] = await db
+        const [currentPacePR] = await tx
           .select()
           .from(exercisePrs)
           .where(
@@ -866,13 +889,7 @@ async function detectAndRecordEndurancePRs({
           : Infinity;
 
         if (newPace < currentPace) {
-          if (currentPacePR) {
-            await db
-              .update(exercisePrs)
-              .set({ supersededAt: now })
-              .where(and(eq(exercisePrs.id, currentPacePR.id), isNull(exercisePrs.supersededAt)));
-          }
-          await db.insert(exercisePrs).values({
+          await recordPR(tx, currentPacePR, {
             userId,
             exerciseId,
             prType: "pace",
@@ -893,10 +910,6 @@ async function detectAndRecordEndurancePRs({
         }
       }
     }
-  } catch (err) {
-    console.error("[logWorkoutSet] endurance_pr_detection_failed", err);
-  }
-
   return newPRs;
 }
 

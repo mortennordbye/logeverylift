@@ -19,7 +19,7 @@
  *   PR history  → ORDER BY achieved_at ASC (for trend curves)
  */
 
-import { decimal, index, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
+import { type AnyPgColumn, decimal, index, integer, pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 import { exercises } from "./exercises";
 import { users } from "./users";
 import { workoutSessions } from "./workout-sessions";
@@ -53,6 +53,13 @@ export const exercisePrs = pgTable("exercise_prs", {
   achievedAt: timestamp("achieved_at").notNull().defaultNow(),
   // Set when a newer PR beats this one (NULL = current record)
   supersededAt: timestamp("superseded_at"),
+  // The PR that beat this one. Un-logging or correcting that PR's set follows
+  // this link to restore exactly the record it displaced; picking "the most
+  // recently superseded row of the same type" instead restored the wrong row
+  // when two records were superseded at once, and ignored the pace bracket.
+  supersededById: integer("superseded_by_id").references((): AnyPgColumn => exercisePrs.id, {
+    onDelete: "set null",
+  }),
 }, (t) => [
   index("idx_pr_user_exercise_superseded").on(t.userId, t.exerciseId, t.supersededAt),
 ]);

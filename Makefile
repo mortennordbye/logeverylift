@@ -88,9 +88,7 @@ verify-full: ## verify + Playwright e2e (needs the compose Postgres up)
 # logeverylift_test database on the compose Postgres, so the dev server and dev
 # data are untouched. Pass a filter through ARGS, e.g. make e2e ARGS=drag.
 e2e: ## Playwright e2e on WebKit + Chromium (needs the compose Postgres up)
-	@port=$$($(COMPOSE) port postgres 5432 | sed 's/.*://'); \
-	  if [ -z "$$port" ]; then echo "Postgres is not running: start it with make dev"; exit 1; fi; \
-	  E2E_DATABASE_URL=postgresql://postgres:postgres@localhost:$$port/logeverylift_test pnpm test:e2e $(ARGS)
+	pnpm test:e2e $(ARGS)
 
 build: ## Production build check (in container)
 	$(COMPOSE) exec app pnpm build

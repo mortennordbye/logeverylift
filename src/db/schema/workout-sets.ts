@@ -43,6 +43,7 @@ import {
     timestamp,
     uniqueIndex,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { exercises } from "./exercises";
 import { programExercises, programSets } from "./programs";
 import { workoutSessions } from "./workout-sessions";
@@ -119,14 +120,21 @@ export const workoutSets = pgTable("workout_sets", {
 }, (t) => [
   index("idx_wsets_session").on(t.sessionId),
   // Prevents double-logging the same set (e.g. rapid double-tap on the
-  // "complete" button) and makes re-logging an upsert. One row per
-  // (session, plan slot, setNumber).
+  // "complete" button) and makes re-logging an upsert: one row per program set
+  // per session.
   //
-  // Postgres treats nulls as distinct, so rows whose slot could not be resolved
-  // (pre-migration history, or a slot deleted after the fact) are not covered.
-  // That is accepted: those rows are read-only history and nothing upserts into
-  // them. Every live write resolves a slot server-side before it gets here.
-  uniqueIndex("uniq_wsets_session_slot_set").on(t.sessionId, t.programExerciseId, t.setNumber),
+  // Keyed on the program set rather than its position. Positions move when the
+  // sets are reordered or one is deleted mid-workout, and the previous key,
+  // (session, plan slot, set_number), let the set that moved into a position
+  // overwrite the row of the set that had been logged there.
+  uniqueIndex("uniq_wsets_session_program_set").on(t.sessionId, t.programSetId),
+  // The same guarantee for rows with no program set, keyed on position since
+  // that is all they have: a set deleted from the plan after its write was
+  // queued, or pre-migration history. Postgres treats nulls as distinct, so a
+  // row with no plan slot at all (an unprogrammed session) is not covered.
+  uniqueIndex("uniq_wsets_session_slot_set_unslotted")
+    .on(t.sessionId, t.programExerciseId, t.setNumber)
+    .where(sql`${t.programSetId} IS NULL`),
   // Retained for the reads still keyed on the exercise (history windows, PR
   // lookups) that the old unique index used to serve.
   index("idx_wsets_session_exercise").on(t.sessionId, t.exerciseId),
