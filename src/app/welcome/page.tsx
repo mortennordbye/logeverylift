@@ -6,22 +6,27 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export const metadata: Metadata = {
-  title: "LogEveryLift: log every lift, know the next one",
+  title: "LogEveryLift: early access to the smart training log",
   description:
-    "A workout log that runs your training block, times your rest and suggests what to lift next session. Works offline, installs to your home screen.",
+    "Be one of the first to train with LogEveryLift: AI-built programs, smart progression that reads your effort, and rest timers that run themselves. Free during early access.",
 };
 
 const SHOTS = [
-  { src: "/screenshots/home.png", w: 920, h: 2000, title: "Today's session", body: "Your block, your week, one tap to start." },
-  { src: "/screenshots/metrics.png", w: 920, h: 2000, title: "Progress you can see", body: "Top lifts and per-exercise charts." },
+  { src: "/screenshots/home.png", w: 920, h: 2000, title: "Your block, on autopilot", body: "The app knows your week. One tap to start." },
+  { src: "/screenshots/metrics.png", w: 920, h: 2000, title: "Progress you can see", body: "Top lifts and per-exercise trends." },
   { src: "/screenshots/calendar.png", w: 920, h: 2000, title: "Planned vs done", body: "Every cycle on one calendar." },
-  { src: "/screenshots/ai-setup.png", w: 920, h: 2000, title: "Program from a prompt", body: "Describe your goal, get a plan." },
+  { src: "/screenshots/ai-setup.png", w: 920, h: 2000, title: "AI program builder", body: "Describe your goal. Get a full plan in seconds." },
 ];
 
 const FEATURES = [
-  { title: "Progression suggestions", body: "Hit your reps and the next weight is waiting for you." },
-  { title: "Rest timers per set", body: "Starts when you log. No fiddling between sets." },
-  { title: "Works offline", body: "Install it to your home screen. Bad gym signal doesn't lose sets." },
+  { title: "Smart progression", body: "Log how hard a set felt and the engine picks your next weight. No spreadsheets, no guessing." },
+  { title: "AI-built programs", body: "Tell it your goal, days and equipment. Get a structured block you can tweak and run." },
+  { title: "Rest that runs itself", body: "Timers start the moment you log a set, so you stay in the session." },
+];
+
+const INSTALL = [
+  { title: "iPhone", body: "Open the site in Safari, tap Share, then Add to Home Screen." },
+  { title: "Android", body: "Open the site in Chrome, tap the menu, then Install app." },
 ];
 
 export default async function WelcomePage() {
@@ -30,8 +35,12 @@ export default async function WelcomePage() {
 
   return (
     // Body is position:fixed (globals.css), so the page scrolls in its own container.
-    <div className="h-[100dvh] overflow-y-auto bg-background">
-      <div className="mx-auto max-w-6xl px-4 pb-28 lg:pb-12">
+    <div className="relative h-[100dvh] overflow-y-auto bg-background">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[640px] bg-[radial-gradient(ellipse_60%_50%_at_30%_20%,color-mix(in_oklab,var(--primary)_22%,transparent),transparent)]"
+      />
+      <div className="relative mx-auto max-w-6xl px-4 pb-28 lg:pb-12">
         <header className="flex h-16 items-center justify-between">
           <span className="text-xl font-extrabold tracking-tight">LogEveryLift</span>
           <Link
@@ -44,23 +53,31 @@ export default async function WelcomePage() {
 
         <section className="grid gap-10 pt-8 pb-14 lg:grid-cols-[1.4fr_0.8fr_1fr] lg:items-center lg:py-20">
           <div>
+            <span className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/10 px-3 py-1 text-sm font-medium text-primary">
+              <span className="h-2 w-2 animate-pulse rounded-full bg-primary" />
+              Early access is open
+            </span>
             <h1 className="text-[44px] leading-[1.02] font-extrabold tracking-tight lg:text-5xl">
-              Log every lift.
+              The training log
               <br />
-              Know the next one.
+              that thinks ahead.
             </h1>
-            <p className="mt-4 max-w-[34ch] text-lg text-muted-foreground">
-              A workout log that runs your training block, times your rest and
-              tells you what to put on the bar next session.
+            <p className="mt-4 max-w-[36ch] text-lg text-muted-foreground">
+              Be one of the first to train with AI-built programs and a smart
+              progression engine that tells you exactly what to put on the bar
+              next session.
             </p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
                 href="/signup"
                 className="inline-flex min-h-12 items-center rounded-xl bg-primary px-6 font-semibold text-primary-foreground active:opacity-80"
               >
-                Create free account
+                Get early access
               </Link>
             </div>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Free while in early access. Your feedback shapes what ships next.
+            </p>
           </div>
 
           <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-[36px] border border-border">
@@ -103,7 +120,10 @@ export default async function WelcomePage() {
           ))}
         </div>
 
-        <h2 className="mt-12 mb-4 text-3xl font-bold tracking-tight">Built for the gym floor</h2>
+        <h2 className="mt-12 mb-1 text-3xl font-bold tracking-tight">Smarter than a notebook</h2>
+        <p className="mb-5 text-muted-foreground">
+          New features land every week. Early users see them first.
+        </p>
         <div className="grid gap-3 lg:grid-cols-3">
           {FEATURES.map((f) => (
             <div key={f.title} className="rounded-2xl bg-card p-5">
@@ -112,6 +132,24 @@ export default async function WelcomePage() {
             </div>
           ))}
         </div>
+
+        <section className="mt-12 rounded-3xl border border-border bg-card p-6 lg:p-8">
+          <h2 className="text-2xl font-bold tracking-tight">No app store needed</h2>
+          <p className="mt-2 max-w-[60ch] text-muted-foreground">
+            For now, LogEveryLift is a web app (a PWA). Add it to your home
+            screen and it opens full screen like a native app, keeps working
+            offline in the gym and syncs your sets when you&apos;re back online.
+            Updates arrive automatically, nothing to download.
+          </p>
+          <div className="mt-5 grid gap-3 lg:grid-cols-2">
+            {INSTALL.map((i) => (
+              <div key={i.title} className="rounded-2xl bg-background p-5">
+                <span className="block font-semibold">{i.title}</span>
+                <span className="text-[15px] text-muted-foreground">{i.body}</span>
+              </div>
+            ))}
+          </div>
+        </section>
 
         <footer className="mt-14 border-t border-border pt-8 text-sm text-muted-foreground">
           LogEveryLift · Open source under Apache 2.0 ·{" "}
@@ -132,7 +170,7 @@ export default async function WelcomePage() {
           href="/signup"
           className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-primary font-semibold text-primary-foreground active:opacity-80"
         >
-          Get started
+          Get early access
         </Link>
       </nav>
     </div>
