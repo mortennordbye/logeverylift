@@ -1,6 +1,7 @@
 import { AiSetupClient } from "@/components/features/AiSetupClient";
 import { env } from "@/lib/env";
 import { getAllExercises } from "@/lib/actions/exercises";
+import { getRevision } from "@/lib/actions/ai-checkin";
 import { getAiRateLimitStatus } from "@/lib/actions/ai-generate";
 import { parseUserGoals } from "@/lib/utils/goals";
 import { requireSession } from "@/lib/utils/session";
@@ -14,7 +15,12 @@ import { and, eq, isNull } from "drizzle-orm";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 
-export default async function AiSetupPage() {
+type Props = {
+  /** `revise`: an AI Setup plan answered "doesn't fit" at its check-in. */
+  searchParams: Promise<{ revise?: string }>;
+};
+
+export default async function AiSetupPage({ searchParams }: Props) {
   const session = await requireSession();
   const userId = session.user.id;
 
@@ -57,6 +63,10 @@ export default async function AiSetupPage() {
 
   const mcpEndpoint = `${env.BETTER_AUTH_URL.replace(/\/$/, "")}/api/mcp`;
 
+  const reviseId = Number((await searchParams).revise);
+  const revisionResult = reviseId ? await getRevision(reviseId) : null;
+  const revision = revisionResult?.success ? revisionResult.data : null;
+
   return (
     <div className="h-[100dvh] bg-background overflow-y-auto">
       <div
@@ -81,6 +91,7 @@ export default async function AiSetupPage() {
           prs={prs}
           existingProgramNames={existingProgramNames}
           mcpEndpoint={mcpEndpoint}
+          revision={revision}
         />
       </div>
     </div>

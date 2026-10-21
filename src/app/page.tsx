@@ -1,7 +1,9 @@
+import { AiCheckinCard } from "@/components/features/AiCheckinCard";
 import { DeclineMakeupButton } from "@/components/features/DeclineMakeupButton";
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
 import { WeeklyGoalProgress } from "@/components/features/WeeklyGoalProgress";
 import { WorkoutInsightBanner } from "@/components/features/WorkoutInsightBanner";
+import { getPendingCheckin } from "@/lib/actions/ai-checkin";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/actions/workout-sets";
@@ -53,13 +55,15 @@ export default async function Home() {
   const todayProgram = info?.todaySlot?.program ?? null;
 
   // Batch remaining queries in parallel, including insight now that we know todayProgram
-  const [statsResult, sessionsResult, insight] = await Promise.all([
+  const [statsResult, sessionsResult, insight, checkinResult] = await Promise.all([
     getWorkoutStats(),
     getCompletedSessions(monday),
     todayProgram
       ? getWorkoutInsight(todayProgram.id, cycleResult).catch(() => undefined)
       : Promise.resolve(undefined),
+    getPendingCheckin(),
   ]);
+  const checkin = checkinResult.success ? checkinResult.data : null;
 
   const stats = statsResult.success
     ? statsResult.data
@@ -127,6 +131,8 @@ export default async function Home() {
 
       {/* Content */}
       <div className="flex-1 flex flex-col gap-3 px-6 min-h-0 overflow-hidden pb-4">
+
+        {checkin && <AiCheckinCard id={checkin.id} cycleName={checkin.cycleName} />}
 
         {/* ── Today card ─────────────────────────────────── */}
         {info ? (

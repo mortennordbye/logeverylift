@@ -1,4 +1,5 @@
 import { AI_CYCLE_WEEKS } from "@/lib/utils/ai-plan";
+import { CHECKIN_ISSUE_IDS, CHECKIN_NOTE_MAX } from "@/lib/utils/ai-checkin";
 import { EDIT_CHIP_IDS, EDIT_CHIPS, EDIT_TEXT_MAX } from "@/lib/utils/ai-edit";
 import {
   AVOID_AREAS,
@@ -59,3 +60,24 @@ export const editRequestSchema = z
   });
 
 export const aiEditSchema = z.object({ picks: templateParamsSchema, request: editRequestSchema });
+
+export const recordAiSetupImportSchema = z.object({
+  cycleId: z.number().int().positive(),
+  picks: templateParamsSchema,
+  edit: editRequestSchema.nullable(),
+  revisionOf: z.number().int().positive().nullable(),
+});
+
+export const checkinIssuesSchema = z.array(z.enum(CHECKIN_ISSUE_IDS)).max(CHECKIN_ISSUE_IDS.length);
+
+export const checkinAnswerSchema = z
+  .object({
+    id: z.number().int().positive(),
+    status: z.enum(["fits", "does_not_fit", "dismissed"]),
+    issues: checkinIssuesSchema.default([]),
+    note: z.string().max(CHECKIN_NOTE_MAX).default(""),
+  })
+  .refine((a) => a.status !== "does_not_fit" || a.issues.length > 0, {
+    message: "Pick at least one thing that doesn't fit",
+    path: ["issues"],
+  });

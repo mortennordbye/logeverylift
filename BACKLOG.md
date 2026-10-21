@@ -16,6 +16,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Deciding whether Norwegian should extend past the front page. If yes, introduce i18n (or a `lang` prop on `LoginForm`) and pass the welcome page's language through to `/login` and `/signup`.
 - **Touchpoints:** `src/app/welcome/page.tsx` (`COPY`), `src/components/features/LoginForm.tsx`.
 
+### AI Setup: seven training days a week
+- **What:** AI Setup's plan builder offers 2 to 6 days per week. There is no 7-day split, and an AI edit can't add a day, because edits keep the picked days (`docs/ai-setup-plan.md`, D-6 and D-7).
+- **Why deferred:** The old free-text box covered 7 days by asking a model for a whole plan; that path was removed so plans cost nothing. Nobody has asked for 7 days since.
+- **Unblocked by:** A request for 7-day training. Then add a 7-day split to `autoSplit` (for example push/pull/legs twice plus a conditioning or mobility day), add 7 to `TEMPLATE_DAYS`, and extend the combination tests.
+- **Touchpoints:** `src/lib/utils/plan-templates.ts` (`TEMPLATE_DAYS`, `autoSplit`, `SPLIT_DAYS`), `src/__tests__/plan-templates.test.ts`.
+
 ### Live-verify AI Setup's tool and JSON-mode paths and the repair turn
 - **What:** The structured-generation client was checked live only partly: `openrouter/free` returned a valid plan with `json_schema`, the text path parsed, and 429/503/404 handling moved on correctly. The `tool` and `json_object` modes timed out or were rate-limited on every free model tried, and the repair turn (feeding validation issues back) has never run against a real model.
 - **Why deferred:** Free models were busy or slow during the session, and the user asked to stop live calls to avoid any spend.

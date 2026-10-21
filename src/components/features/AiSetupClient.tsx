@@ -1,10 +1,11 @@
 "use client";
 
 import { McpConnectCard } from "@/components/features/McpConnectCard";
+import { recordAiSetupImport, type RevisionStart } from "@/lib/actions/ai-checkin";
 import { editPlanWithAi } from "@/lib/actions/ai-generate";
 import { importProgram } from "@/lib/actions/programs";
 import { importCycle } from "@/lib/actions/training-cycles";
-import { EDIT_CHIPS, EDIT_TEXT_MAX, type EditChipId } from "@/lib/utils/ai-edit";
+import { EDIT_CHIPS, EDIT_TEXT_MAX, type EditChipId, type EditRequest } from "@/lib/utils/ai-edit";
 import { aiGeneratingStartedAt, isAiGenerating, setAiGenerating } from "@/lib/utils/ai-generating";
 import { aiPlanSchema, matchLibraryNames, toImportPayload, uniqueProgramNames, type AiPlan } from "@/lib/utils/ai-plan";
 import { buildManualClipboardPrompt, type PrData } from "@/lib/utils/ai-prompt";
@@ -289,11 +290,13 @@ type Props = {
   prs: PrData[];
   existingProgramNames: string[];
   mcpEndpoint: string;
+  /** Set when opened from a check-in answered "doesn't fit". */
+  revision: RevisionStart | null;
 };
 
 type View = "picks" | "preview" | "editing" | "waiting" | "importing";
 
-export function AiSetupClient({ exercises, userProfile, generationsToday, dailyLimit, prs, existingProgramNames, mcpEndpoint }: Props) {
+export function AiSetupClient({ exercises, userProfile, generationsToday, dailyLimit, prs, existingProgramNames, mcpEndpoint, revision }: Props) {
   const router = useRouter();
 
   // Manual flow state
@@ -328,6 +331,10 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   const [importError, setImportError] = useState<string | null>(null);
   const [returnError, setReturnError] = useState<string | null>(null);
   const [remaining, setRemaining] = useState(dailyLimit - generationsToday);
+  // The request behind editedPlan, recorded with the import for the check-in.
+  const [appliedRequest, setAppliedRequest] = useState<EditRequest | null>(null);
+  const [revisionOf, setRevisionOf] = useState<number | null>(null);
+  const [revisionNote, setRevisionNote] = useState<string | null>(null);
   const editPromise = useRef<ReturnType<typeof editPlanWithAi> | null>(null);
   const isMounted = useRef(true);
 
@@ -373,6 +380,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   function showEdit(pending: PendingEdit) {
     restoreRequest(pending.picks, pending.chips, pending.text);
     setEditedPlan(pending.plan);
+    setAppliedRequest({ chips: pending.chips.filter((c): c is EditChipId => EDIT_CHIPS.some((chip) => chip.id === c)), text: pending.text });
     setEditNote(pending.fromCache ? "Edited with AI · saved result, instant" : `Edited with AI in ${pending.seconds} s`);
     setView("preview");
   }
@@ -413,6 +421,8 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     } else if (isAiGenerating()) {
       if (Date.now() - aiGeneratingStartedAt() < PENDING_TIMEOUT_MS) setView("waiting");
       else setAiGenerating(false);
+    } else if (revision) {
+      startRevision(revision);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount only
   }, []);
@@ -443,6 +453,33 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     // eslint-disable-next-line react-hooks/exhaustive-deps -- showEdit/showEditError only set state
   }, [view]);
 
+  /** Opened from a check-in: the fixed picks, then the AI request on top, if any. */
+  function startRevision(rev: RevisionStart) {
+    restorePicks(rev.picks);
+    setRevisionOf(rev.revisionOf);
+    if (rev.request) {
+      setChips(rev.request.chips);
+      setEditText(rev.request.text);
+    }
+    const repickLabel = rev.repick === "daysPerWeek" ? "the days per week" : rev.repick === "equipment" ? "your equipment" : null;
+    setRevisionNote(
+      [
+        ...rev.changes,
+        repickLabel ? `Pick ${repickLabel} below, then build` : null,
+        rev.request && !repickLabel ? "Your request is filled in below; tap Edit with AI to apply it" : null,
+        rev.request && repickLabel ? "Your request will be filled in under the plan" : null,
+      ]
+        .filter(Boolean)
+        .join(". ") + ".",
+    );
+    if (repickLabel) {
+      setView("picks");
+      return;
+    }
+    setBuiltPlan(buildPlan(rev.picks));
+    setView("preview");
+  }
+
   function handleDaysChange(days: TemplateParams["daysPerWeek"]) {
     setDaysPerWeek(days);
     if (!splitSupports(split, days)) setSplit("auto");
@@ -452,8 +489,12 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     setBuiltPlan(buildPlan(picks()));
     setEditedPlan(null);
     setEditNote(null);
-    setChips([]);
-    setEditText("");
+    setAppliedRequest(null);
+    // A revision keeps its AI request so it can be applied to the rebuilt plan.
+    if (revisionOf === null) {
+      setChips([]);
+      setEditText("");
+    }
     setEditError(null);
     setImportError(null);
     setView("preview");
@@ -512,6 +553,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
       }
       setRemaining(result.data.dailyLimit - result.data.generationsToday);
       setEditedPlan(result.data.plan);
+      setAppliedRequest(request);
       setEditNote(
         result.data.fromCache
           ? "Edited with AI · saved result, instant"
@@ -539,6 +581,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   function handleUndoEdit() {
     setEditedPlan(null);
     setEditNote(null);
+    setAppliedRequest(null);
   }
 
   function handleCopyPrompt() {
@@ -550,7 +593,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   }
 
   type ImportResult =
-    | { success: true; successMsg: string; cycleCreated: boolean }
+    | { success: true; successMsg: string; cycleId: number | null }
     | { success: false; error: string };
 
   async function handleImportParsed(raw: Record<string, unknown>): Promise<ImportResult> {
@@ -563,6 +606,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
 
     let programCount = 0;
     let cycleName: string | null = null;
+    let cycleId: number | null = null;
     const warnings: string[] = [];
 
     if (hasProgramData) {
@@ -582,6 +626,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
         warnings.push(`Cycle couldn't be created: ${result.error ?? "unknown error"}`);
       } else {
         cycleName = result.data.cycleName;
+        cycleId = result.data.cycleId;
         if (result.data.unresolvedPrograms.length > 0) {
           warnings.push(
             `Some cycle slots couldn't be linked: "${result.data.unresolvedPrograms.join('", "')}". You can assign them manually in the cycle editor.`,
@@ -606,7 +651,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
 
     const successMsg = warnings.length > 0 ? `${base}${suffix}\n\n⚠️ ${warnings.join(" ")}` : `${base}${suffix}`;
     router.refresh();
-    return { success: true, successMsg, cycleCreated: !!cycleName };
+    return { success: true, successMsg, cycleId };
   }
 
   async function handleImport() {
@@ -643,7 +688,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
       setError(result.error);
     } else {
       setSuccessMsg(result.successMsg);
-      setCycleCreated(result.cycleCreated);
+      setCycleCreated(result.cycleId !== null);
       setStatus("success");
       setPasteJson("");
     }
@@ -660,10 +705,22 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
       setView("preview");
       return;
     }
+    if (result.cycleId !== null) {
+      // For the one-week check-in. Losing this only loses the check-in, so the import stands either way.
+      await recordAiSetupImport({
+        cycleId: result.cycleId,
+        picks: picks(),
+        edit: editedPlan ? appliedRequest : null,
+        revisionOf,
+      }).catch(() => undefined);
+    }
     setBuiltPlan(null);
     setEditedPlan(null);
+    setAppliedRequest(null);
+    setRevisionOf(null);
+    setRevisionNote(null);
     setSuccessMsg(result.successMsg);
-    setCycleCreated(result.cycleCreated);
+    setCycleCreated(result.cycleId !== null);
     setStatus("success");
     setView("picks");
   }
@@ -760,6 +817,12 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
             Change picks
           </button>
 
+{revisionNote && (
+            <div className="rounded-xl bg-primary/10 px-4 py-3">
+              <p className="text-xs font-semibold text-primary">Revising your plan from your check-in</p>
+              <p className="text-xs text-primary/80 mt-0.5">{revisionNote}</p>
+            </div>
+          )}
           {editNote && (
             <div className="rounded-xl bg-primary/10 px-4 py-3 flex items-center justify-between gap-3">
               <p className="text-xs font-medium text-primary">{editNote}</p>
@@ -838,6 +901,12 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
         </div>
       ) : (
         <div className="flex flex-col gap-5">
+          {revisionNote && (
+            <div className="rounded-xl bg-primary/10 px-4 py-3">
+              <p className="text-xs font-semibold text-primary">Revising your plan from your check-in</p>
+              <p className="text-xs text-primary/80 mt-0.5">{revisionNote}</p>
+            </div>
+          )}
           {returnError && (
             <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex flex-col gap-1">
               <p className="text-xs font-semibold text-destructive">Last AI edit failed</p>
