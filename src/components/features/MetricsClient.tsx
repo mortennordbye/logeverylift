@@ -12,6 +12,7 @@ import {
   type MovementPatternBalance,
   type MuscleBalance,
   type PersonalRecord,
+  type PrFeedEntry,
   type ReadinessPerformancePoint,
   type RpeTrendPoint,
   type SummaryStats,
@@ -26,6 +27,7 @@ import {
   logWeightEntry,
   type WeightEntry,
 } from "@/lib/actions/profile";
+import { PrFeedList } from "@/components/features/PrFeedList";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { estimate1RM } from "@/lib/utils/progression";
 import {
@@ -1547,7 +1549,9 @@ function CycleView({
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-type Tab = "alltime" | "cycle";
+type Tab = "alltime" | "cycle" | "records";
+
+const TAB_LABEL: Record<Tab, string> = { alltime: "All Time", cycle: "Cycle", records: "Records" };
 
 type Props = {
   weekly: WeeklyMetric[];
@@ -1567,6 +1571,8 @@ type Props = {
   movementPatternData: MovementPatternBalance[];
   readinessData: ReadinessPerformancePoint[];
   weeklyMuscleVolume: WeeklyMuscleVolume[];
+  prFeed: PrFeedEntry[];
+  initialTab: Tab;
 };
 
 export function MetricsClient({
@@ -1587,8 +1593,10 @@ export function MetricsClient({
   movementPatternData,
   readinessData,
   weeklyMuscleVolume,
+  prFeed,
+  initialTab,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<Tab>("alltime");
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [selectedId, setSelectedId] = useState<number | null>(initialExerciseId);
   const [progressData, setProgressData] = useState<ExerciseProgress[]>(initialProgress);
   const [isPending, startTransition] = useTransition();
@@ -1637,10 +1645,10 @@ export function MetricsClient({
         </Link>
       </div>
       <div className="px-4 pt-2 pb-3 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight mb-3">Metrics</h1>
+        <h1 className="text-3xl font-bold tracking-tight mb-3">Progress</h1>
         {/* Tab toggle */}
         <div className="flex bg-muted rounded-xl p-1 gap-1">
-          {(["alltime", "cycle"] as Tab[]).map((tab) => (
+          {(["alltime", "cycle", "records"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1650,7 +1658,7 @@ export function MetricsClient({
                   : "text-muted-foreground"
               }`}
             >
-              {tab === "alltime" ? "All Time" : "Cycle"}
+              {TAB_LABEL[tab]}
             </button>
           ))}
         </div>
@@ -1769,6 +1777,8 @@ export function MetricsClient({
               </p>
             )}
           </>
+        ) : activeTab === "records" ? (
+          <PrFeedList prs={prFeed} />
         ) : (
           <CycleView
             cycles={cycles}

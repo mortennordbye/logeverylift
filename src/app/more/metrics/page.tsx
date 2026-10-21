@@ -11,6 +11,7 @@ import {
   getMovementPatternBalance,
   getReadinessPerformance,
   getWeeklyMuscleVolume,
+  getRecentPRs,
 } from "@/lib/actions/metrics";
 import { getWeightHistory } from "@/lib/actions/profile";
 import { db } from "@/db";
@@ -18,7 +19,11 @@ import { users } from "@/db/schema/users";
 import { requireSession } from "@/lib/utils/session";
 import { eq } from "drizzle-orm";
 
-export default async function MetricsPage() {
+type Props = {
+  searchParams: Promise<{ tab?: string }>;
+};
+
+export default async function MetricsPage({ searchParams }: Props) {
   const session = await requireSession();
   const userId = session.user.id;
 
@@ -44,6 +49,7 @@ export default async function MetricsPage() {
     movementResult,
     readinessResult,
     weeklyVolumeResult,
+    prFeedResult,
   ] = await Promise.all([
     getSummaryStats(),
     getTopProgressingExercises(),
@@ -57,7 +63,9 @@ export default async function MetricsPage() {
     getMovementPatternBalance(),
     getReadinessPerformance(),
     getWeeklyMuscleVolume(),
+    getRecentPRs(150),
   ]);
+  const initialTab = (await searchParams).tab === "records" ? "records" : "alltime";
 
   return (
     <MetricsClient
@@ -78,6 +86,8 @@ export default async function MetricsPage() {
       movementPatternData={movementResult.success ? movementResult.data : []}
       readinessData={readinessResult.success ? readinessResult.data : []}
       weeklyMuscleVolume={weeklyVolumeResult.success ? weeklyVolumeResult.data : []}
+      prFeed={prFeedResult.success ? prFeedResult.data : []}
+      initialTab={initialTab}
     />
   );
 }

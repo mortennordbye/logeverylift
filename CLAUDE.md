@@ -163,7 +163,7 @@ Before suggesting `git push` for any change that touches a **critical flow** —
 6. **SetEditView notes** — tap a completed set to reopen the edit view. Confirm the notes textarea renders. Type a short note, save. Reopen and confirm the note persisted.
 7. **History page** — navigate to `/history`. Confirm at least one session row OR the empty-state copy. Confirm the search filter input is present. No console errors.
 8. **Metrics page** — navigate to `/more/metrics`. Confirm at least one section heading (e.g. "Volume", "This Week · Volume vs Target", "Personal Records"). No console errors.
-9. **PR feed** — navigate to `/more/prs`. Confirm PR rows OR the empty-state. No console errors.
+9. **PR feed** — navigate to `/more/prs`. Confirm it redirects to the Records tab of Progress (`/more/metrics?tab=records`) showing PR rows OR the empty-state. No console errors.
 
 After all 9 pass, report `smoke ✓: 9/9 flows green` alongside the normal `pnpm verify` summary, then suggest the push. On any failure, report which step, what was expected, what was observed, and the screenshot path — the user decides whether to push anyway.
 

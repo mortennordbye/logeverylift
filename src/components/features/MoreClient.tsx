@@ -2,74 +2,90 @@
 
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
-import { BarChart2, CalendarDays, ChevronRight, Clock, Library, LogOut, MessageSquare, Settings, Shield, Sparkles, Trophy, UserCircle, Users } from "lucide-react";
+import { BarChart2, CalendarDays, ChevronRight, Clock, Library, LogOut, MessageSquare, Settings, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
-const baseItems = [
+type MoreItem = {
+  label: string;
+  href: string;
+  icon: typeof Settings;
+  description: string;
+};
+
+const groups: { title: string; items: MoreItem[] }[] = [
   {
-    label: "AI Setup",
-    href: "/more/ai-setup",
-    icon: Sparkles,
-    description: "Generate your programs and training schedule with AI",
+    title: "Training",
+    items: [
+      {
+        label: "History",
+        href: "/history",
+        icon: Clock,
+        description: "All your workouts",
+      },
+      {
+        label: "Progress",
+        href: "/more/metrics",
+        icon: BarChart2,
+        description: "Stats, trends and personal records",
+      },
+      {
+        label: "Calendar",
+        href: "/more/calendar",
+        icon: CalendarDays,
+        description: "Visualise your training cycles",
+      },
+      {
+        label: "Exercises",
+        href: "/exercises",
+        icon: Library,
+        description: "Browse and manage exercises",
+      },
+    ],
   },
   {
-    label: "Friends",
-    href: "/more/friends",
-    icon: Users,
-    description: "Connect and share programs with friends",
+    title: "Plan & share",
+    items: [
+      {
+        label: "AI Setup",
+        href: "/more/ai-setup",
+        icon: Sparkles,
+        description: "Generate your programs and training schedule with AI",
+      },
+      {
+        label: "Friends",
+        href: "/more/friends",
+        icon: Users,
+        description: "Connect and share programs with friends",
+      },
+    ],
   },
   {
-    label: "Account",
-    href: "/more/account",
-    icon: UserCircle,
-    description: "Profile and sign out",
-  },
-  {
-    label: "Calendar",
-    href: "/more/calendar",
-    icon: CalendarDays,
-    description: "Visualise your training cycles",
-  },
-  {
-    label: "Exercises",
-    href: "/exercises",
-    icon: Library,
-    description: "Browse and manage exercises",
-  },
-  {
-    label: "History",
-    href: "/history",
-    icon: Clock,
-    description: "All your workouts",
-  },
-  {
-    label: "Metrics",
-    href: "/more/metrics",
-    icon: BarChart2,
-    description: "Volume, records, and muscle balance",
-  },
-  {
-    label: "Personal records",
-    href: "/more/prs",
-    icon: Trophy,
-    description: "Every PR you've broken, newest first",
-  },
-  {
-    label: "Settings",
-    href: "/settings",
-    icon: Settings,
-    description: "Appearance and preferences",
-  },
-  {
-    label: "Feedback",
-    href: "/more/feedback",
-    icon: MessageSquare,
-    description: "Report issues or suggest features",
+    title: "App",
+    items: [
+      {
+        label: "Settings",
+        href: "/settings",
+        icon: Settings,
+        description: "Appearance and preferences",
+      },
+      {
+        label: "Account",
+        href: "/more/account",
+        icon: UserCircle,
+        description: "Profile and sign out",
+      },
+      {
+        label: "Feedback",
+        href: "/more/feedback",
+        icon: MessageSquare,
+        description: "Report issues or suggest features",
+      },
+    ],
   },
 ];
 
-const adminItem = {
+const adminItem: MoreItem = {
   label: "Admin Tools",
   href: "/more/admin",
   icon: Shield,
@@ -132,42 +148,39 @@ export function MoreClient({ role }: { role: string }) {
             </button>
           </div>
         )}
-        <div className="divide-y divide-border">
-          {baseItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="flex items-center gap-4 px-4 min-h-[56px] active:bg-muted/50 transition-colors"
-              >
-                <Icon className="w-5 h-5 text-muted-foreground flex-none" />
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium">{item.label}</div>
-                  {item.description && (
-                    <div className="text-sm text-muted-foreground">
-                      {item.description}
-                    </div>
-                  )}
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
-              </Link>
-            );
-          })}
-          {isAdmin && (
-            <Link
-              href={adminItem.href}
-              className="flex items-center gap-4 px-4 min-h-[56px] active:bg-muted/50 transition-colors"
-            >
-              <Shield className="w-5 h-5 text-muted-foreground flex-none" />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium">{adminItem.label}</div>
-                <div className="text-sm text-muted-foreground">{adminItem.description}</div>
+        {groups.map((group) => {
+          // Admin Tools sits at the end of the App group, for admins only.
+          const items =
+            isAdmin && group.title === "App" ? [...group.items, adminItem] : group.items;
+          return (
+            <section key={group.title} className="pt-6">
+              <h2 className="px-4 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                {group.title}
+              </h2>
+              <div className="divide-y divide-border border-y border-border">
+                {items.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className="flex items-center gap-4 px-4 min-h-[56px] active:bg-muted/50 transition-colors"
+                    >
+                      <Icon className="w-5 h-5 text-muted-foreground flex-none" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium">{item.label}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {item.description}
+                        </div>
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
+                    </Link>
+                  );
+                })}
               </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
-            </Link>
-          )}
-        </div>
+            </section>
+          );
+        })}
       </main>
     </div>
   );
