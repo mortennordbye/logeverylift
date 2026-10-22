@@ -17,10 +17,9 @@ import {
   userWeightEntries,
   workoutSessions,
 } from "../../src/db/schema";
-import { E2E_USER_EMAIL } from "./env";
 
 /**
- * Put the e2e user's data back to the seeded state.
+ * Put one e2e account's data back to the seeded state.
  *
  * Every spec starts from here, so none depends on what an earlier one left
  * behind: a spec that logs a set, reorders a list or imports a plan no longer
@@ -53,11 +52,11 @@ function seededRandom(seed: number): () => number {
   };
 }
 
-export async function resetE2EUser(): Promise<void> {
+export async function resetE2EUser(email: string): Promise<void> {
   const db = testDb();
-  const user = await db.query.users.findFirst({ where: eq(users.email, E2E_USER_EMAIL) });
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
   if (!user) {
-    throw new Error(`e2e user ${E2E_USER_EMAIL} does not exist. Run scripts/e2e-prepare.ts first.`);
+    throw new Error(`e2e user ${email} does not exist. Run scripts/e2e-prepare.ts first.`);
   }
   const userId = user.id;
 
