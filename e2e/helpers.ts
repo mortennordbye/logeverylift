@@ -218,7 +218,7 @@ export async function waitForLiveSession(page: Page): Promise<void> {
 }
 
 /** Every program's workout href, in picker order. */
-async function programWorkoutHrefs(page: Page): Promise<string[]> {
+export async function programWorkoutHrefs(page: Page): Promise<string[]> {
   await page.goto("/new-workout");
   // On a day the active cycle schedules a program, the picker leads with that
   // cycle card and collapses the full list behind "Different program"
@@ -254,56 +254,22 @@ export async function openWorkout(page: Page): Promise<void> {
   await dismissReadinessSheet(page);
 }
 
-/**
- * Tap the first exercise on the workout page and wait for its set list.
- *
- * Why this isn't just `.click()`: under WebKit, a tap that lands just after the
- * readiness sheet closes is accepted by the anchor — `defaultPrevented` is
- * true, so React had hydrated — but the App Router navigation never commits and
- * the user stays on the workout page. The cause is not known; it did not
- * reproduce in iOS Simulator Safari (see BACKLOG.md).
- *
- * Verified with a throwaway diagnostic: clicking immediately after
- * `openWorkout` left `page.url()` unchanged, while inserting a single
- * `getAttribute` round trip beforehand made it navigate 3/3. So the retry below
- * is covering a real dropped tap, not a slow one — the first click is not
- * "still in flight", it is gone.
- *
- * This only reproduces on WebKit; Chromium never dropped the tap, which is why
- * the suite looked green when it was run there.
- */
+/** Tap the first exercise on the workout page and wait for its set list. */
 export async function openFirstExercise(page: Page): Promise<void> {
   const link = page.locator('a[href*="/exercises/"]').first();
   const href = await link.getAttribute("href");
   if (!href) throw new Error("No exercise link on the workout page");
 
   await link.click();
-  try {
-    await page.waitForURL(`**${href}`, { timeout: 5_000 });
-  } catch {
-    await link.click();
-    await page.waitForURL(`**${href}`, { timeout: 10_000 });
-  }
+  await page.waitForURL(`**${href}`);
 }
 
-/**
- * Tap the first set row to open its edit view, and wait for the route.
- *
- * Same dropped-tap window as `openFirstExercise`, one level deeper: the set
- * row navigates to `.../sets/<id>`, and a tap that lands while the set list is
- * still settling is accepted and then lost. Both timer specs open the editor
- * this way to shorten a duration before playing it.
- */
+/** Tap the first set row to open its edit view, and wait for the route. */
 export async function openFirstSetEditor(page: Page): Promise<void> {
   const row = page.getByTestId("set-prescription").first();
   await expect(row).toBeVisible({ timeout: 10_000 });
   await row.click();
-  try {
-    await page.waitForURL(/\/sets\/\d+$/, { timeout: 5_000 });
-  } catch {
-    await row.click();
-    await page.waitForURL(/\/sets\/\d+$/, { timeout: 10_000 });
-  }
+  await page.waitForURL(/\/sets\/\d+$/);
 }
 
 /**
