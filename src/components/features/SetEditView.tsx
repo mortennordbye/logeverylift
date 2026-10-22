@@ -180,6 +180,10 @@ function SetEditForm({
   const [easy, setEasy] = useState<boolean>(override?.wasEasy ?? false);
   // Reps In Reserve (workout strength mode). Null until the user picks one.
   const [rir, setRir] = useState<number | null>(override?.rir ?? null);
+  // Workout-mode only: the reps field records what was done, and the plan's
+  // target stands. This opt-in is for the other case — the program itself is
+  // wrong — and writes the typed number as the new target as well.
+  const [retarget, setRetarget] = useState(false);
   const repsMin = isWorkout ? 0 : 1;
   const [duration, setDuration] = useState(override?.durationSeconds ?? Number(set.durationSeconds ?? 0));
   const [startDelay, setStartDelay] = useState(override?.startDelaySeconds ?? set.startDelaySeconds ?? 0);
@@ -286,7 +290,9 @@ function SetEditForm({
     // lifter had just lowered, and the engine never saw the miss. In
     // program-edit mode the same field is the prescription.
     const plannedReps = override?.targetReps ?? set.targetReps ?? reps;
-    const targetRepsValue = isWorkout ? plannedReps : reps;
+    const changesTarget =
+      isWorkout && !isTimed && !isRunning && !failed && retarget && reps !== plannedReps;
+    const targetRepsValue = isWorkout && !changesTarget ? plannedReps : reps;
 
     // Telemetry for tuning the weight presets: record the weights people have
     // to type in because no circle offers them. Fire-and-forget.
@@ -326,16 +332,15 @@ function SetEditForm({
         // A failed set was taken to failure, so RIR is 0 regardless of the picker.
         workoutSession?.setOverride(set.id, { targetReps: plannedReps, weightKg: weight, notes: noteValue, isFailed: true, actualReps: reps, rir: 0 });
       } else {
-        // Re-prescribe the set so the target matches what was actually
-        // confirmed — otherwise the plan is stuck on a number the lifter has
-        // already shown they've moved past. The override's targetReps must
-        // follow suit: it wins over the (now stale, until the next fetch)
-        // program_sets row in the list's display, so leaving it at
-        // plannedReps would keep showing the old target with a "done" badge.
-        workoutSession?.setOverride(set.id, { targetReps: reps, weightKg: weight, notes: noteValue, actualReps: reps, rir: rir ?? undefined, wasEasy: easy });
-        if (reps !== plannedReps) {
+        // Record what was done against the target that stands, so a short set
+        // reads as a miss to the engine. Only the explicit "change the program
+        // target" opt-in re-prescribes the set; the override's targetReps
+        // follows it then, since it wins over the (stale until the next fetch)
+        // program_sets row in the list's display.
+        workoutSession?.setOverride(set.id, { targetReps: targetRepsValue, weightKg: weight, notes: noteValue, actualReps: reps, rir: rir ?? undefined, wasEasy: easy });
+        if (changesTarget) {
           // Mid-workout this must not hold up the lifter; the session override
-          // already carries the corrected reps.
+          // already carries the new target.
           writes.push(callAction(updateProgramSet({ id: set.id, targetReps: reps })));
         }
       }
@@ -655,6 +660,33 @@ function SetEditForm({
               <span className="text-base text-muted-foreground">{reps}</span>
             </button>
 
+            {/* Reps done differs from the plan: say which it is. Off, the set is
+                logged against the plan's target (a miss, or extra reps). On, the
+                program itself was wrong and its target changes too. */}
+            {isWorkout && !failed && reps !== (override?.targetReps ?? set.targetReps ?? reps) && (
+              <button
+                type="button"
+                role="switch"
+                aria-checked={retarget}
+                onClick={() => setRetarget((v) => !v)}
+                className="w-full min-h-11 flex items-center justify-between gap-3 py-3 border-b border-border transition-colors active:bg-muted/70"
+              >
+                <span className="text-left">
+                  <span className="block text-base font-medium">
+                    Also change the program target to {reps}
+                  </span>
+                  <span className="block text-xs text-muted-foreground">
+                    {retarget
+                      ? "The plan is wrong: future sessions ask for this number"
+                      : `Logged against the target of ${override?.targetReps ?? set.targetReps}`}
+                  </span>
+                </span>
+                <span className={`flex items-center justify-center w-6 h-6 shrink-0 rounded-full border-2 ${retarget ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"}`}>
+                  {retarget && <span className="text-xs leading-none">✓</span>}
+                </span>
+              </button>
+            )}
+
             {/* Weight */}
             <button
               onClick={() => { setWeightStr(String(weight)); setShowWeightPicker(true); }}
@@ -734,7 +766,7 @@ function SetEditForm({
                 <span className="text-left">
                   <span className="block text-base font-medium">Mark set as easy</span>
                   <span className="block text-xs text-muted-foreground">
-                    Suggests going heavier next session
+                    Can move you up a session early if the whole session clears
                   </span>
                 </span>
                 <span className={`flex items-center justify-center w-6 h-6 rounded-full border-2 ${easy ? "bg-primary border-primary text-primary-foreground" : "border-muted-foreground/40"}`}>

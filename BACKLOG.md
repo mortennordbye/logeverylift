@@ -64,12 +64,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Wanting failed sets visually distinct in history. Add `isFailed` to the history query + `HistoryRow`, render a badge, and decide whether failed sets count toward volume.
 - **Touchpoints:** `src/lib/actions/workout-sets.ts` (history query ~line 711), `src/components/features/` history/metrics components, `src/lib/utils/progression.ts` (optional: treat `isFailed` as a hard fail).
 
-### Prescribe target RIR in programs + AI generation
-- **What:** Per-set RIR is now *logged* and feeds progression/adaptation (Jun 2026), but programs can't *prescribe* a target RIR. A full version adds a `targetRir` column to `program_sets`, sets it per phase (a phase-aware recipe returning a target RIR that ramps base→peak), shows "target RIR N" on each set like the existing target-HR-zone display, and feeds RIR into the LLM program-generation prompt (`ai-prompt.ts`) so generated programs can specify intended effort.
-- **Why deferred:** The user scoped this pass to "adaptation + progression" — capturing RIR and routing it into the algorithmic engine — explicitly excluding prescription and the LLM path. The logged-RIR half delivers the adaptive value on its own.
-- **Unblocked by:** Wanting programs/AI to *target* an effort level, not just record it. Add `program_sets.targetRir` (+ migration), thread it through `addProgramSetSchema`/`updateProgramSetSchema` and `SetEditView` (program-edit mode), decide where a prescribed RIR is written now that phase re-prescription is gone (see "Strength periodization: considered, not implemented" in `docs/specs/cycle-periodization.md`), render it on the set row, and add it to the AI prompt/output schema.
-- **Touchpoints:** `src/db/schema/programs.ts` (`program_sets`), `src/lib/validators/workout.ts`, `src/components/features/SetEditView.tsx`, `src/lib/actions/training-cycles.ts` (`syncPeriodizedTargets`), `src/lib/utils/ai-prompt.ts`, `src/lib/actions/ai-generate.ts`.
-
 ### Exercise-type: laterality dimension + backfill precision
 - **What:** Exercise type shipped as a single flat enum (compound/accessory/isolation/plyometric/isometric) with a per-program override (Jun 2026). Two follow-ups: (1) the **unilateral/bilateral** laterality axis was intentionally left out — it's orthogonal (a Bulgarian split squat is compound *and* unilateral) and folding it into the one enum would be wrong; (2) the **library backfill is coarse** — `0039` derives type from `movement_pattern`, so cable/dumbbell isolation work tagged `push`/`pull` (curls, raises, flyes, pushdowns) is currently mislabeled `compound` (≈142 of ~196 rows landed on compound). The editor lets users correct individual exercises, but the bulk default is rough.
 - **Why deferred:** (1) laterality is a separate feature with its own column + picker; no one asked for it yet. (2) precise per-exercise classification of the 191 seed entries is a manual judgment pass the user opted out of in favour of the heuristic.
@@ -80,7 +74,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ### Skip suggestion compute for completed sets
 - **What:** In `getProgressiveSuggestions`, skip program sets whose corresponding `workoutSet.isCompleted = true` in the active session.
-- **Why deferred:** Marginal CPU win. The UI already settles the chips to a tick for completed sets rather than acting on them (`WorkoutSetsList.tsx:1415`). Adds a DB query for negligible benefit.
+- **Why deferred:** Marginal CPU win. The UI already settles the chips to a tick for completed sets rather than acting on them (`WorkoutSetsList.tsx:1901`). Adds a DB query for negligible benefit.
 - **Unblocked by:** Profiling that shows suggestion compute is a real bottleneck (unlikely with current dataset sizes).
 - **Touchpoints:** `src/lib/actions/workout-sets.ts` (`getProgressiveSuggestions`).
 
@@ -88,7 +82,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **What:** Collapse the per-set `↑ Xkg` badges into one affordance per exercise: "↑ all working sets to 82.5 kg". Today, applying a suggestion propagates across siblings, but the badges still render per-set.
 - **Why deferred:** Bigger UX redesign than the recent rounds covered. Hold until you've used the current per-set badges for a while and confirmed the clutter is real.
 - **Unblocked by:** Concrete user feedback that the per-set badges are still too noisy now that warm-ups are filtered and the apply propagates.
-- **Touchpoints:** `src/components/features/WorkoutSetsList.tsx:1415-1635`.
+- **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (`SortableSetRow`, the suggestion chips).
 
 ### Effort-prompt suppression doesn't round-trip through export/import
 - **What:** `progressionSuppressEffortPrompt` (the "Skip the effort prompt" toggle, SI-43 in `docs/specs/smart-incrementation.md`) isn't included in the JSON export/import format, unlike its sibling `progressionApplyToPlan` which is explicitly round-tripped (`src/lib/actions/programs.ts:1021,1090,1263`, `src/lib/validators/workout.ts:500`). An imported program silently defaults the flag to `false` (prompt shown) regardless of what the exporter had set.
@@ -97,10 +91,10 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/lib/actions/programs.ts` (`exportProgram`, `exportAllPrograms`, `importProgram`), `src/lib/validators/workout.ts:500`, `src/__tests__/validators.test.ts:674-695`.
 
 ### Logged weight vs program-planned weight quirk
-- **What:** `buildSuggestion` takes `baseWeight` from the last logged session (`src/lib/utils/progression.ts:699`), not the program's planned weight. If a user logs a one-off heavy single, the next suggestion is built off that single — which then usually shows "held" because the consensus gate kicks in. Surprising in edge cases.
+- **What:** `buildSuggestion` takes `baseWeight` from the last logged session (`src/lib/utils/progression.ts:1221`), not the program's planned weight. If a user logs a one-off heavy single, the next suggestion is built off that single — which then usually shows "held" because the consensus gate kicks in. Surprising in edge cases.
 - **Why deferred:** Rare in practice; the consensus gate masks most surprise. Tier 1 changes don't make it worse.
 - **Unblocked by:** A user reporting concrete confusion.
-- **Touchpoints:** `src/lib/utils/progression.ts:695-712`.
+- **Touchpoints:** `src/lib/utils/progression.ts:1206-1226`.
 
 ### pnpm 11 is pinned away from, not migrated to
 - **What:** The Dockerfile installs `pnpm@10` at every stage, matching the major CI's `pnpm/action-setup` pins. It used to install whatever was newest, and when pnpm 11 shipped it turned `ERR_PNPM_IGNORED_BUILDS` into a hard error, so `pnpm install` began failing inside the image — breaking `make dev` and the production image CI pushes, with no change to this repo. Pinning restored the tested toolchain; it did not resolve the underlying question. Eight packages have build scripts pnpm has been *ignoring* all along (`sharp`, three `esbuild` versions, `unrs-resolver`, `lefthook`, `@sentry/cli`, `msw`), and `sharp` is the one that matters — Next.js uses it for image optimization, and it is a native module whose install script is what fetches its binaries.
@@ -109,16 +103,16 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `Dockerfile` (four `npm install -g pnpm@10` lines), `.github/workflows/ci.yml:34-37`, `pnpm-workspace.yaml`.
 
 ### Two shapes left by migration 0051 read Custom in the progression sheet
-- **What:** Two configurations nobody chose match no preset, so the sheet labels them Custom. (1) `reps` exercises with `progression_required_hits` null: the engine gates them on `REQUIRED_HITS` (2), which is what rep mode did before the rebuild, but the Rep ladder preset fixes the gate at 1. Prod had 14 such exercises on 2026-09-14. (2) Timed exercises that 0051 backfilled to `load` with `backoff`: the sheet snaps the advance to `duration` for display, the Duration preset wants `hold`, and the engine does not snap at all, so it judges them by reps a timed set never logs. A whole-database count of shape (2) was not taken; one user has four (Cycling, Hollow Hold, two Warm Ups). The effort-cap cause of the same symptom was fixed in #43.
-- **Why deferred:** Both fixes change behaviour, not just the label. Gating (1) on one session makes those exercises progress twice as fast; moving (2) to `duration` starts suggesting longer holds, and moving it to `manual` stops suggesting anything. The Ironman programs that surfaced this were corrected by hand instead.
-- **Unblocked by:** Choosing per shape between a data migration and a preset-table change that gives today's behaviour a name. For (2), also decide whether the engine should apply the same snap the sheet does, so the two cannot disagree.
-- **Touchpoints:** `src/lib/utils/progression-presets.ts` (`PROGRESSION_PRESETS`, `matchPreset`), `src/components/features/WorkoutSetsClient.tsx:205` (the advance snap), `src/lib/utils/progression.ts:1159` (a non-duration advance is judged on reps), `drizzle/0051_progression_axes.sql`.
+- **What:** Two configurations nobody chose match no preset, so the sheet labels them Custom. (1) `reps` exercises with `progression_required_hits` null: the engine gates them on `REQUIRED_HITS` (2), which is what rep mode did before the rebuild, but the Rep ladder preset fixes the gate at 1. Prod had 14 such exercises on 2026-09-14. (2) Timed exercises that 0051 backfilled to `load` with `backoff`: the sheet and the engine both snap the advance to `duration` (`effectiveAdvance`, since the smart-incrementation review), but the Duration preset wants `hold`, so the regress axis still reads Custom. A whole-database count of shape (2) was not taken; one user has four (Cycling, Hollow Hold, two Warm Ups). The effort-cap cause of the same symptom was fixed in #43.
+- **Why deferred:** Both fixes change behaviour, not just the label. Gating (1) on one session makes those exercises progress twice as fast; moving (2) to `hold` stops it backing off after misses. The Ironman programs that surfaced this were corrected by hand instead.
+- **Unblocked by:** Choosing per shape between a data migration and a preset-table change that gives today's behaviour a name.
+- **Touchpoints:** `src/lib/utils/progression-presets.ts` (`PROGRESSION_PRESETS`, `matchPreset`), `src/lib/utils/progression.ts:158` (`effectiveAdvance`, the advance snap), `drizzle/0051_progression_axes.sql`.
 
 ### A timed set cannot plan or progress weight
 - **What:** A weighted hold (Pallof Hold against a cable, a loaded carry) can only progress its time. Saving a timed set from the program editor writes duration, rest and start delay but not weight, the set row renders only the time, and the `duration` advance suggests a longer hold, never more load. Weight can still be entered during a workout and is logged.
 - **Why deferred:** Pallof Hold shipped on the `duration` advance, which the engine supports today. Weight on timed sets needs a new judging rule (hold the target time at this weight, then add weight) plus editor and row changes.
 - **Unblocked by:** Deciding whether a weighted hold should progress weight at a fixed time, time at a fixed weight, or alternate. Then: write `weightKg` in the timed branch of the program-edit save, show it on the timed row, and add a load step to the `duration` case in the engine.
-- **Touchpoints:** `src/components/features/SetEditView.tsx:292` (timed save omits weight), `src/components/features/WorkoutSetsList.tsx:1717` (timed row shows time only), `src/lib/utils/progression.ts:1517` (the `duration` case).
+- **Touchpoints:** `src/components/features/SetEditView.tsx:348` (timed save omits weight), `src/components/features/WorkoutSetsList.tsx:1742` (timed row shows time only), `src/lib/utils/progression.ts:1634` (the `duration` case).
 
 ## Cycle periodization (spec divergences)
 

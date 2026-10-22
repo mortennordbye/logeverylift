@@ -147,15 +147,17 @@ export type ActiveCycleInfo = {
  *   "held-unknown"      — an effort cap is prescribed and no effort was logged,
  *                         so the session is neither a clear nor a miss. A
  *                         different message from "held": the app is missing an
- *                         answer, not waiting for more sessions. No exercise can
- *                         carry a cap yet, so nothing emits this — the consumers
- *                         handle it now so the engine can emit it later.
+ *                         answer, not waiting for more sessions.
  *   "reset"             — double progression's load-up-reps-down step: every
  *                         set reached the top of the rep range, so the load
  *                         rises and the target drops back to the bottom of it.
  *                         The one suggestion that deliberately lowers a number
  *                         in the plan besides a deload (E-1).
- *   "deload"            — 3+ consecutive failures detected; 10% weight reduction suggested
+ *   "deload"            — the back-off: `backoffAfter` sessions in a row missed, so
+ *                         the load drops by `backoffPct`. With readinessModulated
+ *                         set it is instead a low-readiness day under the
+ *                         "reduce" rule, for today only and never written to the
+ *                         plan.
  *   "manual"            — progression mode is manual; no suggestion
  */
 export type SetSuggestion = {

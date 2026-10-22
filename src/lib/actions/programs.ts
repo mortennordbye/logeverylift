@@ -9,7 +9,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exercise-type";
-import type { ProgressionAdvance } from "@/lib/utils/progression";
+import { judgingRuleChanged, type ProgressionAdvance } from "@/lib/utils/progression";
 import { requireSession } from "@/lib/utils/session";
 import {
   addExerciseToProgramSchema,
@@ -38,7 +38,7 @@ import type {
   ProgramSet,
   ProgramWithExercises,
 } from "@/types/workout";
-import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -270,10 +270,10 @@ export async function removeExerciseFromProgram(
 
 export async function updateProgramExerciseIncrement(
   programExerciseId: number,
-  incrementKg: number,
+  incrementKg: number | null,
 ): Promise<ActionResult<void>> {
   const auth = await requireSession();
-  if (incrementKg < 0 || incrementKg > 100) {
+  if (incrementKg != null && (incrementKg < 0 || incrementKg > 100)) {
     return { success: false, error: "Increment must be between 0 and 100 kg" };
   }
   try {
@@ -288,7 +288,8 @@ export async function updateProgramExerciseIncrement(
     }
     const [pe] = await db
       .update(programExercises)
-      .set({ overloadIncrementKg: incrementKg.toString() })
+      // Null hands the step back to the automatic ladder.
+      .set({ overloadIncrementKg: incrementKg == null ? null : incrementKg.toString() })
       .where(eq(programExercises.id, programExerciseId))
       .returning({ programId: programExercises.programId });
     if (pe) {
@@ -626,7 +627,12 @@ export async function setProgramExerciseProgression(
   const { programExerciseId, ...axes } = validation.data;
   try {
     const [check] = await db
-      .select({ userId: programs.userId })
+      .select({
+        userId: programs.userId,
+        progressionAdvance: programExercises.progressionAdvance,
+        progressionScope: programExercises.progressionScope,
+        progressionRequiredHits: programExercises.progressionRequiredHits,
+      })
       .from(programExercises)
       .innerJoin(programs, eq(programs.id, programExercises.programId))
       .where(eq(programExercises.id, programExerciseId))
@@ -635,7 +641,7 @@ export async function setProgramExerciseProgression(
       return { success: false, error: "Not found" };
     }
 
-    const updates: Record<string, unknown> = { progressionConfigAt: new Date() };
+    const updates: Record<string, unknown> = {};
     if (axes.advance !== undefined) {
       updates.progressionAdvance = axes.advance;
       updates.progressionMode = LEGACY_MODE_FOR_ADVANCE[axes.advance];
@@ -650,6 +656,12 @@ export async function setProgramExerciseProgression(
       updates.progressionBackoffAfter = axes.backoffAfter;
     if (axes.readiness !== undefined)
       updates.progressionReadiness = axes.readiness;
+    // E-13: only a write that changes how a session is judged restarts the
+    // window. Re-tapping the lit preset, or moving readiness or back-off, must
+    // not wipe the lifter's banked clears.
+    if (judgingRuleChanged(check, updates)) {
+      updates.progressionConfigAt = new Date();
+    }
 
     const [pe] = await db
       .update(programExercises)
@@ -852,9 +864,47 @@ export async function addProgramSet(
       return { success: false, error: "Not found" };
     }
 
+    // A new working set joins the exercise's scheme: it takes the effort cap
+    // and rep range the slot's last working set carries. Under scope "all" the
+    // cap is read from the last working set, so a set added without one would
+    // switch the cap off and turn the preset into Custom.
+    const values = { ...validation.data };
+    if (values.setType === "working") {
+      const [last] = await db
+        .select({
+          targetRir: programSets.targetRir,
+          repRangeMin: programSets.repRangeMin,
+          repRangeMax: programSets.repRangeMax,
+        })
+        .from(programSets)
+        .where(
+          and(
+            eq(programSets.programExerciseId, values.programExerciseId),
+            eq(programSets.setType, "working"),
+          ),
+        )
+        .orderBy(desc(programSets.setNumber))
+        .limit(1);
+      if (last) {
+        values.targetRir ??= last.targetRir ?? undefined;
+        // Only a range the new target sits inside, or the set would be stored
+        // outside its own bounds.
+        const fits =
+          values.targetReps == null ||
+          (last.repRangeMin != null &&
+            last.repRangeMax != null &&
+            values.targetReps >= last.repRangeMin &&
+            values.targetReps <= last.repRangeMax);
+        if (values.repRangeMin == null && values.repRangeMax == null && fits) {
+          values.repRangeMin = last.repRangeMin ?? undefined;
+          values.repRangeMax = last.repRangeMax ?? undefined;
+        }
+      }
+    }
+
     const [ps] = await db
       .insert(programSets)
-      .values(validation.data as typeof programSets.$inferInsert)
+      .values(values as typeof programSets.$inferInsert)
       .returning();
 
     // Look up programId to revalidate the correct paths

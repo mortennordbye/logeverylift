@@ -19,6 +19,7 @@ import {
   resolveExerciseType,
   type ExerciseType,
 } from "@/lib/utils/exercise-type";
+import { useToast } from "@/contexts/toast-context";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { sanitizeDecimalInput } from "@/lib/utils/format";
 import {
@@ -27,6 +28,7 @@ import {
   MAX_REQUIRED_HITS,
   REQUIRED_HITS,
   describeProgressionRule,
+  effectiveAdvance,
   pendingProgressions,
   type PendingProgression,
   type ProgressionAdvance,
@@ -218,24 +220,24 @@ export function WorkoutSetsClient({
     initialSuppressEffortPrompt,
   );
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const { showToast } = useToast();
+  // Every sheet write reverts on failure; this says so instead of leaving the
+  // lifter to notice the chip they tapped is no longer lit.
+  const saveFailed = () =>
+    showToast({ variant: "error", message: "Couldn't save the setting — try again" });
   const [showCustomKg, setShowCustomKg] = useState(false);
   const [showCustomReps, setShowCustomReps] = useState(false);
   const [customTargetRepsInput, setCustomTargetRepsInput] = useState("");
   const [showCustomTargetReps, setShowCustomTargetReps] = useState(false);
   const [axes, setAxes] = useState<Axes>(() => {
-    const isRunningEx =
-      exerciseCategory === "cardio" && !exerciseIsTimed;
     // Snap a stale advance onto something the exercise can actually do. A
-    // strength scheme on a plank has no measure to move.
-    const advance = toAdvance(initialAdvance);
-    const snapped: ProgressionAdvance =
-      exerciseIsTimed && advance !== "manual" && advance !== "none" && advance !== "duration"
-        ? "duration"
-        : isRunningEx && advance !== "manual" && advance !== "none" && advance !== "distance"
-          ? "manual"
-          : advance;
+    // strength scheme on a plank has no measure to move. The engine reads
+    // through the same function, so the sheet shows what actually runs.
     return {
-      advance: snapped,
+      advance: effectiveAdvance(toAdvance(initialAdvance), {
+        isTimed: !!exerciseIsTimed,
+        isRunning: exerciseCategory === "cardio" && !exerciseIsTimed,
+      }),
       scope: toScope(initialScope),
       requiredHits: initialRequiredHits,
       regress: toRegress(initialRegress),
@@ -374,12 +376,23 @@ export function WorkoutSetsClient({
   // The sheet is bottom-anchored (`items-end`), so anything that changes its
   // height moves every row upward — including the one the user just tapped.
   // Measured at 141px before this: tapping "Weight" mounted the increment
-  // block and threw that row up under the user's finger onto "Smart weight".
+  // block and threw that row up under the user's finger onto the row below.
   // Reserving per-exercise rather than fixing the sheet to 80vh keeps the
   // timed/running sheets (one reachable section) from becoming a mostly-empty
   // full-height card.
   const incrementSections: ("weight" | "reps" | "time" | "distance")[] =
     isRunning ? ["distance"] : exerciseIsTimed ? ["time"] : ["weight", "reps"];
+  // Which increments the engine actually reads for this scheme. Load on a
+  // bodyweight exercise has no weight to add, so it climbs reps; double
+  // progression uses both, the rep step inside the range and the load at the top.
+  const isBodyweight =
+    workingSets.length > 0 && workingSets.every((s) => Number(s.weightKg ?? 0) === 0);
+  const showWeightIncrement =
+    axes.advance === "double" || (axes.advance === "load" && !isBodyweight);
+  const showRepIncrement =
+    axes.advance === "reps" ||
+    axes.advance === "double" ||
+    (axes.advance === "load" && isBodyweight);
 
   // Today's values with the blueprint carried alongside. The first decides
   // whether a suggestion has been taken yet, the second whether writing it
@@ -393,6 +406,13 @@ export function WorkoutSetsClient({
     planned: sets.find((p) => p.id === s.id),
   }));
   const completedSetIds = workoutSession?.completedSetIds ?? EMPTY_SET_IDS;
+  // No suggestion on any working set of a scheme that would make one: the
+  // engine has no completed session to read yet (SI-15).
+  const hasNoHistory =
+    axes.advance !== "none" &&
+    axes.advance !== "manual" &&
+    workingSets.length > 0 &&
+    workingSets.every((s) => !suggestions?.[s.id]);
 
   // Suggestions the lifter hasn't taken yet, in the values applying them would
   // write. Reads the override-folded sets so a set drops out the moment it is
@@ -432,7 +452,7 @@ export function WorkoutSetsClient({
    */
   function persistToPlan(updates: PendingProgression[]) {
     if (!applyToPlan || updates.length === 0) return;
-    void applyProgressionToPlan({
+    void callAction(applyProgressionToPlan({
       programExerciseId,
       updates: updates.map((u) => ({
         programSetId: u.setId,
@@ -445,7 +465,7 @@ export function WorkoutSetsClient({
           ? { distanceMeters: u.distanceMeters }
           : {}),
       })),
-    }).catch(() => {
+    })).catch(() => {
       // Offline or a dropped request. Swallowed on purpose — surfacing an error
       // mid-set would interrupt a lift over a plan edit that self-heals.
     });
@@ -511,16 +531,18 @@ export function WorkoutSetsClient({
    * hold: the sentence underneath is the contract with the lifter, and a
    * sentence describing a rule that was never saved is worse than no sentence.
    */
-  async function updateAxes(next: Partial<Axes>) {
+  async function updateAxes(next: Partial<Axes>): Promise<boolean> {
     const previous = axes;
     const merged = { ...axes, ...next };
     setAxes(merged);
     const result = await callAction(setProgramExerciseProgression({ programExerciseId, ...next }));
     if (!result.success) {
       setAxes(previous);
-      return;
+      saveFailed();
+      return false;
     }
     router.refresh();
+    return true;
   }
 
   /**
@@ -532,15 +554,16 @@ export function WorkoutSetsClient({
    * the axis values in the preset table.
    */
   async function handlePresetChange(preset: ProgressionPreset) {
-    // Both per-set defaults go in one write, so the preset lands complete
-    // rather than in a state its own name does not match.
+    // Both per-set defaults go in one write. It follows the axes write, and
+    // only once that has landed: defaults for a scheme that was never saved
+    // would leave the exercise in a state no preset matches.
     const defaults = presetSetDefaults(preset, {
       hasRange: repRange != null,
       effortCap,
       anySetCapped: workingSets.some((s) => s.targetRir != null),
       targetReps: lowestWorkingTargetReps,
     });
-    await updateAxes(preset.axes);
+    if (!(await updateAxes(preset.axes))) return;
     if (Object.keys(defaults).length > 0) await handleSetDefaults(defaults);
   }
 
@@ -556,6 +579,7 @@ export function WorkoutSetsClient({
   }) {
     const result = await callAction(setProgramExerciseSetDefaults({ programExerciseId, ...next }));
     if (result.success) router.refresh();
+    else saveFailed();
   }
 
   async function handleTargetRepsChange(next: number) {
@@ -571,18 +595,22 @@ export function WorkoutSetsClient({
     const result = await callAction(setProgramExerciseType({ programExerciseId, exerciseType: next }));
     if (!result.success) {
       setTypeOverride(previous);
+      saveFailed();
       return;
     }
     router.refresh();
   }
 
-  async function handleIncrementChange(newIncrement: number) {
+  // null hands the step back to the automatic ladder (load zone, experience,
+  // equipment), which is where every exercise starts.
+  async function handleIncrementChange(newIncrement: number | null) {
     const previous = increment;
     setIncrement(newIncrement);
     setCustomKgInput("");
     const result = await callAction(updateProgramExerciseIncrement(programExerciseId, newIncrement));
     if (!result.success) {
       setIncrement(previous);
+      saveFailed();
       return;
     }
     router.refresh();
@@ -596,6 +624,7 @@ export function WorkoutSetsClient({
     }));
     if (!result.success) {
       setApplyToPlan(!next);
+      saveFailed();
       return;
     }
     router.refresh();
@@ -609,6 +638,7 @@ export function WorkoutSetsClient({
     }));
     if (!result.success) {
       setSuppressEffortPrompt(!next);
+      saveFailed();
       return;
     }
     router.refresh();
@@ -621,6 +651,7 @@ export function WorkoutSetsClient({
     const result = await callAction(updateProgramExerciseIncrementReps(programExerciseId, newIncrement));
     if (!result.success) {
       setIncrementReps(previous);
+      saveFailed();
       return;
     }
     router.refresh();
@@ -717,11 +748,18 @@ export function WorkoutSetsClient({
           onClick={() => setShowProgressionPicker(true)}
           className={`flex items-center gap-1 px-3 py-1.5 rounded-full bg-muted text-xs font-semibold active:scale-95 transition-all ${axes.advance === "none" ? "text-muted-foreground/40" : "text-muted-foreground"}`}
         >
-          {axes.advance !== "none" && "↑ "}{progressionBadgeLabel()}
+          {axes.advance !== "none" && axes.advance !== "manual" && "↑ "}{progressionBadgeLabel()}
         </button>
         {isWorkout && bestEstimated1RM != null && (
           <span className="px-3 py-1.5 rounded-full bg-primary/10 text-xs font-semibold text-primary">
             1RM ~{Math.round(bestEstimated1RM)}kg
+          </span>
+        )}
+        {/* Without history there is nothing to suggest, and a set row with no
+            suggestion line at all reads as the feature being off. */}
+        {isWorkout && hasNoHistory && (
+          <span className="text-xs text-muted-foreground">
+            Suggestions start after your first session
           </span>
         )}
         {/* One tap instead of one per set. Only worth showing when there is
@@ -780,6 +818,7 @@ export function WorkoutSetsClient({
             onApplySuggestion={isWorkout ? applySuggestion : undefined}
             onApplyRepSuggestion={isWorkout ? applyRepSuggestion : undefined}
             hideEffortPrompt={suppressEffortPrompt || axes.advance === "none"}
+            progressionScope={axes.scope}
           />
         )}
       </div>
@@ -1076,11 +1115,21 @@ export function WorkoutSetsClient({
                 <div className="grid">
                 {/* Kg increment — shown for the load-bearing schemes */}
                 {incrementSections.includes("weight") && (
-                  <div className={`col-start-1 row-start-1 border-t border-border ${axes.advance === "load" || axes.advance === "double" ? "" : "invisible pointer-events-none"}`}>
+                  <div className={`col-start-1 row-start-1 border-t border-border ${showWeightIncrement ? "" : "invisible pointer-events-none"}`}>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
                       Weight increment
                     </p>
                     <div className="flex flex-wrap gap-2 px-4 pb-3">
+                      <button
+                        onClick={() => handleIncrementChange(null)}
+                        className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                          increment == null
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted text-muted-foreground"
+                        }`}
+                      >
+                        Auto
+                      </button>
                       {KG_INCREMENT_PRESETS.map((preset) => (
                         <button
                           key={preset}
@@ -1136,10 +1185,11 @@ export function WorkoutSetsClient({
                   </div>
                 )}
 
-                {/* Rep increment — the rep ladder's step, and double
-                    progression's floor when it climbs inside the range */}
+                {/* Rep increment — the rep ladder's step, double progression's
+                    step inside the range, and the climb on a bodyweight load
+                    scheme. Below the weight row when both apply. */}
                 {incrementSections.includes("reps") && (
-                  <div className={`col-start-1 row-start-1 border-t border-border ${axes.advance === "reps" ? "" : "invisible pointer-events-none"}`}>
+                  <div className={`col-start-1 ${showWeightIncrement && showRepIncrement ? "row-start-2" : "row-start-1"} border-t border-border ${showRepIncrement ? "" : "invisible pointer-events-none"}`}>
                     <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1">
                       Rep increment
                     </p>
@@ -1301,8 +1351,8 @@ export function WorkoutSetsClient({
                         Skip the effort prompt
                       </span>
                       <span className="block text-xs text-muted-foreground">
-                        Never ask how much was left after the last set, even
-                        if this exercise has an effort cap
+                        Never ask how much was left, even if this exercise
+                        has an effort cap
                       </span>
                       {suppressEffortPrompt && axes.advance !== "none" && (
                         <span className="block text-xs text-muted-foreground mt-1">
@@ -1349,6 +1399,10 @@ export function WorkoutSetsClient({
 
                   {showAdvanced && (
                     <>
+                      <p className="text-xs text-muted-foreground px-4 pb-2">
+                        Changing the sessions needed or which sets count starts
+                        the count again from your next workout.
+                      </p>
                       <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
                         <CheckCheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         Sessions at target

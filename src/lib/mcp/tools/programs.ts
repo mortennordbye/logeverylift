@@ -20,6 +20,7 @@ import {
   PROGRESSION_READINESSES,
   PROGRESSION_REGRESSES,
   PROGRESSION_SCOPES,
+  judgingRuleChanged,
   type ProgressionAdvance,
 } from "@/lib/utils/progression";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -370,6 +371,14 @@ export function registerProgramTools(server: McpServer, userId: string) {
           }
           const owner = await programExerciseOwner(programExerciseId);
           if (!owner || owner.userId !== userId) return fail("Exercise slot not found");
+          const [current] = await db
+            .select({
+              progressionAdvance: programExercises.progressionAdvance,
+              progressionScope: programExercises.progressionScope,
+              progressionRequiredHits: programExercises.progressionRequiredHits,
+            })
+            .from(programExercises)
+            .where(eq(programExercises.id, programExerciseId));
 
           const peUpdates: Record<string, unknown> = {};
           if (args.exerciseId !== undefined) peUpdates.exerciseId = args.exerciseId;
@@ -405,6 +414,11 @@ export function registerProgramTools(server: McpServer, userId: string) {
             peUpdates.progressionRequiredHits = args.progressionRequiredHits;
           if (args.progressionApplyToPlan !== undefined)
             peUpdates.progressionApplyToPlan = args.progressionApplyToPlan;
+          // E-13, as in setProgramExerciseProgression: an agent changing how
+          // sessions are judged restarts the window just as the sheet does.
+          if (current && judgingRuleChanged(current, peUpdates)) {
+            peUpdates.progressionConfigAt = new Date();
+          }
 
           // Apply the slot edits and the wholesale set-replace in one
           // transaction: deleting the old sets must roll back if the re-insert

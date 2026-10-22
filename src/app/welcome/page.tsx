@@ -10,7 +10,7 @@ export function generateMetadata(): Promise<Metadata> {
   return shareMetadata({
     title: "LogEveryLift. Log every lift, know the next one",
     description:
-      "AI-built programs, smart progression that reads your effort and rest timers that run themselves.",
+      "AI-built programs, smart progression that picks your next weight and rest timers that run themselves.",
     path: "/welcome",
   });
 }
@@ -45,7 +45,7 @@ const COPY = {
     featuresHeading: "Smarter than a notebook",
     featuresIntro: "New features land every week. Early users see them first.",
     features: [
-      { title: "Smart progression", body: "Log how hard a set felt and the engine picks your next weight. No spreadsheets, no guessing." },
+      { title: "Smart progression", body: "Hit your reps and the engine picks your next weight. Add an effort target and it checks that too. No spreadsheets, no guessing." },
       { title: "AI-built programs", body: "Tell it your goal, days and equipment. Get a structured block you can tweak and run." },
       { title: "Rest that runs itself", body: "Timers start the moment you log a set, so you stay in the session." },
     ],
@@ -80,7 +80,7 @@ const COPY = {
     featuresHeading: "Smartere enn en notatbok",
     featuresIntro: "Nye funksjoner kommer hver uke. De første brukerne ser dem først.",
     features: [
-      { title: "Smart progresjon", body: "Logg hvor tungt settet føltes, så velger motoren neste vekt. Ingen regneark, ingen gjetting." },
+      { title: "Smart progresjon", body: "Treff repetisjonene, så velger motoren neste vekt. Legg til et innsatsmål, så sjekker den det også. Ingen regneark, ingen gjetting." },
       { title: "AI-bygde programmer", body: "Fortell mål, dager og utstyr. Få en strukturert blokk du kan justere og kjøre." },
       { title: "Pause som styrer seg selv", body: "Timeren starter i det du logger et sett, så du holder fokus på økta." },
     ],

@@ -149,6 +149,74 @@ export function toAdvance(value: string | null | undefined): ProgressionAdvance 
     : "manual";
 }
 
+/**
+ * The advance an exercise can actually run. A strength scheme left on a plank
+ * has no load or reps to move, so it runs on duration; on a run it has nothing
+ * to move at all, so it is manual. The settings sheet and the engine both read
+ * through this, so what the sheet describes is what the engine does.
+ */
+export function effectiveAdvance(
+  advance: ProgressionAdvance,
+  exercise: { isTimed: boolean; isRunning: boolean },
+): ProgressionAdvance {
+  if (advance === "manual" || advance === "none") return advance;
+  if (exercise.isTimed) return "duration";
+  if (exercise.isRunning && advance !== "distance") return "manual";
+  return advance;
+}
+
+/**
+ * Whether a settings write changes how a session is judged, and so has to
+ * stamp `progression_config_at` (E-13). Only the advance, the scope and the
+ * gate do; regress, readiness and the back-off numbers act on the verdicts
+ * without changing them. A write that repeats the stored value changes
+ * nothing, and stamping it would wipe banked progress for a tap.
+ */
+export function judgingRuleChanged(
+  current: {
+    progressionAdvance: string | null;
+    progressionScope: string | null;
+    progressionRequiredHits: number | null;
+  },
+  next: {
+    progressionAdvance?: string | null;
+    progressionScope?: string | null;
+    progressionRequiredHits?: number | null;
+  },
+): boolean {
+  return (
+    (next.progressionAdvance !== undefined &&
+      next.progressionAdvance !== current.progressionAdvance) ||
+    (next.progressionScope !== undefined &&
+      next.progressionScope !== current.progressionScope) ||
+    (next.progressionRequiredHits !== undefined &&
+      next.progressionRequiredHits !== current.progressionRequiredHits)
+  );
+}
+
+/**
+ * Which set the in-workout effort prompt should ask about, or null for none.
+ *
+ * D-8: the engine reads effort from the set the scope already names — set 1
+ * under `first`, the last working set under `last` and `all`, and each set on
+ * its own under `set`. Asking about any other set leaves the session unknown
+ * however the lifter answers. Only a set with a cap, already logged and still
+ * without a reported effort, is worth a prompt.
+ */
+export function effortPromptSet<T extends { id: number; targetRir: number | null }>(
+  working: T[],
+  scope: ProgressionScope,
+  needsEffort: (set: T) => boolean,
+): T | null {
+  const candidates =
+    scope === "set"
+      ? working
+      : scope === "first"
+        ? working.slice(0, 1)
+        : working.slice(-1);
+  return candidates.find((s) => s.targetRir != null && needsEffort(s)) ?? null;
+}
+
 /** What happens when the gate keeps not being met — axis 7. */
 export type ProgressionRegress = "hold" | "backoff";
 
@@ -982,6 +1050,9 @@ export function pendingProgressions(
     if (set.setType != null && set.setType !== "working") continue;
     const s = suggestions[set.id];
     if (!s) continue;
+    // A low-readiness hold or back-off is about today. Writing it would let one
+    // bad night's sleep lower the programme for good.
+    if (s.readinessModulated) continue;
 
     const currentWeight = Number(set.weightKg ?? 0);
     const currentReps = set.targetReps ?? 0;
