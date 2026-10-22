@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   adaptiveIncrementKg,
+  backoffWeight,
   buildSuggestion,
   describeProgressionRule,
   estimate1RM,
@@ -8,9 +9,16 @@ import {
   pendingProgressions,
   roundToNearest,
   DELOAD_THRESHOLD,
+  effectiveAdvance,
+  effortPromptSet,
+  judgingRuleChanged,
   REQUIRED_HITS,
   STALE_DAYS,
   staleThresholdDays,
+  toAdvance,
+  toReadiness,
+  toRegress,
+  toScope,
   uniformTargetReps,
 } from "@/lib/utils/progression";
 import type {
@@ -1024,6 +1032,18 @@ describe("pendingProgressions", () => {
     const result = pendingProgressions(
       [makeSet({ setType: "warmup" })],
       { 1: makeSuggestion() },
+      NONE,
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("never writes a low-readiness back-off to the plan — it is for today only", () => {
+    // E-7 labels the readiness "reduce" cut as a deload. A real deload may
+    // lower the plan; this one must not, or one bad night's sleep rewrites the
+    // programme down for good.
+    const result = pendingProgressions(
+      [makeSet()],
+      { 1: makeSuggestion({ reason: "deload", suggestedWeightKg: 72.5, readinessModulated: true }) },
       NONE,
     );
     expect(result).toEqual([]);
@@ -2428,5 +2448,131 @@ describe("buildSuggestion — staleness", () => {
     );
     const r = buildSuggestion(bw, makePs({ advance: "load" }), null, null, "2024-06-01");
     expect(r?.reason).not.toBe("re-approach");
+  });
+});
+
+// ─── Gaps: settings the suite did not reach ─────────────────────────────────
+
+describe("buildSuggestion — settings without a direct test", () => {
+  const cleared = () => makeSessions(REQUIRED_HITS, { actualReps: 8, targetReps: 8 });
+
+  it("readiness hold, set explicitly, holds the load on a low day", () => {
+    const r = buildSuggestion(cleared(), makePs({ advance: "load", readiness: "hold" }), null, 2);
+    expect(r?.reason).toBe("held-readiness");
+    expect(r?.suggestedWeightKg).toBe(80);
+  });
+
+  it("readiness reduce leaves a normal day alone", () => {
+    const r = buildSuggestion(
+      cleared(),
+      makePs({ advance: "load", readiness: "reduce", overloadIncrementKg: "2.50" }),
+      null,
+      3,
+    );
+    expect(r?.reason).toBe("progressed");
+    expect(r?.readinessModulated).toBe(false);
+  });
+
+  it("advance none suggests nothing, even after enough misses to back off (SI-16)", () => {
+    const missed = makeSessions(DELOAD_THRESHOLD + 1, { actualReps: 5, targetReps: 8 });
+    expect(buildSuggestion(missed, makePs({ advance: "none" }), null)).toBeNull();
+    expect(buildSuggestion(cleared(), makePs({ advance: "none" }), null)).toBeNull();
+  });
+});
+
+describe("setting parsers fall back on unknown values", () => {
+  it("maps anything unrecognised to the documented default", () => {
+    expect(toScope("bogus")).toBe("all");
+    expect(toScope(null)).toBe("all");
+    expect(toAdvance("smart")).toBe("manual");
+    expect(toAdvance(undefined)).toBe("manual");
+    expect(toRegress(null)).toBe("backoff");
+    expect(toRegress("hold")).toBe("hold");
+    expect(toReadiness("")).toBe("hold");
+  });
+});
+
+describe("backoffWeight", () => {
+  it("cuts by the percentage and snaps to the increment", () => {
+    expect(backoffWeight(100, 10, 2.5)).toBe(90);
+    expect(backoffWeight(100, 25, 2.5)).toBe(75);
+  });
+
+  it("never walks a lift below one increment (E-18)", () => {
+    expect(backoffWeight(2.5, 25, 2.5)).toBe(2.5);
+  });
+});
+
+describe("effectiveAdvance", () => {
+  it("passes a fitting advance through", () => {
+    expect(effectiveAdvance("load", { isTimed: false, isRunning: false })).toBe("load");
+    expect(effectiveAdvance("duration", { isTimed: true, isRunning: false })).toBe("duration");
+    expect(effectiveAdvance("distance", { isTimed: false, isRunning: true })).toBe("distance");
+  });
+
+  it("moves a timed exercise onto duration, since it has no load or reps to move", () => {
+    expect(effectiveAdvance("load", { isTimed: true, isRunning: false })).toBe("duration");
+    expect(effectiveAdvance("double", { isTimed: true, isRunning: false })).toBe("duration");
+  });
+
+  it("makes a strength scheme on a run manual", () => {
+    expect(effectiveAdvance("load", { isTimed: false, isRunning: true })).toBe("manual");
+  });
+
+  it("leaves manual and none alone everywhere", () => {
+    for (const ctx of [
+      { isTimed: true, isRunning: false },
+      { isTimed: false, isRunning: true },
+    ]) {
+      expect(effectiveAdvance("manual", ctx)).toBe("manual");
+      expect(effectiveAdvance("none", ctx)).toBe("none");
+    }
+  });
+});
+
+describe("judgingRuleChanged", () => {
+  const current = {
+    progressionAdvance: "load",
+    progressionScope: "all",
+    progressionRequiredHits: null,
+  };
+
+  it("is false for a write that repeats what is stored", () => {
+    expect(judgingRuleChanged(current, { progressionAdvance: "load", progressionScope: "all" })).toBe(false);
+    expect(judgingRuleChanged(current, {})).toBe(false);
+  });
+
+  it("is true when the advance, scope or gate moves", () => {
+    expect(judgingRuleChanged(current, { progressionAdvance: "double" })).toBe(true);
+    expect(judgingRuleChanged(current, { progressionScope: "first" })).toBe(true);
+    expect(judgingRuleChanged(current, { progressionRequiredHits: 3 })).toBe(true);
+  });
+});
+
+describe("effortPromptSet — asks about the set that decides (D-8)", () => {
+  const sets = (caps: (number | null)[]) => caps.map((targetRir, i) => ({ id: i + 1, targetRir }));
+  const any = () => true;
+
+  it("asks about set 1 under scope first", () => {
+    expect(effortPromptSet(sets([2, 2, 2]), "first", any)?.id).toBe(1);
+  });
+
+  it("asks about the last working set under all and last", () => {
+    expect(effortPromptSet(sets([2, 2, 2]), "all", any)?.id).toBe(3);
+    expect(effortPromptSet(sets([2, 2, 2]), "last", any)?.id).toBe(3);
+  });
+
+  it("walks the sets in order under scope set, skipping ones already answered", () => {
+    const answered = new Set([1]);
+    expect(effortPromptSet(sets([2, 2, 2]), "set", (s) => !answered.has(s.id))?.id).toBe(2);
+  });
+
+  it("stays quiet when the deciding set has no cap, whatever the others carry", () => {
+    expect(effortPromptSet(sets([null, 2, 2]), "first", any)).toBeNull();
+    expect(effortPromptSet(sets([2, 2, null]), "all", any)).toBeNull();
+  });
+
+  it("stays quiet once the deciding set has its answer", () => {
+    expect(effortPromptSet(sets([2, 2, 2]), "first", () => false)).toBeNull();
   });
 });

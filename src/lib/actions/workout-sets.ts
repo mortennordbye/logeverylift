@@ -42,7 +42,9 @@ import {
 import {
     buildSuggestion,
     CONSENSUS_WINDOW,
+    effectiveAdvance,
     estimate1RM,
+    toAdvance,
     toScope,
 } from "@/lib/utils/progression";
 import type { ProgramSetData, SessionHistory } from "@/lib/utils/progression";
@@ -1274,6 +1276,8 @@ export async function getProgressiveSuggestions(
         exerciseTypeOverride: programExercises.exerciseType,
         exerciseTypeDefault: exercises.exerciseType,
         exerciseName: exercises.name,
+        exerciseIsTimed: exercises.isTimed,
+        exerciseCategory: exercises.category,
       })
       .from(programSets)
       .innerJoin(
@@ -1478,7 +1482,12 @@ export async function getProgressiveSuggestions(
         overloadIncrementReps: ps.overloadIncrementReps,
         scope: ps.progressionScope,
         requiredHits: ps.progressionRequiredHits,
-        advance: ps.progressionAdvance,
+        // The same snap the settings sheet shows, so the sheet describes the
+        // scheme that actually runs.
+        advance: effectiveAdvance(toAdvance(ps.progressionAdvance), {
+          isTimed: ps.exerciseIsTimed,
+          isRunning: ps.exerciseCategory === "cardio" && !ps.exerciseIsTimed,
+        }),
         regress: ps.progressionRegress,
         backoffPct: ps.progressionBackoffPct,
         backoffAfter: ps.progressionBackoffAfter,
@@ -1664,12 +1673,13 @@ export async function getWorkoutInsight(
     if (!sug.exerciseName) continue;
     const prev = exerciseStatusMap.get(sug.exerciseName);
     let status: ExerciseInsight["status"];
-    if (sug.reason === "deload") {
+    if (sug.reason === "deload" && !sug.readinessModulated) {
       status = "deloading";
-    } else if (sug.reason === "re-approach") {
+    } else if (sug.reason === "re-approach" || sug.readinessModulated) {
       // Not "deloading". The pill would report a plateau remedy for someone
       // who has simply been away, and "re-approach" means the opposite of a
       // stall — this is the first session back, not the fourth failed one.
+      // A low-readiness hold or back-off is the same: about today, not a stall.
       status = "held";
     } else if (sug.sessionsUntilDeload === 1) {
       status = "near_deload";
@@ -1698,10 +1708,18 @@ export async function getWorkoutInsight(
 
   // ── Priority 0: readiness_low — if energy is very low today ─────────────────
   if (readiness != null && readiness <= 2) {
+    // Say only what the exercises' readiness settings actually did: lighter,
+    // held, or (all set to ignore) nothing at all.
+    const lighter = suggestions.some((s) => s.readinessModulated && s.reason === "deload");
+    const held = suggestions.some((s) => s.reason === "held-readiness");
     return {
       type: "readiness_low",
-      headline: "Energy is low today. Targets adjusted — focus on technique.",
-      detail: "Weights have been reduced to match your readiness. Quality over quantity.",
+      headline: "Energy is low today. Focus on technique.",
+      detail: lighter
+        ? "Some weights are lighter today to match your readiness. Your plan is unchanged."
+        : held
+          ? "No weight increases today. They come back on a better day."
+          : "Quality over quantity.",
       ...cycleContext,
       sessionCount,
       exerciseInsights,
@@ -1732,7 +1750,7 @@ export async function getWorkoutInsight(
   if (cookedExerciseCount >= 3) {
     return {
       type: "deload_recommended",
-      headline: `${cookedExerciseCount} lifts hit RPE 9+ last session.`,
+      headline: `${cookedExerciseCount} lifts went to 1 rep or less in reserve last session.`,
       detail: "A planned light week now usually beats a forced break later.",
       ...cycleContext,
       sessionCount,
@@ -1745,7 +1763,7 @@ export async function getWorkoutInsight(
   if (nearDeloadExercise) {
     return {
       type: "plateau_warning",
-      headline: `${nearDeloadExercise.exerciseName} is 1 miss from a deload.`,
+      headline: `${nearDeloadExercise.exerciseName} is 1 miss from backing off.`,
       detail: "Push through with good form, or adjust weights proactively.",
       ...cycleContext,
       sessionCount,

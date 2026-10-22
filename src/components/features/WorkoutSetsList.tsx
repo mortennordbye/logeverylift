@@ -15,6 +15,8 @@ import { buildSetLog } from "@/lib/utils/set-log";
 import { computeMapping, toFlatItems } from "@/lib/utils/set-mapping";
 import type { FlatItem, RestFlatItem, SetFlatItem } from "@/lib/utils/set-mapping";
 import type { PRResult, ProgramSet } from "@/types/workout";
+import { effortPromptSet, type ProgressionScope } from "@/lib/utils/progression";
+import { rirFromRpe } from "@/lib/utils/rir";
 import {
   DndContext,
   KeyboardSensor,
@@ -85,6 +87,8 @@ type WorkoutSetsListProps = {
   onApplySuggestion?: (setId: number, weightKg: number, adjustedReps?: number, durationSeconds?: number, distanceMeters?: number) => void;
   onApplyRepSuggestion?: (setId: number, reps: number) => void;
   hideEffortPrompt?: boolean;
+  /** Which sets decide a session, and so which set the effort prompt asks about. */
+  progressionScope?: ProgressionScope;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -110,6 +114,7 @@ export function WorkoutSetsList({
   onApplySuggestion,
   onApplyRepSuggestion,
   hideEffortPrompt = false,
+  progressionScope = "all",
 }: WorkoutSetsListProps) {
   const router = useRouter();
   const workoutSession = useWorkoutSession();
@@ -317,17 +322,22 @@ export function WorkoutSetsList({
    */
   const effortPrompt = (() => {
     if (!isWorkout || effortSkipped || hideEffortPrompt) return null;
-    const working = flatItems.filter(
-      (i): i is SetFlatItem => i.type === "set" && (i.set.setType ?? "working") === "working",
+    const working = flatItems
+      .filter(
+        (i): i is SetFlatItem => i.type === "set" && (i.set.setType ?? "working") === "working",
+      )
+      .map((i) => i.set);
+    const target = effortPromptSet(
+      working,
+      progressionScope,
+      (set) =>
+        activeCompletedSets.has(set.id) && workoutSession?.overrides[set.id]?.rir == null,
     );
-    const last = working[working.length - 1];
-    if (!last || last.set.targetRir == null) return null;
-    if (!activeCompletedSets.has(last.set.id)) return null;
-    if (workoutSession?.overrides[last.set.id]?.rir != null) return null;
+    if (!target) return null;
     const setItems = flatItems.filter((i): i is SetFlatItem => i.type === "set");
     return {
-      set: last.set,
-      setIndex: setItems.findIndex((s) => s.set.id === last.set.id),
+      set: target,
+      setIndex: setItems.findIndex((s) => s.set.id === target.id),
     };
   })();
 
@@ -949,7 +959,9 @@ export function WorkoutSetsList({
       {effortPrompt && (
         <div className="mt-3 rounded-2xl bg-card border border-border p-4">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm font-medium">Last set — how much was left?</span>
+            <span className="text-sm font-medium">
+              Set {effortPrompt.setIndex + 1} — how much was left?
+            </span>
             <button
               onClick={() => setEffortSkipped(true)}
               className="text-xs text-muted-foreground font-medium min-h-[44px] px-2"
@@ -1336,6 +1348,8 @@ export function WorkoutSetsList({
               <p className="text-xs text-muted-foreground mb-4">
                 {sessionDetail.suggestion.hitsAchieved} of{" "}
                 {sessionDetail.suggestion.hitsRequired} sessions in a row.
+                {sessionDetail.suggestion.sessionsUntilDeload === 1 &&
+                  " One more miss backs off the weight."}
               </p>
               <ul className="flex flex-col gap-2">
                 {sessionDetail.suggestion.sessions?.map((session, i) => (
@@ -1676,7 +1690,12 @@ function SortableSetRow({
       <div className="relative w-7 h-7 rounded-full bg-muted flex items-center justify-center shrink-0">
         <span className="text-xs font-bold">{setNumber}</span>
         {isWorkout && suggestion?.sessionsUntilDeload === 1 && (
-          <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-500 border-2 border-background" />
+          <div
+            role="img"
+            aria-label="One more miss backs off the weight"
+            title="One more miss backs off the weight"
+            className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-amber-500 border-2 border-background"
+          />
         )}
       </div>
 
@@ -1812,7 +1831,8 @@ function SortableSetRow({
           // Parenthesise the qualifier only when there is a value in front of
           // it. Timed sets routinely have no basedOn* value, which rendered a
           // bare "Last: (OK)" that reads as a broken template.
-          const lastQualifier = `${suggestion.basedOnFeeling}${showRpe ? `, RPE ${suggestion.basedOnRpe}` : ""}`;
+          // Effort is logged as reps in reserve, so it reads back the same way.
+          const lastQualifier = `${suggestion.basedOnFeeling}${showRpe ? `, ${rirFromRpe(suggestion.basedOnRpe!)} RIR` : ""}`;
           const lastLabel = lastValue
             ? `Last: ${lastValue} (${lastQualifier})`
             : `Last: ${lastQualifier}`;
@@ -1906,7 +1926,7 @@ function SortableSetRow({
                     applied={!weightPending || isCompleted}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
-                    ↓ {suggestion.suggestedWeightKg}kg — back after a break
+                    {weightPending ? "↓" : "✓"} {suggestion.suggestedWeightKg}kg — back after a break
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "deload" && (
@@ -1915,7 +1935,10 @@ function SortableSetRow({
                     applied={!weightPending || isCompleted}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
-                    {weightPending ? "↓" : "✓"} {suggestion.suggestedWeightKg}kg — deload
+                    {/* A readiness back-off is for today only and never reaches
+                        the plan; a real back-off follows repeated misses. */}
+                    {weightPending ? "↓" : "✓"} {suggestion.suggestedWeightKg}kg —{" "}
+                    {suggestion.readinessModulated ? "lighter today" : "back off"}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "retry" && suggestion.suggestedReps === undefined && (
@@ -2014,9 +2037,9 @@ function SortableSetRow({
                     Target set by your training cycle
                   </span>
                 )}
-                {suggestion.readinessModulated && (
+                {suggestion.reason === "held-readiness" && (
                   <span className="text-[10px] text-muted-foreground/60">
-                    ↓ adjusted for readiness
+                    Holding today for low readiness
                   </span>
                 )}
               </div>

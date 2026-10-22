@@ -29,7 +29,7 @@ Behaviour specs — numbered, citable rules stating what a feature is meant to d
 
 | Spec | What it covers | Last verified |
 |---|---|---|
-| [specs/smart-incrementation.md](specs/smart-incrementation.md) | Progressive overload: increment sizing, the confidence & consensus gates, deload, retry, readiness, felt-easy, the eight configurable axes, the plan ratchet | 2026-09-07 @ `94a8048` |
+| [specs/smart-incrementation.md](specs/smart-incrementation.md) | Progressive overload: increment sizing, the confidence & consensus gates, deload, retry, readiness, felt-easy, the eight configurable axes, the plan ratchet | 2026-10-22 @ `b265f78` |
 | [specs/cycle-periodization.md](specs/cycle-periodization.md) | Block-level volume periodization: the ramp/deload/taper curve, deload cadence, the ACWR guardrail, phase prescriptions, the no-wearable adaptation nudge, and the weekly sync that writes derived targets onto the plan | 2026-08-25 @ `91c1646` |
 
 ## Conventions recap (the short version — full text in CLAUDE.md)

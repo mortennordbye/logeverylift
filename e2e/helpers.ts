@@ -156,14 +156,19 @@ async function dismissReadinessSheet(page: Page) {
 export function trackActions(page: Page, quietMs = 500): () => Promise<void> {
   let inFlight = 0;
   let lastActivity = Date.now();
+  // Only requests seen starting count. One already in flight when tracking
+  // began would otherwise finish as a decrement, leave the count at -1, and
+  // the wait below would never see zero.
+  const tracked = new Set<Request>();
   const isAction = (r: Request) => r.method() === "POST" && Boolean(r.headers()["next-action"]);
   page.on("request", (r) => {
     if (!isAction(r)) return;
+    tracked.add(r);
     inFlight++;
     lastActivity = Date.now();
   });
   const done = (r: Request) => {
-    if (!isAction(r)) return;
+    if (!tracked.delete(r)) return;
     inFlight--;
     lastActivity = Date.now();
   };
