@@ -1,0 +1,38 @@
+{
+  "name": "Barbell Curl",
+  "primary": "biceps",
+  "secondary": ["forearms"],
+  "cue": "Keep your elbows pinned to your sides. Curl the bar to your shoulders, then lower it under control.",
+  "phases": ["Curl", "Lower"],
+  "views": {
+    "front": {
+      "anchor": "lAnkle",
+      "keyframes": [
+        {
+          "head": [125, 60], "neck": [125, 84], "pelvis": [125, 160],
+          "lShoulder": [103, 92], "rShoulder": [147, 92],
+          "lElbow": [99, 138], "rElbow": [151, 138],
+          "lWrist": [101, 180], "rWrist": [149, 180],
+          "lHip": [113, 164], "rHip": [137, 164],
+          "lKnee": [112, 224], "rKnee": [138, 224],
+          "lAnkle": [111, 280], "rAnkle": [139, 280],
+          "lToe": [106, 287], "rToe": [144, 287]
+        },
+        { "lWrist": [104, 110], "rWrist": [146, 110] }
+      ],
+      "props": [{ "type": "barbell" }]
+    },
+    "side": {
+      "anchor": "ankle",
+      "keyframes": [
+        {
+          "head": [126, 62], "neck": [123, 86], "shoulder": [121, 94], "chest": [121, 124], "hip": [119, 164],
+          "elbow": [123, 140], "wrist": [130, 182],
+          "knee": [123, 224], "ankle": [121, 280], "toe": [141, 286]
+        },
+        { "elbow": [124, 141], "wrist": [150, 108] }
+      ],
+      "props": [{ "type": "barbell" }]
+    }
+  }
+}
