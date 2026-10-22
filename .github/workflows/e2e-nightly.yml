@@ -1,0 +1,71 @@
+name: E2E flake hunt
+
+# The PR gate runs the suite once. A test that fails one run in twenty passes
+# that gate most of the time and then fails someone's unrelated PR. Running
+# every spec three times a night finds it first, and on a different weekday
+# each night, which matters because the seeded cycle schedules programs by
+# weekday. A failure here emails the repo owner; treat it as a bug in the test
+# or the app (TESTING.md: no retries), never as noise.
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: E2E x3 (WebKit + Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: logeverylift_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps webkit chromium
+
+      - name: E2E, every spec three times
+        run: pnpm test:e2e --repeat-each=3
+        env:
+          E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/logeverylift_test
+
+      - name: Upload report and traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-nightly
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14

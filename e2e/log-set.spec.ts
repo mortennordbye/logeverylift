@@ -12,28 +12,27 @@ import { openFirstExercise, openWorkout } from "./helpers";
  * exercise that has unlogged sets. Idempotent: the test logs a set, asserts
  * it's logged, then un-logs it (toggleSet is a true toggle).
  *
- * UI state signals (set toggle button, `w-7 h-7 rounded-full`):
- *   - unlogged: `bg-transparent` + Play icon
- *   - logged:   `bg-primary` + Check icon
+ * UI state signals (the set toggle, "Log set N" / "Un-log set N"):
+ *   - unlogged: aria-pressed="false", Play icon
+ *   - logged:   aria-pressed="true", Check icon
  */
 test("logging a set toggles its completion state", async ({ page }) => {
   await openWorkout(page);
 
   // Tap the first exercise to open its set list. Via the helper because a tap
-  // dropped here does not fail loudly: `button.w-7.h-7.rounded-full` also
-  // matches the *exercise* toggle on the workout page, so the spec carries on
-  // asserting against the wrong control.
+  // dropped here does not fail loudly: the spec would carry on against the
+  // workout page instead of the set list.
   await openFirstExercise(page);
 
   // Find the first set's toggle button. The set toggle is the small round
-  // button at the start of each set row — `w-7 h-7 rounded-full`.
-  const firstSetToggle = page.locator("button.w-7.h-7.rounded-full").first();
+  // button at the start of each set row.
+  const firstSetToggle = page.getByTestId("set-row").first().getByRole("button", { name: /^(Log|Un-log) set 1$/ });
   await expect(firstSetToggle).toBeVisible();
-  await expect(firstSetToggle).toHaveClass(/bg-transparent/);
+  await expect(firstSetToggle).toHaveAttribute("aria-pressed", "false");
 
   // Tap to log.
   await firstSetToggle.click();
-  await expect(firstSetToggle).toHaveClass(/bg-primary/);
+  await expect(firstSetToggle).toHaveAttribute("aria-pressed", "true");
 
   // After logging, a rest countdown appears below the set. The timer starts
   // from the configured rest time (e.g. 02:30) and ticks down — assert it's
@@ -42,5 +41,5 @@ test("logging a set toggles its completion state", async ({ page }) => {
 
   // Cleanup: tap again to un-log so the test is idempotent.
   await firstSetToggle.click();
-  await expect(firstSetToggle).toHaveClass(/bg-transparent/);
+  await expect(firstSetToggle).toHaveAttribute("aria-pressed", "false");
 });

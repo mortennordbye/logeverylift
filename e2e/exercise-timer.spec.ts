@@ -28,7 +28,7 @@ test("exercise timer countdown shows 00:00 before completing", async ({ page }) 
   // Open the first set's edit view to override duration to 3 seconds for
   // the test. The set row is tappable; the edit view exposes a duration
   // picker with minute and second inputs.
-  const firstSetRow = page.locator("button.w-7.h-7.rounded-full").first();
+  const firstSetRow = page.getByTestId("set-row").first().getByRole("button", { name: /^(Log|Un-log) set 1$/ });
   await expect(firstSetRow).toBeVisible();
   // The set row container is the parent that's clickable. Click on the
   // duration text to open the edit view.
@@ -51,7 +51,7 @@ test("exercise timer countdown shows 00:00 before completing", async ({ page }) 
   // fast (15s) while still testing the completion frame. Scoped to the bottom
   // sheet so it can't match the "15s" start-delay chip in the edit view behind it.
   const fifteenSecondPreset = page
-    .locator("div.rounded-t-3xl")
+    .getByRole("dialog")
     .getByRole("button", { name: /^15\s?s?$/ });
 
   // Retry the open, and assert the outcome rather than the tap. A bare click()
@@ -81,13 +81,13 @@ test("exercise timer countdown shows 00:00 before completing", async ({ page }) 
   });
 
   // Tap the play button on the first set to start the timer. The play button
-  // lives next to the set toggle (the small w-7 h-7 round one).
-  const playBtn = page.locator("button.w-7.h-7.rounded-full").first();
+  // is the set toggle of a timed set.
+  const playBtn = page.getByTestId("set-row").first().getByRole("button", { name: /^(Log|Un-log) set 1$/ });
   await expect(playBtn).toBeVisible();
   await playBtn.click();
 
-  // After the timer completes the set is marked logged (toggle uses bg-primary).
-  await expect(playBtn).toHaveClass(/bg-primary/, { timeout: 25_000 });
+  // After the timer completes the set is marked logged.
+  await expect(playBtn).toHaveAttribute("aria-pressed", "true", { timeout: 25_000 });
 
   // The user must have seen the 00:00 frame before the overlay cleared —
   // this is the "timer ends a second early" regression guard.
@@ -95,5 +95,5 @@ test("exercise timer countdown shows 00:00 before completing", async ({ page }) 
 
   // Cleanup: un-log so the test is idempotent.
   await playBtn.click();
-  await expect(playBtn).toHaveClass(/bg-transparent/);
+  await expect(playBtn).toHaveAttribute("aria-pressed", "false");
 });

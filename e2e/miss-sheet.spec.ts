@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures/test";
-import { openFirstExercise, openWorkout, tapAndSave } from "./helpers";
+import { openFirstExercise, openWorkout, stableBox, tapAndSave, waitForLiveSession } from "./helpers";
 
 /**
  * Logging a set that fell short.
@@ -23,7 +23,7 @@ test("a long press logs the reps achieved without moving the target", async ({
   await openWorkout(page);
   await openFirstExercise(page);
 
-  const prescription = page.locator("p.text-lg.font-medium").first();
+  const prescription = page.getByTestId("set-prescription").first();
   await expect(prescription).toBeVisible({ timeout: 10_000 });
   const before = (await prescription.innerText()).trim();
   const target = Number(before.match(/^(\d+)\s/)?.[1]);
@@ -35,16 +35,21 @@ test("a long press logs the reps achieved without moving the target", async ({
     );
   }
 
-  const toggle = page.locator("button.w-7.h-7.rounded-full").first();
-  await expect(toggle).toHaveClass(/bg-transparent/);
+  const toggle = page.getByTestId("set-row").first().getByRole("button", { name: /^(Log|Un-log) set 1$/ });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  // The press is handled by pointerdown, which only exists once the list has
+  // hydrated; a press before that does nothing at all (seen 1 run in ~20 on
+  // WebKit). The live session is set by a client effect, so it marks hydration.
+  await waitForLiveSession(page);
 
   // Long press. `click({ delay })` is not enough: the handler runs off
   // pointerdown and a 450ms timer, so the press has to be held open.
   const press = async () => {
-    const box = await toggle.boundingBox();
-    if (!box) throw new Error("Set toggle has no box to press");
+    const box = await stableBox(toggle);
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
+    // Holding the press is the action under test (450ms to trigger).
+    // eslint-disable-next-line no-restricted-syntax
     await page.waitForTimeout(700);
     await page.mouse.up();
   };
@@ -52,8 +57,10 @@ test("a long press logs the reps achieved without moving the target", async ({
   await press();
 
   // The sheet, and the press that opened it must not also have logged the set.
-  await expect(page.getByText("Reps done")).toBeVisible({ timeout: 5_000 });
-  await expect(toggle).toHaveClass(/bg-transparent/);
+  // Scoped to the sheet: the set editor has a "Reps done" field too, and a
+  // press that missed the toggle opens the editor instead.
+  await expect(page.getByRole("dialog").getByText("Reps done")).toBeVisible({ timeout: 5_000 });
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
 
   const fewer = page.getByRole("button", { name: "One rep fewer" });
   await fewer.click();
@@ -65,13 +72,13 @@ test("a long press logs the reps achieved without moving the target", async ({
   });
 
   // Logged, short, and the prescription is untouched.
-  await expect(toggle).toHaveClass(/bg-primary/);
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
   await expect(prescription).toContainText(`${target - 2} done`);
   await expect(prescription).toContainText(before);
 
   // Cleanup: un-log, put the achieved count back to the target, un-log again.
   await toggle.click();
-  await expect(toggle).toHaveClass(/bg-transparent/);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
   await press();
   const more = page.getByRole("button", { name: "One rep more" });
   await more.click();
@@ -80,5 +87,5 @@ test("a long press logs the reps achieved without moving the target", async ({
     bodyIncludes: '"actualReps":',
   });
   await toggle.click();
-  await expect(toggle).toHaveClass(/bg-transparent/);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
 });

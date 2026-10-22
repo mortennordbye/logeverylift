@@ -151,6 +151,19 @@ Writing a spec:
   activation distance in steps, release over the target
   (`drag-reorder.spec.ts`).
 
+Two checks keep the suite from drifting, beyond the PR gate:
+
+- **ESLint guardrails on `e2e/`** (`eslint.config.mjs`) fail the build on a
+  fixed `waitForTimeout`, a selector built from Tailwind classes, or a spec
+  importing `test`/`expect` from `@playwright/test` instead of the fixture. A
+  genuine timing measurement (sampling an animation, holding a long press) may
+  opt out with an `eslint-disable-next-line` comment that says why.
+- **A nightly flake hunt** (`.github/workflows/e2e-nightly.yml`) runs every spec
+  three times. A test that fails one run in twenty slips through a single PR
+  run; three repeats a night catch it, and on a different weekday each night,
+  which matters because the seeded cycle schedules programs by weekday. A red
+  nightly is a bug to fix, in the test or the app.
+
 When a spec fails, the trace is in `test-results/<spec>/trace.zip`
 (`pnpm exec playwright show-trace <path>`); in CI, download the
 `playwright-report` artifact.

@@ -173,7 +173,7 @@ Before suggesting `git push` for any change that touches a **critical flow** —
 1. **Reachability** — `browser_navigate` to `http://localhost:3000`. Expect a redirect to `/login` (unauthenticated). Confirm the login form is visible. Capture `browser_console_messages`; any `error` level entry fails this step.
 2. **Login** — fill email + password from env vars, submit. Confirm landing on `/` with the "LogEveryLift" header visible.
 3. **Today's workout** — find the `Start Today's Workout` link or equivalent CTA. If absent (e.g. no active program), note it and skip steps 4–6.
-4. **Strength set logging** — open the first exercise; tap the `w-7 h-7 rounded-full` toggle on the first set. Confirm the toggle gains `bg-primary` and a `REST mm:ss` countdown appears. Tap again to un-log (idempotent).
+4. **Strength set logging** — open the first exercise; tap the first set's toggle (button "Log set 1"). Confirm it becomes "Un-log set 1" (`aria-pressed=true`) and a `REST mm:ss` countdown appears. Tap again to un-log (idempotent).
 5. **Timed set countdown** — find an exercise whose set summary shows `mm:ss` without `kg`. If none, skip with a note. Open the first set's edit view, override duration to the `15s` preset, save. Back on the set list, tap play. Within 20 seconds, assert `00:00` is visible (this is the timer-completion bug class). Confirm the set then shows as logged.
 6. **SetEditView notes** — tap a completed set to reopen the edit view. Confirm the notes textarea renders. Type a short note, save. Reopen and confirm the note persisted.
 7. **History page** — navigate to `/history`. Confirm at least one session row OR the empty-state copy. Confirm the search filter input is present. No console errors.

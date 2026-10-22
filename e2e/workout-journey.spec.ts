@@ -21,7 +21,7 @@ test("tick an exercise, finish, and the session is in history with its sets", as
   const id = await sessionId(page);
 
   const first = page.getByTestId("exercise-row").first();
-  const name = await first.locator("p.text-base").first().innerText();
+  const name = await first.getByRole("paragraph").first().innerText();
   const planned = await testDb()
     .select({ id: programSets.id })
     .from(programSets)

@@ -1691,11 +1691,11 @@ function SortableSetRow({
           <div>
             <div className="flex items-center gap-2">
               {set.distanceMeters ? (
-                <p className="text-lg font-medium">
+                <p className="text-lg font-medium" data-testid="set-prescription">
                   {formatEnduranceDistance(cfg.inputUnit, set.distanceMeters)}
                 </p>
               ) : (
-                <p className="text-lg font-medium text-muted-foreground">
+                <p className="text-lg font-medium text-muted-foreground" data-testid="set-prescription">
                   {totalSets > 1 ? `Interval ${setNumber}` : cfg.label}
                 </p>
               )}
@@ -1721,7 +1721,7 @@ function SortableSetRow({
             )}
           </div>
         ) : isTimed || set.durationSeconds != null ? (
-          <p className="text-lg font-medium">
+          <p className="text-lg font-medium" data-testid="set-prescription">
             {formatTime(overrideDurationSeconds ?? Number(set.durationSeconds ?? 60))}
             {(overrideStartDelaySeconds ?? set.startDelaySeconds ?? 0) > 0 && (
               <span className="text-xs text-muted-foreground font-normal ml-1.5">
@@ -1730,7 +1730,7 @@ function SortableSetRow({
             )}
           </p>
         ) : (
-          <p className="text-lg font-medium">
+          <p className="text-lg font-medium" data-testid="set-prescription">
             {Number(set.weightKg ?? 0) > 0
               ? `${set.targetReps ?? "?"} x ${Number(set.weightKg)}kg`
               : `${set.targetReps ?? "?"} reps`}
