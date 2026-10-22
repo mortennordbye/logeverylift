@@ -1,6 +1,6 @@
 /**
  * Prepare the e2e database: create it if missing, migrate, seed the exercise
- * library and create the e2e user.
+ * library and create one e2e account per Playwright worker.
  *
  * Run by Playwright's webServer before it starts the production build (see
  * playwright.config.ts), so `pnpm test:e2e` needs nothing but a Postgres to
@@ -14,6 +14,7 @@
 
 import { execFileSync } from "node:child_process";
 import pg from "pg";
+import { e2eUser } from "../e2e/fixtures/env";
 import { assertTestDatabase } from "./lib/test-database";
 
 async function main() {
@@ -36,8 +37,17 @@ async function main() {
     await client.end();
   }
 
-  for (const script of ["scripts/migrate.ts", "scripts/seed.ts", "scripts/create-e2e-user.ts"]) {
+  for (const script of ["scripts/migrate.ts", "scripts/seed.ts"]) {
     execFileSync("pnpm", ["exec", "tsx", script], { stdio: "inherit", env: process.env });
+  }
+  // One account per Playwright worker (e2e/fixtures/env.ts).
+  const workers = Number(process.env.E2E_WORKERS ?? 1);
+  for (let i = 0; i < workers; i++) {
+    const { email, password } = e2eUser(i);
+    execFileSync("pnpm", ["exec", "tsx", "scripts/create-e2e-user.ts"], {
+      stdio: "inherit",
+      env: { ...process.env, E2E_USER_EMAIL: email, E2E_USER_PASSWORD: password },
+    });
   }
 }
 

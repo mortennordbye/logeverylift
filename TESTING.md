@@ -61,7 +61,8 @@ spec yet and you touch it, add one.
   turned up were real bugs: the readiness sheet stalling, and the set editor
   cancelling its own write on iOS.
 - **Every test sets up its own data.** Integration tests truncate before each
-  test; e2e resets the e2e user before each spec. Never depend on order.
+  test; e2e resets the worker's own e2e account before each spec. Never depend
+  on order, or on another spec's data.
 
 ---
 
@@ -118,16 +119,22 @@ make e2e ARGS="--project=webkit -g drag"   # one engine, by name
 ```
 
 Needs only the compose Postgres. Playwright prepares `logeverylift_test`
-(`scripts/e2e-prepare.ts`: create, migrate, seed, e2e user), builds the app,
+(`scripts/e2e-prepare.ts`: create, migrate, seed, one e2e account per
+worker), builds the app,
 and serves the standalone production build on port 3917
 (`scripts/e2e-serve.sh`). It never reuses a running server, because one left
 over from an interrupted run was built from older code. Projects: `webkit`
-(iPhone 14 Pro) and `chromium` (Pixel 7).
+(iPhone 14 Pro) and `chromium` (Pixel 7). Specs run in parallel (up to 4
+workers locally, 2 per machine in CI, where the suite is split across two
+machines with `--shard`); each worker has its own account, so a spec may
+assume nothing about data it did not create or seed. `E2E_WORKERS=1` runs
+them one at a time.
 
 Writing a spec:
 
 - Import `test` and `expect` from `./fixtures/test`, never from
-  `@playwright/test`. The fixture resets the e2e user's data before the spec
+  `@playwright/test`. The fixture logs the spec in as its worker's account,
+  resets that account's data before the spec
   (fixed-seed demo data from `scripts/lib/demo-data.ts`) and **fails the spec on
   any uncaught page exception**. The one exception it makes is WebKit's report
   of a request cancelled by a page load the spec itself started. A request the

@@ -1,11 +1,12 @@
 import { test as base, expect } from "@playwright/test";
+import { authFile, e2eUser } from "./env";
 import { closeResetPool, resetE2EUser } from "./reset";
 
 /**
  * The `test` every spec imports. Two automatic fixtures:
  *
- * - **resetData** puts the e2e user back to the seeded state before the spec,
- *   so specs are independent and order doesn't matter.
+ * - **resetData** puts this worker's e2e account back to the seeded state
+ *   before the spec, so specs are independent and order doesn't matter.
  * - **failOnPageError** fails the spec on any uncaught exception in the page.
  *   A crash in an effect or event handler often leaves the screen looking fine
  *   while the feature behind it is dead, and no assertion about the UI notices.
@@ -20,9 +21,15 @@ export const test = base.extend<{ resetData: void; failOnPageError: void }, { re
     },
     { scope: "worker", auto: true },
   ],
+  // Each worker logs in as, and resets, its own account (fixtures/env.ts), so
+  // specs in different workers never see each other's data.
+  // `provide`, not `use`: React's hooks lint rule reads a named `use` call as a hook.
+  storageState: async ({}, provide, testInfo) => {
+    await provide(authFile(testInfo.parallelIndex));
+  },
   resetData: [
-    async ({}, use) => {
-      await resetE2EUser();
+    async ({}, use, testInfo) => {
+      await resetE2EUser(e2eUser(testInfo.parallelIndex).email);
       await use();
     },
     { auto: true },

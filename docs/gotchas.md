@@ -55,7 +55,7 @@ If you add a route that the app's own nav/persistence can point at, give it the 
 
 ## E2E / smoke credentials
 
-The Playwright suite needs none: `make e2e` creates `e2e@workout.local` in its own test database (`scripts/e2e-prepare.ts`, defaults in `e2e/fixtures/env.ts`). For the manual MCP smoke pass against the dev server, `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` live in `.env.local` (gitignored) if set there; source it (`set -a; . ./.env.local; set +a`) rather than prompting.
+The Playwright suite needs none: `make e2e` creates one account per worker (`e2e@workout.local`, `e2e+1@workout.local`, ...) in its own test database (`scripts/e2e-prepare.ts`, defaults in `e2e/fixtures/env.ts`). For the manual MCP smoke pass against the dev server, `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` live in `.env.local` (gitignored) if set there; source it (`set -a; . ./.env.local; set +a`) rather than prompting.
 
 ## E2E needs WebKit, and its installer can hang
 
