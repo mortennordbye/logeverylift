@@ -13,6 +13,7 @@ import {
   reorderCycleSlots,
   upsertCycleSlot,
 } from "@/lib/actions/training-cycles";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { Program, TrainingCycleWithSlots } from "@/types/workout";
 import {
   DndContext,
@@ -156,24 +157,24 @@ function DayOfWeekBuilder({
 
   async function handleSelectProgram(programId: number, label: string, autoComplete: boolean) {
     if (pickerDay === null) return;
-    await upsertCycleSlot({
+    await callAction(upsertCycleSlot({
       trainingCycleId: cycle.id,
       dayOfWeek: pickerDay,
       programId,
       label,
       autoComplete,
-    });
+    }));
     setPickerDay(null);
     router.refresh();
   }
 
   async function handleToggleAuto(next: boolean) {
     if (pickerDay === null) return;
-    await upsertCycleSlot({
+    await callAction(upsertCycleSlot({
       trainingCycleId: cycle.id,
       dayOfWeek: pickerDay,
       autoComplete: next,
-    });
+    }));
     router.refresh();
   }
 
@@ -183,7 +184,7 @@ function DayOfWeekBuilder({
     if (pickerDay === null) return;
     const existing = slotByDay[pickerDay];
     if (existing) {
-      await removeCycleSlot(existing.id, cycle.id);
+      await callAction(removeCycleSlot(existing.id, cycle.id));
     }
     setPickerDay(null);
     router.refresh();
@@ -345,60 +346,61 @@ function RotationBuilder({
     const newIndex = localSlots.findIndex((s) => s.id === over.id);
     const reordered = arrayMove(localSlots, oldIndex, newIndex);
     setLocalSlots(reordered);
-    await reorderCycleSlots(
+    const result = await callAction(reorderCycleSlots(
       cycle.id,
       reordered.map((s) => s.id),
-    );
+    ));
+    if (!result.success) setLocalSlots(localSlots);
     router.refresh();
   }
 
   async function handleSelectProgram(programId: number, label: string, autoComplete: boolean) {
     if (!editingSlot) return;
-    await upsertCycleSlot({
+    await callAction(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: editingSlot.orderIndex ?? undefined,
       programId,
       label,
       autoComplete,
-    });
+    }));
     setEditingSlot(null);
     router.refresh();
   }
 
   async function handleToggleAuto(next: boolean) {
     if (!editingSlot) return;
-    await upsertCycleSlot({
+    await callAction(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: editingSlot.orderIndex ?? undefined,
       autoComplete: next,
-    });
+    }));
     router.refresh();
   }
 
   async function handleRest() {
     if (!editingSlot) return;
-    await upsertCycleSlot({
+    await callAction(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: editingSlot.orderIndex ?? undefined,
       programId: null,
       label: "Rest",
-    });
+    }));
     setEditingSlot(null);
     router.refresh();
   }
 
   async function handleRemove(slot: Slot) {
-    await removeCycleSlot(slot.id, cycle.id);
+    await callAction(removeCycleSlot(slot.id, cycle.id));
     router.refresh();
   }
 
   async function handleAddSlot() {
     const nextOrder = localSlots.length + 1;
-    await upsertCycleSlot({
+    await callAction(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: nextOrder,
       label: `Day ${nextOrder}`,
-    });
+    }));
     router.refresh();
   }
 

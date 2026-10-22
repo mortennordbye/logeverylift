@@ -2,6 +2,7 @@
 
 import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { removeFriend, respondToFriendRequest, searchUsers, sendFriendRequest } from "@/lib/actions/friends";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { UserSearchResult } from "@/types/workout";
 import { Check, Loader2, Search, UserCheck, UserPlus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -107,7 +108,7 @@ export function FriendSearchClient() {
 
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
-      const result = await searchUsers({ query: query.trim() });
+      const result = await callAction(searchUsers({ query: query.trim() }));
       if (result.success) setResults(result.data);
       setLoading(false);
     }, 300);
@@ -121,15 +122,15 @@ export function FriendSearchClient() {
     setActionLoading(user.id);
 
     if (user.friendshipStatus === "none") {
-      await sendFriendRequest({ addresseeId: user.id });
+      await callAction(sendFriendRequest({ addresseeId: user.id }));
     } else if (user.friendshipStatus === "pending_sent" && user.friendshipId) {
-      await removeFriend({ friendshipId: user.friendshipId });
+      await callAction(removeFriend({ friendshipId: user.friendshipId }));
     } else if (user.friendshipStatus === "pending_received" && user.friendshipId) {
-      await respondToFriendRequest({ friendshipId: user.friendshipId, action: "accepted" });
+      await callAction(respondToFriendRequest({ friendshipId: user.friendshipId, action: "accepted" }));
     }
 
     // Re-fetch results to update status
-    const result = await searchUsers({ query: query.trim() });
+    const result = await callAction(searchUsers({ query: query.trim() }));
     if (result.success) setResults(result.data);
     setActionLoading(null);
     router.refresh();

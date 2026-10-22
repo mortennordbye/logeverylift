@@ -6,6 +6,7 @@ import { updateUserProfile } from "@/lib/actions/profile";
 import type { Goal } from "@/lib/utils/goals";
 import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { CheckCircle2, KeyRound, LogOut } from "lucide-react";
 import { useState } from "react";
 
@@ -237,11 +238,11 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
     setProfileSaving(true);
     setProfileError(null);
     const { name: profileName, goals, ...bodyFields } = profile;
-    const result = await updateUserProfile({
+    const result = await callAction(updateUserProfile({
       ...bodyFields,
       name: profileName.trim() || undefined,
       goals: goals.length > 0 ? goals : null,
-    });
+    }));
     setProfileSaving(false);
     if (result.success) {
       setProfileSaved(true);
@@ -254,7 +255,8 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
   async function handleActivityPrivacyToggle() {
     const next = !activityPrivacy;
     setActivityPrivacy(next);
-    await updateActivityPrivacy({ showActivityToFriends: next });
+    const result = await callAction(updateActivityPrivacy({ showActivityToFriends: next }));
+    if (!result.success) setActivityPrivacy(!next);
   }
 
   return (

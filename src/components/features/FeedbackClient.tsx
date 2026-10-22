@@ -1,6 +1,7 @@
 "use client";
 
 import { submitFeedback } from "@/lib/actions/feedback";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { ChevronLeft, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -25,7 +26,7 @@ export function FeedbackClient() {
     if (!message.trim()) return;
     setLoading(true);
     setError(null);
-    const result = await submitFeedback({ type, message: message.trim() });
+    const result = await callAction(submitFeedback({ type, message: message.trim() }));
     setLoading(false);
     if (!result.success) {
       setError(result.error);

@@ -1,585 +1,179 @@
-# Testing Guide
+# Testing
 
-Full reference for verifying this app — from fast unit tests to interactive MCP browser sessions.
+How this app is tested, and what a change has to come with. Written for whoever
+changes the code next, person or agent.
 
----
-
-## Quick reference
-
-| Check | Command | Speed |
-|-------|---------|-------|
-| Unit tests | `pnpm test` | < 2s |
-| Watch mode | `pnpm test:watch` | live |
-| Single file | `pnpm test src/__tests__/progressive-suggestions.test.ts` | < 1s |
-| Single test | `pnpm test -t "deload"` | < 1s |
-| TypeScript | `docker-compose exec app pnpm exec tsc --noEmit` | ~15s |
-| Lint | `docker-compose exec app pnpm lint` | ~10s |
-| Build check | `docker-compose exec app pnpm build` | ~60s |
-| Start dev | `make dev` | ~30s |
+The short version: **a change that could break a workout has to come with a test
+that would have failed before the change.** Unit tests alone cannot carry that.
+Most of what breaks a real workout happens where a pure function meets React
+state, the database or the browser, and a suite that only tests pure functions
+passes straight through those breaks.
 
 ---
 
-## 1 — Unit tests (Vitest)
+## The four layers
 
-All pure logic lives in `src/__tests__/`. Run without Docker.
+| Layer | Runs | Where | Catches | Command |
+|-------|------|-------|---------|---------|
+| Unit | Node, no I/O | `src/__tests__/*.test.ts` | Logic in pure functions: progression, formatting, set mapping, payload building, queue retry rules | `pnpm test` |
+| Component | jsdom + Testing Library | `src/__tests__/components/*.test.tsx` | React behaviour without a browser: timers, effects, providers, hydration order | `pnpm test` |
+| Integration | Node + real Postgres | `src/__tests__/integration/*.test.ts` | Server Actions against real SQL: ownership, upsert keys, transactions, concurrency, migration data steps | `pnpm test:int` |
+| End-to-end | Production build + WebKit and Chromium | `e2e/*.spec.ts` | Whole flows as a user does them: taps, drags, timers, reloads, offline | `make e2e` |
 
-```bash
-pnpm test                                                   # all 210 tests
-pnpm test src/__tests__/progressive-suggestions.test.ts    # progression logic
-pnpm test src/__tests__/format.test.ts                      # formatters
-pnpm test src/__tests__/set-mapping.test.ts                 # drag-reorder logic
-pnpm test src/__tests__/validators.test.ts                  # Zod schemas
-pnpm test src/__tests__/training-cycle-validators.test.ts   # cycle validators
-```
+`pnpm verify` runs typecheck, lint, the doc-claims check, unit + component and
+integration tests. CI runs all of that plus e2e on every PR, and the Docker
+image is only built (so nothing deploys) when both pass.
 
-### What is covered
+---
 
-| File | Covers |
-|------|--------|
-| `progressive-suggestions.test.ts` | `buildSuggestion`, deload, retry, RPE gate, bodyweight fallback, time/distance confidence, readiness modulation |
-| `format.test.ts` | `formatTime`, `buildSetSummary`, `setToken`, `restToken` |
-| `set-mapping.test.ts` | `toFlatItems`, `computeMapping` — drag-and-drop reorder invariants |
-| `validators.test.ts` | Zod input schemas for server actions |
-| `training-cycle-validators.test.ts` | Cycle duration and week validation |
+## Which test a change needs
 
-### Adding a regression test
+Pick the lowest layer that can fail for the bug you are guarding against. When
+in doubt, go one higher.
 
-When you find a bug in `progression.ts`, add a failing test first:
+| You changed | Add or update |
+|-------------|---------------|
+| A pure function in `src/lib/utils/` | Unit test |
+| Logic inside a component (a handler that builds a payload, decides a state transition, merges overrides) | Move the logic into `src/lib/utils/` and unit-test it there; leave the component calling it |
+| A timer, effect, context or provider (`src/contexts/`, `useEffect` with timers or storage) | Component test with fake timers |
+| A Server Action, a query, a schema change or a migration | Integration test. A migration that rewrites existing rows also gets a test that runs its data step on legacy-shaped rows (see `migrations.test.ts`) |
+| Anything in a critical flow: logging a set, the rest or exercise timer, editing a set, drag-reorder, finishing a workout, login | E2E spec, plus whichever of the above applies |
+| A bug fix | A test that reproduces the bug, written and seen failing before the fix |
+
+"Critical flow" is the list in `CLAUDE.md` under the smoke pass. If a flow has no
+spec yet and you touch it, add one.
+
+---
+
+## Rules that apply to every layer
+
+- **See it fail.** A new regression test is only proof once you have run it
+  against the unfixed code and watched it fail. A test that passes either way
+  guards nothing.
+- **Assert the outcome, not the call.** "The row in `workout_sets` belongs to
+  set A" beats "logWorkoutSet was called". The bugs that shipped had the right
+  calls with the wrong keys.
+- **No sleeps for correctness.** Wait for the condition: `expect.poll`,
+  `waitForLiveSession`, `trackActions`, fake timers. A fixed wait is a race
+  that is usually won.
+- **No retries to make a test pass.** CI runs with `retries: 0`. A flaky test is
+  either a test bug or an app bug; find out which. Two "flakes" this suite
+  turned up were real bugs: the readiness sheet stalling, and the set editor
+  cancelling its own write on iOS.
+- **Every test sets up its own data.** Integration tests truncate before each
+  test; e2e resets the e2e user before each spec. Never depend on order.
+
+---
+
+## Unit and component tests
+
+Plain Vitest. Component tests opt into the browser-like environment with a
+docblock on the first line:
 
 ```ts
-// src/__tests__/progressive-suggestions.test.ts
-it("reproduces the bug", () => {
-  const rows = [makeRow({ ... })];
-  const result = buildSuggestion(rows, makePs({ progressionMode: "weight" }), null);
-  expect(result?.reason).toBe("held"); // was wrong before fix
-});
+// @vitest-environment jsdom
 ```
 
----
+Mock Server Actions at the module boundary (`vi.mock("@/lib/actions/...")`),
+never `@/db` from a component test. Use `vi.useFakeTimers()` for anything with a
+countdown, a backoff or a debounce, and drive it with
+`vi.advanceTimersByTimeAsync`. A component that re-renders on a clock should be
+tested *with* a re-rendering parent: that is how the readiness auto-skip stall
+was caught (`components/readiness-sheet.test.tsx`).
 
-## 2 — Static analysis
-
-```bash
-# TypeScript (must be run inside container)
-docker-compose exec app pnpm exec tsc --noEmit
-
-# ESLint
-docker-compose exec app pnpm lint
-
-# Production build (catches server/client boundary errors Next.js catches at build time)
-docker-compose exec app pnpm build
-```
-
-TypeScript errors Surface missing fields, wrong types in server actions, and Server/Client Component boundary issues that unit tests won't catch.
-
----
-
-## 3 — Database commands
+## Integration tests
 
 ```bash
-docker-compose exec app pnpm db:push          # apply schema changes
-docker-compose exec app pnpm db:seed          # seed with realistic data
-docker-compose exec app pnpm db:seed-fake     # seed with faker data (many sessions)
-docker-compose exec app pnpm db:studio        # Drizzle Studio at localhost:4983
-docker-compose exec app pnpm db:diagnose      # diagnose schema drift
+pnpm test:int
 ```
 
-Use `db:seed-fake` before MCP browser sessions to have realistic history for progression suggestions and insight banners.
+Needs the compose Postgres up (`make dev`). The global setup creates
+`logeverylift_int_test`, applies every committed migration (the same SQL prod
+runs), and each test starts from empty tables.
 
----
-
-## 4 — MCP browser testing (Playwright)
-
-This is the primary way to catch integration bugs — UI state, server action errors, navigation, rest timers, and suggestion display.
-
-### Prerequisites
-
-1. Dev server running: `make dev`
-2. App seeded with data: `docker-compose exec app pnpm db:seed`
-3. A client with the Playwright MCP tools available
-
-### Screenshot convention
-
-Always save screenshots to `.playwright-mcp/<name>.png` (folder is gitignored):
-
-```
-mcp__playwright__browser_take_screenshot → path: ".playwright-mcp/login.png"
-```
-
-### MCP tool reference
-
-| Tool | Purpose |
-|------|---------|
-| `browser_navigate` | Go to a URL |
-| `browser_snapshot` | Get accessibility tree (find selectors without screenshots) |
-| `browser_click` | Tap a button or link |
-| `browser_type` | Type into a focused input |
-| `browser_fill_form` | Fill multiple fields at once |
-| `browser_press_key` | Keyboard events (Enter, Tab, Escape) |
-| `browser_wait_for` | Wait for element / network idle |
-| `browser_take_screenshot` | Visual screenshot |
-| `browser_console_messages` | Catch JS errors and console logs |
-| `browser_network_requests` | Inspect fetch/XHR calls and status codes |
-| `browser_evaluate` | Run arbitrary JS in the page |
-
----
-
-## 5 — MCP test scenarios
-
-Run these end-to-end. Each section is independent — reset state between sections using `db:seed`.
-
----
-
-### 5.1 Authentication
-
-```
-navigate → http://localhost:3000
-expect: redirect to /login
-```
-
-**Login flow**
-```
-navigate → http://localhost:3000/login
-fill: email = morten03nordbye@gmail.com, password = <your password>
-click: Sign in button
-expect: redirect to / (home dashboard)
-screenshot → .playwright-mcp/auth-logged-in.png
-```
-
-**Signup form validation**
-```
-navigate → http://localhost:3000/signup
-click: Sign up without filling fields
-expect: validation errors visible, no redirect
-```
-
----
-
-### 5.2 Program setup
-
-```
-navigate → http://localhost:3000/programs
-screenshot → .playwright-mcp/programs-list.png
-```
-
-**Create a new program**
-```
-click: New Program (or "+" button)
-type: program name "MCP Test Program"
-click: Save / Create
-expect: redirect to program detail page
-screenshot → .playwright-mcp/program-created.png
-```
-
-**Add a strength exercise (bench press)**
-```
-navigate → /programs/<id>/add-exercise
-search for: "Bench Press"
-click: Bench Press
-expect: exercise added to program, set list visible
-```
-
-**Add a set with weight + reps**
-```
-navigate → /programs/<id>/exercises/<programExerciseId>/sets/new
-fill: targetReps = 8, weightKg = 80
-click: Save
-expect: set appears in list showing "8 x 80kg"
-```
-
-**Add a timed exercise (Plank)**
-```
-navigate → /programs/<id>/add-exercise
-search: "Plank"
-add exercise → navigate to sets/new
-fill: durationSeconds = 60 (1:00)
-save
-expect: set shows "01:00"
-```
-
-**Add a running exercise**
-```
-add exercise: "Running" or "Treadmill"
-navigate to sets/new
-fill: distanceMeters = 5000, durationSeconds = 1800
-save
-expect: set shows "5.0 km · 30:00"
-```
-
-**Configure progression mode**
-```
-navigate → /programs/<id>/exercises/<programExerciseId>
-look for: progression mode picker
-change: "Weight" → "Smart"
-verify: mode change is persisted (reload page)
-```
-
----
-
-### 5.3 Active workout — strength flow
-
-```
-navigate → /programs/<id>/workout
-expect: insight banner visible (first_session or on_track)
-expect: exercise list rendered
-screenshot → .playwright-mcp/workout-start.png
-```
-
-**Complete a set**
-```
-tap: play (▶) button on Set 1
-expect: circle fills with checkmark
-expect: rest timer starts below the next set
-expect: completed set fades to 50% opacity
-screenshot → .playwright-mcp/set-completed.png
-check console: no JS errors
-```
-
-**PR celebration**
-```
-(need a seeded session with lower previous weight)
-complete a set at a higher weight
-expect: 🏆 confetti animation appears
-expect: "Personal Record" overlay with weight or 1RM value
-screenshot → .playwright-mcp/pr-celebration.png
-```
-
-**Suggestion pills — weight progression**
-```
-(seed 2+ sessions where user completed sets at RPE ≤ 7)
-navigate to workout
-expect: "↑ 82.5kg" pill below the set row
-tap the pill
-expect: set row updates to show "8 x 82.5kg"
-complete the set
-verify: set is logged at 82.5kg, not 80kg
-network_requests: confirm POST to logWorkoutSet contains weightKg=82.5
-```
-
-**Suggestion pills — deload**
-```
-(seed 3+ consecutive sessions where actualReps < targetReps)
-navigate to workout
-expect: "↓ 72kg — deload" pill (orange)
-tap it
-expect: set updates to 72kg
-```
-
-**Undo completed set**
-```
-tap checkmark on a completed set
-expect: set reverts to uncompleted state (play button returns)
-expect: rest timer clears
-```
-
-**Catch-up logging**
-```
-skip Set 1 (don't tap play)
-tap play on Set 2
-expect: Set 1 is auto-completed (catch-up)
-check network_requests: two POST calls to logWorkoutSet (one for Set 1 with rest=0, one for Set 2)
-```
-
----
-
-### 5.4 Active workout — timed exercise (Plank)
-
-```
-navigate to workout containing a plank set
-tap: play button
-expect: full-screen timer overlay appears
-expect: countdown starts (60 → 59 → 58...)
-screenshot → .playwright-mcp/exercise-timer.png
-```
-
-**Let timer run to 0**
-```
-(use browser_evaluate to fast-forward: document.dispatchEvent(...) or just wait)
-expect: set auto-completes
-expect: logged durationSeconds = target (60)
-```
-
-**Tap Done early (e.g. at 40s remaining)**
-```
-tap: Done button while 40s remain
-expect: set completes
-network_requests: confirm durationSeconds = 20 (60 - 40), not 60
-```
-
-**Tap Cancel**
-```
-tap: Cancel
-expect: timer closes, set remains uncompleted
-```
-
----
-
-### 5.5 Active workout — running
-
-```
-navigate to workout with running exercise
-tap: play button
-expect: LogRunModal opens (not timer, not instant complete)
-screenshot → .playwright-mcp/log-run-modal.png
-```
-
-**Pre-filled from suggestion**
-```
-first tap the "↑ 5.5km" distance suggestion pill
-then tap play
-expect: LogRunModal pre-fills distance as 5.5km (not 5.0km from program)
-```
-
-**Complete a run**
-```
-in LogRunModal:
-  set distance to 5.0 km
-  set duration to 28:00
-  set RPE to 7
-  set incline to 2%
-confirm
-expect: set marked complete
-network_requests: distanceMeters=5000, durationSeconds=1680, inclinePercent=2, rpe=7
-```
-
----
-
-### 5.6 Finish workout
-
-```
-navigate to /programs/<id>/workout
-complete all sets
-tap: Finish Workout button
-expect: session saved, redirect to /history/<sessionId>
-expect: session detail shows all exercises, sets, weights
-screenshot → .playwright-mcp/session-detail.png
-```
-
-**Session feeling**
-```
-on finish page: select feeling (Tired / OK / Good / Awesome)
-submit
-verify in DB: workoutSessions.feeling = selected value
-docker-compose exec app pnpm db:studio (check manually)
-```
-
----
-
-### 5.7 Progression suggestions — full cycle
-
-This is the most important flow to test.
-
-**Setup (run in db:studio or seed script):**
-- Create program with Bench Press
-- Insert 2 completed sessions with { actualReps=8, targetReps=8, weightKg=80, rpe=7 }
-- progressionMode = "weight", overloadIncrementKg = null (adaptive)
-
-```
-navigate to /programs/<id>/workout
-expect: "↑ 82.5kg" suggestion pill (REQUIRED_HITS=2 met, adaptive increment = 2.5kg)
-tap pill
-expect: set shows 82.5kg
-complete set
-finish workout
-navigate back to workout (new session)
-expect: suggestion is now "↑ 85kg" (progressed again from 82.5)
-```
-
-**Deload cycle:**
-```
-seed 3 sessions with { actualReps=5, targetReps=8, rpe=9 } at 85kg
-navigate to workout
-expect: "↓ 76.5kg — deload" pill
-tap deload, complete set
-finish workout
-navigate to workout again
-expect: NO retry pill suggesting 85kg
-expect: suggestion holds at 76.5kg until confidence rebuilds
-```
-
-**Bodyweight exercise:**
-```
-add pull-ups (weightKg=0, progressionMode="weight", overloadIncrementReps=1)
-seed 2 sessions with { actualReps=8, targetReps=8, weightKg=0, rpe=6 }
-navigate to workout
-expect: "↑ 9 reps" pill (NOT "↑ 2.5kg")
-```
-
-**Timed exercise (RPE gate):**
-```
-add plank (progressionMode="time", durationSeconds=60)
-seed 2 sessions with { durationSeconds=60, rpe=9 }
-navigate to workout
-expect: NO "↑ 70s duration" pill (RPE 9 does not count as confident)
-change to 2 sessions with rpe=7
-navigate to workout
-expect: "↑ 70s duration" pill appears
-```
-
----
-
-### 5.8 History
-
-```
-navigate → /history
-expect: list of completed sessions, newest first
-click a session
-expect: session detail with exercises grouped, sets showing actual weight/reps/RPE
-screenshot → .playwright-mcp/history-detail.png
-```
-
-**Exercise PRs**
-```
-navigate to history detail for a session where a PR was hit
-expect: 🏆 PR badge visible on the relevant set
-```
-
----
-
-### 5.9 Settings and profile
-
-```
-navigate → /settings
-fill: experience level = Intermediate
-fill: goal = Strength
-save
-navigate to a workout
-expect: adaptive increment uses 2.5kg baseline (not beginner 5kg)
-```
-
----
-
-### 5.10 Navigation and layout
-
-```
-tap each bottom nav tab: Home, Programs, History, More
-expect: correct page loads, no crashes
-screenshot → .playwright-mcp/nav-home.png
-```
-
-**iOS safe area**
-```
-browser_resize → width: 390, height: 844 (iPhone 14)
-navigate to /programs/<id>/workout
-expect: content not cut off by bottom nav bar
-expect: complete button reachable without scrolling over nav
-screenshot → .playwright-mcp/mobile-workout.png
-```
-
-**Keyboard on inputs**
-```
-navigate to /programs/<id>/exercises/<id>/sets/<id>
-tap weight input
-expect: number keyboard appears, value editable
-type: 85
-blur / press Done
-expect: weight field shows 85
-```
-
----
-
-### 5.11 Console and network health checks
-
-Run these on every major page:
-
-```
-browser_console_messages
-→ expect: no errors (ignore "DevTools listening" and manifest 404s)
-
-browser_network_requests
-→ expect: no 4xx or 5xx responses
-→ server actions are POST to the same origin — verify 200 OK
-```
-
-Key server action endpoints to watch:
-- `POST /programs/[id]/workout` — `logWorkoutSet`
-- `POST /programs/[id]/exercises/[id]` — `updateProgramSet`
-- `POST /programs/page` — create/delete programs
-
----
-
-### 5.12 Error states
-
-**Invalid program ID**
-```
-navigate → /programs/999999/workout
-expect: 404 page or graceful error (not unhandled exception)
-```
-
-**Network failure simulation**
-```
-browser_evaluate: window.fetch = () => Promise.reject(new Error("offline"))
-tap: play button on a set
-expect: no crash, UI reverts or shows error state
-```
-
-**Empty program**
-```
-create a program with no exercises
-navigate to workout
-expect: empty state message, not a blank/broken UI
-```
-
----
-
-## 6 — Progressive overload algorithm — manual verification
-
-After running the app for several sessions, verify the suggestion data against what `buildSuggestion` would compute.
-
-### Fetch suggestion data directly
-
-```bash
-# In Drizzle Studio (localhost:4983 while dev is running):
-# Check workoutSets for a given exerciseId — confirm actualReps, weightKg, rpe
-# Check programExercises.progressionMode and overloadIncrementKg
-```
-
-### Compute expected suggestion manually
+Call the Server Action directly. Only two things are faked
+(`src/__tests__/integration/setup.ts`): who is calling, via `asUser(id)`, and
+Next's cache invalidation. Build data with the factories in `factories.ts`:
 
 ```ts
-// Run in node REPL or test file:
-import { buildSuggestion } from "@/lib/utils/progression";
-
-const rows = [
-  { exerciseId: 1, setNumber: 1, actualReps: 8, targetReps: 8,
-    weightKg: "82.50", durationSeconds: null, feeling: "Good",
-    date: "2026-04-17", rpe: 7 },
-  { exerciseId: 1, setNumber: 1, actualReps: 8, targetReps: 8,
-    weightKg: "80.00", durationSeconds: null, feeling: "Good",
-    date: "2026-04-10", rpe: 6 },
-];
-const ps = {
-  programSetId: 1, setNumber: 1, targetReps: 8,
-  durationSeconds: null, exerciseId: 1,
-  overloadIncrementKg: null, overloadIncrementReps: 0,
-  progressionMode: "weight", movementPattern: "push",
-};
-console.log(buildSuggestion(rows, ps, { experienceLevel: "intermediate", goal: "strength" }, 4));
-// Expected: { reason: "progressed", suggestedWeightKg: 85 }
+const user = await createUser();
+asUser(user.id);
+const { program, slots } = await createProgram(user.id, [{ exerciseId, sets: [{}, {}, {}] }]);
+const session = await createSession(user.id, program.id);
+const result = await logWorkoutSet({ sessionId: session.id, /* ... */ });
 ```
 
+Always add a test that calls the action as a *different* user and checks it is
+refused and nothing changed. The demo user shares tables with real users.
+
+For concurrency, fire the calls with `Promise.all` and repeat a few rounds; a
+race shows only sometimes (`workout-sets.test.ts`, "sets logged at once").
+
+## End-to-end tests
+
+```bash
+make e2e                                   # everything, both engines
+make e2e ARGS="e2e/drag-reorder.spec.ts"   # one file
+make e2e ARGS="--project=webkit -g drag"   # one engine, by name
+```
+
+Needs only the compose Postgres. Playwright prepares `logeverylift_test`
+(`scripts/e2e-prepare.ts`: create, migrate, seed, e2e user), builds the app,
+and serves the standalone production build on port 3917
+(`scripts/e2e-serve.sh`). It never reuses a running server, because one left
+over from an interrupted run was built from older code. Projects: `webkit`
+(iPhone 14 Pro) and `chromium` (Pixel 7).
+
+Writing a spec:
+
+- Import `test` and `expect` from `./fixtures/test`, never from
+  `@playwright/test`. The fixture resets the e2e user's data before the spec
+  (fixed-seed demo data from `scripts/lib/demo-data.ts`) and **fails the spec on
+  any uncaught page exception**. The one exception it makes is WebKit's report
+  of a request cancelled by a page load the spec itself started. A request the
+  app cancels on its own still fails the spec, and so does an unhandled
+  rejection. Do not widen the filter; fix the app or wait for its writes before
+  navigating (`tapAndSave`, `trackActions`).
+- Find elements by role and accessible name (`getByRole("button", { name: "Log set 1" })`),
+  or by `data-testid` where there is no good name (`set-row`, `exercise-row`).
+  Never by Tailwind classes. Adding an `aria-label` to an unlabeled button is
+  usually the right fix and helps screen readers too.
+- Navigate with the helpers in `e2e/helpers.ts`: `openWorkout`,
+  `openFirstExercise`, `openTimedExercise`, `waitForLiveSession`. They handle
+  the readiness sheet and WebKit's dropped taps.
+- Wait for writes with `tapAndSave` (one tap) or `trackActions` (a drag or a
+  multi-write flow) before reloading or querying. The app saves optimistically,
+  and reloading too early cancels the write.
+- Check what was written: `testDb()` from `./fixtures/reset` queries the test
+  database directly. A drag spec that only looks at the screen passed while the
+  logs were landing on the wrong sets.
+- Drag with real pointer moves: press on the handle, move past dnd-kit's 8 px
+  activation distance in steps, release over the target
+  (`drag-reorder.spec.ts`).
+
+When a spec fails, the trace is in `test-results/<spec>/trace.zip`
+(`pnpm exec playwright show-trace <path>`); in CI, download the
+`playwright-report` artifact.
+
 ---
 
-## 7 — Bug reporting checklist
+## Manual checks
 
-When you find a bug, collect:
+Automated tests do not replace a look at the real thing on a phone-sized screen.
 
-- [ ] Screenshot (`.playwright-mcp/<name>.png`)
-- [ ] Console errors (`browser_console_messages`)
-- [ ] Network requests showing wrong payload or status (`browser_network_requests`)
-- [ ] Exact navigation path to reproduce
-- [ ] Seed state (what sessions/data was in DB)
-- [ ] Expected vs. actual behaviour
+- **Smoke pass before pushing a critical-flow change:** the Playwright MCP
+  protocol in `CLAUDE.md`.
+- **Exploratory checklist:** `UI_TESTS.md`, a screen-by-screen list of expected
+  behaviour for a full manual run.
+- **Real device:** gestures (the iOS edge swipe), haptics, notifications and
+  backgrounding can only be checked on an iPhone.
 
-Then write a unit test in `src/__tests__/progressive-suggestions.test.ts` (for logic bugs) or a repro note (for UI bugs) before fixing.
+## Test databases and safety
 
----
-
-## 8 — CI / automated checks
-
-The GitHub Action runs on every push:
-- `pnpm build` — TypeScript + Next.js build
-- Docker image build
-- ArgoCD deploys and runs `db:migrate` automatically
-
-There is no automated E2E CI yet. The MCP browser session above is the manual equivalent.
+Everything that writes or wipes data on the tests' behalf goes through
+`assertTestDatabase` (`scripts/lib/test-database.ts`), which refuses any
+database not named `*_test`. URLs come from `scripts/lib/local-test-db.ts`:
+`TEST_DATABASE_URL` / `E2E_DATABASE_URL` if set, the CI service in CI, otherwise
+the port Docker reports for the compose Postgres. There is deliberately no
+`localhost:5432` default: on a laptop that port can be a tunnel to a real
+database.

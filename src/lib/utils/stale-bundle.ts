@@ -36,3 +36,30 @@ export async function reloadForFreshBundle(): Promise<void> {
   }
   window.location.reload();
 }
+
+/**
+ * Await a Server Action from client code, turning a rejection into an ordinary
+ * failed result.
+ *
+ * A Server Action returns `{ success: false }` for anything the server
+ * decided, but the call itself rejects when the request never completes:
+ * offline, cut off by a navigation, or a stale bundle after a deploy. Callers
+ * already handle the failed result (revert the optimistic change, stay on the
+ * form); a rejection skipped that handling, left the change on screen as if
+ * saved, and surfaced as an unhandled rejection. Routed through here, both
+ * cases take the same path, and a stale bundle also triggers the reload that
+ * fixes it.
+ */
+export async function callAction<R extends { success: boolean }>(
+  call: Promise<R>,
+): Promise<R | { success: false; error: string }> {
+  try {
+    return await call;
+  } catch (err) {
+    if (isStaleBundleError(err)) {
+      void reloadForFreshBundle();
+      return { success: false, error: "App updating" };
+    }
+    return { success: false, error: "Couldn't reach the server" };
+  }
+}

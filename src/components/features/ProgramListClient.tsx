@@ -1,6 +1,7 @@
 "use client";
 
 import { createProgram, deleteManyPrograms, exportAllPrograms, exportProgram, importProgram, updateProgram } from "@/lib/actions/programs";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { Program } from "@/types/workout";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { ArrowDownUp, Check, ChevronRightIcon, Download, PlusIcon, Upload } from "lucide-react";
@@ -40,7 +41,7 @@ export function ProgramListClient({ programs: initial }: Props) {
 
   async function handleExportSingle(id: number, name: string) {
     setExportingSingleId(id);
-    const result = await exportProgram(id);
+    const result = await callAction(exportProgram(id));
     setExportingSingleId(null);
     if (!result.success) return;
     const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" });
@@ -54,7 +55,7 @@ export function ProgramListClient({ programs: initial }: Props) {
 
   async function handleExportAll() {
     setExporting(true);
-    const result = await exportAllPrograms();
+    const result = await callAction(exportAllPrograms());
     setExporting(false);
     if (!result.success) return;
     const blob = new Blob([JSON.stringify(result.data, null, 2)], {
@@ -110,7 +111,7 @@ export function ProgramListClient({ programs: initial }: Props) {
     setPrograms((prev) => prev.filter((p) => !selectedIds.has(p.id)));
     setSelectedIds(new Set());
     setShowBulkConfirm(false);
-    const result = await deleteManyPrograms(ids);
+    const result = await callAction(deleteManyPrograms(ids));
     if (!result.success) {
       setPrograms(snapshot);
       setBulkDeleteError(result.error ?? "Failed to delete programs.");
@@ -131,7 +132,10 @@ export function ProgramListClient({ programs: initial }: Props) {
     setRenamingId(null);
     if (!trimmed || trimmed === program.name) return;
     setPrograms((prev) => prev.map((p) => p.id === program.id ? { ...p, name: trimmed } : p));
-    await updateProgram({ id: program.id, name: trimmed });
+    const result = await callAction(updateProgram({ id: program.id, name: trimmed }));
+    if (!result.success) {
+      setPrograms((prev) => prev.map((p) => p.id === program.id ? { ...p, name: program.name } : p));
+    }
     router.refresh();
   }
 
@@ -139,7 +143,7 @@ export function ProgramListClient({ programs: initial }: Props) {
     e.preventDefault();
     if (!newName.trim()) return;
     setCreating(true);
-    const result = await createProgram({ name: newName.trim() });
+    const result = await callAction(createProgram({ name: newName.trim() }));
     setCreating(false);
     if (result.success) {
       setNewName("");
@@ -162,7 +166,7 @@ export function ProgramListClient({ programs: initial }: Props) {
       return;
     }
     setImportStatus("uploading");
-    const result = await importProgram(parsed);
+    const result = await callAction(importProgram(parsed));
     if (!result.success) {
       setImportStatus("error");
       setImportError(result.error);

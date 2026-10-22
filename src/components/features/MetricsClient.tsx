@@ -37,6 +37,7 @@ import {
   sanitizeDecimalInput,
   toDateString,
 } from "@/lib/utils/format";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { Activity, ChevronLeft, ChevronRight, Plus, TrendingUp, Trash2, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState, useSyncExternalStore, useTransition } from "react";
@@ -580,7 +581,7 @@ function WeightHistorySection({
     }
     setLogStatus("saving");
     setLogError(null);
-    const result = await logWeightEntry({ weightKg: kg });
+    const result = await callAction(logWeightEntry({ weightKg: kg }));
     if (result.success) {
       setEntries((prev) => [...prev, result.data]);
       setWeightInput("");
@@ -594,7 +595,7 @@ function WeightHistorySection({
 
   function handleDelete(id: string) {
     startTransition(async () => {
-      const result = await deleteWeightEntry(id);
+      const result = await callAction(deleteWeightEntry(id));
       if (result.success) {
         setEntries((prev) => prev.filter((e) => e.id !== id));
       }
@@ -1613,7 +1614,7 @@ export function MetricsClient({
     if (exerciseId === selectedId) return;
     setSelectedId(exerciseId);
     startTransition(async () => {
-      const result = await getExerciseProgress(exerciseId);
+      const result = await callAction(getExerciseProgress(exerciseId));
       if (result.success) setProgressData(result.data);
     });
   }
@@ -1624,7 +1625,7 @@ export function MetricsClient({
     setCycleLoading(true);
     setCycleError(null);
     setCycleMetrics(null);
-    const result = await getCycleMetrics(cycleId);
+    const result = await callAction(getCycleMetrics(cycleId));
     if (result.success) {
       setCycleMetrics(result.data);
     } else {

@@ -1,6 +1,7 @@
 "use client";
 
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
 import { useRouter } from "next/navigation";
@@ -54,13 +55,13 @@ export function EditCycleForm({ cycle }: Props) {
     setLoading(true);
     setError("");
 
-    const result = await updateTrainingCycle({
+    const result = await callAction(updateTrainingCycle({
       id: cycle.id,
       name: name.trim(),
       durationWeeks,
       endAction,
       endMessage: endMessage.trim() || null,
-    });
+    }));
 
     setLoading(false);
     if (result.success) {

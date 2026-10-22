@@ -1,6 +1,7 @@
 "use client";
 
 import { shareProgram } from "@/lib/actions/program-shares";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { FriendWithActivity } from "@/types/workout";
 import { Check, Download, Loader2, Share2, Users } from "lucide-react";
 import { useState } from "react";
@@ -19,7 +20,7 @@ export function ProgramShareButton({ programId, friends, onExport, exporting }: 
 
   async function handleShare(friendUserId: string) {
     setSharingTo(friendUserId);
-    const result = await shareProgram({ programId, friendUserId });
+    const result = await callAction(shareProgram({ programId, friendUserId }));
     if (result.success) {
       setSharedTo((prev) => new Set([...prev, friendUserId]));
     }

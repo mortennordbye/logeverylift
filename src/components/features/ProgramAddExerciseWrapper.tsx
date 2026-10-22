@@ -2,6 +2,7 @@
 
 import { ExercisesClient } from "@/components/features/ExercisesClient";
 import { addExerciseToProgram } from "@/lib/actions/programs";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { Exercise } from "@/types/workout";
 import { useRouter } from "next/navigation";
 
@@ -14,7 +15,8 @@ export function ProgramAddExerciseWrapper({ programId, exercises }: Props) {
   const router = useRouter();
 
   async function handleSelect(exercise: Exercise) {
-    await addExerciseToProgram({ programId, exerciseId: exercise.id });
+    const result = await callAction(addExerciseToProgram({ programId, exerciseId: exercise.id }));
+    if (!result.success) return;
     router.push(`/programs/${programId}?editing=true`);
   }
 

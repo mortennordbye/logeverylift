@@ -2,6 +2,7 @@
 
 import { createInviteToken, revokeInviteToken } from "@/lib/actions/invite-tokens";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { ChevronLeft, Key, Plus, Share2, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -29,7 +30,7 @@ export function AdminTokensClient({ tokens }: { tokens: InviteToken[] }) {
   async function handleRevoke(id: string) {
     setLoadingId(id);
     setConfirmRevokeId(null);
-    await revokeInviteToken(id);
+    await callAction(revokeInviteToken(id));
     router.refresh();
     setLoadingId(null);
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
+import { buildSetLog } from "@/lib/utils/set-log";
 import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import type { Discipline } from "@/lib/utils/discipline";
@@ -138,25 +139,12 @@ export function WorkoutExerciseList({
                 isCompleted: true,
               });
             }
-            const target = ov?.targetReps ?? s.targetReps ?? 0;
-            const failed = ov?.isFailed ?? false;
             return logWithRetry({
               sessionId,
               exerciseId: exercise.exerciseId,
               setNumber: exercise.sets.indexOf(s) + 1,
               programSetId: s.id,
-              targetReps: target > 0 ? target : undefined,
-              actualReps: ov?.actualReps ?? (failed ? 0 : target),
-              weightKg: ov?.weightKg ?? Number(s.weightKg ?? 0),
-              durationSeconds: ov?.durationSeconds ?? s.durationSeconds ?? undefined,
-              restTimeSeconds: s.restTimeSeconds ?? 0,
-              // One tap for a whole exercise says even less about effort than
-              // one tap for a set. Only a value the lifter supplied is sent.
-              rir: failed ? 0 : ov?.rir,
-              notes: ov?.notes ?? null,
-              isCompleted: true,
-              isFailed: failed,
-              wasEasy: !failed && (ov?.wasEasy ?? false),
+              ...buildSetLog(s, ov, { restTimeSeconds: s.restTimeSeconds ?? 0 }),
             });
           }),
         );
@@ -287,10 +275,13 @@ function SortableExerciseRow({
         opacity: isDragging ? 0.4 : 1,
       }}
       className="flex items-center gap-3 py-3.5 border-b border-border"
+      data-testid="exercise-row"
+      data-program-exercise-id={exercise.id}
     >
       {isEditing && (
         <button
           type="button"
+          aria-label={`Remove ${exercise.name}`}
           onClick={onDelete}
           className="tap-slop w-7 h-7 rounded-full bg-destructive flex items-center justify-center shrink-0"
         >
@@ -350,6 +341,7 @@ function SortableExerciseRow({
         <button
           {...attributes}
           {...listeners}
+          aria-label={`Reorder ${exercise.name}`}
           className="w-10 h-10 flex items-center justify-center shrink-0 text-muted-foreground touch-none"
         >
           <GripVertical className="h-5 w-5" />

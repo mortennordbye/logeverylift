@@ -126,6 +126,17 @@ make e2e                                         # Playwright, WebKit + Chromium
 
 `pnpm test:int` and `make e2e` need the compose Postgres running (`make dev`); each creates its own `*_test` database on it and never touches the dev data. Integration tests live in `src/__tests__/integration/`: they call Server Actions directly, with only the session (`asUser`) and Next's cache faked, so the SQL runs for real. Use them for anything that writes more than one row, keys an upsert, or checks ownership.
 
+## Testing standard
+
+Full guide: [`TESTING.md`](TESTING.md). The rules that are not optional:
+
+- **A change to a critical flow ships with a test that would have failed before it.** Critical flows: logging a set, the rest and exercise timers, set editing, drag-reorder, finishing a workout, login. Green unit tests are not enough evidence for these; the bugs that reach a real workout live where logic meets React state, the database or the browser.
+- **Pick the layer by what can break:** pure logic → unit test (move it out of the component into `src/lib/utils/` first); timers, effects, providers → component test (`src/__tests__/components/`, jsdom); Server Actions, queries, migrations → integration test (`pnpm test:int`); a user flow → e2e spec (`make e2e`).
+- **Bug fixes start with a failing test.** Write it, run it against the unfixed code, watch it fail, then fix.
+- **Client code calls Server Actions through `callAction()`** (`src/lib/utils/stale-bundle.ts`) unless it already catches the rejection. A rejected action skips the failure handling and leaves the screen showing a change the server never saved.
+- **e2e specs import `test` from `e2e/fixtures/test.ts`**, find elements by role/name or `data-testid` (never Tailwind classes), and check what was written via `testDb()` when a flow writes data.
+- **No retries, no sleeps.** A flaky test is a bug in the test or the app; find out which.
+
 ## Before reporting a task complete
 
 Run `pnpm verify` from the host. It runs `tsc --noEmit`, `eslint`, the doc-claims check, and the unit and integration suites. If anything fails, fix it and re-run before declaring the task done.

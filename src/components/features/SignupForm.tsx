@@ -2,6 +2,7 @@
 
 import { registerWithToken } from "@/lib/actions/invite-tokens";
 import { authClient } from "@/lib/auth-client";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -25,7 +26,7 @@ export function SignupForm() {
     setError("");
 
     if (inviteToken) {
-      const result = await registerWithToken(inviteToken, name, email, password);
+      const result = await callAction(registerWithToken(inviteToken, name, email, password));
       if (!result.success) {
         setError(result.error);
         setLoading(false);

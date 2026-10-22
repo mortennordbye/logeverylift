@@ -3,6 +3,7 @@
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteTrainingCycle, deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
 import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { TrainingCycle } from "@/types/workout";
 import { Check, PlusIcon } from "lucide-react";
 import Link from "next/link";
@@ -136,7 +137,7 @@ export function CyclesListClient({ cycles: initial }: Props) {
     setCycles((prev) => prev.filter((c) => !selectedIds.has(c.id)));
     setSelectedIds(new Set());
     setShowBulkConfirm(false);
-    const result = await deleteManyTrainingCycles(ids);
+    const result = await callAction(deleteManyTrainingCycles(ids));
     if (!result.success) {
       setCycles(snapshot);
       setBulkDeleteError(result.error ?? "Failed to delete cycles.");
@@ -149,8 +150,10 @@ export function CyclesListClient({ cycles: initial }: Props) {
 
   async function handleDelete(cycleId: number) {
     setDeleting(true);
+    const snapshot = cycles;
     setCycles((prev) => prev.filter((c) => c.id !== cycleId));
-    await deleteTrainingCycle(cycleId);
+    const result = await callAction(deleteTrainingCycle(cycleId));
+    if (!result.success) setCycles(snapshot);
     setPendingDeleteId(null);
     setDeleting(false);
     router.refresh();

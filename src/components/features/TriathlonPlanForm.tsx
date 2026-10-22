@@ -1,6 +1,7 @@
 "use client";
 
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { ChevronLeftIcon, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -52,12 +53,12 @@ export function TriathlonPlanForm() {
   const handleGenerate = async () => {
     setSaving(true);
     setError(null);
-    const result = await generateTriathlonPlan({
+    const result = await callAction(generateTriathlonPlan({
       weeks,
       goal,
       level,
       ...(restDays.length > 0 ? { restDays } : {}),
-    });
+    }));
     if (result.success) {
       router.push(`/cycles/${result.data.cycleId}`);
     } else {

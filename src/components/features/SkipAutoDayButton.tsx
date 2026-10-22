@@ -1,6 +1,7 @@
 "use client";
 
 import { skipAutoCompletedDay } from "@/lib/actions/training-cycles";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -15,7 +16,7 @@ export function SkipAutoDayButton({ sessionId }: { sessionId: number }) {
   async function handleSkip() {
     if (pending) return;
     setPending(true);
-    const result = await skipAutoCompletedDay({ sessionId });
+    const result = await callAction(skipAutoCompletedDay({ sessionId }));
     if (result.success) {
       router.refresh();
     } else {

@@ -60,7 +60,7 @@ test("a long press logs the reps achieved without moving the target", async ({
   await fewer.click();
   await expect(page.getByText(`2 short of ${target}`)).toBeVisible();
 
-  await tapAndSave(page, page.getByRole("button", { name: "Log set" }), {
+  await tapAndSave(page, page.getByRole("button", { name: "Log set", exact: true }), {
     bodyIncludes: '"actualReps":',
   });
 
@@ -76,7 +76,7 @@ test("a long press logs the reps achieved without moving the target", async ({
   const more = page.getByRole("button", { name: "One rep more" });
   await more.click();
   await more.click();
-  await tapAndSave(page, page.getByRole("button", { name: "Log set" }), {
+  await tapAndSave(page, page.getByRole("button", { name: "Log set", exact: true }), {
     bodyIncludes: '"actualReps":',
   });
   await toggle.click();

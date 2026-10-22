@@ -63,7 +63,7 @@ export function OnboardingTutorial({ defaultShow = false }: { defaultShow?: bool
 
   async function dismiss() {
     setVisible(false);
-    await dismissTutorial();
+    await dismissTutorial().catch(() => undefined);
   }
 
   function next() {
