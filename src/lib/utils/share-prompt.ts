@@ -1,6 +1,6 @@
 // When to ask a user to share the app. Rare by design: only after they have
-// trained with it a few times, and then at most once per interval whatever
-// they answered.
+// trained with it a few times, and then at most once per interval. Being
+// shown counts as asked, answered or not.
 export const SHARE_PROMPT_MIN_WORKOUTS = 5;
 export const SHARE_PROMPT_INTERVAL_DAYS = 60;
 
