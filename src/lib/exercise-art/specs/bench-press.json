@@ -1,0 +1,16 @@
+{
+  "name": "Bench Press",
+  "primary": "chest",
+  "secondary": ["triceps", "shoulders"],
+  "cue": "Lower the bar to your lower chest with your elbows tucked in a little, not flared straight out. Keep your feet planted and your shoulder blades squeezed together.",
+  "phases": ["Lower", "Press"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    { "head": [125.0, 214.8, -79.7], "neck": [125.0, 212.4, -55.8], "chest": [125.0, 212.4, -17.8], "pelvis": [125, 216, 22], "lShoulder": [102.8, 212.4, -49.8], "rShoulder": [147.2, 212.4, -49.8], "lElbow": [89.8, 168.3, -49.4], "rElbow": [160.2, 168.3, -49.4], "lWrist": [80.0, 127.0, -49.1], "rWrist": [170.0, 127.0, -49.1], "lHip": [113.2, 216.0, 24.0], "rHip": [136.8, 216.0, 24.0], "lKnee": [87.6, 228.9, 76.7], "rKnee": [162.4, 228.9, 76.7], "lAnkle": [92, 279, 52], "rAnkle": [158, 279, 52], "lToe": [92.0, 284.1, 72.4], "rToe": [158.0, 284.1, 72.4] },
+    { "lElbow": [62.8, 195.2, -35.0], "rElbow": [187.2, 195.2, -35.0], "lWrist": [80.0, 157.0, -37.5], "rWrist": [170.0, 157.0, -37.5] },
+    { "lElbow": [69.5, 234.7, -27.1], "rElbow": [180.5, 234.7, -27.1], "lWrist": [80.0, 194.0, -26.0], "rWrist": [170.0, 194.0, -26.0] }
+  ],
+  "props": [{"type": "barbell"}, {"type": "bench", "y": 230, "z1": -95, "z2": 40, "width": 44}]
+}

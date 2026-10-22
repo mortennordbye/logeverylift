@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { BONES, CENTER_X, FLOOR_Y, HEAD_RADIUS, JOINTS, MUSCLES, type Joint, type Muscle } from "./skeleton";
+import { BONE_LENGTH, JOINTS, MUSCLES, NEIGHBOURS, type Joint, type Muscle } from "./skeleton";
 
 export type Point3 = [number, number, number];
 export type Pose = Record<Joint, Point3>;
@@ -43,7 +43,20 @@ export const artSpecSchema = z.object({
   phases: z.tuple([z.string(), z.string()]),
   /** The joint that stays put while the body moves round it (an ankle for standing lifts, a wrist for a hang). */
   anchor: joint,
-  /** First keyframe lists every joint; later ones list only the joints that move. */
+  /**
+   * Hands or feet that travel in a straight line between keyframes, with the
+   * elbow or knee solved to fit: hands on a pressed or rowed bar, feet planted
+   * when the anchor is not a foot. Leave out for free swings (a curl's hands).
+   */
+  hold: z.array(z.enum(["lWrist", "rWrist", "lAnkle", "rAnkle"])).default([]),
+  /** "top" swaps the front view for a view from above, for lifts done lying down. */
+  camera: z.enum(["front", "top"]).default("front"),
+  /**
+   * Keyframe 0 is where the lifter sets up before the first rep. It lists
+   * every joint; later keyframes list only the joints that move. Bone lengths
+   * are applied for you (resolveFrames), so a joint only has to point the
+   * right way from its parent.
+   */
   keyframes: z.array(z.partialRecord(joint, point3)).min(2),
   props: z.array(prop).default([]),
 });
@@ -55,43 +68,52 @@ export function slugify(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
-/** Every keyframe as a complete pose. Assumes the first keyframe is complete (checkSpec). */
-export function resolvePoses(spec: ArtSpec): Pose[] {
+const sub = (a: Point3, b: Point3): Point3 => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const len3 = (v: Point3) => Math.hypot(v[0], v[1], v[2]);
+
+/** A joint placed well off where its bone can reach: a sign of a typo or the wrong joint. */
+export type Miss = { frame: number; joint: Joint; parent: Joint; off: number; length: number };
+
+const FEET: ReadonlySet<Joint> = new Set(["lAnkle", "rAnkle", "lToe", "rToe"]);
+
+/**
+ * Every keyframe as a complete pose, built outward from the anchor with each
+ * bone at its exact length. A joint listed in the keyframe sets the bone's
+ * direction from its (already placed) parent. A joint not listed keeps the
+ * direction it had in the keyframe before, so moving an elbow carries the
+ * wrist with it; except feet, which stay planted where they were unless
+ * listed. Assumes keyframe 0 lists every joint (checkSpec).
+ */
+export function resolveFrames(spec: ArtSpec): { poses: Pose[]; misses: Miss[] } {
   const poses: Pose[] = [];
-  for (const frame of spec.keyframes) poses.push({ ...(poses.at(-1) ?? {}), ...frame } as Pose);
-  return poses;
+  const misses: Miss[] = [];
+  spec.keyframes.forEach((frame, i) => {
+    const prev = poses.at(-1);
+    const anchor = frame[spec.anchor] ?? prev![spec.anchor];
+    const out: Partial<Pose> = { [spec.anchor]: anchor };
+    const queue: Joint[] = [spec.anchor];
+    while (queue.length) {
+      const parent = queue.shift()!;
+      for (const child of NEIGHBOURS.get(parent) ?? []) {
+        if (out[child]) continue;
+        const length = BONE_LENGTH.get(`${parent}-${child}`)!;
+        const listed = frame[child];
+        const planted = !listed && FEET.has(child) ? prev![child] : null;
+        const dir = listed ? sub(listed, out[parent]!) : planted ? sub(planted, out[parent]!) : sub(prev![child], prev![parent]);
+        const n = len3(dir) || 1;
+        const placed: Point3 = [0, 1, 2].map((k) => out[parent]![k] + (dir[k] / n) * length) as Point3;
+        if (listed && len3(sub(listed, placed)) > length * 0.15) {
+          misses.push({ frame: i, joint: child, parent, off: len3(sub(listed, placed)), length });
+        }
+        out[child] = placed;
+        queue.push(child);
+      }
+    }
+    poses.push(out as Pose);
+  });
+  return { poses, misses };
 }
 
-const dist = (a: Point3, b: Point3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
-
-/** Problems with a spec, as readable sentences. Empty means it can ship. */
-export function checkSpec(raw: unknown): string[] {
-  const parsed = artSpecSchema.safeParse(raw);
-  if (!parsed.success) {
-    return parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`);
-  }
-  const spec = parsed.data;
-  const problems: string[] = [];
-  if (spec.secondary.includes(spec.primary)) problems.push(`secondary repeats the primary muscle "${spec.primary}"`);
-  const missing = JOINTS.filter((j) => !spec.keyframes[0][j]);
-  if (missing.length) return [...problems, `keyframe 0: missing ${missing.join(", ")}`];
-
-  resolvePoses(spec).forEach((pose, i) => {
-    for (const { a, b, length } of BONES) {
-      const len = dist(pose[a], pose[b]);
-      if (Math.abs(len - length) > length * 0.03) {
-        problems.push(`keyframe ${i}: ${a}-${b} is ${len.toFixed(1)} long, must be ${length}`);
-      }
-    }
-    for (const j of JOINTS) {
-      const [x, y, z] = pose[j];
-      if (y > FLOOR_Y + 2) problems.push(`keyframe ${i}: ${j} is below the floor (y ${y})`);
-      // Both views must fit the view box (scene.ts VIEWBOX): x 25-225, y 36-296.
-      const top = j === "head" ? y - HEAD_RADIUS : y;
-      if (x < 25 || x > 225 || CENTER_X + z < 25 || CENTER_X + z > 225 || top < 36) {
-        problems.push(`keyframe ${i}: ${j} is outside the frame`);
-      }
-    }
-  });
-  return problems;
+export function resolvePoses(spec: ArtSpec): Pose[] {
+  return resolveFrames(spec).poses;
 }

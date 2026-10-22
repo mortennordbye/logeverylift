@@ -2,6 +2,7 @@
  * Local pipeline for exercise illustrations (see .claude/skills/exercise-art).
  *
  *   pnpm art check [slug...]  validate specs and render .art-preview/<slug>.png
+ *                             (--zoom: 2x preview, --joints: print where each joint ends up)
  *   pnpm art index            regenerate src/lib/exercise-art/specs/index.ts
  *   pnpm art todo             strength exercises from the seed that have no spec yet
  *   pnpm art map              render the muscle map to .art-preview/muscle-map.png
@@ -10,7 +11,8 @@
 import { chromium } from "@playwright/test";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { artSpecSchema, checkSpec, slugify } from "../src/lib/exercise-art/schema";
+import { checkSpec } from "../src/lib/exercise-art/check";
+import { artSpecSchema, resolvePoses, slugify } from "../src/lib/exercise-art/schema";
 import { MAP_FIGURES, MAP_VIEWBOX } from "../src/lib/exercise-art/muscle-map";
 import { MUSCLE_FILL, VIEWBOX, renderSvg } from "../src/lib/exercise-art/scene";
 import { VIEWS, type Muscle } from "../src/lib/exercise-art/skeleton";
@@ -29,12 +31,12 @@ const THEMES = {
 };
 const MOMENTS = [0, 0.5, 1];
 
-function previewHtml(slug: string, raw: unknown): string {
+function previewHtml(slug: string, raw: unknown, zoom: number): string {
   const spec = artSpecSchema.parse(raw);
   const row = (theme: keyof typeof THEMES) =>
-    `<div class="row" style="${THEMES[theme]}">` +
+    `<div class="row" style="${THEMES[theme]}"><span class="theme">${theme}</span>` +
     VIEWS.flatMap((v) =>
-      MOMENTS.map((t) => `<figure><svg viewBox="${VIEWBOX}">${renderSvg(spec, v, t, `${theme}-${v}-${t * 10}`)}</svg><figcaption>${v} · t=${t}</figcaption></figure>`),
+      MOMENTS.map((t) => `<figure><svg viewBox="${VIEWBOX}">${renderSvg(spec, v, t, `${theme}-${v}-${t * 10}`)}</svg><figcaption>${v === "front" ? spec.camera : v} · t=${t}</figcaption></figure>`),
     ).join("") +
     `</div>`;
   return `<!doctype html><html><head><style>
@@ -42,16 +44,20 @@ function previewHtml(slug: string, raw: unknown): string {
     h1 { color: #ccc; font-size: 14px; margin: 8px 12px; }
     .row { display: flex; gap: 8px; padding: 8px; background: var(--card); }
     figure { margin: 0; text-align: center; color: var(--muted-foreground); }
-    svg { width: 200px; height: 240px; display: block; }
+    .theme { writing-mode: vertical-rl; color: var(--muted-foreground); }
+    svg { width: ${200 * zoom}px; height: ${240 * zoom}px; display: block; }
   </style></head><body><h1>${spec.name} (${slug})</h1>${row("dark")}${row("light")}</body></html>`;
 }
 
-async function check(only: string[]) {
+async function check(args: string[]) {
+  const zoom = args.includes("--zoom") ? 2 : 1;
+  const showJoints = args.includes("--joints");
+  const only = args.filter((a) => !a.startsWith("--"));
   const targets = only.length ? only : slugs();
   let failed = false;
   mkdirSync(PREVIEW_DIR, { recursive: true });
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1280, height: 600 } });
+  const page = await browser.newPage({ viewport: { width: 1280 * zoom, height: 600 * zoom } });
   for (const slug of targets) {
     const raw = readSpec(slug);
     const problems = checkSpec(raw);
@@ -62,7 +68,14 @@ async function check(only: string[]) {
       console.log(`✗ ${slug}\n${problems.map((p) => `  - ${p}`).join("\n")}`);
       continue;
     }
-    await page.setContent(previewHtml(slug, raw));
+    if (showJoints) {
+      // Where each joint really ends up once bone lengths are applied.
+      resolvePoses(artSpecSchema.parse(raw)).forEach((pose, i) => {
+        console.log(`  keyframe ${i}:`);
+        for (const [j, p] of Object.entries(pose)) console.log(`    ${j.padEnd(10)} [${p.map((c) => c.toFixed(1)).join(", ")}]`);
+      });
+    }
+    await page.setContent(previewHtml(slug, raw, zoom));
     const out = path.join(PREVIEW_DIR, `${slug}.png`);
     await page.screenshot({ path: out, fullPage: true });
     console.log(`✓ ${slug} → ${path.relative(ROOT, out)}`);

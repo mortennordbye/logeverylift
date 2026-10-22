@@ -3,7 +3,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { muscleRoles } from "@/lib/exercise-art/load";
 import { CYCLE_MS, capsule, cycleAt, poseAt, renderSvg } from "@/lib/exercise-art/scene";
-import { artSpecSchema, checkSpec, slugify, type ArtSpec } from "@/lib/exercise-art/schema";
+import { checkSpec } from "@/lib/exercise-art/check";
+import { artSpecSchema, slugify, type ArtSpec } from "@/lib/exercise-art/schema";
 import { SPEC_LOADERS } from "@/lib/exercise-art/specs";
 
 const SPEC_DIR = path.resolve(__dirname, "../lib/exercise-art/specs");
@@ -41,10 +42,22 @@ describe("checkSpec", () => {
     return spec;
   };
 
-  it("rejects a limb that is the wrong length", () => {
-    expect(checkSpec(withFrame0({ lWrist: [102, 220, 4] }))).toEqual(
-      expect.arrayContaining([expect.stringMatching(/keyframe 0: lElbow-lWrist is [\d.]+ long, must be 42/)]),
+  it("fixes bone lengths itself but rejects a joint placed far off its bone", () => {
+    // 10% long: the resolver puts the wrist at the right distance, no complaint.
+    expect(checkSpec(withFrame0({ lWrist: [102, 180, 4] }))).toEqual([]);
+    expect(checkSpec(withFrame0({ lWrist: [102, 230, 4] }))).toEqual(
+      expect.arrayContaining([expect.stringMatching(/keyframe 0: lWrist is \d+ from where its bone puts it \(lElbow-lWrist is 42 long\)/)]),
     );
+  });
+
+  it("rejects hands that slide along the bar mid-rep", () => {
+    // Forearms level, pointing out-and-forward, then out-and-back: the same
+    // grip width at both ends, but each forearm swings through straight out
+    // to the side, so the hands spread apart halfway.
+    const spec = structuredClone(read("barbell-curl.json")) as ArtSpec;
+    spec.keyframes[0] = { ...spec.keyframes[0], lWrist: [80, 134, 33.4], rWrist: [170, 134, 33.4] };
+    spec.keyframes[1] = { lWrist: [80, 134, -39.4], rWrist: [170, 134, -39.4] };
+    expect(checkSpec(spec)).toEqual(expect.arrayContaining([expect.stringMatching(/grip on the barbell changes width mid-rep/)]));
   });
 
   it("rejects an unknown joint and a joint below the floor", () => {
@@ -80,6 +93,25 @@ describe("motion", () => {
       expect(Math.abs(p.lWrist[0] - p.lElbow[0])).toBeLessThan(4);
       expect(Math.abs(p.rWrist[0] - p.rElbow[0])).toBeLessThan(4);
       expect(p.lWrist[2]).toBeGreaterThanOrEqual(p.lElbow[2]);
+    }
+  });
+
+  it("moves held hands in a straight line, so the grip on the bar never changes", () => {
+    const bench = artSpecSchema.parse(read("bench-press.json"));
+    const width = (t: number) => len(poseAt(bench, t), "lWrist", "rWrist");
+    for (const t of [0.1, 0.3, 0.5, 0.7, 0.9]) expect(width(t)).toBeCloseTo(width(0), 0);
+    // ...and the elbow is solved to fit: both arm bones keep their length.
+    expect(len(poseAt(bench, 0.3), "lShoulder", "lElbow")).toBeCloseTo(46, 1);
+    expect(len(poseAt(bench, 0.3), "lElbow", "lWrist")).toBeCloseTo(42, 1);
+  });
+
+  it("keeps a foot planted that no keyframe moves, even off the anchor", () => {
+    // The squat's second keyframe moves hips and knees but lists no feet.
+    const squat = artSpecSchema.parse(read("squat.json"));
+    const start = poseAt(squat, 0).rAnkle;
+    for (const t of [0.3, 0.6, 1]) {
+      // Within a unit or two (bone fitting); unheld it slid about 7.
+      poseAt(squat, t).rAnkle.forEach((c, i) => expect(Math.abs(c - start[i])).toBeLessThan(1.5));
     }
   });
 

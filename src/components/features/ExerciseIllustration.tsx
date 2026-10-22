@@ -6,7 +6,7 @@ import { VIEWS } from "@/lib/exercise-art/skeleton";
 import { Pause, Play } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
-const LABELS = { front: "Front", side: "Side" } as const;
+const LABELS = { front: "Front", top: "Top", side: "Side" } as const;
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 function subscribeReducedMotion(onChange: () => void) {
@@ -79,9 +79,9 @@ export function ExerciseIllustration({ spec }: { spec: ArtSpec }) {
               viewBox={VIEWBOX}
               className="block h-56 w-full"
               role="img"
-              aria-label={`${spec.name}, ${LABELS[v].toLowerCase()} view`}
+              aria-label={`${spec.name}, ${LABELS[v === "front" ? spec.camera : v].toLowerCase()} view`}
             />
-            <figcaption className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{LABELS[v]}</figcaption>
+            <figcaption className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{LABELS[v === "front" ? spec.camera : v]}</figcaption>
           </figure>
         ))}
       </div>

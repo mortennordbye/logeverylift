@@ -9,7 +9,8 @@
  * Axes: x across the body (screen x in the front view; `l*` joints have the
  * smaller x), y down (floor at y = 290), z forward, the way the lifter faces.
  * The front view looks at the lifter (screen x = x). The side view looks from
- * the `r*` side, lifter facing right (screen x = 125 + z).
+ * the `r*` side, lifter facing right (screen x = 125 + z). A lying lift can
+ * swap the front view for a top view, looking down (screen y = TOP_Y + z).
  */
 
 import type { muscleGroupEnum } from "@/db/schema/exercises";
@@ -26,8 +27,13 @@ export const HEAD_RADIUS = 15;
 /** Body centre line: x in the front view, the side view's z = 0. */
 export const CENTER_X = 125;
 
+/** Screen y of z = 0 in the top view. */
+export const TOP_Y = 166;
+
 export const VIEWS = ["front", "side"] as const;
 export type View = (typeof VIEWS)[number];
+/** What the "front" view slot shows: the lifter from the front, or from above (for lying lifts). */
+export type Camera = "front" | "top";
 
 export const JOINTS = [
   "head", "neck", "chest", "pelvis",
@@ -61,6 +67,15 @@ export const BONES: readonly { a: Joint; b: Joint; length: number }[] = [
   { a: "lAnkle", b: "lToe", length: 21 },
   { a: "rAnkle", b: "rToe", length: 21 },
 ];
+
+export const BONE_LENGTH = new Map<string, number>();
+export const NEIGHBOURS = new Map<Joint, Joint[]>();
+for (const { a, b, length } of BONES) {
+  BONE_LENGTH.set(`${a}-${b}`, length);
+  BONE_LENGTH.set(`${b}-${a}`, length);
+  NEIGHBOURS.set(a, [...(NEIGHBOURS.get(a) ?? []), b]);
+  NEIGHBOURS.set(b, [...(NEIGHBOURS.get(b) ?? []), a]);
+}
 
 /** A limb drawn as a tapered capsule from one joint to the next. */
 export type Limb = {

@@ -31,7 +31,7 @@
     "test:coverage": "vitest run --coverage",
     "prepare": "lefthook install || true",
     "check:docs": "tsx scripts/check-doc-claims.ts",
-    "art": "tsx scripts/exercise-art.ts"
+    "art": "tsx --no-deprecation scripts/exercise-art.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -2,4 +2,6 @@
 
 export const SPEC_LOADERS: Record<string, () => Promise<unknown>> = {
   "barbell-curl": () => import("./barbell-curl.json").then((m) => m.default),
+  "bench-press": () => import("./bench-press.json").then((m) => m.default),
+  "squat": () => import("./squat.json").then((m) => m.default),
 };
