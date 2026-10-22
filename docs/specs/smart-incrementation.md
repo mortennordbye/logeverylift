@@ -10,7 +10,7 @@
 >
 > **2026-09-07:** added SI-43 and SI-43a — the effort prompt can now be hidden per-exercise (explicit opt-out, or automatically when the advance axis is `none`), independent of the `targetRir` cap.
 >
-> **2026-10-22, live miss:** SI-9a now judges every logged set against its *own* set's current target, not the target of the set being suggested for; under scope `all` a plan of 8/8/7 gave one session two verdicts. Added SI-46 (a set logged short empties the dots mid-workout and says so). SI-12's control moved out of Advanced.
+> **2026-10-22, live miss:** SI-9a now judges every logged set against its *own* set's current target, not the target of the set being suggested for; under scope `all` a plan of 8/8/7 gave one session two verdicts. Added SI-46 (a set logged short empties the dots mid-workout and says so) and SI-47 (taking an advance empties them too). SI-12's control moved out of Advanced.
 >
 > **2026-10-22, review pass:** the engine (`progression.ts`, `progression-presets.ts`) had not changed since the last stamp; the code around it had, and four rules here had drifted from it. Brought back in line: SI-9a (a mid-workout reps edit had started re-prescribing the set again, #57; it now records, with an explicit opt-in to change the target), SI-10b (the effort prompt asked about the last working set whatever the scope), SI-37 (a low-readiness back-off could lower the plan) and SI-40a (every axis write stamped the clock, and an MCP write never did). Added SI-44 (the sheet and the engine run the same advance) and SI-45 (a new working set joins the slot's cap and range). Coverage below gained integration, component and e2e tests.
 
@@ -252,6 +252,12 @@ It is display only and writes nothing. The server decides when the session finis
 
 *Why:* a miss used to leave the dots full until the next workout, which read as "this still counts" at the moment the lifter most needed to hear it did not.
 *Covered by:* `live-miss.test.ts`; `components/live-miss-dots.test.tsx`; `e2e/progression-suggestion.spec.ts` — "a set logged short empties the dots on the spot and says the count starts over".
+
+### SI-47 — Taking an advance empties the dots
+While an advance is on offer the dots show the run that earned it. Once the set holds the suggested value (the chip has turned to a tick) they show 0, labelled "since the increase", and the progress sheet says the run earned the increase and the count starts again from it. That is what the engine will report after the next session: clears at the old load do not count at the new one (SI-11), and clears of the old rep, time or distance target are stale at the new one (SI-9a). A live miss (SI-46) takes precedence. Display only.
+
+*Why:* "2 of 2" next to a bump already taken read as progress still banked toward another one.
+*Covered by:* `components/suggestion-chips.test.tsx` — "progress dots once the advance is taken"; `e2e/progression-suggestion.spec.ts` — "two clean sessions offer a bump, and taking it writes the plan".
 
 ### SI-13 — A set marked "felt easy" satisfies the gate on its own
 When the gate is *not* already met, the most recent logged set is `wasEasy`, and that set met its target (SI-9), progression is offered as if consensus existed. The resulting suggestion is flagged `easyOverride` so the UI can say why.

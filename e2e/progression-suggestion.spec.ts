@@ -126,6 +126,10 @@ test("two clean sessions offer a bump, and taking it writes the plan", async ({ 
   await tapAndSave(page, chip, { bodyIncludes: '"updates"' });
 
   await expect(page.getByTestId("set-row").first().getByRole("button", { name: `✓ ${next}kg` })).toBeVisible();
+  // The run that earned the bump is spent once it is taken.
+  await expect(
+    page.getByTestId("set-row").first().getByRole("button", { name: "Progress: 0 of 2 sessions since the increase" }),
+  ).toBeVisible();
   await expect.poll(async () => Number((await plannedSet(slot.setId)).weightKg)).toBe(next);
 });
 
