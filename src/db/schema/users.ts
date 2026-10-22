@@ -14,6 +14,9 @@ export const users = pgTable("user", {
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
   tutorialDismissedAt: timestamp("tutorial_dismissed_at"),
+  // Last time the home screen asked this user to share the app (answered
+  // either way). Null until first asked. See src/lib/utils/share-prompt.ts.
+  sharePromptAt: timestamp("share_prompt_at"),
   // Optional user profile fields — used for AI prompt personalisation and future smart progression
   gender: text("gender").$type<"male" | "female" | "other" | "prefer_not_to_say">(),
   birthYear: integer("birth_year"),

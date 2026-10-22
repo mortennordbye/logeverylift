@@ -24,6 +24,8 @@ const PUBLIC_FILES = [
   "/icon-192x192.png",
   "/icon-512x512.png",
   "/favicon-32.png",
+  // Link-preview image, fetched by Slack, iMessage and other crawlers
+  "/og-image.png",
 ];
 
 export function middleware(request: NextRequest) {

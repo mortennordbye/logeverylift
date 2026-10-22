@@ -25,7 +25,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "LogEveryLift",
     short_name: "LogEveryLift",
     description:
-      "Track your workouts with intelligent progress monitoring, offline-first design, and auto-deload detection.",
+      "Log your sets, follow a plan built for you and see what to lift next time.",
     start_url: "/",
     display: "standalone", // Runs like a native app
     background_color: "#ffffff",
