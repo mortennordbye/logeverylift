@@ -1,6 +1,10 @@
 "use client";
 
+import { ExerciseIllustration } from "@/components/features/ExerciseIllustration";
+import { MuscleMap } from "@/components/features/MuscleMap";
 import { createCustomExercise, deleteCustomExercise, updateCustomExercise } from "@/lib/actions/exercises";
+import { loadArtSpec, muscleRoles } from "@/lib/exercise-art/load";
+import type { ArtSpec } from "@/lib/exercise-art/schema";
 import { EXERCISE_TYPES, EXERCISE_TYPE_LABELS, type ExerciseType } from "@/lib/utils/exercise-type";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { Exercise } from "@/types/workout";
@@ -20,7 +24,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 type Category = "strength" | "cardio" | "flexibility";
 type BodyArea = "upper_body" | "lower_body" | "core" | "full_body" | "cardio";
@@ -114,6 +118,21 @@ function DetailView({ exercise }: { exercise: Exercise }) {
     ...(exercise.movementPattern ? [{ label: "Movement", value: capitalize(exercise.movementPattern) }] : []),
   ];
 
+  // Illustrations exist for built-in exercises only; a custom exercise that
+  // happens to share a name is not the movement that was drawn.
+  // Keyed by name so switching exercises never shows the previous drawing.
+  const [loaded, setLoaded] = useState<{ name: string; spec: ArtSpec | null } | null>(null);
+  useEffect(() => {
+    if (exercise.isCustom) return;
+    let current = true;
+    void loadArtSpec(exercise.name).then((spec) => { if (current) setLoaded({ name: exercise.name, spec }); });
+    return () => { current = false; };
+  }, [exercise.name, exercise.isCustom]);
+  const art = !exercise.isCustom && loaded?.name === exercise.name ? loaded.spec : null;
+  const roles = muscleRoles(exercise.muscleGroup, art);
+  const primary = Object.entries(roles).filter(([, r]) => r === "primary").map(([m]) => capitalize(m));
+  const secondary = Object.entries(roles).filter(([, r]) => r === "secondary").map(([m]) => capitalize(m));
+
   return (
     <>
       <h1 className="text-3xl font-bold tracking-tight mb-6">
@@ -124,6 +143,31 @@ function DetailView({ exercise }: { exercise: Exercise }) {
           </span>
         )}
       </h1>
+      <div className="space-y-4">
+      {art && <ExerciseIllustration spec={art} />}
+      {(primary.length > 0 || secondary.length > 0) && (
+        <section aria-label="Muscles worked" className="bg-card rounded-2xl p-4">
+          <div className="flex justify-around text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            <span>Front</span>
+            <span>Back</span>
+          </div>
+          <MuscleMap roles={roles} className="mt-2 block h-56 w-full" />
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-sm">
+            {primary.length > 0 && (
+              <span className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                Primary · {primary.join(", ")}
+              </span>
+            )}
+            {secondary.length > 0 && (
+              <span className="flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-primary/45" />
+                Secondary · {secondary.join(", ")}
+              </span>
+            )}
+          </div>
+        </section>
+      )}
       <div className="bg-card rounded-2xl overflow-hidden">
         {rows.map(({ label, value }, i) => (
           <div
@@ -134,6 +178,7 @@ function DetailView({ exercise }: { exercise: Exercise }) {
             <span className="text-muted-foreground text-right">{value}</span>
           </div>
         ))}
+      </div>
       </div>
     </>
   );
@@ -662,7 +707,7 @@ export function ExercisesClient({
       </div>
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto px-4 pb-nav-safe">
+      <div className="flex-1 overflow-y-auto px-4 pb-nav-safe-lg">
         {content}
         <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
       </div>

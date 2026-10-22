@@ -1,0 +1,28 @@
+{
+  "name": "Squat",
+  "primary": "quads",
+  "secondary": ["glutes", "hamstrings", "lower_back"],
+  "cue": "Push your knees out over your toes and keep your chest up. Sit down until your hips are level with your knees.",
+  "phases": ["Squat", "Stand"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, -10], "rShoulder": [147, 88, -10],
+      "lElbow": [88, 126, -32], "rElbow": [162, 126, -32],
+      "lWrist": [84, 88, -12], "rWrist": [166, 88, -12],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [108, 222, 1], "rKnee": [142, 222, 1],
+      "lAnkle": [105, 278, -1], "rAnkle": [145, 278, -1],
+      "lToe": [100, 284, 19], "rToe": [150, 284, 19]
+    },
+    {
+      "head": [125, 153, 31], "neck": [125, 175, 21], "chest": [125, 204, -3], "pelvis": [125, 235, -29],
+      "lElbow": [88, 201, -27], "rElbow": [162, 201, -27],
+      "lWrist": [84, 180, 6], "rWrist": [166, 180, 6],
+      "lHip": [113, 237, -29], "rHip": [137, 237, -29],
+      "lKnee": [98, 232, 31], "rKnee": [152, 232, 31]
+    }
+  ],
+  "props": [{ "type": "barbell", "at": ["lShoulder", "rShoulder"] }]
+}

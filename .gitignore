@@ -72,3 +72,6 @@ Thumbs.db
 # swept into commits twice by `git add -A` before this existed.
 /fable.md
 /*.png
+
+# exercise illustration previews (pnpm art check)
+/.art-preview/

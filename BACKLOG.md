@@ -10,6 +10,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
+### Exercise illustrations: draw the rest of the library
+- **What:** Barbell Curl, Squat and Bench Press have animated illustrations. The other built-in strength exercises show the muscle map (from their single muscle group) and no drawing. `pnpm art todo` lists them.
+- **Why deferred:** The pipeline and the look were built and locked on one exercise first, so the batch draws to a settled style. The look was agreed on 2026-10-22: one 3D pose per keyframe projected to a front and a side view, animated; worked muscles in the user's accent (never a fixed colour); anatomical front/back muscle map.
+- **Unblocked by:** Running the saved `exercise-art` workflow (`.claude/workflows/exercise-art.js`) with exact seed names as args, most common first: Deadlift, Overhead Press, Barbell Row, Pull-up, Lat Pulldown, Incline Dumbbell Press, Romanian Deadlift, Tricep Pushdown, Plank. The skill was dry-run on Bench Press and Squat by agents with no other context and fixed from what they hit. Look at the `.art-preview/*.png` contact sheets before committing, then repeat for the rest. Each spec is posed by hand, so expect to judge the first batch before scaling up.
+- **Touchpoints:** `src/lib/exercise-art/` (skeleton, schema, scene, muscle-map, `specs/`), `.claude/skills/exercise-art/SKILL.md`, `.claude/workflows/exercise-art.js`, `scripts/exercise-art.ts`, `src/components/features/ExerciseIllustration.tsx`, `src/components/features/MuscleMap.tsx`.
+
 ### Norwegian sign-in form on the welcome page
 - **What:** `/welcome?lang=no` translates all of the welcome page's own copy, but the embedded sign-in form (labels, "Sign In" button, "New here? Create account") stays in English, as do `/login` and `/signup`.
 - **Why deferred:** The Norwegian option was asked for on the front page only. `LoginForm` is shared with `/login`, so translating it means adding a language prop or real i18n rather than a page-local dictionary.
