@@ -413,6 +413,14 @@ export type ProgramSetData = {
    * information as a side effect of asking a question about it.
    */
   configChangedAt?: string | null;
+  /**
+   * Every working set's current rep target in this slot, keyed by set number.
+   * A logged row is judged against its *own* set's target, not this set's:
+   * under scope "all" one session has to read the same for every set, and a
+   * plan of 8/8/7 judged set 3 against 8 for sets 1-2 and against 7 for set 3.
+   * Missing entries fall back to `targetReps`.
+   */
+  slotTargets?: Record<number, number | null>;
 };
 
 /**
@@ -831,6 +839,113 @@ export function countConsecutiveMisses(outcomes: SessionOutcome[]): number {
     count++;
   }
   return count;
+}
+
+// ─── The session in progress ────────────────────────────────────────────────
+
+/** One working set of the exercise as the workout in progress holds it. */
+export type LiveSet = {
+  setNumber: number;
+  targetReps: number | null;
+  /** What was done: the recorded count, else the target the tap claimed. */
+  actualReps: number;
+  weightKg: number;
+  rir: number | null;
+  targetRir: number | null;
+  completed: boolean;
+};
+
+export type LiveMiss = {
+  setNumber: number;
+  actualReps: number;
+  targetReps: number | null;
+  weightKg: number;
+  /** Set when the reps were there and the reserve was not (D-1). */
+  effort?: { rir: number; cap: number };
+};
+
+/**
+ * Has the workout in progress already missed, for the set asking?
+ *
+ * The dots come from completed sessions only, so without this a set logged
+ * short leaves them full until the next workout and the lifter is told nothing
+ * at the moment it happens. Display only: the server still decides when the
+ * session finishes, and a session finished as Tired is held harmless (A6) even
+ * though this reported a miss.
+ *
+ * Mirrors `evaluateSession`: the scope names the deciding sets, only a logged
+ * set can miss (an unlogged one is unknown, D-9), short means
+ * `!metTargetReps`, and effort is read from the set the scope names, the last
+ * working set under "all" (D-8). Unlogged effort is not a miss (D-2).
+ *
+ * `working` must be the exercise's working sets in set order.
+ */
+export function liveSessionMiss(
+  working: LiveSet[],
+  scope: ProgressionScope,
+  setNumber: number,
+): LiveMiss | null {
+  if (working.length === 0) return null;
+  const deciding =
+    scope === "all"
+      ? working
+      : scope === "first"
+        ? [working[0]]
+        : scope === "last"
+          ? [working[working.length - 1]]
+          : working.filter((s) => s.setNumber === setNumber);
+
+  const toMiss = (s: LiveSet): LiveMiss => ({
+    setNumber: s.setNumber,
+    actualReps: s.actualReps,
+    targetReps: s.targetReps,
+    weightKg: s.weightKg,
+  });
+
+  // `metTargetReps`'s rule: an open-ended set clears on any completed rep.
+  const short = deciding.find(
+    (s) =>
+      s.completed &&
+      (s.targetReps == null ? s.actualReps <= 0 : s.actualReps < s.targetReps),
+  );
+  if (short) return toMiss(short);
+
+  const effortSet = deciding[deciding.length - 1];
+  if (
+    effortSet?.completed &&
+    effortSet.targetRir != null &&
+    effortSet.rir != null &&
+    effortSet.rir < effortSet.targetRir
+  ) {
+    return { ...toMiss(effortSet), effort: { rir: effortSet.rir, cap: effortSet.targetRir } };
+  }
+  return null;
+}
+
+/**
+ * What the lifter is told the moment a set breaks the run: what fell short,
+ * that the count starts over, and what it takes to move again.
+ */
+export function describeLiveMiss(
+  miss: LiveMiss,
+  scope: ProgressionScope,
+  requiredHits: number,
+): string {
+  const what = miss.effort
+    ? `Set ${miss.setNumber}: ${miss.effort.rir} RIR, the plan asks for at least ${miss.effort.cap}.`
+    : `Set ${miss.setNumber}: ${miss.actualReps} of ${miss.targetReps}.`;
+  const who =
+    scope === "first"
+      ? "set 1 hits"
+      : scope === "last"
+        ? "the last set hits"
+        : scope === "set"
+          ? `set ${miss.setNumber} hits`
+          : "every set hits";
+  const when =
+    requiredHits <= 1 ? "in a session" : `in ${requiredHits} sessions in a row`;
+  const hold = miss.weightKg > 0 ? `Stay at ${miss.weightKg}kg` : "Stay here";
+  return `${what} Count starts over. ${hold} until ${who} its target ${when}.`;
 }
 
 // ─── Rule description ───────────────────────────────────────────────────────
@@ -1273,17 +1388,21 @@ export function buildSuggestion(
       const target = ps.distanceMeters ?? r.distanceMeters;
       return { cleared: target != null && (r.distanceMeters ?? 0) >= target };
     }
-    if (metTargetReps(r, ps.targetReps)) {
+    const planTarget =
+      ps.slotTargets?.[r.setNumber] !== undefined
+        ? ps.slotTargets[r.setNumber]
+        : ps.targetReps;
+    if (metTargetReps(r, planTarget)) {
       // SI-9a. The set cleared the bar it was logged under; the plan may since
       // have been raised. Re-ask the question of the log instead of discarding
       // the session, so a lifter who was already doing 8s against a target of 6
       // keeps the clears they earned when they level the target to 8.
-      if (ps.targetReps != null && r.actualReps < ps.targetReps) {
+      if (planTarget != null && r.actualReps < planTarget) {
         return { cleared: false, stale: true };
       }
       return { cleared: true };
     }
-    const target = r.targetReps ?? ps.targetReps;
+    const target = r.targetReps ?? planTarget;
     return {
       cleared: false,
       ...(target != null ? { shortfall: target - r.actualReps } : {}),

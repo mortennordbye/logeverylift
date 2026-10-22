@@ -15,7 +15,14 @@ import { buildSetLog } from "@/lib/utils/set-log";
 import { computeMapping, toFlatItems } from "@/lib/utils/set-mapping";
 import type { FlatItem, RestFlatItem, SetFlatItem } from "@/lib/utils/set-mapping";
 import type { PRResult, ProgramSet } from "@/types/workout";
-import { effortPromptSet, type ProgressionScope } from "@/lib/utils/progression";
+import {
+  describeLiveMiss,
+  effortPromptSet,
+  liveSessionMiss,
+  type LiveMiss,
+  type LiveSet,
+  type ProgressionScope,
+} from "@/lib/utils/progression";
 import { rirFromRpe } from "@/lib/utils/rir";
 import {
   DndContext,
@@ -396,6 +403,66 @@ export function WorkoutSetsList({
     setMissSheet(null);
     void toggleSet(setId, { actualReps: missReps, rir: missRir });
   };
+
+  // ── The session in progress ─────────────────────────────────────────────────
+
+  // The dots count completed sessions, so a set logged short today would leave
+  // them full until the next workout. Read today's logged sets the way the
+  // engine will when the session finishes, and show the miss now. Display
+  // only: nothing here writes.
+  const liveWorking: LiveSet[] =
+    isWorkout && !isTimed && !isRunning
+      ? flatItems
+          .filter((i): i is SetFlatItem => i.type === "set")
+          .map((i, index) => ({ set: i.set, setNumber: index + 1 }))
+          .filter(({ set }) => (set.setType ?? "working") === "working")
+          .map(({ set, setNumber }) => {
+            const ov = renderedOverrides[set.id];
+            const targetReps = ov?.targetReps ?? set.targetReps ?? null;
+            return {
+              setNumber,
+              targetReps,
+              actualReps: ov?.actualReps ?? targetReps ?? 0,
+              weightKg: ov?.weightKg ?? Number(set.weightKg ?? 0),
+              rir: ov?.rir ?? null,
+              targetRir: set.targetRir ?? null,
+              completed: activeCompletedSets.has(set.id),
+            };
+          })
+      : [];
+  const liveMissFor = (setNumber: number): LiveMiss | null =>
+    liveSessionMiss(liveWorking, progressionScope, setNumber);
+  // Every distinct miss, keyed by the set that missed, with the suggestion the
+  // toast quotes the gate from. Only exercises that show dots can lose them.
+  const setIdByNumber = new Map(
+    flatItems
+      .filter((i): i is SetFlatItem => i.type === "set")
+      .map((i, index) => [index + 1, i.set.id]),
+  );
+  const liveMisses = new Map<number, { miss: LiveMiss; requiredHits: number }>();
+  for (const { setNumber } of liveWorking) {
+    const s = suggestions?.[setIdByNumber.get(setNumber) ?? -1];
+    if (!s || s.reason === "manual" || s.hitsRequired <= 0) continue;
+    const miss = liveMissFor(setNumber);
+    if (miss) liveMisses.set(miss.setNumber, { miss, requiredHits: s.hitsRequired });
+  }
+  const liveMissKey = [...liveMisses.keys()].sort((a, b) => a - b).join(",");
+  // Seeded with what is already missed on mount: coming back to an exercise
+  // that missed earlier is not news. Only a log that creates a miss is.
+  const toldMisses = useRef(new Set(liveMisses.keys()));
+  useEffect(() => {
+    const fresh = [...liveMisses.values()].find(
+      ({ miss }) => !toldMisses.current.has(miss.setNumber),
+    );
+    toldMisses.current = new Set(liveMisses.keys());
+    if (fresh) {
+      showToast({
+        message: describeLiveMiss(fresh.miss, progressionScope, fresh.requiredHits),
+        durationMs: 7000,
+      });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [liveMissKey]);
 
   // ── Set completion ──────────────────────────────────────────────────────────
 
@@ -898,6 +965,7 @@ export function WorkoutSetsList({
                     onStartTimer={startExerciseTimer}
                     onOpenLogRun={isRunning ? (id) => setPendingRunSetId(id) : undefined}
                     suggestion={suggestions?.[item.set.id]}
+                    liveMiss={liveMissFor(setNumber)}
                     onShowSessions={(suggestion) =>
                       setSessionDetail({ setNumber, suggestion })
                     }
@@ -1345,9 +1413,18 @@ export function WorkoutSetsList({
           </div>
           {sessionDetail && (
             <>
+              {(() => {
+                const miss = liveMissFor(sessionDetail.setNumber);
+                return miss ? (
+                  <p className="text-xs text-orange-500 mb-2">
+                    {describeLiveMiss(miss, progressionScope, sessionDetail.suggestion.hitsRequired)}
+                  </p>
+                ) : null;
+              })()}
               <p className="text-xs text-muted-foreground mb-4">
                 {sessionDetail.suggestion.hitsAchieved} of{" "}
-                {sessionDetail.suggestion.hitsRequired} sessions in a row.
+                {sessionDetail.suggestion.hitsRequired} sessions in a row
+                {liveMissFor(sessionDetail.setNumber) ? " before today" : ""}.
                 {sessionDetail.suggestion.sessionsUntilDeload === 1 &&
                   " One more miss backs off the weight."}
               </p>
@@ -1521,6 +1598,7 @@ function SortableSetRow({
   onStartTimer,
   onOpenLogRun,
   suggestion,
+  liveMiss = null,
   onShowSessions,
   onApplySuggestion,
   onApplyRepSuggestion,
@@ -1550,6 +1628,8 @@ function SortableSetRow({
   onStartTimer?: (setId: number, duration: number, startDelaySeconds?: number) => void;
   onOpenLogRun?: (setId: number) => void;
   suggestion?: SetSuggestionDisplay;
+  /** Today's session has already missed for this set: the run starts over. */
+  liveMiss?: LiveMiss | null;
   onShowSessions?: (suggestion: SetSuggestionDisplay) => void;
   onApplySuggestion?: (setId: number, weightKg: number, adjustedReps?: number, durationSeconds?: number, distanceMeters?: number) => void;
   onApplyRepSuggestion?: (setId: number, reps: number) => void;
@@ -1872,7 +1952,11 @@ function SortableSetRow({
                   // themselves stay 6px; the hit area around them does not.
                   <button
                     type="button"
-                    aria-label={`Progress: ${suggestion.hitsAchieved} of ${suggestion.hitsRequired} sessions`}
+                    aria-label={
+                      liveMiss
+                        ? `Missed this session: count starts over, 0 of ${suggestion.hitsRequired} sessions`
+                        : `Progress: ${suggestion.hitsAchieved} of ${suggestion.hitsRequired} sessions`
+                    }
                     onClick={(e) => {
                       e.stopPropagation();
                       onShowSessions?.(suggestion);
@@ -1880,13 +1964,20 @@ function SortableSetRow({
                     disabled={!suggestion.sessions?.length}
                     className="flex items-center gap-1 -m-3 p-3 disabled:pointer-events-none"
                   >
+                    {/* A miss today empties the run on the spot, and the first
+                        dot rings amber so the reset reads as something that
+                        just happened rather than as no history. */}
                     {Array.from({ length: suggestion.hitsRequired }).map((_, i) => (
                       <div
                         key={i}
                         className={`w-1.5 h-1.5 rounded-full ${
-                          i < suggestion.hitsAchieved
-                            ? "bg-primary"
-                            : "bg-muted-foreground/30"
+                          liveMiss
+                            ? i === 0
+                              ? "ring-1 ring-orange-500"
+                              : "bg-muted-foreground/30"
+                            : i < suggestion.hitsAchieved
+                              ? "bg-primary"
+                              : "bg-muted-foreground/30"
                         }`}
                       />
                     ))}

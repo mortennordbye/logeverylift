@@ -10,6 +10,8 @@
 >
 > **2026-09-07:** added SI-43 and SI-43a — the effort prompt can now be hidden per-exercise (explicit opt-out, or automatically when the advance axis is `none`), independent of the `targetRir` cap.
 >
+> **2026-10-22, live miss:** SI-9a now judges every logged set against its *own* set's current target, not the target of the set being suggested for; under scope `all` a plan of 8/8/7 gave one session two verdicts. Added SI-46 (a set logged short empties the dots mid-workout and says so). SI-12's control moved out of Advanced.
+>
 > **2026-10-22, review pass:** the engine (`progression.ts`, `progression-presets.ts`) had not changed since the last stamp; the code around it had, and four rules here had drifted from it. Brought back in line: SI-9a (a mid-workout reps edit had started re-prescribing the set again, #57; it now records, with an explicit opt-in to change the target), SI-10b (the effort prompt asked about the last working set whatever the scope), SI-37 (a low-readiness back-off could lower the plan) and SI-40a (every axis write stamped the clock, and an MCP write never did). Added SI-44 (the sheet and the engine run the same advance) and SI-45 (a new working set joins the slot's cap and range). Coverage below gained integration, component and e2e tests.
 
 Smart incrementation decides, for one planned set, whether the lifter should be offered more weight (or reps, seconds, metres) next time — and how much more.
@@ -184,12 +186,12 @@ The prescription lives on each `program_sets` row, so a top set and its back-off
 
 **The rule sentence quotes a number only when every working set agrees.** `uniformTargetReps` returns null for a spread, and `describeProgressionRule` then says "the target reps".
 
-**A target that moves re-judges the window instead of invalidating it.** A logged set is measured against the harder of the target it was logged under and the target the plan asks now. A set that cleared its own target but falls short of a raised one is `stale`, and a session whose only shortfalls are stale is **unknown** with reason `reconfigured` — inert, not a miss. Writing a target therefore does not stamp `progression_config_at`; the rep range and the effort cap still do (SI-40a).
+**A target that moves re-judges the window instead of invalidating it.** A logged set is measured against the harder of the target it was logged under and the target the plan asks now — the plan target of *that set*, read from `ProgramSetData.slotTargets`, not of the set the suggestion is for. Otherwise a plan of 8/8/7 judged set 3's 7 against 8 for sets 1 and 2 (stale, so unknown) and against 7 for set 3 (cleared), and one exercise under scope `all` showed a bump on two rows and a retry on the third. A set that cleared its own target but falls short of a raised one is `stale`, and a session whose only shortfalls are stale is **unknown** with reason `reconfigured` — inert, not a miss. Writing a target therefore does not stamp `progression_config_at`; the rep range and the effort cap still do (SI-40a).
 
 *Why:* a Pull-up prescribed 8/6/6 was read off the first working set, so the sheet promised "+2.5kg once every set hits 8 reps" while two of the three sets asked for 6 — the engine cleared the exercise on evidence the sentence never described, and there was no way to correct it without leaving the workout. Re-judging rather than discarding is what makes the correction affordable: `workout_sets.actual_reps` already records what was done, so a lifter who was doing 8s against a target of 6 keeps the clears they earned. Taking the *harder* of the two numbers is what stops the reverse — cutting a target cannot hand back clears for sessions that missed the number in force at the time.
 The opt-in is per edit and off by default. #57 had made every differing number re-prescribe the set, which relabelled "I got 6, not 8" as a clean hit against a target of 6 and moved the plan down without asking.
 
-*Covered by:* `progressive-suggestions.test.ts` — the `uniformTargetReps` block and "buildSuggestion — a changed rep target re-judges past sessions"; `validators.test.ts` — the `setProgramExerciseSetDefaultsSchema` block; `e2e/progression-settings.spec.ts` — the rep-target section; `components/set-edit-reps.test.tsx` — "records a short set against the target that stands, and leaves the plan alone", "changes the program target too when asked to"; `e2e/progression-suggestion.spec.ts` — "correcting reps mid-workout keeps the plan's target unless asked to change it".
+*Covered by:* `progressive-suggestions.test.ts` — the `uniformTargetReps` block and "buildSuggestion — a changed rep target re-judges past sessions", including "judges each set against its own target, so every set reads a session the same way"; `validators.test.ts` — the `setProgramExerciseSetDefaultsSchema` block; `e2e/progression-settings.spec.ts` — the rep-target section; `components/set-edit-reps.test.tsx` — "records a short set against the target that stands, and leaves the plan alone", "changes the program target too when asked to"; `e2e/progression-suggestion.spec.ts` — "correcting reps mid-workout keeps the plan's target unless asked to change it".
 
 ### SI-10 — Effort decides clearing only where a cap is prescribed
 An exercise with no effort cap clears on the target alone, whatever the lifter reported about how hard it was — including nothing.
@@ -238,10 +240,18 @@ Hits logged below the base weight are excluded from the count.
 *Covered by:* `progressive-suggestions.test.ts` — the "hits must be at the current weight" block.
 
 ### SI-12 — The gate is 2 hits, overridable per exercise between 1 and 5
-`progressionRequiredHits` overrides the default; null restores it. The validator clamps to 1…`CONSENSUS_WINDOW`.
+`progressionRequiredHits` overrides the default; null restores it. The validator clamps to 1…`CONSENSUS_WINDOW`. The control ("Sessions at target") sits in the progression sheet directly, not under Advanced, and is hidden for `manual` and `none`.
 
 *Why:* one good session can be luck. The ceiling is the window itself — asking for more hits than the window can hold would be unsatisfiable, so it is rejected at the edge rather than silently freezing the exercise.
 *Covered by:* `progressive-suggestions.test.ts` — the "requiredHits override" block; `e2e/progression-settings.spec.ts`.
+
+### SI-46 — A set logged short empties the dots during the workout
+The dots count completed sessions, so the session in progress is not in them. `liveSessionMiss` reads today's logged sets the way `evaluateSession` will: the scope names the deciding sets, only a logged set can miss (D-9), short is `actualReps < targetReps` (an open-ended set clears on any rep), and a logged RIR below the cap on the set that decides effort is a miss (SI-10b); unlogged effort is not (SI-10a). When it finds one, every row it applies to shows its dots empty with the first ringed amber, the progress sheet leads with what missed, and a toast built by `describeLiveMiss` says the count starts over and what it takes to move. Under scope `set` only the set that missed resets. Un-logging the set takes it back. The toast fires only when a log creates the miss, not when the list mounts on one.
+
+It is display only and writes nothing. The server decides when the session finishes, so a session finished as Tired is still held harmless (SI-7c) even though the dots showed it as a miss.
+
+*Why:* a miss used to leave the dots full until the next workout, which read as "this still counts" at the moment the lifter most needed to hear it did not.
+*Covered by:* `live-miss.test.ts`; `components/live-miss-dots.test.tsx`; `e2e/progression-suggestion.spec.ts` — "a set logged short empties the dots on the spot and says the count starts over".
 
 ### SI-13 — A set marked "felt easy" satisfies the gate on its own
 When the gate is *not* already met, the most recent logged set is `wasEasy`, and that set met its target (SI-9), progression is offered as if consensus existed. The resulting suggestion is flagged `easyOverride` so the UI can say why.

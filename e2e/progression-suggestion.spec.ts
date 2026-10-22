@@ -3,7 +3,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { programExercises, programSets, programs, workoutSessions, workoutSets } from "../src/db/schema";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
-import { openFirstExercise, openWorkout, tapAndSave, trackActions, waitForLiveSession } from "./helpers";
+import { openFirstExercise, openWorkout, stableBox, tapAndSave, trackActions, waitForLiveSession } from "./helpers";
 
 /**
  * A suggestion from history to the plan, in a real browser.
@@ -186,4 +186,38 @@ test("correcting reps mid-workout keeps the plan's target unless asked to change
   await page.getByRole("switch", { name: new RegExp(`change the program target to ${short}`) }).click();
   await save();
   await expect.poll(async () => (await plannedSet(slot.setId)).targetReps).toBe(short);
+});
+
+test("a set logged short empties the dots on the spot and says the count starts over", async ({ page }) => {
+  const slot = await openSlot(page);
+  if (slot.targetReps < 3) throw new Error("First set has no rep target to fall short of; the seed puts Bench Press first.");
+  await twoCleanSessions(slot, "hold");
+  await page.reload();
+  await waitForLiveSession(page);
+
+  const row = page.getByTestId("set-row").first();
+  await expect(row.getByRole("button", { name: /^Progress: 2 of 2 sessions$/ })).toBeVisible({ timeout: 10_000 });
+
+  // Long press into the miss sheet, held open past its 450ms timer.
+  const toggle = row.getByRole("button", { name: /^(Log|Un-log) set 1$/ });
+  const box = await stableBox(toggle);
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  // Holding the press is the action under test.
+  // eslint-disable-next-line no-restricted-syntax
+  await page.waitForTimeout(700);
+  await page.mouse.up();
+  await expect(page.getByRole("dialog").getByText("Reps done")).toBeVisible({ timeout: 5_000 });
+  await page.getByRole("button", { name: "One rep fewer" }).click();
+  await tapAndSave(page, page.getByRole("button", { name: "Log set", exact: true }), {
+    bodyIncludes: '"actualReps":',
+  });
+
+  await expect(row.getByRole("button", { name: "Missed this session: count starts over, 0 of 2 sessions" })).toBeVisible();
+  await expect(page.getByText(`Set 1: ${slot.targetReps - 1} of ${slot.targetReps}. Count starts over.`, { exact: false })).toBeVisible();
+
+  // Un-logging takes the miss back.
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(row.getByRole("button", { name: /^Progress: 2 of 2 sessions$/ })).toBeVisible();
 });
