@@ -74,6 +74,9 @@ export async function tapAndSave(
       // failure the app never made.
       const startBy = Date.now() + startTimeoutMs;
       while (started === 0 && Date.now() < startBy) {
+        // Polls the request counters above; expect.poll can't express the
+        // re-tap fallback this loop feeds.
+        // eslint-disable-next-line no-restricted-syntax
         await page.waitForTimeout(100);
       }
       if (started === 0) continue;
@@ -81,6 +84,9 @@ export async function tapAndSave(
       const deadline = Date.now() + timeoutMs;
       while (Date.now() < deadline) {
         if (inFlight === 0 && Date.now() - lastActivity >= quietMs) return;
+        // Polls the request counters above; expect.poll can't express the
+        // re-tap fallback this loop feeds.
+        // eslint-disable-next-line no-restricted-syntax
         await page.waitForTimeout(100);
       }
       throw new Error("Server Actions never finished");
@@ -164,6 +170,32 @@ export function trackActions(page: Page, quietMs = 500): () => Promise<void> {
       .poll(() => inFlight === 0 && Date.now() - lastActivity >= quietMs, { timeout: 20_000, intervals: [100] })
       .toBe(true);
   };
+}
+
+/**
+ * The element's box once it has stopped moving.
+ *
+ * For manual pointer input (a long press, a drag). `click()` waits for the
+ * element to be stable by itself; `mouse.down()` at coordinates does not, and a
+ * screen that has just been pushed is still finishing its slide-in for ~120ms.
+ * A press read off a box mid-slide lands beside the control.
+ */
+export async function stableBox(locator: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+  let previous = "";
+  let box: Awaited<ReturnType<Locator["boundingBox"]>> = null;
+  await expect
+    .poll(
+      async () => {
+        box = await locator.boundingBox();
+        const key = box ? `${box.x},${box.y},${box.width},${box.height}` : "";
+        const still = key !== "" && key === previous;
+        previous = key;
+        return still;
+      },
+      { intervals: [50], timeout: 10_000 },
+    )
+    .toBe(true);
+  return box!;
 }
 
 /** Wait until the workout layout has created or restored its session. */
@@ -259,7 +291,7 @@ export async function openFirstExercise(page: Page): Promise<void> {
  * this way to shorten a duration before playing it.
  */
 export async function openFirstSetEditor(page: Page): Promise<void> {
-  const row = page.locator("p.text-lg.font-medium").first();
+  const row = page.getByTestId("set-prescription").first();
   await expect(row).toBeVisible({ timeout: 10_000 });
   await row.click();
   try {

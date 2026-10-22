@@ -30,7 +30,7 @@ test("timed set with start delay runs Get ready phase then work countdown", asyn
     .first();
   await durationButton.click();
   const fifteenSecondPreset = page
-    .locator("div.rounded-t-3xl")
+    .getByRole("dialog")
     .getByRole("button", { name: /^15\s?s?$/ });
   await expect(fifteenSecondPreset).toBeVisible({ timeout: 2_000 });
   await fifteenSecondPreset.click();
@@ -57,7 +57,7 @@ test("timed set with start delay runs Get ready phase then work countdown", asyn
   });
 
   // Start the timer.
-  const playBtn = page.locator("button.w-7.h-7.rounded-full").first();
+  const playBtn = page.getByTestId("set-row").first().getByRole("button", { name: /^(Log|Un-log) set 1$/ });
   await expect(playBtn).toBeVisible();
   await playBtn.click();
 
@@ -68,7 +68,7 @@ test("timed set with start delay runs Get ready phase then work countdown", asyn
   await expect(page.getByText("of 00:15")).toBeVisible({ timeout: 10_000 });
 
   // The full countdown (3s delay + 15s work) completes and auto-logs the set.
-  await expect(playBtn).toHaveClass(/bg-primary/, { timeout: 25_000 });
+  await expect(playBtn).toHaveAttribute("aria-pressed", "true", { timeout: 25_000 });
 
   // The user must have seen the 00:00 completion frame before the overlay
   // cleared.
@@ -77,7 +77,7 @@ test("timed set with start delay runs Get ready phase then work countdown", asyn
   // Cleanup: un-log the set and reset the delay to None so the test is
   // idempotent and doesn't leak state into other specs.
   await playBtn.click();
-  await expect(playBtn).toHaveClass(/bg-transparent/);
+  await expect(playBtn).toHaveAttribute("aria-pressed", "false");
   await openFirstSetEditor(page);
   await page.getByRole("button", { name: /^None$/ }).click();
   await page.getByRole("button", { name: /^Save$/ }).click();

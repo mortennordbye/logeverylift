@@ -266,7 +266,7 @@ function PlanPreview({ plan }: { plan: AiPlan }) {
       {plan.programs.map((program) => (
         <div key={program.name} className="rounded-xl bg-muted p-4 flex flex-col gap-2">
           <div className="flex items-baseline justify-between gap-2">
-            <p className="text-sm font-semibold">{program.name}</p>
+            <p className="text-sm font-semibold" data-testid="plan-program-name">{program.name}</p>
             <p className="text-xs text-muted-foreground">~{Math.round(estimateSessionMinutes(program.exercises))} min</p>
           </div>
           <ul className="flex flex-col gap-1.5">

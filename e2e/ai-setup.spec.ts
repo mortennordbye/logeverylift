@@ -60,7 +60,7 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   for (const minutes of body.match(/~(\d+) min/g) ?? []) {
     expect(Number(minutes.slice(1, -4))).toBeLessThanOrEqual(45);
   }
-  const programNames = (await page.locator("p.text-sm.font-semibold").allInnerTexts()).filter((t) => /^(Upper|Lower) A/.test(t));
+  const programNames = (await page.getByTestId("plan-program-name").allInnerTexts()).filter((t) => /^(Upper|Lower) A/.test(t));
   expect(programNames).toHaveLength(2);
 
   await page.getByRole("button", { name: "Import" }).click();

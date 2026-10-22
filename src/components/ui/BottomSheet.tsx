@@ -81,6 +81,8 @@ export function BottomSheet({ open, onClose, children, blur = false }: Props) {
             transition={SHEET_TRANSITION}
             className="fixed inset-x-0 bottom-0 z-50"
             style={{ marginBottom: kbHeight }}
+            role="dialog"
+            aria-modal="true"
           >
             {children}
           </motion.div>

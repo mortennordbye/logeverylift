@@ -46,13 +46,33 @@ async function maxSlide(page: Page, action: () => Promise<void>): Promise<number
   });
 
   await action();
-  await page.waitForTimeout(700); // longer than the 240ms slide
+  // A sampling window, not a wait for a condition: the frames are recorded
+  // above while this runs, and it must outlast the 240ms slide.
+  // eslint-disable-next-line no-restricted-syntax
+  await page.waitForTimeout(700);
 
   return page.evaluate(() => {
     const w = window as unknown as { __tx: number[]; __stop?: () => void };
     w.__stop?.();
     return w.__tx.length ? Math.max(...w.__tx) : 0;
   });
+}
+
+/**
+ * Wait until no page layer is mid-slide, so a measurement starts from rest
+ * rather than catching the tail of the previous transition.
+ */
+async function transitionsSettled(page: Page) {
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        Array.from(document.querySelectorAll(".page-layer")).every((el) => {
+          const t = getComputedStyle(el as HTMLElement).transform;
+          return t === "none" || /^matrix\(1, 0, 0, 1, 0, 0\)$/.test(t);
+        }),
+      ),
+    )
+    .toBe(true);
 }
 
 // A real slide crosses most of a 390px viewport; anything under this is either
@@ -62,7 +82,7 @@ const SLID = 50;
 test("a push into a deeper route animates", async ({ page }) => {
   test.setTimeout(120_000);
   await openWorkout(page);
-  await page.waitForTimeout(600);
+  await transitionsSettled(page);
 
   const slide = await maxSlide(page, async () => {
     await openFirstExercise(page);
@@ -78,11 +98,13 @@ test("a platform history navigation does not animate on top of the system", asyn
   test.setTimeout(120_000);
   await openWorkout(page);
   await openFirstExercise(page);
-  await page.waitForTimeout(900);
+  await transitionsSettled(page);
 
   // goBack() raises the same popstate the iOS edge swipe raises.
   const slide = await maxSlide(page, async () => {
     await page.goBack();
+    // Part of the sampling window (see maxSlide).
+    // eslint-disable-next-line no-restricted-syntax
     await page.waitForTimeout(300);
   });
 
@@ -98,9 +120,9 @@ test("our own Back still animates even though it is also a popstate", async ({
   test.setTimeout(120_000);
   await openWorkout(page);
   await openFirstExercise(page);
-  await page.waitForTimeout(600);
+  await transitionsSettled(page);
   await openFirstSetEditor(page);
-  await page.waitForTimeout(900);
+  await transitionsSettled(page);
 
   // Save runs markProgrammaticBack() then router.back().
   const save = page.getByRole("button", { name: /^Save$/ }).first();
@@ -108,6 +130,8 @@ test("our own Back still animates even though it is also a popstate", async ({
 
   const slide = await maxSlide(page, async () => {
     await save.click();
+    // Part of the sampling window (see maxSlide).
+    // eslint-disable-next-line no-restricted-syntax
     await page.waitForTimeout(300);
   });
 

@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { workoutSets } from "../src/db/schema";
 import { expect, test } from "./fixtures/test";
 import { testDb } from "./fixtures/reset";
-import { openFirstExercise, openWorkout, trackActions, waitForLiveSession } from "./helpers";
+import { openFirstExercise, openWorkout, stableBox, trackActions, waitForLiveSession } from "./helpers";
 
 /**
  * Drag-to-reorder, mid-workout, with real pointer drags.
@@ -20,15 +20,16 @@ import { openFirstExercise, openWorkout, trackActions, waitForLiveSession } from
  * 8 px activation distance in small steps, release over the target.
  */
 async function drag(page: Page, handle: Locator, target: Locator) {
-  const from = await handle.boundingBox();
-  const to = await target.boundingBox();
-  if (!from || !to) throw new Error("drag endpoints not visible");
+  const from = await stableBox(handle);
+  const to = await stableBox(target);
   const x = from.x + from.width / 2;
   await page.mouse.move(x, from.y + from.height / 2);
   await page.mouse.down();
   await page.mouse.move(x, from.y + from.height / 2 + 12, { steps: 4 });
   await page.mouse.move(x, to.y + to.height / 2, { steps: 20 });
-  // Let dnd-kit settle the drop position before releasing.
+  // A finger pauses over the target before lifting; dnd-kit computes the drop
+  // position from the last move, so releasing in the same frame can miss it.
+  // eslint-disable-next-line no-restricted-syntax
   await page.waitForTimeout(150);
   await page.mouse.up();
 }
@@ -159,7 +160,7 @@ test("exercises can be dragged into a new order that survives a reload", async (
   const before = await exerciseIds(page);
   expect(before.length).toBeGreaterThanOrEqual(2);
   const [e1, e2, ...rest] = before;
-  const firstName = await page.getByTestId("exercise-row").first().locator("p.text-base").first().innerText();
+  const firstName = await page.getByTestId("exercise-row").first().getByRole("paragraph").first().innerText();
 
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await drag(
