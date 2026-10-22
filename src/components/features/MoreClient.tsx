@@ -1,17 +1,19 @@
 "use client";
 
+import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
-import { BarChart2, CalendarDays, ChevronRight, Clock, Library, LogOut, MessageSquare, Settings, Shield, Sparkles, UserCircle, Users } from "lucide-react";
+import { shareApp } from "@/lib/utils/share";
+import { BarChart2, CalendarDays, ChevronRight, Clock, Library, LogOut, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
+// A row either links to a page or runs an action in place.
 type MoreItem = {
   label: string;
-  href: string;
   icon: typeof Settings;
   description: string;
-};
+} & ({ href: string } | { action: "share" });
 
 const groups: { title: string; items: MoreItem[] }[] = [
   {
@@ -58,6 +60,12 @@ const groups: { title: string; items: MoreItem[] }[] = [
         icon: Users,
         description: "Connect and share programs with friends",
       },
+      {
+        label: "Invite a friend",
+        action: "share",
+        icon: Share2,
+        description: "Send a link to someone who trains",
+      },
     ],
   },
   {
@@ -96,6 +104,7 @@ export function MoreClient({ role }: { role: string }) {
   const isAdmin = role === "admin";
   const { data: session } = authClient.useSession();
   const [stopping, setStopping] = useState(false);
+  const { showToast } = useToast();
   const isImpersonating = !!session?.session.impersonatedBy;
   const isDemoMode = isImpersonating && session?.user.email === DEMO_USER_EMAIL;
 
@@ -120,6 +129,12 @@ export function MoreClient({ role }: { role: string }) {
     }
     await authClient.admin.stopImpersonating();
     window.location.href = "/more/admin";
+  }
+
+  async function handleShare() {
+    if ((await shareApp(window.location.origin)) === "copied") {
+      showToast({ message: "Link copied" });
+    }
   }
 
   return (
@@ -160,12 +175,10 @@ export function MoreClient({ role }: { role: string }) {
               <div className="divide-y divide-border border-y border-border">
                 {items.map((item) => {
                   const Icon = item.icon;
-                  return (
-                    <Link
-                      key={item.href}
-                      href={item.href}
-                      className="flex items-center gap-4 px-4 min-h-[56px] active:bg-muted/50 transition-colors"
-                    >
+                  const rowClass =
+                    "flex items-center gap-4 px-4 min-h-[56px] w-full text-left active:bg-muted/50 transition-colors";
+                  const content = (
+                    <>
                       <Icon className="w-5 h-5 text-muted-foreground flex-none" />
                       <div className="flex-1 min-w-0">
                         <div className="font-medium">{item.label}</div>
@@ -174,7 +187,16 @@ export function MoreClient({ role }: { role: string }) {
                         </div>
                       </div>
                       <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
+                    </>
+                  );
+                  return "href" in item ? (
+                    <Link key={item.href} href={item.href} className={rowClass}>
+                      {content}
                     </Link>
+                  ) : (
+                    <button key={item.label} onClick={handleShare} className={rowClass}>
+                      {content}
+                    </button>
                   );
                 })}
               </div>

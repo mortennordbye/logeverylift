@@ -42,7 +42,8 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "LogEveryLift",
-  description: "Track your workouts with intelligent progress monitoring.",
+  applicationName: "LogEveryLift",
+  description: "Log your sets, follow a plan built for you and see what to lift next time.",
   icons: {
     apple: "/apple-touch-icon.png",
   },

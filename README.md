@@ -4,6 +4,8 @@
 
 ### A mobile-first workout tracking PWA that feels like a native iOS app.
 
+**Try it at [logeverylift.com](https://logeverylift.com)**
+
 [![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org) [![Drizzle](https://img.shields.io/badge/Drizzle-C5F74F?logo=drizzle&logoColor=black)](https://orm.drizzle.team) [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
 
 [![CI](https://github.com/mortennordbye/logeverylift/actions/workflows/ci.yml/badge.svg)](https://github.com/mortennordbye/logeverylift/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mortennordbye/logeverylift/badge)](https://securityscorecards.dev/viewer/?uri=github.com/mortennordbye/logeverylift)

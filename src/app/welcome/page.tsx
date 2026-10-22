@@ -1,15 +1,19 @@
 import { LoginForm } from "@/components/features/LoginForm";
+import { shareMetadata } from "@/lib/share-metadata";
 import { getOptionalSession } from "@/lib/utils/session";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "LogEveryLift: early access to the smart training log",
-  description:
-    "Be one of the first to train with LogEveryLift: AI-built programs, smart progression that reads your effort, and rest timers that run themselves. Free during early access.",
-};
+export function generateMetadata(): Promise<Metadata> {
+  return shareMetadata({
+    title: "LogEveryLift. Log every lift, know the next one",
+    description:
+      "AI-built programs, smart progression that reads your effort and rest timers that run themselves.",
+    path: "/welcome",
+  });
+}
 
 const SHOT_FILES = [
   { src: "/screenshots/home.png", w: 920, h: 2000 },

@@ -1,6 +1,16 @@
 import { SignupForm } from "@/components/features/SignupForm";
+import { shareMetadata } from "@/lib/share-metadata";
 import { getOptionalSession } from "@/lib/utils/session";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+
+export function generateMetadata(): Promise<Metadata> {
+  return shareMetadata({
+    title: "Join LogEveryLift",
+    description: "Log your sets, follow a plan built for you and see what to lift next time.",
+    path: "/signup",
+  });
+}
 
 export default async function SignupPage() {
   const session = await getOptionalSession();

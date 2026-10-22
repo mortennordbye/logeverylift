@@ -89,7 +89,7 @@ export function AdminTokensClient({ tokens }: { tokens: InviteToken[] }) {
 
   function handleShare(token: InviteToken) {
     const url = `${window.location.origin}/signup?token=${encodeURIComponent(token.token)}`;
-    const text = `Hey! I'd like to invite you to try LogEveryLift — a workout tracking app I use.\n\nSign up here: ${url}`;
+    const text = `Hey! I'd like to invite you to try LogEveryLift, a workout tracking app I use.\n\nSign up here: ${url}`;
     if (navigator.share) {
       navigator.share({ text });
     } else {

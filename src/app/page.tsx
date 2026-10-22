@@ -1,5 +1,6 @@
 import { AiCheckinCard } from "@/components/features/AiCheckinCard";
 import { DeclineMakeupButton } from "@/components/features/DeclineMakeupButton";
+import { SharePromptLoader } from "@/components/features/SharePromptLoader";
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
 import { WeeklyGoalProgress } from "@/components/features/WeeklyGoalProgress";
 import { WorkoutInsightBanner } from "@/components/features/WorkoutInsightBanner";
@@ -10,6 +11,7 @@ import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/
 import { parseDateStr } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
 import Link from "next/link";
+import { Suspense } from "react";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
 const DAY_LABELS_FULL = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -402,6 +404,10 @@ export default async function Home() {
           </Link>
         </div>
       )}
+
+      <Suspense fallback={null}>
+        <SharePromptLoader />
+      </Suspense>
 
     </div>
   );
