@@ -147,7 +147,7 @@ Writing a spec:
   usually the right fix and helps screen readers too.
 - Navigate with the helpers in `e2e/helpers.ts`: `openWorkout`,
   `openFirstExercise`, `openTimedExercise`, `waitForLiveSession`. They handle
-  the readiness sheet and WebKit's dropped taps.
+  the readiness sheet.
 - Wait for writes with `tapAndSave` (one tap) or `trackActions` (a drag or a
   multi-write flow) before reloading or querying. The app saves optimistically,
   and reloading too early cancels the write.

@@ -242,14 +242,9 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Unblocked by:** Running `/security-review` (or `/code-review high`) over the current branch diff before/after merge, and optionally addressing the lower-severity residuals captured in the entries above (cookieCache revocation lag, weight float dedup, reaction privacy flag).
 - **Touchpoints:** whole MCP + auth surface — `src/lib/mcp/`, `src/app/api/[transport]/`, `src/lib/actions/`, `src/lib/auth.ts`, `src/middleware.ts`, `src/lib/env.ts`.
 
-### Playwright WebKit: a tap right after the readiness sheet closes was dropped, not seen on iOS
-- **What:** Under Playwright's WebKit, a tap on an in-app `<Link>` shortly after the readiness sheet closed was accepted by the anchor but the navigation never committed (exercise row → set list, and set row → set editor). The retries in `openFirstExercise` / `openFirstSetEditor` exist for it. The cause first written down for it no longer matches the code: `confirmReadiness` does not call `router.refresh()`, and `setSessionReadiness` does not revalidate.
-- **Why deferred:** Not reproduced on 2026-09-14 in iOS Simulator Safari (iPhone 17 Pro) against the dev server: Skip followed by an immediate exercise tap navigated, and Back, reopen, then an immediate set-row tap opened the editor. Simulator taps land a few hundred ms apart, so a narrower window is not ruled out, and there is nothing to fix without a failing case.
-- **Unblocked by:** A report of a dead tap on a real iPhone, or a Playwright WebKit run once the binary downloads (it hangs locally). Capture a trace of the failing tap before changing any component.
-- **Touchpoints:** `src/components/features/WorkoutSessionClient.tsx` (`showReadiness`), `src/components/features/ReadinessSheet.tsx`, `src/components/features/WorkoutExerciseList.tsx` (the row `<Link>`), `e2e/helpers.ts` (`openFirstExercise`, `openFirstSetEditor`).
 
-### e2e: `exercise-timer-delay` intermittently fails on "element is not stable"
-- **What:** Roughly 1 run in 6 on WebKit, `exercise-timer-delay` times out at 90 s clicking the Duration row, with Playwright reporting `element is not stable` — the control never stops moving long enough to be clicked. The other five runs pass in ~25 s.
-- **Why deferred:** Not reproducible on demand. A diagnostic that samples every element's `getBoundingClientRect` per frame for 4 s found **zero** moving elements once the page transition had settled, so this is not a permanent oscillation — it looks like the click landing while the page-transition slide is still running, in a run where the dev server was also compiling. Chasing it further needs a capture from a failing run, which I could not force.
-- **Unblocked by:** Catching one in the act — run the spec in a loop with `trace: "on"` and inspect the frame-by-frame screenshots of a failing attempt, or re-check against a production build where the transition is not competing with on-demand compilation.
-- **Touchpoints:** `e2e/exercise-timer-delay.spec.ts`, `src/components/features/PageTransition.tsx`, `src/components/features/SetEditView.tsx`.
+### `eslint-config-next` held at 16.1.6 while `next` is on 16.4.2
+- **What:** `eslint-config-next` 16.4.2 pulls `eslint-plugin-react-hooks` 7.1.1, whose stricter rules report 17 errors in existing code, mostly `react-hooks/set-state-in-effect` (14), plus `react-hooks/purity` and `react-hooks/immutability`.
+- **Why deferred:** `next` was bumped to 16.4.2 to fix a router action-queue race that dropped taps and pulled users back a screen (`e2e/session-start-race.spec.ts`). Rewriting effects across the app to satisfy new lint rules is separate work and would have buried that fix.
+- **Unblocked by:** Bumping `eslint-config-next` to match `next`, running `pnpm lint`, and fixing or deliberately suppressing each finding with a reason.
+- **Touchpoints:** `package.json`, `eslint.config.mjs`, the files `pnpm lint` reports after the bump.
