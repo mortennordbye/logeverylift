@@ -72,7 +72,7 @@ export default async function SetEditPage({ params }: Props) {
       </div>
 
       {/* Edit view */}
-      <SetEditView set={set} isWorkout={true} isTimed={pe.exercise.isTimed} isRunning={pe.exercise.name === "Running" || pe.exercise.discipline != null} discipline={pe.exercise.discipline} exerciseId={pe.exercise.id} setNumber={setIndex + 1} exerciseTypeDefault={pe.exercise.exerciseType} exerciseTypeOverride={pe.exerciseType} />
+      <SetEditView set={set} isWorkout={true} isTimed={pe.exercise.isTimed} isRunning={pe.exercise.name === "Running" || pe.exercise.discipline != null} discipline={pe.exercise.discipline} exerciseId={pe.exercise.id} setNumber={setIndex + 1} exerciseTypeDefault={pe.exercise.exerciseType} exerciseTypeOverride={pe.exerciseType} equipment={pe.exercise.equipment} />
     </div>
   );
 }

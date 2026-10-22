@@ -5,7 +5,7 @@ import { useToast } from "@/contexts/toast-context";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { addProgramSet } from "@/lib/actions/programs";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
-import { withCustomOption } from "@/lib/utils/picker-options";
+import { type Equipment, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import type { SetType } from "@/lib/validators/workout";
@@ -48,6 +48,8 @@ type Props = {
   isRunning?: boolean;
   /** Triathlon discipline of the exercise. Null → generic run-mode behavior. */
   discipline?: Discipline | null;
+  /** Exercise's equipment — picks the weight presets (see weightOptionsFor). */
+  equipment?: Equipment | null;
 };
 
 export function NewSetView({
@@ -60,6 +62,7 @@ export function NewSetView({
   isWorkout = false,
   isRunning = false,
   discipline = null,
+  equipment = null,
 }: Props) {
   const router = useRouter();
   const cfg = disciplineConfig(discipline);
@@ -105,7 +108,7 @@ export function NewSetView({
   const weightScrollRef = useRef<HTMLDivElement>(null);
   const repsScrollRef = useRef<HTMLDivElement>(null);
 
-  const WEIGHT_OPTIONS = [0, ...Array.from({ length: 60 }, (_, i) => (i + 1) * 2.5)];
+  const WEIGHT_OPTIONS = weightOptionsFor(equipment);
   // A typed-in weight gets its own circle rather than lighting up the nearest
   // preset — see withCustomOption.
   const weightOptions = withCustomOption(WEIGHT_OPTIONS, weight);
