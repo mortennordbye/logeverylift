@@ -158,3 +158,26 @@ describe("effort prompt", () => {
     expect(screen.getByText("Set 3 — how much was left?")).toBeTruthy();
   });
 });
+
+describe("progress dots once the advance is taken", () => {
+  const label = () =>
+    screen.getByRole("button", { name: /^Progress/ }).getAttribute("aria-label");
+
+  it("still shows the run that earned the bump while it is on offer", () => {
+    mount([makeSet(1)], { 1: suggestion() });
+    expect(label()).toBe("Progress: 2 of 2 sessions");
+  });
+
+  it("starts the count again once the bump is taken", () => {
+    // The clears at 80kg do not count at 82.5kg (SI-11), so the run is empty.
+    mount([makeSet(1, { weightKg: "82.50" })], { 1: suggestion() });
+    expect(label()).toBe("Progress: 0 of 2 sessions since the increase");
+  });
+
+  it("starts the count again once a rep climb is taken", () => {
+    mount([makeSet(1, { targetReps: 9 })], {
+      1: suggestion({ reason: "progressed-reps", suggestedWeightKg: 80, suggestedReps: 9 }),
+    });
+    expect(label()).toBe("Progress: 0 of 2 sessions since the increase");
+  });
+});

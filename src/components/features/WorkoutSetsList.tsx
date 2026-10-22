@@ -173,6 +173,7 @@ export function WorkoutSetsList({
   const [sessionDetail, setSessionDetail] = useState<{
     setNumber: number;
     suggestion: SetSuggestionDisplay;
+    advanceTaken: boolean;
   } | null>(null);
   // Long-press on a set's toggle: record what was actually done rather than
   // taking the tap's word for it. Holds the set the press opened it on.
@@ -966,8 +967,8 @@ export function WorkoutSetsList({
                     onOpenLogRun={isRunning ? (id) => setPendingRunSetId(id) : undefined}
                     suggestion={suggestions?.[item.set.id]}
                     liveMiss={liveMissFor(setNumber)}
-                    onShowSessions={(suggestion) =>
-                      setSessionDetail({ setNumber, suggestion })
+                    onShowSessions={(suggestion, advanceTaken) =>
+                      setSessionDetail({ setNumber, suggestion, advanceTaken })
                     }
                     onApplySuggestion={handleApplySuggestion}
                     onApplyRepSuggestion={handleApplyRepSuggestion}
@@ -1424,7 +1425,11 @@ export function WorkoutSetsList({
               <p className="text-xs text-muted-foreground mb-4">
                 {sessionDetail.suggestion.hitsAchieved} of{" "}
                 {sessionDetail.suggestion.hitsRequired} sessions in a row
-                {liveMissFor(sessionDetail.setNumber) ? " before today" : ""}.
+                {liveMissFor(sessionDetail.setNumber)
+                  ? " before today."
+                  : sessionDetail.advanceTaken
+                    ? " earned this increase. The count starts again from it."
+                    : "."}
                 {sessionDetail.suggestion.sessionsUntilDeload === 1 &&
                   " One more miss backs off the weight."}
               </p>
@@ -1630,7 +1635,7 @@ function SortableSetRow({
   suggestion?: SetSuggestionDisplay;
   /** Today's session has already missed for this set: the run starts over. */
   liveMiss?: LiveMiss | null;
-  onShowSessions?: (suggestion: SetSuggestionDisplay) => void;
+  onShowSessions?: (suggestion: SetSuggestionDisplay, advanceTaken: boolean) => void;
   onApplySuggestion?: (setId: number, weightKg: number, adjustedReps?: number, durationSeconds?: number, distanceMeters?: number) => void;
   onApplyRepSuggestion?: (setId: number, reps: number) => void;
   overrideDurationSeconds?: number;
@@ -1923,6 +1928,23 @@ function SortableSetRow({
           // which is exactly when "2 of 2" explains where the bump came from.
           const showProgressDots =
             suggestion.reason !== "manual" && suggestion.hitsRequired > 0;
+          // Once the advance is taken the run that earned it is spent: clears
+          // at the old load (SI-11) or the old target (SI-9a) do not count at
+          // the new one, so the next session starts from zero. While the bump
+          // is still on offer the full run stays, since it explains the chip.
+          const advanceTaken =
+            (suggestion.reason === "progressed" && !weightPending) ||
+            (suggestion.reason === "reset" && !resetPending) ||
+            (suggestion.reason === "progressed-reps" &&
+              suggestion.suggestedReps !== undefined &&
+              !repsPending) ||
+            (suggestion.reason === "progressed-time" &&
+              suggestion.suggestedDurationSeconds !== undefined &&
+              !timePending) ||
+            (suggestion.reason === "progressed-distance" &&
+              suggestion.suggestedDistanceMeters !== undefined &&
+              !distancePending);
+          const banked = liveMiss || advanceTaken ? 0 : suggestion.hitsAchieved;
 
           return (
             <div className="mt-0.5">
@@ -1955,11 +1977,13 @@ function SortableSetRow({
                     aria-label={
                       liveMiss
                         ? `Missed this session: count starts over, 0 of ${suggestion.hitsRequired} sessions`
-                        : `Progress: ${suggestion.hitsAchieved} of ${suggestion.hitsRequired} sessions`
+                        : advanceTaken
+                          ? `Progress: 0 of ${suggestion.hitsRequired} sessions since the increase`
+                          : `Progress: ${suggestion.hitsAchieved} of ${suggestion.hitsRequired} sessions`
                     }
                     onClick={(e) => {
                       e.stopPropagation();
-                      onShowSessions?.(suggestion);
+                      onShowSessions?.(suggestion, advanceTaken);
                     }}
                     disabled={!suggestion.sessions?.length}
                     className="flex items-center gap-1 -m-3 p-3 disabled:pointer-events-none"
@@ -1975,7 +1999,7 @@ function SortableSetRow({
                             ? i === 0
                               ? "ring-1 ring-orange-500"
                               : "bg-muted-foreground/30"
-                            : i < suggestion.hitsAchieved
+                            : i < banked
                               ? "bg-primary"
                               : "bg-muted-foreground/30"
                         }`}
