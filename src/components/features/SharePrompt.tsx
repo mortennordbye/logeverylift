@@ -5,22 +5,33 @@ import { markSharePromptSeen } from "@/lib/actions/onboarding";
 import { shareApp } from "@/lib/utils/share";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Share2, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+
+// Set once the card has been shown in this page session. The router cache
+// keeps home's payload for 30 seconds, so going back to home can mount the
+// card again from a render made before the ask was recorded.
+let shownThisSession = false;
 
 /**
  * A card above the bottom nav asking the user to share the app. The loader
- * only renders it when the prompt is due; either answer records it as seen
- * so it stays away for the interval in src/lib/utils/share-prompt.ts.
+ * only renders it when the prompt is due. Showing it records the ask, so it
+ * appears once and then stays away for the interval in
+ * src/lib/utils/share-prompt.ts, whether or not the user answers.
  */
 export function SharePrompt() {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(() => !shownThisSession);
   const { showToast } = useToast();
+
+  useEffect(() => {
+    if (shownThisSession) return;
+    shownThisSession = true;
+    void callAction(markSharePromptSeen());
+  }, []);
 
   if (!open) return null;
 
   function close() {
     setOpen(false);
-    void callAction(markSharePromptSeen());
   }
 
   async function handleShare() {
