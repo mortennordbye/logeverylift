@@ -1,7 +1,15 @@
+import path from "node:path";
+
+export { e2eUser } from "../../scripts/lib/e2e-accounts";
+
 /**
- * The e2e account. Defaults match scripts/create-e2e-user.ts, which the
- * webServer's prepare step runs against the test database, so a plain
- * `pnpm test:e2e` needs no credentials set.
+ * How many e2e accounts exist, one per Playwright worker
+ * (scripts/lib/e2e-accounts.ts). Set by playwright.config.ts, which also
+ * passes it to the webServer's prepare step that creates them.
  */
-export const E2E_USER_EMAIL = process.env.E2E_USER_EMAIL ?? "e2e@workout.local";
-export const E2E_USER_PASSWORD = process.env.E2E_USER_PASSWORD ?? "e2e-test-password";
+export const E2E_WORKERS = Number(process.env.E2E_WORKERS ?? 1);
+
+/** Where worker `workerIndex`'s logged-in storage state is kept. */
+export function authFile(workerIndex: number): string {
+  return path.join(__dirname, "..", ".auth", `user-${workerIndex}.json`);
+}

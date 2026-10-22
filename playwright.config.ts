@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import os from "node:os";
 import { testDatabaseUrl } from "./scripts/lib/local-test-db";
 
 /**
@@ -16,23 +17,33 @@ import { testDatabaseUrl } from "./scripts/lib/local-test-db";
  * behind most of the suite's flakiness.
  *
  * Two engines: WebKit is what iOS ships, Chromium is the Android and desktop
- * PWA. The `setup` project logs in once; the rest reuse its storage state.
+ * PWA. The `setup` project logs each worker's account in once; specs reuse
+ * that storage state (e2e/fixtures/test.ts).
  */
 // Off the usual dev ports, so nothing else is listening there.
 const PORT = Number(process.env.E2E_PORT ?? 3917);
 const baseURL = `http://127.0.0.1:${PORT}`;
 const databaseUrl = testDatabaseUrl("logeverylift_test", process.env.E2E_DATABASE_URL);
 
-// The reset fixture runs in the test workers and reads DATABASE_URL.
+// Specs run in parallel, each worker logged in as its own e2e account
+// (e2e/fixtures/env.ts). CI runners have 4 vCPUs and the suite is also split
+// across machines there (see .github/workflows/ci.yml); locally, half the
+// cores, capped, leaves room for the server and the browsers.
+const WORKERS = Number(
+  process.env.E2E_WORKERS ?? (process.env.CI ? 2 : Math.min(4, Math.max(1, Math.floor(os.cpus().length / 2)))),
+);
+
+// The workers read these: DATABASE_URL for the reset fixture, E2E_WORKERS for
+// the account list.
 process.env.DATABASE_URL = databaseUrl;
+process.env.E2E_WORKERS = String(WORKERS);
 
 export default defineConfig({
   testDir: "./e2e",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: 0,
-  // One worker: every spec shares the e2e user and resets it before running.
-  workers: 1,
+  workers: WORKERS,
   reporter: process.env.CI ? [["list"], ["html", { open: "never" }]] : "list",
   use: {
     baseURL,
@@ -57,6 +68,7 @@ export default defineConfig({
       BETTER_AUTH_URL: baseURL,
       BETTER_AUTH_SECRET: "e2e-only-auth-secret-never-used-outside-tests",
       NEXT_TELEMETRY_DISABLED: "1",
+      E2E_WORKERS: String(WORKERS),
     },
   },
   projects: [
@@ -68,18 +80,12 @@ export default defineConfig({
     {
       name: "webkit",
       dependencies: ["setup"],
-      use: {
-        ...devices["iPhone 14 Pro"],
-        storageState: "e2e/.auth/user.json",
-      },
+      use: { ...devices["iPhone 14 Pro"] },
     },
     {
       name: "chromium",
       dependencies: ["setup"],
-      use: {
-        ...devices["Pixel 7"],
-        storageState: "e2e/.auth/user.json",
-      },
+      use: { ...devices["Pixel 7"] },
     },
   ],
 });
