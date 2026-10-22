@@ -5,6 +5,7 @@ import { useToast } from "@/contexts/toast-context";
 import { logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
 import { completeWorkoutSession } from "@/lib/actions/workout-sessions";
 import { updateProgramSet } from "@/lib/actions/programs";
+import { afterFailedReplay, dueItems, mergeReplayed, nextReplayIn } from "@/lib/utils/pending-queue";
 import { isStaleBundleError, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
 
 /**
@@ -45,20 +46,6 @@ type QueuedMutation =
   | { id: string; kind: "completeWorkoutSession"; payload: CompletePayload; queuedAt: number; attempts?: number; nextAttemptAt?: number };
 
 const STORAGE_KEY = "pendingMutationQueue";
-
-// Drop a queued mutation after this many failed replays. Permanent failures
-// (validation errors, unique violations the server can't recover from) would
-// otherwise loop on every `online` event forever.
-const MAX_ATTEMPTS = 5;
-
-// Wait this long before retrying an item, indexed by attempts already made.
-// Without a delay the five attempts are spent in a fraction of a second: a
-// failed replay bumps `attempts`, which used to re-trigger the replay, which
-// failed again — so a server blip lasting seconds (pods restarting mid-deploy)
-// drained the whole budget and dropped the user's sets while the device was
-// still online. Spread this way the budget lasts ~17 minutes, which outlives a
-// rolling deploy.
-const BACKOFF_MS = [5_000, 30_000, 120_000, 300_000, 600_000];
 
 type PendingQueueContextValue = {
   count: number;
@@ -122,10 +109,7 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
       // dependency on the queue gave this callback a new identity on every
       // mutation, including the one that bumps `attempts`, which re-fired the
       // effect below and burned the whole retry budget in a tight loop.
-      const due = Date.now();
-      const snapshot = queueRef.current.filter(
-        (m) => (m.nextAttemptAt ?? 0) <= due,
-      );
+      const snapshot = dueItems(queueRef.current, Date.now());
       if (snapshot.length === 0) return;
 
       const failed: QueuedMutation[] = [];
@@ -157,17 +141,9 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
           ok = false;
         }
         if (ok) continue;
-        const nextAttempts = (m.attempts ?? 0) + 1;
-        if (nextAttempts >= MAX_ATTEMPTS) {
-          dropped.push(m);
-        } else {
-          const delay = BACKOFF_MS[nextAttempts - 1] ?? BACKOFF_MS[BACKOFF_MS.length - 1];
-          failed.push({
-            ...m,
-            attempts: nextAttempts,
-            nextAttemptAt: Date.now() + delay,
-          } as QueuedMutation);
-        }
+        const next = afterFailedReplay(m, Date.now());
+        if (next.dropped) dropped.push(m);
+        else failed.push(next.item);
       }
 
       if (staleBundleSeen) {
@@ -185,15 +161,7 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
       // Drop the snapshot, keep failed ones (with bumped attempt counts)
       // + anything enqueued during replay. Dropped ones disappear silently
       // from the queue but we surface a toast so the user knows.
-      setQueue((prev) => {
-        const failedById = new Map(failed.map((m) => [m.id, m]));
-        const replayedIds = new Set(snapshot.map((m) => m.id));
-        return prev.flatMap((m) => {
-          if (!replayedIds.has(m.id)) return [m];
-          const updated = failedById.get(m.id);
-          return updated ? [updated] : [];
-        });
-      });
+      setQueue((prev) => mergeReplayed(prev, snapshot, failed));
 
       const succeeded = snapshot.length - failed.length - dropped.length;
       if (succeeded > 0) {
@@ -243,17 +211,13 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
   // queue change finds nothing due and only schedules a timer.
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (queue.length === 0) return;
-    const now = Date.now();
-    if (queue.some((m) => (m.nextAttemptAt ?? 0) <= now)) {
+    const wait = nextReplayIn(queue, Date.now());
+    if (wait === null) return;
+    if (wait === "now") {
       if (navigator.onLine) void replayAll();
       return;
     }
-    const soonest = queue.reduce<number>(
-      (acc, m) => Math.min(acc, m.nextAttemptAt ?? 0),
-      Number.POSITIVE_INFINITY,
-    );
-    const timer = setTimeout(() => void replayAll(), soonest - now);
+    const timer = setTimeout(() => void replayAll(), wait);
     return () => clearTimeout(timer);
   }, [queue, replayAll]);
 
@@ -284,8 +248,12 @@ export function usePendingQueue(): PendingQueueContextValue {
  * list.
  */
 export function useWorkoutSetWriter() {
-  const { enqueue } = usePendingQueue();
+  const { enqueue, replayAll } = usePendingQueue();
   const { showToast } = useToast();
+  // Retry replays the queue the failed write is already in. Re-sending the
+  // payload instead enqueued it a second time whenever the retry failed too,
+  // and replayed both.
+  const retryQueued = () => void replayAll();
 
   const logWithRetry = async (
     payload: LogPayload,
@@ -305,7 +273,7 @@ export function useWorkoutSetWriter() {
         showToast({
           variant: "error",
           message: "Set didn't save — tap Retry",
-          onRetry: () => void logWithRetry(payload),
+          onRetry: retryQueued,
         });
       }
       return r;
@@ -316,15 +284,18 @@ export function useWorkoutSetWriter() {
       if (isStaleBundleError(err)) {
         showToast({ message: "App updating — refreshing…", durationMs: 3000 });
         void reloadForFreshBundle();
-        throw err;
+        return { success: false, error: "App updating" };
       }
       enqueue({ kind: "logWorkoutSet", payload });
       showToast({
         variant: "error",
         message: "Set didn't save — tap Retry",
-        onRetry: () => void logWithRetry(payload),
+        onRetry: retryQueued,
       });
-      throw err;
+      // Resolve, not reject: the write is queued, which is all a caller can
+      // act on. Re-throwing left every caller with an unhandled rejection (and
+      // a crashed toggle handler) for a set that was in fact saved for replay.
+      return { success: false, error: "Saved locally, will retry" };
     }
   };
 
@@ -340,7 +311,7 @@ export function useWorkoutSetWriter() {
         showToast({
           variant: "error",
           message: "Couldn't remove set — tap Retry",
-          onRetry: () => void unlogWithRetry(payload),
+          onRetry: retryQueued,
         });
       }
     } catch (err) {
@@ -353,7 +324,7 @@ export function useWorkoutSetWriter() {
       showToast({
         variant: "error",
         message: "Couldn't remove set — tap Retry",
-        onRetry: () => void unlogWithRetry(payload),
+        onRetry: retryQueued,
       });
     }
   };

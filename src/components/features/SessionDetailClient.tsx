@@ -2,6 +2,7 @@
 
 import { deleteWorkoutSession } from "@/lib/actions/workout-sessions";
 import { formatDistanceKm, formatPace, formatTime } from "@/lib/utils/format";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { SessionDetail } from "@/types/workout";
 import { ChevronLeftIcon, Dumbbell, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -56,7 +57,11 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
 
   async function handleDelete() {
     setDeleting(true);
-    await deleteWorkoutSession(detail.id);
+    const result = await callAction(deleteWorkoutSession(detail.id));
+    if (!result.success) {
+      setDeleting(false);
+      return;
+    }
     router.push("/history");
   }
 

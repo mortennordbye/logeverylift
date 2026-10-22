@@ -2,6 +2,7 @@
 
 import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { removeFriend, respondToFriendRequest, sendFriendRequest, sendNudge } from "@/lib/actions/friends";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { FriendProfileStats, FriendSessionCard } from "@/types/workout";
 import { Check, Dumbbell, Loader2, UserCheck, UserMinus, UserPlus } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -108,16 +109,16 @@ export function PublicProfileClient({
     setLoading(true);
 
     if (status === "none") {
-      const result = await sendFriendRequest({ addresseeId: profile.id });
+      const result = await callAction(sendFriendRequest({ addresseeId: profile.id }));
       if (result.success) setStatus("pending_sent");
     } else if (status === "pending_sent" && friendshipId) {
-      const result = await removeFriend({ friendshipId });
+      const result = await callAction(removeFriend({ friendshipId }));
       if (result.success) { setStatus("none"); setFriendshipId(null); }
     } else if (status === "pending_received" && friendshipId) {
-      const result = await respondToFriendRequest({ friendshipId, action: "accepted" });
+      const result = await callAction(respondToFriendRequest({ friendshipId, action: "accepted" }));
       if (result.success) setStatus("accepted");
     } else if (status === "accepted" && friendshipId) {
-      const result = await removeFriend({ friendshipId });
+      const result = await callAction(removeFriend({ friendshipId }));
       if (result.success) { setStatus("none"); setFriendshipId(null); }
     }
 
@@ -127,7 +128,7 @@ export function PublicProfileClient({
 
   async function handleNudge() {
     setNudging(true);
-    const result = await sendNudge({ toUserId: profile.id });
+    const result = await callAction(sendNudge({ toUserId: profile.id }));
     if (result.success) setNudged(true);
     setNudging(false);
   }

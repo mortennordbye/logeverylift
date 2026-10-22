@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { setMissedWorkoutsEnabled } from "@/lib/actions/training-cycles";
 import { exportAllSessions } from "@/lib/actions/workout-sessions";
 import { requestNotificationPermission } from "@/lib/notifications";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { Bell, BookOpen, CheckIcon, ChevronLeft, ChevronRight, Download, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -110,7 +111,7 @@ function MissedWorkoutsRow({ initialEnabled }: { initialEnabled: boolean }) {
     const next = !enabled;
     setEnabled(next); // optimistic
     setSaving(true);
-    const result = await setMissedWorkoutsEnabled({ enabled: next });
+    const result = await callAction(setMissedWorkoutsEnabled({ enabled: next }));
     setSaving(false);
     if (!result.success) setEnabled(!next); // revert on failure
   }
@@ -148,7 +149,7 @@ function ExportHistoryButton() {
 
   async function handleExport() {
     setExporting(true);
-    const result = await exportAllSessions();
+    const result = await callAction(exportAllSessions());
     setExporting(false);
     if (!result.success) return;
     const blob = new Blob([JSON.stringify(result.data, null, 2)], {

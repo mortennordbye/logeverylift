@@ -14,6 +14,7 @@ import {
   restartTrainingCycle,
   startTrainingCycle,
 } from "@/lib/actions/training-cycles";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { TrainingCycle } from "@/types/workout";
 import { PlayIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -25,7 +26,7 @@ export function StartCycleButton({ cycle }: { cycle: TrainingCycle }) {
 
   async function handleStart() {
     setLoading(true);
-    const result = await startTrainingCycle(cycle.id);
+    const result = await callAction(startTrainingCycle(cycle.id));
     setLoading(false);
     if (result.success) {
       router.refresh();
@@ -55,7 +56,7 @@ export function RestartCycleButton({ cycle }: { cycle: TrainingCycle }) {
 
   async function handleRestart() {
     setLoading(true);
-    const result = await restartTrainingCycle(cycle.id);
+    const result = await callAction(restartTrainingCycle(cycle.id));
     setLoading(false);
     if (result.success) {
       setOpen(false);
@@ -118,7 +119,11 @@ export function DeleteCycleButton({ cycleId }: { cycleId: number }) {
 
   async function handleDelete() {
     setLoading(true);
-    await deleteTrainingCycle(cycleId);
+    const result = await callAction(deleteTrainingCycle(cycleId));
+    if (!result.success) {
+      setLoading(false);
+      return;
+    }
     router.push("/cycles");
   }
 

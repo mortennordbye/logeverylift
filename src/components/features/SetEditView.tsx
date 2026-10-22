@@ -1,10 +1,12 @@
 "use client";
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { setProgramExerciseType, updateProgramSet } from "@/lib/actions/programs";
 import { updateWorkoutSetNotes } from "@/lib/actions/workout-sets";
 import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
-import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { useToast } from "@/contexts/toast-context";
+import { useOverridesReady, useWorkoutSession } from "@/contexts/workout-session-context";
 import {
   EXERCISE_TYPES,
   EXERCISE_TYPE_LABELS,
@@ -71,7 +73,24 @@ const RIR_OPTIONS: { value: number | null; label: string }[] = [
   { value: 5, label: "5+" },
 ];
 
-export function SetEditView({
+/**
+ * The set editor. Its fields seed from the session's overrides, which reach the
+ * client only after hydration, restored from localStorage by the provider. On
+ * a cold load of the editor's URL (the PWA evicted mid-workout, then a set
+ * reopened) the fields seeded from the plan instead, and Save wrote the plan's
+ * values back over the correction; or, when the provider restored first, the
+ * hydration render disagreed with the server HTML.
+ *
+ * So the form mounts once the overrides are usable. On in-app navigation that
+ * is the first render; only a cold load waits for hydration. Mounting it early
+ * and re-seeding later would show the wrong numbers first and could discard
+ * what was typed in between.
+ */
+export function SetEditView(props: Props) {
+  return useOverridesReady() ? <SetEditForm {...props} /> : null;
+}
+
+function SetEditForm({
   set,
   isWorkout = false,
   isTimed = false,
@@ -97,6 +116,7 @@ export function SetEditView({
   const [showDurationPicker, setShowDurationPicker] = useState(false);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { showToast } = useToast();
 
   // Per-program exercise-type override. Editing it here writes to the
   // program_exercise (so it changes the type for ALL sets of this exercise in
@@ -111,14 +131,20 @@ export function SetEditView({
   );
 
   async function handleTypeChange(next: ExerciseType | null) {
+    const previous = typeOverride;
     setTypeOverride(next);
     setShowTypePicker(false);
     setSavingType(true);
-    await setProgramExerciseType({
+    const r = await callAction(setProgramExerciseType({
       programExerciseId: set.programExerciseId,
       exerciseType: next,
-    });
+    }));
     setSavingType(false);
+    if (!r.success) {
+      setTypeOverride(previous);
+      showToast({ variant: "error", message: "Couldn't save the change — try again" });
+      return;
+    }
     router.refresh();
   }
 
@@ -240,6 +266,18 @@ export function SetEditView({
 
   const handleSave = async () => {
     setSaving(true);
+    const writes: Promise<unknown>[] = [];
+    // Editing the plan (outside a workout) waits for the write. If it fails,
+    // stay on the editor with the values still in it: going back as if it had
+    // saved threw the edit away, and offline the rejection left the Save
+    // button spinning forever.
+    const savePlan = async (input: Parameters<typeof updateProgramSet>[0]) => {
+      const r = await callAction(updateProgramSet(input));
+      if (r.success) return true;
+      setSaving(false);
+      showToast({ variant: "error", message: "Couldn't save the set — try again" });
+      return false;
+    };
     const trimmedNote = notes.trim();
     const noteValue = trimmedNote.length > 0 ? trimmedNote : null;
     // During a workout the reps field records what was achieved and the
@@ -253,7 +291,7 @@ export function SetEditView({
     // Telemetry for tuning the weight presets: record the weights people have
     // to type in because no circle offers them. Fire-and-forget.
     if (!isRunning && !isTimed && exerciseId != null && !WEIGHT_OPTIONS.includes(weight) && weight > 0) {
-      void logCustomWeight({ exerciseId, weightKg: weight });
+      writes.push(callAction(logCustomWeight({ exerciseId, weightKg: weight })));
     }
 
     if (isRunning) {
@@ -269,11 +307,11 @@ export function SetEditView({
         const anchor = isPeriodized && set.peakDistanceMeters == null
           ? { peakDistanceMeters: distanceMeters, peakDurationSeconds: null }
           : {};
-        await updateProgramSet({ id: set.id, distanceMeters, durationSeconds: duration > 0 ? duration : undefined, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor });
+        if (!(await savePlan({ id: set.id, distanceMeters, durationSeconds: duration > 0 ? duration : undefined, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
       } else {
         // Time mode: anchor the entered duration as the peak (and drop the distance anchor) for periodized sets.
         const anchor = isPeriodized ? { peakDurationSeconds: duration, peakDistanceMeters: null } : {};
-        await updateProgramSet({ id: set.id, distanceMeters: null, durationSeconds: duration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor });
+        if (!(await savePlan({ id: set.id, distanceMeters: null, durationSeconds: duration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
       }
     } else if (isWorkout) {
       // During a workout, changes apply to the active session only — never write back to
@@ -296,13 +334,15 @@ export function SetEditView({
         // plannedReps would keep showing the old target with a "done" badge.
         workoutSession?.setOverride(set.id, { targetReps: reps, weightKg: weight, notes: noteValue, actualReps: reps, rir: rir ?? undefined, wasEasy: easy });
         if (reps !== plannedReps) {
-          void updateProgramSet({ id: set.id, targetReps: reps });
+          // Mid-workout this must not hold up the lifter; the session override
+          // already carries the corrected reps.
+          writes.push(callAction(updateProgramSet({ id: set.id, targetReps: reps })));
         }
       }
     } else if (isTimed) {
-      await updateProgramSet({ id: set.id, durationSeconds: duration, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null });
+      if (!(await savePlan({ id: set.id, durationSeconds: duration, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null }))) return;
     } else {
-      await updateProgramSet({ id: set.id, targetReps: reps, weightKg: weight, setType, restTimeSeconds: restSeconds, targetRir: prescribedRir });
+      if (!(await savePlan({ id: set.id, targetReps: reps, weightKg: weight, setType, restTimeSeconds: restSeconds, targetRir: prescribedRir }))) return;
     }
 
     const activeSessionId = workoutSession?.sessionId ?? null;
@@ -313,7 +353,7 @@ export function SetEditView({
         // ones. Rewrite the row (logWorkoutSet upserts) with the corrected
         // values — otherwise history, volume and PRs keep what the user has
         // just corrected away.
-        void logWithRetry({
+        writes.push(logWithRetry({
           sessionId: activeSessionId,
           exerciseId,
           setNumber,
@@ -331,14 +371,22 @@ export function SetEditView({
           isCompleted: true,
           isFailed: failed,
           wasEasy: easy,
-        });
+        }));
       } else {
         // Not yet logged: the override carries the values (and the note)
         // forward to the next logWorkoutSet call. The note still goes through
         // in case a row exists from an earlier session state.
-        void updateWorkoutSetNotes({ sessionId: activeSessionId, exerciseId, setNumber, programSetId: set.id, notes: noteValue });
+        writes.push(callAction(updateWorkoutSetNotes({ sessionId: activeSessionId, exerciseId, setNumber, programSetId: set.id, notes: noteValue })));
       }
     }
+
+    // Wait for this edit's writes before leaving. WebKit cancels in-flight
+    // fetches when a history traversal starts, even a same-document one, so on
+    // iOS router.back() killed the re-log of a corrected set and the lifter got
+    // "Set didn't save" for an edit that had only been cut off. Each write
+    // resolves either way (failures are queued or swallowed), so this cannot
+    // strand the editor.
+    await Promise.all(writes);
 
     // Marks this as our own back, not an edge swipe. Both arrive as popstate;
     // only the swipe is already being animated by the system.

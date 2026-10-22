@@ -2,6 +2,7 @@
 
 import { createCustomExercise, deleteCustomExercise, updateCustomExercise } from "@/lib/actions/exercises";
 import { EXERCISE_TYPES, EXERCISE_TYPE_LABELS, type ExerciseType } from "@/lib/utils/exercise-type";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { Exercise } from "@/types/workout";
 import {
   Activity,
@@ -427,7 +428,7 @@ export function ExercisesClient({
   async function handleDelete() {
     if (!editingExercise) return;
     setLoading(true);
-    const result = await deleteCustomExercise(editingExercise.id);
+    const result = await callAction(deleteCustomExercise(editingExercise.id));
     setLoading(false);
     if (!result.success) { setError(result.error ?? "Failed to delete exercise"); return; }
     closeEdit();
@@ -446,12 +447,12 @@ export function ExercisesClient({
     if (!editingExercise || !name.trim()) return;
     setLoading(true);
     setError("");
-    const result = await updateCustomExercise(editingExercise.id, {
+    const result = await callAction(updateCustomExercise(editingExercise.id, {
       name: name.trim(), category, isCustom: true,
       bodyArea: bodyArea || undefined, muscleGroup: muscleGroup || undefined,
       equipment: equipment || undefined, movementPattern: movementPattern || undefined,
       exerciseType: exType || undefined,
-    });
+    }));
     setLoading(false);
     if (!result.success) { setError(result.error ?? "Failed to update exercise"); return; }
     setSelectedExercise(result.data);
@@ -464,12 +465,12 @@ export function ExercisesClient({
     if (!name.trim()) return;
     setLoading(true);
     setError("");
-    const result = await createCustomExercise({
+    const result = await callAction(createCustomExercise({
       name: name.trim(), category, isCustom: true,
       bodyArea: bodyArea || undefined, muscleGroup: muscleGroup || undefined,
       equipment: equipment || undefined, movementPattern: movementPattern || undefined,
       exerciseType: exType || undefined,
-    });
+    }));
     setLoading(false);
     if (!result.success) { setError(result.error ?? "Failed to create exercise"); return; }
     resetForm();

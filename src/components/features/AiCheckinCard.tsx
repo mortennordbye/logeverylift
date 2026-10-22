@@ -3,6 +3,7 @@
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { answerCheckin } from "@/lib/actions/ai-checkin";
 import { CHECKIN_ISSUES, CHECKIN_NOTE_MAX, type CheckinIssue } from "@/lib/utils/ai-checkin";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -23,7 +24,7 @@ export function AiCheckinCard({ id, cycleName }: { id: number; cycleName: string
 
   async function answer(status: "fits" | "dismissed") {
     setSaving(true);
-    const result = await answerCheckin({ id, status });
+    const result = await callAction(answerCheckin({ id, status }));
     setSaving(false);
     if (!result.success) {
       setError(result.error);
@@ -35,7 +36,7 @@ export function AiCheckinCard({ id, cycleName }: { id: number; cycleName: string
   async function submitDoesNotFit() {
     setSaving(true);
     setError(null);
-    const result = await answerCheckin({ id, status: "does_not_fit", issues, note });
+    const result = await callAction(answerCheckin({ id, status: "does_not_fit", issues, note }));
     if (!result.success) {
       setSaving(false);
       setError(result.error);

@@ -33,7 +33,8 @@ import { E2E_USER_EMAIL } from "./env";
 
 let pool: pg.Pool | null = null;
 
-function testDb() {
+/** The test database, for specs that check what a flow actually wrote. */
+export function testDb() {
   pool ??= new pg.Pool({
     connectionString: assertTestDatabase(process.env.DATABASE_URL).toString(),
     max: 2,

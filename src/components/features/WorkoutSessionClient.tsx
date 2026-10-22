@@ -4,7 +4,9 @@ import { WorkoutExerciseList } from "@/components/features/WorkoutExerciseList";
 import { IdlePrefetch } from "@/components/features/IdlePrefetch";
 import { ReadinessSheet } from "@/components/features/ReadinessSheet";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { useToast } from "@/contexts/toast-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { ExerciseInsight, WorkoutInsight } from "@/lib/actions/workout-sets";
 import { formatTime } from "@/lib/utils/format";
 import type { Discipline } from "@/lib/utils/discipline";
@@ -109,11 +111,21 @@ export function WorkoutSessionClient({
   const [showActionSheet, setShowActionSheet] = useState(false);
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [exercises, setExercises] = useState(initial);
+  const { showToast } = useToast();
   const [noteDismissed, setNoteDismissed] = useState(false);
+
+  // Both edits show at once and save behind. If the save fails, put back the
+  // list the server sent rather than leave the screen showing a change the
+  // database doesn't have.
+  function restoreAfterFailedSave() {
+    setExercises(initial);
+    showToast({ variant: "error", message: "Couldn't save the change — try again" });
+  }
 
   async function handleDeleteExercise(peId: number) {
     setExercises((prev) => prev.filter((e) => e.id !== peId));
-    await removeExerciseFromProgram(peId, programId);
+    const r = await callAction(removeExerciseFromProgram(peId, programId));
+    if (!r.success) restoreAfterFailedSave();
     router.refresh();
   }
 
@@ -121,7 +133,8 @@ export function WorkoutSessionClient({
     setExercises((prev) =>
       orderedIds.map((id) => prev.find((e) => e.id === id)!),
     );
-    await reorderProgramExercises(programId, orderedIds);
+    const r = await callAction(reorderProgramExercises(programId, orderedIds));
+    if (!r.success) restoreAfterFailedSave();
   }
 
   return (

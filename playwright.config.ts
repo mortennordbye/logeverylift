@@ -18,8 +18,7 @@ import { testDatabaseUrl } from "./scripts/lib/local-test-db";
  * Two engines: WebKit is what iOS ships, Chromium is the Android and desktop
  * PWA. The `setup` project logs in once; the rest reuse its storage state.
  */
-// Off the usual dev ports so a forwarded service or the dev server is never
-// mistaken for this one (reuseExistingServer would happily test it).
+// Off the usual dev ports, so nothing else is listening there.
 const PORT = Number(process.env.E2E_PORT ?? 3917);
 const baseURL = `http://127.0.0.1:${PORT}`;
 const databaseUrl = testDatabaseUrl("logeverylift_test", process.env.E2E_DATABASE_URL);
@@ -43,7 +42,9 @@ export default defineConfig({
   webServer: {
     command: "pnpm e2e:serve",
     url: `${baseURL}/login`,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse: a server left running by an interrupted run was built from
+    // older code, and the suite then tests that instead of the working tree.
+    reuseExistingServer: false,
     timeout: 600_000,
     stdout: "pipe",
     env: {

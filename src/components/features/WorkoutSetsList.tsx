@@ -2,13 +2,16 @@
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { LogRunModal } from "@/components/features/LogRunModal";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { reorderProgramSets, updateProgramSet } from "@/lib/actions/programs";
 import type { SetSuggestionDisplay } from "@/components/features/WorkoutSetsClient";
 import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
+import { useToast } from "@/contexts/toast-context";
 import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
 import { formatEnduranceDistance, formatEndurancePace, formatTime } from "@/lib/utils/format";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { haptics } from "@/lib/utils/haptics";
+import { buildSetLog } from "@/lib/utils/set-log";
 import { computeMapping, toFlatItems } from "@/lib/utils/set-mapping";
 import type { FlatItem, RestFlatItem, SetFlatItem } from "@/lib/utils/set-mapping";
 import type { PRResult, ProgramSet } from "@/types/workout";
@@ -119,6 +122,7 @@ export function WorkoutSetsList({
   // it the un-log was client-state only, so history/volume/PRs kept the value
   // the user had just corrected away.
   const { logWithRetry, unlogWithRetry } = useWorkoutSetWriter();
+  const { showToast } = useToast();
 
   const workoutSessionRef = useRef(workoutSession);
   useEffect(() => { workoutSessionRef.current = workoutSession; }, [workoutSession]);
@@ -238,9 +242,6 @@ export function WorkoutSetsList({
 
   async function saveCurrentState(items: FlatItem[]) {
     const { orderedSetIds, restAssignments } = computeMapping(items);
-    if (orderedSetIds.length > 0) {
-      await reorderProgramSets(programExerciseId, orderedSetIds);
-    }
 
     // What the database holds as far as this list knows: its own last write,
     // else the loaded value. Only sets whose rest differs are written.
@@ -254,13 +255,26 @@ export function WorkoutSetsList({
       ([setId, seconds]) => currentRests.get(setId) !== seconds,
     );
 
-    if (changed.length > 0) {
+    let saved = true;
+    if (orderedSetIds.length > 0) {
+      saved = (await callAction(reorderProgramSets(programExerciseId, orderedSetIds))).success;
+    }
+    if (saved && changed.length > 0) {
       for (const [setId, seconds] of changed) savedRests.current.set(setId, seconds);
-      await Promise.all(
+      const results = await Promise.all(
         changed.map(([setId, seconds]) =>
-          updateProgramSet({ id: setId, restTimeSeconds: seconds }),
+          callAction(updateProgramSet({ id: setId, restTimeSeconds: seconds })),
         ),
       );
+      saved = results.every((r) => r.success);
+    }
+    if (!saved) {
+      // The list already shows the new order. Left like that, the screen and
+      // the database disagree until the next load, and logging a set sends a
+      // position the server doesn't have. Put back what the server has.
+      for (const [setId] of changed) savedRests.current.delete(setId);
+      setFlatItems(toFlatItems(sets));
+      showToast({ variant: "error", message: "Couldn't save the change — try again" });
     }
 
     router.refresh();
@@ -459,30 +473,14 @@ export function WorkoutSetsList({
       if (isWorkout && sessionId != null && exerciseId != null) {
         for (const item of precedingUncompleted) {
           const sIdx = setItems.findIndex((s) => s.set.id === item.set.id);
-          const ov = workoutSession?.overrides[item.set.id];
-          // Zod requires targetReps to be positive when present — for timed
-          // sets it's 0 by default, so coerce 0 to undefined.
-          const tr = ov?.targetReps ?? item.set.targetReps ?? 0;
+          // Caught up with one tap: a claim that it went to plan, apart from
+          // what the session recorded for it (including a set marked failed).
           void logWithRetry({
             sessionId,
             exerciseId,
             setNumber: sIdx + 1,
             programSetId: item.set.id,
-            targetReps: tr > 0 ? tr : undefined,
-            // The achieved count when the session recorded one (the miss sheet
-            // or a correction in the editor), otherwise the target: catching a
-            // set up with one tap is a claim that it went to plan.
-            actualReps: ov?.actualReps ?? tr,
-            weightKg: ov?.weightKg ?? Number(item.set.weightKg ?? 0),
-            durationSeconds: ov?.durationSeconds ?? item.set.durationSeconds ?? undefined,
-            distanceMeters: ov?.distanceMeters ?? item.set.distanceMeters ?? undefined,
-            // No rpe: the lifter caught these sets up with one tap and said
-            // nothing about effort. When rir is present the server derives rpe
-            // from it; when it isn't, the set is logged with effort unknown.
-            rir: ov?.rir,
-            restTimeSeconds: 0,
-            notes: ov?.notes ?? null,
-            isCompleted: true,
+            ...buildSetLog(item.set, workoutSession?.overrides[item.set.id], { restTimeSeconds: 0 }),
           });
         }
       }
@@ -491,33 +489,15 @@ export function WorkoutSetsList({
       if (isWorkout && sessionId != null && exerciseId != null) {
         const setData = setItems[setIndex]?.set;
         if (setData) {
-          const ov = workoutSession?.overrides[setData.id];
-          const tr = ov?.targetReps ?? setData.targetReps ?? 0;
-          // The target is the goal either way; what changes is the achieved
-          // count. A recorded one wins, a set taken to failure with nothing
-          // recorded is 0, and a plain tap claims the target.
-          const failed = ov?.isFailed ?? false;
-          const achieved = logged?.actualReps ?? ov?.actualReps ?? (failed ? 0 : tr);
           const result = await logWithRetry({
             sessionId,
             exerciseId,
             setNumber: setIndex + 1,
             programSetId: setData.id,
-            targetReps: tr > 0 ? tr : undefined,
-            actualReps: achieved,
-            weightKg: ov?.weightKg ?? Number(setData.weightKg ?? 0),
-            durationSeconds: ov?.durationSeconds ?? setData.durationSeconds ?? undefined,
-            distanceMeters: ov?.distanceMeters ?? setData.distanceMeters ?? undefined,
-            // A failed set was taken to failure ⇒ RIR 0; otherwise use the logged
-            // value, which may be absent — a tap says the set is done, not how
-            // hard it was.
-            rir: failed ? 0 : (logged?.rir ?? ov?.rir),
-            restTimeSeconds: restSeconds,
-            notes: ov?.notes ?? null,
-            isCompleted: true,
-            isFailed: failed,
-            // A failed set can't also have been easy.
-            wasEasy: !failed && (ov?.wasEasy ?? false),
+            ...buildSetLog(setData, workoutSession?.overrides[setData.id], {
+              restTimeSeconds: restSeconds,
+              recorded: logged ? { actualReps: logged.actualReps, rir: logged.rir ?? undefined } : undefined,
+            }),
           });
           // Only celebrate when an existing record was beaten (previousValue defined).
           // First-time baselines are stored silently — no celebration.
@@ -545,11 +525,22 @@ export function WorkoutSetsList({
         (nextSet.weightKg == null || Number(nextSet.weightKg) === 0) &&
         !activeCompletedSets.has(nextSet.id)
       ) {
-        await updateProgramSet({
-          id: nextSet.id,
-          weightKg: Number(currentSet.weightKg),
-        });
-        router.refresh();
+        const carried = Number(currentSet.weightKg);
+        // Show it now through the session override, the way an applied
+        // suggestion does; waiting on the write and a refresh flipped the
+        // row's text a few hundred ms after the tap. The program write still
+        // happens, so the carried weight is there next workout too.
+        const existing = workoutSession?.overrides[nextSet.id];
+        if (existing?.weightKg == null || existing.weightKg === 0) {
+          workoutSession?.setOverride(nextSet.id, {
+            ...existing,
+            targetReps: existing?.targetReps ?? nextSet.targetReps ?? 0,
+            weightKg: carried,
+          });
+        }
+        // If this fails, this workout already shows the carried weight and
+        // only next session's plan misses it.
+        void callAction(updateProgramSet({ id: nextSet.id, weightKg: carried }));
       }
     }
   };
@@ -1637,10 +1628,13 @@ function SortableSetRow({
       }}
       className={`flex items-center gap-3 py-4 border-t border-b border-border transition-opacity duration-200${(isEditing || isWorkout) ? " cursor-pointer" : ""}${isWorkout && isCompleted ? " opacity-50" : ""}`}
       onClick={handleRowClick}
+      data-testid="set-row"
+      data-set-id={set.id}
     >
       {isEditing && (
         <button
           type="button"
+          aria-label={`Delete set ${setNumber}`}
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
           className="tap-slop w-7 h-7 rounded-full bg-destructive flex items-center justify-center shrink-0"
         >
@@ -1650,6 +1644,8 @@ function SortableSetRow({
 
       {isWorkout && (
         <button
+          aria-label={isCompleted ? `Un-log set ${setNumber}` : `Log set ${setNumber}`}
+          aria-pressed={isCompleted}
           onClick={handlePlayClick}
           onPointerDown={startLongPress}
           onPointerUp={cancelLongPress}
@@ -2033,6 +2029,7 @@ function SortableSetRow({
         <button
           {...attributes}
           {...listeners}
+          aria-label={`Reorder set ${setNumber}`}
           className="w-8 h-8 flex items-center justify-center shrink-0 touch-none"
         >
           <GripVertical className="w-5 h-5 text-muted-foreground" />
@@ -2105,6 +2102,7 @@ function SortableRestRow({
           <button
             {...attributes}
             {...listeners}
+            aria-label="Reorder rest"
             className="w-8 h-8 flex items-center justify-center shrink-0 touch-none"
           >
             <GripVertical className="w-5 h-5 text-muted-foreground" />

@@ -1,6 +1,7 @@
 "use client";
 
 import { copySharedProgram } from "@/lib/actions/program-shares";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { IncomingShare } from "@/types/workout";
 import { CheckCircle2, Copy, Gift } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -39,7 +40,7 @@ export function SharedProgramsClient({ shares }: Props) {
 
   async function handleCopy(shareId: number) {
     setCopyingId(shareId);
-    const result = await copySharedProgram({ shareId });
+    const result = await callAction(copySharedProgram({ shareId }));
     if (result.success) {
       setCopiedIds((prev) => new Set([...prev, shareId]));
       router.refresh();

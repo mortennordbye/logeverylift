@@ -3,6 +3,7 @@
 import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { respondToFriendRequest, removeFriend } from "@/lib/actions/friends";
 import { WorkoutReactions } from "@/components/features/WorkoutReactions";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { FriendActivityItem, FriendWithActivity, LeaderboardEntry, PendingRequest, ReceivedNudge } from "@/types/workout";
 import { Dumbbell, UserPlus, Users, ChevronRight, Check, X, UserMinus, Gift, Trophy } from "lucide-react";
 import Link from "next/link";
@@ -272,14 +273,14 @@ export function FriendsClient({ friends, pendingRequests, activityFeed, leaderbo
 
   async function handleRespond(friendshipId: number, action: "accepted" | "declined") {
     setLoadingId(friendshipId);
-    await respondToFriendRequest({ friendshipId, action });
+    await callAction(respondToFriendRequest({ friendshipId, action }));
     setLoadingId(null);
     router.refresh();
   }
 
   async function handleRemove(friendshipId: number) {
     setRemovingId(friendshipId);
-    await removeFriend({ friendshipId });
+    await callAction(removeFriend({ friendshipId }));
     setRemovingId(null);
     router.refresh();
   }

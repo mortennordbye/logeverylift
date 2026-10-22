@@ -8,6 +8,7 @@ import {
 } from "@/lib/actions/programs";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import type { Discipline } from "@/lib/utils/discipline";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { ProgramSet } from "@/types/workout";
 import {
   DndContext,
@@ -211,16 +212,16 @@ export function ProgramDetailClient({
   async function commitEdits() {
     // Rename if changed
     if (name.trim() !== preEditName) {
-      await updateProgram({ id: programId, name: name.trim() });
+      await callAction(updateProgram({ id: programId, name: name.trim() }));
     }
     // Apply deletions
     for (const peId of pendingDeleteIds) {
-      await removeExerciseFromProgram(peId, programId);
+      await callAction(removeExerciseFromProgram(peId, programId));
     }
     // Apply reorder on the surviving exercises
     const surviving = exercises.filter((e) => !pendingDeleteIds.has(e.id));
     if (surviving.length > 1) {
-      await reorderProgramExercises(programId, surviving.map((e) => e.id));
+      await callAction(reorderProgramExercises(programId, surviving.map((e) => e.id)));
     }
   }
 
@@ -248,7 +249,7 @@ export function ProgramDetailClient({
 
   async function handleExport() {
     setExporting(true);
-    const result = await exportProgram(programId);
+    const result = await callAction(exportProgram(programId));
     setExporting(false);
     if (!result.success) return;
     const blob = new Blob([JSON.stringify(result.data, null, 2)], { type: "application/json" });

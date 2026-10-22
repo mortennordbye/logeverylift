@@ -30,11 +30,23 @@ export const test = base.extend<{ resetData: void; failOnPageError: void }, { re
   failOnPageError: [
     async ({ page }, use) => {
       const errors: string[] = [];
+      // WebKit reports every request a navigation cancels as an uncaught
+      // "Fetch API cannot load <url> due to access control checks", whether or
+      // not the code that made it handles the failure (a genuinely unhandled
+      // rejection shows up separately, as "Unhandled Promise Rejection"). When
+      // the spec itself loaded a page just before, the cancellation is the
+      // spec's doing and not a finding; so is a cancelled router read. When
+      // the app cancelled one of its own writes, that is a bug: it is how the
+      // set editor's router.back() killing its own write was found.
+      let lastPageLoad = 0;
+      page.on("request", (r) => {
+        if (r.isNavigationRequest() && r.frame() === page.mainFrame()) lastPageLoad = Date.now();
+      });
       page.on("pageerror", (err) => {
-        // WebKit raises this for Next.js's own RSC fetches (`?_rsc=`) when a
-        // spec's page.goto cuts them off mid-flight. It is the router's
-        // prefetch being cancelled by the test navigating, not app code.
-        if (/\?_rsc=\S* due to access control checks/.test(err.message)) return;
+        // WebKit can leave this text out of `message` and put it in `stack`.
+        const cancelled = /Fetch API cannot load (\S+) due to access control checks/.exec(`${err.message}\n${err.stack ?? ""}`);
+        // `?_rsc=` is the router fetching a page payload: a read, nothing lost.
+        if (cancelled && (cancelled[1].includes("?_rsc=") || Date.now() - lastPageLoad < 3_000)) return;
         errors.push(err.stack ?? err.message);
       });
       await use();

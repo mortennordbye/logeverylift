@@ -19,6 +19,7 @@ import {
   resolveExerciseType,
   type ExerciseType,
 } from "@/lib/utils/exercise-type";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { sanitizeDecimalInput } from "@/lib/utils/format";
 import {
   DELOAD_PCT,
@@ -514,7 +515,7 @@ export function WorkoutSetsClient({
     const previous = axes;
     const merged = { ...axes, ...next };
     setAxes(merged);
-    const result = await setProgramExerciseProgression({ programExerciseId, ...next });
+    const result = await callAction(setProgramExerciseProgression({ programExerciseId, ...next }));
     if (!result.success) {
       setAxes(previous);
       return;
@@ -553,7 +554,7 @@ export function WorkoutSetsClient({
     targetRir?: number | null;
     targetReps?: number;
   }) {
-    const result = await setProgramExerciseSetDefaults({ programExerciseId, ...next });
+    const result = await callAction(setProgramExerciseSetDefaults({ programExerciseId, ...next }));
     if (result.success) router.refresh();
   }
 
@@ -565,24 +566,34 @@ export function WorkoutSetsClient({
 
   // null clears the override so the exercise's intrinsic type is inherited.
   async function handleTypeOverrideChange(next: ExerciseType | null) {
+    const previous = typeOverride;
     setTypeOverride(next);
-    await setProgramExerciseType({ programExerciseId, exerciseType: next });
+    const result = await callAction(setProgramExerciseType({ programExerciseId, exerciseType: next }));
+    if (!result.success) {
+      setTypeOverride(previous);
+      return;
+    }
     router.refresh();
   }
 
   async function handleIncrementChange(newIncrement: number) {
+    const previous = increment;
     setIncrement(newIncrement);
     setCustomKgInput("");
-    await updateProgramExerciseIncrement(programExerciseId, newIncrement);
+    const result = await callAction(updateProgramExerciseIncrement(programExerciseId, newIncrement));
+    if (!result.success) {
+      setIncrement(previous);
+      return;
+    }
     router.refresh();
   }
 
   async function handleApplyToPlanChange(next: boolean) {
     setApplyToPlan(next);
-    const result = await setProgramExerciseApplyToPlan({
+    const result = await callAction(setProgramExerciseApplyToPlan({
       programExerciseId,
       applyToPlan: next,
-    });
+    }));
     if (!result.success) {
       setApplyToPlan(!next);
       return;
@@ -592,10 +603,10 @@ export function WorkoutSetsClient({
 
   async function handleSuppressEffortPromptChange(next: boolean) {
     setSuppressEffortPrompt(next);
-    const result = await setProgramExerciseSuppressEffortPrompt({
+    const result = await callAction(setProgramExerciseSuppressEffortPrompt({
       programExerciseId,
       suppressEffortPrompt: next,
-    });
+    }));
     if (!result.success) {
       setSuppressEffortPrompt(!next);
       return;
@@ -604,15 +615,25 @@ export function WorkoutSetsClient({
   }
 
   async function handleIncrementRepsChange(newIncrement: number) {
+    const previous = incrementReps;
     setIncrementReps(newIncrement);
     setCustomRepInput("");
-    await updateProgramExerciseIncrementReps(programExerciseId, newIncrement);
+    const result = await callAction(updateProgramExerciseIncrementReps(programExerciseId, newIncrement));
+    if (!result.success) {
+      setIncrementReps(previous);
+      return;
+    }
     router.refresh();
   }
 
   async function handleDeleteSet(setId: number) {
+    const previous = sets;
     setSets((prev) => prev.filter((s) => s.id !== setId));
-    await deleteProgramSet(setId, programId, programExerciseId);
+    const result = await callAction(deleteProgramSet(setId, programId, programExerciseId));
+    if (!result.success) {
+      setSets(previous);
+      return;
+    }
     router.push(
       isWorkout
         ? `/programs/${programId}/workout/exercises/${programExerciseId}?edit=true`

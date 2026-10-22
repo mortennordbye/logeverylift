@@ -1,6 +1,8 @@
 "use client";
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { useToast } from "@/contexts/toast-context";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { addProgramSet } from "@/lib/actions/programs";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
 import { withCustomOption } from "@/lib/utils/picker-options";
@@ -73,6 +75,7 @@ export function NewSetView({
   const [showRepsKeypad, setShowRepsKeypad] = useState(false);
   const [showWeightKeypad, setShowWeightKeypad] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { showToast } = useToast();
   const repsInputRef = useRef<HTMLInputElement>(null);
   const weightInputRef = useRef<HTMLInputElement>(null);
 
@@ -136,51 +139,37 @@ export function NewSetView({
 
   const handleSave = async () => {
     setSaving(true);
-    if (isRunning) {
-      if (runMode === "distance") {
-        await addProgramSet({
-          programExerciseId,
-          setNumber: nextSetNumber,
-          distanceMeters,
-          durationSeconds: duration > 0 ? duration : undefined,
-          inclinePercent: inclinePercent ?? undefined,
-          targetHeartRateZone: targetHeartRateZone ?? undefined,
-          restTimeSeconds: 0,
-          setType,
-        });
-      } else {
-        await addProgramSet({
-          programExerciseId,
-          setNumber: nextSetNumber,
-          durationSeconds: duration,
-          inclinePercent: inclinePercent ?? undefined,
-          targetHeartRateZone: targetHeartRateZone ?? undefined,
-          restTimeSeconds: 0,
-          setType,
-        });
-      }
-    } else if (isTimed) {
-      await addProgramSet({
-        programExerciseId,
-        setNumber: nextSetNumber,
-        durationSeconds: duration,
-        restTimeSeconds: 0,
-        setType,
-      });
-    } else {
-      // Telemetry for tuning the weight presets: record the weights people have
-      // to type in because no circle offers them. Fire-and-forget.
-      if (!WEIGHT_OPTIONS.includes(weight) && weight > 0) {
-        void logCustomWeight({ exerciseId, weightKg: weight });
-      }
-      await addProgramSet({
-        programExerciseId,
-        setNumber: nextSetNumber,
-        targetReps: reps,
-        weightKg: weight,
-        restTimeSeconds: 0,
-        setType,
-      });
+    // Telemetry for tuning the weight presets: record the weights people have
+    // to type in because no circle offers them. Fire-and-forget.
+    if (!isRunning && !isTimed && !WEIGHT_OPTIONS.includes(weight) && weight > 0) {
+      void callAction(logCustomWeight({ exerciseId, weightKg: weight }));
+    }
+    const base = { programExerciseId, setNumber: nextSetNumber, restTimeSeconds: 0, setType };
+    const input = isRunning
+      ? runMode === "distance"
+        ? {
+            ...base,
+            distanceMeters,
+            durationSeconds: duration > 0 ? duration : undefined,
+            inclinePercent: inclinePercent ?? undefined,
+            targetHeartRateZone: targetHeartRateZone ?? undefined,
+          }
+        : {
+            ...base,
+            durationSeconds: duration,
+            inclinePercent: inclinePercent ?? undefined,
+            targetHeartRateZone: targetHeartRateZone ?? undefined,
+          }
+      : isTimed
+        ? { ...base, durationSeconds: duration }
+        : { ...base, targetReps: reps, weightKg: weight };
+    // Leaving as if the set had been added, when it hadn't, dropped it without
+    // a word; offline the rejection left Save spinning. Stay, with the values.
+    const r = await callAction(addProgramSet(input));
+    if (!r.success) {
+      setSaving(false);
+      showToast({ variant: "error", message: "Couldn't add the set — try again" });
+      return;
     }
     router.push(
       isWorkout

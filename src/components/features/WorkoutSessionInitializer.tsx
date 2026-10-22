@@ -2,12 +2,10 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
-import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { ACTIVE_WORKOUT_TTL_MS, useWorkoutSession } from "@/contexts/workout-session-context";
 import { createWorkoutSession, isSessionResumable } from "@/lib/actions/workout-sessions";
 import { getActiveSessionCompletedProgramSetIds } from "@/lib/actions/workout-sets";
 import { toDateString } from "@/lib/utils/format";
-
-const STALE_MS = 8 * 60 * 60 * 1000;
 
 /**
  * Mounted in the workout layout so every route under /programs/[id]/workout/*
@@ -84,7 +82,7 @@ export function WorkoutSessionInitializer({ programId }: { programId: number }) 
 
     // Drop a session that's been around longer than the activity window —
     // mirrors the rule in workout-session-context.tsx.
-    if (storedStart != null && Date.now() - new Date(storedStart).getTime() > STALE_MS) {
+    if (storedStart != null && Date.now() - new Date(storedStart).getTime() > ACTIVE_WORKOUT_TTL_MS) {
       localStorage.removeItem("activeWorkout");
       localStorage.removeItem("restTimerEnds");
       localStorage.removeItem("workoutOverrides");

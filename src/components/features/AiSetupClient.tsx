@@ -30,6 +30,7 @@ import {
   type TemplateParams,
   type TemplateSplit,
 } from "@/lib/utils/plan-templates";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { templateParamsSchema } from "@/lib/validators/ai-setup";
 import type { Exercise } from "@/types/workout";
 import { ArrowLeft, Check, ChevronDown, Clipboard, Copy, Sparkles, Undo2, Zap } from "lucide-react";
@@ -610,7 +611,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     const warnings: string[] = [];
 
     if (hasProgramData) {
-      const result = await importProgram(raw);
+      const result = await callAction(importProgram(raw));
       if (!result.success) {
         return { success: false, error: result.error ?? "Failed to import programs." };
       }
@@ -621,7 +622,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     }
 
     if (hasCycle) {
-      const result = await importCycle(raw.cycle);
+      const result = await callAction(importCycle(raw.cycle));
       if (!result.success) {
         warnings.push(`Cycle couldn't be created: ${result.error ?? "unknown error"}`);
       } else {

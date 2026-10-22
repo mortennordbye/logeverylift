@@ -29,11 +29,13 @@ export default defineConfig({
         test: {
           name: "unit",
           environment: "node",
-          include: ["src/__tests__/**/*.test.ts"],
+          include: ["src/__tests__/**/*.test.{ts,tsx}"],
           // Vitest's defaults pick up everything under `e2e/`. Those are
           // Playwright specs run separately via `pnpm test:e2e` and use the
           // Playwright runner, not Vitest.
           exclude: ["**/node_modules/**", "e2e/**", "src/__tests__/integration/**"],
+          // Only acts in files that opt into jsdom; a no-op for the rest.
+          setupFiles: ["src/__tests__/components/setup-dom.ts"],
         },
       },
       {

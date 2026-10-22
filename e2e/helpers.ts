@@ -135,6 +135,37 @@ async function dismissReadinessSheet(page: Page) {
   await expect(skipBtn).toBeHidden({ timeout: 10_000 });
 }
 
+/**
+ * Track Server Action requests on `page` from now on. The returned function
+ * resolves once none is in flight and none has started for `quietMs`.
+ *
+ * For flows that save behind the UI without a single tap to hang it on (a drag
+ * fires a reorder and then rest writes). `networkidle` is no substitute: it
+ * counts every request, and it can resolve before the action has started.
+ */
+export function trackActions(page: Page, quietMs = 500): () => Promise<void> {
+  let inFlight = 0;
+  let lastActivity = Date.now();
+  const isAction = (r: Request) => r.method() === "POST" && Boolean(r.headers()["next-action"]);
+  page.on("request", (r) => {
+    if (!isAction(r)) return;
+    inFlight++;
+    lastActivity = Date.now();
+  });
+  const done = (r: Request) => {
+    if (!isAction(r)) return;
+    inFlight--;
+    lastActivity = Date.now();
+  };
+  page.on("requestfinished", done);
+  page.on("requestfailed", done);
+  return async () => {
+    await expect
+      .poll(() => inFlight === 0 && Date.now() - lastActivity >= quietMs, { timeout: 20_000, intervals: [100] })
+      .toBe(true);
+  };
+}
+
 /** Wait until the workout layout has created or restored its session. */
 export async function waitForLiveSession(page: Page): Promise<void> {
   await page.waitForFunction(

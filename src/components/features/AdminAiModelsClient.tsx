@@ -10,6 +10,7 @@ import {
 } from "@/lib/actions/ai-model-configs";
 import type { AiModelConfig } from "@/db/schema/ai-model-configs";
 import { isFreeModel } from "@/lib/utils/llm-response";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { Bot, ChevronDown, ChevronLeft, ChevronUp, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -36,20 +37,20 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
   const [addLoading, setAddLoading] = useState(false);
 
   async function refresh() {
-    const result = await listAiModelConfigs();
+    const result = await callAction(listAiModelConfigs());
     if (result.success) setModels(result.data);
   }
 
   async function handleToggle(id: number, enabled: boolean) {
     setBusy((b) => ({ ...b, [id]: true }));
-    await setAiModelEnabled(id, enabled);
+    await callAction(setAiModelEnabled(id, enabled));
     await refresh();
     setBusy((b) => ({ ...b, [id]: false }));
   }
 
   async function handleMove(id: number, direction: "up" | "down") {
     setBusy((b) => ({ ...b, [id]: true }));
-    await moveAiModel(id, direction);
+    await callAction(moveAiModel(id, direction));
     await refresh();
     setBusy((b) => ({ ...b, [id]: false }));
   }
@@ -57,7 +58,7 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
   async function handleTest(id: number, modelId: string) {
     setTesting((t) => ({ ...t, [id]: true }));
     setTestResults((r) => { const next = { ...r }; delete next[id]; return next; });
-    const result = await testAiModel(modelId);
+    const result = await callAction(testAiModel(modelId));
     setTestResults((r) => ({
       ...r,
       [id]: result.success ? { ok: true, latencyMs: result.data.latencyMs, mode: result.data.mode } : { ok: false, error: result.error },
@@ -67,7 +68,7 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
 
   async function handleDelete(id: number) {
     setBusy((b) => ({ ...b, [id]: true }));
-    await deleteAiModel(id);
+    await callAction(deleteAiModel(id));
     await refresh();
     setBusy((b) => ({ ...b, [id]: false }));
   }
@@ -75,7 +76,7 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
   async function handleAdd() {
     setAddError(null);
     setAddLoading(true);
-    const result = await addAiModel(newModelId, newLabel);
+    const result = await callAction(addAiModel(newModelId, newLabel));
     if (!result.success) {
       setAddError(result.error);
     } else {

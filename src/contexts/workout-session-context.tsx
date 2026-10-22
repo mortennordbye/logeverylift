@@ -3,7 +3,7 @@ import { setSessionReadiness } from "@/lib/actions/workout-sessions";
 import { requestNotificationPermission, sendNotification } from "@/lib/notifications";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
-type SetOverride = {
+export type SetOverride = {
   targetReps: number;
   weightKg: number;
   durationSeconds?: number;
@@ -28,6 +28,13 @@ type SetOverride = {
 };
 
 const STORAGE_KEY = "activeWorkout";
+
+/**
+ * How long a stored active workout stays resumable. Shared with
+ * WorkoutSessionInitializer, which drops the same stored session; two copies
+ * of this number had already drifted apart in their comments.
+ */
+export const ACTIVE_WORKOUT_TTL_MS = 8 * 60 * 60 * 1000;
 const REST_TIMERS_KEY = "restTimerEnds";
 const OVERRIDES_KEY = "workoutOverrides";
 const READINESS_KEY = "workoutReadiness";
@@ -51,6 +58,13 @@ type WorkoutSessionContextValue = {
   workoutPath: string | null;
   setActiveWorkout: (programId: number, startTime: string, sessionId?: number) => void;
   clearActiveWorkout: () => void;
+  /**
+   * False until the mount effect has restored the session, rest timers and
+   * overrides from localStorage. Child effects and state initialisers run
+   * before that effect, so anything that seeds local state from `overrides`
+   * has to wait for this (see SetEditView).
+   */
+  restored: boolean;
   /** Pre-workout readiness (1=Drained → 5=Excellent). Null until the user answers. */
   readiness: number | null;
   confirmReadiness: (level: number) => void;
@@ -69,6 +83,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   const [startTime, setStartTime] = useState<string | null>(null);
   const [workoutPath, setWorkoutPath] = useState<string | null>(null);
   const [readiness, setReadinessState] = useState<number | null>(null);
+  const [restored, setRestored] = useState(false);
 
   useEffect(() => {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -79,10 +94,10 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
           startTime: string;
           sessionId: number | null;
         };
-        // Discard sessions older than 24 hours — they are stale and would show
-        // a wildly incorrect elapsed timer with no way to resume meaningfully.
+        // Discard stale sessions: they would show a wildly incorrect elapsed
+        // timer with no way to resume meaningfully.
         const ageMs = Date.now() - new Date(st).getTime();
-        if (ageMs > 8 * 60 * 60 * 1000) {
+        if (ageMs > ACTIVE_WORKOUT_TTL_MS) {
           localStorage.removeItem(STORAGE_KEY);
           localStorage.removeItem(REST_TIMERS_KEY);
           localStorage.removeItem(OVERRIDES_KEY);
@@ -119,6 +134,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       const parsed = parseInt(rawReadiness, 10);
       if (!isNaN(parsed)) setReadinessState(parsed);
     }
+    setRestored(true);
   }, []);
 
   // Schedule/cancel notification timeouts whenever restTimerEnds changes
@@ -256,6 +272,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     <WorkoutSessionContext.Provider
       value={{
         sessionId,
+        restored,
         overrides,
         setOverride,
         clearOverrides,
@@ -318,4 +335,20 @@ export function useRenderedOverrides(): Record<number, SetOverride> {
     () => false,
   );
   return hydrated ? (session?.overrides ?? {}) : {};
+}
+
+/**
+ * True once local state may be seeded from `overrides`: after hydration (the
+ * same reason as useRenderedOverrides) and after the provider has restored
+ * them from localStorage (before that they are just empty). A component that
+ * copies overrides into its own state mounts once this is true.
+ */
+export function useOverridesReady(): boolean {
+  const session = useWorkoutSession();
+  const hydrated = useSyncExternalStore(
+    subscribeNever,
+    () => true,
+    () => false,
+  );
+  return hydrated && (session?.restored ?? true);
 }

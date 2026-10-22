@@ -8,6 +8,7 @@
  */
 
 import { createTrainingCycle } from "@/lib/actions/training-cycles";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -41,13 +42,13 @@ export function CreateCycleForm() {
     setLoading(true);
     setError("");
 
-    const result = await createTrainingCycle({
+    const result = await callAction(createTrainingCycle({
       name: name.trim(),
       durationWeeks,
       scheduleType,
       endAction,
       endMessage: endMessage.trim() || undefined,
-    });
+    }));
 
     setLoading(false);
     if (result.success) {

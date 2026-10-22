@@ -1,6 +1,7 @@
 "use client";
 
 import { markFeedbackRead, type FeedbackWithUser } from "@/lib/actions/feedback";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -34,7 +35,8 @@ export function AdminFeedbackClient({ initial }: { initial: FeedbackWithUser[] }
   const newCount = items.filter((i) => i.status === "new").length;
 
   async function handleMarkRead(id: number) {
-    await markFeedbackRead(id);
+    const result = await callAction(markFeedbackRead(id));
+    if (!result.success) return;
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: "read" } : i)));
   }
 

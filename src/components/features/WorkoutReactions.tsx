@@ -1,6 +1,7 @@
 "use client";
 
 import { toggleReaction } from "@/lib/actions/friends";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { ReactionSummary } from "@/types/workout";
 import { useState } from "react";
 
@@ -29,7 +30,7 @@ export function WorkoutReactions({ sessionId, initialReactions }: Props) {
       ),
     );
 
-    const result = await toggleReaction({ sessionId, emoji });
+    const result = await callAction(toggleReaction({ sessionId, emoji }));
     if (!result.success) {
       // Roll back on error
       setReactions(prev);

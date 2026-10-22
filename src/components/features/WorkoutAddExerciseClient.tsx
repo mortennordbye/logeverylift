@@ -1,6 +1,7 @@
 "use client";
 
 import { addExerciseToProgram } from "@/lib/actions/programs";
+import { callAction } from "@/lib/utils/stale-bundle";
 import type { Exercise } from "@/types/workout";
 import { markProgrammaticBack } from "@/lib/utils/nav-intent";
 import { ChevronLeft, Search } from "lucide-react";
@@ -25,7 +26,11 @@ export function WorkoutAddExerciseClient({ programId, exercises }: Props) {
 
   async function handleSelect(exerciseId: number) {
     setLoading(true);
-    await addExerciseToProgram({ programId, exerciseId });
+    const result = await callAction(addExerciseToProgram({ programId, exerciseId }));
+    if (!result.success) {
+      setLoading(false);
+      return;
+    }
     router.push(`/programs/${programId}/workout`);
   }
 

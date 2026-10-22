@@ -144,23 +144,11 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Unblocked by:** Nothing — pick an item off the doc. It lists a suggested order at the end.
 - **Touchpoints:** see the file:line references per finding in `docs/ui-polish-audit.md`.
 
-### Auto-carried weight still lands as a delayed text change (audit W6)
-- **What:** `WorkoutSetsList.toggleSet` awaits `updateProgramSet` then calls `router.refresh()` when the next set has no weight configured, so that row's text flips from "8 reps" to "8 x 80kg" a few hundred ms after the tap.
-- **Why deferred:** The *shift* half of this is gone — the suggestion-block fix made row heights stable, so this is now a delayed text change rather than the list jumping. Fixing the lag properly means writing the value through `workoutSession.setOverride` in the same frame, and the current code deliberately writes to the **program** (so the carried weight persists to the next workout). Changing that is a semantics decision, not a UI one, and it wasn't asked for.
-- **Unblocked by:** Deciding whether the carry should persist to the program or only to the session. If program: keep the write, add an optimistic override alongside it and drop the `router.refresh()`. If session-only: replace the write with `setOverride`.
-- **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (`toggleSet`, the auto-carry block), `src/components/features/WorkoutSetsClient.tsx` (`applySuggestion` — the optimistic pattern to copy).
-
 ### SetEditView seeds its fields from overrides via `useState` initialisers
 - **What:** `SetEditView` reads `workoutSession.overrides[set.id]` in `useState(...)` initialisers (reps, weight, duration, notes, failed, rir). Those run once. Overrides are restored from localStorage in a mount effect on a provider above, so on a **cold load of the set-edit URL** the initialisers may run before the overrides exist, leaving the editor showing program values while the set list shows adjusted ones. Not observed in the audit — the case wasn't exercised — but the ordering that caused the hydration mismatch fixed in this pass (see `useRenderedOverrides`) is the same ordering that would cause it.
 - **Why deferred:** Unverified, and it is a correctness question about override initialisation rather than the layout-shift brief.
 - **Unblocked by:** Reproduce first: apply a suggestion to a set, then hard-reload that set's `/sets/[setId]` URL and check whether the editor shows the adjusted or the program value. If adjusted, there is nothing to fix.
 - **Touchpoints:** `src/components/features/SetEditView.tsx` (the `useState` block, ~lines 125–160), `src/contexts/workout-session-context.tsx` (`useRenderedOverrides` and the restore effect).
-
-### No automated test for the offline replay queue
-- **What:** `pending-queue-context.tsx` now carries real logic — per-item backoff (`BACKOFF_MS`), a due-time filter, drop-after-`MAX_ATTEMPTS`, and the mount/hydration ordering that decides whether a queued workout replays on cold open. All of it was verified by hand (fake `navigator.onLine` + a rejecting `window.fetch`, then a cold reload) and none of it is covered by a test. It is the mechanism that prevents mid-workout data loss, so a silent regression here is expensive.
-- **Why deferred:** The Vitest suite is pure-function only — no jsdom, no React Testing Library — so testing a provider means adding a browser-ish test environment and the deps that go with it, which is a bigger change than the fix it would guard.
-- **Unblocked by:** Adding `jsdom` + `@testing-library/react` to the Vitest config. Then: assert that five rapid failures span the full backoff rather than draining instantly, that an item past `MAX_ATTEMPTS` is dropped exactly once, and that a queue hydrated from localStorage replays on mount without an `online` event. Alternatively extract the scheduling decision into a pure helper (`nextDue(queue, now)`) and unit-test that alone — cheaper, covers most of the risk.
-- **Touchpoints:** `src/contexts/pending-queue-context.tsx`, `vitest.config.ts`.
 
 ### `PageTransition` depends on a Next internal (`LayoutRouterContext`)
 - **What:** The paired page-push/pop animation needs the outgoing page to keep rendering its *own* content while it slides away. `children` here is the router's children slot — one element whose identity is stable across navigations — so the element AnimatePresence keeps mounted for the exit otherwise re-renders with the destination's content, and the parallax animates two copies of the same screen. `FrozenRouter` pins the router context for a page that is leaving, using `LayoutRouterContext` imported from `next/dist/shared/lib/app-router-context.shared-runtime`.

@@ -1,6 +1,7 @@
 "use client";
 
 import { dismissMissedWorkout } from "@/lib/actions/training-cycles";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -15,7 +16,7 @@ export function DeclineMakeupButton({ date }: { date: string }) {
   async function handleDecline() {
     if (pending) return;
     setPending(true);
-    const result = await dismissMissedWorkout({ date });
+    const result = await callAction(dismissMissedWorkout({ date }));
     if (result.success) {
       router.refresh();
     } else {
