@@ -130,13 +130,17 @@ export async function tapAndSave(
  * real detach and not an opacity-0 element Playwright would still call visible.
  */
 async function dismissReadinessSheet(page: Page) {
-  // The sheet is triggered by the session going live, which is a Server Action
-  // round trip after hydration and can take longer than any fixed probe on a
-  // slow runner. Wait for the session itself, then for the sheet's 300ms delay.
+  // The sheet is triggered by the session going live, a Server Action round
+  // trip after hydration, and then slides in 300ms later. Probing for it with
+  // isVisible() answered at once (it ignores its timeout), so on a slow runner
+  // the probe ran in that gap, found nothing, and the sheet arrived over the
+  // next step of the spec. It shows exactly when no readiness answer is
+  // stored, so decide from that instead of from timing.
   await waitForLiveSession(page);
+  const answered = await page.evaluate(() => localStorage.getItem("workoutReadiness") !== null);
   const skipBtn = page.getByRole("button", { name: "Skip" });
-  if (await skipBtn.isVisible({ timeout: 5_000 }).catch(() => false)) {
-    await skipBtn.click();
+  if (!answered) {
+    await skipBtn.click({ timeout: 10_000 });
   }
   await expect(skipBtn).toBeHidden({ timeout: 10_000 });
 }

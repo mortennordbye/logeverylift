@@ -20,6 +20,11 @@ const eslintConfig = defineConfig([
             "Wait for a condition (expect.poll, toBeVisible, trackActions), not a fixed time. Only a deliberate timing measurement may opt out, with an eslint-disable comment saying why.",
         },
         {
+          selector: "CallExpression[callee.property.name='isVisible']",
+          message:
+            "isVisible() answers at once and ignores its timeout, so it races whatever is still rendering. Use expect(locator).toBeVisible() or locator.waitFor(), or decide from app state.",
+        },
+        {
           selector: "CallExpression[callee.property.name='locator'] > Literal[value=/^[a-z]+\\.[a-z0-9-]/]",
           message:
             "Don't select by Tailwind classes; they change with styling. Use getByRole/getByText, or add a data-testid.",
