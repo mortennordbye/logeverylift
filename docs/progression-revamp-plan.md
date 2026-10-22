@@ -154,6 +154,11 @@ Facts a cold session must not re-derive, re-decide, or accidentally undo. Each i
 - **An estimated-1RM record needs a logged RIR of 3 or better**, and records of the two derived types set before `HONEST_REPS_FROM` are flagged `unverified` in the PR feed. Kept, not deleted or recomputed (`D-10`). **The cutover is a constant**, set to `2026-09-01` for this release and still owed a check if the deploy slips past that date — late over-flags, early presents assumed numbers as measured ones.
 - **The AI plan prompt describes the axes.** All six advance values, the gate, a worked rep-range exercise, and what an effort cap costs before it is offered. It still does not offer `progressionApplyToPlan`, deliberately: the ratchet rewrites a lifter's plan and a generator opting them into it is not a default anyone chose. The import writes the retired mode column from the axis, so an imported program that is later shared does not arrive describing a different scheme.
 
+*Since the merge (2026-10-22):*
+
+- **A logged row is judged against its own set's target.** `buildSuggestion`'s `judge` reads `ps.slotTargets[r.setNumber]`, which `getProgressiveSuggestions` fills from the slot's working sets. Judging every row against the suggested set's `targetReps` gave one session two verdicts under scope `all` whenever the sets' targets differed. Do not drop the map back to `ps.targetReps`.
+- **The session in progress shows its miss on the dots** (`liveSessionMiss`, SI-46). Display only: it writes nothing and the server still decides when the session finishes. Do not let it feed `pendingProgressions` or hide a chip.
+
 *Nothing is still wrong that a later phase was going to fix.* The open items are `SI-D7` (the inert global increment controls in Settings, a Settings question this plan does not touch) and the carry-forward below, none of which is code.
 
 ### Carry-forward: things every phase still owes

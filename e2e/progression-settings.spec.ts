@@ -78,8 +78,8 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   });
   await expect(rule()).toContainText(/hits 10 reps/, { timeout: 5_000 });
 
-  // ── Layer 3: an individual axis, and the relabel to Custom ────────────────
-  await openAdvanced();
+  // ── An individual axis, and the relabel to Custom ─────────────────────────
+  // The gate sits outside Advanced: it is the setting lifters reach for first.
   await expect(gate()).toBeVisible({ timeout: 5_000 });
   // The chips carry their unit now: "3 sessions" counts clears, and the
   // back-off group's "3 short" counts misses. They used to be bare numbers,
@@ -95,6 +95,7 @@ test("preset, gate and plan opt-in persist across a reload", async ({ page }) =>
   });
 
   // Scope, which had no control at all until this phase.
+  await openAdvanced();
   const scope = () => page.getByRole("group", { name: "Which sets have to clear" });
   await tapAndSave(page, scope().getByRole("button", { name: "First set" }), {
     bodyIncludes: '"scope":"first"',

@@ -1296,6 +1296,42 @@ export function WorkoutSetsClient({
                 )}
                 </div>
 
+                {/* The gate: how many sessions in a row at target before
+                    anything moves. Out of Advanced because it is the setting
+                    lifters reach for first, and it was three taps deep. */}
+                {axes.advance !== "none" && axes.advance !== "manual" && (
+                  <div className="border-t border-border">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-3 pb-1 flex items-center gap-1.5">
+                      <CheckCheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      Sessions at target
+                    </p>
+                    <div
+                      role="group"
+                      aria-label="Sessions at target"
+                      className="flex gap-2 px-4 pb-2"
+                    >
+                      {REQUIRED_HITS_PRESETS.map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => updateAxes({ requiredHits: preset })}
+                          className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
+                            (axes.requiredHits ?? REQUIRED_HITS) === preset
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {preset} {preset === 1 ? "session" : "sessions"}
+                        </button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground px-4 pb-3">
+                      Sessions in a row that must hit the target before the
+                      weight goes up. Changing it starts the count again from
+                      your next workout.
+                    </p>
+                  </div>
+                )}
+
                 {/* Plan opt-in. Always mounted, and greyed rather than
                     unmounted for the two schemes that never suggest anything,
                     so switching schemes can't change the sheet's height and
@@ -1400,32 +1436,9 @@ export function WorkoutSetsClient({
                   {showAdvanced && (
                     <>
                       <p className="text-xs text-muted-foreground px-4 pb-2">
-                        Changing the sessions needed or which sets count starts
-                        the count again from your next workout.
+                        Changing which sets count starts the count again from
+                        your next workout.
                       </p>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
-                        <CheckCheckIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                        Sessions at target
-                      </p>
-                      <div
-                        role="group"
-                        aria-label="Sessions at target"
-                        className="flex gap-2 px-4 pb-3"
-                      >
-                        {REQUIRED_HITS_PRESETS.map((preset) => (
-                          <button
-                            key={preset}
-                            onClick={() => updateAxes({ requiredHits: preset })}
-                            className={`px-3 py-1.5 rounded-full text-sm font-semibold transition-all active:scale-95 ${
-                              (axes.requiredHits ?? REQUIRED_HITS) === preset
-                                ? "bg-primary text-primary-foreground"
-                                : "bg-muted text-muted-foreground"
-                            }`}
-                          >
-                            {preset} {preset === 1 ? "session" : "sessions"}
-                          </button>
-                        ))}
-                      </div>
 
                       <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
                         <AlignEndVerticalIcon className="h-3.5 w-3.5" aria-hidden="true" />

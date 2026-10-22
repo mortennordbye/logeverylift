@@ -798,6 +798,32 @@ describe("buildSuggestion — a changed rep target re-judges past sessions", () 
     const result = buildSuggestion(rows, makePs({ targetReps: 8, setNumber: 1 }), null);
     expect(result?.sessions?.[0]).toMatchObject({ status: "missed" });
   });
+
+  it("judges each set against its own target, so every set reads a session the same way", () => {
+    // Plan 8/8/7. Set 3 did the 7 it was prescribed. Judged against set 1's 8
+    // it looked "stale" for sets 1-2 and cleared for set 3, so one session got
+    // two verdicts and the exercise split into a bump and a retry.
+    const plan = { 1: 8, 2: 8, 3: 7 };
+    const session = (date: string) =>
+      makeMultiSession(
+        [
+          { targetReps: 8, actualReps: 8 },
+          { targetReps: 8, actualReps: 8 },
+          { targetReps: 7, actualReps: 7 },
+        ],
+        { date },
+      );
+    const rows = [session("2024-01-03"), session("2024-01-02"), session("2024-01-01")];
+    const verdicts = [1, 2, 3].map(
+      (n) =>
+        buildSuggestion(
+          rows,
+          makePs({ setNumber: n, targetReps: plan[n as 1 | 2 | 3], slotTargets: plan }),
+          null,
+        )?.sessions?.[0].status,
+    );
+    expect(verdicts).toEqual(["cleared", "cleared", "cleared"]);
+  });
 });
 
 // ─── uniformTargetReps ───────────────────────────────────────────────────────

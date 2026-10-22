@@ -1493,6 +1493,9 @@ export async function getProgressiveSuggestions(
         backoffAfter: ps.progressionBackoffAfter,
         readiness: ps.progressionReadiness,
         effortCap: capSet?.targetRir ?? null,
+        // Each logged row is judged against its own set's target, so one
+        // session reads the same for every set of the slot.
+        slotTargets: Object.fromEntries(working.map((w) => [w.setNumber, w.targetReps])),
         // E-13. Compared against the session's own plain date, so the
         // granularity is a day: a session logged earlier on the day the setting
         // changed still counts. The engine holds anything older inert rather
