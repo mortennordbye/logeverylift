@@ -14,7 +14,7 @@
 
 import { execFileSync } from "node:child_process";
 import pg from "pg";
-import { e2eUser } from "../e2e/fixtures/env";
+import { e2eUser } from "./lib/e2e-accounts";
 import { assertTestDatabase } from "./lib/test-database";
 
 async function main() {
@@ -40,7 +40,7 @@ async function main() {
   for (const script of ["scripts/migrate.ts", "scripts/seed.ts"]) {
     execFileSync("pnpm", ["exec", "tsx", script], { stdio: "inherit", env: process.env });
   }
-  // One account per Playwright worker (e2e/fixtures/env.ts).
+  // One account per Playwright worker (scripts/lib/e2e-accounts.ts).
   const workers = Number(process.env.E2E_WORKERS ?? 1);
   for (let i = 0; i < workers; i++) {
     const { email, password } = e2eUser(i);
