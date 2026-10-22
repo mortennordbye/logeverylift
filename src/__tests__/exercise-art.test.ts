@@ -35,30 +35,27 @@ describe("exercise illustration specs", () => {
 });
 
 describe("checkSpec", () => {
-  const withSide = (frame0: Record<string, [number, number]>) => {
+  const withFrame0 = (frame0: Record<string, [number, number, number]>) => {
     const spec = structuredClone(read("barbell-curl.json")) as ArtSpec;
-    spec.views.side.keyframes[0] = { ...spec.views.side.keyframes[0], ...frame0 };
+    spec.keyframes[0] = { ...spec.keyframes[0], ...frame0 };
     return spec;
   };
 
-  it("rejects a stretched limb", () => {
-    expect(checkSpec(withSide({ wrist: [130, 230] }))).toEqual(
-      expect.arrayContaining([expect.stringMatching(/side keyframe 0: elbow-wrist is \d+ long, max 44/)]),
+  it("rejects a limb that is the wrong length", () => {
+    expect(checkSpec(withFrame0({ lWrist: [102, 220, 4] }))).toEqual(
+      expect.arrayContaining([expect.stringMatching(/keyframe 0: lElbow-lWrist is [\d.]+ long, must be 42/)]),
     );
   });
 
   it("rejects an unknown joint and a joint below the floor", () => {
-    const problems = checkSpec(withSide({ tail: [100, 100], toe: [141, 299] }));
-    expect(problems).toEqual(expect.arrayContaining([
-      'side keyframe 0: unknown joint "tail"',
-      expect.stringMatching(/toe is below the floor/),
-    ]));
+    expect(checkSpec(withFrame0({ tail: [100, 100, 0] } as never)).join("\n")).toMatch(/tail/);
+    expect(checkSpec(withFrame0({ lToe: [110, 299, 19] }))).toEqual(expect.arrayContaining([expect.stringMatching(/lToe is below the floor/)]));
   });
 
-  it("rejects a first keyframe that leaves out a required joint", () => {
+  it("rejects a first keyframe that leaves out a joint", () => {
     const spec = structuredClone(read("barbell-curl.json")) as ArtSpec;
-    delete spec.views.front.keyframes[0].lKnee;
-    expect(checkSpec(spec)).toContain("front keyframe 0: missing lKnee");
+    delete spec.keyframes[0].lKnee;
+    expect(checkSpec(spec)).toContain("keyframe 0: missing lKnee");
   });
 
   it("rejects a secondary muscle that repeats the primary", () => {
@@ -67,19 +64,27 @@ describe("checkSpec", () => {
 });
 
 describe("motion", () => {
-  const len = (p: Record<string, [number, number]>, a: string, b: string) => Math.hypot(p[a][0] - p[b][0], p[a][1] - p[b][1]);
+  const len = (p: Record<string, number[]>, a: string, b: string) => Math.hypot(...p[a].map((c, i) => c - p[b][i]));
 
-  it("swings the forearm round the elbow instead of shrinking it mid-curl", () => {
-    // A straight-line blend of the wrist would cut the forearm to ~17 here.
-    const start = len(poseAt(curl, "side", 0), "elbow", "wrist");
-    const end = len(poseAt(curl, "side", 1), "elbow", "wrist");
-    const middle = len(poseAt(curl, "side", 0.5), "elbow", "wrist");
-    expect(middle).toBeGreaterThanOrEqual(Math.min(start, end) - 0.01);
-    expect(middle).toBeLessThanOrEqual(Math.max(start, end) + 0.01);
+  it("keeps every bone its length through the movement", () => {
+    for (const t of [0.25, 0.5, 0.75]) {
+      expect(len(poseAt(curl, t), "lElbow", "lWrist")).toBeCloseTo(len(poseAt(curl, 0), "lElbow", "lWrist"), 0);
+    }
+  });
+
+  it("curls the forearm forward and up, never inward across the body", () => {
+    // The first version rotated bones flat in each view, and in the front view
+    // the forearm took the short way round: through the torso.
+    for (const t of [0, 0.25, 0.5, 0.75, 1]) {
+      const p = poseAt(curl, t);
+      expect(Math.abs(p.lWrist[0] - p.lElbow[0])).toBeLessThan(4);
+      expect(Math.abs(p.rWrist[0] - p.rElbow[0])).toBeLessThan(4);
+      expect(p.lWrist[2]).toBeGreaterThanOrEqual(p.lElbow[2]);
+    }
   });
 
   it("keeps the anchor joint where the keyframes put it", () => {
-    expect(poseAt(curl, "side", 0.37).ankle).toEqual([121, 280]);
+    expect(poseAt(curl, 0.37).lAnkle).toEqual([112, 278, -1]);
   });
 
   it("goes out, holds, and comes back over one cycle", () => {

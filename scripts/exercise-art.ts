@@ -4,14 +4,16 @@
  *   pnpm art check [slug...]  validate specs and render .art-preview/<slug>.png
  *   pnpm art index            regenerate src/lib/exercise-art/specs/index.ts
  *   pnpm art todo             strength exercises from the seed that have no spec yet
+ *   pnpm art map              render the muscle map to .art-preview/muscle-map.png
  */
 
 import { chromium } from "@playwright/test";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { artSpecSchema, checkSpec, slugify } from "../src/lib/exercise-art/schema";
-import { VIEWBOX, renderSvg } from "../src/lib/exercise-art/scene";
-import { VIEWS } from "../src/lib/exercise-art/skeleton";
+import { MAP_FIGURES, MAP_VIEWBOX } from "../src/lib/exercise-art/muscle-map";
+import { MUSCLE_FILL, VIEWBOX, renderSvg } from "../src/lib/exercise-art/scene";
+import { VIEWS, type Muscle } from "../src/lib/exercise-art/skeleton";
 
 const ROOT = path.resolve(__dirname, "..");
 const SPEC_DIR = path.join(ROOT, "src/lib/exercise-art/specs");
@@ -88,11 +90,47 @@ function todo() {
   console.error(`${missing.length} of ${names.length} strength exercises have no illustration`);
 }
 
+/** The muscle map with a few highlight sets, in both themes. */
+async function map() {
+  const sets: [string, Partial<Record<Muscle, "primary" | "secondary">>][] = [
+    ["nothing", {}],
+    ["curl", { biceps: "primary", forearms: "secondary" }],
+    ["bench", { chest: "primary", shoulders: "secondary", triceps: "secondary" }],
+    ["deadlift", { hamstrings: "primary", glutes: "secondary", lower_back: "secondary", back: "secondary" }],
+    ["squat", { quads: "primary", glutes: "secondary", calves: "secondary", abs: "secondary" }],
+  ];
+  const svg = (roles: Partial<Record<Muscle, "primary" | "secondary">>) =>
+    `<svg viewBox="${MAP_VIEWBOX}">` +
+    MAP_FIGURES.map((fig) =>
+      `<g transform="translate(${fig.x} 0)">` +
+      fig.shapes.map((s) => `<path d="${s.d}" style="fill:${s.muscle === null ? MUSCLE_FILL.body : MUSCLE_FILL[roles[s.muscle] ?? "none"]}"/>`).join("") +
+      fig.lines.map((d) => `<path d="${d}" style="fill:none;stroke:${MUSCLE_FILL.line};stroke-width:1.2"/>`).join("") +
+      `</g>`,
+    ).join("") +
+    `</svg>`;
+  const row = (theme: keyof typeof THEMES) =>
+    `<div class="row" style="${THEMES[theme]}">${sets.map(([label, roles]) => `<figure>${svg(roles)}<figcaption>${label}</figcaption></figure>`).join("")}</div>`;
+  mkdirSync(PREVIEW_DIR, { recursive: true });
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 3000, height: 1200 } });
+  await page.setContent(`<!doctype html><html><head><style>
+    body { margin: 0; background: #000; font: 12px system-ui; }
+    .row { display: flex; gap: 8px; padding: 8px; background: var(--card); }
+    figure { margin: 0; text-align: center; color: var(--muted-foreground); }
+    svg { width: 580px; height: 552px; display: block; }
+  </style></head><body>${row("dark")}${row("light")}</body></html>`);
+  const out = path.join(PREVIEW_DIR, "muscle-map.png");
+  await page.screenshot({ path: out, fullPage: true });
+  await browser.close();
+  console.log(`✓ muscle map → ${path.relative(ROOT, out)}`);
+}
+
 const [cmd, ...rest] = process.argv.slice(2);
 if (cmd === "check") void check(rest);
 else if (cmd === "index") index();
 else if (cmd === "todo") todo();
+else if (cmd === "map") void map();
 else {
-  console.error("usage: pnpm art check [slug...] | index | todo");
+  console.error("usage: pnpm art check [slug...] | index | todo | map");
   process.exit(1);
 }

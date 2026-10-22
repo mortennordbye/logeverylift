@@ -5,12 +5,14 @@ description: Draw the animated front and side illustration (and primary/secondar
 
 # Drawing an exercise
 
-An illustration is **data, not a picture**: joint positions for a start and an
-end pose, in two views, plus the equipment and the muscles worked. The renderer
-(`src/lib/exercise-art/scene.ts`) owns the look: tapered limbs, shading, the
-user's accent colour for worked muscles, theme colours for the rest, and the
-animation between poses. You never pick colours, sizes or styles. You pose a
-fixed figure, the way an animator poses a rig.
+An illustration is **data, not a picture**: a 3D pose of a fixed skeleton at
+the start and the end of a rep, plus the equipment and the muscles worked. The
+renderer (`src/lib/exercise-art/scene.ts`) owns the look: it projects the one
+3D pose into a front view and a side view, draws tapered limbs, colours worked
+muscles with the user's accent and the rest with theme colours, and animates
+between the poses by turning each bone round its joint. You never pick
+colours, sizes or styles. You pose a fixed figure, the way an animator poses a
+rig.
 
 One exercise is one file: `src/lib/exercise-art/specs/<slug>.json`, where the
 slug is the exercise name in kebab case (`Barbell Curl` → `barbell-curl`).
@@ -21,83 +23,73 @@ slug is the exercise name in kebab case (`Barbell Curl` → `barbell-curl`).
    `muscleGroup` and `equipment`. `pnpm art todo` lists the ones not drawn yet.
 2. **Start from the closest existing spec** in `specs/` (same stance, same
    equipment), not from scratch. `barbell-curl.json` is the standing reference.
-3. **Pose both views**, keyframe 0 = the start of the rep, last keyframe = the
-   other end of the range (see the rules below).
-4. **Run `pnpm art check <slug>`.** It rejects stretched limbs, unknown or
+3. **Pose it**: keyframe 0 = the start of the rep, the last keyframe = the
+   other end of the range (rules below).
+4. **Run `pnpm art check <slug>`.** It rejects bones of the wrong length,
    missing joints, joints below the floor or out of frame, then renders
    `.art-preview/<slug>.png`: front and side at t = 0, 0.5 and 1, in the dark
    and the light theme.
 5. **Read the PNG and look at it.** Go through the checklist below. Fix and
-   re-run until every row of it holds. A spec that passes `check` but looks
-   wrong is not done.
+   re-run until every row holds. A spec that passes `check` but looks wrong is
+   not done; t = 0.5 is where a bad path shows.
 6. Do not edit `specs/index.ts` by hand. When you are drawing one exercise on
    your own, finish with `pnpm art index` and `pnpm test src/__tests__/exercise-art.test.ts`.
    In the batch workflow the last stage does it once for everyone.
 
-## The figure
+## The skeleton (3D)
 
-The view box shows x 25–225, y 36–296. The floor is **y = 290**; standing feet
-sit on it (ankle y ≈ 280, toe y ≈ 286). The head joint is the centre of a
-radius-15 head. Bigger y is lower.
+Axes: **x** across the body (the front view's screen x; `l*` joints have the
+smaller x), **y** down (floor at **y = 290**), **z** forward, the way the
+lifter faces. The body's centre line is x = 125, z = 0. The front view shows
+(x, y); the side view looks from the `r*` side with the lifter facing right and
+shows (125 + z, y). Both must fit x 25–225, y 36–296, so keep z within ±100.
 
-**Side view** faces **right** (the lifter looks toward +x). Joints:
-`head, neck, shoulder, chest, hip, elbow, wrist, knee, ankle, toe`, plus the
-far side `farElbow, farWrist, farKnee, farAnkle, farToe`. The far joints are
-optional: left out, each one sits a few px behind its near twin, which is right
-for any symmetric movement. Pose them yourself when the two sides differ
-(a split squat, a one-arm row, a lunge).
+Joints: `head` (centre of a radius-15 head), `neck` (base of the neck),
+`chest` (mid spine), `pelvis`, and `lShoulder rShoulder lElbow rElbow lWrist
+rWrist lHip rHip lKnee rKnee lAnkle rAnkle lToe rToe`.
 
-**Front view** faces the viewer. `l*` is the limb on the **left of the screen**.
-Joints: `head, neck, pelvis, lShoulder, rShoulder, lElbow, rElbow, lWrist,
-rWrist, lHip, rHip, lKnee, rKnee, lAnkle, rAnkle, lToe, rToe`. Keep it mirror
-symmetric around x = 125 unless the movement is one-sided.
+**Bone lengths are fixed** and `check` holds every keyframe to them within 3%:
 
-**Bone lengths.** `check` fails any bone longer than its maximum. Shorter is
-allowed, and expected when a limb points toward the viewer (the forearm in the
-front view of a curl shrinks to about 28 at the top). Standing reference
-lengths, which keep every exercise the same size:
+| bone | length |
+|---|---|
+| pelvis→chest / chest→neck / neck→head | 40 / 38 / 24 |
+| neck→shoulder | 23 |
+| shoulder→elbow / elbow→wrist | 46 / 42 |
+| pelvis→hip | 12 |
+| hip→knee / knee→ankle / ankle→toe | 60 / 56 / 21 |
 
-| bone | side | front |
-|---|---|---|
-| upper arm (shoulder→elbow) | 46 | 46 |
-| forearm (elbow→wrist) | 42 | 42 |
-| thigh (hip→knee) | 60 | 60 |
-| shin (knee→ankle) | 56 | 56 |
-| hip→chest / chest→neck | 40 / 38 | pelvis→neck 76 |
-| neck→head | 24 | 24 |
-| foot (ankle→toe) | 21 | 9 (seen end-on) |
-
-Keep each bone the **same length in every keyframe of a view** unless it turns
-toward or away from the viewer. The animation swings bones round their joints,
-so a length change reads as a limb growing.
+Work out a joint from its parent: parent + length × a unit direction. Standing
+upright, the reference pose in `barbell-curl.json` already has every length
+right; move limbs by rotating them, not by nudging single coordinates.
 
 **Anchor.** `anchor` names the joint that stays put while the body moves round
-it: `ankle` / `lAnkle` for anything standing, a wrist for a hang (pull-up),
-`hip` / `pelvis` for seated or lying work. Pick the joint that does not move in
-real life, or the feet will skate.
+it: `lAnkle` for anything standing, a wrist for a hang (pull-up), `pelvis` for
+seated or lying work. Pick the joint that does not move in real life, or the
+feet will skate.
 
-**Keyframes.** The first keyframe lists every required joint. Later keyframes
-list only the joints that move; the rest carry over. Use two keyframes. Add a
-middle one only when the path between start and end is not a simple swing
-(a clean, a get-up), since the animation goes start → middle → end and back.
+**Keyframes.** The first keyframe lists every joint. Later keyframes list only
+the joints that move; the rest carry over. Use two. Each bone turns along the
+shortest arc between its two directions, so a bone that turns close to 180°
+(an arm going from straight down to straight overhead) can take the wrong
+side: add a middle keyframe there, which also suits paths that are not one
+swing (a clean, a get-up). The animation goes start → middle → end and back.
 
 ## Equipment (`props`)
 
 | type | fields | drawn as |
 |---|---|---|
-| `barbell` | `at` (default both wrists) | bar and plates across the joints (front), a plate at them (side) |
-| `dumbbell` | `at` (default both wrists) | one dumbbell per joint |
-| `kettlebell` | `at` | one bell hanging below the midpoint of the joints |
-| `bench` | `x, y, w` | pad with its top-left at x, y; legs to the floor |
-| `bar` | `x1, x2, y` | fixed bar; x1 = x2 draws it end-on (side view of a pull-up bar) |
-| `cable` | `anchor: [x, y], at` | line from a pulley to a joint |
-| `box` | `x, y, w, h` | box or platform |
+| `barbell` | `at` (default both wrists) | bar along x through the joints' midpoint: plates at the ends (front), a plate (side) |
+| `dumbbell` | `at` (default both wrists), `along` `x` (overhand, default) or `z` (neutral grip) | one dumbbell per joint |
+| `kettlebell` | `at` | one bell hanging below the joints' midpoint |
+| `bench` | `y, z1, z2, width` | pad with its top at y, from z1 to z2, `width` across; legs to the floor |
+| `box` | `y, z1, z2, width` | solid box or step from y down to the floor |
+| `bar` | `y, z` | fixed bar along x (pull-up bar, rack) |
+| `cable` | `anchor: [x, y, z], at` | line from a pulley to a joint |
 
-Each prop takes an optional `layer`: `back` (behind the figure, the default for
-benches, bars, cables and boxes), `mid` (behind the near arm, the default for
-held weights, so the hands sit over the bar) or `front`. A back squat puts the
-barbell `at: ["neck"]` in the side view and `at: ["lShoulder", "rShoulder"]` in
-the front view.
+Held weights sort by depth with the body (the near hand stays over the bar).
+Benches, boxes, bars and cables sit behind the figure. Any prop takes `layer`:
+`auto`, `back` or `front` to override. A back squat puts the barbell
+`at: ["lShoulder", "rShoulder"]` with the shoulders' z a little behind 0.
 
 ## Muscles
 
@@ -110,8 +102,9 @@ the front view.
 The renderer lights a limb when one of its muscles is primary (accent) or
 secondary (dimmed accent). Upper arm: biceps, triceps, shoulders. Forearm:
 forearms. Thigh: quads, hamstrings, glutes. Shin: calves. Side torso: chest and
-back (upper), abs and lower_back (lower). Front torso: chest plate, abs, lats
-(back) and the shoulder caps.
+back (upper), abs and lower_back (lower), glutes (seat). Front torso: chest
+plate, abs, lats (back) and the shoulder caps. The muscle map next to the
+figure (`muscle-map.ts`, preview with `pnpm art map`) uses the same muscles.
 
 ## Words
 
@@ -126,11 +119,13 @@ back (upper), abs and lower_back (lower). Front torso: chest plate, abs, lats
 - [ ] The pose is recognisable as this exercise from either view alone.
 - [ ] Start and end match the real range of motion (depth, lockout, bar path).
 - [ ] Feet stay planted and on the floor; nothing floats or sinks.
+- [ ] Front and side agree: each limb is where the other view says it is.
 - [ ] No limb bends the wrong way (knees and elbows bend forward/back correctly
       for the view).
 - [ ] Hands are on the bar, handle or bell; the body sits on the bench, not
       through it.
-- [ ] The front view is symmetric (unless the movement is one-sided).
+- [ ] The front view is symmetric (unless the movement is one-sided), and no
+      limb swings through the body on its way between poses.
 - [ ] The t = 0.5 frame looks like a real mid-rep position, not a limb passing
       through the body.
 - [ ] The accent lands on the right muscles in both views and both themes.
