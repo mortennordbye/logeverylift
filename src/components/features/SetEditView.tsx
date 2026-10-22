@@ -14,7 +14,7 @@ import {
   type ExerciseType,
 } from "@/lib/utils/exercise-type";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
-import { withCustomOption } from "@/lib/utils/picker-options";
+import { type Equipment, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { markProgrammaticBack } from "@/lib/utils/nav-intent";
@@ -39,6 +39,8 @@ type Props = {
   exerciseTypeDefault?: string | null;
   /** Per-program override of the exercise type; null = inherit the default. */
   exerciseTypeOverride?: string | null;
+  /** Exercise's equipment — picks the weight presets (see weightOptionsFor). */
+  equipment?: Equipment | null;
 };
 
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120, 180, 300, 600];
@@ -100,6 +102,7 @@ function SetEditForm({
   setNumber,
   exerciseTypeDefault = null,
   exerciseTypeOverride = null,
+  equipment = null,
 }: Props) {
   const router = useRouter();
   const { logWithRetry } = useWorkoutSetWriter();
@@ -214,7 +217,7 @@ function SetEditForm({
   const weightScrollRef = useRef<HTMLDivElement>(null);
   const repsScrollRef = useRef<HTMLDivElement>(null);
 
-  const WEIGHT_OPTIONS = [0, ...Array.from({ length: 40 }, (_, i) => (i + 1) * 2.5)];
+  const WEIGHT_OPTIONS = weightOptionsFor(equipment);
   // A typed-in weight gets its own circle rather than lighting up the nearest
   // preset — see withCustomOption.
   const weightOptions = withCustomOption(WEIGHT_OPTIONS, weight);
@@ -1077,7 +1080,7 @@ function SetEditForm({
               {weightOptions.map((num) => {
                 // The typed-in value sits in the ladder at its sorted position
                 // (withCustomOption). A dashed ring and a "custom" caption keep
-                // it distinguishable from the 2.5 kg presets around it.
+                // it distinguishable from the presets around it.
                 const isCustom = !WEIGHT_OPTIONS.includes(num);
                 return (
                   <button
