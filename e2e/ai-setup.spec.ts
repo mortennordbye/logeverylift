@@ -44,10 +44,14 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   await pick(page, "Cycle length", "16 wk");
   await page.getByRole("group", { name: "Go easy on" }).getByRole("button", { name: "Knees" }).click();
 
-  await page.getByRole("button", { name: "Build my plan" }).click();
+  // Assert the outcome and retry the tap, like pick(): a WebKit tap can focus
+  // the button without its click handler running (seen once in CI).
+  await expect(async () => {
+    await page.getByRole("button", { name: "Build my plan" }).click();
+    await expect(page.getByText("16-Week Upper/Lower")).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
 
   // The preview: the cycle on the picked days, every exercise listed.
-  await expect(page.getByText("16-Week Upper/Lower")).toBeVisible();
   await expect(page.getByText(/^Mon Upper A.* · Thu Lower A/)).toBeVisible();
   const body = await page.locator("body").innerText();
   const lines = body.split("\n").map((l) => l.trim());
@@ -116,9 +120,12 @@ test("only offers splits and focus muscles the picks allow", async ({ page }) =>
 
 test("asks for a note before swapping named exercises", async ({ page }) => {
   await openAiSetup(page);
-  await page.getByRole("button", { name: "Build my plan" }).click();
-
   const edit = page.getByRole("button", { name: "Edit with AI" });
+  // Retried for the same dropped-tap reason as the first spec.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Build my plan" }).click();
+    await expect(edit).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
   await expect(edit).toBeDisabled();
   await page.getByRole("group", { name: "Changes" }).getByRole("button", { name: "Swap exercises I name" }).click();
   await expect(edit).toBeDisabled();

@@ -39,7 +39,7 @@ async function leaveEditMode(page: Page) {
   const done = page.getByRole("button", { name: "Done", exact: true });
   // A tap that lands while the drop animation is finishing can be swallowed.
   await expect(async () => {
-    if (await done.isVisible()) await done.click();
+    if ((await done.count()) > 0) await done.click();
     await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible({ timeout: 1_000 });
   }).toPass({ timeout: 10_000 });
 }
