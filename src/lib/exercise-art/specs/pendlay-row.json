@@ -1,0 +1,30 @@
+{
+  "name": "Pendlay Row",
+  "primary": "back",
+  "secondary": ["biceps", "shoulders", "lower_back"],
+  "cue": "Keep your back flat and close to level with the floor. Pull the bar from the floor to your lower chest, then set it down dead each rep.",
+  "phases": ["Pull", "Lower"],
+  "anchor": "lAnkle",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 157, 40], "neck": [125, 172, 23], "chest": [125, 188, -11], "pelvis": [125, 204, -48],
+      "lShoulder": [103, 177, 20], "rShoulder": [147, 177, 20],
+      "lElbow": [102, 221, 16], "rElbow": [148, 221, 16],
+      "lWrist": [102, 265, 12], "rWrist": [148, 265, 12],
+      "lHip": [113, 204, -48], "rHip": [137, 204, -48],
+      "lKnee": [111, 223, 8], "rKnee": [139, 223, 8],
+      "lAnkle": [110, 278, -1], "rAnkle": [140, 278, -1],
+      "lToe": [108, 284, 19], "rToe": [142, 284, 19]
+    },
+    {
+      "lElbow": [97, 200, -18], "rElbow": [153, 200, -18],
+      "lWrist": [102, 222, 20], "rWrist": [148, 222, 20]
+    },
+    {
+      "lElbow": [97, 172, -28], "rElbow": [153, 172, -28],
+      "lWrist": [102, 200, 0], "rWrist": [148, 200, 0]
+    }
+  ],
+  "props": [{ "type": "barbell" }]
+}

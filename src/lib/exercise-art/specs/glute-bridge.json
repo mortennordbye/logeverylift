@@ -1,0 +1,187 @@
+{
+  "name": "Glute Bridge",
+  "primary": "glutes",
+  "secondary": [
+    "hamstrings",
+    "lower_back"
+  ],
+  "cue": "Push through your heels and squeeze your glutes until your shoulders, hips and knees form one line. Keep your ribs down so the lift comes from the hips, not an arched back.",
+  "phases": [
+    "Bridge",
+    "Lower"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.85,
+  "hold": [
+    "lAnkle",
+    "rAnkle"
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        275,
+        -90
+      ],
+      "neck": [
+        125,
+        275,
+        -66
+      ],
+      "chest": [
+        125,
+        275,
+        -28
+      ],
+      "pelvis": [
+        125,
+        276,
+        12
+      ],
+      "lShoulder": [
+        102,
+        275,
+        -66
+      ],
+      "rShoulder": [
+        148,
+        275,
+        -66
+      ],
+      "lElbow": [
+        100,
+        282,
+        -20
+      ],
+      "rElbow": [
+        150,
+        282,
+        -20
+      ],
+      "lWrist": [
+        100,
+        283,
+        22
+      ],
+      "rWrist": [
+        150,
+        283,
+        22
+      ],
+      "lHip": [
+        113,
+        276,
+        12
+      ],
+      "rHip": [
+        137,
+        276,
+        12
+      ],
+      "lKnee": [
+        111,
+        230.1,
+        50.6
+      ],
+      "rKnee": [
+        139,
+        230.1,
+        50.6
+      ],
+      "lAnkle": [
+        109,
+        281,
+        74
+      ],
+      "rAnkle": [
+        141,
+        281,
+        74
+      ],
+      "lToe": [
+        109,
+        287,
+        94
+      ],
+      "rToe": [
+        141,
+        287,
+        94
+      ]
+    },
+    {
+      "head": [
+        125,
+        275,
+        -90
+      ],
+      "neck": [
+        125,
+        275,
+        -66
+      ],
+      "lShoulder": [
+        102,
+        275,
+        -66
+      ],
+      "rShoulder": [
+        148,
+        275,
+        -66
+      ],
+      "chest": [
+        125,
+        260.8,
+        -30.8
+      ],
+      "pelvis": [
+        125,
+        245.8,
+        6.3
+      ],
+      "lHip": [
+        113,
+        245.8,
+        6.3
+      ],
+      "rHip": [
+        137,
+        245.8,
+        6.3
+      ],
+      "lKnee": [
+        111,
+        226.1,
+        62.9
+      ],
+      "rKnee": [
+        139,
+        226.1,
+        62.9
+      ],
+      "lElbow": [
+        100,
+        282,
+        -20
+      ],
+      "rElbow": [
+        150,
+        282,
+        -20
+      ],
+      "lWrist": [
+        100,
+        283,
+        22
+      ],
+      "rWrist": [
+        150,
+        283,
+        22
+      ]
+    }
+  ],
+  "props": []
+}

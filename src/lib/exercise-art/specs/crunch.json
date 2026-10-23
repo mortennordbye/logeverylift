@@ -1,0 +1,16 @@
+{
+  "name": "Crunch",
+  "primary": "abs",
+  "secondary": [],
+  "cue": "Curl your shoulders off the floor and keep your lower back down. Do not pull on your head with your hands.",
+  "phases": ["Crunch", "Lower"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.85,
+  "hold": ["lAnkle", "rAnkle"],
+  "keyframes": [
+    { "head": [125, 273, -82], "neck": [125, 273, -58], "chest": [125, 273, -20], "pelvis": [125, 273, 20], "lShoulder": [102.8, 273, -52], "rShoulder": [147.2, 273, -52], "lElbow": [63.6, 276.6, -75.9], "rElbow": [186.4, 276.6, -75.9], "lWrist": [110, 282, -86], "rWrist": [140, 282, -86], "lHip": [113, 273, 20], "rHip": [137, 273, 20], "lKnee": [108, 233, 64.7], "rKnee": [142, 233, 64.7], "lAnkle": [108, 279, 96.6], "rAnkle": [142, 279, 96.6], "lToe": [108, 284, 117], "rToe": [142, 284, 117] },
+    { "chest": [125, 266.1, -19.4], "neck": [125, 247.1, -52.3], "head": [125, 231.7, -70.7], "lShoulder": [102.8, 250.1, -47.1], "rShoulder": [147.2, 250.1, -47.1], "lElbow": [65.8, 227.5, -62.6], "rElbow": [184.2, 227.5, -62.6], "lWrist": [108, 236, -80], "rWrist": [142, 236, -80] }
+  ],
+  "props": []
+}
