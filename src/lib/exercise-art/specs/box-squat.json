@@ -1,0 +1,29 @@
+{
+  "name": "Box Squat",
+  "primary": "quads",
+  "secondary": ["glutes", "hamstrings", "lower_back"],
+  "cue": "Sit back until you touch the box, pause without relaxing, then drive up. Keep your shins close to vertical.",
+  "phases": ["Squat", "Stand"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, -10], "rShoulder": [147, 88, -10],
+      "lElbow": [88, 126, -32], "rElbow": [162, 126, -32],
+      "lWrist": [84, 88, -12], "rWrist": [166, 88, -12],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [106, 222, 1], "rKnee": [144, 222, 1],
+      "lAnkle": [100, 278, -1], "rAnkle": [150, 278, -1],
+      "lToe": [94, 284, 19], "rToe": [156, 284, 19]
+    },
+    {
+      "head": [125, 158, 26], "neck": [125, 180, 12], "chest": [125, 207, -17], "pelvis": [125, 235, -45],
+      "lHip": [113, 237, -45], "rHip": [137, 237, -45],
+      "lKnee": [94, 225, 14], "rKnee": [156, 225, 14]
+    }
+  ],
+  "props": [
+    { "type": "barbell", "at": ["lShoulder", "rShoulder"] },
+    { "type": "box", "y": 251, "z1": -80, "z2": -22, "width": 70 }
+  ]
+}

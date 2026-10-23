@@ -1,0 +1,28 @@
+{
+  "name": "Leg Raise",
+  "primary": "abs",
+  "secondary": ["quads"],
+  "cue": "Keep your lower back pressed into the floor and your legs straight. Lower slowly and stop just before your heels touch.",
+  "phases": ["Raise", "Lower"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.75,
+  "keyframes": [
+    {
+      "head": [125, 273, -92], "neck": [125, 273, -68], "chest": [125, 273, -30], "pelvis": [125, 273, 10],
+      "lShoulder": [102, 273, -66], "rShoulder": [148, 273, -66],
+      "lElbow": [98, 279, -20], "rElbow": [152, 279, -20],
+      "lWrist": [96, 282, 22], "rWrist": [154, 282, 22],
+      "lHip": [113, 273, 10], "rHip": [137, 273, 10],
+      "lKnee": [117, 271, 70], "rKnee": [133, 271, 70],
+      "lAnkle": [118, 268, 126], "rAnkle": [132, 268, 126],
+      "lToe": [118, 248, 132], "rToe": [132, 248, 132]
+    },
+    {
+      "lKnee": [117, 213, 12], "rKnee": [133, 213, 12],
+      "lAnkle": [118, 157, 13], "rAnkle": [132, 157, 13],
+      "lToe": [118, 152, -7], "rToe": [132, 152, -7]
+    }
+  ],
+  "props": []
+}

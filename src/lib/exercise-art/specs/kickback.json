@@ -1,0 +1,130 @@
+{
+  "name": "Kickback",
+  "primary": "triceps",
+  "secondary": [
+    "shoulders"
+  ],
+  "cue": "Keep your upper arm still and level with your back. Only the forearm moves, until the arm is straight.",
+  "phases": [
+    "Extend",
+    "Lower"
+  ],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        155,
+        87
+      ],
+      "neck": [
+        125,
+        161,
+        63
+      ],
+      "chest": [
+        125,
+        166,
+        26
+      ],
+      "pelvis": [
+        125,
+        170,
+        -12
+      ],
+      "lShoulder": [
+        102,
+        161,
+        62
+      ],
+      "rShoulder": [
+        148,
+        161,
+        62
+      ],
+      "lElbow": [
+        113,
+        205,
+        50
+      ],
+      "rElbow": [
+        166,
+        174,
+        18
+      ],
+      "lWrist": [
+        118,
+        232,
+        82
+      ],
+      "rWrist": [
+        166,
+        216,
+        18
+      ],
+      "lHip": [
+        113,
+        172,
+        -12
+      ],
+      "rHip": [
+        137,
+        172,
+        -12
+      ],
+      "lKnee": [
+        118,
+        232,
+        -10
+      ],
+      "rKnee": [
+        146,
+        226,
+        8
+      ],
+      "lAnkle": [
+        118,
+        233,
+        -66
+      ],
+      "rAnkle": [
+        148,
+        279,
+        0
+      ],
+      "lToe": [
+        118,
+        237,
+        -87
+      ],
+      "rToe": [
+        150,
+        284,
+        20
+      ]
+    },
+    {
+      "rWrist": [
+        166,
+        178,
+        -24
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "bench",
+      "y": 238,
+      "z1": -92,
+      "z2": 86,
+      "width": 24
+    },
+    {
+      "type": "dumbbell",
+      "at": [
+        "rWrist"
+      ],
+      "along": "forearm"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Front Raise",
+  "primary": "shoulders",
+  "secondary": ["chest"],
+  "cue": "Raise the dumbbells straight in front of you to shoulder height with a soft elbow. Do not lean back or swing them up.",
+  "phases": ["Raise", "Lower"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, 0], "rShoulder": [147, 88, 0],
+      "lElbow": [100, 134, 5], "rElbow": [150, 134, 5],
+      "lWrist": [103, 175, 15], "rWrist": [147, 175, 15],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [112, 222, 1], "rKnee": [138, 222, 1],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    {
+      "lElbow": [101, 91, 46], "rElbow": [149, 91, 46],
+      "lWrist": [104, 96, 87], "rWrist": [146, 96, 87]
+    }
+  ],
+  "props": [{ "type": "dumbbell" }]
+}

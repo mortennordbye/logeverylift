@@ -131,6 +131,16 @@ edge (`z1`) where the foot line crosses the step top at t = 0, not at the
 heel or the toe, and set the box `layer: "front"` so the front view hides the
 dropped heels behind the step.
 
+**Onto a box** (step-up): the trail foot must rise behind the box and then
+cross above its top, not drag across it or go through the back edge. Two
+keyframes cannot do that: add one with the knee driven forward and the foot
+lifted behind the box (toe pointing back), then one with the foot over the
+box, then the planted end. A shin swept back near horizontal with the knee
+under the hip reads as a donkey kick. `check` does not catch a foot passing
+through a prop mid-rep, so sample `poseAt` from `scene.ts` at small steps of t
+(run the spec through `artSpecSchema` first) and confirm the toe stays above
+the box top wherever its z is over the box.
+
 **Anchor.** `anchor` names the joint that stays put while the body moves round
 it: `lAnkle` for anything standing, a wrist for a hang (pull-up), `pelvis` for
 seated or lying work. Pick the joint that does not move in real life, or the
