@@ -1,0 +1,33 @@
+{
+  "name": "Seated Cable Row",
+  "primary": "back",
+  "secondary": ["biceps", "shoulders", "forearms"],
+  "cue": "Sit tall and pull the handle to your belly by driving your elbows back. Do not rock your torso to move the weight.",
+  "phases": ["Pull", "Return"],
+  "anchor": "pelvis",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 126, -36], "neck": [125, 150, -40], "chest": [125, 187, -46], "pelvis": [125, 226, -52],
+      "lShoulder": [103, 156, -40], "rShoulder": [147, 156, -40],
+      "lElbow": [110, 168, 4], "rElbow": [140, 168, 4],
+      "lWrist": [117, 180, 44], "rWrist": [133, 180, 44],
+      "lHip": [113, 228, -52], "rHip": [137, 228, -52],
+      "lKnee": [111, 206, 4], "rKnee": [139, 206, 4],
+      "lAnkle": [111, 232, 52], "rAnkle": [139, 232, 52],
+      "lToe": [111, 214, 62], "rToe": [139, 214, 62]
+    },
+    {
+      "head": [125, 124, -50], "neck": [125, 148, -52], "chest": [125, 186, -52],
+      "lShoulder": [103, 154, -52], "rShoulder": [147, 154, -52],
+      "lElbow": [99, 190, -76], "rElbow": [151, 190, -76],
+      "lWrist": [113, 196, -36], "rWrist": [137, 196, -36]
+    }
+  ],
+  "props": [
+    { "type": "cable", "anchor": [125, 214, 98], "at": "lWrist" },
+    { "type": "cable", "anchor": [125, 214, 98], "at": "rWrist" },
+    { "type": "box", "y": 240, "z1": -80, "z2": -20, "width": 44 },
+    { "type": "box", "y": 204, "z1": 64, "z2": 80, "width": 70 }
+  ]
+}
