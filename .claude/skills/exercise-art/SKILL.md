@@ -155,12 +155,16 @@ the knees, torso leaning about 40°, bar over mid-foot.
 | type | fields | drawn as |
 |---|---|---|
 | `barbell` | `at` (default both wrists) | bar along x through the joints' midpoint: plates at the ends (front), a plate (side) |
-| `dumbbell` | `at` (default both wrists), `along` `x` (overhand, default) or `z` (neutral grip) | one dumbbell per joint |
+| `dumbbell` | `at` (default both wrists), `along` `x` (overhand, default), `z` (neutral grip) or `forearm` (neutral grip that stays at right angles to the forearm as it swings: hammer curl) | one dumbbell per joint |
 | `kettlebell` | `at` | one bell hanging below the joints' midpoint |
 | `bench` | `y, z1, z2, width` | pad with its top at y, from z1 to z2, `width` across and always centred on x = 125; legs to the floor |
+| `incline` | `from`, `to` (each `[y, z]`), `width` | sloped pad whose top surface runs from `from` to `to` (incline bench back, upright seat back); one post to the floor. Pair it with a `bench` for the seat |
+| `bars` | `y, z1, z2, width` | parallel bars along z at height y, `width` apart (dip station) |
 | `box` | `y, z1, z2, width` | solid box or step from y down to the floor |
 | `bar` | `y, z` | fixed bar along x (pull-up bar, rack) |
 | `cable` | `anchor: [x, y, z], at` | line from a pulley to a joint |
+
+Leg Press stays undrawn until there is a sled prop (a reclined back pad and a footplate the feet push).
 
 Held weights sort by depth with the body; the near plate of a barbell in the
 side view sits just behind the near arm, so the grip stays readable.

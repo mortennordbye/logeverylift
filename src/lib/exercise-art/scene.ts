@@ -250,6 +250,31 @@ function sideTorso(j: Record<Joint, Point>, glute: Point, role: (m: Muscle[]) =>
   ];
 }
 
+/**
+ * A neutral grip's handle: at right angles to the forearm, in the plane the
+ * forearm swings in (so hanging it runs along z, held level it stands upright).
+ */
+function handleAxis(pose: Pose, j: Joint): Point3 {
+  const elbow = j.endsWith("Wrist") ? pose[j.replace("Wrist", "Elbow") as Joint] : null;
+  if (!elbow) return [0, 0, 1];
+  const d = unit(sub(pose[j], elbow));
+  const h: Point3 = [0, -d[2], d[1]];
+  return len3(h) < 0.2 ? [0, 0, 1] : unit(h);
+}
+
+/** A dumbbell whose handle points along `axis`, foreshortened in the view. */
+function turnedDumbbell(c: Point, axis: Point3, view: View, camera: Camera): Shape[] {
+  const v: Point = view === "side" ? [axis[2], axis[1]] : camera === "top" ? [axis[0], axis[2]] : [axis[0], axis[1]];
+  const shown = Math.hypot(v[0], v[1]);
+  if (shown < 0.35) return [{ d: circle(c, 9.5), role: "plate" }, { d: circle(c, 2.5), role: "steel" }];
+  const n: Point = [-v[1] / shown, v[0] / shown];
+  const at = (k: number, m = 0): Point => [c[0] + v[0] * k + n[0] * m, c[1] + v[1] * k + n[1] * m];
+  return [
+    { d: line(at(-12), at(12)), role: "steel", stroke: 3.6 },
+    ...[-1, 1].map((s): Shape => ({ d: capsule(at(s * 12, -6), at(s * 12, 6), 3, 3), role: "plate" })),
+  ];
+}
+
 function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[] {
   const pin = p.layer === "back" ? -1e6 : p.layer === "front" ? 1e6 : null;
   const group = (depth: number, shapes: Shape[]): Group => ({ depth: pin ?? depth, shapes });
@@ -283,6 +308,7 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
     case "dumbbell":
       return (p.at ?? wrists).map((j) => {
         const { at: [x, y], depth } = project(pose[j], view, camera);
+        if (p.along === "forearm") return group(depth - 1, turnedDumbbell([x, y], handleAxis(pose, j), view, camera));
         // Seen end-on, a dumbbell is a disc; from above, a neutral grip runs down the screen.
         const endOn = view === "front" && camera === "front" ? p.along === "z" : view === "side" && p.along === "x";
         const vertical = view === "front" && camera === "top" && p.along === "z";
@@ -321,6 +347,42 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
             { d: rect(x0 + w - 11, p.y + 8, 5, FLOOR_Y - p.y - 8, 2), role: "steel" },
             { d: rect(x0, p.y, w, 10, 4), role: "equip" },
           ])];
+    }
+    case "incline": {
+      const ys = [p.from[0], p.to[0]];
+      const zs = [p.from[1], p.to[1]];
+      if (view === "front") {
+        const x0 = CENTER_X - p.width / 2;
+        return [group(-1e6, camera === "top"
+          ? [{ d: rect(x0, TOP_Y + Math.min(...zs), p.width, Math.abs(zs[1] - zs[0]), 6), role: "equip" }]
+          : [{ d: rect(x0, Math.min(...ys), p.width, Math.abs(ys[1] - ys[0]) + 10, 4), role: "equip" }])];
+      }
+      // Side: a 10-thick pad whose top surface is the from-to line, on the
+      // side away from the lifter (down, or back for an upright pad).
+      const a: Point = [CENTER_X + zs[0], ys[0]];
+      const b: Point = [CENTER_X + zs[1], ys[1]];
+      const dl = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+      let n: Point = [-(b[1] - a[1]) / dl, (b[0] - a[0]) / dl];
+      if (n[1] < 0 || (n[1] === 0 && n[0] > 0)) n = [-n[0], -n[1]];
+      const off = (q: Point, k: number): Point => [q[0] + n[0] * k, q[1] + n[1] * k];
+      const under = off(mid(a, b), 10);
+      return [group(-1e6, [
+        { d: rect(under[0] - 2.5, under[1], 5, Math.max(0, FLOOR_Y - under[1]), 2), role: "steel" },
+        { d: capsule(off(a, 5), off(b, 5), 5, 5), role: "equip" },
+      ])];
+    }
+    case "bars": {
+      const [za, zb] = [Math.min(p.z1, p.z2), Math.max(p.z1, p.z2)];
+      const xs = [CENTER_X - p.width / 2, CENTER_X + p.width / 2];
+      if (view === "side") {
+        return [group(-1e6, [
+          ...[za + 4, zb - 4].map((z): Shape => ({ d: rect(CENTER_X + z - 2.5, p.y, 5, FLOOR_Y - p.y, 2), role: "steel" })),
+          { d: rect(CENTER_X + za, p.y - 2.5, zb - za, 5, 2.5), role: "steel" },
+        ])];
+      }
+      return [group(-1e6, xs.flatMap((x): Shape[] => camera === "top"
+        ? [{ d: rect(x - 2.5, TOP_Y + za, 5, zb - za, 2.5), role: "steel" }]
+        : [{ d: rect(x - 2.5, p.y, 5, FLOOR_Y - p.y, 2), role: "steel" }, { d: circle([x, p.y], 4.5), role: "steel" }]))];
     }
     case "bar":
       return [group(-1e6, view === "front"
