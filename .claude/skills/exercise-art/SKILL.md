@@ -116,6 +116,18 @@ horizontal, and the shins are close to vertical. Hips level with the knees
 and a flat back read as a squat; agents got this wrong three times on the
 deadlift. Check the angles with `--joints`, not by eye.
 
+**Supported on the hands** (dip, and the top of anything pressed up on
+bars): at lockout the shoulders sit over the hands and the torso is close to
+upright, with only a slight lean; the lean grows on the way down. A body that
+is one straight diagonal with the shoulders well ahead of the hands reads as
+falling forward. Bend the knees and let the feet hang a little behind.
+
+**On a step** (calf raise): the foot is one straight bone, so a heel dropped
+below the step top touches the step only at its edge. Put the box's back
+edge (`z1`) where the foot line crosses the step top at t = 0, not at the
+heel or the toe, and set the box `layer: "front"` so the front view hides the
+dropped heels behind the step.
+
 **Anchor.** `anchor` names the joint that stays put while the body moves round
 it: `lAnkle` for anything standing, a wrist for a hang (pull-up), `pelvis` for
 seated or lying work. Pick the joint that does not move in real life, or the
@@ -148,7 +160,10 @@ from the body, not flared straight out; on a squat the knees track over the
 toes. From above or the front, an elbow tucked right under the wrist hides
 the arm behind the body, so a slight flare reads better. A parallel squat
 (see `squat.json`): shins about 35° forward, thighs level with or just below
-the knees, torso leaning about 40°, bar over mid-foot.
+the knees, torso leaning about 40°, bar over mid-foot. At the bottom of any
+press (bench, incline, overhead) the forearm stays close to vertical under
+the weight in the side view; a forearm leaning toward the feet reads as a
+cocked wrist.
 
 ## Equipment (`props`)
 
@@ -164,7 +179,15 @@ the knees, torso leaning about 40°, bar over mid-foot.
 | `bar` | `y, z` | fixed bar along x (pull-up bar, rack) |
 | `cable` | `anchor: [x, y, z], at` | line from a pulley to a joint |
 
-Leg Press stays undrawn until there is a sled prop (a reclined back pad and a footplate the feet push).
+**If the equipment is not in this table, do not fake it with another prop.**
+Batch 2 tried: a vertical `box` as an incline backrest (the back hung in the
+air), a `bench` shrunk to 8 wide as a dip bar (it read as a pole), and a
+fixed-axis dumbbell for a hammer curl (the handle ran along the forearm).
+Each failed review twice and cost a full fix round. Stop, write no spec, and
+say in your result which prop is missing and what it should look like; a
+renderer change in `src/lib/exercise-art/scene.ts` and `schema.ts` comes
+first. Leg Press stays undrawn until there is a sled prop (a reclined back
+pad and a footplate the feet push).
 
 Held weights sort by depth with the body; the near plate of a barbell in the
 side view sits just behind the near arm, so the grip stays readable.
@@ -214,11 +237,15 @@ figure (`muscle-map.ts`, preview with `pnpm art map`) uses the same muscles.
 - [ ] The accent lands on the right muscles in both views and both themes.
 - [ ] Everything is inside the frame, including plates and the head.
 
-## Running a batch (lessons from the first one)
+## Running a batch (lessons from the first two)
 
 - Run the saved workflow (`.claude/workflows/exercise-art.js`) with about 10
-  exact seed names. Ten took 60 agents and about 3.6M tokens in all, over
-  three rounds.
+  exact seed names. Batch 1: ten took 60 agents and about 3.6M tokens over
+  three rounds. Batch 2: 37 agents and about 2M tokens, five of ten right.
+- Before launching, go through the list against the equipment table. An
+  exercise whose machine or station the renderer cannot draw (a sled, a
+  backrest at an angle, a pec deck) needs the prop first; agents cannot pose
+  their way round it and the review loop only burns tokens finding that out.
 - Agents passing `check` and their own review is not enough. The person
   running the batch reads every `.art-preview/<slug>.png`, then opens them
   for the user (`open .art-preview/<slug>.png ...`) and commits only what the
@@ -227,6 +254,11 @@ figure (`muscle-map.ts`, preview with `pnpm art map`) uses the same muscles.
 - If the same fault comes back after two fixes, the cause is usually
   something no pose can fix (the frame, the renderer), not the pose. Find it
   in `--joints` before sending more agents. That is how `zoom` came about:
-  agents rotated full-length bodies diagonally to fit the side view.
+  agents rotated full-length bodies diagonally to fit the side view, and
+  `incline`, `bars` and the `forearm` dumbbell grip came the same way in
+  batch 2.
+- Small pose faults the last review names precisely (a step edge a few
+  units off, a wrist z to move) are quicker to fix by hand with `--joints`
+  than with another agent round.
 - Poses that fail in a new way go into this skill, so the next batch gets
   them right the first time.

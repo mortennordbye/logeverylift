@@ -36,7 +36,8 @@ const VERDICT = {
 
 const drawPrompt = (name) => `Use the exercise-art skill (.claude/skills/exercise-art/SKILL.md) to draw "${name}".
 Write src/lib/exercise-art/specs/${slug(name)}.json, run \`pnpm art check ${slug(name)}\`, Read .art-preview/${slug(name)}.png and iterate until the skill's checklist holds.
-Only touch that one spec file: other agents are drawing other exercises in parallel. Do not run \`pnpm art index\`.`
+Only touch that one spec file: other agents are drawing other exercises in parallel. Do not run \`pnpm art index\`.
+If the exercise needs equipment the skill's props table cannot draw, do not fake it with another prop: write no spec, set passedCheck false, and say in notes which prop is missing.`
 
 const reviewPrompt = (name, drawn) => `You are reviewing an exercise illustration someone else drew. Be strict: a figure people learn technique from must not be wrong.
 Exercise: "${name}". Spec: src/lib/exercise-art/specs/${slug(name)}.json. The drawer's notes: ${drawn.notes || 'none'}.
@@ -51,9 +52,13 @@ const results = await pipeline(
   names,
   (name) => agent(drawPrompt(name), { label: `draw:${slug(name)}`, phase: 'Draw', schema: DRAWN }),
   (drawn, name) =>
-    agent(reviewPrompt(name, drawn), { label: `review:${slug(name)}`, phase: 'Review', schema: VERDICT })
-      .then((verdict) => ({ name, drawn, verdict })),
+    // No spec written (e.g. a missing prop): nothing to review or fix.
+    drawn && !drawn.passedCheck
+      ? { name, drawn, skipped: true }
+      : agent(reviewPrompt(name, drawn), { label: `review:${slug(name)}`, phase: 'Review', schema: VERDICT })
+          .then((verdict) => ({ name, drawn, verdict })),
   async (r) => {
+    if (r.skipped) return { name: r.name, status: 'not drawn', problems: [r.drawn.notes] }
     if (!r.verdict || r.verdict.pass) return { name: r.name, status: 'ok', problems: [] }
     await agent(fixPrompt(r.name, r.verdict.problems), { label: `fix:${slug(r.name)}`, phase: 'Fix' })
     // A fix nobody re-reviews can still be wrong (batch 1: four of eight were), so check it once more.
