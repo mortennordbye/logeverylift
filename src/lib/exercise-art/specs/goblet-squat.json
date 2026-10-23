@@ -1,0 +1,29 @@
+{
+  "name": "Goblet Squat",
+  "primary": "quads",
+  "secondary": ["glutes", "hamstrings"],
+  "cue": "Hold the bell against your chest with your elbows pointing down. Sit between your heels and keep your chest tall.",
+  "phases": ["Squat", "Stand"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, 0], "rShoulder": [147, 88, 0],
+      "lElbow": [106, 133, 8], "rElbow": [144, 133, 8],
+      "lWrist": [119, 98, 24], "rWrist": [131, 98, 24],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [108, 222, 1], "rKnee": [142, 222, 1],
+      "lAnkle": [105, 278, -1], "rAnkle": [145, 278, -1],
+      "lToe": [100, 284, 19], "rToe": [150, 284, 19]
+    },
+    {
+      "head": [125, 148, 21], "neck": [125, 170, 11], "chest": [125, 204, -5], "pelvis": [125, 240, -22],
+      "lShoulder": [103, 176, 11], "rShoulder": [147, 176, 11],
+      "lElbow": [106, 219, 22], "rElbow": [144, 219, 22],
+      "lWrist": [119, 184, 40], "rWrist": [131, 184, 40],
+      "lHip": [113, 242, -22], "rHip": [137, 242, -22],
+      "lKnee": [96, 232, 33], "rKnee": [154, 232, 33]
+    }
+  ],
+  "props": [{ "type": "kettlebell", "at": ["lWrist", "rWrist"] }]
+}

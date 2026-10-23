@@ -1,0 +1,136 @@
+{
+  "name": "Dumbbell Row",
+  "primary": "back",
+  "secondary": [
+    "biceps",
+    "shoulders"
+  ],
+  "cue": "Keep your back flat and your shoulders square to the bench. Pull the dumbbell to your hip with your elbow, not by twisting.",
+  "phases": [
+    "Row",
+    "Lower"
+  ],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        155,
+        87
+      ],
+      "neck": [
+        125,
+        161,
+        63
+      ],
+      "chest": [
+        125,
+        166,
+        26
+      ],
+      "pelvis": [
+        125,
+        170,
+        -12
+      ],
+      "lShoulder": [
+        102,
+        161,
+        62
+      ],
+      "rShoulder": [
+        148,
+        161,
+        62
+      ],
+      "lElbow": [
+        110,
+        205,
+        50
+      ],
+      "rElbow": [
+        149,
+        207,
+        61
+      ],
+      "lWrist": [
+        115,
+        232,
+        82
+      ],
+      "rWrist": [
+        150,
+        249,
+        60
+      ],
+      "lHip": [
+        113,
+        172,
+        -12
+      ],
+      "rHip": [
+        137,
+        172,
+        -12
+      ],
+      "lKnee": [
+        115,
+        232,
+        -10
+      ],
+      "rKnee": [
+        150,
+        224,
+        8
+      ],
+      "lAnkle": [
+        115,
+        233,
+        -66
+      ],
+      "rAnkle": [
+        165,
+        278,
+        0
+      ],
+      "lToe": [
+        115,
+        237,
+        -87
+      ],
+      "rToe": [
+        167,
+        284,
+        20
+      ]
+    },
+    {
+      "rElbow": [
+        154,
+        153,
+        18
+      ],
+      "rWrist": [
+        154,
+        195,
+        18
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "bench",
+      "y": 238,
+      "z1": -92,
+      "z2": 86,
+      "width": 30
+    },
+    {
+      "type": "dumbbell",
+      "at": [
+        "rWrist"
+      ],
+      "along": "z"
+    }
+  ]
+}

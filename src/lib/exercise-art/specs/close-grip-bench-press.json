@@ -1,0 +1,16 @@
+{
+  "name": "Close-Grip Bench Press",
+  "primary": "triceps",
+  "secondary": ["chest", "shoulders"],
+  "cue": "Grip the bar about shoulder width apart, not closer, and keep your elbows tucked close to your sides as you lower it to your lower chest.",
+  "phases": ["Lower", "Press"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    { "head": [125.0, 214.8, -79.7], "neck": [125.0, 212.4, -55.8], "chest": [125.0, 212.4, -17.8], "pelvis": [125, 216, 22], "lShoulder": [102.8, 212.4, -49.8], "rShoulder": [147.2, 212.4, -49.8], "lElbow": [105.5, 166.6, -46.8], "rElbow": [144.5, 166.6, -46.8], "lWrist": [108.0, 124.6, -44.0], "rWrist": [142.0, 124.6, -44.0], "lHip": [113.2, 216.0, 24.0], "rHip": [136.8, 216.0, 24.0], "lKnee": [87.6, 228.9, 76.7], "rKnee": [162.4, 228.9, 76.7], "lAnkle": [92, 279, 52], "rAnkle": [158, 279, 52], "lToe": [92.0, 284.1, 72.4], "rToe": [158.0, 284.1, 72.4] },
+    { "lElbow": [84.0, 190.5, -14.0], "rElbow": [166.0, 190.5, -14.0], "lWrist": [108.0, 160.0, -30.0], "rWrist": [142.0, 160.0, -30.0] },
+    { "lElbow": [86.0, 228.0, -10.5], "rElbow": [164.0, 228.0, -10.5], "lWrist": [108.0, 194.0, -20.0], "rWrist": [142.0, 194.0, -20.0] }
+  ],
+  "props": [{"type": "barbell"}, {"type": "bench", "y": 230, "z1": -95, "z2": 40, "width": 44}]
+}

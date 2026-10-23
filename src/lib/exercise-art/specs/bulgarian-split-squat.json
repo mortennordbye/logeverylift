@@ -1,0 +1,17 @@
+{
+  "name": "Bulgarian Split Squat",
+  "primary": "quads",
+  "secondary": ["glutes", "hamstrings"],
+  "cue": "Keep most of your weight on the front foot and drop your back knee straight down. Your front heel stays flat on the floor.",
+  "phases": ["Lower", "Stand"],
+  "anchor": "lAnkle",
+  "hold": ["lAnkle", "rAnkle"],
+  "keyframes": [
+    { "pelvis": [125, 172, -8], "chest": [125, 132.1, -5.2], "neck": [125, 94.2, -2.6], "head": [125, 70.2, -0.9], "lShoulder": [103, 100.2, -2.6], "rShoulder": [147, 100.2, -2.6], "lElbow": [99, 146.2, -2.6], "rElbow": [151, 146.2, -2.6], "lWrist": [97, 188.2, -2.6], "rWrist": [153, 188.2, -2.6], "lHip": [113, 174, -8], "rHip": [137, 174, -8], "lKnee": [113, 224, 25.2], "rKnee": [137, 233.5, -16.1], "lAnkle": [113, 278, 40], "rAnkle": [137, 229, -72], "lToe": [113, 284, 60], "rToe": [137, 229, -93] },
+    { "pelvis": [125, 216, -4], "chest": [125, 176.9, 4.3], "neck": [125, 139.7, 12.2], "head": [125, 116.2, 17.2], "lShoulder": [103, 145.7, 12.2], "rShoulder": [147, 145.7, 12.2], "lElbow": [99, 191.7, 12.2], "rElbow": [151, 191.7, 12.2], "lWrist": [97, 233.7, 12.2], "rWrist": [153, 233.7, 12.2], "lHip": [113, 218, -4], "rHip": [137, 218, -4], "lKnee": [113, 224, 55], "rKnee": [137, 270, -33.9] }
+  ],
+  "props": [
+    { "type": "dumbbell", "along": "z" },
+    { "type": "bench", "y": 234, "z1": -104, "z2": -74, "width": 40 }
+  ]
+}
