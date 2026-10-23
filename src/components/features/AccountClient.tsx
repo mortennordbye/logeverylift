@@ -2,6 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { exportMyData } from "@/lib/actions/account";
+import { setAiConsent } from "@/lib/actions/legal";
 import { updateActivityPrivacy } from "@/lib/actions/friends";
 import { updateUserProfile } from "@/lib/actions/profile";
 import type { Goal } from "@/lib/utils/goals";
@@ -31,6 +32,7 @@ interface AccountClientProps {
   invited: boolean;
   profile: UserProfile;
   showActivityToFriends: boolean;
+  aiConsent: boolean;
 }
 
 interface ProfileState extends UserProfile {
@@ -182,7 +184,7 @@ function NumberRow({
   );
 }
 
-export function AccountClient({ name, email, role, invited, profile: initialProfile, showActivityToFriends: initialActivityPrivacy }: AccountClientProps) {
+export function AccountClient({ name, email, role, invited, profile: initialProfile, showActivityToFriends: initialActivityPrivacy, aiConsent: initialAiConsent }: AccountClientProps) {
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -196,6 +198,7 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
   const [profileError, setProfileError] = useState<string | null>(null);
 
   const [activityPrivacy, setActivityPrivacy] = useState(initialActivityPrivacy);
+  const [aiConsent, setAiConsentState] = useState(initialAiConsent);
 
   const [signOutWarning, setSignOutWarning] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -309,6 +312,13 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
     } else {
       setProfileError(result.error ?? "Failed to save profile");
     }
+  }
+
+  async function handleAiConsentToggle() {
+    const next = !aiConsent;
+    setAiConsentState(next);
+    const result = await callAction(setAiConsent({ consent: next }));
+    if (!result.success) setAiConsentState(!next);
   }
 
   async function handleActivityPrivacyToggle() {
@@ -449,7 +459,39 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
                 />
               </div>
             </button>
+            {/* Turning AI editing on happens in AI Setup, next to what it sends. */}
+            {initialAiConsent && (
+              <button
+                onClick={handleAiConsentToggle}
+                disabled={!aiConsent}
+                className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 border-t border-border/50"
+              >
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium">AI editing</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {aiConsent
+                      ? "AI Setup can send your request to an outside model"
+                      : "Off. AI Setup will ask before the next AI edit"}
+                  </p>
+                </div>
+                <div
+                  className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
+                    aiConsent ? "bg-primary" : "bg-muted-foreground/30"
+                  }`}
+                >
+                  <div
+                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
+                      aiConsent ? "translate-x-5" : "translate-x-0.5"
+                    }`}
+                  />
+                </div>
+              </button>
+            )}
           </div>
+          <p className="text-xs text-muted-foreground px-1 mt-2">
+            <a href="/privacy" className="text-primary">Privacy policy</a> ·{" "}
+            <a href="/terms" className="text-primary">Terms of use</a>
+          </p>
         </div>
 
         {/* Your data */}

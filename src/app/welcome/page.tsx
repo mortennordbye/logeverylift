@@ -58,6 +58,8 @@ const COPY = {
     ],
     builtIn: "Built in Oslo",
     license: "Open source under Apache 2.0",
+    privacy: "Privacy",
+    terms: "Terms",
   },
   no: {
     signIn: "Logg inn",
@@ -93,6 +95,8 @@ const COPY = {
     ],
     builtIn: "Laget i Oslo",
     license: "Åpen kildekode under Apache 2.0",
+    privacy: "Personvern",
+    terms: "Vilkår",
   },
 };
 
@@ -246,6 +250,14 @@ export default async function WelcomePage({ searchParams }: Props) {
           <a href="https://github.com/mortennordbye/logeverylift" className="text-primary">
             GitHub
           </a>
+          <span aria-hidden>·</span>
+          <Link href="/privacy" className="text-primary">
+            {t.privacy}
+          </Link>
+          <span aria-hidden>·</span>
+          <Link href="/terms" className="text-primary">
+            {t.terms}
+          </Link>
         </footer>
       </div>
 

@@ -38,6 +38,7 @@ export default async function AccountPage() {
           experienceLevel: user?.experienceLevel ?? null,
         }}
         showActivityToFriends={user?.showActivityToFriends ?? true}
+        aiConsent={!!user?.aiConsentAt}
       />
     </div>
   );

@@ -4,6 +4,7 @@ import pg from "pg";
 import { assertTestDatabase } from "../../scripts/lib/test-database";
 import { seedDemoData } from "../../scripts/lib/demo-data";
 import * as schema from "../../src/db/schema";
+import { LEGAL_VERSION } from "../../src/lib/constants/legal";
 import {
   aiGenerations,
   aiSetupPlans,
@@ -73,6 +74,13 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(userWeightEntries).where(eq(userWeightEntries.userId, userId));
     await tx.delete(exercises).where(eq(exercises.userId, userId));
     await seedDemoData(tx, userId, seededRandom(20261021));
+    // Terms accepted, so the home screen doesn't send every spec to /consent;
+    // AI editing not opted in, as for a new user.
+    const now = new Date();
+    await tx
+      .update(users)
+      .set({ termsVersion: LEGAL_VERSION, termsAcceptedAt: now, healthConsentAt: now, aiConsentAt: null })
+      .where(eq(users.id, userId));
   });
 }
 

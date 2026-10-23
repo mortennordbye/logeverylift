@@ -17,6 +17,15 @@ export const users = pgTable("user", {
   // Last time the home screen asked this user to share the app (answered
   // either way). Null until first asked. See src/lib/utils/share-prompt.ts.
   sharePromptAt: timestamp("share_prompt_at"),
+  // GDPR consent records (src/lib/constants/legal.ts). termsVersion is the
+  // LEGAL_VERSION last accepted; the home screen asks again when it is behind.
+  // healthConsentAt is explicit consent to body and training data (Art. 9),
+  // given together with the terms. aiConsentAt is the separate opt-in to
+  // sending the AI request to an outside model; null until given.
+  termsVersion: text("terms_version"),
+  termsAcceptedAt: timestamp("terms_accepted_at"),
+  healthConsentAt: timestamp("health_consent_at"),
+  aiConsentAt: timestamp("ai_consent_at"),
   // Optional user profile fields — used for AI prompt personalisation and future smart progression
   gender: text("gender").$type<"male" | "female" | "other" | "prefer_not_to_say">(),
   birthYear: integer("birth_year"),

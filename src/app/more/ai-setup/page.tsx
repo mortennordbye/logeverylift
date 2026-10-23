@@ -92,6 +92,7 @@ export default async function AiSetupPage({ searchParams }: Props) {
           existingProgramNames={existingProgramNames}
           mcpEndpoint={mcpEndpoint}
           revision={revision}
+          aiConsented={!!user?.aiConsentAt}
         />
       </div>
     </div>

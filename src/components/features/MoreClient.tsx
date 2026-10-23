@@ -4,7 +4,7 @@ import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { shareApp } from "@/lib/utils/share";
-import { BarChart2, CalendarDays, ChevronRight, Clock, Library, LogOut, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
+import { BarChart2, CalendarDays, ChevronRight, Clock, FileText, Library, LogOut, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -88,6 +88,12 @@ const groups: { title: string; items: MoreItem[] }[] = [
         href: "/more/feedback",
         icon: MessageSquare,
         description: "Report issues or suggest features",
+      },
+      {
+        label: "Privacy & Terms",
+        href: "/privacy",
+        icon: FileText,
+        description: "How your data is handled",
       },
     ],
   },

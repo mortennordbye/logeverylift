@@ -2,6 +2,7 @@ import { LoginForm } from "@/components/features/LoginForm";
 import { shareMetadata } from "@/lib/share-metadata";
 import { getOptionalSession } from "@/lib/utils/session";
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 export function generateMetadata(): Promise<Metadata> {
@@ -23,6 +24,9 @@ export default async function LoginPage() {
         <p className="mt-2 text-sm text-muted-foreground">Sign in to your account</p>
       </div>
       <LoginForm />
+      <p className="mt-8 text-center text-xs text-muted-foreground">
+        <Link href="/privacy">Privacy policy</Link> · <Link href="/terms">Terms of use</Link>
+      </p>
     </div>
   );
 }
