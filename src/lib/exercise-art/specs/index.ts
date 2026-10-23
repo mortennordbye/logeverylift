@@ -2,6 +2,16 @@
 
 export const SPEC_LOADERS: Record<string, () => Promise<unknown>> = {
   "barbell-curl": () => import("./barbell-curl.json").then((m) => m.default),
+  "barbell-row": () => import("./barbell-row.json").then((m) => m.default),
   "bench-press": () => import("./bench-press.json").then((m) => m.default),
+  "deadlift": () => import("./deadlift.json").then((m) => m.default),
+  "dumbbell-curl": () => import("./dumbbell-curl.json").then((m) => m.default),
+  "hip-thrust": () => import("./hip-thrust.json").then((m) => m.default),
+  "lat-pulldown": () => import("./lat-pulldown.json").then((m) => m.default),
+  "lunge": () => import("./lunge.json").then((m) => m.default),
+  "overhead-press": () => import("./overhead-press.json").then((m) => m.default),
+  "plank": () => import("./plank.json").then((m) => m.default),
+  "pull-up": () => import("./pull-up.json").then((m) => m.default),
+  "push-up": () => import("./push-up.json").then((m) => m.default),
   "squat": () => import("./squat.json").then((m) => m.default),
 };

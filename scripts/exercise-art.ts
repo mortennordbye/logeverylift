@@ -97,7 +97,7 @@ function index() {
 function todo() {
   const seed = readFileSync(path.join(ROOT, "scripts/seed.ts"), "utf8");
   const done = new Set(slugs());
-  const names = [...seed.matchAll(/name: "([^"]+)", category: "strength"/g)].map((m) => m[1]);
+  const names = [...seed.matchAll(/name: "([^"]+)",\s*category: "strength"/g)].map((m) => m[1]);
   const missing = names.filter((n) => !done.has(slugify(n)));
   console.log(missing.join("\n"));
   console.error(`${missing.length} of ${names.length} strength exercises have no illustration`);

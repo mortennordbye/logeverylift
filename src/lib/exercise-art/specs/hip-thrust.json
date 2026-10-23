@@ -1,0 +1,69 @@
+{
+  "name": "Hip Thrust",
+  "primary": "glutes",
+  "secondary": [
+    "hamstrings",
+    "quads"
+  ],
+  "cue": "Keep your chin tucked and your ribs down, and push through your heels until your hips are level with your knees. Squeeze your glutes at the top instead of arching your lower back.",
+  "phases": [
+    "Drive",
+    "Lower"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "keyframes": [
+    {
+      "head": [125.0, 205.5, -80.1],
+      "neck": [125, 225, -66],
+      "chest": [125.0, 253.2, -40.5],
+      "pelvis": [125, 264, -2],
+      "lShoulder": [102, 225, -66],
+      "rShoulder": [148, 225, -66],
+      "lElbow": [82.0, 254.0, -40.0],
+      "rElbow": [168.0, 254.0, -40.0],
+      "lWrist": [92, 258, -2],
+      "rWrist": [158, 258, -2],
+      "lHip": [113, 265, -2],
+      "rHip": [137, 265, -2],
+      "lKnee": [110.6, 230.9, 47.3],
+      "rKnee": [139.4, 230.9, 47.3],
+      "lAnkle": [106, 281, 72],
+      "rAnkle": [144, 281, 72],
+      "lToe": [106, 287, 93],
+      "rToe": [144, 287, 93]
+    },
+    {
+      "head": [125.0, 211.2, -85.7],
+      "neck": [125, 225, -66],
+      "chest": [125.0, 224.0, -28.0],
+      "pelvis": [125, 223, 12],
+      "lShoulder": [102, 225, -66],
+      "rShoulder": [148, 225, -66],
+      "lElbow": [86.0, 232.0, -24.0],
+      "rElbow": [164.0, 232.0, -24.0],
+      "lWrist": [92, 217, 12],
+      "rWrist": [158, 217, 12],
+      "lHip": [113, 224, 12],
+      "rHip": [137, 224, 12],
+      "lKnee": [108.5, 225.1, 71.8],
+      "rKnee": [141.5, 225.1, 71.8]
+    }
+  ],
+  "props": [
+    {
+      "type": "barbell",
+      "at": [
+        "lHip",
+        "rHip"
+      ]
+    },
+    {
+      "type": "bench",
+      "y": 240,
+      "z1": -100,
+      "z2": -52,
+      "width": 120
+    }
+  ]
+}

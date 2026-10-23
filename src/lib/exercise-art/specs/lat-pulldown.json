@@ -1,0 +1,34 @@
+{
+  "name": "Lat Pulldown",
+  "primary": "back",
+  "secondary": ["biceps", "forearms"],
+  "cue": "Pull the bar to your upper chest by driving your elbows down and back. Lean back only a little and do not swing.",
+  "phases": ["Pull", "Return"],
+  "anchor": "pelvis",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 118, 2], "neck": [125, 142, 0], "chest": [125, 180, 0], "pelvis": [125, 220, 0],
+      "lShoulder": [103, 148, 0], "rShoulder": [147, 148, 0],
+      "lElbow": [87, 105, 3], "rElbow": [163, 105, 3],
+      "lWrist": [72, 64, 10], "rWrist": [178, 64, 10],
+      "lHip": [113, 222, 0], "rHip": [137, 222, 0],
+      "lKnee": [112, 226, 60], "rKnee": [138, 226, 60],
+      "lAnkle": [112, 279, 78], "rAnkle": [138, 279, 78],
+      "lToe": [110, 284, 98], "rToe": [140, 284, 98]
+    },
+    {
+      "head": [125, 119, -8], "neck": [125, 143, -8], "chest": [125, 180, -4],
+      "lShoulder": [103, 149, -8], "rShoulder": [147, 149, -8],
+      "lElbow": [79, 188, -10], "rElbow": [171, 188, -10],
+      "lWrist": [72, 152, 16], "rWrist": [178, 152, 16]
+    }
+  ],
+  "props": [
+    { "type": "barbell", "layer": "back" },
+    { "type": "cable", "anchor": [125, 40, 12], "at": "lWrist" },
+    { "type": "cable", "anchor": [125, 40, 12], "at": "rWrist" },
+    { "type": "bench", "y": 205, "z1": 38, "z2": 58, "width": 56 },
+    { "type": "box", "y": 234, "z1": -22, "z2": 26, "width": 44 }
+  ]
+}

@@ -93,6 +93,18 @@ to rest on a bench pad whose top is at y, put the spine joints (`pelvis`,
 bench reference: pad `y: 230, z1: -95, z2: 40, width: 44`, spine at y ≈ 213–216.
 Feet go on the floor either side of the bench (ankle y ≈ 279).
 
+**Zoom.** A body lying flat from head to heels (plank, push-up) is about 245
+long, more than the 200 the side view fits. Do not turn the body diagonally to
+squeeze it in: that tilts it in the top view. Set `"zoom"` (0.6 to 1, default
+1) instead. It draws the whole figure smaller round the middle of the floor
+(x 125, y 290), or of the top view (x 125, y 166), and `check` applies it to
+the frame. With `zoom` 0.8 the side view fits z within about ±125. Keep the
+spine on x = 125.
+
+**Hanging** (pull-up, chin-up, hanging leg raise): the legs hang straight down
+under the body, at most a slight knee bend, feet together. Do not tuck the
+shins back as if kneeling. Make the bar readable in the side view.
+
 **Anchor.** `anchor` names the joint that stays put while the body moves round
 it: `lAnkle` for anything standing, a wrist for a hang (pull-up), `pelvis` for
 seated or lying work. Pick the joint that does not move in real life, or the

@@ -1,0 +1,14 @@
+{
+  "name": "Lunge",
+  "primary": "quads",
+  "secondary": ["glutes", "hamstrings"],
+  "cue": "Drop your back knee straight down toward the floor. Keep your front heel down and your front knee over your foot.",
+  "phases": ["Lower", "Stand"],
+  "anchor": "lAnkle",
+  "hold": ["lAnkle", "rAnkle"],
+  "keyframes": [
+    { "pelvis": [125, 176, -5], "chest": [125, 136, -3], "neck": [125, 98, -1], "head": [125, 74, 1], "lShoulder": [103, 104, -1], "rShoulder": [147, 104, -1], "lElbow": [99, 150, -3], "rElbow": [151, 150, -3], "lWrist": [97, 192, 1], "rWrist": [153, 192, 1], "lHip": [113, 178, -5], "rHip": [137, 178, -5], "lKnee": [111, 223, 35], "rKnee": [139, 231, -33], "lAnkle": [110, 278, 45], "rAnkle": [140, 272, -71], "lToe": [109, 284, 66], "rToe": [141, 286, -56] },
+    { "pelvis": [125, 206, -4], "chest": [125, 166, -1], "neck": [125, 128, 2], "head": [125, 104, 4], "lShoulder": [103, 134, 2], "rShoulder": [147, 134, 2], "lElbow": [99, 180, 0], "rElbow": [151, 180, 0], "lWrist": [97, 222, 4], "rWrist": [153, 222, 4], "lHip": [113, 208, -4], "rHip": [137, 208, -4], "lKnee": [111, 222, 52], "rKnee": [139, 265.5, -16.3] }
+  ],
+  "props": []
+}

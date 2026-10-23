@@ -187,6 +187,17 @@ export function project(p: Point3, view: View, camera: Camera): { at: Point; dep
   return camera === "top" ? { at: [p[0], TOP_Y + p[2]], depth: -p[1] } : { at: [p[0], p[1]], depth: p[2] };
 }
 
+/** Where `zoom` shrinks a view toward: the middle of the floor, or of the view from above. */
+function zoomOrigin(view: View, camera: Camera): Point {
+  return view === "front" && camera === "top" ? [CENTER_X, TOP_Y] : [CENTER_X, FLOOR_Y];
+}
+
+/** Where a projected point lands once the spec's zoom is applied. */
+export function zoomed([x, y]: Point, view: View, spec: ArtSpec): Point {
+  const [ox, oy] = zoomOrigin(view, spec.camera);
+  return [ox + (x - ox) * spec.zoom, oy + (y - oy) * spec.zoom];
+}
+
 const unit = (v: Point3): Point3 => {
   const n = len3(v) || 1;
   return [v[0] / n, v[1] / n, v[2] / n];
@@ -416,5 +427,7 @@ export function renderSvg(spec: ArtSpec, view: View, t: number, id: string): str
         : `<path d="${s.d}" style="fill:${SHADED.includes(s.role) || s.role === "shadow" ? `url(#${id}-${s.role})` : COLOR[s.role]}"/>`,
     )
     .join("");
-  return `<defs>${defs}</defs>${body}`;
+  if (spec.zoom === 1) return `<defs>${defs}</defs>${body}`;
+  const [ox, oy] = zoomOrigin(view, spec.camera);
+  return `<defs>${defs}</defs><g transform="translate(${ox} ${oy}) scale(${spec.zoom}) translate(${-ox} ${-oy})">${body}</g>`;
 }

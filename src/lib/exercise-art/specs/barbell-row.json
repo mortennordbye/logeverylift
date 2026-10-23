@@ -1,0 +1,26 @@
+{
+  "name": "Barbell Row",
+  "primary": "back",
+  "secondary": ["biceps", "shoulders", "lower_back"],
+  "cue": "Hinge forward and keep your back still. Pull the bar to your lower ribs with your elbows, not by standing up.",
+  "phases": ["Pull", "Lower"],
+  "anchor": "lAnkle",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 108, 52], "neck": [125, 124, 35], "chest": [125, 148, 6], "pelvis": [125, 174, -25],
+      "lShoulder": [103, 129, 31], "rShoulder": [147, 129, 31],
+      "lElbow": [102, 175, 26], "rElbow": [148, 175, 26],
+      "lWrist": [102, 217, 22], "rWrist": [148, 217, 22],
+      "lHip": [113, 176, -25], "rHip": [137, 176, -25],
+      "lKnee": [111, 224, 12], "rKnee": [139, 224, 12],
+      "lAnkle": [110, 278, -1], "rAnkle": [140, 278, -1],
+      "lToe": [108, 284, 19], "rToe": [142, 284, 19]
+    },
+    {
+      "lElbow": [93, 136, -13], "rElbow": [157, 136, -13],
+      "lWrist": [102, 165, 16], "rWrist": [148, 165, 16]
+    }
+  ],
+  "props": [{ "type": "barbell" }]
+}

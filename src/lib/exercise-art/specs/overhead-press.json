@@ -1,0 +1,32 @@
+{
+  "name": "Overhead Press",
+  "primary": "shoulders",
+  "secondary": ["triceps", "chest"],
+  "cue": "Seated or standing, move your head back to let the bar pass your face, then push your head through once it clears. Press straight up and lock your elbows with the bar over your shoulders.",
+  "phases": ["Press", "Lower"],
+  "anchor": "pelvis",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 124, 2], "neck": [125, 148, 0], "chest": [125, 186, 0], "pelvis": [125, 226, 0],
+      "lShoulder": [103, 154, 0], "rShoulder": [147, 154, 0],
+      "lElbow": [93, 196, 14], "rElbow": [157, 196, 14],
+      "lWrist": [89, 154, 18], "rWrist": [161, 154, 18],
+      "lHip": [113, 228, 0], "rHip": [137, 228, 0],
+      "lKnee": [106, 231, 58], "rKnee": [144, 231, 58],
+      "lAnkle": [96, 279, 33], "rAnkle": [154, 279, 33],
+      "lToe": [95, 284, 53], "rToe": [155, 284, 53]
+    },
+    {
+      "head": [125, 126, -9],
+      "lElbow": [84, 150, 42], "rElbow": [166, 150, 42],
+      "lWrist": [88, 112, 14], "rWrist": [162, 112, 14]
+    },
+    {
+      "head": [125, 124, 3],
+      "lElbow": [95.5, 110, 0.5], "rElbow": [154.5, 110, 0.5],
+      "lWrist": [88, 66, 1], "rWrist": [162, 66, 1]
+    }
+  ],
+  "props": [{ "type": "barbell", "layer": "back" }, { "type": "bench", "y": 240, "z1": -35, "z2": 30, "width": 44 }]
+}

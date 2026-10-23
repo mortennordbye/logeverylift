@@ -52,6 +52,12 @@ export const artSpecSchema = z.object({
   /** "top" swaps the front view for a view from above, for lifts done lying down. */
   camera: z.enum(["front", "top"]).default("front"),
   /**
+   * Draws the whole figure smaller, round the middle of the floor (or of the
+   * view from above), for poses too long for the frame at full size: a body
+   * lying flat from head to heels in a plank or push-up.
+   */
+  zoom: z.number().min(0.6).max(1).default(1),
+  /**
    * Keyframe 0 is where the lifter sets up before the first rep. It lists
    * every joint; later keyframes list only the joints that move. Bone lengths
    * are applied for you (resolveFrames), so a joint only has to point the
