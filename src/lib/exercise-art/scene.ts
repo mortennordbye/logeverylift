@@ -334,10 +334,20 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
             ]);
       });
     case "kettlebell": {
-      const { at: [x, y], depth } = project(mean3(p.at.map((j) => pose[j])), view, camera);
+      const c = mean3(p.at.map((j) => pose[j]));
+      const { at: [x, y], depth } = project(c, view, camera);
+      // The bell's "down" on screen: straight down, or along the forearms, foreshortened.
+      let [dx, dy]: Point = [0, 1];
+      if (p.along === "forearm") {
+        const elbows = p.at.map((j) => pose[j.replace("Wrist", "Elbow") as Joint]);
+        const d = unit(sub(c, mean3(elbows)));
+        const tip = project([c[0] + d[0], c[1] + d[1], c[2] + d[2]], view, camera).at;
+        [dx, dy] = [tip[0] - x, tip[1] - y];
+      }
+      const at = (a: number, b: number): string => `${f(x + a * dy + b * dx)} ${f(y - a * dx + b * dy)}`;
       return [group(depth - 1, [
-        { d: `M${f(x - 8)} ${f(y + 10)}C${f(x - 9)} ${f(y - 4)} ${f(x + 9)} ${f(y - 4)} ${f(x + 8)} ${f(y + 10)}`, role: "steel", stroke: 3.5 },
-        { d: circle([x, y + 20], 13), role: "plate" },
+        { d: `M${at(-8, 10)}C${at(-9, -4)} ${at(9, -4)} ${at(8, 10)}`, role: "steel", stroke: 3.5 },
+        { d: circle([x + 20 * dx, y + 20 * dy], 13), role: "plate" },
       ])];
     }
     case "bench":

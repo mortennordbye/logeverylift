@@ -119,6 +119,11 @@ deadlift. Check the angles with `--joints`, not by eye. A bar on the back
 skeleton's torso puts it near the toes. Keep the knee at about 140° and accept
 that; chasing mid-foot bent the knees into a half squat in batch 3.
 
+**Swinging the arms through** (jump squat, any arm swing from behind the
+hips to in front): the arm turns close to 180 degrees between the backswing
+and the forward swing, so the shortest arc goes out sideways and the front
+view flares into an A. Add a keyframe between them with the arms hanging.
+
 **Hands under the chest** (close-grip and diamond push-up): the `top` camera
 hides them behind the torso and the front view of a prone body is too small
 to read. Do not draw these until the renderer has a camera for it.
@@ -188,7 +193,7 @@ cocked wrist.
 |---|---|---|
 | `barbell` | `at` (default both wrists), `cambered` (EZ bar) | bar along x through the joints' midpoint: plates at the ends (front), a plate (side); `cambered` bends the middle into a W with the hands on the angled stretches about 18 either side of centre |
 | `dumbbell` | `at` (default both wrists), `along` `x` (overhand, default), `z` (neutral grip) or `forearm` (neutral grip that stays at right angles to the forearm as it swings: hammer curl) | one dumbbell per joint |
-| `kettlebell` | `at` | one bell hanging below the joints' midpoint |
+| `kettlebell` | `at`, `along` `hang` (default) or `forearm` | one bell at the joints' midpoint, hanging straight down or carried on in line with the forearms (a swing's float, where the bell extends the arms) |
 | `bench` | `y, z1, z2, width` | pad with its top at y, from z1 to z2, `width` across and always centred on x = 125; legs to the floor |
 | `incline` | `from`, `to` (each `[y, z]`), `width` | sloped pad whose top surface runs from `from` to `to` (incline bench back, upright seat back); one post to the floor. Pair it with a `bench` for the seat |
 | `bars` | `y, z1, z2, width` | parallel bars along z at height y, `width` apart (dip station) |

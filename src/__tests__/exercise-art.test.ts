@@ -157,6 +157,18 @@ describe("motion", () => {
     expect(steel(true)).toHaveLength(1);
     expect(steel(true)[0].d.match(/L/g)).toHaveLength(9);
   });
+
+  it("carries a kettlebell on in line with the forearms when asked, instead of hanging it", () => {
+    const swing = artSpecSchema.parse(read("kettlebell-swing.json"));
+    // At the float the arms point forward: a hanging bell sits under the
+    // hands, a forearm bell out past them (further right in the side view).
+    const bellX = (along: "hang" | "forearm") => {
+      const bell = buildScene({ ...swing, props: [{ type: "kettlebell", at: ["lWrist", "rWrist"], along, layer: "auto" }] }, "side", 1)
+        .find((s) => s.role === "plate")!;
+      return Math.max(...[...bell.d.matchAll(/(-?[\d.]+) -?[\d.]+/g)].map((m) => Number(m[1])));
+    };
+    expect(bellX("forearm")).toBeGreaterThan(bellX("hang") + 10);
+  });
 });
 
 describe("muscleRoles", () => {

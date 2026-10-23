@@ -1,0 +1,335 @@
+{
+  "name": "Push Press",
+  "primary": "shoulders",
+  "secondary": [
+    "triceps",
+    "quads",
+    "glutes"
+  ],
+  "cue": "Dip a few inches by bending your knees with your torso upright, then drive up hard with your legs and press the bar overhead as it leaves your shoulders. Do not let the dip turn into a squat or a lean forward.",
+  "phases": [
+    "Dip and drive",
+    "Lower"
+  ],
+  "anchor": "lAnkle",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "head": [
+        125,
+        58,
+        2
+      ],
+      "neck": [
+        125,
+        82,
+        0
+      ],
+      "chest": [
+        125,
+        120,
+        0
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        103,
+        88,
+        0
+      ],
+      "rShoulder": [
+        147,
+        88,
+        0
+      ],
+      "lElbow": [
+        93,
+        130,
+        14
+      ],
+      "rElbow": [
+        157,
+        130,
+        14
+      ],
+      "lWrist": [
+        89,
+        88,
+        18
+      ],
+      "rWrist": [
+        161,
+        88,
+        18
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        108,
+        222,
+        1
+      ],
+      "rKnee": [
+        142,
+        222,
+        1
+      ],
+      "lAnkle": [
+        105,
+        278,
+        -1
+      ],
+      "rAnkle": [
+        145,
+        278,
+        -1
+      ],
+      "lToe": [
+        100,
+        284,
+        19
+      ],
+      "rToe": [
+        150,
+        284,
+        19
+      ]
+    },
+    {
+      "head": [
+        125,
+        78,
+        -5
+      ],
+      "neck": [
+        125,
+        102,
+        -8
+      ],
+      "chest": [
+        125,
+        140,
+        -7
+      ],
+      "pelvis": [
+        125,
+        180,
+        -8
+      ],
+      "lShoulder": [
+        103,
+        108,
+        -8
+      ],
+      "rShoulder": [
+        147,
+        108,
+        -8
+      ],
+      "lElbow": [
+        93,
+        150,
+        12
+      ],
+      "rElbow": [
+        157,
+        150,
+        12
+      ],
+      "lWrist": [
+        89,
+        108,
+        17
+      ],
+      "rWrist": [
+        161,
+        108,
+        17
+      ],
+      "lHip": [
+        113,
+        182,
+        -8
+      ],
+      "rHip": [
+        137,
+        182,
+        -8
+      ],
+      "lKnee": [
+        107,
+        230,
+        27
+      ],
+      "rKnee": [
+        143,
+        230,
+        27
+      ]
+    },
+    {
+      "head": [
+        125,
+        59,
+        -9
+      ],
+      "neck": [
+        125,
+        82,
+        0
+      ],
+      "chest": [
+        125,
+        120,
+        0
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        103,
+        88,
+        0
+      ],
+      "rShoulder": [
+        147,
+        88,
+        0
+      ],
+      "lElbow": [
+        90,
+        92,
+        43
+      ],
+      "rElbow": [
+        160,
+        92,
+        43
+      ],
+      "lWrist": [
+        88,
+        50,
+        38
+      ],
+      "rWrist": [
+        162,
+        50,
+        38
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        108,
+        222,
+        1
+      ],
+      "rKnee": [
+        142,
+        222,
+        1
+      ]
+    },
+    {
+      "head": [
+        125,
+        58,
+        3
+      ],
+      "neck": [
+        125,
+        82,
+        0
+      ],
+      "chest": [
+        125,
+        120,
+        0
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        103,
+        88,
+        0
+      ],
+      "rShoulder": [
+        147,
+        88,
+        0
+      ],
+      "lElbow": [
+        95.5,
+        44,
+        0.5
+      ],
+      "rElbow": [
+        154.5,
+        44,
+        0.5
+      ],
+      "lWrist": [
+        88,
+        0,
+        1
+      ],
+      "rWrist": [
+        162,
+        0,
+        1
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        108,
+        222,
+        1
+      ],
+      "rKnee": [
+        142,
+        222,
+        1
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "barbell"
+    }
+  ]
+}
