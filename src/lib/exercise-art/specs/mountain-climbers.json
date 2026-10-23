@@ -1,0 +1,211 @@
+{
+  "name": "Mountain Climbers",
+  "primary": "abs",
+  "secondary": [
+    "shoulders",
+    "quads"
+  ],
+  "cue": "Keep your shoulders over your hands and your hips level with your shoulders. Drive each knee toward your chest without bouncing your hips up.",
+  "phases": [
+    "Switch",
+    "Switch"
+  ],
+  "anchor": "lWrist",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": [
+    "lWrist",
+    "rWrist",
+    "lAnkle",
+    "rAnkle"
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        188.9,
+        -98.1
+      ],
+      "neck": [
+        125,
+        197.9,
+        -75.9
+      ],
+      "chest": [
+        125,
+        210,
+        -40.6
+      ],
+      "pelvis": [
+        125,
+        222,
+        -3.6
+      ],
+      "lShoulder": [
+        102,
+        197.9,
+        -75.9
+      ],
+      "rShoulder": [
+        148,
+        197.9,
+        -75.9
+      ],
+      "lElbow": [
+        103,
+        243.9,
+        -73
+      ],
+      "rElbow": [
+        147,
+        243.9,
+        -73
+      ],
+      "lWrist": [
+        104,
+        285.9,
+        -70
+      ],
+      "rWrist": [
+        146,
+        285.9,
+        -70
+      ],
+      "lHip": [
+        113,
+        222,
+        -3.6
+      ],
+      "rHip": [
+        137,
+        222,
+        -3.6
+      ],
+      "lKnee": [
+        115,
+        246,
+        52.1
+      ],
+      "lAnkle": [
+        115,
+        270.5,
+        104
+      ],
+      "lToe": [
+        115,
+        290,
+        96.1
+      ],
+      "rKnee": [
+        145,
+        252,
+        -55.6
+      ],
+      "rAnkle": [
+        141,
+        268.8,
+        -2.2
+      ],
+      "rToe": [
+        141,
+        279.3,
+        16
+      ]
+    },
+    {
+      "pelvis": [
+        125,
+        197,
+        -3.6
+      ],
+      "lHip": [
+        113,
+        197,
+        -3.6
+      ],
+      "rHip": [
+        137,
+        197,
+        -3.6
+      ],
+      "lKnee": [
+        113,
+        252,
+        22
+      ],
+      "rKnee": [
+        137,
+        252,
+        14
+      ],
+      "lAnkle": [
+        113,
+        266,
+        76
+      ],
+      "rAnkle": [
+        137,
+        266,
+        68
+      ],
+      "lToe": [
+        113,
+        282,
+        63
+      ],
+      "rToe": [
+        137,
+        282,
+        55
+      ]
+    },
+    {
+      "pelvis": [
+        125,
+        222,
+        -3.6
+      ],
+      "lHip": [
+        113,
+        222,
+        -3.6
+      ],
+      "rHip": [
+        137,
+        222,
+        -3.6
+      ],
+      "rKnee": [
+        135,
+        246,
+        52.1
+      ],
+      "rAnkle": [
+        135,
+        270.5,
+        104
+      ],
+      "rToe": [
+        135,
+        290,
+        96.1
+      ],
+      "lKnee": [
+        105,
+        252,
+        -55.6
+      ],
+      "lAnkle": [
+        109,
+        268.8,
+        -2.2
+      ],
+      "lToe": [
+        109,
+        279.3,
+        16
+      ]
+    }
+  ],
+  "props": []
+}

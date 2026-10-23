@@ -124,6 +124,17 @@ hips to in front): the arm turns close to 180 degrees between the backswing
 and the forward swing, so the shortest arc goes out sideways and the front
 view flares into an A. Add a keyframe between them with the arms hanging.
 
+**Inverted V** (pike push-up): from the feet the legs hide everything, and
+from above the steep torso is end-on. Face the lifter toward the front
+camera (head toward +z) so the front view shows the head dropping between
+the hands with the hips up behind.
+
+**Legs switching under a plank** (mountain climbers): a thigh swinging from
+tucked to extended passes through vertical, and with the hips about 70 off
+the floor the knee and toe go through it. Put the ankles in `hold` so the
+feet travel in straight lines and the knees are solved to fit, and lift the
+hips a little at the switch.
+
 **Hands under the chest** (close-grip and diamond push-up): the `top` camera
 hides them behind the torso and the front view of a prone body is too small
 to read. Do not draw these until the renderer has a camera for it.

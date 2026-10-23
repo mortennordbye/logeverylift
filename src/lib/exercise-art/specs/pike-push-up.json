@@ -1,0 +1,185 @@
+{
+  "name": "Pike Push-up",
+  "primary": "shoulders",
+  "secondary": [
+    "triceps",
+    "chest"
+  ],
+  "cue": "Keep your hips high so your body makes an upside-down V. Lower the top of your head toward the floor just in front of your hands, elbows angled back.",
+  "phases": [
+    "Lower",
+    "Push"
+  ],
+  "anchor": "lAnkle",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "lAnkle": [
+        115,
+        274.6,
+        -88
+      ],
+      "rAnkle": [
+        135,
+        274.6,
+        -88
+      ],
+      "lToe": [
+        115,
+        290,
+        -73.7
+      ],
+      "rToe": [
+        135,
+        290,
+        -73.7
+      ],
+      "lKnee": [
+        115,
+        221.0,
+        -65.8
+      ],
+      "rKnee": [
+        135,
+        221.0,
+        -65.8
+      ],
+      "lHip": [
+        113,
+        167.4,
+        -43.6
+      ],
+      "rHip": [
+        137,
+        167.4,
+        -43.6
+      ],
+      "pelvis": [
+        125,
+        167.4,
+        -43.6
+      ],
+      "chest": [
+        125,
+        183.0,
+        -6.7
+      ],
+      "neck": [
+        125,
+        197.7,
+        28.3
+      ],
+      "head": [
+        125,
+        207.0,
+        50.4
+      ],
+      "lShoulder": [
+        102,
+        197.7,
+        28.3
+      ],
+      "rShoulder": [
+        148,
+        197.7,
+        28.3
+      ],
+      "lElbow": [
+        91.0,
+        242.3,
+        22.0
+      ],
+      "rElbow": [
+        159.0,
+        242.3,
+        22.0
+      ],
+      "lWrist": [
+        82,
+        283,
+        20
+      ],
+      "rWrist": [
+        168,
+        283,
+        20
+      ]
+    },
+    {
+      "lKnee": [
+        115,
+        229,
+        -58
+      ],
+      "rKnee": [
+        135,
+        229,
+        -58
+      ],
+      "lHip": [
+        113,
+        180,
+        -28
+      ],
+      "rHip": [
+        137,
+        180,
+        -28
+      ],
+      "pelvis": [
+        125,
+        180,
+        -28
+      ],
+      "chest": [
+        125,
+        208,
+        3
+      ],
+      "neck": [
+        125,
+        231,
+        35
+      ],
+      "head": [
+        125,
+        247,
+        53
+      ],
+      "lShoulder": [
+        102,
+        231,
+        35
+      ],
+      "rShoulder": [
+        148,
+        231,
+        35
+      ],
+      "lElbow": [
+        84,
+        250,
+        1
+      ],
+      "rElbow": [
+        166,
+        250,
+        1
+      ],
+      "lWrist": [
+        82,
+        283,
+        20
+      ],
+      "rWrist": [
+        168,
+        283,
+        20
+      ]
+    }
+  ],
+  "props": []
+}

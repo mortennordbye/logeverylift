@@ -1,0 +1,41 @@
+{
+  "name": "V-Up",
+  "primary": "abs",
+  "secondary": ["quads"],
+  "cue": "Lift your legs and chest together and reach for your shins. Keep your legs straight and lower slowly instead of dropping back.",
+  "phases": ["Fold up", "Lower"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.65,
+  "keyframes": [
+    {
+      "head": [125, 275, -87], "neck": [125, 276, -63], "chest": [125, 276, -25], "pelvis": [125, 276, 15],
+      "lShoulder": [102, 276, -63], "rShoulder": [148, 276, -63],
+      "lElbow": [100, 279, -109], "rElbow": [150, 279, -109],
+      "lWrist": [98, 282, -151], "rWrist": [152, 282, -151],
+      "lHip": [113, 276, 15], "rHip": [137, 276, 15],
+      "lKnee": [115, 278, 75], "rKnee": [135, 278, 75],
+      "lAnkle": [117, 280, 131], "rAnkle": [133, 280, 131],
+      "lToe": [117, 270, 150], "rToe": [133, 270, 150]
+    },
+    {
+      "chest": [125, 256, -19.6], "neck": [125, 237, -52.5], "head": [125, 224, -73],
+      "lShoulder": [102, 237, -52.5], "rShoulder": [148, 237, -52.5],
+      "lElbow": [101, 191, -50], "rElbow": [149, 191, -50],
+      "lWrist": [100, 149, -48], "rWrist": [150, 149, -48],
+      "lKnee": [115, 246, 67], "rKnee": [135, 246, 67],
+      "lAnkle": [117, 218, 115.5], "rAnkle": [133, 218, 115.5],
+      "lToe": [117, 205, 132], "rToe": [133, 205, 132]
+    },
+    {
+      "chest": [125, 240, -8], "neck": [125, 209, -30], "head": [125, 189, -43],
+      "lShoulder": [102, 209, -30], "rShoulder": [148, 209, -30],
+      "lElbow": [108, 196.6, 13.8], "rElbow": [142, 196.6, 13.8],
+      "lWrist": [113.5, 185, 53.8], "rWrist": [136.5, 185, 53.8],
+      "lKnee": [115, 224, 49.4], "rKnee": [135, 224, 49.4],
+      "lAnkle": [117, 178, 81.6], "rAnkle": [133, 178, 81.6],
+      "lToe": [117, 162, 95], "rToe": [133, 162, 95]
+    }
+  ],
+  "props": []
+}
