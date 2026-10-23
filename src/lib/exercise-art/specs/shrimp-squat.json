@@ -1,0 +1,31 @@
+{
+  "name": "Shrimp Squat",
+  "primary": "quads",
+  "secondary": ["glutes", "hamstrings"],
+  "cue": "Lower slowly until your back knee touches the floor behind your standing heel. Keep the standing heel down and reach your arms forward for balance.",
+  "phases": ["Lower", "Stand"],
+  "anchor": "lAnkle",
+  "hold": ["lAnkle"],
+  "keyframes": [
+    {
+      "head": [125, 58, 14], "neck": [125, 82, 10], "chest": [125, 120, 6], "pelvis": [125, 160, 3],
+      "lShoulder": [103, 88, 10], "rShoulder": [147, 88, 10],
+      "lElbow": [103, 111, 50], "rElbow": [147, 111, 50],
+      "lWrist": [103, 132, 86], "rWrist": [147, 132, 86],
+      "lHip": [113, 162, 3], "rHip": [137, 162, 3],
+      "lKnee": [113, 222, 6], "rKnee": [137, 220, -10],
+      "lAnkle": [113, 278, 9], "rAnkle": [137, 205, -63],
+      "lToe": [113, 284, 29], "rToe": [137, 197, -83]
+    },
+    {
+      "pelvis": [125, 228, -15], "chest": [125, 200, 13], "neck": [125, 171, 37], "head": [125, 153, 53],
+      "lShoulder": [103, 177, 37], "rShoulder": [147, 177, 37],
+      "lElbow": [103, 210, 70], "rElbow": [147, 210, 70],
+      "lWrist": [103, 240, 98], "rWrist": [147, 240, 98],
+      "lHip": [113, 230, -15], "rHip": [137, 230, -15],
+      "lKnee": [113, 235, 45], "rKnee": [137, 285, -22],
+      "rAnkle": [137, 262, -76], "rToe": [137, 258, -93]
+    }
+  ],
+  "props": []
+}

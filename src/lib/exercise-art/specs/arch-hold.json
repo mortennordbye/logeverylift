@@ -1,0 +1,188 @@
+{
+  "name": "Arch Hold",
+  "primary": "lower_back",
+  "secondary": [
+    "glutes",
+    "hamstrings"
+  ],
+  "cue": "Squeeze your glutes and lift your arms, chest and legs off the floor together. Keep your neck long and hold the shape still instead of rocking.",
+  "phases": [
+    "Lift",
+    "Lower"
+  ],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.65,
+  "keyframes": [
+    {
+      "head": [
+        125,
+        274,
+        -87
+      ],
+      "neck": [
+        125,
+        276,
+        -63
+      ],
+      "chest": [
+        125,
+        276,
+        -25
+      ],
+      "pelvis": [
+        125,
+        276,
+        15
+      ],
+      "lShoulder": [
+        102,
+        276,
+        -63
+      ],
+      "rShoulder": [
+        148,
+        276,
+        -63
+      ],
+      "lElbow": [
+        100,
+        279,
+        -109
+      ],
+      "rElbow": [
+        150,
+        279,
+        -109
+      ],
+      "lWrist": [
+        98,
+        282,
+        -151
+      ],
+      "rWrist": [
+        152,
+        282,
+        -151
+      ],
+      "lHip": [
+        113,
+        276,
+        15
+      ],
+      "rHip": [
+        137,
+        276,
+        15
+      ],
+      "lKnee": [
+        117,
+        278,
+        75
+      ],
+      "rKnee": [
+        133,
+        278,
+        75
+      ],
+      "lAnkle": [
+        117,
+        280,
+        131
+      ],
+      "rAnkle": [
+        133,
+        280,
+        131
+      ],
+      "lToe": [
+        117,
+        288,
+        151
+      ],
+      "rToe": [
+        133,
+        288,
+        151
+      ]
+    },
+    {
+      "chest": [
+        125,
+        265.6,
+        -23.6
+      ],
+      "neck": [
+        125,
+        249.5,
+        -58
+      ],
+      "head": [
+        125,
+        237.5,
+        -78.8
+      ],
+      "lShoulder": [
+        102,
+        249.5,
+        -58
+      ],
+      "rShoulder": [
+        148,
+        249.5,
+        -58
+      ],
+      "lElbow": [
+        100,
+        226.5,
+        -97.8
+      ],
+      "rElbow": [
+        150,
+        226.5,
+        -97.8
+      ],
+      "lWrist": [
+        98,
+        205.5,
+        -134.2
+      ],
+      "rWrist": [
+        152,
+        205.5,
+        -134.2
+      ],
+      "lKnee": [
+        117,
+        263.5,
+        73.7
+      ],
+      "rKnee": [
+        133,
+        263.5,
+        73.7
+      ],
+      "lAnkle": [
+        117,
+        251.9,
+        128.5
+      ],
+      "rAnkle": [
+        133,
+        251.9,
+        128.5
+      ],
+      "lToe": [
+        117,
+        254,
+        149
+      ],
+      "rToe": [
+        133,
+        254,
+        149
+      ]
+    }
+  ],
+  "props": []
+}
