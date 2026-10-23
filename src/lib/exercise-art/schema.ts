@@ -18,12 +18,20 @@ const layer = z.enum(["auto", "back", "front"]);
 const prop = z.discriminatedUnion("type", [
   /** Bar along x through the midpoint of the joints (default: the wrists). */
   z.object({ type: z.literal("barbell"), at: z.array(joint).min(1).optional(), layer: layer.default("auto") }),
-  /** One dumbbell per joint (default: the wrists); `along` is the handle's axis: x for an overhand grip, z for a neutral one. */
-  z.object({ type: z.literal("dumbbell"), at: z.array(joint).min(1).optional(), along: z.enum(["x", "z"]).default("x"), layer: layer.default("auto") }),
+  /**
+   * One dumbbell per joint (default: the wrists); `along` is the handle's axis:
+   * x for an overhand grip, z for a neutral one, "forearm" for a neutral grip
+   * that stays at right angles to the forearm as it swings (a hammer curl).
+   */
+  z.object({ type: z.literal("dumbbell"), at: z.array(joint).min(1).optional(), along: z.enum(["x", "z", "forearm"]).default("x"), layer: layer.default("auto") }),
   /** One bell hanging from the midpoint of the joints. */
   z.object({ type: z.literal("kettlebell"), at: z.array(joint).min(1), layer: layer.default("auto") }),
   /** Bench pad: top at y, from z1 to z2 front to back, `width` across, centred; legs to the floor. */
   z.object({ type: z.literal("bench"), y: z.number(), z1: z.number(), z2: z.number(), width: z.number().positive(), layer: layer.default("back") }),
+  /** Sloped pad (incline bench back, seat back): top surface from `from` to `to`, each [y, z], `width` across, centred; one post to the floor. */
+  z.object({ type: z.literal("incline"), from: z.tuple([z.number(), z.number()]), to: z.tuple([z.number(), z.number()]), width: z.number().positive(), layer: layer.default("back") }),
+  /** Parallel bars (dip station): two bars along z from z1 to z2 at height y, `width` apart, centred; uprights to the floor. */
+  z.object({ type: z.literal("bars"), y: z.number(), z1: z.number(), z2: z.number(), width: z.number().positive(), layer: layer.default("back") }),
   /** Fixed bar along x (pull-up bar, rack) at height y and depth z. */
   z.object({ type: z.literal("bar"), y: z.number(), z: z.number(), layer: layer.default("back") }),
   /** Cable from a fixed pulley to a joint. */

@@ -1,0 +1,181 @@
+{
+  "name": "Incline Dumbbell Press",
+  "primary": "chest",
+  "secondary": [
+    "shoulders",
+    "triceps"
+  ],
+  "cue": "Set the bench to a low incline and lower the dumbbells to the sides of your upper chest with your elbows tucked in a little. Press up and slightly together until your arms are straight over your shoulders.",
+  "phases": [
+    "Lower",
+    "Press"
+  ],
+  "anchor": "pelvis",
+  "camera": "top",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        160.5,
+        -68.1
+      ],
+      "neck": [
+        125,
+        175.9,
+        -49.7
+      ],
+      "chest": [
+        125,
+        200.3,
+        -20.6
+      ],
+      "pelvis": [
+        125,
+        226,
+        10
+      ],
+      "lShoulder": [
+        102,
+        175.9,
+        -49.7
+      ],
+      "rShoulder": [
+        148,
+        175.9,
+        -49.7
+      ],
+      "lElbow": [
+        101,
+        132.3,
+        -35.3
+      ],
+      "rElbow": [
+        149,
+        132.3,
+        -35.3
+      ],
+      "lWrist": [
+        100,
+        92,
+        -22
+      ],
+      "rWrist": [
+        150,
+        92,
+        -22
+      ],
+      "lHip": [
+        113,
+        226,
+        10
+      ],
+      "rHip": [
+        137,
+        226,
+        10
+      ],
+      "lKnee": [
+        106,
+        228,
+        70
+      ],
+      "rKnee": [
+        144,
+        228,
+        70
+      ],
+      "lAnkle": [
+        98,
+        279,
+        47
+      ],
+      "rAnkle": [
+        152,
+        279,
+        47
+      ],
+      "lToe": [
+        97,
+        284,
+        67
+      ],
+      "rToe": [
+        153,
+        284,
+        67
+      ]
+    },
+    {
+      "lElbow": [
+        74.4,
+        156.7,
+        -18.3
+      ],
+      "rElbow": [
+        175.6,
+        156.7,
+        -18.3
+      ],
+      "lWrist": [
+        78,
+        114.9,
+        -16.7
+      ],
+      "rWrist": [
+        172,
+        114.9,
+        -16.7
+      ]
+    },
+    {
+      "lElbow": [
+        75.2,
+        207.2,
+        -29.2
+      ],
+      "rElbow": [
+        174.8,
+        207.2,
+        -29.2
+      ],
+      "lWrist": [
+        66,
+        170,
+        -24
+      ],
+      "rWrist": [
+        184,
+        170,
+        -24
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "dumbbell"
+    },
+    {
+      "type": "bench",
+      "y": 240,
+      "z1": -5,
+      "z2": 40,
+      "width": 44
+    },
+    {
+      "type": "incline",
+      "from": [
+        237,
+        0
+      ],
+      "to": [
+        166,
+        -85
+      ],
+      "width": 40
+    }
+  ]
+}
