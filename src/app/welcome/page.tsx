@@ -101,15 +101,24 @@ const COPY = {
 };
 
 type Props = {
-  searchParams: Promise<{ lang?: string }>;
+  searchParams: Promise<{ lang?: string; token?: string }>;
 };
 
 export default async function WelcomePage({ searchParams }: Props) {
   const session = await getOptionalSession();
   if (session) redirect("/");
 
-  const lang = (await searchParams).lang === "no" ? "no" : "en";
+  const params = await searchParams;
+  const lang = params.lang === "no" ? "no" : "en";
   const t = COPY[lang];
+  // Invite links land here with ?token=...; carry it through the language
+  // switch and on to sign-up so the token's use is still counted.
+  const token = params.token?.trim() ?? "";
+  const welcomeHref = (l: "en" | "no") => {
+    const q = new URLSearchParams({ ...(l === "no" && { lang: "no" }), ...(token && { token }) }).toString();
+    return q ? `/welcome?${q}` : "/welcome";
+  };
+  const signupHref = token ? `/signup?token=${encodeURIComponent(token)}` : "/signup";
 
   return (
     // Body is position:fixed (globals.css), so the page scrolls in its own container.
@@ -125,7 +134,7 @@ export default async function WelcomePage({ searchParams }: Props) {
             {(["en", "no"] as const).map((l) => (
               <Link
                 key={l}
-                href={l === "no" ? "/welcome?lang=no" : "/welcome"}
+                href={welcomeHref(l)}
                 aria-current={l === lang ? "true" : undefined}
                 className={`flex min-h-9 min-w-11 items-center justify-center rounded-lg px-2 active:opacity-70 ${
                   l === lang ? "bg-primary/15 text-primary" : "text-muted-foreground"
@@ -159,7 +168,7 @@ export default async function WelcomePage({ searchParams }: Props) {
             <p className="mt-4 max-w-[36ch] text-lg text-muted-foreground">{t.intro}</p>
             <div className="mt-7 flex flex-wrap gap-3">
               <Link
-                href="/signup"
+                href={signupHref}
                 className="inline-flex min-h-12 items-center rounded-xl bg-primary px-6 font-semibold text-primary-foreground active:opacity-80"
               >
                 {t.cta}
@@ -269,7 +278,7 @@ export default async function WelcomePage({ searchParams }: Props) {
           {t.signIn}
         </Link>
         <Link
-          href="/signup"
+          href={signupHref}
           className="flex min-h-12 flex-1 items-center justify-center rounded-xl bg-primary font-semibold text-primary-foreground active:opacity-80"
         >
           {t.cta}
