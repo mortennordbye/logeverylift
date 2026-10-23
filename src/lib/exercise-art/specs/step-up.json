@@ -1,0 +1,18 @@
+{
+  "name": "Step-up",
+  "primary": "quads",
+  "secondary": ["glutes", "hamstrings"],
+  "cue": "Push through the heel of the foot on the box and stand all the way up. Do not push off the floor with your back foot.",
+  "phases": ["Step up", "Step down"],
+  "anchor": "rAnkle",
+  "zoom": 0.85,
+  "keyframes": [
+    { "pelvis": [125, 167, -15], "chest": [125, 128, -6], "neck": [125, 91, 2], "head": [125, 68, 7], "lShoulder": [103, 97, 2], "rShoulder": [147, 97, 2], "lElbow": [101, 143, 2], "rElbow": [149, 143, 2], "lWrist": [100, 185, 5], "rWrist": [150, 185, 5], "lHip": [113, 169, -15], "rHip": [137, 169, -15], "lKnee": [113, 228, -7], "rKnee": [137, 191, 41], "lAnkle": [113, 279, -30], "rAnkle": [137, 239, 15], "lToe": [113, 285, -9], "rToe": [137, 245, 36] },
+    { "pelvis": [125, 145, 0], "chest": [125, 106, 6], "neck": [125, 68, 10], "head": [125, 44, 12], "lShoulder": [103, 74, 10], "rShoulder": [147, 74, 10], "lElbow": [101, 120, 10], "rElbow": [149, 120, 10], "lWrist": [100, 162, 12], "rWrist": [150, 162, 12], "lHip": [113, 147, 0], "rHip": [137, 147, 0], "rKnee": [137, 190, 42], "lKnee": [113, 196, 34], "lAnkle": [113, 222, -16], "lToe": [113, 237, -30] },
+    { "pelvis": [125, 134, 6], "chest": [125, 95, 10], "neck": [125, 57, 12], "head": [125, 33, 14], "lShoulder": [103, 63, 12], "rShoulder": [147, 63, 12], "lElbow": [101, 109, 12], "rElbow": [149, 109, 12], "lWrist": [100, 151, 14], "rWrist": [150, 151, 14], "lHip": [113, 136, 6], "rHip": [137, 136, 6], "rKnee": [137, 188, 28], "lKnee": [113, 178, 48], "lAnkle": [113, 226, 19], "lToe": [113, 236, 37] },
+    { "pelvis": [125, 124, 12], "chest": [125, 84, 13], "neck": [125, 46, 14], "head": [125, 22, 15], "lShoulder": [103, 52, 14], "rShoulder": [147, 52, 14], "lElbow": [101, 98, 14], "rElbow": [149, 98, 14], "lWrist": [100, 140, 16], "rWrist": [150, 140, 16], "lHip": [113, 126, 12], "rHip": [137, 126, 12], "lKnee": [113, 181, 14], "rKnee": [137, 186, 14], "lAnkle": [113, 240, 15], "lToe": [113, 246, 36] }
+  ],
+  "props": [
+    { "type": "box", "y": 250, "z1": -5, "z2": 50, "width": 70, "layer": "front" }
+  ]
+}

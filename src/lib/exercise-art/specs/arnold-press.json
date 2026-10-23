@@ -1,0 +1,33 @@
+{
+  "name": "Arnold Press",
+  "primary": "shoulders",
+  "secondary": ["triceps"],
+  "cue": "Start with the dumbbells in front of your chin, palms facing you. Turn your palms forward as your elbows open out to the sides, then press straight up over your shoulders.",
+  "phases": ["Press", "Lower"],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [125, 124, 2], "neck": [125, 148, 0], "chest": [125, 186, 0], "pelvis": [125, 226, 0],
+      "lShoulder": [103, 154, 0], "rShoulder": [147, 154, 0],
+      "lElbow": [108, 190, 30], "rElbow": [142, 190, 30],
+      "lWrist": [106, 150, 42], "rWrist": [144, 150, 42],
+      "lHip": [113, 228, 0], "rHip": [137, 228, 0],
+      "lKnee": [106, 231, 58], "rKnee": [144, 231, 58],
+      "lAnkle": [96, 279, 33], "rAnkle": [154, 279, 33],
+      "lToe": [95, 284, 53], "rToe": [155, 284, 53]
+    },
+    {
+      "lElbow": [86, 188, 12], "rElbow": [164, 188, 12],
+      "lWrist": [86, 146, 16], "rWrist": [164, 146, 16]
+    },
+    {
+      "lElbow": [95.5, 110, 0.5], "rElbow": [154.5, 110, 0.5],
+      "lWrist": [92, 66, 1], "rWrist": [158, 66, 1]
+    }
+  ],
+  "props": [
+    { "type": "dumbbell" },
+    { "type": "bench", "y": 240, "z1": -35, "z2": 30, "width": 44 },
+    { "type": "incline", "from": [236, -14], "to": [150, -14], "width": 40 }
+  ]
+}

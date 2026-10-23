@@ -1,0 +1,26 @@
+{
+  "name": "Concentration Curl",
+  "primary": "biceps",
+  "secondary": ["forearms"],
+  "cue": "Brace the back of your upper arm against your inner thigh and keep it there. Curl with the forearm only and lower all the way down.",
+  "phases": ["Curl", "Lower"],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [125, 148, 65], "neck": [125, 166, 50], "chest": [125, 195, 26], "pelvis": [125, 226, 0],
+      "lShoulder": [102, 166, 50], "rShoulder": [148, 166, 50],
+      "lElbow": [99, 202, 22], "rElbow": [150, 212, 52],
+      "lWrist": [93, 222, 58], "rWrist": [148, 254, 54],
+      "lHip": [113, 228, 0], "rHip": [137, 228, 0],
+      "lKnee": [92, 231, 56], "rKnee": [158, 231, 56],
+      "lAnkle": [84, 279, 30], "rAnkle": [166, 279, 30],
+      "lToe": [83, 284, 50], "rToe": [167, 284, 50]
+    },
+    { "rWrist": [146, 220, 94] },
+    { "rWrist": [140, 176, 72] }
+  ],
+  "props": [
+    { "type": "bench", "y": 240, "z1": -35, "z2": 30, "width": 44 },
+    { "type": "dumbbell", "at": ["rWrist"] }
+  ]
+}
