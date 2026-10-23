@@ -1,0 +1,25 @@
+{
+  "name": "Cable Curl",
+  "primary": "biceps",
+  "secondary": ["forearms"],
+  "cue": "Keep your elbows pinned to your sides and stand still. Curl the handle to your shoulders, then lower it until your arms are straight.",
+  "phases": ["Curl", "Lower"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 0], "neck": [125, 82, -2], "chest": [125, 120, -1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, -2], "rShoulder": [147, 88, -2],
+      "lElbow": [101, 134, -3], "rElbow": [149, 134, -3],
+      "lWrist": [104, 175, 8], "rWrist": [146, 175, 8],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [112, 222, 1], "rKnee": [138, 222, 1],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    { "lWrist": [104, 109, 31], "rWrist": [146, 109, 31] }
+  ],
+  "props": [
+    { "type": "cable", "anchor": [125, 282, 85], "at": "lWrist", "layer": "front" },
+    { "type": "cable", "anchor": [125, 282, 85], "at": "rWrist", "layer": "front" }
+  ]
+}

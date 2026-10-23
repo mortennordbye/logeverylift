@@ -1,0 +1,28 @@
+{
+  "name": "Seal Row",
+  "primary": "back",
+  "secondary": ["biceps", "shoulders"],
+  "cue": "Lie flat with your chest on the pad and let your arms hang straight. Pull the bar up to the bench with your elbows and keep your chest down.",
+  "phases": ["Pull", "Lower"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 170, -101], "neck": [125, 165, -78], "chest": [125, 165, -40], "pelvis": [125, 165, 0],
+      "lShoulder": [102, 165, -78], "rShoulder": [148, 165, -78],
+      "lElbow": [97, 211, -78], "rElbow": [153, 211, -78],
+      "lWrist": [93, 253, -78], "rWrist": [157, 253, -78],
+      "lHip": [113, 165, 0], "rHip": [137, 165, 0],
+      "lKnee": [113, 166, 60], "rKnee": [137, 166, 60],
+      "lAnkle": [113, 167, 116], "rAnkle": [137, 167, 116],
+      "lToe": [113, 187, 122], "rToe": [137, 187, 122]
+    },
+    {
+      "lElbow": [78, 163, -39], "rElbow": [172, 163, -39],
+      "lWrist": [93, 195, -62], "rWrist": [157, 195, -62]
+    }
+  ],
+  "props": [{ "type": "barbell", "layer": "back" }, { "type": "bench", "y": 180, "z1": -116, "z2": 118, "width": 44 }]
+}

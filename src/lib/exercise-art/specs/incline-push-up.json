@@ -1,0 +1,196 @@
+{
+  "name": "Incline Push-up",
+  "primary": "chest",
+  "secondary": [
+    "triceps",
+    "shoulders",
+    "abs"
+  ],
+  "cue": "Keep your body in one straight line from head to heels. Lower until your chest touches the edge, elbows angled back about 45 degrees.",
+  "phases": [
+    "Lower",
+    "Push"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "lAnkle": [
+        115,
+        270.5,
+        80.6
+      ],
+      "rAnkle": [
+        135,
+        270.5,
+        80.6
+      ],
+      "lToe": [
+        115,
+        290,
+        72.7
+      ],
+      "rToe": [
+        135,
+        290,
+        72.7
+      ],
+      "lKnee": [
+        115,
+        233.4,
+        38.6
+      ],
+      "rKnee": [
+        135,
+        233.4,
+        38.6
+      ],
+      "lHip": [
+        113,
+        193.7,
+        -6.3
+      ],
+      "rHip": [
+        137,
+        193.7,
+        -6.3
+      ],
+      "pelvis": [
+        125,
+        193.7,
+        -6.3
+      ],
+      "chest": [
+        125,
+        167.2,
+        -36.3
+      ],
+      "neck": [
+        125,
+        142,
+        -64.7
+      ],
+      "head": [
+        125,
+        123.1,
+        -82.7
+      ],
+      "lShoulder": [
+        102,
+        142,
+        -64.7
+      ],
+      "lElbow": [
+        89.9,
+        185.9,
+        -57.9
+      ],
+      "lWrist": [
+        82,
+        227,
+        -55
+      ],
+      "rShoulder": [
+        148,
+        142,
+        -64.7
+      ],
+      "rElbow": [
+        160.1,
+        185.9,
+        -57.9
+      ],
+      "rWrist": [
+        168,
+        227,
+        -55
+      ]
+    },
+    {
+      "lKnee": [
+        115,
+        250.2,
+        28.4
+      ],
+      "rKnee": [
+        135,
+        250.2,
+        28.4
+      ],
+      "lHip": [
+        113,
+        228.5,
+        -27.5
+      ],
+      "rHip": [
+        137,
+        228.5,
+        -27.5
+      ],
+      "pelvis": [
+        125,
+        228.5,
+        -27.5
+      ],
+      "chest": [
+        125,
+        214,
+        -64.8
+      ],
+      "neck": [
+        125,
+        200.2,
+        -100.2
+      ],
+      "head": [
+        125,
+        188.5,
+        -122.6
+      ],
+      "lShoulder": [
+        102,
+        200.2,
+        -100.2
+      ],
+      "lElbow": [
+        76.8,
+        186.4,
+        -64.3
+      ],
+      "lWrist": [
+        82,
+        227,
+        -55
+      ],
+      "rShoulder": [
+        148,
+        200.2,
+        -100.2
+      ],
+      "rElbow": [
+        173.2,
+        186.4,
+        -64.3
+      ],
+      "rWrist": [
+        168,
+        227,
+        -55
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "box",
+      "y": 230,
+      "z1": -120,
+      "z2": -45,
+      "width": 110
+    }
+  ]
+}

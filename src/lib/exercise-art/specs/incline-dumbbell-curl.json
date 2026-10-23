@@ -1,0 +1,27 @@
+{
+  "name": "Incline Dumbbell Curl",
+  "primary": "biceps",
+  "secondary": ["forearms"],
+  "cue": "Let your arms hang straight down behind your body and keep your elbows back as you curl. Do not let your shoulders roll forward off the bench.",
+  "phases": ["Curl", "Lower"],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [125, 142.4, -48.6], "neck": [125, 162.1, -34.8], "chest": [125, 193.2, -13], "pelvis": [125, 226, 10],
+      "lShoulder": [102, 162.1, -34.8], "rShoulder": [148, 162.1, -34.8],
+      "lElbow": [101, 208, -34.8], "rElbow": [149, 208, -34.8],
+      "lWrist": [100, 250, -34.8], "rWrist": [150, 250, -34.8],
+      "lHip": [113, 226, 10], "rHip": [137, 226, 10],
+      "lKnee": [106, 228, 70], "rKnee": [144, 228, 70],
+      "lAnkle": [98, 279, 47], "rAnkle": [152, 279, 47],
+      "lToe": [97, 284, 67], "rToe": [153, 284, 67]
+    },
+    { "lWrist": [100, 190.2, 3.3], "rWrist": [150, 190.2, 3.3] },
+    { "lWrist": [100, 170, -15], "rWrist": [150, 170, -15] }
+  ],
+  "props": [
+    { "type": "dumbbell" },
+    { "type": "bench", "y": 240, "z1": -5, "z2": 40, "width": 44 },
+    { "type": "incline", "from": [222, -9.5], "to": [100, -94.5], "width": 40 }
+  ]
+}
