@@ -1,0 +1,196 @@
+{
+  "name": "Decline Push-up",
+  "primary": "chest",
+  "secondary": [
+    "shoulders",
+    "triceps",
+    "abs"
+  ],
+  "cue": "Keep your body in one straight line from your feet on the box to your head. Lower until your chest is close to the floor, elbows angled back about 45 degrees.",
+  "phases": [
+    "Lower",
+    "Push"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "neck": [
+        125,
+        204.7,
+        -89.8
+      ],
+      "chest": [
+        125,
+        199.0,
+        -52.2
+      ],
+      "pelvis": [
+        125,
+        193.0,
+        -12.7
+      ],
+      "head": [
+        125,
+        208.3,
+        -113.5
+      ],
+      "lHip": [
+        113,
+        193.0,
+        -12.7
+      ],
+      "rHip": [
+        137,
+        193.0,
+        -12.7
+      ],
+      "lKnee": [
+        115,
+        183.9,
+        46.6
+      ],
+      "rKnee": [
+        135,
+        183.9,
+        46.6
+      ],
+      "lAnkle": [
+        115,
+        175.5,
+        102.0
+      ],
+      "rAnkle": [
+        135,
+        175.5,
+        102.0
+      ],
+      "lToe": [
+        115,
+        195.0,
+        94.1
+      ],
+      "rToe": [
+        135,
+        195.0,
+        94.1
+      ],
+      "lShoulder": [
+        102,
+        204.7,
+        -89.8
+      ],
+      "rShoulder": [
+        148,
+        204.7,
+        -89.8
+      ],
+      "lWrist": [
+        82,
+        283,
+        -64
+      ],
+      "rWrist": [
+        168,
+        283,
+        -64
+      ],
+      "lElbow": [
+        91,
+        245,
+        -77
+      ],
+      "rElbow": [
+        159,
+        245,
+        -77
+      ]
+    },
+    {
+      "neck": [
+        125,
+        262.0,
+        -71.6
+      ],
+      "chest": [
+        125,
+        245.1,
+        -37.6
+      ],
+      "pelvis": [
+        125,
+        227.2,
+        -1.8
+      ],
+      "head": [
+        125,
+        272.7,
+        -93.1
+      ],
+      "lHip": [
+        113,
+        227.2,
+        -1.8
+      ],
+      "rHip": [
+        137,
+        227.2,
+        -1.8
+      ],
+      "lKnee": [
+        115,
+        200.5,
+        51.9
+      ],
+      "rKnee": [
+        135,
+        200.5,
+        51.9
+      ],
+      "lShoulder": [
+        102,
+        262.0,
+        -71.6
+      ],
+      "rShoulder": [
+        148,
+        262.0,
+        -71.6
+      ],
+      "lWrist": [
+        82,
+        283,
+        -64
+      ],
+      "rWrist": [
+        168,
+        283,
+        -64
+      ],
+      "lElbow": [
+        64.2,
+        247.8,
+        -49.6
+      ],
+      "rElbow": [
+        185.8,
+        247.8,
+        -49.6
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "box",
+      "y": 195.0,
+      "z1": 64,
+      "z2": 116,
+      "width": 70
+    }
+  ]
+}

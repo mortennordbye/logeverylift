@@ -1,0 +1,32 @@
+{
+  "name": "Superman",
+  "primary": "lower_back",
+  "secondary": ["glutes", "hamstrings"],
+  "cue": "Lift your arms, chest and legs together and keep your neck long, eyes on the floor. Hold for a second at the top instead of swinging up.",
+  "phases": ["Lift", "Lower"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.65,
+  "keyframes": [
+    {
+      "head": [125, 274, -87], "neck": [125, 276, -63], "chest": [125, 276, -25], "pelvis": [125, 276, 15],
+      "lShoulder": [102, 276, -63], "rShoulder": [148, 276, -63],
+      "lElbow": [100, 279, -109], "rElbow": [150, 279, -109],
+      "lWrist": [98, 282, -151], "rWrist": [152, 282, -151],
+      "lHip": [113, 276, 15], "rHip": [137, 276, 15],
+      "lKnee": [113, 278, 75], "rKnee": [137, 278, 75],
+      "lAnkle": [113, 280, 131], "rAnkle": [137, 280, 131],
+      "lToe": [113, 288, 151], "rToe": [137, 288, 151]
+    },
+    {
+      "chest": [125, 265.6, -23.6], "neck": [125, 249.5, -58], "head": [125, 237.5, -78.8],
+      "lShoulder": [102, 249.5, -58], "rShoulder": [148, 249.5, -58],
+      "lElbow": [100, 226.5, -97.8], "rElbow": [150, 226.5, -97.8],
+      "lWrist": [98, 205.5, -134.2], "rWrist": [152, 205.5, -134.2],
+      "lKnee": [113, 263.5, 73.7], "rKnee": [137, 263.5, 73.7],
+      "lAnkle": [113, 251.9, 128.5], "rAnkle": [137, 251.9, 128.5],
+      "lToe": [113, 254, 149], "rToe": [137, 254, 149]
+    }
+  ],
+  "props": []
+}

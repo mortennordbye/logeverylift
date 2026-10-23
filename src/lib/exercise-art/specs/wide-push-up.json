@@ -1,0 +1,60 @@
+{
+  "name": "Wide Push-up",
+  "primary": "chest",
+  "secondary": [
+    "shoulders",
+    "triceps",
+    "abs"
+  ],
+  "cue": "Set your hands about one and a half times shoulder width, fingers forward. Keep your body in one straight line and lower until your chest is just above the floor.",
+  "phases": [
+    "Lower",
+    "Push"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "lAnkle": [115, 270.5, 104],
+      "rAnkle": [135, 270.5, 104],
+      "lToe": [115, 290, 96.1],
+      "rToe": [135, 290, 96.1],
+      "lKnee": [115, 251.9, 51.2],
+      "rKnee": [135, 251.9, 51.2],
+      "lHip": [113, 231.8, -5.4],
+      "rHip": [137, 231.8, -5.4],
+      "pelvis": [125, 231.8, -5.4],
+      "chest": [125, 218.5, -43],
+      "neck": [125, 205.8, -78.9],
+      "head": [125, 197.8, -101.5],
+      "lShoulder": [102, 205.8, -78.9],
+      "rShoulder": [148, 205.8, -78.9],
+      "lElbow": [82, 245, -77.5],
+      "rElbow": [168, 245, -77.5],
+      "lWrist": [65, 283, -76],
+      "rWrist": [185, 283, -76]
+    },
+    {
+      "lKnee": [115, 268.4, 48],
+      "rKnee": [135, 268.4, 48],
+      "lHip": [113, 266, -11.9],
+      "rHip": [137, 266, -11.9],
+      "pelvis": [125, 266, -11.9],
+      "chest": [125, 264.5, -51.9],
+      "neck": [125, 263, -89.9],
+      "head": [125, 262.1, -113.8],
+      "lShoulder": [102, 263, -89.9],
+      "rShoulder": [148, 263, -89.9],
+      "lElbow": [62, 243, -80],
+      "rElbow": [188, 243, -80],
+      "lWrist": [65, 283, -76],
+      "rWrist": [185, 283, -76]
+    }
+  ],
+  "props": []
+}

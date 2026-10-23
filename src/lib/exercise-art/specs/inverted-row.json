@@ -1,0 +1,195 @@
+{
+  "name": "Inverted Row",
+  "primary": "back",
+  "secondary": [
+    "biceps",
+    "shoulders",
+    "forearms"
+  ],
+  "cue": "Keep your body in one straight line from heels to head and pull your chest to the bar. Do not let your hips sag on the way up.",
+  "phases": [
+    "Pull",
+    "Lower"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "lAnkle": [
+        121,
+        282,
+        105
+      ],
+      "rAnkle": [
+        129,
+        282,
+        105
+      ],
+      "lKnee": [
+        119,
+        266.7,
+        51.1
+      ],
+      "rKnee": [
+        131,
+        266.7,
+        51.1
+      ],
+      "lHip": [
+        113,
+        250.4,
+        -6.6
+      ],
+      "rHip": [
+        137,
+        250.4,
+        -6.6
+      ],
+      "pelvis": [
+        125,
+        250.4,
+        -6.6
+      ],
+      "chest": [
+        125,
+        239.4,
+        -45.1
+      ],
+      "neck": [
+        125,
+        229.1,
+        -81.6
+      ],
+      "head": [
+        125,
+        222.5,
+        -104.7
+      ],
+      "lShoulder": [
+        102,
+        229.1,
+        -81.6
+      ],
+      "rShoulder": [
+        148,
+        229.1,
+        -81.6
+      ],
+      "lWrist": [
+        88,
+        168.7,
+        -20.3
+      ],
+      "rWrist": [
+        162,
+        168.7,
+        -20.3
+      ],
+      "lElbow": [
+        96,
+        192.6,
+        -54.3
+      ],
+      "rElbow": [
+        154,
+        192.6,
+        -54.3
+      ],
+      "lToe": [
+        121,
+        263,
+        114
+      ],
+      "rToe": [
+        129,
+        263,
+        114
+      ]
+    },
+    {
+      "lKnee": [
+        119,
+        249.1,
+        59.7
+      ],
+      "rKnee": [
+        131,
+        249.1,
+        59.7
+      ],
+      "lHip": [
+        113,
+        213.8,
+        11.2
+      ],
+      "rHip": [
+        137,
+        213.8,
+        11.2
+      ],
+      "pelvis": [
+        125,
+        213.8,
+        11.2
+      ],
+      "chest": [
+        125,
+        190.3,
+        -21.2
+      ],
+      "neck": [
+        125,
+        168,
+        -51.9
+      ],
+      "head": [
+        125,
+        153.9,
+        -71.4
+      ],
+      "lShoulder": [
+        102,
+        168,
+        -51.9
+      ],
+      "rShoulder": [
+        148,
+        168,
+        -51.9
+      ],
+      "lElbow": [
+        77,
+        204.5,
+        -39.3
+      ],
+      "rElbow": [
+        173,
+        204.5,
+        -39.3
+      ],
+      "lWrist": [
+        88,
+        168.7,
+        -20.3
+      ],
+      "rWrist": [
+        162,
+        168.7,
+        -20.3
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "bar",
+      "y": 168.7,
+      "z": -20.3,
+      "layer": "front"
+    }
+  ]
+}

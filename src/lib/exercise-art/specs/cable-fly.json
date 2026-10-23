@@ -1,0 +1,41 @@
+{
+  "name": "Cable Fly",
+  "primary": "chest",
+  "secondary": ["shoulders"],
+  "cue": "Set the pulleys at shoulder height and keep a slight, fixed bend in your elbows. Bring your hands together in front of your chest in a wide hug, not a press.",
+  "phases": ["Squeeze", "Return"],
+  "anchor": "lAnkle",
+  "zoom": 0.85,
+  "keyframes": [
+    {
+      "head": [125, 62, 16],
+      "neck": [125, 85, 16],
+      "chest": [125, 122, 8],
+      "pelvis": [125, 160, 0],
+      "lShoulder": [103, 90, 16],
+      "rShoulder": [147, 90, 16],
+      "lElbow": [58, 95, 6],
+      "rElbow": [192, 95, 6],
+      "lWrist": [17.5, 100, 16],
+      "rWrist": [232.5, 100, 16],
+      "lHip": [113, 162, 0],
+      "rHip": [137, 162, 0],
+      "lKnee": [112, 222, 2],
+      "rKnee": [138, 222, 2],
+      "lAnkle": [112, 278, -1],
+      "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19],
+      "rToe": [140, 284, 19]
+    },
+    {
+      "lElbow": [96, 99, 60.6],
+      "rElbow": [154, 99, 60.6],
+      "lWrist": [115, 105, 97.6],
+      "rWrist": [135, 105, 97.6]
+    }
+  ],
+  "props": [
+    { "type": "cable", "anchor": [0, 92, -30], "at": "lWrist" },
+    { "type": "cable", "anchor": [250, 92, -30], "at": "rWrist" }
+  ]
+}
