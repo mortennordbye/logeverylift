@@ -1,0 +1,192 @@
+{
+  "name": "Pistol Squat",
+  "primary": "quads",
+  "secondary": [
+    "glutes",
+    "hamstrings",
+    "abs"
+  ],
+  "cue": "Keep your standing heel flat and the knee tracking over your toes. Reach your arms and free leg forward to stay balanced.",
+  "phases": [
+    "Squat",
+    "Stand"
+  ],
+  "anchor": "rAnkle",
+  "zoom": 0.85,
+  "keyframes": [
+    {
+      "head": [
+        125,
+        58,
+        2
+      ],
+      "neck": [
+        125,
+        82,
+        0
+      ],
+      "chest": [
+        125,
+        120,
+        0
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "rShoulder": [
+        147,
+        88,
+        0
+      ],
+      "lShoulder": [
+        103,
+        88,
+        0
+      ],
+      "rElbow": [
+        144,
+        96,
+        45
+      ],
+      "lElbow": [
+        106,
+        96,
+        45
+      ],
+      "rWrist": [
+        141,
+        104,
+        86
+      ],
+      "lWrist": [
+        109,
+        104,
+        86
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rKnee": [
+        137,
+        222,
+        0
+      ],
+      "lKnee": [
+        113,
+        214,
+        30
+      ],
+      "rAnkle": [
+        137,
+        278,
+        0
+      ],
+      "lAnkle": [
+        113,
+        262,
+        58
+      ],
+      "rToe": [
+        137,
+        284,
+        20
+      ],
+      "lToe": [
+        113,
+        252,
+        76
+      ]
+    },
+    {
+      "pelvis": [
+        125,
+        246,
+        -20
+      ],
+      "chest": [
+        125,
+        214,
+        4
+      ],
+      "neck": [
+        125,
+        186,
+        30
+      ],
+      "head": [
+        125,
+        166,
+        43
+      ],
+      "rShoulder": [
+        147,
+        190,
+        30
+      ],
+      "lShoulder": [
+        103,
+        190,
+        30
+      ],
+      "rElbow": [
+        144,
+        196,
+        76
+      ],
+      "lElbow": [
+        106,
+        196,
+        76
+      ],
+      "rWrist": [
+        141,
+        202,
+        118
+      ],
+      "lWrist": [
+        109,
+        202,
+        118
+      ],
+      "rHip": [
+        137,
+        248,
+        -20
+      ],
+      "lHip": [
+        113,
+        248,
+        -20
+      ],
+      "rKnee": [
+        137,
+        238,
+        40
+      ],
+      "lKnee": [
+        113,
+        240,
+        40
+      ],
+      "lAnkle": [
+        113,
+        232,
+        96
+      ],
+      "lToe": [
+        113,
+        212,
+        100
+      ]
+    }
+  ]
+}

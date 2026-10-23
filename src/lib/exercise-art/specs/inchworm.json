@@ -1,0 +1,56 @@
+{
+  "name": "Inchworm",
+  "primary": "abs",
+  "secondary": ["shoulders", "hamstrings"],
+  "cue": "Keep your legs as straight as you can while you fold. Walk your hands out until your body is one straight line, then walk them back to your feet.",
+  "phases": ["Walk out", "Walk back"],
+  "anchor": "lToe",
+  "zoom": 0.75,
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 60, -102], "neck": [125, 84, -104], "chest": [125, 122, -104], "pelvis": [125, 162, -104],
+      "lShoulder": [102, 84, -104], "rShoulder": [148, 84, -104],
+      "lElbow": [101, 130, -104], "rElbow": [149, 130, -104],
+      "lWrist": [101, 172, -102], "rWrist": [149, 172, -102],
+      "lHip": [113, 162, -104], "rHip": [137, 162, -104],
+      "lKnee": [113, 222, -104], "rKnee": [137, 222, -104],
+      "lAnkle": [113, 278, -104], "rAnkle": [137, 278, -104],
+      "lToe": [113, 288, -84], "rToe": [137, 288, -84]
+    },
+    {
+      "pelvis": [125, 166, -112], "lHip": [113, 166, -112], "rHip": [137, 166, -112],
+      "lKnee": [113, 224, -96], "rKnee": [137, 224, -96],
+      "chest": [125, 168, -72], "neck": [125, 170, -34], "head": [125, 178, -12],
+      "lShoulder": [102, 170, -34], "rShoulder": [148, 170, -34],
+      "lElbow": [101, 216, -34], "rElbow": [149, 216, -34],
+      "lWrist": [100, 258, -32], "rWrist": [150, 258, -32]
+    },
+    {
+      "pelvis": [125, 165, -124], "lHip": [113, 165, -124], "rHip": [137, 165, -124],
+      "lKnee": [113, 221, -106], "rKnee": [137, 221, -106],
+      "chest": [125, 181, -87], "neck": [125, 196, -52], "head": [125, 213, -35],
+      "lShoulder": [102, 196, -52], "rShoulder": [148, 196, -52],
+      "lElbow": [101, 240, -49], "rElbow": [149, 240, -49],
+      "lWrist": [100, 283, -45], "rWrist": [150, 283, -45]
+    },
+    {
+      "pelvis": [125, 176, -55], "lHip": [113, 176, -55], "rHip": [137, 176, -55],
+      "lKnee": [113, 233, -67], "rKnee": [137, 233, -67],
+      "chest": [125, 187, -17], "neck": [125, 197, 20], "head": [125, 210, 40],
+      "lShoulder": [102, 197, 20], "rShoulder": [148, 197, 20],
+      "lElbow": [101, 240, 22], "rElbow": [149, 240, 22],
+      "lWrist": [100, 283, 24], "rWrist": [150, 283, 24]
+    },
+    {
+      "lAnkle": [113, 268, -90], "rAnkle": [137, 268, -90],
+      "lKnee": [113, 247, -38], "rKnee": [137, 247, -38],
+      "pelvis": [125, 224.4, 17.7], "lHip": [113, 224.4, 17.7], "rHip": [137, 224.4, 17.7],
+      "chest": [125, 209.4, 54.8], "neck": [125, 195, 90], "head": [125, 186, 112],
+      "lShoulder": [102, 195, 90], "rShoulder": [148, 195, 90],
+      "lElbow": [101, 239, 90], "rElbow": [149, 239, 90],
+      "lWrist": [100, 283, 90], "rWrist": [150, 283, 90]
+    }
+  ],
+  "props": []
+}

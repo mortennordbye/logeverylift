@@ -1,0 +1,188 @@
+{
+  "name": "Archer Push-up",
+  "primary": "chest",
+  "secondary": [
+    "triceps",
+    "shoulders",
+    "abs"
+  ],
+  "cue": "Set your hands very wide and shift your chest toward one hand as you lower, keeping the other arm straight. Keep your hips in line with your shoulders the whole way.",
+  "phases": [
+    "Lower",
+    "Push"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "lAnkle": [
+        115,
+        270.5,
+        104
+      ],
+      "rAnkle": [
+        135,
+        270.5,
+        103.9
+      ],
+      "lToe": [
+        115,
+        290,
+        96.1
+      ],
+      "rToe": [
+        135,
+        290,
+        96.1
+      ],
+      "lKnee": [
+        115,
+        251.9,
+        51.2
+      ],
+      "rKnee": [
+        135,
+        251.9,
+        51.1
+      ],
+      "lHip": [
+        113,
+        231.8,
+        -5.3
+      ],
+      "rHip": [
+        137,
+        231.8,
+        -5.4
+      ],
+      "pelvis": [
+        125,
+        231.8,
+        -5.4
+      ],
+      "chest": [
+        125,
+        218.5,
+        -43.1
+      ],
+      "neck": [
+        125,
+        205.8,
+        -78.9
+      ],
+      "head": [
+        125,
+        197.8,
+        -101.6
+      ],
+      "lShoulder": [
+        102,
+        205.8,
+        -78.9
+      ],
+      "rShoulder": [
+        148,
+        205.8,
+        -78.9
+      ],
+      "lElbow": [
+        78.5,
+        245.3,
+        -77.6
+      ],
+      "rElbow": [
+        171.5,
+        245.3,
+        -77.6
+      ],
+      "lWrist": [
+        60,
+        283,
+        -76
+      ],
+      "rWrist": [
+        190,
+        283,
+        -76
+      ]
+    },
+    {
+      "lKnee": [
+        124.8,
+        265.7,
+        48.1
+      ],
+      "rKnee": [
+        146.5,
+        265.7,
+        50.3
+      ],
+      "lHip": [
+        135.3,
+        260.6,
+        -11.8
+      ],
+      "rHip": [
+        158.9,
+        260.6,
+        -7.2
+      ],
+      "pelvis": [
+        147.1,
+        260.6,
+        -9.5
+      ],
+      "chest": [
+        154.7,
+        257.2,
+        -48.5
+      ],
+      "neck": [
+        162.0,
+        254.0,
+        -85.7
+      ],
+      "head": [
+        166.6,
+        255.0,
+        -109.2
+      ],
+      "lShoulder": [
+        139.4,
+        254.0,
+        -90.1
+      ],
+      "rShoulder": [
+        184.6,
+        254.0,
+        -81.3
+      ],
+      "lElbow": [
+        99.7,
+        264.5,
+        -83.1
+      ],
+      "rElbow": [
+        216.7,
+        262.9,
+        -49.5
+      ],
+      "lWrist": [
+        60,
+        283,
+        -76
+      ],
+      "rWrist": [
+        190,
+        283,
+        -76
+      ]
+    }
+  ],
+  "props": []
+}

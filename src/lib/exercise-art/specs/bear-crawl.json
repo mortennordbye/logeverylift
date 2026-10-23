@@ -1,0 +1,52 @@
+{
+  "name": "Bear Crawl",
+  "primary": "shoulders",
+  "secondary": ["abs", "quads", "triceps"],
+  "cue": "Keep your knees an inch off the floor and your back flat, hips level with your shoulders. Move the opposite hand and foot together in short steps.",
+  "phases": ["Step", "Return"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": ["rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 189, -98],
+      "neck": [125, 198, -76],
+      "chest": [125, 199, -37],
+      "pelvis": [125, 200, 2],
+      "lShoulder": [102, 198, -76],
+      "rShoulder": [148, 198, -76],
+      "lElbow": [103, 244, -74],
+      "rElbow": [147, 244, -74],
+      "lWrist": [104, 286, -72],
+      "rWrist": [146, 286, -72],
+      "lHip": [113, 200, 2],
+      "rHip": [137, 200, 2],
+      "lKnee": [113, 258, 17.4],
+      "rKnee": [137, 258, 17.4],
+      "lAnkle": [113, 272, 71.6],
+      "rAnkle": [137, 272, 71.6],
+      "lToe": [113, 290, 60.8],
+      "rToe": [137, 290, 60.8]
+    },
+    {
+      "lElbow": [102, 240, -84],
+      "lWrist": [103, 270, -112],
+      "rKnee": [137, 253, -8],
+      "rAnkle": [137, 260, 47],
+      "rToe": [137, 277, 41]
+    },
+    {
+      "chest": [125, 200, -37],
+      "neck": [125, 200, -76],
+      "lElbow": [102, 246, -77.2],
+      "rElbow": [147, 244.6, -64.8],
+      "lWrist": [103, 286, -90],
+      "rWrist": [146, 286, -72],
+      "rKnee": [137, 256.6, -18],
+      "rAnkle": [137, 272, 35.8],
+      "rToe": [137, 290, 25]
+    }
+  ],
+  "props": []
+}
