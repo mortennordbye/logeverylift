@@ -232,6 +232,9 @@ function frontTorso(j: Record<Joint, Point>, role: (m: Muscle[]) => Role): Shape
   return [
     { d: capsule(j.lHip, j.rHip, 13, 13), role: "limb" },
     shape([[-1.1, 0], [-0.5, -0.12], [0, -0.14], [0.5, -0.12], [1.1, 0], [1.06, 0.2], [0.84, 0.55], [1.0, 0.98], [0.5, 1.08], [0, 1.1], [-0.5, 1.08], [-1.0, 0.98], [-0.84, 0.55], [-1.06, 0.2]], role([])),
+    // Upper traps: the slope from the neck to each shoulder, above the chest.
+    shape([[-0.18, -0.22], [-0.55, -0.15], [-0.92, -0.02], [-0.84, 0.08], [-0.5, 0.04], [-0.2, 0.02]], role(["back"])),
+    shape([[0.18, -0.22], [0.55, -0.15], [0.92, -0.02], [0.84, 0.08], [0.5, 0.04], [0.2, 0.02]], role(["back"])),
     shape([[-1.02, 0.18], [-0.86, 0.2], [-0.66, 0.6], [-0.82, 0.6]], role(["back"])),
     shape([[1.02, 0.18], [0.86, 0.2], [0.66, 0.6], [0.82, 0.6]], role(["back"])),
     shape([[-0.9, 0.04], [0, 0.0], [0.9, 0.04], [0.84, 0.3], [0.44, 0.4], [0, 0.36], [-0.44, 0.4], [-0.84, 0.3]], role(["chest"])),
@@ -296,8 +299,12 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
           { d: circle([x, y], 4), role: "steel" },
         ])];
       }
+      // An EZ bar's W: the hands sit on the angled stretches either side of the middle.
+      const camber: [number, number][] = [[-84, 0], [-30, 0], [-24, 5], [-11, -4], [-4, 1], [4, 1], [11, -4], [24, 5], [30, 0], [84, 0]];
       return [group(c[2] - 1, [
-        { d: rect(x - 84, y - 2, 168, 4, 2), role: "steel" },
+        p.cambered
+          ? { d: camber.map(([dx, dy], i) => `${i ? "L" : "M"}${f(x + dx)} ${f(y + dy)}`).join(""), role: "steel", stroke: 4 }
+          : { d: rect(x - 84, y - 2, 168, 4, 2), role: "steel" },
         ...[-1, 1].flatMap((s): Shape[] => [
           { d: rect(x + s * 58 - 2, y - 6, 4, 12, 1.5), role: "steel" },
           { d: rect(x + s * 64 - 4, y - 25, 8, 50, 2.5), role: "plate" },

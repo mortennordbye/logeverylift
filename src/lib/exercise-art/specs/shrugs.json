@@ -1,0 +1,27 @@
+{
+  "name": "Shrugs",
+  "primary": "back",
+  "secondary": ["forearms"],
+  "cue": "Lift your shoulders straight up toward your ears and hold for a moment. Keep your arms straight and do not roll your shoulders.",
+  "phases": ["Shrug", "Lower"],
+  "anchor": "lAnkle",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 89, 0], "rShoulder": [147, 89, 0],
+      "lElbow": [102, 135, 2], "rElbow": [148, 135, 2],
+      "lWrist": [101, 177, 5], "rWrist": [149, 177, 5],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [112, 222, 1], "rKnee": [138, 222, 1],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    {
+      "lShoulder": [104, 73, 0], "rShoulder": [146, 73, 0],
+      "lElbow": [103, 119, 2], "rElbow": [147, 119, 2],
+      "lWrist": [102, 161, 5], "rWrist": [148, 161, 5]
+    }
+  ],
+  "props": [{ "type": "barbell" }]
+}

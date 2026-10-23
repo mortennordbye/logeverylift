@@ -2,7 +2,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { muscleRoles } from "@/lib/exercise-art/load";
-import { CYCLE_MS, capsule, cycleAt, poseAt, renderSvg } from "@/lib/exercise-art/scene";
+import { CYCLE_MS, buildScene, capsule, cycleAt, poseAt, renderSvg } from "@/lib/exercise-art/scene";
 import { checkSpec } from "@/lib/exercise-art/check";
 import { artSpecSchema, slugify, type ArtSpec } from "@/lib/exercise-art/schema";
 import { SPEC_LOADERS } from "@/lib/exercise-art/specs";
@@ -140,6 +140,22 @@ describe("motion", () => {
 
   it("draws a limb shorter than its taper as a plain circle", () => {
     expect(capsule([10, 10], [10, 11], 6, 4)).not.toContain("L");
+  });
+
+  it("lights the traps above the shoulder line when the back is worked", () => {
+    const spec = { ...curl, primary: "back" as const, secondary: [] };
+    const shoulderY = poseAt(spec, 0).lShoulder[1];
+    const topOf = (d: string) => Math.min(...[...d.matchAll(/-?[\d.]+ (-?[\d.]+)/g)].map((m) => Number(m[1])));
+    const lit = buildScene(spec, "front", 0).filter((s) => s.role === "primary");
+    expect(lit.some((s) => topOf(s.d) < shoulderY)).toBe(true);
+  });
+
+  it("bends a cambered barbell into an EZ bar's W in the front view", () => {
+    const steel = (cambered: boolean) =>
+      buildScene({ ...curl, props: [{ type: "barbell", cambered, layer: "auto" }] }, "front", 0).filter((s) => s.role === "steel" && s.stroke);
+    expect(steel(false)).toHaveLength(0);
+    expect(steel(true)).toHaveLength(1);
+    expect(steel(true)[0].d.match(/L/g)).toHaveLength(9);
   });
 });
 
