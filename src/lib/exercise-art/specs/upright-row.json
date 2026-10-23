@@ -1,0 +1,27 @@
+{
+  "name": "Upright Row",
+  "primary": "shoulders",
+  "secondary": ["back", "biceps", "forearms"],
+  "cue": "Lead with your elbows and lift them out to the sides. Stop when they reach shoulder height and keep the bar close to your body.",
+  "phases": ["Pull", "Lower"],
+  "anchor": "lAnkle",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, 0], "rShoulder": [147, 88, 0],
+      "lElbow": [97, 134, -1], "rElbow": [153, 134, -1],
+      "lWrist": [98, 175, 8], "rWrist": [152, 175, 8],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [112, 222, 1], "rKnee": [138, 222, 1],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    {
+      "lShoulder": [103, 86, 0], "rShoulder": [147, 86, 0],
+      "lElbow": [66, 96, 26.3], "rElbow": [184, 96, 26.3],
+      "lWrist": [98, 118, 10.3], "rWrist": [152, 118, 10.3]
+    }
+  ],
+  "props": [{ "type": "barbell" }]
+}

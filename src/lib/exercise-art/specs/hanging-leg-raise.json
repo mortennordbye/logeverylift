@@ -1,0 +1,30 @@
+{
+  "name": "Hanging Leg Raise",
+  "primary": "abs",
+  "secondary": ["forearms", "quads"],
+  "cue": "Hang still and lift your legs by curling your hips up, not by swinging. Lower slowly so you do not start the next rep with momentum.",
+  "phases": ["Raise", "Lower"],
+  "anchor": "lWrist",
+  "hold": ["lWrist", "rWrist"],
+  "zoom": 0.75,
+  "keyframes": [
+    {
+      "head": [125, 48, -29], "neck": [125, 72, -32], "chest": [125, 110, -32], "pelvis": [125, 150, -32],
+      "lShoulder": [105.3, 84.3, -32], "rShoulder": [144.7, 84.3, -32],
+      "lElbow": [92.1, 40.2, -32], "rElbow": [157.9, 40.2, -32],
+      "lWrist": [80, 0, -32], "rWrist": [170, 0, -32],
+      "lHip": [113, 150, -32], "rHip": [137, 150, -32],
+      "lKnee": [117, 210, -29], "rKnee": [133, 210, -29],
+      "lAnkle": [121, 266, -32], "rAnkle": [129, 266, -32],
+      "lToe": [121, 280, -17], "rToe": [129, 280, -17]
+    },
+    {
+      "head": [125, 48, -32], "neck": [125, 72, -36], "chest": [125, 110, -38], "pelvis": [125, 149, -34],
+      "lHip": [113, 149, -34], "rHip": [137, 149, -34],
+      "lKnee": [117, 158, 24], "rKnee": [133, 158, 24],
+      "lAnkle": [121, 167, 79], "rAnkle": [129, 167, 79],
+      "lToe": [121, 146, 82], "rToe": [129, 146, 82]
+    }
+  ],
+  "props": [{ "type": "bar", "y": 0, "z": -32, "layer": "front" }]
+}

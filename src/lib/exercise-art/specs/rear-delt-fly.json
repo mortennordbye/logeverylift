@@ -1,0 +1,25 @@
+{
+  "name": "Rear Delt Fly",
+  "primary": "shoulders",
+  "secondary": ["back"],
+  "cue": "Hinge until your back is nearly flat and keep it still. Sweep the dumbbells out wide with soft elbows; do not row them up or swing your torso.",
+  "phases": ["Raise", "Lower"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 130, 55], "neck": [125, 138, 32.5], "chest": [125, 157, 0], "pelvis": [125, 177, -35],
+      "lShoulder": [103, 142, 30], "rShoulder": [147, 142, 30],
+      "lElbow": [100, 187, 32], "rElbow": [150, 187, 32],
+      "lWrist": [103, 228, 36], "rWrist": [147, 228, 36],
+      "lHip": [113, 177, -35], "rHip": [137, 177, -35],
+      "lKnee": [112, 223, 4], "rKnee": [138, 223, 4],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    {
+      "lElbow": [63, 165, 32], "rElbow": [187, 165, 32],
+      "lWrist": [31, 190, 36], "rWrist": [219, 190, 36]
+    }
+  ],
+  "props": [{ "type": "dumbbell", "along": "z" }]
+}

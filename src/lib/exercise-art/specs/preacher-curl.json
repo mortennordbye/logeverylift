@@ -1,0 +1,26 @@
+{
+  "name": "Preacher Curl",
+  "primary": "biceps",
+  "secondary": ["forearms"],
+  "cue": "Keep the backs of your arms flat on the pad the whole time. Lower until your arms are almost straight, without letting the bar drop the last part.",
+  "phases": ["Curl", "Lower"],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [125, 126, 6], "neck": [125, 150, 8], "chest": [125, 188, 4], "pelvis": [125, 226, 0],
+      "lShoulder": [103, 156, 8], "rShoulder": [147, 156, 8],
+      "lElbow": [103, 188, 40], "rElbow": [147, 188, 40],
+      "lWrist": [103, 222, 64], "rWrist": [147, 222, 64],
+      "lHip": [113, 228, 0], "rHip": [137, 228, 0],
+      "lKnee": [106, 231, 58], "rKnee": [144, 231, 58],
+      "lAnkle": [96, 279, 33], "rAnkle": [154, 279, 33],
+      "lToe": [95, 284, 53], "rToe": [155, 284, 53]
+    },
+    { "lWrist": [103, 146, 48], "rWrist": [147, 146, 48] }
+  ],
+  "props": [
+    { "type": "barbell" },
+    { "type": "bench", "y": 240, "z1": -35, "z2": 10, "width": 44 },
+    { "type": "incline", "from": [172, 9], "to": [226, 63], "width": 92 }
+  ]
+}
