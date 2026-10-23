@@ -290,7 +290,7 @@ Rules:
 - Keep the cycle's training days and "weeks". The athlete changes frequency and cycle length with their picks, not here.
 - Use names from "allowedExercises" spelled exactly as listed. Only use another exercise when nothing listed fits, and only with equipment that "picks.equipment" allows (${Object.entries(EQUIPMENT_LABELS).map(([k, v]) => `${k}: ${v}`).join("; ")}).
 - Don't add exercises that load the joints in "picks.avoidJoints". Keep extra work for "picks.priorityMuscles".
-- When "picks.sessionMinutes" is set, keep each session within it: a set takes about 45 seconds plus its rest.
+- When "picks.sessionMinutes" is set, each session should take close to that many minutes and never more: a set takes about 45 seconds plus its rest, and each exercise about a minute to set up.
 - Leave "kg" null on every set of a loaded exercise; the app sets the athlete's starting weights. Use 0 for bodyweight exercises.
 
 Field guide:

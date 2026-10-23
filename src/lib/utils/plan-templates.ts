@@ -29,7 +29,7 @@ export const MAX_PRIORITIES = 2;
  * Bump whenever a change alters the plan built for any picks. AI edit results
  * are cached against the plan they edited, and the cache key includes this.
  */
-export const TEMPLATE_VERSION = 2;
+export const TEMPLATE_VERSION = 3;
 
 export type TemplateGoal = (typeof TEMPLATE_GOALS)[number];
 export type TemplateLevel = (typeof TEMPLATE_LEVELS)[number];
@@ -53,6 +53,8 @@ export type TemplateParams = {
   priorities?: PriorityMuscle[];
   /** Joints to spare: exercises that load them are skipped. */
   avoid?: AvoidArea[];
+  /** Training weekdays (1 = Monday … 7 = Sunday), one per day. Absent: picked from the split. */
+  weekdays?: number[];
 };
 
 export type TemplateAthlete = {
@@ -226,18 +228,55 @@ const SLOTS = {
 } satisfies Record<string, Candidate[]>;
 
 type SlotKey = keyof typeof SLOTS;
-type Session = { name: string; slots: [SlotKey, Role][] };
+// `extras` are added in order when a session is short of the chosen length.
+type Session = { name: string; slots: [SlotKey, Role][]; extras: [SlotKey, Role][] };
 
 const SESSIONS = {
-  fullA: { name: "Full Body A", slots: [["squat", "main"], ["hpush", "main"], ["hpull", "secondary"], ["hinge_accessory", "accessory"], ["core", "core"]] },
-  fullB: { name: "Full Body B", slots: [["hinge", "main"], ["vpush", "main"], ["vpull", "secondary"], ["lunge", "accessory"], ["core_dynamic", "core"]] },
-  upperA: { name: "Upper A", slots: [["hpush", "main"], ["hpull", "main"], ["vpush", "secondary"], ["vpull", "secondary"], ["biceps", "isolation"], ["triceps", "isolation"]] },
-  upperB: { name: "Upper B", slots: [["vpush", "main"], ["vpull", "main"], ["hpush_accessory", "secondary"], ["hpull", "secondary"], ["side_delt", "isolation"], ["rear_delt", "isolation"]] },
-  lowerA: { name: "Lower A", slots: [["squat", "main"], ["hinge_accessory", "secondary"], ["lunge", "accessory"], ["ham_iso", "isolation"], ["calves", "isolation"], ["core", "core"]] },
-  lowerB: { name: "Lower B", slots: [["hinge", "main"], ["squat", "secondary"], ["lunge", "accessory"], ["quad_iso", "isolation"], ["calves", "isolation"], ["core_dynamic", "core"]] },
-  push: { name: "Push", slots: [["hpush", "main"], ["vpush", "secondary"], ["hpush_accessory", "accessory"], ["side_delt", "isolation"], ["triceps", "isolation"]] },
-  pull: { name: "Pull", slots: [["vpull", "main"], ["hpull", "secondary"], ["rear_delt", "isolation"], ["biceps", "isolation"], ["core_dynamic", "core"]] },
-  legs: { name: "Legs", slots: [["squat", "main"], ["hinge_accessory", "secondary"], ["lunge", "accessory"], ["ham_iso", "isolation"], ["calves", "isolation"]] },
+  fullA: {
+    name: "Full Body A",
+    slots: [["squat", "main"], ["hpush", "main"], ["hpull", "secondary"], ["hinge_accessory", "accessory"], ["core", "core"]],
+    extras: [["vpull", "secondary"], ["side_delt", "isolation"], ["biceps", "isolation"], ["triceps", "isolation"]],
+  },
+  fullB: {
+    name: "Full Body B",
+    slots: [["hinge", "main"], ["vpush", "main"], ["vpull", "secondary"], ["lunge", "accessory"], ["core_dynamic", "core"]],
+    extras: [["hpull", "secondary"], ["chest_iso", "isolation"], ["ham_iso", "isolation"], ["calves", "isolation"]],
+  },
+  upperA: {
+    name: "Upper A",
+    slots: [["hpush", "main"], ["hpull", "main"], ["vpush", "secondary"], ["vpull", "secondary"], ["biceps", "isolation"], ["triceps", "isolation"]],
+    extras: [["side_delt", "isolation"], ["rear_delt", "isolation"], ["chest_iso", "isolation"]],
+  },
+  upperB: {
+    name: "Upper B",
+    slots: [["vpush", "main"], ["vpull", "main"], ["hpush_accessory", "secondary"], ["hpull", "secondary"], ["side_delt", "isolation"], ["rear_delt", "isolation"]],
+    extras: [["biceps", "isolation"], ["triceps", "isolation"], ["back_iso", "isolation"]],
+  },
+  lowerA: {
+    name: "Lower A",
+    slots: [["squat", "main"], ["hinge_accessory", "secondary"], ["lunge", "accessory"], ["ham_iso", "isolation"], ["calves", "isolation"], ["core", "core"]],
+    extras: [["quad_iso", "isolation"], ["glute_iso", "isolation"]],
+  },
+  lowerB: {
+    name: "Lower B",
+    slots: [["hinge", "main"], ["squat", "secondary"], ["lunge", "accessory"], ["quad_iso", "isolation"], ["calves", "isolation"], ["core_dynamic", "core"]],
+    extras: [["ham_iso", "isolation"], ["glute_iso", "isolation"]],
+  },
+  push: {
+    name: "Push",
+    slots: [["hpush", "main"], ["vpush", "secondary"], ["hpush_accessory", "accessory"], ["side_delt", "isolation"], ["triceps", "isolation"]],
+    extras: [["chest_iso", "isolation"], ["rear_delt", "isolation"], ["core", "core"]],
+  },
+  pull: {
+    name: "Pull",
+    slots: [["vpull", "main"], ["hpull", "secondary"], ["rear_delt", "isolation"], ["biceps", "isolation"], ["core_dynamic", "core"]],
+    extras: [["back_iso", "isolation"], ["side_delt", "isolation"], ["hinge_accessory", "accessory"]],
+  },
+  legs: {
+    name: "Legs",
+    slots: [["squat", "main"], ["hinge_accessory", "secondary"], ["lunge", "accessory"], ["ham_iso", "isolation"], ["calves", "isolation"]],
+    extras: [["quad_iso", "isolation"], ["glute_iso", "isolation"], ["core", "core"]],
+  },
 } satisfies Record<string, Session>;
 
 type Split = { name: string; sessions: Session[]; days: { session: number; day: number }[] };
@@ -423,10 +462,7 @@ function schemeFor(role: Role, params: TemplateParams): Scheme {
 function prescribe(candidate: Candidate, role: Role, params: TemplateParams): Exercise {
   const base = schemeFor(role, params);
   // Advanced lifters get one more set on the big lifts; beginners keep isolation light.
-  // Long sessions add a set to accessory and isolation work.
-  const bonus =
-    (params.level === "advanced" && (role === "main" || role === "secondary") ? 1 : 0) +
-    (params.sessionMinutes === 90 && (role === "accessory" || role === "isolation") ? 1 : 0);
+  const bonus = params.level === "advanced" && (role === "main" || role === "secondary") ? 1 : 0;
   const sets = Math.min(4, base.sets + bonus);
   const meta = {
     name: candidate.name,
@@ -721,9 +757,41 @@ function fitToTime(entries: Entry[], minutes: number): Entry[] {
   return out;
 }
 
+/**
+ * Grows a session that is short of the time limit, without going over it:
+ * a set more on the compound lifts, then the session's extra exercises, then
+ * a set more on accessory and isolation work. Each step that would overrun the
+ * limit is skipped.
+ */
+function fillToTime(entries: Entry[], minutes: number, session: Session, params: TemplateParams, used: Set<string>): void {
+  const fits = () => estimateSessionMinutes(entries.map((e) => e.exercise)) <= minutes;
+  const addSets = (roles: Role[]) => {
+    for (const entry of entries) {
+      if (!roles.includes(entry.role) || workingSets(entry.exercise) >= 4) continue;
+      addSet(entry.exercise);
+      if (!fits()) removeWorkingSet(entry.exercise);
+    }
+  };
+
+  addSets(["main", "secondary"]);
+  for (const [slot, role] of session.extras) {
+    if (entries.length >= MAX_EXERCISES_PER_PROGRAM) break;
+    if (entries.some((e) => e.slot === slot)) continue;
+    const candidate = pick(slot, params, used);
+    if (!candidate) continue;
+    const entry: Entry = { slot, role, priority: false, exercise: prescribe(candidate, role, params) };
+    const at = role === "core" ? -1 : entries.findIndex((e) => e.role === "core");
+    entries.splice(at === -1 ? entries.length : at, 0, entry);
+    if (fits()) used.add(candidate.name);
+    else entries.splice(entries.indexOf(entry), 1);
+  }
+  addSets(["accessory", "isolation"]);
+}
+
 /** The complete plan for these picks. Deterministic: same picks, same plan. */
 export function buildTemplatePlan(params: TemplateParams, athlete: TemplateAthlete): AiPlan {
   const split = splitFor(params.daysPerWeek, params.level, params.split ?? "auto");
+  const weekdays = params.weekdays ? [...params.weekdays].sort((a, b) => a - b) : undefined;
   const programs = split.sessions.map((session) => {
     const used = new Set<string>();
     let entries: Entry[] = [];
@@ -734,7 +802,10 @@ export function buildTemplatePlan(params: TemplateParams, athlete: TemplateAthle
       entries.push({ slot, role, priority: false, exercise: prescribe(candidate, role, params) });
     }
     applyPriorities(entries, session, params, used);
-    if (params.sessionMinutes) entries = fitToTime(entries, params.sessionMinutes);
+    if (params.sessionMinutes) {
+      entries = fitToTime(entries, params.sessionMinutes);
+      fillToTime(entries, params.sessionMinutes, session, params, used);
+    }
     return { name: session.name, exercises: entries.map((e) => e.exercise) };
   });
 
@@ -744,9 +815,9 @@ export function buildTemplatePlan(params: TemplateParams, athlete: TemplateAthle
       name: `${params.weeks}-Week ${split.name}`,
       weeks: params.weeks,
       sched: "day_of_week",
-      slots: split.days.map(({ session, day }) => ({
+      slots: split.days.map(({ session, day }, i) => ({
         prog: split.sessions[session].name,
-        day,
+        day: weekdays?.[i] ?? day,
         idx: null,
         label: null,
         auto: false,

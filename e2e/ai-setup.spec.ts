@@ -1,5 +1,8 @@
 import type { Page } from "@playwright/test";
+import { trainingCycleSlots } from "../src/db/schema";
+import { asc, eq } from "drizzle-orm";
 import { expect, test } from "./fixtures/test";
+import { testDb } from "./fixtures/reset";
 
 /**
  * AI Setup: building a plan from picks, importing it, and the parts of the AI
@@ -38,6 +41,11 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   await pick(page, "Goal", "Build muscle");
   await pick(page, "Experience", "Intermediate");
   await pick(page, "Days per week", "2");
+  await pick(page, "Training days", "Choose days");
+  const weekdays = page.getByRole("group", { name: "Weekdays" });
+  await weekdays.getByRole("button", { name: "Tue" }).click();
+  await weekdays.getByRole("button", { name: "Sat" }).click();
+  await expect(weekdays.getByRole("button", { name: "Mon" })).toBeDisabled();
   await pick(page, "Session length", "45 min");
   await pick(page, "Split", "Upper/Lower");
   await pick(page, "Equipment", "Dumbbells");
@@ -51,8 +59,8 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
     await expect(page.getByText("16-Week Upper/Lower")).toBeVisible({ timeout: 2_000 });
   }).toPass({ timeout: 15_000 });
 
-  // The preview: the cycle on the picked days, every exercise listed.
-  await expect(page.getByText(/^Mon Upper A.* · Thu Lower A/)).toBeVisible();
+  // The preview: the cycle on the chosen weekdays, every exercise listed.
+  await expect(page.getByText(/^Tue Upper A.* · Sat Lower A/)).toBeVisible();
   const body = await page.locator("body").innerText();
   const lines = body.split("\n").map((l) => l.trim());
   expect(lines).toContain("Dumbbell Bench Press");
@@ -78,6 +86,12 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   await expect(cycleLinks.first()).toBeVisible();
   const hrefs = await cycleLinks.evaluateAll((as) => as.map((a) => a.getAttribute("href") ?? ""));
   const newest = hrefs.sort((a, b) => Number(b.split("/").pop()) - Number(a.split("/").pop()))[0];
+  const slots = await testDb()
+    .select({ day: trainingCycleSlots.dayOfWeek })
+    .from(trainingCycleSlots)
+    .where(eq(trainingCycleSlots.trainingCycleId, Number(newest.split("/").pop())))
+    .orderBy(asc(trainingCycleSlots.dayOfWeek));
+  expect(slots.map((s) => s.day)).toEqual([2, 6]);
   await page.goto(newest);
   await expect(page.getByText("draft").first()).toBeVisible();
   await page.getByRole("button", { name: "Delete cycle" }).click();

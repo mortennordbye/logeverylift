@@ -29,6 +29,7 @@ export const templateParamsSchema = z
     split: z.enum(TEMPLATE_SPLITS).optional(),
     priorities: z.array(z.enum(PRIORITY_MUSCLES)).max(MAX_PRIORITIES).optional(),
     avoid: z.array(z.enum(AVOID_AREAS)).max(AVOID_AREAS.length).optional(),
+    weekdays: z.array(z.number().int().min(1).max(7)).max(7).optional(),
   })
   .refine((p) => splitSupports(p.split ?? "auto", p.daysPerWeek), {
     message: "That split can't be built for this many days",
@@ -41,6 +42,10 @@ export const templateParamsSchema = z
   .refine((p) => new Set(p.avoid ?? []).size === (p.avoid ?? []).length, {
     message: "Areas to avoid must be different",
     path: ["avoid"],
+  })
+  .refine((p) => !p.weekdays || (new Set(p.weekdays).size === p.weekdays.length && p.weekdays.length === p.daysPerWeek), {
+    message: "Pick one weekday per training day",
+    path: ["weekdays"],
   });
 
 const needsText = new Set<string>(EDIT_CHIPS.filter((c) => "needsText" in c && c.needsText).map((c) => c.id));

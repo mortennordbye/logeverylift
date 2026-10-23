@@ -12,8 +12,8 @@ import type { AiPlan } from "@/lib/utils/ai-plan";
 import { GOAL_VALUES, type Goal } from "@/lib/utils/goals";
 import {
   equipmentAllowed,
+  estimateSessionMinutes,
   TEMPLATE_VERSION,
-  type TemplateEquipment,
   type TemplateParams,
 } from "@/lib/utils/plan-templates";
 
@@ -129,6 +129,7 @@ export function editCacheMaterial(profile: GenericProfile, picks: TemplateParams
       split: picks.split ?? "auto",
       priorities: [...(picks.priorities ?? [])].sort(),
       avoid: [...(picks.avoid ?? [])].sort(),
+      weekdays: picks.weekdays ? [...picks.weekdays].sort((a, b) => a - b) : null,
     },
     edit,
   });
@@ -143,13 +144,18 @@ export function editInstructions(request: EditRequest): string[] {
 }
 
 /** Problems an edited plan has against the picks, beyond what validatePlan checks. */
-export function checkEdit(plan: AiPlan, equipment: TemplateEquipment): string[] {
+export function checkEdit(plan: AiPlan, picks: Pick<TemplateParams, "equipment" | "sessionMinutes">): string[] {
   const issues: string[] = [];
   for (const program of plan.programs) {
     for (const exercise of program.exercises) {
-      if (!equipmentAllowed(equipment, exercise.equipment)) {
-        issues.push(`"${program.name}" uses ${exercise.name} (${exercise.equipment}), but the athlete only has: ${equipment.replace("_", " ")}. Pick an exercise for that equipment.`);
+      if (!equipmentAllowed(picks.equipment, exercise.equipment)) {
+        issues.push(`"${program.name}" uses ${exercise.name} (${exercise.equipment}), but the athlete only has: ${picks.equipment.replace("_", " ")}. Pick an exercise for that equipment.`);
       }
+    }
+    // The estimate is rough, so allow a little over before calling it too long.
+    const minutes = estimateSessionMinutes(program.exercises);
+    if (picks.sessionMinutes && minutes > picks.sessionMinutes * 1.1) {
+      issues.push(`"${program.name}" takes about ${Math.round(minutes)} minutes, but the athlete has ${picks.sessionMinutes}. Remove sets or exercises to fit.`);
     }
   }
   return issues;

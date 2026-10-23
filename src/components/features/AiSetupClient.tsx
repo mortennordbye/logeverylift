@@ -150,6 +150,7 @@ const AVOID_LABELS: Record<AvoidArea, string> = {
 };
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const WEEKDAY_OPTIONS: Option<string>[] = WEEKDAYS.map((label, i) => ({ value: String(i + 1), label }));
 
 function chipClass(active: boolean): string {
   return `min-h-[44px] min-w-[44px] rounded-full px-4 text-sm font-medium active:opacity-70 disabled:opacity-40 ${
@@ -325,6 +326,8 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   const [weeks, setWeeks] = useState<TemplateParams["weeks"]>(8);
   const [priorities, setPriorities] = useState<PriorityMuscle[]>([]);
   const [avoid, setAvoid] = useState<AvoidArea[]>([]);
+  // null: the split picks the weekdays.
+  const [weekdays, setWeekdays] = useState<number[] | null>(null);
 
   // Plan and AI edit
   const [view, setView] = useState<View>("picks");
@@ -344,7 +347,10 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   const editPromise = useRef<ReturnType<typeof editPlanWithAi> | null>(null);
   const isMounted = useRef(true);
 
-  const picks = (): TemplateParams => ({ goal, level, daysPerWeek, equipment, weeks, sessionMinutes, split, priorities, avoid });
+  const picks = (): TemplateParams => ({
+    goal, level, daysPerWeek, equipment, weeks, sessionMinutes, split, priorities, avoid,
+    ...(weekdays && { weekdays: [...weekdays].sort((a, b) => a - b) }),
+  });
 
   const athlete = () => ({
     bodyWeightKg: userProfile.weightKg,
@@ -374,6 +380,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     setSplit(p.split ?? "auto");
     setPriorities(p.priorities ?? []);
     setAvoid(p.avoid ?? []);
+    setWeekdays(p.weekdays ?? null);
   }
 
   function restoreRequest(p: TemplateParams, requestChips: string[], text: string) {
@@ -489,6 +496,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   function handleDaysChange(days: TemplateParams["daysPerWeek"]) {
     setDaysPerWeek(days);
     if (!splitSupports(split, days)) setSplit("auto");
+    if (weekdays && weekdays.length > days) setWeekdays(weekdays.slice(0, days));
   }
 
   function handleBuild() {
@@ -766,6 +774,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   const shownPlan = editedPlan ?? builtPlan;
   const swapNeedsText = chips.includes("swap_named") && !editText.trim();
   const canEdit = (chips.length > 0 || editText.trim().length > 0) && !swapNeedsText;
+  const weekdaysMissing = weekdays !== null && weekdays.length !== daysPerWeek;
   const splitHint =
     split === "auto"
       ? undefined
@@ -939,6 +948,26 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
           <Field label="Days per week">
             <Chips label="Days per week" options={DAY_OPTIONS} value={daysPerWeek} onChange={handleDaysChange} />
           </Field>
+          <Field
+            label="Training days"
+            hint={weekdays ? `${weekdays.length} of ${daysPerWeek} picked` : undefined}
+          >
+            <Chips
+              label="Training days"
+              options={[{ value: "auto", label: "Pick for me" }, { value: "choose", label: "Choose days" }]}
+              value={weekdays ? "choose" : "auto"}
+              onChange={(v) => setWeekdays(v === "choose" ? [] : null)}
+            />
+            {weekdays && (
+              <MultiChips
+                label="Weekdays"
+                options={WEEKDAY_OPTIONS}
+                values={weekdays.map(String)}
+                onChange={(v) => setWeekdays(v.map(Number))}
+                max={daysPerWeek}
+              />
+            )}
+          </Field>
           <Field label="Session length">
             <Chips label="Session length" options={MINUTE_OPTIONS} value={sessionMinutes} onChange={setSessionMinutes} />
           </Field>
@@ -978,11 +1007,15 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
             <button
               type="button"
               onClick={handleBuild}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80"
+              disabled={weekdaysMissing}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
             >
               <Zap className="w-4 h-4" />
               Build my plan
             </button>
+            {weekdaysMissing && (
+              <p className="text-xs text-destructive">Pick {daysPerWeek} training days, or let us pick them.</p>
+            )}
             <p className="text-xs text-muted-foreground">
               Ready instantly, with starting weights from your logged lifts. You can review it, and change it with AI, before anything is created.
             </p>

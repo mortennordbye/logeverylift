@@ -82,8 +82,27 @@ describe("edit requests", () => {
 
   it("flags exercises outside the equipment pick", () => {
     const plan = buildTemplatePlan({ ...picks, equipment: "full_gym" }, athlete);
-    expect(checkEdit(plan, "full_gym")).toEqual([]);
-    expect(checkEdit(plan, "dumbbells").join()).toContain("Squat (barbell)");
+    expect(checkEdit(plan, { equipment: "full_gym" })).toEqual([]);
+    expect(checkEdit(plan, { equipment: "dumbbells" }).join()).toContain("Squat (barbell)");
+  });
+
+  it("flags a session that runs well over the chosen length", () => {
+    const plan = buildTemplatePlan({ ...picks, sessionMinutes: 45 }, athlete);
+    expect(checkEdit(plan, { equipment: "full_gym", sessionMinutes: 45 })).toEqual([]);
+    const long = clone(plan);
+    for (const ex of long.programs[0].exercises) ex.sets.push(...clone(ex.sets), ...clone(ex.sets));
+    expect(checkEdit(long, { equipment: "full_gym", sessionMinutes: 45 }).join()).toContain(`"${long.programs[0].name}" takes about`);
+    expect(checkEdit(long, { equipment: "full_gym" })).toEqual([]);
+  });
+
+  it("keys the cache on the chosen weekdays, in any order", () => {
+    const request = { chips: ["more_variety" as const], text: "" };
+    expect(editCacheMaterial(profile, { ...picks, weekdays: [5, 1, 3] }, request)).toBe(
+      editCacheMaterial(profile, { ...picks, weekdays: [1, 3, 5] }, request),
+    );
+    expect(editCacheMaterial(profile, { ...picks, weekdays: [2, 4, 6] }, request)).not.toBe(
+      editCacheMaterial(profile, picks, request),
+    );
   });
 });
 
@@ -93,6 +112,14 @@ describe("validators", () => {
     expect(templateParamsSchema.safeParse({ ...picks, daysPerWeek: 4, split: "ppl" }).success).toBe(false);
     expect(templateParamsSchema.safeParse({ ...picks, daysPerWeek: 7 }).success).toBe(false);
     expect(templateParamsSchema.safeParse({ ...picks, sessionMinutes: 50 }).success).toBe(false);
+  });
+
+  it("takes one different weekday per training day", () => {
+    expect(templateParamsSchema.safeParse({ ...picks, weekdays: [2, 4, 6] }).success).toBe(true);
+    expect(templateParamsSchema.safeParse({ ...picks, weekdays: [2, 4] }).success).toBe(false);
+    expect(templateParamsSchema.safeParse({ ...picks, weekdays: [2, 2, 4] }).success).toBe(false);
+    expect(templateParamsSchema.safeParse({ ...picks, weekdays: [0, 2, 4] }).success).toBe(false);
+    expect(templateParamsSchema.safeParse({ ...picks, weekdays: [2, 4, 8] }).success).toBe(false);
   });
 
   it("caps priorities at two different muscles", () => {
