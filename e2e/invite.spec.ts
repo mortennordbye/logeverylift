@@ -28,6 +28,13 @@ test("an invite link opens the front page and keeps the token through sign-up", 
   try {
     await page.goto(`/welcome?token=${token}`);
     await expect(page.getByRole("heading", { name: /Log every lift/, level: 1 })).toBeVisible();
+    // Every way to sign up from here keeps the token, including the sign-in
+    // panel's "Create account" link.
+    const signupLinks = page.locator('a[href^="/signup"]');
+    await expect(signupLinks).toHaveCount(3);
+    for (const href of await signupLinks.evaluateAll((as) => as.map((a) => a.getAttribute("href")))) {
+      expect(href).toBe(`/signup?token=${token}`);
+    }
 
     // Switching language must not lose the invite.
     await page.getByRole("link", { name: "NO" }).click();
