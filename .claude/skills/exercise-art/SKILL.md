@@ -25,7 +25,12 @@ slug is the exercise name in kebab case (`Barbell Curl` → `barbell-curl`).
    equipment), not from scratch. References: `barbell-curl.json` (standing,
    free arm swing), `squat.json` (standing, hips and knees moving, bar racked
    on the shoulders) and `bench-press.json` (lying on a bench, top camera,
-   held hands on a pressed bar).
+   held hands on a pressed bar). Also: `deadlift.json` and `barbell-row.json`
+   (hip hinge, bar in the hands), `pull-up.json` (hang, wrist anchor, legs
+   straight down), `lat-pulldown.json` and `overhead-press.json` (seated),
+   `plank.json` and `push-up.json` (face down full length, top camera,
+   `zoom`), `hip-thrust.json` (back on a bench edge, top camera), `lunge.json`
+   (split stance), `dumbbell-curl.json` (dumbbells).
 3. **Pose it**: keyframe 0 is where the lifter sets up before the first rep
    (lockout for a bench press or squat, arms hanging for a curl, bar on the
    floor for a deadlift); the last keyframe is the other end of the range.
@@ -104,6 +109,12 @@ spine on x = 125.
 **Hanging** (pull-up, chin-up, hanging leg raise): the legs hang straight down
 under the body, at most a slight knee bend, feet together. Do not tuck the
 shins back as if kneeling. Make the bar readable in the side view.
+
+**Hip hinge** (deadlift, Romanian deadlift, row, good morning): the hips sit
+clearly above the knees, the back is flat at about 30 to 45 degrees above
+horizontal, and the shins are close to vertical. Hips level with the knees
+and a flat back read as a squat; agents got this wrong three times on the
+deadlift. Check the angles with `--joints`, not by eye.
 
 **Anchor.** `anchor` names the joint that stays put while the body moves round
 it: `lAnkle` for anything standing, a wrist for a hang (pull-up), `pelvis` for
@@ -198,3 +209,20 @@ figure (`muscle-map.ts`, preview with `pnpm art map`) uses the same muscles.
       through the body.
 - [ ] The accent lands on the right muscles in both views and both themes.
 - [ ] Everything is inside the frame, including plates and the head.
+
+## Running a batch (lessons from the first one)
+
+- Run the saved workflow (`.claude/workflows/exercise-art.js`) with about 10
+  exact seed names. Ten took 60 agents and about 3.6M tokens in all, over
+  three rounds.
+- Agents passing `check` and their own review is not enough. The person
+  running the batch reads every `.art-preview/<slug>.png`, then opens them
+  for the user (`open .art-preview/<slug>.png ...`) and commits only what the
+  user approves. Send the rest back with concrete problems (view, frame,
+  joint, what is wrong).
+- If the same fault comes back after two fixes, the cause is usually
+  something no pose can fix (the frame, the renderer), not the pose. Find it
+  in `--joints` before sending more agents. That is how `zoom` came about:
+  agents rotated full-length bodies diagonally to fit the side view.
+- Poses that fail in a new way go into this skill, so the next batch gets
+  them right the first time.

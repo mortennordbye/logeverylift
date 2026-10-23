@@ -5,7 +5,7 @@ export const meta = {
   phases: [
     { title: 'Draw', detail: 'one agent per exercise writes and checks its spec' },
     { title: 'Review', detail: 'a fresh agent judges each preview against the skill checklist' },
-    { title: 'Fix', detail: 'only for exercises the review rejected' },
+    { title: 'Fix', detail: 'only for exercises the review rejected, then reviewed again' },
     { title: 'Index', detail: 'regenerate the spec index and run the tests' },
   ],
 }
@@ -56,7 +56,9 @@ const results = await pipeline(
   async (r) => {
     if (!r.verdict || r.verdict.pass) return { name: r.name, status: 'ok', problems: [] }
     await agent(fixPrompt(r.name, r.verdict.problems), { label: `fix:${slug(r.name)}`, phase: 'Fix' })
-    return { name: r.name, status: 'fixed', problems: r.verdict.problems }
+    // A fix nobody re-reviews can still be wrong (batch 1: four of eight were), so check it once more.
+    const again = await agent(reviewPrompt(r.name, { notes: `fixed after review: ${r.verdict.problems.join(' / ')}` }), { label: `re-review:${slug(r.name)}`, phase: 'Fix', schema: VERDICT })
+    return { name: r.name, status: again?.pass ? 'fixed' : 'still failing', problems: again?.pass ? [] : again?.problems ?? ['re-review failed to run'] }
   },
 )
 
