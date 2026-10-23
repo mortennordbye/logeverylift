@@ -38,10 +38,12 @@ import { and, asc, count, eq, gte, isNull, sql } from "drizzle-orm";
 
 const DAILY_LIMIT = 5;
 
+/** editPlanWithAi's error when the user hasn't opted in to AI editing. */
+const AI_CONSENT_REQUIRED = "Turn on AI editing first.";
+
 // Used only when the ai_model_configs table is empty. Free OpenRouter models
 // come and go; ones no longer listed are skipped at call time.
 const DEFAULT_MODELS: LlmModel[] = [
-  { modelId: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Google AI)", provider: "google" },
   { modelId: "minimax/minimax-m3.1-flash:free", label: "MiniMax M3.1 Flash (free)", provider: "openrouter" },
   { modelId: "openrouter/free", label: "Free Models Router (auto)", provider: "openrouter" },
   { modelId: "nvidia/nemotron-3-ultra-550b-a55b:free", label: "Nemotron 3 Ultra 550B (free)", provider: "openrouter" },
@@ -86,11 +88,14 @@ async function getEnabledModels(): Promise<LlmModel[]> {
   } catch (err) {
     console.error("[getEnabledModels] failed, using defaults", err);
   }
-  const free = models.filter(isFreeModel);
+  // Google's terms don't allow the free Gemini API tier in apps used from the
+  // EEA, which is where our users are. Re-enable only on a paid key, and update
+  // the privacy policy's processor list when doing so.
+  const usable = models.filter((m) => isFreeModel(m) && m.provider !== "google");
   for (const model of models) {
-    if (!isFreeModel(model)) console.warn(`[AI] ${model.modelId} skipped: not a free model`);
+    if (!usable.includes(model)) console.warn(`[AI] ${model.modelId} skipped: not a usable free model`);
   }
-  return free;
+  return usable;
 }
 
 export async function getAiRateLimitStatus(): Promise<ActionResult<RateLimitInfo>> {
@@ -153,6 +158,8 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
       generationsToday(userId),
     ]);
     const dailyLimit = isAdmin ? Infinity : DAILY_LIMIT;
+    // The request goes to outside model providers: only with the user's opt-in.
+    if (!user?.aiConsentAt) return { success: false, error: AI_CONSENT_REQUIRED };
 
     // Estimated 1RM per exercise, else the best weight: the template builder's input.
     const lifts: Record<string, number> = {};

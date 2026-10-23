@@ -1,6 +1,9 @@
 "use client";
 
+import { ConsentChecks, type ConsentState } from "@/components/features/ConsentChecks";
 import { registerWithToken } from "@/lib/actions/invite-tokens";
+import { acceptTerms } from "@/lib/actions/legal";
+import { LEGAL_VERSION } from "@/lib/constants/legal";
 import { authClient } from "@/lib/auth-client";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Loader2 } from "lucide-react";
@@ -17,10 +20,21 @@ export function SignupForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [consent, setConsent] = useState<ConsentState>({ terms: false, healthData: false });
+
+  // The account exists and is signed in by now. If this write fails, the home
+  // screen asks again (src/app/consent), so it never blocks the sign-up.
+  async function recordConsent() {
+    await callAction(acceptTerms({ version: LEGAL_VERSION, ...consent })).catch(() => {});
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim() || !email.trim() || !password) return;
+    if (!consent.terms || !consent.healthData) {
+      setError("Please tick both boxes to create an account.");
+      return;
+    }
 
     setLoading(true);
     setError("");
@@ -37,6 +51,7 @@ export function SignupForm() {
         password,
       });
       // Account was created; fall back to signing in manually.
+      if (!signInResult.error) await recordConsent();
       window.location.href = signInResult.error ? "/login" : "/";
       return;
     }
@@ -60,6 +75,7 @@ export function SignupForm() {
       return;
     }
 
+    await recordConsent();
     window.location.href = "/";
   }
 
@@ -115,6 +131,8 @@ export function SignupForm() {
           className="w-full rounded-xl border border-border bg-muted px-4 py-3 text-base outline-none focus:ring-2 focus:ring-primary transition-shadow"
         />
       </div>
+
+      <ConsentChecks value={consent} onChange={(v) => { setConsent(v); setError(""); }} />
 
       {error && (
         <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">

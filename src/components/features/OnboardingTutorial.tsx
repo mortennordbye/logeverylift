@@ -4,6 +4,7 @@ import { dismissTutorial } from "@/lib/actions/onboarding";
 import { CheckCircle, ChevronLeft, Dumbbell, LayoutList, Play, RefreshCw, Smartphone } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { LEGAL_PATHS } from "@/lib/constants/legal";
 
 const slides = [
   {
@@ -59,7 +60,7 @@ export function OnboardingTutorial({ defaultShow = false }: { defaultShow?: bool
   }, []);
 
   if (!visible) return null;
-  if (pathname === "/login" || pathname === "/signup") return null;
+  if (pathname === "/login" || pathname === "/signup" || LEGAL_PATHS.includes(pathname)) return null;
 
   async function dismiss() {
     setVisible(false);

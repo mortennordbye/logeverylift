@@ -76,6 +76,38 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** (1) wanting unilateral/bilateral tracking — add a nullable `laterality` enum column to `exercises` (+ optional `program_exercises` override) mirroring the exercise-type plumbing. (2) wanting accurate types — do a one-time pass classifying the seed `EXERCISES` array explicitly (a name/equipment-aware heuristic: single-muscle + cable/machine ⇒ isolation), then a corrective migration `UPDATE` for existing rows.
 - **Touchpoints:** `src/db/schema/exercises.ts`, `src/db/schema/programs.ts`, `src/lib/utils/exercise-type.ts` (`exerciseTypeFromPattern`), `scripts/seed.ts` (`EXERCISES`), `drizzle/0039_nice_supreme_intelligence.sql` (the backfill CASE), `src/components/features/ExercisesClient.tsx`.
 
+## Privacy and legal
+
+### Have a lawyer review the privacy policy and terms
+- **What:** The privacy policy, terms and consent texts were drafted against GDPR, personopplysningsloven and ekomloven, but nobody with legal training has read them.
+- **Why deferred:** Getting a review needs a person and possibly a fee; the drafts were needed now that sign-up is open.
+- **Unblocked by:** A short review by a Norwegian privacy lawyer. Ask specifically about the two open questions below: required health-data consent, and AI consent with free models that may train on requests.
+- **Touchpoints:** `src/app/privacy/page.tsx`, `src/app/terms/page.tsx`, `src/components/features/ConsentChecks.tsx`, `src/components/features/AiConsentSheet.tsx`, `docs/privacy/data-inventory.md`.
+
+### Health-data consent is required to sign up
+- **What:** Sign-up needs both boxes ticked, including explicit consent to health data (Art. 9(2)(a)). GDPR Art. 7(4) is wary of consent made a condition of a service. The argument is that a training log can't work without training data, but body weight, readiness and heart rate are optional features.
+- **Why deferred:** Letting people decline would mean hiding or disabling every body-data field (profile, weight history, readiness, HR zones, notes) for them, a large change for an uncertain gain.
+- **Unblocked by:** The lawyer review above. If it says consent must be optional, add a `healthConsentAt`-gated mode that hides those fields, and make the second box optional.
+- **Touchpoints:** `src/lib/actions/legal.ts` (`acceptTerms`), `src/components/features/ConsentChecks.tsx`, `src/components/features/AccountClient.tsx`.
+
+### AI editing on free models that may keep requests
+- **What:** AI Setup uses free OpenRouter models whose providers may store and train on requests, possibly outside the EEA. This is covered by an explicit opt-in that says so, but a no-training route would be cleaner. OpenRouter can exclude training providers per request (`provider.data_collection: "deny"`), which may leave no free model available.
+- **Why deferred:** Testing it needs the production OpenRouter key, and a paid, zero-retention model costs money.
+- **Unblocked by:** Trying `data_collection: "deny"` against the enabled free models. If they still answer, set it in `callOpenRouter` and soften the consent text and policy. Otherwise decide whether to pay for a no-training model.
+- **Touchpoints:** `src/lib/llm.ts` (`callOpenRouter`), `src/components/features/AiConsentSheet.tsx`, `src/app/privacy/page.tsx`.
+
+### Retention for inactive accounts
+- **What:** Accounts and their data are kept until the user deletes them, however long they stay unused. Storage limitation (Art. 5(1)(e)) favours deleting long-inactive accounts.
+- **Why deferred:** The app can't send email, so it can't warn someone before deleting their account, and silently deleting training history is worse than keeping it.
+- **Unblocked by:** Email sending. Then warn after, say, 24 months without a login and delete 30 days later; add the rule to the policy and the inventory.
+- **Touchpoints:** `docs/privacy/data-inventory.md`, `src/lib/account-data.ts`.
+
+### Short DPIA
+- **What:** A data protection impact assessment for health data processing. At this scale it is likely not mandatory, but Datatilsynet's list puts health data and new technology (AI) close to the line.
+- **Why deferred:** Needs the lawyer review's answer on whether it is required.
+- **Unblocked by:** The review. If required or wanted, write it to `docs/privacy/dpia.md` from the inventory.
+- **Touchpoints:** `docs/privacy/data-inventory.md`.
+
 ## Smart-progression UX (deferred long-term)
 
 ### Skip suggestion compute for completed sets

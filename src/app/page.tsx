@@ -8,9 +8,11 @@ import { getPendingCheckin } from "@/lib/actions/ai-checkin";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/actions/workout-sets";
+import { needsTermsConsent } from "@/lib/consent";
 import { parseDateStr } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { Suspense } from "react";
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -42,7 +44,10 @@ function getThisWeekDates(): string[] {
 }
 
 export default async function Home() {
-  await requireSession();
+  const session = await requireSession();
+  // New accounts and anyone behind on the terms accept them first. Asked here,
+  // not on every route, so it never interrupts a workout in progress.
+  if (await needsTermsConsent(session)) redirect("/consent");
 
   // Failsafe: close out any workout left open for >10h before rendering.
   await closeStaleOpenSessions();

@@ -166,6 +166,7 @@ const inserts: { table: unknown; values: Record<string, unknown> }[] = [];
 const updates: { table: unknown; values: Record<string, unknown> }[] = [];
 const callModel = vi.fn();
 let role = "user";
+let aiConsentAt: Date | null = new Date();
 
 function query(table: unknown) {
   const result = Promise.resolve(rows.get(table) ?? []);
@@ -174,7 +175,7 @@ function query(table: unknown) {
 
 vi.mock("@/db", () => ({
   db: {
-    query: { users: { findFirst: async () => ({ id: "u1", birthYear: 1995, gender: "male", goals: '["strength"]', experienceLevel: "beginner", weightKg: 80 }) } },
+    query: { users: { findFirst: async () => ({ id: "u1", birthYear: 1995, gender: "male", goals: '["strength"]', experienceLevel: "beginner", weightKg: 80, aiConsentAt }) } },
     select: () => ({
       from: (table: unknown) => {
         const chain = { innerJoin: () => chain, where: () => query(table) };
@@ -228,6 +229,7 @@ beforeEach(() => {
   updates.length = 0;
   callModel.mockReset();
   role = "user";
+  aiConsentAt = new Date();
 });
 
 describe("editPlanWithAi", () => {
@@ -278,6 +280,20 @@ describe("editPlanWithAi", () => {
     callModel.mockResolvedValue({ ok: true, text: JSON.stringify(swapped()), truncated: false });
     const result = await editPlanWithAi(request);
     expect(result.success).toBe(true);
+  });
+
+  it("calls no model without the user's AI opt-in", async () => {
+    aiConsentAt = null;
+    const result = await editPlanWithAi(request);
+    expect(result).toEqual({ success: false, error: "Turn on AI editing first." });
+    expect(callModel).not.toHaveBeenCalled();
+  });
+
+  it("never calls the free Gemini API, which Google doesn't allow for EEA users", async () => {
+    rows.set(aiModelConfigs, [{ modelId: "gemini-2.5-flash", label: "Gemini", provider: "google" }]);
+    const result = await editPlanWithAi(request);
+    expect(result).toEqual({ success: false, error: "No free AI models are enabled. Ask an admin to enable one." });
+    expect(callModel).not.toHaveBeenCalled();
   });
 
   it("never calls a model that isn't free", async () => {

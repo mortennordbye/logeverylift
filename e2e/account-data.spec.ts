@@ -1,4 +1,5 @@
 import { users } from "../src/db/schema";
+import { LEGAL_VERSION } from "../src/lib/constants/legal";
 import { eq } from "drizzle-orm";
 import { readFile } from "node:fs/promises";
 import { expect, test } from "./fixtures/test";
@@ -20,7 +21,15 @@ test("a new user can download their data and delete their account", async ({ pag
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
   await page.getByRole("button", { name: "Create Account" }).click();
+  await expect(page.getByText("Please tick both boxes to create an account.")).toBeVisible();
+  await page.getByRole("checkbox", { name: /I accept the terms of use/ }).check();
+  await page.getByRole("checkbox", { name: /I consent to LogEveryLift storing/ }).check();
+  await page.getByRole("button", { name: "Create Account" }).click();
+  // Consent was recorded with the sign-up, so home doesn't ask again.
   await page.waitForURL((url) => url.pathname === "/");
+  const [created] = await testDb().select().from(users).where(eq(users.email, email));
+  expect(created.termsVersion).toBe(LEGAL_VERSION);
+  expect(created.healthConsentAt).not.toBeNull();
   // A new account opens on the tutorial; dismiss it the way the e2e accounts are.
   await testDb().update(users).set({ tutorialDismissedAt: new Date() }).where(eq(users.email, email));
 

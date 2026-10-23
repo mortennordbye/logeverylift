@@ -6,6 +6,7 @@ import { Dumbbell, MoreHorizontal, RefreshCw, LayoutList } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { LEGAL_PATHS } from "@/lib/constants/legal";
 
 const staticNavItems = [
   {
@@ -58,7 +59,7 @@ export function BottomNav() {
     return subscribeAiGenerating(check);
   }, []);
 
-  if (pathname === "/login" || pathname === "/signup" || pathname === "/welcome") return null;
+  if (pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname)) return null;
 
   const isActive = (label: string, href: string) => {
     if (label === "Workout") {

@@ -1,6 +1,8 @@
 # Authentication
 
-LogEveryLift uses [Better Auth](https://www.better-auth.com/) with email + password. There is no public sign-up — an admin creates all accounts and distributes credentials to users. Sessions last 30 days and refresh automatically on activity.
+LogEveryLift uses [Better Auth](https://www.better-auth.com/) with email + password. Sign-up is open to anyone at `/signup` (rate limited per IP and site-wide in `src/app/api/auth/[...all]/route.ts`); invite links still work and admins can also create accounts. Sessions last 30 days and refresh automatically on activity.
+
+Signing up requires accepting the terms and giving explicit consent to health data, recorded on the user row (`termsVersion`, `termsAcceptedAt`, `healthConsentAt`). The home screen sends anyone behind on `LEGAL_VERSION` to `/consent`. See `docs/privacy/data-inventory.md`.
 
 ---
 
@@ -128,8 +130,9 @@ docker-compose exec app pnpm db:seed-fake --force
 
 ## Security notes
 
-- Passwords are hashed by Better Auth (bcrypt) — they are never stored in plain text
+- Passwords are hashed by Better Auth (scrypt) — they are never stored in plain text
 - Sessions are stored in the `session` table and validated server-side on every request
 - Middleware performs a fast cookie-presence check at the edge; Server Components call `requireSession()` for full cryptographic verification
 - Mutation Server Actions resolve `userId` from the session internally — clients cannot pass a user ID to act on behalf of another user
-- Admins cannot delete their own account via the UI to prevent accidental lockout
+- Any user, admins included, can delete their own account from Account (Better Auth `deleteUser`, password required). The demo account can't be deleted that way. If the `ADMIN_EMAIL` account is deleted, the next boot recreates it from `ADMIN_EMAIL`/`ADMIN_PASSWORD`
+- Before any user row is deleted (self-service or admin `removeUser`), `handOverSharedCustomExercises` gives their custom exercises that others still use to one of those users, so the cascade doesn't delete other people's sets

@@ -16,6 +16,7 @@ import { execFileSync } from "node:child_process";
 import pg from "pg";
 import { e2eUser } from "./lib/e2e-accounts";
 import { assertTestDatabase } from "./lib/test-database";
+import { LEGAL_VERSION } from "../src/lib/constants/legal";
 
 async function main() {
   const url = assertTestDatabase(process.env.DATABASE_URL);
@@ -48,6 +49,21 @@ async function main() {
       stdio: "inherit",
       env: { ...process.env, E2E_USER_EMAIL: email, E2E_USER_PASSWORD: password },
     });
+  }
+
+  // Accounts created before the consent columns existed are kept, so record
+  // the current terms on all of them; otherwise login lands on /consent.
+  const db = new pg.Client({ connectionString: url.toString() });
+  await db.connect();
+  try {
+    const emails = Array.from({ length: workers }, (_, i) => e2eUser(i).email);
+    await db.query(
+      `UPDATE "user" SET terms_version = $1, terms_accepted_at = now(), health_consent_at = now()
+       WHERE email = ANY($2)`,
+      [LEGAL_VERSION, emails],
+    );
+  } finally {
+    await db.end();
   }
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { AiConsentSheet } from "@/components/features/AiConsentSheet";
 import { McpConnectCard } from "@/components/features/McpConnectCard";
 import { recordAiSetupImport, type RevisionStart } from "@/lib/actions/ai-checkin";
 import { editPlanWithAi } from "@/lib/actions/ai-generate";
@@ -293,11 +294,15 @@ type Props = {
   mcpEndpoint: string;
   /** Set when opened from a check-in answered "doesn't fit". */
   revision: RevisionStart | null;
+  /** Whether the user has opted in to sending requests to outside models. */
+  aiConsented: boolean;
 };
 
 type View = "picks" | "preview" | "editing" | "waiting" | "importing";
 
-export function AiSetupClient({ exercises, userProfile, generationsToday, dailyLimit, prs, existingProgramNames, mcpEndpoint, revision }: Props) {
+export function AiSetupClient({ exercises, userProfile, generationsToday, dailyLimit, prs, existingProgramNames, mcpEndpoint, revision, aiConsented: initialAiConsented }: Props) {
+  const [aiConsented, setAiConsented] = useState(initialAiConsented);
+  const [showAiConsent, setShowAiConsent] = useState(false);
   const router = useRouter();
 
   // Manual flow state
@@ -501,8 +506,12 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     setView("preview");
   }
 
-  async function handleEdit() {
+  async function handleEdit(consented = aiConsented) {
     if (view === "editing") return;
+    if (!consented) {
+      setShowAiConsent(true);
+      return;
+    }
     const sent = picks();
     const request = { chips, text: editText };
     setView("editing");
@@ -891,7 +900,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
             </p>
             <button
               type="button"
-              onClick={handleEdit}
+              onClick={() => handleEdit()}
               disabled={!canEdit}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-muted text-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
             >
@@ -1005,7 +1014,8 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
               Step 1 — Copy the prompt
             </p>
             <p className="text-sm text-muted-foreground">
-              Tap the button below to copy a ready-made prompt to your clipboard.
+              Tap the button below to copy a ready-made prompt to your clipboard. It includes your age, height,
+              body weight and best lifts, and goes only to the AI you paste it into.
             </p>
             <button
               type="button"
@@ -1082,6 +1092,15 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
         </>
       )}
       <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
+      <AiConsentSheet
+        open={showAiConsent}
+        onClose={() => setShowAiConsent(false)}
+        onAccept={() => {
+          setAiConsented(true);
+          setShowAiConsent(false);
+          void handleEdit(true);
+        }}
+      />
     </div>
   );
 }

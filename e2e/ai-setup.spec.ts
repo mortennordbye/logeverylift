@@ -161,3 +161,23 @@ test("restores an AI edit that failed after the user left, request intact", asyn
   await expect(page.getByRole("radiogroup", { name: "Goal" }).getByRole("radio", { name: "Strength" })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByRole("radiogroup", { name: "Experience" }).getByRole("radio", { name: "Advanced" })).toHaveAttribute("aria-checked", "true");
 });
+
+test("asks for consent before the first AI edit, and sends nothing on cancel", async ({ page }) => {
+  await openAiSetup(page);
+  const edit = page.getByRole("button", { name: "Edit with AI" });
+  await expect(async () => {
+    await page.getByRole("button", { name: "Build my plan" }).click();
+    await expect(edit).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
+  await page.getByRole("group", { name: "Changes" }).getByRole("button", { name: "Swap exercises I name" }).click();
+  await page.getByPlaceholder(/Which exercises\?/).fill("no lunges");
+
+  await edit.click();
+  const sheet = page.getByRole("heading", { name: "Turn on AI editing?" });
+  await expect(sheet).toBeVisible();
+  await expect(page.getByText(/OpenRouter/)).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await expect(sheet).toBeHidden();
+  // Still on the preview, nothing in flight.
+  await expect(edit).toBeEnabled();
+});
