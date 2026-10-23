@@ -8,6 +8,8 @@ import { Suspense, useState } from "react";
 
 function LoginFormContent() {
   const searchParams = useSearchParams();
+  // Embedded on /welcome, which an invite link opens with ?token=...
+  const inviteToken = searchParams.get("token")?.trim() ?? "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -108,7 +110,10 @@ function LoginFormContent() {
 
       <p className="text-center text-sm text-muted-foreground">
         New here?{" "}
-        <Link href="/signup" className="text-primary font-medium">
+        <Link
+          href={inviteToken ? `/signup?token=${encodeURIComponent(inviteToken)}` : "/signup"}
+          className="text-primary font-medium"
+        >
           Create account
         </Link>
       </p>
