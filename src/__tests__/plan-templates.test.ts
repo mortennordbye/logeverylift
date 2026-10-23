@@ -216,10 +216,47 @@ describe("buildTemplatePlan — session length, split and avoid areas", () => {
     }
   });
 
-  it("adds a set to accessory and isolation work in 90-minute sessions", () => {
-    const curl = (p: TemplateParams) =>
-      buildTemplatePlan(p, athlete).programs[0].exercises.find((e) => e.name === "Dumbbell Curl")!.sets.length;
-    expect(curl({ ...base, sessionMinutes: 90 })).toBe(curl(base) + 1);
+  it("fills a session up to its length with a full gym", () => {
+    const failures: string[] = [];
+    for (const p of combos.filter((c) => c.equipment === "full_gym")) {
+      for (const [sessionMinutes, share] of [[45, 0.85], [60, 0.75]] as const) {
+        for (const program of buildTemplatePlan({ ...p, sessionMinutes }, athlete).programs) {
+          const minutes = estimateSessionMinutes(program.exercises);
+          if (minutes < sessionMinutes * share) {
+            failures.push(`${p.goal}/${p.level}/${p.daysPerWeek}d/${sessionMinutes}min ${program.name}: ${minutes.toFixed(1)} min`);
+          }
+        }
+      }
+    }
+    expect(failures.slice(0, 10)).toEqual([]);
+  });
+
+  it("builds longer sessions for a longer pick", () => {
+    for (const p of combos) {
+      const total = (sessionMinutes: TemplateParams["sessionMinutes"]) =>
+        buildTemplatePlan({ ...p, sessionMinutes }, athlete).programs.reduce((sum, prog) => sum + estimateSessionMinutes(prog.exercises), 0);
+      expect(total(45)).toBeGreaterThan(total(30));
+      expect(total(60)).toBeGreaterThan(total(45));
+      expect(total(90)).toBeGreaterThanOrEqual(total(60));
+    }
+  });
+
+  it("gives an hour-long general fitness plan about an hour per session", () => {
+    const plan = buildTemplatePlan(
+      { goal: "general_fitness", level: "beginner", daysPerWeek: 3, equipment: "full_gym", weeks: 8, sessionMinutes: 60 },
+      athlete,
+    );
+    for (const program of plan.programs) {
+      expect(estimateSessionMinutes(program.exercises)).toBeGreaterThanOrEqual(51);
+      expect(estimateSessionMinutes(program.exercises)).toBeLessThanOrEqual(60);
+    }
+  });
+
+  it("trains on the weekdays the athlete chose, in the split's order", () => {
+    const slots = (p: TemplateParams) => buildTemplatePlan(p, athlete).cycle!.slots.map((s) => [s.prog, s.day]);
+    expect(slots({ ...base, daysPerWeek: 3, split: "ppl", weekdays: [6, 2, 4] })).toEqual([["Push", 2], ["Pull", 4], ["Legs", 6]]);
+    expect(slots({ ...base, daysPerWeek: 3, split: "ppl" })).toEqual([["Push", 1], ["Pull", 3], ["Legs", 5]]);
+    expect(slots({ ...base, weekdays: [1, 3, 6, 7] }).map(([, d]) => d)).toEqual([1, 3, 6, 7]);
   });
 
   it("drops cheap work before touching the main lifts", () => {

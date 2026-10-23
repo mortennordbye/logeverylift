@@ -44,7 +44,7 @@ type Outcome = { model: string; kind: "edit" | "repair"; mode: OutputMode; secon
 function check(text: string): { valid: boolean; issues: string[] } {
   const result = validatePlan(parsePlanText(text), { daysPerWeek: SMOKE_PICKS.daysPerWeek, cycleDurationWeeks: SMOKE_PICKS.weeks });
   if (!result.ok) return { valid: false, issues: result.issues };
-  const issues = checkEdit(result.plan, SMOKE_PICKS.equipment);
+  const issues = checkEdit(result.plan, SMOKE_PICKS);
   return { valid: issues.length === 0, issues };
 }
 

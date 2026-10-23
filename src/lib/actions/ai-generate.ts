@@ -229,7 +229,7 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
           model,
           buildMessages,
           constraints,
-          (plan) => checkEdit(plan, picks.equipment),
+          (plan) => checkEdit(plan, picks),
           deadline,
         );
         if ("plan" in attempt) {

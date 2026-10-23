@@ -39,7 +39,7 @@ describe("recorded model responses", () => {
       daysPerWeek: fixture.picks.daysPerWeek,
       cycleDurationWeeks: fixture.picks.weeks,
     });
-    const issues = result.ok ? checkEdit(result.plan, fixture.picks.equipment) : result.issues;
+    const issues = result.ok ? checkEdit(result.plan, fixture.picks) : result.issues;
     expect(issues.length === 0).toBe(fixture.valid);
   });
 
@@ -54,7 +54,11 @@ describe("recorded model responses", () => {
       if (fixture.kind === "repair") {
         expect(after).toEqual(before);
       } else {
-        expect(after.slice(0, -1)).toEqual(before);
+        // The finisher goes last. A full session (at the exercise cap or the
+        // time limit) may give up one exercise to make room, nothing else.
+        const kept = after.slice(0, -1);
+        expect(before.filter((name) => kept.includes(name))).toEqual(kept);
+        expect(kept.length).toBeGreaterThanOrEqual(before.length - 1);
         expect(program.exercises.at(-1)!.sets[0].durSec).toBeGreaterThanOrEqual(300);
       }
     });

@@ -10,11 +10,16 @@ export async function OnboardingTutorialLoader() {
 
   const user = await db.query.users.findFirst({
     where: eq(users.id, session.user.id),
-    columns: { createdAt: true, tutorialDismissedAt: true },
+    columns: { createdAt: true, tutorialDismissedAt: true, heightCm: true, weightKg: true, birthYear: true },
   });
   if (!user) return null;
 
   const defaultShow = !user.tutorialDismissedAt;
 
-  return <OnboardingTutorial defaultShow={defaultShow} />;
+  return (
+    <OnboardingTutorial
+      defaultShow={defaultShow}
+      profile={{ heightCm: user.heightCm, weightKg: user.weightKg, birthYear: user.birthYear }}
+    />
+  );
 }
