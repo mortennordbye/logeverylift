@@ -1,0 +1,189 @@
+{
+  "name": "Good Morning",
+  "primary": "hamstrings",
+  "secondary": [
+    "glutes",
+    "lower_back"
+  ],
+  "cue": "Push your hips back with soft knees and keep your back flat. Stop when your hamstrings are tight, not when your back starts to round.",
+  "phases": [
+    "Hinge",
+    "Stand"
+  ],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        58,
+        2
+      ],
+      "neck": [
+        125,
+        82,
+        0
+      ],
+      "chest": [
+        125,
+        120,
+        1
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        103,
+        88,
+        -10
+      ],
+      "rShoulder": [
+        147,
+        88,
+        -10
+      ],
+      "lElbow": [
+        88,
+        126,
+        -32
+      ],
+      "rElbow": [
+        162,
+        126,
+        -32
+      ],
+      "lWrist": [
+        84,
+        88,
+        -12
+      ],
+      "rWrist": [
+        166,
+        88,
+        -12
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        110,
+        220,
+        4
+      ],
+      "rKnee": [
+        140,
+        220,
+        4
+      ],
+      "lAnkle": [
+        108,
+        278,
+        -1
+      ],
+      "rAnkle": [
+        142,
+        278,
+        -1
+      ],
+      "lToe": [
+        105,
+        284,
+        19
+      ],
+      "rToe": [
+        145,
+        284,
+        19
+      ]
+    },
+    {
+      "head": [
+        125,
+        113,
+        53
+      ],
+      "neck": [
+        125,
+        126,
+        33
+      ],
+      "chest": [
+        125,
+        148,
+        3
+      ],
+      "pelvis": [
+        125,
+        171,
+        -30
+      ],
+      "lShoulder": [
+        103,
+        120,
+        24
+      ],
+      "rShoulder": [
+        147,
+        120,
+        24
+      ],
+      "lElbow": [
+        83,
+        142,
+        -10
+      ],
+      "rElbow": [
+        167,
+        142,
+        -10
+      ],
+      "lWrist": [
+        84,
+        120,
+        24
+      ],
+      "rWrist": [
+        166,
+        120,
+        24
+      ],
+      "lHip": [
+        113,
+        173,
+        -30
+      ],
+      "rHip": [
+        137,
+        173,
+        -30
+      ],
+      "lKnee": [
+        110,
+        222,
+        4
+      ],
+      "rKnee": [
+        140,
+        222,
+        4
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "barbell",
+      "at": [
+        "lShoulder",
+        "rShoulder"
+      ]
+    }
+  ]
+}

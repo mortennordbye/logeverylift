@@ -1,0 +1,29 @@
+{
+  "name": "Front Squat",
+  "primary": "quads",
+  "secondary": ["glutes", "abs", "lower_back"],
+  "cue": "Keep your elbows high so the bar stays on your shoulders. Stay upright and sit straight down between your heels.",
+  "phases": ["Squat", "Stand"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 3], "neck": [125, 82, 1], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, 4], "rShoulder": [147, 88, 4],
+      "lElbow": [98, 96, 48], "rElbow": [152, 96, 48],
+      "lWrist": [96, 81, 9], "rWrist": [154, 81, 9],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [108, 222, 1], "rKnee": [142, 222, 1],
+      "lAnkle": [105, 278, -1], "rAnkle": [145, 278, -1],
+      "lToe": [100, 284, 19], "rToe": [150, 284, 19]
+    },
+    {
+      "head": [125, 143, 16], "neck": [125, 167, 8], "chest": [125, 202, -8], "pelvis": [125, 238, -25],
+      "lShoulder": [103, 172, 8], "rShoulder": [147, 172, 8],
+      "lElbow": [98, 180, 52], "rElbow": [152, 180, 52],
+      "lWrist": [96, 165, 13], "rWrist": [154, 165, 13],
+      "lHip": [113, 240, -25], "rHip": [137, 240, -25],
+      "lKnee": [98, 235, 35], "rKnee": [152, 235, 35]
+    }
+  ],
+  "props": [{ "type": "barbell", "at": ["lShoulder", "rShoulder"], "layer": "front" }]
+}

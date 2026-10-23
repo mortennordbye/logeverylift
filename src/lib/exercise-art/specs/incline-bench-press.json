@@ -1,0 +1,19 @@
+{
+  "name": "Incline Bench Press",
+  "primary": "chest",
+  "secondary": ["shoulders", "triceps"],
+  "cue": "Lower the bar to your upper chest, just below the collarbones, with your elbows tucked in a little. Press it back up over your shoulders, not out toward your face.",
+  "phases": ["Lower", "Press"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    { "head": [125, 160.5, -68.1], "neck": [125, 175.9, -49.7], "chest": [125, 200.3, -20.6], "pelvis": [125, 226, 10], "lShoulder": [102, 175.9, -49.7], "rShoulder": [148, 175.9, -49.7], "lElbow": [90, 133, -49], "rElbow": [160, 133, -49], "lWrist": [80, 91, -48], "rWrist": [170, 91, -48], "lHip": [113, 226, 10], "rHip": [137, 226, 10], "lKnee": [106, 228, 70], "rKnee": [144, 228, 70], "lAnkle": [98, 279, 47], "rAnkle": [152, 279, 47], "lToe": [97, 284, 67], "rToe": [153, 284, 67] },
+    { "lElbow": [72, 209, -30], "rElbow": [178, 209, -30], "lWrist": [80, 168, -30], "rWrist": [170, 168, -30] }
+  ],
+  "props": [
+    { "type": "barbell" },
+    { "type": "bench", "y": 240, "z1": -5, "z2": 40, "width": 44 },
+    { "type": "incline", "from": [237, 0], "to": [166, -85], "width": 40 }
+  ]
+}

@@ -114,7 +114,10 @@ shins back as if kneeling. Make the bar readable in the side view.
 clearly above the knees, the back is flat at about 30 to 45 degrees above
 horizontal, and the shins are close to vertical. Hips level with the knees
 and a flat back read as a squat; agents got this wrong three times on the
-deadlift. Check the angles with `--joints`, not by eye.
+deadlift. Check the angles with `--joints`, not by eye. A bar on the back
+(good morning) cannot sit over mid-foot at the bottom with soft knees: the
+skeleton's torso puts it near the toes. Keep the knee at about 140° and accept
+that; chasing mid-foot bent the knees into a half squat in batch 3.
 
 **Supported on the hands** (dip, and the top of anything pressed up on
 bars): at lockout the shoulders sit over the hands and the torso is close to
