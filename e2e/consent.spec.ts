@@ -35,3 +35,15 @@ test("the privacy policy and terms are readable signed out", async ({ browser })
   }
   await context.close();
 });
+
+// Before React hydrates, a tap on Sign In is a native form submit. Without
+// method="post" that is a GET with the password in the URL, where Cloudflare,
+// the server log and browser history keep it.
+test("the server-rendered login form posts rather than gets", async ({ playwright, baseURL }) => {
+  const request = await playwright.request.newContext({ baseURL, storageState: { cookies: [], origins: [] } });
+  const html = await (await request.get("/login")).text();
+  await request.dispose();
+  const forms = html.match(/<form[^>]*>/g) ?? [];
+  expect(forms.length).toBeGreaterThan(0);
+  for (const form of forms) expect(form).toMatch(/method="post"/);
+});
