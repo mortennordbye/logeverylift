@@ -144,7 +144,7 @@ export function FriendSearchClient() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <input
             type="text"
-            placeholder="Search by name or email"
+            placeholder="Search by name or full email"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             autoFocus
@@ -168,7 +168,6 @@ export function FriendSearchClient() {
                     <p className="font-medium truncate">{user.name}</p>
                     {user.invitedByFounder && <InvitedBadge compact />}
                   </div>
-                  <p className="text-sm text-muted-foreground truncate">{user.email}</p>
                 </div>
                 <ActionButton
                   user={user}
@@ -183,14 +182,14 @@ export function FriendSearchClient() {
         {!loading && query.trim().length > 0 && results.length === 0 && (
           <div className="flex flex-col items-center gap-2 py-16 text-center px-8">
             <p className="font-medium">No users found</p>
-            <p className="text-sm text-muted-foreground">Try a different name or email address.</p>
+            <p className="text-sm text-muted-foreground">Type at least three letters of a name, or their full email address.</p>
           </div>
         )}
 
         {query.trim().length === 0 && (
           <div className="flex flex-col items-center gap-2 py-16 text-center px-8">
             <Search className="w-10 h-10 text-muted-foreground/50" />
-            <p className="text-sm text-muted-foreground">Search for people by name or email to send them a friend request.</p>
+            <p className="text-sm text-muted-foreground">Search for people by name or full email address to send them a friend request.</p>
           </div>
         )}
       </div>

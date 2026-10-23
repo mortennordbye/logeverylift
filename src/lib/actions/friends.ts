@@ -57,25 +57,29 @@ export async function searchUsers(query: unknown): Promise<ActionResult<UserSear
   }
 
   try {
-    const pattern = `%${parsed.data.query}%`;
+    const { query: q } = parsed.data;
     const me = session.user.id;
+
+    // An email only matches in full, and a name needs three characters, so the
+    // search can't be used to walk the user list or harvest addresses.
+    const isEmail = q.includes("@");
+    if (!isEmail && q.length < 3) {
+      return { success: true, data: [] };
+    }
+    const match = isEmail
+      ? sql`lower(${users.email}) = ${q.toLowerCase()}`
+      : ilike(users.name, `%${q.replace(/[\\%_]/g, "\\$&")}%`);
 
     // Fetch matching users excluding self
     const matchingUsers = await db
       .select({
         id: users.id,
         name: users.name,
-        email: users.email,
         image: users.image,
         invitedById: users.invitedById,
       })
       .from(users)
-      .where(
-        and(
-          or(ilike(users.name, pattern), ilike(users.email, pattern)),
-          ne(users.id, me),
-        ),
-      )
+      .where(and(match, ne(users.id, me)))
       .limit(20);
 
     if (matchingUsers.length === 0) {

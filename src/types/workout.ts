@@ -309,7 +309,6 @@ export type LeaderboardEntry = {
 export type UserSearchResult = {
   id: string;
   name: string;
-  email: string;
   image: string | null;
   invitedByFounder: boolean;
   friendshipStatus: "none" | "pending_sent" | "pending_received" | "accepted";
