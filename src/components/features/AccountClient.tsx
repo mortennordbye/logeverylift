@@ -1,13 +1,15 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
+import { exportMyData } from "@/lib/actions/account";
 import { updateActivityPrivacy } from "@/lib/actions/friends";
 import { updateUserProfile } from "@/lib/actions/profile";
 import type { Goal } from "@/lib/utils/goals";
 import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { clearLocalUserData, unsyncedChangeCount } from "@/lib/utils/local-data";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { CheckCircle2, KeyRound, LogOut } from "lucide-react";
+import { CheckCircle2, Download, KeyRound, LogOut, Trash2 } from "lucide-react";
 import { useState } from "react";
 
 type Gender = "male" | "female" | "other" | "prefer_not_to_say";
@@ -195,9 +197,66 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
 
   const [activityPrivacy, setActivityPrivacy] = useState(initialActivityPrivacy);
 
+  const [signOutWarning, setSignOutWarning] = useState<number | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [showDeleteSheet, setShowDeleteSheet] = useState(false);
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   async function handleSignOut() {
+    // Signing out clears this device, so unsynced sets would be lost: say so
+    // once, and sign out on the second tap.
+    const unsynced = unsyncedChangeCount();
+    if (unsynced > 0 && signOutWarning === null) {
+      setSignOutWarning(unsynced);
+      return;
+    }
     await authClient.signOut();
+    await clearLocalUserData();
     window.location.href = "/login";
+  }
+
+  async function handleExport() {
+    setExporting(true);
+    setExportError(null);
+    const result = await callAction(exportMyData());
+    setExporting(false);
+    if (!result.success) {
+      setExportError(result.error);
+      return;
+    }
+    const url = URL.createObjectURL(new Blob([result.data], { type: "application/json" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `logeverylift-data-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    // Revoking in the same tick cancels the download in some browsers.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function closeDeleteSheet() {
+    setShowDeleteSheet(false);
+    setDeletePassword("");
+    setDeleteConfirm("");
+    setDeleteError(null);
+  }
+
+  async function handleDeleteAccount() {
+    setDeleting(true);
+    setDeleteError(null);
+    const result = await authClient.deleteUser({ password: deletePassword });
+    if (result.error) {
+      setDeleting(false);
+      setDeleteError(result.error.message ?? "Failed to delete account.");
+      return;
+    }
+    await clearLocalUserData();
+    window.location.href = "/welcome";
   }
 
   function closePasswordSheet() {
@@ -393,6 +452,25 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
           </div>
         </div>
 
+        {/* Your data */}
+        <div>
+          <SectionLabel>Your Data</SectionLabel>
+          <div className="rounded-2xl bg-card overflow-hidden">
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 disabled:opacity-50"
+            >
+              <Download className="w-5 h-5 text-muted-foreground" />
+              <div className="flex-1 text-left">
+                <p className="text-sm font-medium">{exporting ? "Preparing…" : "Download My Data"}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Everything stored about you, as a JSON file</p>
+              </div>
+            </button>
+          </div>
+          {exportError && <p className="text-xs text-destructive text-center mt-2">{exportError}</p>}
+        </div>
+
         {/* Sign out */}
         <div>
           <SectionLabel>Session</SectionLabel>
@@ -402,13 +480,86 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
               className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
             >
               <LogOut className="w-5 h-5 text-destructive" />
-              <span className="text-sm font-medium text-destructive">Sign Out</span>
+              <span className="text-sm font-medium text-destructive">
+                {signOutWarning === null ? "Sign Out" : "Sign Out Anyway"}
+              </span>
+            </button>
+          </div>
+          {signOutWarning !== null && (
+            <p className="text-xs text-destructive px-1 mt-2">
+              {signOutWarning === 1 ? "1 change hasn't" : `${signOutWarning} changes haven't`} synced yet and will be
+              lost. Go back online first to keep {signOutWarning === 1 ? "it" : "them"}.
+            </p>
+          )}
+        </div>
+
+        {/* Delete account */}
+        <div>
+          <div className="rounded-2xl bg-card overflow-hidden">
+            <button
+              onClick={() => setShowDeleteSheet(true)}
+              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
+            >
+              <Trash2 className="w-5 h-5 text-destructive" />
+              <span className="text-sm font-medium text-destructive">Delete Account</span>
             </button>
           </div>
         </div>
 
         <div aria-hidden="true" className="pb-nav-safe-lg" style={{ height: "var(--kb-height, 0px)" }} />
       </div>
+
+      {/* Delete Account Sheet */}
+      <BottomSheet open={showDeleteSheet} onClose={closeDeleteSheet} blur>
+        <div className="bg-background rounded-t-2xl flex flex-col" style={{ maxHeight: "80dvh" }}>
+          <div className="flex items-center justify-between px-4 pt-5 pb-4 shrink-0">
+            <h2 className="text-lg font-semibold">Delete Account</h2>
+            <button
+              onClick={closeDeleteSheet}
+              className="text-primary text-sm font-medium min-h-[44px] px-1"
+            >
+              Cancel
+            </button>
+          </div>
+
+          <div className="overflow-y-auto flex flex-col gap-4 px-4 pb-10">
+            <p className="text-sm text-muted-foreground">
+              This permanently deletes your account and everything in it: workouts, sets, programs, cycles, body
+              weight history and friends. It can&apos;t be undone. Download your data first if you want a copy.
+            </p>
+            <div className="flex flex-col gap-3">
+              <input
+                type="password"
+                autoComplete="current-password"
+                placeholder="Password"
+                aria-label="Password"
+                value={deletePassword}
+                onChange={(e) => { setDeletePassword(e.target.value); setDeleteError(null); }}
+                className="w-full rounded-xl bg-muted px-4 py-3.5 text-sm outline-none focus:ring-2 ring-primary"
+              />
+              <input
+                type="text"
+                autoComplete="off"
+                placeholder='Type "DELETE" to confirm'
+                aria-label='Type "DELETE" to confirm'
+                value={deleteConfirm}
+                onChange={(e) => setDeleteConfirm(e.target.value)}
+                className="w-full rounded-xl bg-muted px-4 py-3.5 text-sm outline-none focus:ring-2 ring-primary"
+              />
+            </div>
+
+            {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
+
+            <button
+              onClick={handleDeleteAccount}
+              disabled={deleting || !deletePassword || deleteConfirm !== "DELETE"}
+              className="w-full rounded-xl bg-destructive py-4 text-sm font-semibold text-white disabled:opacity-50 active:opacity-80"
+            >
+              {deleting ? "Deleting…" : "Delete My Account"}
+            </button>
+          </div>
+        </div>
+      </BottomSheet>
 
       {/* Change Password Sheet */}
       <BottomSheet open={showPasswordSheet} onClose={closePasswordSheet} blur>
