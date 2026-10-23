@@ -1,0 +1,27 @@
+{
+  "name": "Cable Lateral Raise",
+  "primary": "shoulders",
+  "secondary": [],
+  "cue": "Raise the handle out to the side and stop at shoulder height. Keep a slight bend in the elbow and do not lean away or shrug.",
+  "phases": ["Raise", "Lower"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, 0], "rShoulder": [147, 88, 0],
+      "lElbow": [100, 134, 0], "rElbow": [141, 133, 12],
+      "lWrist": [98, 175, 2], "rWrist": [124, 170, 24],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [112, 222, 1], "rKnee": [138, 222, 1],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    {
+      "rElbow": [187, 90, 23],
+      "rWrist": [222, 96, 42]
+    }
+  ],
+  "props": [
+    { "type": "cable", "anchor": [40, 282, -20], "at": "rWrist", "layer": "front" }
+  ]
+}

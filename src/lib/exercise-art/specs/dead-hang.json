@@ -1,0 +1,32 @@
+{
+  "name": "Dead Hang",
+  "primary": "forearms",
+  "secondary": ["back", "shoulders"],
+  "cue": "Hang with straight arms and a full grip on the bar. Pull your shoulders down away from your ears instead of sinking into them.",
+  "phases": ["Engage", "Hold"],
+  "anchor": "lWrist",
+  "hold": ["lWrist", "rWrist"],
+  "zoom": 0.75,
+  "keyframes": [
+    {
+      "head": [125, 44, 3], "neck": [125, 68, 0], "chest": [125, 106, 0], "pelvis": [125, 146, 0],
+      "lShoulder": [102.2, 65.2, 0], "rShoulder": [147.8, 65.2, 0],
+      "lElbow": [91.1, 22.6, 0], "rElbow": [158.9, 22.6, 0],
+      "lWrist": [80, -20, 0], "rWrist": [170, -20, 0],
+      "lHip": [113, 146, 0], "rHip": [137, 146, 0],
+      "lKnee": [117, 206, 5], "rKnee": [133, 206, 5],
+      "lAnkle": [121, 261, 0], "rAnkle": [129, 261, 0],
+      "lToe": [121, 276, 14], "rToe": [129, 276, 14]
+    },
+    {
+      "head": [125, 30, 3], "neck": [125, 54, 0], "chest": [125, 92, 0], "pelvis": [125, 132, 0],
+      "lShoulder": [104.5, 64.4, 0], "rShoulder": [145.5, 64.4, 0],
+      "lElbow": [92.25, 22.2, 0], "rElbow": [157.75, 22.2, 0],
+      "lHip": [113, 132, 0], "rHip": [137, 132, 0],
+      "lKnee": [117, 192, 5], "rKnee": [133, 192, 5],
+      "lAnkle": [121, 247, 0], "rAnkle": [129, 247, 0],
+      "lToe": [121, 262, 14], "rToe": [129, 262, 14]
+    }
+  ],
+  "props": [{ "type": "bar", "y": -20, "z": 0, "layer": "front" }]
+}
