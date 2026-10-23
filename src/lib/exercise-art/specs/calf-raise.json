@@ -1,0 +1,48 @@
+{
+  "name": "Calf Raise",
+  "primary": "calves",
+  "secondary": [],
+  "cue": "Let your heels sink below the step for a full stretch, then rise as high as you can onto the balls of your feet. Keep your knees straight and pause at the top instead of bouncing.",
+  "phases": [
+    "Rise",
+    "Lower"
+  ],
+  "anchor": "lToe",
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "head": [125, 37, 3],
+      "neck": [125, 61, 1],
+      "chest": [125, 99, 2],
+      "pelvis": [125, 139, 1],
+      "lShoulder": [103, 67, 1],
+      "rShoulder": [147, 67, 1],
+      "lElbow": [101, 113, 0],
+      "rElbow": [149, 113, 0],
+      "lWrist": [102, 155, 3],
+      "rWrist": [148, 155, 3],
+      "lHip": [113, 141, 1],
+      "rHip": [137, 141, 1],
+      "lKnee": [112, 201, 1],
+      "rKnee": [138, 201, 1],
+      "lAnkle": [112, 257, 0],
+      "rAnkle": [138, 257, 0],
+      "lToe": [110, 248, 19],
+      "rToe": [140, 248, 19]
+    },
+    {
+      "lAnkle": [112, 232, 5],
+      "rAnkle": [138, 232, 5]
+    }
+  ],
+  "props": [
+    {
+      "type": "box",
+      "y": 251,
+      "z1": 12,
+      "z2": 60,
+      "width": 70,
+      "layer": "front"
+    }
+  ]
+}

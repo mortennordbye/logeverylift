@@ -1,0 +1,25 @@
+{
+  "name": "Tricep Pushdown",
+  "primary": "triceps",
+  "secondary": ["forearms"],
+  "cue": "Keep your elbows pinned to your sides and push down until your arms are straight. Do not lean over the handle to move it.",
+  "phases": ["Push", "Return"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 60, 16], "neck": [125, 83, 10], "chest": [125, 121, 5], "pelvis": [125, 160, -2],
+      "lShoulder": [103, 89, 10], "rShoulder": [147, 89, 10],
+      "lElbow": [104, 135, 14], "rElbow": [146, 135, 14],
+      "lWrist": [114, 118, 52], "rWrist": [136, 118, 52],
+      "lHip": [113, 162, -2], "rHip": [137, 162, -2],
+      "lKnee": [112, 222, 2], "rKnee": [138, 222, 2],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    { "lWrist": [110, 177, 20], "rWrist": [140, 177, 20] }
+  ],
+  "props": [
+    { "type": "cable", "anchor": [125, 40, 46], "at": "lWrist", "layer": "front" },
+    { "type": "cable", "anchor": [125, 40, 46], "at": "rWrist", "layer": "front" }
+  ]
+}
