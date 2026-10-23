@@ -4,8 +4,8 @@
  */
 
 import { artSpecSchema, resolveFrames, type Point3 } from "./schema";
-import { poseAt } from "./scene";
-import { CENTER_X, FLOOR_Y, HEAD_RADIUS, JOINTS, TOP_Y, type Joint } from "./skeleton";
+import { poseAt, project, zoomed } from "./scene";
+import { FLOOR_Y, HEAD_RADIUS, JOINTS, type Joint } from "./skeleton";
 
 const dist = (a: Point3, b: Point3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 /** Moments between keyframes the motion checks sample. */
@@ -28,11 +28,14 @@ export function checkSpec(raw: unknown): string[] {
     problems.push(`keyframe ${m.frame}: ${m.joint} is ${m.off.toFixed(0)} from where its bone puts it (${m.parent}-${m.joint} is ${m.length} long); check the joint`);
   }
 
-  const inFrame = ([x, y, z]: Point3, joint: Joint) => {
-    const top = joint === "head" ? y - HEAD_RADIUS : y;
-    const front = spec.camera === "top" ? x >= 25 && x <= 225 && TOP_Y + z >= 36 && TOP_Y + z <= 296 : x >= 25 && x <= 225 && top >= 36;
-    const side = CENTER_X + z >= 25 && CENTER_X + z <= 225 && top >= 36;
-    return front && side;
+  const inFrame = (p: Point3, joint: Joint) => {
+    // The head's top edge, or its near edge seen from above.
+    const r = joint === "head" ? HEAD_RADIUS : 0;
+    const top: Point3 = [p[0], p[1] - r, p[2]];
+    const front = spec.camera === "top" ? zoomed(project(p, "front", "top").at, "front", spec) : zoomed(project(top, "front", "front").at, "front", spec);
+    const [sx, sy] = zoomed(project(top, "side", spec.camera).at, "side", spec);
+    const fits = ([x, y]: [number, number], bottom: boolean) => x >= 25 && x <= 225 && y >= 36 && (!bottom || y <= 296);
+    return fits(front, spec.camera === "top") && fits([sx, sy], false);
   };
   poses.forEach((pose, i) => {
     for (const j of JOINTS) {

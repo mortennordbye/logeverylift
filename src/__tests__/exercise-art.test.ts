@@ -71,6 +71,18 @@ describe("checkSpec", () => {
     expect(checkSpec(spec)).toContain("keyframe 0: missing lKnee");
   });
 
+  it("lets a zoomed-out spec reach past the frame it would leave at full size", () => {
+    // The whole curl moved 100 forward: the side view runs off the right edge,
+    // until zoom shrinks the drawing round the centre of the floor.
+    const spec = structuredClone(read("barbell-curl.json")) as ArtSpec;
+    spec.keyframes = spec.keyframes.map((k) =>
+      Object.fromEntries(Object.entries(k).map(([j, p]) => [j, [p[0], p[1], p[2] + 100]])),
+    );
+    expect(checkSpec(spec)).toEqual(expect.arrayContaining([expect.stringMatching(/is outside the frame/)]));
+    expect(checkSpec({ ...spec, zoom: 0.7 })).toEqual([]);
+    expect(renderSvg(artSpecSchema.parse({ ...spec, zoom: 0.7 }), "side", 0, "t")).toContain("scale(0.7)");
+  });
+
   it("rejects a secondary muscle that repeats the primary", () => {
     expect(checkSpec({ ...curl, secondary: ["biceps"] })).toContain('secondary repeats the primary muscle "biceps"');
   });

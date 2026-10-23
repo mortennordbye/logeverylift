@@ -1,0 +1,43 @@
+{
+  "name": "Pull-up",
+  "primary": "back",
+  "secondary": ["biceps", "forearms"],
+  "cue": "Start from a full hang and pull your elbows down toward your ribs. Get your chin over the bar without kicking your legs.",
+  "phases": ["Pull", "Lower"],
+  "anchor": "lWrist",
+  "hold": ["lWrist", "rWrist"],
+  "zoom": 0.75,
+  "keyframes": [
+    {
+      "head": [125, 48, 3], "neck": [125, 72, 0], "chest": [125, 110, 0], "pelvis": [125, 150, 0],
+      "lShoulder": [105.3, 84.3, 0], "rShoulder": [144.7, 84.3, 0],
+      "lElbow": [92.1, 40.2, 0], "rElbow": [157.9, 40.2, 0],
+      "lWrist": [80, 0, 0], "rWrist": [170, 0, 0],
+      "lHip": [113, 150, 0], "rHip": [137, 150, 0],
+      "lKnee": [117, 210, 5], "rKnee": [133, 210, 5],
+      "lAnkle": [121, 265, 0], "rAnkle": [129, 265, 0],
+      "lToe": [121, 280, 14], "rToe": [129, 280, 14]
+    },
+    {
+      "head": [125, 9, -14], "neck": [125, 32, -6], "chest": [125, 70, -8], "pelvis": [125, 110, -8],
+      "lShoulder": [103, 38.6, -6], "rShoulder": [147, 38.6, -6],
+      "lElbow": [57.2, 35.2, -3], "rElbow": [192.8, 35.2, -3],
+      "lWrist": [80, 0, 0], "rWrist": [170, 0, 0],
+      "lHip": [113, 110, -8], "rHip": [137, 110, -8],
+      "lKnee": [117, 170, -2], "rKnee": [133, 170, -2],
+      "lAnkle": [121, 225, -8], "rAnkle": [129, 225, -8],
+      "lToe": [121, 240, 6], "rToe": [129, 240, 6]
+    },
+    {
+      "head": [125, -28, -8], "neck": [125, -4, -12], "chest": [125, 34, -16], "pelvis": [125, 74, -16],
+      "lShoulder": [103, 2.8, -12], "rShoulder": [147, 2.8, -12],
+      "lElbow": [81.5, 42, -1], "rElbow": [168.5, 42, -1],
+      "lWrist": [80, 0, 0], "rWrist": [170, 0, 0],
+      "lHip": [113, 74, -16], "rHip": [137, 74, -16],
+      "lKnee": [117, 134, -10], "rKnee": [133, 134, -10],
+      "lAnkle": [121, 189, -16], "rAnkle": [129, 189, -16],
+      "lToe": [121, 204, -3], "rToe": [129, 204, -3]
+    }
+  ],
+  "props": [{ "type": "bar", "y": 0, "z": 0, "layer": "front" }]
+}

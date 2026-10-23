@@ -1,0 +1,22 @@
+{
+  "name": "Dumbbell Curl",
+  "primary": "biceps",
+  "secondary": ["forearms"],
+  "cue": "Keep your elbows at your sides and your palms facing up. Lower all the way down without swinging.",
+  "phases": ["Curl", "Lower"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, 0], "rShoulder": [147, 88, 0],
+      "lElbow": [96, 134, -1], "rElbow": [154, 134, -1],
+      "lWrist": [83, 174, 9], "rWrist": [167, 174, 9],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [112, 222, 1], "rKnee": [138, 222, 1],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    { "lWrist": [100, 109, 31], "rWrist": [150, 109, 31] }
+  ],
+  "props": [{ "type": "dumbbell" }]
+}

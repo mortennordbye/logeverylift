@@ -1,0 +1,43 @@
+{
+  "name": "Plank",
+  "primary": "abs",
+  "secondary": ["shoulders", "glutes"],
+  "cue": "Keep one straight line from your head to your heels. Squeeze your glutes so your hips do not sag or pike up.",
+  "phases": ["Brace", "Hold"],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 233, -98.7],
+      "neck": [125, 237, -75],
+      "chest": [125, 243.3, -37.5],
+      "pelvis": [125, 250, 1.9],
+      "lHip": [113, 250, 1.9],
+      "rHip": [137, 250, 1.9],
+      "lKnee": [113, 259.9, 61.1],
+      "rKnee": [137, 259.9, 61.1],
+      "lAnkle": [113, 269.3, 116.3],
+      "rAnkle": [137, 269.3, 116.3],
+      "lToe": [113, 290, 112.8],
+      "rToe": [137, 290, 112.8],
+      "lShoulder": [102, 237, -75],
+      "rShoulder": [148, 237, -75],
+      "lElbow": [102, 283, -75],
+      "rElbow": [148, 283, -75],
+      "lWrist": [111, 283, -116],
+      "rWrist": [139, 283, -116]
+    },
+    {
+      "pelvis": [125, 249, 1.9],
+      "lHip": [113, 249, 1.9],
+      "rHip": [137, 249, 1.9],
+      "lKnee": [113, 259.4, 61.1],
+      "rKnee": [137, 259.4, 61.1],
+      "chest": [125, 243, -37.5],
+      "neck": [125, 237, -75]
+    }
+  ],
+  "props": []
+}
