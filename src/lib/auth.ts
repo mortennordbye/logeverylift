@@ -8,8 +8,11 @@ import {
   users,
   verifications,
 } from "@/db/schema";
+import { handOverSharedCustomExercises } from "@/lib/account-data";
+import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { env, trustedOrigins } from "@/lib/env";
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, mcp } from "better-auth/plugins";
 
@@ -37,6 +40,23 @@ export const auth = betterAuth({
       // Written server-side only (registerWithToken, admin createUser);
       // input: false keeps a public sign-up from claiming an inviter.
       invitedById: { type: "string", required: false, input: false },
+    },
+    // Self-service deletion from Account (POST /api/auth/delete-user). The
+    // client sends the password, which Better Auth checks.
+    deleteUser: {
+      enabled: true,
+      beforeDelete: async (user) => {
+        // Admins impersonate the demo account; it is not anyone's to delete.
+        if (user.email === DEMO_USER_EMAIL) {
+          throw new APIError("FORBIDDEN", { message: "The demo account can't be deleted" });
+        }
+      },
+    },
+  },
+  databaseHooks: {
+    user: {
+      // Runs for both self-deletion and admin removeUser.
+      delete: { before: async (user) => handOverSharedCustomExercises(user.id) },
     },
   },
   session: {

@@ -26,6 +26,14 @@ export async function register() {
   const { registerShutdown } = await import("@/lib/shutdown");
   await registerShutdown();
 
+  // Expired sessions hold an IP address and user agent; drop them at boot and
+  // daily after that.
+  const { purgeExpiredSessions } = await import("@/lib/account-data");
+  const purge = () =>
+    purgeExpiredSessions().catch((err) => console.error("[purgeExpiredSessions] failed", err));
+  void purge();
+  setInterval(purge, 24 * 60 * 60 * 1000).unref();
+
   const adminEmail = env.ADMIN_EMAIL;
   const adminPassword = env.ADMIN_PASSWORD;
   const adminName = env.ADMIN_NAME;
