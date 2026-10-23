@@ -172,7 +172,7 @@ cocked wrist.
 
 | type | fields | drawn as |
 |---|---|---|
-| `barbell` | `at` (default both wrists) | bar along x through the joints' midpoint: plates at the ends (front), a plate (side) |
+| `barbell` | `at` (default both wrists), `cambered` (EZ bar) | bar along x through the joints' midpoint: plates at the ends (front), a plate (side); `cambered` bends the middle into a W with the hands on the angled stretches about 18 either side of centre |
 | `dumbbell` | `at` (default both wrists), `along` `x` (overhand, default), `z` (neutral grip) or `forearm` (neutral grip that stays at right angles to the forearm as it swings: hammer curl) | one dumbbell per joint |
 | `kettlebell` | `at` | one bell hanging below the joints' midpoint |
 | `bench` | `y, z1, z2, width` | pad with its top at y, from z1 to z2, `width` across and always centred on x = 125; legs to the floor |
@@ -212,7 +212,7 @@ The renderer lights a limb when one of its muscles is primary (accent) or
 secondary (dimmed accent). Upper arm: biceps, triceps, shoulders. Forearm:
 forearms. Thigh: quads, hamstrings, glutes. Shin: calves. Side torso: chest and
 back (upper), abs and lower_back (lower), glutes (seat). Front torso: chest
-plate, abs, lats (back) and the shoulder caps. The muscle map next to the
+plate, abs, lats and upper traps (back) and the shoulder caps. The muscle map next to the
 figure (`muscle-map.ts`, preview with `pnpm art map`) uses the same muscles.
 
 ## Words

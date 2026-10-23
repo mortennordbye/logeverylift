@@ -16,8 +16,8 @@ const muscle = z.enum(MUSCLES as [Muscle, ...Muscle[]]);
 const layer = z.enum(["auto", "back", "front"]);
 
 const prop = z.discriminatedUnion("type", [
-  /** Bar along x through the midpoint of the joints (default: the wrists). */
-  z.object({ type: z.literal("barbell"), at: z.array(joint).min(1).optional(), layer: layer.default("auto") }),
+  /** Bar along x through the midpoint of the joints (default: the wrists); `cambered` bends the middle into an EZ bar's W. */
+  z.object({ type: z.literal("barbell"), at: z.array(joint).min(1).optional(), cambered: z.boolean().default(false), layer: layer.default("auto") }),
   /**
    * One dumbbell per joint (default: the wrists); `along` is the handle's axis:
    * x for an overhand grip, z for a neutral one, "forearm" for a neutral grip
