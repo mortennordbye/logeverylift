@@ -13,6 +13,9 @@ test("a new user can download their data and delete their account", async ({ pag
   const password = "correct-horse-battery";
 
   await page.goto("/signup");
+  // Wait for hydration: a tap before it is a native form submit, not the
+  // form's own handler.
+  await page.waitForLoadState("networkidle");
   await page.getByLabel("Name").fill("Delete Me");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);
