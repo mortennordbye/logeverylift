@@ -1,0 +1,28 @@
+{
+  "name": "Straight-Arm Pulldown",
+  "primary": "back",
+  "secondary": ["triceps", "abs"],
+  "cue": "Keep your arms straight and sweep the bar down to your thighs from your shoulders. Do not bend your elbows to turn it into a pushdown.",
+  "phases": ["Pull", "Return"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 64, 14], "neck": [125, 86, 6], "chest": [125, 122, -2], "pelvis": [125, 164.5, -15],
+      "lShoulder": [103, 92, 6], "rShoulder": [147, 92, 6],
+      "lElbow": [105, 69, 46], "rElbow": [145, 69, 46],
+      "lWrist": [107, 48, 82], "rWrist": [143, 48, 82],
+      "lHip": [113, 164.5, -15], "rHip": [137, 164.5, -15],
+      "lKnee": [112, 222.1, 1.9], "rKnee": [138, 222.1, 1.9],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    {
+      "lElbow": [104, 138, 8], "rElbow": [146, 138, 8],
+      "lWrist": [106, 180, 10], "rWrist": [144, 180, 10]
+    }
+  ],
+  "props": [
+    { "type": "cable", "anchor": [125, 38, 100], "at": "lWrist", "layer": "front" },
+    { "type": "cable", "anchor": [125, 38, 100], "at": "rWrist", "layer": "front" }
+  ]
+}

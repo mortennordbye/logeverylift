@@ -1,0 +1,173 @@
+{
+  "name": "Cable Crossover",
+  "primary": "chest",
+  "secondary": [
+    "shoulders"
+  ],
+  "cue": "Keep a soft, fixed bend in your elbows and bring your hands together in a wide arc in front of your hips. Do not turn it into a press by bending your arms.",
+  "phases": [
+    "Squeeze",
+    "Return"
+  ],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        62,
+        16
+      ],
+      "neck": [
+        125,
+        85,
+        16
+      ],
+      "chest": [
+        125,
+        122,
+        8
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        103,
+        90,
+        16
+      ],
+      "rShoulder": [
+        147,
+        90,
+        16
+      ],
+      "lElbow": [
+        64,
+        98,
+        30
+      ],
+      "rElbow": [
+        186,
+        98,
+        30
+      ],
+      "lWrist": [
+        36,
+        105,
+        60
+      ],
+      "rWrist": [
+        214,
+        105,
+        60
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        112,
+        222,
+        2
+      ],
+      "rKnee": [
+        138,
+        222,
+        2
+      ],
+      "lAnkle": [
+        112,
+        278,
+        -1
+      ],
+      "rAnkle": [
+        138,
+        278,
+        -1
+      ],
+      "lToe": [
+        110,
+        284,
+        19
+      ],
+      "rToe": [
+        140,
+        284,
+        19
+      ]
+    },
+    {
+      "lElbow": [
+        74,
+        110,
+        48
+      ],
+      "rElbow": [
+        176,
+        110,
+        48
+      ],
+      "lWrist": [
+        66,
+        128,
+        88
+      ],
+      "rWrist": [
+        184,
+        128,
+        88
+      ]
+    },
+    {
+      "lElbow": [
+        88,
+        122,
+        44
+      ],
+      "rElbow": [
+        162,
+        122,
+        44
+      ],
+      "lWrist": [
+        118,
+        145,
+        66
+      ],
+      "rWrist": [
+        132,
+        145,
+        66
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "cable",
+      "anchor": [
+        25,
+        38,
+        36
+      ],
+      "at": "lWrist",
+      "layer": "front"
+    },
+    {
+      "type": "cable",
+      "anchor": [
+        225,
+        38,
+        36
+      ],
+      "at": "rWrist",
+      "layer": "front"
+    }
+  ]
+}

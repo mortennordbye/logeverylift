@@ -1,0 +1,43 @@
+{
+  "name": "Reverse Lunge",
+  "primary": "glutes",
+  "secondary": ["quads", "hamstrings"],
+  "cue": "Step back far enough that your front shin stays close to vertical. Drive through your front heel to stand back up.",
+  "phases": ["Step back", "Stand"],
+  "anchor": "lAnkle",
+  "hold": ["lAnkle"],
+  "keyframes": [
+    {
+      "head": [125, 58, 48], "neck": [125, 82, 46], "chest": [125, 120, 47], "pelvis": [125, 160, 46],
+      "lShoulder": [103, 88, 46], "rShoulder": [147, 88, 46],
+      "lElbow": [101, 134, 44], "rElbow": [149, 134, 44],
+      "lWrist": [100, 176, 48], "rWrist": [150, 176, 48],
+      "lHip": [113, 162, 46], "rHip": [137, 162, 46],
+      "lKnee": [112, 222, 47], "rKnee": [138, 222, 47],
+      "lAnkle": [112, 278, 45], "rAnkle": [138, 278, 45],
+      "lToe": [110, 284, 65], "rToe": [140, 284, 65]
+    },
+    {
+      "rKnee": [138, 216.4, 71.4], "rAnkle": [139, 261.2, 37.8], "rToe": [140, 273.8, 54.6]
+    },
+    {
+      "pelvis": [125, 180, 22], "chest": [125, 141, 27], "neck": [125, 103, 31], "head": [125, 79, 34],
+      "lShoulder": [103, 109, 31], "rShoulder": [147, 109, 31],
+      "lElbow": [100, 155, 28], "rElbow": [150, 155, 28],
+      "lWrist": [99, 197, 32], "rWrist": [151, 197, 32],
+      "lHip": [113, 182, 22], "rHip": [137, 182, 22],
+      "lKnee": [112, 227, 56], "rKnee": [138, 231, -12],
+      "rAnkle": [139, 256, -62], "rToe": [140, 274, -51]
+    },
+    {
+      "pelvis": [125, 206, -4], "chest": [125, 166, -1], "neck": [125, 128, 2], "head": [125, 104, 4],
+      "lShoulder": [103, 134, 2], "rShoulder": [147, 134, 2],
+      "lElbow": [99, 180, 0], "rElbow": [151, 180, 0],
+      "lWrist": [97, 222, 4], "rWrist": [153, 222, 4],
+      "lHip": [113, 208, -4], "rHip": [137, 208, -4],
+      "lKnee": [111, 222, 52], "rKnee": [139, 265.5, -16.3],
+      "rAnkle": [140, 272, -71], "rToe": [141, 286, -56]
+    }
+  ],
+  "props": []
+}

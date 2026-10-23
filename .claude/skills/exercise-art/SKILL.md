@@ -119,6 +119,10 @@ deadlift. Check the angles with `--joints`, not by eye. A bar on the back
 skeleton's torso puts it near the toes. Keep the knee at about 140° and accept
 that; chasing mid-foot bent the knees into a half squat in batch 3.
 
+**Hands under the chest** (close-grip and diamond push-up): the `top` camera
+hides them behind the torso and the front view of a prone body is too small
+to read. Do not draw these until the renderer has a camera for it.
+
 **Supported on the hands** (dip, and the top of anything pressed up on
 bars): at lockout the shoulders sit over the hands and the torso is close to
 upright, with only a slight lean; the lean grows on the way down. A body that
