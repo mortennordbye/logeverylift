@@ -1,0 +1,192 @@
+{
+  "name": "Kettlebell Swing",
+  "primary": "glutes",
+  "secondary": [
+    "hamstrings",
+    "lower_back",
+    "abs"
+  ],
+  "cue": "Hinge at the hips and snap them forward to float the bell. Do not squat it down or lift it with your arms.",
+  "phases": [
+    "Swing",
+    "Hike"
+  ],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        132,
+        55
+      ],
+      "neck": [
+        125,
+        140,
+        32
+      ],
+      "chest": [
+        125,
+        159,
+        0
+      ],
+      "pelvis": [
+        125,
+        180,
+        -36
+      ],
+      "lShoulder": [
+        108,
+        153,
+        27
+      ],
+      "rShoulder": [
+        142,
+        153,
+        27
+      ],
+      "lElbow": [
+        113,
+        184,
+        -4
+      ],
+      "rElbow": [
+        137,
+        184,
+        -4
+      ],
+      "lWrist": [
+        119,
+        214,
+        -34
+      ],
+      "rWrist": [
+        131,
+        214,
+        -34
+      ],
+      "lHip": [
+        113,
+        180,
+        -36
+      ],
+      "rHip": [
+        137,
+        180,
+        -36
+      ],
+      "lKnee": [
+        107,
+        226,
+        10
+      ],
+      "rKnee": [
+        143,
+        226,
+        10
+      ],
+      "lAnkle": [
+        104,
+        278,
+        -1
+      ],
+      "rAnkle": [
+        146,
+        278,
+        -1
+      ],
+      "lToe": [
+        100,
+        284,
+        19
+      ],
+      "rToe": [
+        150,
+        284,
+        19
+      ]
+    },
+    {
+      "head": [
+        125,
+        58,
+        2
+      ],
+      "neck": [
+        125,
+        82,
+        0
+      ],
+      "chest": [
+        125,
+        120,
+        1
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        103,
+        88,
+        0
+      ],
+      "rShoulder": [
+        147,
+        88,
+        0
+      ],
+      "lElbow": [
+        110,
+        104,
+        41
+      ],
+      "rElbow": [
+        140,
+        104,
+        41
+      ],
+      "lWrist": [
+        119,
+        120,
+        82
+      ],
+      "rWrist": [
+        131,
+        120,
+        82
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        107,
+        222,
+        1
+      ],
+      "rKnee": [
+        143,
+        222,
+        1
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "kettlebell",
+      "at": [
+        "lWrist",
+        "rWrist"
+      ],
+      "along": "forearm"
+    }
+  ],
+  "zoom": 0.8
+}

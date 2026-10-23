@@ -1,0 +1,195 @@
+{
+  "name": "Tricep Dip",
+  "primary": "triceps",
+  "secondary": [
+    "chest",
+    "shoulders"
+  ],
+  "cue": "Keep your back close to the bench and lower until your upper arms are about level with the floor. Do not let your shoulders shrug up toward your ears.",
+  "phases": [
+    "Lower",
+    "Press"
+  ],
+  "anchor": "lWrist",
+  "hold": [
+    "lWrist",
+    "rWrist",
+    "lAnkle",
+    "rAnkle"
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        116,
+        -10
+      ],
+      "neck": [
+        125,
+        140,
+        -12
+      ],
+      "chest": [
+        125,
+        178,
+        -10
+      ],
+      "pelvis": [
+        125,
+        218,
+        -6
+      ],
+      "lShoulder": [
+        102,
+        140,
+        -12
+      ],
+      "rShoulder": [
+        148,
+        140,
+        -12
+      ],
+      "lElbow": [
+        102,
+        184,
+        -14
+      ],
+      "rElbow": [
+        148,
+        184,
+        -14
+      ],
+      "lWrist": [
+        102,
+        228,
+        -17
+      ],
+      "rWrist": [
+        148,
+        228,
+        -17
+      ],
+      "lHip": [
+        113,
+        218,
+        -6
+      ],
+      "rHip": [
+        137,
+        218,
+        -6
+      ],
+      "lKnee": [
+        113,
+        248,
+        42
+      ],
+      "rKnee": [
+        137,
+        248,
+        42
+      ],
+      "lAnkle": [
+        113,
+        282,
+        83
+      ],
+      "rAnkle": [
+        137,
+        282,
+        83
+      ],
+      "lToe": [
+        113,
+        268,
+        98
+      ],
+      "rToe": [
+        137,
+        268,
+        98
+      ]
+    },
+    {
+      "head": [
+        125,
+        154.5,
+        4
+      ],
+      "neck": [
+        125,
+        178.5,
+        0
+      ],
+      "chest": [
+        125,
+        216.5,
+        4
+      ],
+      "pelvis": [
+        125,
+        256.5,
+        8
+      ],
+      "lShoulder": [
+        102,
+        178.5,
+        0
+      ],
+      "rShoulder": [
+        148,
+        178.5,
+        0
+      ],
+      "lElbow": [
+        100,
+        195,
+        -43
+      ],
+      "rElbow": [
+        150,
+        195,
+        -43
+      ],
+      "lWrist": [
+        102,
+        228,
+        -17
+      ],
+      "rWrist": [
+        148,
+        228,
+        -17
+      ],
+      "lHip": [
+        113,
+        256.5,
+        8
+      ],
+      "rHip": [
+        137,
+        256.5,
+        8
+      ],
+      "lKnee": [
+        113,
+        235,
+        62
+      ],
+      "rKnee": [
+        137,
+        235,
+        62
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "bench",
+      "y": 230,
+      "z1": -80,
+      "z2": -14,
+      "width": 70
+    }
+  ]
+}

@@ -24,8 +24,11 @@ const prop = z.discriminatedUnion("type", [
    * that stays at right angles to the forearm as it swings (a hammer curl).
    */
   z.object({ type: z.literal("dumbbell"), at: z.array(joint).min(1).optional(), along: z.enum(["x", "z", "forearm"]).default("x"), layer: layer.default("auto") }),
-  /** One bell hanging from the midpoint of the joints. */
-  z.object({ type: z.literal("kettlebell"), at: z.array(joint).min(1), layer: layer.default("auto") }),
+  /**
+   * One bell at the midpoint of the joints: hanging straight down, or with
+   * `along: "forearm"` carried on in line with the forearms (a swing's float).
+   */
+  z.object({ type: z.literal("kettlebell"), at: z.array(joint).min(1), along: z.enum(["hang", "forearm"]).default("hang"), layer: layer.default("auto") }),
   /** Bench pad: top at y, from z1 to z2 front to back, `width` across, centred; legs to the floor. */
   z.object({ type: z.literal("bench"), y: z.number(), z1: z.number(), z2: z.number(), width: z.number().positive(), layer: layer.default("back") }),
   /** Sloped pad (incline bench back, seat back): top surface from `from` to `to`, each [y, z], `width` across, centred; one post to the floor. */

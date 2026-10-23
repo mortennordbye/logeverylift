@@ -1,0 +1,39 @@
+{
+  "name": "Farmer's Carry",
+  "primary": "forearms",
+  "secondary": ["back", "abs", "glutes"],
+  "cue": "Stand tall with your shoulders pulled back and down. Take short, steady steps and do not let the weights pull you to one side.",
+  "phases": ["Step", "Return"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 59, -9], "neck": [125, 83, -11], "chest": [125, 121, -11], "pelvis": [125, 161, -12],
+      "lShoulder": [103, 90, -11], "rShoulder": [147, 90, -11],
+      "lElbow": [99, 136, -11], "rElbow": [151, 136, -11],
+      "lWrist": [97, 178, -10], "rWrist": [153, 178, -10],
+      "lHip": [113, 163, -12], "rHip": [137, 163, -12],
+      "lKnee": [112, 221, -4], "rKnee": [138, 219, -20],
+      "lAnkle": [112, 278, 4], "rAnkle": [139, 271, -36],
+      "lToe": [111, 284, 24], "rToe": [140, 286, -21]
+    },
+    {
+      "pelvis": [125, 159, 7], "chest": [125, 119, 8], "neck": [125, 81, 8], "head": [125, 57, 10],
+      "lShoulder": [103, 88, 8], "rShoulder": [147, 88, 8],
+      "lElbow": [99, 134, 8], "rElbow": [151, 134, 8],
+      "lWrist": [97, 176, 9], "rWrist": [153, 176, 9],
+      "lHip": [113, 161, 7], "rHip": [137, 161, 7],
+      "lKnee": [112, 220, 5], "rKnee": [138, 215, 27],
+      "rAnkle": [139, 266, 3], "rToe": [140, 278, 19]
+    },
+    {
+      "pelvis": [125, 162, 26], "chest": [125, 122, 27], "neck": [125, 84, 27], "head": [125, 60, 29],
+      "lShoulder": [103, 91, 27], "rShoulder": [147, 91, 27],
+      "lElbow": [99, 137, 27], "rElbow": [151, 137, 27],
+      "lWrist": [97, 179, 28], "rWrist": [153, 179, 28],
+      "lHip": [113, 164, 26], "rHip": [137, 164, 26],
+      "lKnee": [112, 222, 15], "rKnee": [138, 219, 37],
+      "rAnkle": [139, 273, 48], "rToe": [140, 275, 69]
+    }
+  ],
+  "props": [{ "type": "dumbbell", "along": "z" }]
+}

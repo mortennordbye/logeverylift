@@ -1,0 +1,27 @@
+{
+  "name": "Dead Bug",
+  "primary": "abs",
+  "secondary": [],
+  "cue": "Keep your lower back pressed into the floor the whole time. Reach out only as far as you can without it arching.",
+  "phases": ["Extend", "Return"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.68,
+  "keyframes": [
+    {
+      "head": [125, 275, -77], "neck": [125, 275, -53], "chest": [125, 275, -15], "pelvis": [125, 275, 25],
+      "lShoulder": [102, 275, -53], "rShoulder": [148, 275, -53],
+      "lElbow": [102, 229, -53], "rElbow": [148, 229, -53],
+      "lWrist": [102, 187, -53], "rWrist": [148, 187, -53],
+      "lHip": [113, 275, 25], "rHip": [137, 275, 25],
+      "lKnee": [113, 215, 25], "rKnee": [137, 215, 25],
+      "lAnkle": [113, 215, 81], "rAnkle": [137, 215, 81],
+      "lToe": [113, 194, 85], "rToe": [137, 194, 85]
+    },
+    {
+      "lElbow": [102, 267, -98.3], "lWrist": [102, 260, -139.7],
+      "rKnee": [137, 264.6, 84], "rAnkle": [137, 255, 139], "rToe": [137, 235, 143]
+    }
+  ],
+  "props": []
+}

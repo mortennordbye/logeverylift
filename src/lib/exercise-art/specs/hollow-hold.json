@@ -1,0 +1,32 @@
+{
+  "name": "Hollow Hold",
+  "primary": "abs",
+  "secondary": ["quads"],
+  "cue": "Press your lower back into the floor before you lift. If it arches, raise your legs higher or bend your knees.",
+  "phases": ["Lift", "Lower"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.65,
+  "keyframes": [
+    {
+      "head": [125, 275, -87], "neck": [125, 276, -63], "chest": [125, 276, -25], "pelvis": [125, 276, 15],
+      "lShoulder": [102, 276, -63], "rShoulder": [148, 276, -63],
+      "lElbow": [100, 279, -109], "rElbow": [150, 279, -109],
+      "lWrist": [98, 282, -151], "rWrist": [152, 282, -151],
+      "lHip": [113, 276, 15], "rHip": [137, 276, 15],
+      "lKnee": [115, 278, 75], "rKnee": [135, 278, 75],
+      "lAnkle": [117, 280, 131], "rAnkle": [133, 280, 131],
+      "lToe": [117, 278, 152], "rToe": [133, 278, 152]
+    },
+    {
+      "chest": [125, 271, -24], "neck": [125, 258, -59], "head": [125, 246, -80],
+      "lShoulder": [102, 258, -59], "rShoulder": [148, 258, -59],
+      "lElbow": [100, 246, -103], "rElbow": [150, 246, -103],
+      "lWrist": [98, 235, -144], "rWrist": [152, 235, -144],
+      "lKnee": [115, 255.5, 71], "rKnee": [135, 255.5, 71],
+      "lAnkle": [117, 236, 124], "rAnkle": [133, 236, 124],
+      "lToe": [117, 229, 144], "rToe": [133, 229, 144]
+    }
+  ],
+  "props": []
+}
