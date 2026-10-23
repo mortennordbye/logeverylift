@@ -24,9 +24,15 @@ test("a new user can download their data and delete their account", async ({ pag
   await expect(page.getByText("Please tick both boxes to create an account.")).toBeVisible();
   await page.getByRole("checkbox", { name: /I accept the terms of use/ }).check();
   await page.getByRole("checkbox", { name: /I consent to LogEveryLift storing/ }).check();
+  // Recording consent re-renders /signup, which sends the now signed-in user
+  // to "/" as a soft navigation before the form's own full reload to "/".
+  // Waiting on the URL alone returns at the soft one and the reload then
+  // interrupts the next goto, so wait for the reload's load event.
+  const reloaded = page.waitForEvent("load");
   await page.getByRole("button", { name: "Create Account" }).click();
+  await reloaded;
   // Consent was recorded with the sign-up, so home doesn't ask again.
-  await page.waitForURL((url) => url.pathname === "/");
+  expect(new URL(page.url()).pathname).toBe("/");
   const [created] = await testDb().select().from(users).where(eq(users.email, email));
   expect(created.termsVersion).toBe(LEGAL_VERSION);
   expect(created.healthConsentAt).not.toBeNull();
