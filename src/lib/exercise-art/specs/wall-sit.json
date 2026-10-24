@@ -1,0 +1,26 @@
+{
+  "name": "Wall Sit",
+  "primary": "quads",
+  "secondary": ["glutes"],
+  "cue": "Keep your whole back flat on the wall and your knees straight above your ankles. Slide down until your thighs are level with the floor.",
+  "phases": ["Slide down", "Stand up"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 80, -34], "neck": [125, 104, -40], "chest": [125, 142, -40], "pelvis": [125, 182, -40],
+      "lShoulder": [102, 108, -40], "rShoulder": [148, 108, -40],
+      "lElbow": [97, 154, -38], "rElbow": [153, 154, -38],
+      "lWrist": [95, 196, -33], "rWrist": [155, 196, -33],
+      "lHip": [113, 182, -40], "rHip": [137, 182, -40],
+      "lKnee": [111, 232, -10], "rKnee": [139, 232, -10],
+      "lAnkle": [110, 278, 20], "rAnkle": [140, 278, 20],
+      "lToe": [107, 284, 40], "rToe": [143, 284, 40]
+    },
+    {
+      "head": [125, 120, -34], "neck": [125, 144, -40], "chest": [125, 182, -40], "pelvis": [125, 222, -40],
+      "lHip": [113, 222, -40], "rHip": [137, 222, -40],
+      "lKnee": [110, 222, 20], "rKnee": [140, 222, 20]
+    }
+  ],
+  "props": [{ "type": "wall", "z": -55 }]
+}

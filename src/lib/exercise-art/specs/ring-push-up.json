@@ -1,0 +1,192 @@
+{
+  "name": "Ring Push-up",
+  "primary": "chest",
+  "secondary": [
+    "triceps",
+    "shoulders",
+    "abs"
+  ],
+  "cue": "Turn the rings out slightly at the top and keep your body in one straight line. Lower until your hands are beside your chest, holding the rings steady.",
+  "phases": [
+    "Lower",
+    "Push"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "lAnkle": [
+        115,
+        270.5,
+        104
+      ],
+      "rAnkle": [
+        135,
+        270.5,
+        104
+      ],
+      "lToe": [
+        115,
+        290,
+        96.1
+      ],
+      "rToe": [
+        135,
+        290,
+        96.1
+      ],
+      "lKnee": [
+        115,
+        240,
+        57
+      ],
+      "rKnee": [
+        135,
+        240,
+        57
+      ],
+      "lHip": [
+        113,
+        207.3,
+        6.7
+      ],
+      "rHip": [
+        137,
+        207.3,
+        6.7
+      ],
+      "pelvis": [
+        125,
+        207.3,
+        6.7
+      ],
+      "chest": [
+        125,
+        185.5,
+        -26.8
+      ],
+      "neck": [
+        125,
+        164.8,
+        -58.7
+      ],
+      "head": [
+        125,
+        147.8,
+        -78.8
+      ],
+      "lShoulder": [
+        102,
+        164.8,
+        -58.7
+      ],
+      "rShoulder": [
+        148,
+        164.8,
+        -58.7
+      ],
+      "lElbow": [
+        95.7,
+        210.3,
+        -55.4
+      ],
+      "lWrist": [
+        94,
+        252,
+        -60
+      ],
+      "rElbow": [
+        154.3,
+        210.3,
+        -55.4
+      ],
+      "rWrist": [
+        156,
+        252,
+        -60
+      ]
+    },
+    {
+      "lKnee": [
+        115,
+        257,
+        49.7
+      ],
+      "rKnee": [
+        135,
+        257,
+        49.7
+      ],
+      "lHip": [
+        113,
+        242.4,
+        -8.6
+      ],
+      "rHip": [
+        137,
+        242.4,
+        -8.6
+      ],
+      "pelvis": [
+        125,
+        242.4,
+        -8.6
+      ],
+      "chest": [
+        125,
+        232.8,
+        -47.4
+      ],
+      "neck": [
+        125,
+        223.6,
+        -84.2
+      ],
+      "head": [
+        125,
+        213.8,
+        -107.5
+      ],
+      "lShoulder": [
+        102,
+        223.6,
+        -84.2
+      ],
+      "rShoulder": [
+        148,
+        223.6,
+        -84.2
+      ],
+      "lElbow": [
+        87.2,
+        214.9,
+        -41.6
+      ],
+      "rElbow": [
+        162.8,
+        214.9,
+        -41.6
+      ],
+      "lWrist": [
+        94,
+        252,
+        -60
+      ],
+      "rWrist": [
+        156,
+        252,
+        -60
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "rings"
+    }
+  ]
+}

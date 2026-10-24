@@ -1,0 +1,193 @@
+{
+  "name": "Ring Row",
+  "primary": "back",
+  "secondary": [
+    "biceps",
+    "shoulders",
+    "forearms"
+  ],
+  "cue": "Keep your body in one straight line from heels to head and pull until your hands reach your ribs. Keep the rings from drifting out wide.",
+  "phases": [
+    "Pull",
+    "Lower"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "lAnkle": [
+        121,
+        282,
+        95
+      ],
+      "rAnkle": [
+        129,
+        282,
+        95
+      ],
+      "lKnee": [
+        119,
+        265.3,
+        41.6
+      ],
+      "rKnee": [
+        131,
+        265.3,
+        41.6
+      ],
+      "lHip": [
+        113,
+        247.4,
+        -15.7
+      ],
+      "rHip": [
+        137,
+        247.4,
+        -15.7
+      ],
+      "pelvis": [
+        125,
+        247.4,
+        -15.7
+      ],
+      "chest": [
+        125,
+        235.5,
+        -53.9
+      ],
+      "neck": [
+        125,
+        224.1,
+        -90.2
+      ],
+      "head": [
+        125,
+        216.9,
+        -113.1
+      ],
+      "lShoulder": [
+        102,
+        224.1,
+        -90.2
+      ],
+      "rShoulder": [
+        148,
+        224.1,
+        -90.2
+      ],
+      "lWrist": [
+        88,
+        165.3,
+        -24.7
+      ],
+      "rWrist": [
+        162,
+        165.3,
+        -24.7
+      ],
+      "lElbow": [
+        95,
+        194.7,
+        -57.45
+      ],
+      "rElbow": [
+        155,
+        194.7,
+        -57.45
+      ],
+      "lToe": [
+        121,
+        263,
+        104
+      ],
+      "rToe": [
+        129,
+        263,
+        104
+      ]
+    },
+    {
+      "lKnee": [
+        119,
+        248,
+        50.5
+      ],
+      "rKnee": [
+        131,
+        248,
+        50.5
+      ],
+      "lHip": [
+        113,
+        211.5,
+        2.9
+      ],
+      "rHip": [
+        137,
+        211.5,
+        2.9
+      ],
+      "pelvis": [
+        125,
+        211.5,
+        2.9
+      ],
+      "chest": [
+        125,
+        187.2,
+        -28.9
+      ],
+      "neck": [
+        125,
+        164.2,
+        -59.1
+      ],
+      "head": [
+        125,
+        149.6,
+        -78.2
+      ],
+      "lShoulder": [
+        102,
+        164.2,
+        -59.1
+      ],
+      "rShoulder": [
+        148,
+        164.2,
+        -59.1
+      ],
+      "lElbow": [
+        83.7,
+        203.1,
+        -42.6
+      ],
+      "rElbow": [
+        166.3,
+        203.1,
+        -42.6
+      ],
+      "lWrist": [
+        88,
+        165.3,
+        -24.7
+      ],
+      "rWrist": [
+        162,
+        165.3,
+        -24.7
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "rings",
+      "y": 36
+    }
+  ]
+}

@@ -1,0 +1,263 @@
+{
+  "name": "Ab Wheel Rollout",
+  "primary": "abs",
+  "secondary": [
+    "shoulders",
+    "back"
+  ],
+  "cue": "Tuck your pelvis and keep your lower back from sagging as you roll out. Only go as far as you can while holding that position, then pull back with your abs.",
+  "phases": [
+    "Roll out",
+    "Roll back"
+  ],
+  "anchor": "lKnee",
+  "camera": "top",
+  "zoom": 0.65,
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "props": [
+    {
+      "type": "wheel"
+    }
+  ],
+  "keyframes": [
+    {
+      "lKnee": [
+        113,
+        281,
+        70
+      ],
+      "rKnee": [
+        137,
+        281,
+        70
+      ],
+      "lAnkle": [
+        113,
+        283,
+        126
+      ],
+      "rAnkle": [
+        137,
+        283,
+        126
+      ],
+      "lToe": [
+        113,
+        289,
+        146
+      ],
+      "rToe": [
+        137,
+        289,
+        146
+      ],
+      "pelvis": [
+        125,
+        224,
+        50
+      ],
+      "lHip": [
+        113,
+        224,
+        50
+      ],
+      "rHip": [
+        137,
+        224,
+        50
+      ],
+      "chest": [
+        125,
+        202,
+        15
+      ],
+      "neck": [
+        125,
+        190,
+        -20
+      ],
+      "head": [
+        125,
+        182,
+        -43
+      ],
+      "lShoulder": [
+        102,
+        190,
+        -20
+      ],
+      "rShoulder": [
+        148,
+        190,
+        -20
+      ],
+      "lElbow": [
+        106,
+        233.5,
+        -26.5
+      ],
+      "rElbow": [
+        144,
+        233.5,
+        -26.5
+      ],
+      "lWrist": [
+        110,
+        277,
+        -33
+      ],
+      "rWrist": [
+        140,
+        277,
+        -33
+      ]
+    },
+    {
+      "lKnee": [
+        113,
+        281,
+        70
+      ],
+      "rKnee": [
+        137,
+        281,
+        70
+      ],
+      "pelvis": [
+        125,
+        243,
+        24
+      ],
+      "lHip": [
+        113,
+        243,
+        24
+      ],
+      "rHip": [
+        137,
+        243,
+        24
+      ],
+      "chest": [
+        125,
+        228,
+        -13
+      ],
+      "neck": [
+        125,
+        216,
+        -49
+      ],
+      "head": [
+        125,
+        210,
+        -72
+      ],
+      "lShoulder": [
+        102,
+        216,
+        -49
+      ],
+      "rShoulder": [
+        148,
+        216,
+        -49
+      ],
+      "lElbow": [
+        106,
+        246.5,
+        -80.7
+      ],
+      "rElbow": [
+        144,
+        246.5,
+        -80.7
+      ],
+      "lWrist": [
+        110,
+        277,
+        -112.4
+      ],
+      "rWrist": [
+        140,
+        277,
+        -112.4
+      ]
+    },
+    {
+      "pelvis": [
+        125,
+        262,
+        12
+      ],
+      "lHip": [
+        113,
+        262,
+        12
+      ],
+      "rHip": [
+        137,
+        262,
+        12
+      ],
+      "chest": [
+        125,
+        252,
+        -26
+      ],
+      "neck": [
+        125,
+        243,
+        -63
+      ],
+      "head": [
+        125,
+        238,
+        -86
+      ],
+      "lShoulder": [
+        102,
+        243,
+        -63
+      ],
+      "rShoulder": [
+        148,
+        243,
+        -63
+      ],
+      "lElbow": [
+        106,
+        260,
+        -103.5
+      ],
+      "rElbow": [
+        144,
+        260,
+        -103.5
+      ],
+      "lWrist": [
+        110,
+        277,
+        -144
+      ],
+      "rWrist": [
+        140,
+        277,
+        -144
+      ],
+      "lKnee": [
+        113,
+        281,
+        70
+      ],
+      "rKnee": [
+        137,
+        281,
+        70
+      ]
+    }
+  ]
+}

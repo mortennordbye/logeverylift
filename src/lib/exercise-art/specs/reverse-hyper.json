@@ -1,0 +1,167 @@
+{
+  "name": "Reverse Hyper",
+  "primary": "glutes",
+  "secondary": [
+    "hamstrings",
+    "lower_back"
+  ],
+  "cue": "Swing your legs up with your glutes until they line up with your body, then let them fall under control. Keep your chest flat on the pad.",
+  "phases": [
+    "Raise",
+    "Lower"
+  ],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.75,
+  "props": [
+    {
+      "type": "bench",
+      "y": 165,
+      "z1": -130,
+      "z2": -32,
+      "width": 44
+    },
+    {
+      "type": "roller",
+      "at": [
+        "lAnkle",
+        "rAnkle"
+      ],
+      "offset": [
+        -6,
+        9
+      ],
+      "pivot": [
+        178,
+        -30
+      ],
+      "width": 70
+    }
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        152,
+        -112
+      ],
+      "neck": [
+        125,
+        150,
+        -88
+      ],
+      "chest": [
+        125,
+        150,
+        -50
+      ],
+      "pelvis": [
+        125,
+        150,
+        -10
+      ],
+      "lShoulder": [
+        102,
+        150,
+        -88
+      ],
+      "rShoulder": [
+        148,
+        150,
+        -88
+      ],
+      "lElbow": [
+        90,
+        180,
+        -120
+      ],
+      "rElbow": [
+        160,
+        180,
+        -120
+      ],
+      "lWrist": [
+        108,
+        218,
+        -122
+      ],
+      "rWrist": [
+        142,
+        218,
+        -122
+      ],
+      "lHip": [
+        113,
+        150,
+        -10
+      ],
+      "rHip": [
+        137,
+        150,
+        -10
+      ],
+      "lKnee": [
+        113,
+        210,
+        -15
+      ],
+      "rKnee": [
+        137,
+        210,
+        -15
+      ],
+      "lAnkle": [
+        113,
+        266,
+        -16
+      ],
+      "rAnkle": [
+        137,
+        266,
+        -16
+      ],
+      "lToe": [
+        113,
+        285,
+        -9
+      ],
+      "rToe": [
+        137,
+        285,
+        -9
+      ]
+    },
+    {
+      "lKnee": [
+        113,
+        145,
+        50
+      ],
+      "rKnee": [
+        137,
+        145,
+        50
+      ],
+      "lAnkle": [
+        113,
+        140,
+        106
+      ],
+      "rAnkle": [
+        137,
+        140,
+        106
+      ],
+      "lToe": [
+        113,
+        146,
+        126
+      ],
+      "rToe": [
+        137,
+        146,
+        126
+      ]
+    }
+  ]
+}

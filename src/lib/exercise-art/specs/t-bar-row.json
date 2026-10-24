@@ -1,0 +1,145 @@
+{
+  "name": "T-Bar Row",
+  "primary": "back",
+  "secondary": [
+    "biceps",
+    "shoulders",
+    "lower_back"
+  ],
+  "cue": "Keep your chest down and your back flat. Pull the handle to your stomach with your elbows close to your sides.",
+  "phases": [
+    "Pull",
+    "Lower"
+  ],
+  "anchor": "lAnkle",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        108,
+        52
+      ],
+      "neck": [
+        125,
+        124,
+        35
+      ],
+      "chest": [
+        125,
+        148,
+        6
+      ],
+      "pelvis": [
+        125,
+        174,
+        -25
+      ],
+      "lShoulder": [
+        103,
+        129,
+        31
+      ],
+      "rShoulder": [
+        147,
+        129,
+        31
+      ],
+      "lElbow": [
+        110,
+        175,
+        28
+      ],
+      "rElbow": [
+        140,
+        175,
+        28
+      ],
+      "lWrist": [
+        118,
+        217,
+        24
+      ],
+      "rWrist": [
+        132,
+        217,
+        24
+      ],
+      "lHip": [
+        113,
+        176,
+        -25
+      ],
+      "rHip": [
+        137,
+        176,
+        -25
+      ],
+      "lKnee": [
+        107,
+        224,
+        12
+      ],
+      "rKnee": [
+        143,
+        224,
+        12
+      ],
+      "lAnkle": [
+        104,
+        278,
+        -1
+      ],
+      "rAnkle": [
+        146,
+        278,
+        -1
+      ],
+      "lToe": [
+        100,
+        284,
+        19
+      ],
+      "rToe": [
+        150,
+        284,
+        19
+      ]
+    },
+    {
+      "lElbow": [
+        100,
+        140,
+        -12
+      ],
+      "rElbow": [
+        150,
+        140,
+        -12
+      ],
+      "lWrist": [
+        118,
+        168,
+        12
+      ],
+      "rWrist": [
+        132,
+        168,
+        12
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "landmine",
+      "pivot": [
+        286,
+        -95
+      ],
+      "plate": "past"
+    }
+  ]
+}
