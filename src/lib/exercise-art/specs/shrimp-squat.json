@@ -4,6 +4,7 @@
   "secondary": ["glutes", "hamstrings"],
   "cue": "Lower slowly until your back knee touches the floor behind your standing heel. Keep the standing heel down and reach your arms forward for balance.",
   "phases": ["Lower", "Stand"],
+  "worked": "left",
   "anchor": "lAnkle",
   "hold": ["lAnkle"],
   "keyframes": [

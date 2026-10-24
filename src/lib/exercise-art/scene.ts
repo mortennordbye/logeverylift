@@ -9,7 +9,7 @@
  */
 
 import { hasHands, resolvePoses, type ArtProp, type ArtSpec, type Point3, type Pose } from "./schema";
-import { BONES, CENTER_X, FLOOR_Y, HEAD_RADIUS, JOINTS, LIMBS, NEIGHBOURS, TOP_Y, isHand, type Camera, type Joint, type Muscle, type View } from "./skeleton";
+import { BONES, CENTER_X, FLOOR_Y, HEAD_RADIUS, JOINTS, LIMBS, NEIGHBOURS, TOP_Y, isHand, isOblique, type Camera, type Joint, type Muscle, type View } from "./skeleton";
 
 /** Where figures and equipment sit (checkSpec keeps joints inside it), so the figure fills its card. */
 export const VIEWBOX = "25 36 200 260";
@@ -62,14 +62,25 @@ function slerp(u: Point3, v: Point3, t: number): Point3 {
  * its parent joint in 3D, so it keeps its length and takes the real path: a
  * forearm curling toward the camera rises in the front view instead of
  * sweeping sideways through the body. The anchor joint is the one held still.
+ * On the way back (`phase` 1, t running 1 to 0) a "loop" spec goes from the
+ * last keyframe straight to the first instead of retracing its keyframes.
  */
-export function poseAt(spec: ArtSpec, t: number): Pose {
+export function poseAt(spec: ArtSpec, t: number, phase: 0 | 1 = 0): Pose {
   const poses = resolvePoses(spec);
-  const span = poses.length - 1;
+  if (spec.cycle !== "loop") return along(spec, poses, t);
+  const turn = Math.min(spec.turnAt ?? poses.length - 1, poses.length - 1);
+  return phase === 0 ? along(spec, poses.slice(0, turn + 1), t) : along(spec, [...poses.slice(turn), poses[0]], 1 - t);
+}
+
+/** The pose a fraction `t` of the way along a path of keyframe poses. */
+function along(spec: ArtSpec, path: Pose[], t: number): Pose {
+  const span = path.length - 1;
   const k = Math.min(span - 1, Math.floor(t * span));
-  const u = t * span - k;
-  const a = poses[k];
-  const b = poses[k + 1];
+  return blend(spec, path[k], path[k + 1], t * span - k);
+}
+
+/** The pose a fraction `u` of the way from keyframe pose `a` to `b`. */
+function blend(spec: ArtSpec, a: Pose, b: Pose, u: number): Pose {
   const out: Partial<Pose> = {
     [spec.anchor]: [0, 1, 2].map((i) => lerp(a[spec.anchor][i], b[spec.anchor][i], u)) as Point3,
   };
@@ -184,8 +195,30 @@ export function smoothClosed(pts: Point[]): string {
 const mid = (a: Point, b: Point): Point => [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
 const mean3 = (ps: Point3[]): Point3 => [0, 1, 2].map((i) => ps.reduce((s, p) => s + p[i], 0) / ps.length) as Point3;
 
+/** The camera a spec's view uses: the front slot's, or the side slot's ("front" there meaning plain side-on). */
+export function cameraFor(spec: ArtSpec, view: View): Camera {
+  return view === "front" ? spec.camera : spec.sideCamera === "angled" ? "angled" : "front";
+}
+
+/** The angled cameras turn 35 degrees off the plain view and look 14 degrees down. */
+const YAW = (35 * Math.PI) / 180;
+const PITCH = (14 * Math.PI) / 180;
+
 /** Screen position and depth (bigger = nearer the camera) of a 3D point. */
 export function project(p: Point3, view: View, camera: Camera): { at: Point; depth: number } {
+  if (isOblique(camera)) {
+    // Front slot: from the front-right, or from behind-right. Side slot: from the side, turned toward the front.
+    const dx = p[0] - CENTER_X;
+    const yaw = camera === "behind" ? Math.PI - YAW : YAW;
+    const [sx, toward] = view === "front"
+      ? [dx * Math.cos(yaw) - p[2] * Math.sin(yaw), dx * Math.sin(yaw) + p[2] * Math.cos(yaw)]
+      : [p[2] * Math.cos(YAW) - dx * Math.sin(YAW), dx * Math.cos(YAW) + p[2] * Math.sin(YAW)];
+    const dy = p[1] - FLOOR_Y;
+    return {
+      at: [CENTER_X + sx, FLOOR_Y + dy * Math.cos(PITCH) + toward * Math.sin(PITCH)],
+      depth: toward * Math.cos(PITCH) - dy * Math.sin(PITCH),
+    };
+  }
   if (view === "side") return { at: [CENTER_X + p[2], p[1]], depth: p[0] };
   return camera === "top" ? { at: [p[0], TOP_Y + p[2]], depth: -p[1] } : { at: [p[0], p[1]], depth: p[2] };
 }
@@ -202,7 +235,7 @@ export function zoomOf(spec: ArtSpec, view: View): number {
 
 /** Where a projected point lands once the spec's zoom is applied. */
 export function zoomed([x, y]: Point, view: View, spec: ArtSpec): Point {
-  const [ox, oy] = zoomOrigin(view, spec.camera);
+  const [ox, oy] = zoomOrigin(view, cameraFor(spec, view));
   const z = zoomOf(spec, view);
   return [ox + (x - ox) * z, oy + (y - oy) * z];
 }
@@ -277,7 +310,7 @@ function handleAxis(pose: Pose, j: Joint): Point3 {
 
 /** A dumbbell whose handle points along `axis`, foreshortened in the view. */
 function turnedDumbbell(c: Point, axis: Point3, view: View, camera: Camera): Shape[] {
-  const v: Point = view === "side" ? [axis[2], axis[1]] : camera === "top" ? [axis[0], axis[2]] : [axis[0], axis[1]];
+  const v: Point = isOblique(camera) ? screenDir(axis, view, camera) : view === "side" ? [axis[2], axis[1]] : camera === "top" ? [axis[0], axis[2]] : [axis[0], axis[1]];
   const shown = Math.hypot(v[0], v[1]);
   if (shown < 0.35) return [{ d: circle(c, 9.5), role: "plate" }, { d: circle(c, 2.5), role: "steel" }];
   const n: Point = [-v[1] / shown, v[0] / shown];
@@ -291,23 +324,30 @@ function turnedDumbbell(c: Point, axis: Point3, view: View, camera: Camera): Sha
 function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[] {
   const pin = p.layer === "back" ? -1e6 : p.layer === "front" ? 1e6 : null;
   const group = (depth: number, shapes: Shape[]): Group => ({ depth: pin ?? depth, shapes });
+  if (isOblique(camera)) {
+    const drawn = angledProp(p, pose, view, camera, group);
+    if (drawn) return drawn;
+  }
   const wrists: Joint[] = ["lWrist", "rWrist"];
   switch (p.type) {
     case "barbell": {
       const joints = (p.at ?? wrists).map((j) => pose[j]);
       const c = mean3(joints);
       const { at: [x, y] } = project(c, view, camera);
+      const fists = gripGroups(p, pose, view, camera, group);
       if (view === "side") {
         // In the hands, the near plate is drawn just behind the near arm so
         // the grip stays readable. Racked on the body (a back squat), it goes
         // behind the figure rather than over the face.
         const inHands = (p.at ?? wrists).every((j) => j.endsWith("Wrist") || isHand(j));
         const near = Math.max(...joints.map((q) => q[0]));
-        return [group(inHands ? near - 1 : -1e5, [
+        const aboveChest = p.layer === "body" && c[1] < pose.chest[1];
+        const depth = aboveChest ? Math.min(pose.pelvis[0], pose.head[0]) - 1 : inHands ? near - 1 : -1e5;
+        return [group(depth, [
           { d: circle([x, y], 24), role: "plate" },
           { d: circle([x, y], 16.5), role: "seam", stroke: 1.2 },
           { d: circle([x, y], 4), role: "steel" },
-        ])];
+        ]), ...fists];
       }
       // An EZ bar's W: the hands sit on the angled stretches either side of the middle.
       const camber: [number, number][] = [[-84, 0], [-30, 0], [-24, 5], [-11, -4], [-4, 1], [4, 1], [11, -4], [24, 5], [30, 0], [84, 0]];
@@ -320,7 +360,7 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
           { d: rect(x + s * 64 - 4, y - 25, 8, 50, 2.5), role: "plate" },
           { d: rect(x + s * 72 - 3, y - 18, 6, 36, 2), role: "plate" },
         ]),
-      ])];
+      ]), ...fists];
     }
     case "dumbbell":
       return (p.at ?? wrists).map((j) => {
@@ -380,7 +420,9 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
       const zs = [p.from[1], p.to[1]];
       if (view === "front") {
         const x0 = CENTER_X - p.width / 2;
-        return [group(-1e6, camera === "top"
+        // With layer "auto" the pad sorts by depth from the front, so a body lying chest-down on it shows behind it.
+        const padDepth = camera === "front" ? (zs[0] + zs[1]) / 2 : -1e6;
+        return [group(padDepth, camera === "top"
           ? [{ d: rect(x0, TOP_Y + Math.min(...zs), p.width, Math.abs(zs[1] - zs[0]), 6), role: "equip" }]
           : [{ d: rect(x0, Math.min(...ys), p.width, Math.abs(ys[1] - ys[0]) + 10, 4), role: "equip" }])];
       }
@@ -469,7 +511,7 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
       const past = p.plate === "past";
       const end: Point3 = [0, 1, 2].map((i) => c[i] + d[i] * (past ? 14 : 4)) as Point3;
       const plate: Point3 = [0, 1, 2].map((i) => c[i] + d[i] * (past ? 14 : -18)) as Point3;
-      const near = view === "side" ? Math.max(...joints.map((q) => q[0])) : project(c, view, camera).depth;
+      const near = view === "side" && !isOblique(camera) ? Math.max(...joints.map((q) => q[0])) : project(c, view, camera).depth;
       return [group(near - 1, [
         { d: line(project(pivot, view, camera).at, project(end, view, camera).at), role: "steel", stroke: 4 },
         { d: circle(project(pivot, view, camera).at, 4.5), role: "steel" },
@@ -600,6 +642,7 @@ function slab(c: Point3, along: Point3, length: number, width: number, view: Vie
 /** A flat disc (plate, ring, wheel) of radius r facing `normal`, as the ellipse it projects to. */
 function disc(c: Point3, normal: Point3, r: number, view: View, camera: Camera): string {
   const n = unit(normal);
+  if (isOblique(camera)) return ring3(c, n, r, view, camera);
   const toward = view === "side" ? n[0] : camera === "top" ? -n[1] : n[2];
   const [sx, sy] = view === "side" ? [n[2], n[1]] : camera === "top" ? [n[0], n[2]] : [n[0], n[1]];
   const { at: [x, y] } = project(c, view, camera);
@@ -614,14 +657,204 @@ function disc(c: Point3, normal: Point3, r: number, view: View, camera: Camera):
   return `M${a}A${f(r)} ${f(minor)} ${rot} 1 0 ${b}A${f(r)} ${f(minor)} ${rot} 1 0 ${a}Z`;
 }
 
+// ─── Angled cameras ─────────────────────────────────────────────────────────
+// The plain views draw flat equipment with screen-aligned shapes. An angled
+// camera sees it obliquely, so those props are built from 3D solids and rods.
+
+/** Screen direction of a 3D unit vector, as the angled camera projects it. */
+function screenDir(v: Point3, view: View, camera: Camera): Point {
+  const a = project([CENTER_X, FLOOR_Y, 0], view, camera).at;
+  const b = project([CENTER_X + v[0], FLOOR_Y + v[1], v[2]], view, camera).at;
+  return [b[0] - a[0], b[1] - a[1]];
+}
+
+/** A disc of radius r facing `n`, traced round its rim. */
+function ring3(c: Point3, n: Point3, r: number, view: View, camera: Camera): string {
+  const seed: Point3 = Math.abs(n[0]) < 0.9 ? [1, 0, 0] : [0, 1, 0];
+  const u = unit(cross(n, seed));
+  const v = cross(n, u);
+  const pts = Array.from({ length: 28 }, (_, i) => {
+    const a = (i / 28) * 2 * Math.PI;
+    return project([0, 1, 2].map((k) => c[k] + r * (u[k] * Math.cos(a) + v[k] * Math.sin(a))) as Point3, view, camera).at;
+  });
+  return polygon(pts);
+}
+
+const polygon = (pts: Point[]) => pts.map(([x, y], i) => `${i ? "L" : "M"}${f(x)} ${f(y)}`).join("") + "Z";
+
+/** Convex hull of screen points (monotone chain). */
+function hull(pts: Point[]): Point[] {
+  const s = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const turn = (o: Point, a: Point, b: Point) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const half = (list: Point[]) => {
+    const out: Point[] = [];
+    for (const p of list) {
+      while (out.length >= 2 && turn(out[out.length - 2], out[out.length - 1], p) <= 0) out.pop();
+      out.push(p);
+    }
+    return out.slice(0, -1);
+  };
+  return [...half(s), ...half(s.reverse())];
+}
+
+/** An axis-aligned block from [x0, y0, z0] to [x1, y1, z1], as its outline on screen. */
+function solid(lo: Point3, hi: Point3, view: View, camera: Camera): string {
+  const corners: Point[] = [];
+  for (const x of [lo[0], hi[0]]) for (const y of [lo[1], hi[1]]) for (const z of [lo[2], hi[2]]) corners.push(project([x, y, z], view, camera).at);
+  return polygon(hull(corners));
+}
+
+/** A round bar of radius r from a to b. */
+const rod = (a: Point3, b: Point3, r: number, view: View, camera: Camera): string => capsule(project(a, view, camera).at, project(b, view, camera).at, r, r);
+
+/** Middle depth of a block, for sorting it against the body. */
+const depthOf = (lo: Point3, hi: Point3, view: View, camera: Camera) => project(mean3([lo, hi]), view, camera).depth;
+
+/**
+ * Equipment the plain views draw flat, rebuilt in 3D for an angled camera.
+ * Returns null for the props whose drawing already works from any angle.
+ */
+function angledProp(p: ArtProp, pose: Pose, view: View, camera: Camera, group: (depth: number, shapes: Shape[]) => Group): Group[] | null {
+  const wrists: Joint[] = ["lWrist", "rWrist"];
+  const xs = (w: number): [number, number] => [CENTER_X - w / 2, CENTER_X + w / 2];
+  switch (p.type) {
+    case "barbell": {
+      const joints = (p.at ?? wrists).map((j) => pose[j]);
+      const c = mean3(joints);
+      const along = (k: number): Point3 => [c[0] + k, c[1], c[2]];
+      const inHands = (p.at ?? wrists).every((j) => j.endsWith("Wrist") || isHand(j));
+      return [
+        group(inHands ? project(c, view, camera).depth - 1 : -1e5, [
+          { d: rod(along(-84), along(84), 2, view, camera), role: "steel" },
+          ...[-1, 1].flatMap((s): Shape[] => [
+            { d: ring3(along(s * 64), [1, 0, 0], 25, view, camera), role: "plate" },
+            { d: ring3(along(s * 72), [1, 0, 0], 18, view, camera), role: "plate" },
+          ]),
+        ]),
+        ...gripGroups(p, pose, view, camera, group),
+      ];
+    }
+    case "dumbbell": {
+      if (p.along === "forearm") return null;
+      const axis: Point3 = p.along === "x" ? [1, 0, 0] : [0, 0, 1];
+      return (p.at ?? wrists).map((j) => {
+        const { at, depth } = project(pose[j], view, camera);
+        return group(depth - 1, turnedDumbbell(at, axis, view, camera));
+      });
+    }
+    case "bench":
+    case "box": {
+      const [x0, x1] = xs(p.width);
+      const [z0, z1] = [Math.min(p.z1, p.z2), Math.max(p.z1, p.z2)];
+      if (p.type === "box") return [group(-1e6, [{ d: solid([x0, p.y, z0], [x1, FLOOR_Y, z1], view, camera), role: "equip" }])];
+      return [group(-1e6, [
+        ...[z0 + 8, z1 - 8].map((z): Shape => ({ d: rod([CENTER_X, p.y + 10, z], [CENTER_X, FLOOR_Y, z], 2.5, view, camera), role: "steel" })),
+        { d: solid([x0, p.y, z0], [x1, p.y + 10, z1], view, camera), role: "equip" },
+      ])];
+    }
+    case "incline": {
+      const [x0, x1] = xs(p.width);
+      const a: Point3 = [CENTER_X, p.from[0], p.from[1]];
+      const b: Point3 = [CENTER_X, p.to[0], p.to[1]];
+      const d = unit(sub(b, a));
+      // The pad hangs 10 under its top surface, on the side away from the lifter.
+      let n: Point3 = [0, -d[2], d[1]];
+      if (n[1] < 0 || (n[1] === 0 && n[2] < 0)) n = [0, -n[1], -n[2]];
+      const under = (q: Point3, k: number): Point3 => [q[0], q[1] + n[1] * k, q[2] + n[2] * k];
+      const pts: Point[] = [];
+      for (const q of [a, b]) for (const x of [x0, x1]) for (const k of [0, 10]) pts.push(project([x, under(q, k)[1], under(q, k)[2]], view, camera).at);
+      const post = under(mean3([a, b]), 10);
+      return [group(p.layer === "auto" ? project(mean3([a, b]), view, camera).depth : -1e6, [
+        { d: rod(post, [CENTER_X, FLOOR_Y, post[2]], 2.5, view, camera), role: "steel" },
+        { d: polygon(hull(pts)), role: "equip" },
+      ])];
+    }
+    case "bars": {
+      const [za, zb] = [Math.min(p.z1, p.z2), Math.max(p.z1, p.z2)];
+      return [group(-1e6, xs(p.width).flatMap((x): Shape[] => [
+        ...[za + 4, zb - 4].map((z): Shape => ({ d: rod([x, p.y, z], [x, FLOOR_Y, z], 2.5, view, camera), role: "steel" })),
+        { d: rod([x, p.y, za], [x, p.y, zb], 2.5, view, camera), role: "steel" },
+      ]))];
+    }
+    case "bar":
+      return [group(-1e6, [{ d: rod([32, p.y, p.z], [218, p.y, p.z], 2.5, view, camera), role: "steel" }])];
+    case "pole":
+      return [group(-1e6, [{ d: rod([p.x, 36, p.z], [p.x, FLOOR_Y, p.z], 3, view, camera), role: "steel" }])];
+    case "wall": {
+      const za = p.z < 0 ? p.z - 8 : p.z;
+      return [group(-1e6, [{ d: solid([36, 36, za], [214, FLOOR_Y, za + 8], view, camera), role: "equip" }])];
+    }
+    case "roller": {
+      let c: Point3 = [CENTER_X, p.y!, p.z!];
+      if (p.at) {
+        const end = mean3(p.at.map((j) => pose[j]));
+        const start = mean3(p.at.map((j) => pose[BONES.find((b) => b.b === j)?.a ?? j]));
+        const dy = end[1] - start[1];
+        const dz = end[2] - start[2];
+        const n = Math.hypot(dy, dz) || 1;
+        const [along, across] = p.offset;
+        c = [CENTER_X, end[1] + (along * dy - across * dz) / n, end[2] + (along * dz + across * dy) / n];
+      }
+      const lever: Shape[] = p.pivot ? [{ d: rod([CENTER_X, p.pivot[0], p.pivot[1]], c, 2, view, camera), role: "steel" }] : [];
+      return [group(project(c, view, camera).depth, [...lever, { d: rod([c[0] - p.width / 2, c[1], c[2]], [c[0] + p.width / 2, c[1], c[2]], 8, view, camera), role: "equip" }])];
+    }
+    case "sled": {
+      const hands = (p.at ?? wrists).map((jn) => pose[jn]);
+      const z0 = mean3(hands)[2] - 6;
+      const top = FLOOR_Y - 24;
+      const lo: Point3 = [CENTER_X - 30, top, z0];
+      const hi: Point3 = [CENTER_X + 30, FLOOR_Y, z0 + 64];
+      return [
+        group(depthOf(lo, hi, view, camera), [
+          { d: solid(lo, hi, view, camera), role: "equip" },
+          { d: ring3([CENTER_X, top - 18, z0 + 42], [1, 0, 0], 18, view, camera), role: "plate" },
+        ]),
+        ...hands.map((h) => group(project(h, view, camera).depth - 1, [{ d: rod(h, [h[0], top, h[2]], 2, view, camera), role: "steel" }])),
+      ];
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Fists on a barbell (`grip`), so an underhand and an overhand grip read
+ * differently. The hand is a small block on the bar whose back faces the
+ * knuckle side, which turns with the forearm: forward when it hangs (an
+ * overhand fist covers the bar from the front, an underhand one sits behind
+ * it) and up when it is level (an overhand fist sits on top of the bar).
+ * Only for grips at the wrists of a spec without hands.
+ */
+function gripGroups(p: ArtProp, pose: Pose, view: View, camera: Camera, group: (depth: number, shapes: Shape[]) => Group): Group[] {
+  if (p.type !== "barbell" || !p.grip) return [];
+  const sign = p.grip === "overhand" ? 1 : -1;
+  return (p.at ?? ["lWrist", "rWrist"]).filter((j) => j.endsWith("Wrist")).map((j) => {
+    const w = pose[j];
+    const d = unit(sub(w, pose[j.replace("Wrist", "Elbow") as Joint]));
+    const back: Point3 = unit([0, -d[2] * sign, d[1] * sign]);
+    // across the bar (x), toward the back of the hand, and along the forearm
+    const at = (a: number, b: number, c: number): Point3 => [w[0] + a, w[1] + back[1] * b + d[1] * c, w[2] + back[2] * b + d[2] * c];
+    const corners: Point[] = [];
+    for (const a of [-6.5, 6.5]) for (const b of [-1, 8]) for (const c of [-4, 5]) corners.push(project(at(a, b, c), view, camera).at);
+    const ridge: Shape[] = sign > 0
+      ? [
+          { d: line(project(at(-6, 8, 2), view, camera).at, project(at(6, 8, 2), view, camera).at), role: "seam", stroke: 1.3 },
+          ...[-2.5, 0, 2.5].map((a): Shape => ({ d: line(project(at(a, 8, 2), view, camera).at, project(at(a, 8, 5), view, camera).at), role: "seam", stroke: 1 })),
+        ]
+      : [];
+    return group(project(at(0, 3.5, 0), view, camera).depth, [{ d: polygon(hull(corners)), role: "limb" }, ...ridge]);
+  });
+}
+
 /** Every shape of one view at movement position `t`, back to front. */
-export function buildScene(spec: ArtSpec, view: View, t: number): Shape[] {
-  const pose = poseAt(spec, t);
+export function buildScene(spec: ArtSpec, view: View, t: number, phase: 0 | 1 = 0): Shape[] {
+  const pose = poseAt(spec, t, phase);
   const hands = hasHands(spec);
+  const camera = cameraFor(spec, view);
   const j = {} as Record<Joint, Point>;
   const depth = {} as Record<Joint, number>;
   for (const name of JOINTS) {
-    const pr = project(pose[name], view, spec.camera);
+    const pr = project(pose[name], view, camera);
     j[name] = pr.at;
     depth[name] = pr.depth;
   }
@@ -636,21 +869,24 @@ export function buildScene(spec: ArtSpec, view: View, t: number): Shape[] {
     : depth.pelvis + 0.5;
   // In the front view a limb level with the torso still has a side: an arm
   // hanging beside it reads in front, a thigh starts behind the hips.
-  const fromFront = view === "front" && spec.camera === "front";
+  const fromFront = view === "front" && camera === "front";
+  // One-sided work lights only the working side's limbs.
+  const working = (from: Joint) => spec.worked === "both" || from.startsWith(spec.worked === "left" ? "l" : "r");
   const bias = { arm: fromFront ? 4 : 0, leg: fromFront ? -1 : 0 };
 
   const groups: Group[] = [
-    { depth: torsoDepth, shapes: view === "front" ? frontTorso(j, (m) => role(m), spec.camera) : sideTorso(j, project(glutePoint(pose), view, spec.camera).at, (m) => role(m)) },
+    { depth: torsoDepth, shapes: view === "front" ? frontTorso(j, (m) => role(m), camera) : sideTorso(j, project(glutePoint(pose), view, camera).at, (m) => role(m)) },
     { depth: Math.max(depth.head, torsoDepth + 0.1), shapes: [{ d: capsule(j.neck, j.head, 6.5, 6.5), role: "limb" }, { d: circle(j.head, HEAD_RADIUS), role: "head" }] },
     ...LIMBS.filter((l) => hands || !isHand(l.to)).map((l): Group => {
       const d = (depth[l.from] + depth[l.to]) / 2 + bias[l.kind];
       const far = view === "side" && d < torsoDepth;
-      const shapes: Shape[] = [{ d: capsule(j[l.from], j[l.to], l.r[0], l.r[1]), role: role(l.muscles, far) }];
-      if (l.from.endsWith("Shoulder")) shapes.push({ d: circle(j[l.from], 9.5), role: role(["shoulders"], far) });
+      const lit = working(l.from);
+      const shapes: Shape[] = [{ d: capsule(j[l.from], j[l.to], l.r[0], l.r[1]), role: role(lit ? l.muscles : [], far) }];
+      if (l.from.endsWith("Shoulder")) shapes.push({ d: circle(j[l.from], 9.5), role: role(lit ? ["shoulders"] : [], far) });
       if (l.to.endsWith("Wrist")) shapes.push({ d: circle(j[l.to], 5), role: far ? "far" : "limb" });
       return { depth: d, shapes };
     }),
-    ...spec.props.flatMap((p) => propGroups(p, pose, view, spec.camera)),
+    ...spec.props.flatMap((p) => propGroups(p, pose, view, camera)),
   ];
 
   const feet = (["lToe", "rToe", "lAnkle", "rAnkle"] as const).map((n) => j[n][0]);
@@ -659,7 +895,7 @@ export function buildScene(spec: ArtSpec, view: View, t: number): Shape[] {
 
   // Stable sort: equal depths keep the order above (torso before limbs).
   // No floor seen from above, so no shadow.
-  const ground = view === "front" && spec.camera === "top" ? [] : [shadow];
+  const ground = view === "front" && camera === "top" ? [] : [shadow];
   return [...ground, ...groups.map((g, i) => ({ g, i })).sort((a, b) => a.g.depth - b.g.depth || a.i - b.i).flatMap(({ g }) => g.shapes)];
 }
 
@@ -695,11 +931,11 @@ export const MUSCLE_FILL = {
 } as const;
 
 /** SVG markup (inside an `<svg viewBox={VIEWBOX}>`) for one view at `t`. `id` must be unique on the page. */
-export function renderSvg(spec: ArtSpec, view: View, t: number, id: string): string {
+export function renderSvg(spec: ArtSpec, view: View, t: number, id: string, phase: 0 | 1 = 0): string {
   const defs =
     SHADED.map((r) => `<linearGradient id="${id}-${r}" x1="0" y1="0" x2="0.35" y2="1"><stop offset="0" style="stop-color:${mix(COLOR[r], 90, "white")}"/><stop offset="1" style="stop-color:${mix(COLOR[r], 84)}"/></linearGradient>`).join("") +
     `<radialGradient id="${id}-shadow"><stop offset="0" style="stop-color:${FG};stop-opacity:0.16"/><stop offset="1" style="stop-color:${FG};stop-opacity:0"/></radialGradient>`;
-  const body = buildScene(spec, view, t)
+  const body = buildScene(spec, view, t, phase)
     .map((s) =>
       s.stroke
         ? `<path d="${s.d}" style="fill:none;stroke:${COLOR[s.role]};stroke-width:${s.stroke};stroke-linecap:round"/>`
@@ -708,6 +944,6 @@ export function renderSvg(spec: ArtSpec, view: View, t: number, id: string): str
     .join("");
   const zoom = zoomOf(spec, view);
   if (zoom === 1) return `<defs>${defs}</defs>${body}`;
-  const [ox, oy] = zoomOrigin(view, spec.camera);
+  const [ox, oy] = zoomOrigin(view, cameraFor(spec, view));
   return `<defs>${defs}</defs><g transform="translate(${ox} ${oy}) scale(${zoom}) translate(${-ox} ${-oy})">${body}</g>`;
 }

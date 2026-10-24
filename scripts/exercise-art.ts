@@ -12,7 +12,7 @@ import { chromium } from "@playwright/test";
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { checkSpec } from "../src/lib/exercise-art/check";
-import { artSpecSchema, resolvePoses, slugify } from "../src/lib/exercise-art/schema";
+import { artSpecSchema, resolvePoses, slugify, type ArtSpec } from "../src/lib/exercise-art/schema";
 import { MAP_FIGURES, MAP_VIEWBOX } from "../src/lib/exercise-art/muscle-map";
 import { MUSCLE_FILL, VIEWBOX, renderSvg } from "../src/lib/exercise-art/scene";
 import { VIEWS, type Muscle } from "../src/lib/exercise-art/skeleton";
@@ -30,19 +30,24 @@ const THEMES = {
   light: "--card: oklch(1 0 0); --foreground: oklch(0.145 0 0); --muted-foreground: oklch(0.556 0 0); --primary: oklch(0.55 0.22 264.36);",
 };
 const MOMENTS = [0, 0.5, 1];
+// A loop spec comes back by a different path, so its preview also shows the middle of the way back.
+const momentsFor = (spec: ArtSpec): { t: number; phase: 0 | 1 }[] => [
+  ...MOMENTS.map((t) => ({ t, phase: 0 as const })),
+  ...(spec.cycle === "loop" ? [{ t: 0.5, phase: 1 as const }] : []),
+];
 
 function previewHtml(slug: string, raw: unknown, zoom: number): string {
   const spec = artSpecSchema.parse(raw);
   const row = (theme: keyof typeof THEMES) =>
     `<div class="row" style="${THEMES[theme]}"><span class="theme">${theme}</span>` +
     VIEWS.flatMap((v) =>
-      MOMENTS.map((t) => `<figure><svg viewBox="${VIEWBOX}">${renderSvg(spec, v, t, `${theme}-${v}-${t * 10}`)}</svg><figcaption>${v === "front" ? spec.camera : v} · t=${t}</figcaption></figure>`),
+      momentsFor(spec).map(({ t, phase }) => `<figure><svg viewBox="${VIEWBOX}">${renderSvg(spec, v, t, `${theme}-${v}-${t * 10}-${phase}`, phase)}</svg><figcaption>${v === "front" ? spec.camera : spec.sideCamera === "angled" ? "side angled" : v} · ${phase ? "back " : ""}t=${t}</figcaption></figure>`),
     ).join("") +
     `</div>`;
   return `<!doctype html><html><head><style>
     body { margin: 0; background: #000; font: 12px system-ui; }
     h1 { color: #ccc; font-size: 14px; margin: 8px 12px; }
-    .row { display: flex; gap: 8px; padding: 8px; background: var(--card); }
+    .row { display: flex; gap: 8px; padding: 8px; background: var(--card); width: max-content; }
     figure { margin: 0; text-align: center; color: var(--muted-foreground); }
     .theme { writing-mode: vertical-rl; color: var(--muted-foreground); }
     svg { width: ${200 * zoom}px; height: ${240 * zoom}px; display: block; }
@@ -128,7 +133,7 @@ async function map() {
   const page = await browser.newPage({ viewport: { width: 3000, height: 1200 } });
   await page.setContent(`<!doctype html><html><head><style>
     body { margin: 0; background: #000; font: 12px system-ui; }
-    .row { display: flex; gap: 8px; padding: 8px; background: var(--card); }
+    .row { display: flex; gap: 8px; padding: 8px; background: var(--card); width: max-content; }
     figure { margin: 0; text-align: center; color: var(--muted-foreground); }
     svg { width: 580px; height: 552px; display: block; }
   </style></head><body>${row("dark")}${row("light")}</body></html>`);

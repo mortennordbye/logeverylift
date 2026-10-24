@@ -12,6 +12,7 @@
     "Stand"
   ],
   "anchor": "rAnkle",
+  "worked": "right",
   "zoom": 0.85,
   "keyframes": [
     {

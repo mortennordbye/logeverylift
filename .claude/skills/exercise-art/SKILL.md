@@ -63,6 +63,32 @@ showing (x, 166 + z). Use it for anything done lying down (bench press, floor
 press, skull crusher, crunch): seen from the feet, a lying body is end-on and
 the worked muscles hide behind the thighs.
 
+`"camera": "angled"` replaces it with a three-quarter view from the front-right,
+a little above; `"behind"` with one from behind-right. Use them when neither
+the plain front view nor the view from above reads: a landmine press (the bar
+and the half-kneel read from the front-right), a donkey kick (from behind, all
+fours and the leg kicking up read). `"sideCamera": "angled"` turns the side
+view toward the front and a little above, for a movement the side-on view
+hides: a dumbbell fly's arc (the arms open toward a side-on camera), a cable
+from a pulley beside the lifter (side-on, the pulley sits on the chest).
+Equipment is drawn in 3D from these cameras, so every prop works with them.
+
+**One-sided work** (single-leg calf raise, pistol squat, single-arm row):
+set `"worked": "left"` or `"right"` so only that side's limbs light up; the
+free arm or leg is drawn as resting.
+
+**Loop** (`"cycle": "loop"`): by default the drawing plays the keyframes out
+and back. A movement whose way back is not its way out (a Hindu push-up dives
+forward and pushes back to downward dog) plays out through its keyframes and
+then returns from the last straight to the first. The preview then adds a
+"back t=0.5" frame, and `check` samples that return too. A return that is
+more than one straight blend gets its own keyframes: set `"turnAt"` to the
+keyframe where the way back begins, and list the return keyframes after it
+(Hindu push-up: 0-2 out, then 3-5 and back to 0). A straight blend between
+two straight-arm poses bends the elbows halfway, because the shoulders cut
+inside arm's reach; add a return keyframe with the shoulders on the arc at
+arm's length from the hands.
+
 Joints: `head` (centre of a radius-15 head), `neck` (base of the neck),
 `chest` (mid spine), `pelvis`, and `lShoulder rShoulder lElbow rElbow lWrist
 rWrist lHip rHip lKnee rKnee lAnkle rAnkle lToe rToe`, plus the optional
@@ -163,12 +189,17 @@ little below the hips, not inside them. Going up from the squat, add a
 middle keyframe with the knees already on the arms and the feet just off
 the floor, or the legs sweep out straight behind.
 
-**Front rack** (power clean, front squat, clean and press): the skeleton
-has no hand, so the bar sits at the wrist joint and a fully folded arm
-cannot put the elbow up and forward. Put the wrists about 15 above and 15
-in front of the shoulder joints, tilt the head back a little so the chin
-clears the bar, and accept elbows a bit below horizontal. Do not let the
-bar rise past rack height in the turnover and drop back onto it.
+**Front rack** (power clean, front squat, clean and press): pose the hands
+(`lHand`, `rHand`) and put the bar `at` them. In the rack the bar rests on
+the front of the shoulders with the hands just under it, bent back at the
+wrist, so the elbows can come up and forward to about shoulder height: hands
+about 6 above and 12 in front of the shoulder joints, wrists below and in
+front of them, elbows forward. Tilt the head back a little so the chin
+clears the bar. Give the barbell `layer: "body"` so in the side view the
+plate goes behind the head whenever the bar is above the chest (the rack, the
+press) and sorts with the body below it (the pull). Do not let the bar rise
+past rack height in the turnover and drop back onto it. Without hands the bar sits at the wrist joint and the
+elbows cannot get above about horizontal.
 
 **A foot swept along the floor** (get-up leg sweep): a held ankle travels
 in a straight line, so a line passing close to the hip makes the knee
@@ -241,11 +272,11 @@ cocked wrist.
 
 | type | fields | drawn as |
 |---|---|---|
-| `barbell` | `at` (default both wrists), `cambered` (EZ bar) | bar along x through the joints' midpoint: plates at the ends (front), a plate (side); `cambered` bends the middle into a W with the hands on the angled stretches about 18 either side of centre |
+| `barbell` | `at` (default both wrists), `cambered` (EZ bar), `grip` `underhand` or `overhand` | bar along x through the joints' midpoint: plates at the ends (front), a plate (side); `cambered` bends the middle into a W with the hands on the angled stretches about 18 either side of centre. `grip` draws a fist at each wrist: overhand covers the bar from the front with its knuckles showing, underhand sits behind it; set it wherever the grip is the point (reverse curl against barbell curl) |
 | `dumbbell` | `at` (default both wrists), `along` `x` (overhand, default), `z` (neutral grip) or `forearm` (neutral grip that stays at right angles to the forearm as it swings: hammer curl) | one dumbbell per joint |
 | `kettlebell` | `at`, `along` `hang` (default) or `forearm` | one bell at the joints' midpoint, hanging straight down or carried on in line with the forearms (a swing's float, where the bell extends the arms) |
 | `bench` | `y, z1, z2, width` | pad with its top at y, from z1 to z2, `width` across and always centred on x = 125; legs to the floor |
-| `incline` | `from`, `to` (each `[y, z]`), `width` | sloped pad whose top surface runs from `from` to `to` (incline bench back, upright seat back); one post to the floor. Pair it with a `bench` for the seat |
+| `incline` | `from`, `to` (each `[y, z]`), `width` | sloped pad whose top surface runs from `from` to `to` (incline bench back, upright seat back); one post to the floor. Pair it with a `bench` for the seat. For a body lying chest-down on it (spider curl) set `layer: "auto"` so the front view draws the pad over the torso and the hanging arms in front of it |
 | `bars` | `y, z1, z2, width` | parallel bars along z at height y, `width` apart (dip station) |
 | `box` | `y, z1, z2, width` | solid box or step from y down to the floor |
 | `bar` | `y, z` | fixed bar along x (pull-up bar, rack) |

@@ -10,6 +10,7 @@
     "Bridge",
     "Lower"
   ],
+  "worked": "left",
   "anchor": "lAnkle",
   "camera": "top",
   "zoom": 0.85,

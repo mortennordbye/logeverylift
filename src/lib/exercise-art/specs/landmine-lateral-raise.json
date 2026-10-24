@@ -5,6 +5,7 @@
   "cue": "Lead with your elbow and stop at shoulder height. Keep your torso still instead of leaning away from the bar.",
   "phases": ["Raise", "Lower"],
   "anchor": "lAnkle",
+  "worked": "right",
   "keyframes": [
     {
       "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],

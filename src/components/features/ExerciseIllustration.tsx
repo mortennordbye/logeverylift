@@ -6,7 +6,7 @@ import { VIEWS } from "@/lib/exercise-art/skeleton";
 import { Pause, Play } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
-const LABELS = { front: "Front", top: "Top", side: "Side" } as const;
+const LABELS = { front: "Front", top: "Top", angled: "Angle", behind: "Behind", side: "Side" } as const;
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 function subscribeReducedMotion(onChange: () => void) {
@@ -32,14 +32,15 @@ export function ExerciseIllustration({ spec }: { spec: ArtSpec }) {
   const [phase, setPhase] = useState<0 | 1>(0);
 
   useEffect(() => {
-    const paint = (t: number) => {
+    const paint = (t: number, phase: 0 | 1) => {
       for (const v of VIEWS) {
         const svg = svgs.current[v];
-        if (svg) svg.innerHTML = renderSvg(spec, v, t, `${id}${v}`);
+        if (svg) svg.innerHTML = renderSvg(spec, v, t, `${id}${v}`, phase);
       }
     };
     if (!playing) {
-      paint(elapsed.current === 0 ? 1 : cycleAt(elapsed.current).t);
+      const at = elapsed.current === 0 ? { t: 1, phase: 0 as const } : cycleAt(elapsed.current);
+      paint(at.t, at.phase);
       return;
     }
     let frame = 0;
@@ -48,7 +49,7 @@ export function ExerciseIllustration({ spec }: { spec: ArtSpec }) {
       elapsed.current += now - last;
       last = now;
       const at = cycleAt(elapsed.current);
-      paint(at.t);
+      paint(at.t, at.phase);
       setPhase(at.phase);
       frame = requestAnimationFrame(tick);
     };

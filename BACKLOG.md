@@ -10,12 +10,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
-### Exercise illustrations: drawings shipped with known weak spots
-- **What:** All 157 built-in strength exercises have illustrations, but some shipped with a fault the renderer could not fix at the time. Reverse Curl has no overhand grip, so it looks like a Barbell Curl. Spider Curl's front view reads as a standing curl, because the `incline` pad is always drawn behind the figure. The free leg of Single-Leg Calf Raise is lit, because `calves` lights both shins. Donkey Kick's top view does not read as all fours. Hindu Push-up plays back down through the dive instead of up through downward dog. Landmine Press's front view shows the bar as a staff and the half-kneel as standing. Dumbbell Fly's side view cannot show the arc. Pallof Press draws the side pulley over the chest in the side view. Power Clean's catch stops short of a full front rack.
-- **Why deferred:** Each one needs a renderer change, not a new pose. The user approved shipping them as they are rather than holding the drawings back.
-- **Unblocked by:** These renderer changes: an overhand grip option on `barbell`; drawing an `incline` pad in front of a body lying chest-down on it; per-side muscle lighting; a one-way keyframe cycle (start, middle, end, then back to the start without reversing); an angled camera. Then redraw the affected specs with the exercise-art skill and have the user approve the previews.
-- **Touchpoints:** `src/lib/exercise-art/scene.ts`, `src/lib/exercise-art/schema.ts`, `src/lib/exercise-art/specs/`, `.claude/skills/exercise-art/SKILL.md`.
-
 ### Norwegian sign-in form on the welcome page
 - **What:** `/welcome?lang=no` translates all of the welcome page's own copy, but the embedded sign-in form (labels, "Sign In" button, "New here? Create account") stays in English, as do `/login` and `/signup`.
 - **Why deferred:** The Norwegian option was asked for on the front page only. `LoginForm` is shared with `/login`, so translating it means adding a language prop or real i18n rather than a page-local dictionary.

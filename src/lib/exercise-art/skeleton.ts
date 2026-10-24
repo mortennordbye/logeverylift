@@ -32,8 +32,17 @@ export const TOP_Y = 166;
 
 export const VIEWS = ["front", "side"] as const;
 export type View = (typeof VIEWS)[number];
-/** What the "front" view slot shows: the lifter from the front, or from above (for lying lifts). */
-export type Camera = "front" | "top";
+/**
+ * How a view slot looks at the lifter. The front slot: from the front, from
+ * above (lying lifts), or three-quarter and a little above, from the
+ * front-right ("angled") or from behind-right ("behind"). The side slot passes
+ * "front" for its plain side-on view or "angled" for one turned toward the
+ * front, a little above.
+ */
+export type Camera = "front" | "top" | "angled" | "behind";
+
+/** The three-quarter cameras, which see equipment obliquely. */
+export const isOblique = (camera: Camera): boolean => camera === "angled" || camera === "behind";
 
 export const JOINTS = [
   "head", "neck", "chest", "pelvis",

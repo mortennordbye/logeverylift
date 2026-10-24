@@ -5,6 +5,7 @@
   "cue": "Brace the back of your upper arm against your inner thigh and keep it there. Curl with the forearm only and lower all the way down.",
   "phases": ["Curl", "Lower"],
   "anchor": "pelvis",
+  "worked": "right",
   "keyframes": [
     {
       "head": [125, 148, 65], "neck": [125, 166, 50], "chest": [125, 195, 26], "pelvis": [125, 226, 0],

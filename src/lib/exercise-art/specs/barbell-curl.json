@@ -18,5 +18,5 @@
     },
     { "lWrist": [102, 109, 31], "rWrist": [148, 109, 31] }
   ],
-  "props": [{ "type": "barbell" }]
+  "props": [{ "type": "barbell", "grip": "underhand" }]
 }
