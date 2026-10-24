@@ -169,6 +169,24 @@ describe("motion", () => {
     };
     expect(bellX("forearm")).toBeGreaterThan(bellX("hang") + 10);
   });
+
+  it("rides a roller pad on the joints it is given, moved by its offset, with a lever to the pivot", () => {
+    const spec = artSpecSchema.parse({ ...(read("barbell-curl.json") as object), props: [{ type: "roller", at: ["lAnkle", "rAnkle"], offset: [-4, 10], pivot: [220, 0] }] });
+    const { lAnkle, rAnkle } = poseAt(curl, 0);
+    const side = buildScene(spec, "side", 0);
+    const pad = side.find((s) => s.role === "equip")!;
+    // A circle's path starts at its leftmost point, 8 (the radius) left of the centre.
+    const [, x, y] = pad.d.match(/^M(-?[\d.]+) (-?[\d.]+)/)!.map(Number);
+    expect(x).toBeCloseTo(125 + (lAnkle[2] + rAnkle[2]) / 2 + 10 - 8, 0);
+    expect(y).toBeCloseTo((lAnkle[1] + rAnkle[1]) / 2 - 4, 0);
+    expect(side.some((s) => s.role === "steel" && s.stroke === 4)).toBe(true);
+  });
+
+  it("needs a place for a roller that rides on no joints", () => {
+    const withRoller = (roller: object) => artSpecSchema.safeParse({ ...(read("barbell-curl.json") as object), props: [roller] }).success;
+    expect(withRoller({ type: "roller", y: 230 })).toBe(false);
+    expect(withRoller({ type: "roller", y: 230, z: 60 })).toBe(true);
+  });
 });
 
 describe("muscleRoles", () => {

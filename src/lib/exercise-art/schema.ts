@@ -39,6 +39,26 @@ const prop = z.discriminatedUnion("type", [
   z.object({ type: z.literal("bar"), y: z.number(), z: z.number(), layer: layer.default("back") }),
   /** Cable from a fixed pulley to a joint. */
   z.object({ type: z.literal("cable"), anchor: point3, at: joint, layer: layer.default("back") }),
+  /**
+   * Roller pad along x: fixed at [y, z] (a decline bench's leg hook), or
+   * riding on joints (`at`) like a leg extension's shin pad. `offset` is
+   * [along, across] in the frame of the bone into those joints: along it past
+   * the joint, then across it, positive being the side a bone pointing +z
+   * has on top (a hanging shin's front, a prone shin's calf). `pivot` [y, z]
+   * draws the machine's lever from there to the pad.
+   */
+  z
+    .object({
+      type: z.literal("roller"),
+      at: z.array(joint).min(1).optional(),
+      y: z.number().optional(),
+      z: z.number().optional(),
+      offset: z.tuple([z.number(), z.number()]).default([0, 0]),
+      pivot: z.tuple([z.number(), z.number()]).optional(),
+      width: z.number().positive().default(44),
+      layer: layer.default("auto"),
+    })
+    .refine((p) => p.at !== undefined || (p.y !== undefined && p.z !== undefined), "roller needs `at` or both `y` and `z`"),
   /** Box or step: top at y, from z1 to z2, `width` across, solid to the floor. */
   z.object({ type: z.literal("box"), y: z.number(), z1: z.number(), z2: z.number(), width: z.number().positive(), layer: layer.default("back") }),
 ]);

@@ -1,0 +1,163 @@
+{
+  "name": "Leg Extension",
+  "primary": "quads",
+  "secondary": [],
+  "cue": "Straighten your knees all the way and pause at the top. Keep your hips down on the seat and do not swing the weight up.",
+  "phases": [
+    "Extend",
+    "Lower"
+  ],
+  "anchor": "pelvis",
+  "props": [
+    {
+      "type": "bench",
+      "y": 205,
+      "z1": -52,
+      "z2": 26,
+      "width": 44
+    },
+    {
+      "type": "incline",
+      "from": [
+        200,
+        -52
+      ],
+      "to": [
+        108,
+        -64
+      ],
+      "width": 44
+    },
+    {
+      "type": "roller",
+      "at": [
+        "lAnkle",
+        "rAnkle"
+      ],
+      "offset": [
+        -6,
+        9
+      ],
+      "pivot": [
+        192,
+        30
+      ]
+    }
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        87,
+        -40
+      ],
+      "neck": [
+        125,
+        111,
+        -42
+      ],
+      "chest": [
+        125,
+        149,
+        -37
+      ],
+      "pelvis": [
+        125,
+        188,
+        -30
+      ],
+      "lShoulder": [
+        103,
+        115,
+        -42
+      ],
+      "rShoulder": [
+        147,
+        115,
+        -42
+      ],
+      "lElbow": [
+        97,
+        158,
+        -36
+      ],
+      "rElbow": [
+        153,
+        158,
+        -36
+      ],
+      "lWrist": [
+        96,
+        195,
+        -22
+      ],
+      "rWrist": [
+        154,
+        195,
+        -22
+      ],
+      "lHip": [
+        113,
+        190,
+        -30
+      ],
+      "rHip": [
+        137,
+        190,
+        -30
+      ],
+      "lKnee": [
+        113,
+        192,
+        30
+      ],
+      "rKnee": [
+        137,
+        192,
+        30
+      ],
+      "lAnkle": [
+        113,
+        247,
+        22
+      ],
+      "rAnkle": [
+        137,
+        247,
+        22
+      ],
+      "lToe": [
+        113,
+        256,
+        41
+      ],
+      "rToe": [
+        137,
+        256,
+        41
+      ]
+    },
+    {
+      "lAnkle": [
+        113,
+        189,
+        86
+      ],
+      "rAnkle": [
+        137,
+        189,
+        86
+      ],
+      "lToe": [
+        113,
+        170,
+        94
+      ],
+      "rToe": [
+        137,
+        170,
+        94
+      ]
+    }
+  ]
+}

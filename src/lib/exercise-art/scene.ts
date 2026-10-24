@@ -9,7 +9,7 @@
  */
 
 import { resolvePoses, type ArtProp, type ArtSpec, type Point3, type Pose } from "./schema";
-import { CENTER_X, FLOOR_Y, HEAD_RADIUS, JOINTS, LIMBS, NEIGHBOURS, TOP_Y, type Camera, type Joint, type Muscle, type View } from "./skeleton";
+import { BONES, CENTER_X, FLOOR_Y, HEAD_RADIUS, JOINTS, LIMBS, NEIGHBOURS, TOP_Y, type Camera, type Joint, type Muscle, type View } from "./skeleton";
 
 /** Where figures and equipment sit (checkSpec keeps joints inside it), so the figure fills its card. */
 export const VIEWBOX = "25 36 200 260";
@@ -405,6 +405,34 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
       return [group(-1e6, view === "front"
         ? [{ d: rect(32, (camera === "top" ? TOP_Y + p.z : p.y) - 2.5, 186, 5, 2.5), role: "steel" }]
         : [{ d: circle([CENTER_X + p.z, p.y], 4.5), role: "steel" }])];
+    case "roller": {
+      // Riding on joints, the offset is in the limb's own frame (along the
+      // bone into the joint, then across it) so the pad stays on the same
+      // spot of a shin that turns through the rep.
+      let c: Point3 = [CENTER_X, p.y!, p.z!];
+      if (p.at) {
+        const end = mean3(p.at.map((j) => pose[j]));
+        const start = mean3(p.at.map((j) => pose[BONES.find((b) => b.b === j)?.a ?? j]));
+        const dy = end[1] - start[1];
+        const dz = end[2] - start[2];
+        const n = Math.hypot(dy, dz) || 1;
+        const [along, across] = p.offset;
+        c = [CENTER_X, end[1] + (along * dy - across * dz) / n, end[2] + (along * dz + across * dy) / n];
+      }
+      const { at: [x, y], depth } = project(c, view, camera);
+      if (view === "side") {
+        // The pad's end cap is the outermost thing on the near side, so it
+        // covers the near shin where they cross.
+        const lever: Shape[] = p.pivot
+          ? [
+              { d: line([CENTER_X + p.pivot[1], p.pivot[0]], [x, y]), role: "steel", stroke: 4 },
+              { d: circle([CENTER_X + p.pivot[1], p.pivot[0]], 4.5), role: "steel" },
+            ]
+          : [];
+        return [group(CENTER_X + p.width / 2, [...lever, { d: circle([x, y], 8), role: "equip" }, { d: circle([x, y], 2.5), role: "steel" }])];
+      }
+      return [group(depth, [{ d: capsule([x - p.width / 2, y], [x + p.width / 2, y], 8, 8), role: "equip" }])];
+    }
     case "cable": {
       const a = project(p.anchor, view, camera).at;
       return [group(-1e6, [

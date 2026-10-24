@@ -30,7 +30,8 @@ slug is the exercise name in kebab case (`Barbell Curl` → `barbell-curl`).
    straight down), `lat-pulldown.json` and `overhead-press.json` (seated),
    `plank.json` and `push-up.json` (face down full length, top camera,
    `zoom`), `hip-thrust.json` (back on a bench edge, top camera), `lunge.json`
-   (split stance), `dumbbell-curl.json` (dumbbells).
+   (split stance), `dumbbell-curl.json` (dumbbells), `leg-extension.json`
+   (machine seat with a backrest, `roller` on the shins with a knee pivot).
 3. **Pose it**: keyframe 0 is where the lifter sets up before the first rep
    (lockout for a bench press or squat, arms hanging for a curl, bar on the
    floor for a deadlift); the last keyframe is the other end of the range.
@@ -233,6 +234,7 @@ cocked wrist.
 | `box` | `y, z1, z2, width` | solid box or step from y down to the floor |
 | `bar` | `y, z` | fixed bar along x (pull-up bar, rack) |
 | `cable` | `anchor: [x, y, z], at` | line from a pulley to a joint |
+| `roller` | `y, z` (fixed) or `at` + `offset: [along, across]` (riding on joints), `pivot: [y, z]`, `width` | padded cylinder along x: a decline bench's leg hook or a seated curl's thigh pad (fixed), or a machine's shin pad (`at` both ankles). `offset` is in the shin's own frame, so the pad stays on the same spot as the knee bends: `along` past the ankle (negative moves it up the shin), `across` positive toward the side a shin pointing +z has on top (a hanging shin's front, a prone shin's calf). Leg extension `[-6, 9]`, seated curl `[-6, -9]`. `pivot` at the knee draws the lever arm |
 
 **If the equipment is not in this table, do not fake it with another prop.**
 Batch 2 tried: a vertical `box` as an incline backrest (the back hung in the
