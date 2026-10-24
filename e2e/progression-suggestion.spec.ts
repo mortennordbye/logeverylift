@@ -173,7 +173,12 @@ test("correcting reps mid-workout keeps the plan's target unless asked to change
   const save = async () => {
     // The editor waits for its writes before it navigates back, so being back
     // on the list means every write it started has finished.
-    await page.getByRole("button", { name: "Save", exact: true }).click();
+    //
+    // tapAndSave, not click: on WebKit, scrolling the switch into view scrolls
+    // the window, ViewportFix snaps it back, and a Save tap aimed a moment
+    // before the snap lands 64px off. Saving mid-workout always writes the
+    // set's note, so a tap that never started a write is retried.
+    await tapAndSave(page, page.getByRole("button", { name: "Save", exact: true }));
     await expect(page).toHaveURL(/\/exercises\/\d+$/);
   };
 
