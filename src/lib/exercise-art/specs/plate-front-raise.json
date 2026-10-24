@@ -1,0 +1,25 @@
+{
+  "name": "Plate Front Raise",
+  "primary": "shoulders",
+  "secondary": ["chest"],
+  "cue": "Hold the plate at its edges and raise it to shoulder height with straight arms. Do not lean back to swing it up.",
+  "phases": ["Raise", "Lower"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 58, 2], "neck": [125, 82, 0], "chest": [125, 120, 1], "pelvis": [125, 160, 0],
+      "lShoulder": [103, 88, 0], "rShoulder": [147, 88, 0],
+      "lElbow": [104, 134, 8], "rElbow": [146, 134, 8],
+      "lWrist": [106, 174, 22], "rWrist": [144, 174, 22],
+      "lHip": [113, 162, 0], "rHip": [137, 162, 0],
+      "lKnee": [112, 222, 1], "rKnee": [138, 222, 1],
+      "lAnkle": [112, 278, -1], "rAnkle": [138, 278, -1],
+      "lToe": [110, 284, 19], "rToe": [140, 284, 19]
+    },
+    {
+      "lElbow": [104, 88, 46], "rElbow": [146, 88, 46],
+      "lWrist": [106, 90, 88], "rWrist": [144, 90, 88]
+    }
+  ],
+  "props": [{ "type": "plate", "facing": "z" }]
+}

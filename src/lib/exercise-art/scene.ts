@@ -215,7 +215,7 @@ function glutePoint(pose: Pose): Point3 {
  * Front torso, laid out in the torso's own frame (across the shoulders, down
  * to the hips) so it follows a lean or a twist.
  */
-function frontTorso(j: Record<Joint, Point>, role: (m: Muscle[]) => Role): Shape[] {
+function frontTorso(j: Record<Joint, Point>, role: (m: Muscle[]) => Role, camera: Camera): Shape[] {
   const top = mid(j.lShoulder, j.rShoulder);
   const bottom = mid(j.lHip, j.rHip);
   const halfTop = Math.hypot(j.rShoulder[0] - j.lShoulder[0], j.rShoulder[1] - j.lShoulder[1]) / 2 || 1;
@@ -239,7 +239,8 @@ function frontTorso(j: Record<Joint, Point>, role: (m: Muscle[]) => Role): Shape
     shape([[1.02, 0.18], [0.86, 0.2], [0.66, 0.6], [0.82, 0.6]], role(["back"])),
     shape([[-0.9, 0.04], [0, 0.0], [0.9, 0.04], [0.84, 0.3], [0.44, 0.4], [0, 0.36], [-0.44, 0.4], [-0.84, 0.3]], role(["chest"])),
     seam([0, 0.03], [0, 0.37]),
-    shape([[-0.4, 0.46], [0.4, 0.46], [0.38, 0.88], [0, 0.96], [-0.38, 0.88]], role(["abs"])),
+    // From above the lower panel can be either side of the body, as in the side view.
+    shape([[-0.4, 0.46], [0.4, 0.46], [0.38, 0.88], [0, 0.96], [-0.38, 0.88]], role(camera === "top" ? ["abs", "lower_back"] : ["abs"])),
     seam([0, 0.5], [0, 0.9]),
   ];
 }
@@ -440,7 +441,84 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
         { d: circle(a, 5), role: "equip" },
       ])];
     }
+    case "rings":
+      // Rings hang with their face across the body: a full ring from the side, edge-on from the front.
+      return (p.at ?? wrists).map((jn) => {
+        const w = pose[jn];
+        const { at: c, depth } = project(w, view, camera);
+        return group(depth - 1, [
+          { d: line(project([w[0], p.y, w[2]], view, camera).at, [c[0], c[1] - 7]), role: "steel", stroke: 1.6 },
+          { d: disc(w, [1, 0, 0], 7, view, camera), role: "steel", stroke: 2.5 },
+        ]);
+      });
+    case "landmine": {
+      const joints = (p.at ?? wrists).map((jn) => pose[jn]);
+      const c = mean3(joints);
+      const pivot: Point3 = [CENTER_X, p.pivot[0], p.pivot[1]];
+      const d = unit(sub(c, pivot));
+      // Hands on the end of the sleeve hold just past the plate; a handle under the bar sits just short of it.
+      const past = p.plate === "past";
+      const end: Point3 = [0, 1, 2].map((i) => c[i] + d[i] * (past ? 14 : 4)) as Point3;
+      const plate: Point3 = [0, 1, 2].map((i) => c[i] + d[i] * (past ? 14 : -18)) as Point3;
+      const near = view === "side" ? Math.max(...joints.map((q) => q[0])) : project(c, view, camera).depth;
+      return [group(near - 1, [
+        { d: line(project(pivot, view, camera).at, project(end, view, camera).at), role: "steel", stroke: 4 },
+        { d: circle(project(pivot, view, camera).at, 4.5), role: "steel" },
+        { d: disc(plate, d, 22, view, camera), role: "plate" },
+      ])];
+    }
+    case "plate": {
+      const c = mean3((p.at ?? wrists).map((jn) => pose[jn]));
+      if (p.hang) c[1] += p.radius;
+      const normal: Point3 = p.facing === "x" ? [1, 0, 0] : p.facing === "y" ? [0, 1, 0] : [0, 0, 1];
+      return [group(project(c, view, camera).depth - 1, [
+        { d: disc(c, normal, p.radius, view, camera), role: "plate" },
+        { d: disc(c, normal, 4, view, camera), role: "steel" },
+      ])];
+    }
+    case "ball": {
+      const { at: c, depth } = project(mean3((p.at ?? wrists).map((jn) => pose[jn])), view, camera);
+      return [group(depth - 1, [
+        { d: circle(c, p.radius), role: "plate" },
+        { d: line([c[0] - p.radius * 0.9, c[1]], [c[0] + p.radius * 0.9, c[1]]), role: "seam", stroke: 1.2 },
+      ])];
+    }
+    case "wheel": {
+      const joints = (p.at ?? wrists).map((jn) => pose[jn]);
+      const c = mean3(joints);
+      const ends = joints.length > 1 ? [project(joints[0], view, camera).at, project(joints.at(-1)!, view, camera).at] : null;
+      return [group(project(c, view, camera).depth - 1, [
+        ...(ends && view !== "side" ? [{ d: line(ends[0], ends[1]), role: "steel" as const, stroke: 3 }] : []),
+        { d: disc(c, [1, 0, 0], 13, view, camera), role: "plate" },
+        { d: circle(project(c, view, camera).at, 2.5), role: "steel" },
+      ])];
+    }
+    case "wall": {
+      // Drawn 8 thick on the side away from the lifter.
+      const za = p.z < 0 ? p.z - 8 : p.z;
+      if (view === "side") return [group(-1e6, [{ d: rect(CENTER_X + za, 36, 8, FLOOR_Y - 36, 1), role: "equip" }])];
+      if (camera === "top") return [group(-1e6, [{ d: rect(32, TOP_Y + za, 186, 8, 1), role: "equip" }])];
+      // From the front, a wall behind the lifter is a backdrop; one in front would hide them, so it is left out.
+      return p.z < 0 ? [group(-1e6, [{ d: rect(36, 60, 178, FLOOR_Y - 60, 4), role: "equip" }])] : [];
+    }
   }
+}
+
+/** A flat disc (plate, ring, wheel) of radius r facing `normal`, as the ellipse it projects to. */
+function disc(c: Point3, normal: Point3, r: number, view: View, camera: Camera): string {
+  const n = unit(normal);
+  const toward = view === "side" ? n[0] : camera === "top" ? -n[1] : n[2];
+  const [sx, sy] = view === "side" ? [n[2], n[1]] : camera === "top" ? [n[0], n[2]] : [n[0], n[1]];
+  const { at: [x, y] } = project(c, view, camera);
+  const shown = Math.hypot(sx, sy);
+  if (shown < 0.05) return circle([x, y], r);
+  // The long axis runs across the projected normal; the short one shrinks with the tilt.
+  const [ux, uy] = [-sy / shown, sx / shown];
+  const minor = Math.max(3, r * Math.abs(toward));
+  const rot = f((Math.atan2(uy, ux) * 180) / Math.PI);
+  const a = `${f(x + ux * r)} ${f(y + uy * r)}`;
+  const b = `${f(x - ux * r)} ${f(y - uy * r)}`;
+  return `M${a}A${f(r)} ${f(minor)} ${rot} 1 0 ${b}A${f(r)} ${f(minor)} ${rot} 1 0 ${a}Z`;
 }
 
 /** Every shape of one view at movement position `t`, back to front. */
@@ -468,7 +546,7 @@ export function buildScene(spec: ArtSpec, view: View, t: number): Shape[] {
   const bias = { arm: fromFront ? 4 : 0, leg: fromFront ? -1 : 0 };
 
   const groups: Group[] = [
-    { depth: torsoDepth, shapes: view === "front" ? frontTorso(j, (m) => role(m)) : sideTorso(j, project(glutePoint(pose), view, spec.camera).at, (m) => role(m)) },
+    { depth: torsoDepth, shapes: view === "front" ? frontTorso(j, (m) => role(m), spec.camera) : sideTorso(j, project(glutePoint(pose), view, spec.camera).at, (m) => role(m)) },
     { depth: Math.max(depth.head, torsoDepth + 0.1), shapes: [{ d: capsule(j.neck, j.head, 6.5, 6.5), role: "limb" }, { d: circle(j.head, HEAD_RADIUS), role: "head" }] },
     ...LIMBS.map((l): Group => {
       const d = (depth[l.from] + depth[l.to]) / 2 + bias[l.kind];

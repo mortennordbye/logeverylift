@@ -184,6 +184,8 @@ through a prop mid-rep, so sample `poseAt` from `scene.ts` at small steps of t
 (run the spec through `artSpecSchema` first) and confirm the toe stays above
 the box top wherever its z is over the box.
 
+**Hyperextension bench** (hyperextension, back extension): there is no prop of its own. Use an `incline` as the hip pad under the front of the thighs, sloped at about 45 degrees for a back extension or flat and high for a hyperextension (a glute-ham style bench), and a fixed `roller` behind the ankles. The hips sit just past the pad edge so the torso can fold down over it. Reverse hyper: chest on a high `bench`, hips just off its end, legs swinging up behind, `roller` on the ankles.
+
 **Anchor.** `anchor` names the joint that stays put while the body moves round
 it: `lAnkle` for anything standing, a wrist for a hang (pull-up), `pelvis` for
 seated or lying work. Pick the joint that does not move in real life, or the
@@ -235,6 +237,12 @@ cocked wrist.
 | `bar` | `y, z` | fixed bar along x (pull-up bar, rack) |
 | `cable` | `anchor: [x, y, z], at` | line from a pulley to a joint |
 | `roller` | `y, z` (fixed) or `at` + `offset: [along, across]` (riding on joints), `pivot: [y, z]`, `width` | padded cylinder along x: a decline bench's leg hook or a seated curl's thigh pad (fixed), or a machine's shin pad (`at` both ankles). `offset` is in the shin's own frame, so the pad stays on the same spot as the knee bends: `along` past the ankle (negative moves it up the shin), `across` positive toward the side a shin pointing +z has on top (a hanging shin's front, a prone shin's calf). Leg extension `[-6, 9]`, seated curl `[-6, -9]`. `pivot` at the knee draws the lever arm |
+| `rings` | `at` (default both wrists), `y` (strap top, default 36) | one ring per joint on a strap straight up: a full ring from the side, edge-on from the front |
+| `landmine` | `pivot: [y, z]` (on the centre line, near the floor), `at` (default both wrists), `plate` `below` (default) or `past` | bar from the floor pivot to the hands, which hold the end of the sleeve, with a plate 18 below them toward the pivot; `past` puts it 14 past them instead, for a T-bar row's handle under the bar (landmine press, T-bar row) |
+| `plate` | `at` (default both wrists), `facing` `x`, `y` or `z` (default, face to the front camera), `radius` (22), `hang` | weight plate at the joints' midpoint; `hang` puts it below them, pinched by its top edge (plate pinch: one prop per hand) |
+| `ball` | `at` (default both wrists), `radius` (14) | medicine ball at the joints' midpoint |
+| `wheel` | `at` (default both wrists) | ab wheel with its hub at the hands: put the wrists 13 above the floor (y 277) so it rolls on it |
+| `wall` | `z` | wall along x at depth z, floor to ceiling. From the front it is a backdrop when behind the lifter (z < 0) and left out when in front |
 
 **If the equipment is not in this table, do not fake it with another prop.**
 Batch 2 tried: a vertical `box` as an incline backrest (the back hung in the
@@ -243,7 +251,7 @@ fixed-axis dumbbell for a hammer curl (the handle ran along the forearm).
 Each failed review twice and cost a full fix round. Stop, write no spec, and
 say in your result which prop is missing and what it should look like; a
 renderer change in `src/lib/exercise-art/scene.ts` and `schema.ts` comes
-first. Leg Press stays undrawn until there is a sled prop (a reclined back
+first. Leg Press and Hack Squat stay undrawn until there is a sled prop (a reclined back
 pad and a footplate the feet push).
 
 Held weights sort by depth with the body; the near plate of a barbell in the
@@ -264,7 +272,7 @@ back squat's plate never covers the face: put it `at: ["lShoulder",
 
 The renderer lights a limb when one of its muscles is primary (accent) or
 secondary (dimmed accent). Upper arm: biceps, triceps, shoulders. Forearm:
-forearms. Thigh: quads, hamstrings, glutes. Shin: calves. Side torso: chest and
+forearms. Thigh: quads, hamstrings, glutes. Shin: calves. Front torso from above (`top` camera): the lower panel lights for abs or lower_back, as in the side view. Side torso: chest and
 back (upper), abs and lower_back (lower), glutes (seat). Front torso: chest
 plate, abs, lats and upper traps (back) and the shoulder caps. The muscle map next to the
 figure (`muscle-map.ts`, preview with `pnpm art map`) uses the same muscles.

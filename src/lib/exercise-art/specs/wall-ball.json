@@ -1,0 +1,264 @@
+{
+  "name": "Wall Ball",
+  "primary": "quads",
+  "secondary": [
+    "shoulders",
+    "glutes",
+    "triceps"
+  ],
+  "cue": "Squat to full depth with the ball at your chest, then drive up through your legs and let that push the ball to the target. Catch it and go straight into the next squat.",
+  "phases": [
+    "Squat and throw",
+    "Catch"
+  ],
+  "anchor": "lAnkle",
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "head": [
+        125,
+        58,
+        2
+      ],
+      "neck": [
+        125,
+        82,
+        0
+      ],
+      "chest": [
+        125,
+        120,
+        1
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        103,
+        88,
+        3
+      ],
+      "rShoulder": [
+        147,
+        88,
+        3
+      ],
+      "lElbow": [
+        98,
+        133.5,
+        -1.8
+      ],
+      "rElbow": [
+        152,
+        133.5,
+        -1.8
+      ],
+      "lWrist": [
+        111,
+        103,
+        24
+      ],
+      "rWrist": [
+        139,
+        103,
+        24
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        108,
+        222,
+        1
+      ],
+      "rKnee": [
+        142,
+        222,
+        1
+      ],
+      "lAnkle": [
+        105,
+        278,
+        -1
+      ],
+      "rAnkle": [
+        145,
+        278,
+        -1
+      ],
+      "lToe": [
+        100,
+        284,
+        19
+      ],
+      "rToe": [
+        150,
+        284,
+        19
+      ]
+    },
+    {
+      "head": [
+        125,
+        148,
+        21
+      ],
+      "neck": [
+        125,
+        170,
+        11
+      ],
+      "chest": [
+        125,
+        204,
+        -5
+      ],
+      "pelvis": [
+        125,
+        240,
+        -22
+      ],
+      "lShoulder": [
+        103,
+        176,
+        13
+      ],
+      "rShoulder": [
+        147,
+        176,
+        13
+      ],
+      "lElbow": [
+        98,
+        220.9,
+        4.4
+      ],
+      "rElbow": [
+        152,
+        220.9,
+        4.4
+      ],
+      "lWrist": [
+        111,
+        188,
+        27
+      ],
+      "rWrist": [
+        139,
+        188,
+        27
+      ],
+      "lHip": [
+        113.2,
+        242,
+        -22
+      ],
+      "rHip": [
+        136.8,
+        242,
+        -22
+      ],
+      "lKnee": [
+        93.1,
+        236.2,
+        34.3
+      ],
+      "rKnee": [
+        156.9,
+        236.2,
+        34.3
+      ]
+    },
+    {
+      "head": [
+        125,
+        59,
+        -4
+      ],
+      "neck": [
+        125,
+        82,
+        0
+      ],
+      "chest": [
+        125,
+        120,
+        0
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        103,
+        88,
+        0
+      ],
+      "rShoulder": [
+        147,
+        88,
+        0
+      ],
+      "lElbow": [
+        104,
+        46,
+        16
+      ],
+      "rElbow": [
+        146,
+        46,
+        16
+      ],
+      "lWrist": [
+        111,
+        6,
+        34
+      ],
+      "rWrist": [
+        139,
+        6,
+        34
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        108,
+        222,
+        1
+      ],
+      "rKnee": [
+        142,
+        222,
+        1
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "ball",
+      "radius": 14
+    },
+    {
+      "type": "wall",
+      "z": 80
+    }
+  ]
+}

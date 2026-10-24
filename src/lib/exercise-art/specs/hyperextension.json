@@ -1,0 +1,32 @@
+{
+  "name": "Hyperextension",
+  "primary": "lower_back",
+  "secondary": ["glutes", "hamstrings"],
+  "cue": "Fold at the hips over the edge of the pad and lift until your body is in one straight line. Do not swing up past straight or arch your lower back hard at the top.",
+  "phases": ["Lower", "Raise"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "head": [125, 158, -117], "neck": [125, 160, -93], "chest": [125, 160, -55], "pelvis": [125, 160, -15],
+      "lShoulder": [102, 160, -93], "rShoulder": [148, 160, -93],
+      "lElbow": [65, 150, -110], "rElbow": [185, 150, -110],
+      "lWrist": [105, 150, -120], "rWrist": [145, 150, -120],
+      "lHip": [113, 160, -15], "rHip": [137, 160, -15],
+      "lKnee": [113, 160, 45], "rKnee": [137, 160, 45],
+      "lAnkle": [113, 160, 101], "rAnkle": [137, 160, 101],
+      "lToe": [113, 181, 103], "rToe": [137, 181, 103]
+    },
+    {
+      "chest": [125, 197.6, -28.7], "neck": [125, 233.3, -41.6], "head": [125, 255.9, -49.8],
+      "lShoulder": [102, 233.3, -41.6], "rShoulder": [148, 233.3, -41.6],
+      "lElbow": [65, 245.9, -56.8], "rElbow": [185, 245.9, -56.8],
+      "lWrist": [105, 255.3, -60.2], "rWrist": [145, 255.3, -60.2]
+    }
+  ],
+  "props": [
+    { "type": "incline", "from": [170, -5], "to": [170, 62], "width": 44 },
+    { "type": "roller", "y": 148, "z": 96, "width": 44 }
+  ]
+}

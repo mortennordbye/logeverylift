@@ -61,6 +61,28 @@ const prop = z.discriminatedUnion("type", [
     .refine((p) => p.at !== undefined || (p.y !== undefined && p.z !== undefined), "roller needs `at` or both `y` and `z`"),
   /** Box or step: top at y, from z1 to z2, `width` across, solid to the floor. */
   z.object({ type: z.literal("box"), y: z.number(), z1: z.number(), z2: z.number(), width: z.number().positive(), layer: layer.default("back") }),
+  /** Gymnastic rings: one ring per joint (default: the wrists), each on a strap straight up to height `y`. */
+  z.object({ type: z.literal("rings"), at: z.array(joint).min(1).optional(), y: z.number().default(36), layer: layer.default("auto") }),
+  /** Landmine: a bar from a floor pivot at [y, z] (on the centre line) through the midpoint of the joints (default: the wrists), with a plate just below the hands (on the end of the sleeve), or with `plate: "past"` just past them (a T-bar row's handle under the bar). */
+  z.object({ type: z.literal("landmine"), pivot: z.tuple([z.number(), z.number()]), at: z.array(joint).min(1).optional(), plate: z.enum(["below", "past"]).default("below"), layer: layer.default("auto") }),
+  /**
+   * Weight plate at the midpoint of the joints (default: the wrists), its face
+   * toward `facing`; `hang` puts it below the joints, pinched by its top edge.
+   */
+  z.object({
+    type: z.literal("plate"),
+    at: z.array(joint).min(1).optional(),
+    facing: z.enum(["x", "y", "z"]).default("z"),
+    radius: z.number().positive().default(22),
+    hang: z.boolean().default(false),
+    layer: layer.default("auto"),
+  }),
+  /** Medicine ball held at the midpoint of the joints (default: the wrists). */
+  z.object({ type: z.literal("ball"), at: z.array(joint).min(1).optional(), radius: z.number().positive().default(14), layer: layer.default("auto") }),
+  /** Ab wheel: the wheel's hub at the midpoint of the joints (default: the wrists); put them 13 above the floor so it rolls on it. */
+  z.object({ type: z.literal("wheel"), at: z.array(joint).min(1).optional(), layer: layer.default("auto") }),
+  /** Wall along x at depth z, floor to ceiling (wall sit, wall ball). */
+  z.object({ type: z.literal("wall"), z: z.number(), layer: layer.default("back") }),
 ]);
 
 export const artSpecSchema = z.object({

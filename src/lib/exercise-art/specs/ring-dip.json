@@ -1,0 +1,211 @@
+{
+  "name": "Ring Dip",
+  "primary": "triceps",
+  "secondary": [
+    "chest",
+    "shoulders"
+  ],
+  "cue": "Hold the rings tight to your sides so they do not drift apart. At the top, lock your elbows and turn the rings out slightly.",
+  "phases": [
+    "Lower",
+    "Press"
+  ],
+  "anchor": "lWrist",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        -3,
+        13
+      ],
+      "neck": [
+        125,
+        21,
+        8
+      ],
+      "chest": [
+        125,
+        57.7,
+        -1.8
+      ],
+      "pelvis": [
+        125,
+        96.3,
+        -12.2
+      ],
+      "lShoulder": [
+        103,
+        28,
+        6
+      ],
+      "rShoulder": [
+        147,
+        28,
+        6
+      ],
+      "lElbow": [
+        102,
+        71.5,
+        -1
+      ],
+      "rElbow": [
+        148,
+        71.5,
+        -1
+      ],
+      "lWrist": [
+        100,
+        115,
+        0
+      ],
+      "rWrist": [
+        150,
+        115,
+        0
+      ],
+      "lHip": [
+        113,
+        96.3,
+        -12.2
+      ],
+      "rHip": [
+        137,
+        96.3,
+        -12.2
+      ],
+      "lKnee": [
+        115,
+        156,
+        -8
+      ],
+      "rKnee": [
+        135,
+        156,
+        -8
+      ],
+      "lAnkle": [
+        117,
+        208,
+        -30
+      ],
+      "rAnkle": [
+        133,
+        208,
+        -30
+      ],
+      "lToe": [
+        117,
+        226,
+        -38
+      ],
+      "rToe": [
+        133,
+        226,
+        -38
+      ]
+    },
+    {
+      "head": [
+        125,
+        40,
+        46
+      ],
+      "neck": [
+        125,
+        61.5,
+        35
+      ],
+      "chest": [
+        125,
+        88.4,
+        8.1
+      ],
+      "pelvis": [
+        125,
+        114.1,
+        -22.5
+      ],
+      "lShoulder": [
+        103,
+        68,
+        35.5
+      ],
+      "rShoulder": [
+        147,
+        68,
+        35.5
+      ],
+      "lElbow": [
+        100.2,
+        74.3,
+        -9.4
+      ],
+      "rElbow": [
+        149.8,
+        74.3,
+        -9.4
+      ],
+      "lWrist": [
+        100,
+        115,
+        0
+      ],
+      "rWrist": [
+        150,
+        115,
+        0
+      ],
+      "lHip": [
+        113,
+        114.1,
+        -22.5
+      ],
+      "rHip": [
+        137,
+        114.1,
+        -22.5
+      ],
+      "lKnee": [
+        115,
+        174,
+        -18
+      ],
+      "rKnee": [
+        135,
+        174,
+        -18
+      ],
+      "lAnkle": [
+        119,
+        228,
+        -33
+      ],
+      "rAnkle": [
+        131,
+        228,
+        -33
+      ],
+      "lToe": [
+        119,
+        247,
+        -41
+      ],
+      "rToe": [
+        131,
+        247,
+        -41
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "rings",
+      "y": -25
+    }
+  ],
+  "zoom": 0.8
+}
