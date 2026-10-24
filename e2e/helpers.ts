@@ -140,7 +140,12 @@ async function dismissReadinessSheet(page: Page) {
   const answered = await page.evaluate(() => localStorage.getItem("workoutReadiness") !== null);
   const skipBtn = page.getByRole("button", { name: "Skip" });
   if (!answered) {
-    await skipBtn.click({ timeout: 10_000 });
+    // Wait for the readiness save, not just the tap. A spec that navigates
+    // straight on cancels it client-side, `confirmReadiness` retries from the
+    // page being unloaded, and that dropped retry never reports finished or
+    // failed, so a `trackActions` wait started earlier never sees zero.
+    const sid = await page.evaluate(() => JSON.parse(localStorage.getItem("activeWorkout") ?? "{}").sessionId);
+    await tapAndSave(page, skipBtn, { bodyIncludes: `[${sid},`, attempts: 1, startTimeoutMs: 10_000 });
   }
   await expect(skipBtn).toBeHidden({ timeout: 10_000 });
 }
