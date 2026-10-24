@@ -1,0 +1,46 @@
+{
+  "name": "Seated Calf Raise",
+  "primary": "calves",
+  "secondary": [],
+  "cue": "Let your heels drop below the footplate for a full stretch, then push up onto the balls of your feet. Pause at the top and lower slowly instead of bouncing.",
+  "phases": ["Rise", "Lower"],
+  "anchor": "pelvis",
+  "hold": ["lAnkle", "rAnkle"],
+  "keyframes": [
+    {
+      "head": [125, 86, -28],
+      "neck": [125, 110, -30],
+      "chest": [125, 148, -30],
+      "pelvis": [125, 188, -30],
+      "lShoulder": [103, 114, -30],
+      "rShoulder": [147, 114, -30],
+      "lElbow": [100, 157, -16],
+      "rElbow": [150, 157, -16],
+      "lWrist": [108, 174, 16],
+      "rWrist": [142, 174, 16],
+      "lHip": [113, 190, -30],
+      "rHip": [137, 190, -30],
+      "lKnee": [113, 190, 30],
+      "rKnee": [137, 190, 30],
+      "lAnkle": [113, 248, 31],
+      "rAnkle": [137, 248, 31],
+      "lToe": [113, 240, 50],
+      "rToe": [137, 240, 50]
+    },
+    {
+      "lKnee": [113, 176, 30],
+      "rKnee": [137, 176, 30],
+      "lAnkle": [113, 226, 32],
+      "rAnkle": [137, 226, 32],
+      "lElbow": [100, 158, -22],
+      "rElbow": [150, 158, -22],
+      "lWrist": [108, 160, 18],
+      "rWrist": [142, 160, 18]
+    }
+  ],
+  "props": [
+    { "type": "bench", "y": 205, "z1": -62, "z2": 5, "width": 44 },
+    { "type": "box", "y": 244, "z1": 40, "z2": 80, "width": 70, "layer": "front" },
+    { "type": "roller", "at": ["lKnee", "rKnee"], "offset": [-12, 11], "width": 44 }
+  ]
+}

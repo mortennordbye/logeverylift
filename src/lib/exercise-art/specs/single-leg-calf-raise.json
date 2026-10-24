@@ -1,0 +1,148 @@
+{
+  "name": "Single-Leg Calf Raise",
+  "primary": "calves",
+  "secondary": [],
+  "cue": "Drop the heel below the step for a full stretch, then rise as high as you can on the ball of the foot. Keep the working knee straight and use a light touch on a wall for balance, not to push.",
+  "phases": [
+    "Rise",
+    "Lower"
+  ],
+  "anchor": "rToe",
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "head": [
+        125,
+        37,
+        3
+      ],
+      "neck": [
+        125,
+        61,
+        1
+      ],
+      "chest": [
+        125,
+        99,
+        2
+      ],
+      "pelvis": [
+        125,
+        139,
+        1
+      ],
+      "lShoulder": [
+        103,
+        67,
+        1
+      ],
+      "rShoulder": [
+        147,
+        67,
+        1
+      ],
+      "lElbow": [
+        101,
+        113,
+        0
+      ],
+      "rElbow": [
+        149,
+        113,
+        0
+      ],
+      "lWrist": [
+        102,
+        155,
+        3
+      ],
+      "rWrist": [
+        148,
+        155,
+        3
+      ],
+      "lHip": [
+        113,
+        141,
+        1
+      ],
+      "rHip": [
+        137,
+        141,
+        1
+      ],
+      "lKnee": [
+        116,
+        200,
+        4
+      ],
+      "rKnee": [
+        138,
+        201,
+        1
+      ],
+      "lAnkle": [
+        120,
+        228,
+        -45
+      ],
+      "rAnkle": [
+        138,
+        257,
+        0
+      ],
+      "lToe": [
+        120,
+        247,
+        -52
+      ],
+      "rToe": [
+        140,
+        248,
+        19
+      ]
+    },
+    {
+      "rAnkle": [
+        138,
+        232,
+        5
+      ],
+      "rKnee": [
+        138,
+        176,
+        12
+      ],
+      "rHip": [
+        137,
+        116,
+        16
+      ],
+      "lAnkle": [
+        120,
+        203,
+        -30
+      ],
+      "lToe": [
+        120,
+        222,
+        -37
+      ],
+      "lKnee": [
+        116,
+        175,
+        19
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "box",
+      "y": 251,
+      "z1": 12,
+      "z2": 60,
+      "width": 70,
+      "layer": "front"
+    }
+  ]
+}
