@@ -1,0 +1,184 @@
+{
+  "name": "Decline Bench Press",
+  "primary": "chest",
+  "secondary": [
+    "triceps",
+    "shoulders"
+  ],
+  "cue": "Hook your knees over the top pad and your ankles behind the lower one. Lower the bar to your lower chest, not your neck, keep your elbows tucked in a little and press back up over your shoulders.",
+  "phases": [
+    "Lower",
+    "Press"
+  ],
+  "anchor": "pelvis",
+  "camera": "top",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        234.9,
+        -75.9
+      ],
+      "neck": [
+        125,
+        226.7,
+        -53.3
+      ],
+      "chest": [
+        125,
+        213.7,
+        -17.6
+      ],
+      "pelvis": [
+        125,
+        200,
+        20
+      ],
+      "lShoulder": [
+        102,
+        226.7,
+        -53.3
+      ],
+      "rShoulder": [
+        148,
+        226.7,
+        -53.3
+      ],
+      "lElbow": [
+        89,
+        182.6,
+        -52
+      ],
+      "rElbow": [
+        161,
+        182.6,
+        -52
+      ],
+      "lWrist": [
+        80,
+        141.6,
+        -51
+      ],
+      "rWrist": [
+        170,
+        141.6,
+        -51
+      ],
+      "lHip": [
+        113,
+        200,
+        22
+      ],
+      "rHip": [
+        137,
+        200,
+        22
+      ],
+      "lKnee": [
+        110,
+        194,
+        81
+      ],
+      "rKnee": [
+        140,
+        194,
+        81
+      ],
+      "lAnkle": [
+        108,
+        248,
+        70
+      ],
+      "rAnkle": [
+        142,
+        248,
+        70
+      ],
+      "lToe": [
+        108,
+        254,
+        90
+      ],
+      "rToe": [
+        142,
+        254,
+        90
+      ]
+    },
+    {
+      "lElbow": [
+        69,
+        240,
+        -28
+      ],
+      "rElbow": [
+        181,
+        240,
+        -28
+      ],
+      "lWrist": [
+        80,
+        200,
+        -30
+      ],
+      "rWrist": [
+        170,
+        200,
+        -30
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "barbell"
+    },
+    {
+      "type": "incline",
+      "from": [
+        210.5,
+        35
+      ],
+      "to": [
+        253,
+        -82
+      ],
+      "width": 44
+    },
+    {
+      "type": "incline",
+      "from": [
+        210.5,
+        35
+      ],
+      "to": [
+        207,
+        64
+      ],
+      "width": 44
+    },
+    {
+      "type": "roller",
+      "y": 208,
+      "z": 76,
+      "pivot": [
+        212,
+        62
+      ],
+      "width": 60
+    },
+    {
+      "type": "roller",
+      "y": 238,
+      "z": 86,
+      "pivot": [
+        288,
+        86
+      ],
+      "width": 60
+    }
+  ]
+}

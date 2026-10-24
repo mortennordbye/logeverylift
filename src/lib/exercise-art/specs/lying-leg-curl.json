@@ -1,0 +1,155 @@
+{
+  "name": "Lying Leg Curl",
+  "primary": "hamstrings",
+  "secondary": [
+    "calves"
+  ],
+  "cue": "Keep your hips pressed into the pad as you curl. Lower the weight slowly instead of letting it drop.",
+  "phases": [
+    "Curl",
+    "Lower"
+  ],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.8,
+  "props": [
+    {
+      "type": "bench",
+      "y": 230,
+      "z1": -115,
+      "z2": 48,
+      "width": 44
+    },
+    {
+      "type": "roller",
+      "at": [
+        "lAnkle",
+        "rAnkle"
+      ],
+      "offset": [
+        -6,
+        9
+      ],
+      "pivot": [
+        220,
+        55
+      ]
+    }
+  ],
+  "keyframes": [
+    {
+      "head": [
+        125,
+        215,
+        -107
+      ],
+      "neck": [
+        125,
+        215,
+        -83
+      ],
+      "chest": [
+        125,
+        215,
+        -45
+      ],
+      "pelvis": [
+        125,
+        214,
+        -5
+      ],
+      "lShoulder": [
+        102,
+        215,
+        -83
+      ],
+      "rShoulder": [
+        148,
+        215,
+        -83
+      ],
+      "lElbow": [
+        83.5,
+        257.1,
+        -82.8
+      ],
+      "rElbow": [
+        166.5,
+        257.1,
+        -82.8
+      ],
+      "lWrist": [
+        102,
+        236,
+        -114
+      ],
+      "rWrist": [
+        148,
+        236,
+        -114
+      ],
+      "lHip": [
+        113,
+        215,
+        -5
+      ],
+      "rHip": [
+        137,
+        215,
+        -5
+      ],
+      "lKnee": [
+        113,
+        220,
+        55
+      ],
+      "rKnee": [
+        137,
+        220,
+        55
+      ],
+      "lAnkle": [
+        113,
+        222,
+        111
+      ],
+      "rAnkle": [
+        137,
+        222,
+        111
+      ],
+      "lToe": [
+        113,
+        242,
+        115
+      ],
+      "rToe": [
+        137,
+        242,
+        115
+      ]
+    },
+    {
+      "lAnkle": [
+        113,
+        168,
+        75
+      ],
+      "rAnkle": [
+        137,
+        168,
+        75
+      ],
+      "lToe": [
+        113,
+        162,
+        95
+      ],
+      "rToe": [
+        137,
+        162,
+        95
+      ]
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "name": "Decline Sit-up",
+  "primary": "abs",
+  "secondary": [],
+  "cue": "Hook your feet under the pad and curl up one vertebra at a time. Lower slowly all the way down, and do not yank on your head.",
+  "phases": ["Sit up", "Lower"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "head": [125, 232.9, -81.5], "neck": [125, 225.2, -58.8], "chest": [125, 212.9, -22.9], "pelvis": [125, 200, 15],
+      "lShoulder": [102, 225.2, -58.8], "rShoulder": [148, 225.2, -58.8],
+      "lElbow": [62, 229.2, -81.1], "rElbow": [188, 229.2, -81.1],
+      "lWrist": [103.2, 235, -87], "rWrist": [146.8, 235, -87],
+      "lHip": [113, 200, 15], "rHip": [137, 200, 15],
+      "lKnee": [110, 166, 64], "rKnee": [140, 166, 64],
+      "lAnkle": [110, 212, 96], "rAnkle": [140, 212, 96],
+      "lToe": [110, 222, 114], "rToe": [140, 222, 114]
+    },
+    {
+      "neck": [125, 182.5, -45.7], "head": [125, 160.4, -55],
+      "lShoulder": [102, 184, -46], "rShoulder": [148, 184, -46],
+      "lElbow": [59.8, 179.6, -63.8], "rElbow": [190.2, 179.6, -63.8],
+      "lWrist": [100.7, 170.2, -65.6], "rWrist": [149.3, 170.2, -65.6]
+    },
+    {
+      "chest": [125, 160.8, 23], "neck": [125, 123.6, 30.6], "head": [125, 100, 35.4],
+      "lShoulder": [102, 124, 30], "rShoulder": [148, 124, 30],
+      "lElbow": [60, 117.4, 47.7], "rElbow": [190, 117.4, 47.7],
+      "lWrist": [97.6, 105.8, 32.9], "rWrist": [152.4, 105.8, 32.9]
+    }
+  ],
+  "props": [
+    { "type": "incline", "from": [207, 40], "to": [250, -92], "width": 44 },
+    { "type": "roller", "y": 195, "z": 103, "pivot": [214, 48] }
+  ]
+}
