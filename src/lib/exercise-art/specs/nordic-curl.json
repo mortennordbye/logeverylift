@@ -1,0 +1,32 @@
+{
+  "name": "Nordic Curl",
+  "primary": "hamstrings",
+  "secondary": ["glutes", "calves"],
+  "cue": "Keep your hips straight so your body moves as one line from knees to head. Lower as slowly as you can and catch yourself with your hands only at the end.",
+  "phases": ["Lower", "Pull up"],
+  "anchor": "lKnee",
+  "zoom": 0.8,
+  "props": [
+    { "type": "roller", "y": 268, "z": -99, "pivot": [290, -99], "width": 44 }
+  ],
+  "keyframes": [
+    {
+      "head": [125, 118, -45], "neck": [125, 142, -45], "chest": [125, 180, -45], "pelvis": [125, 220, -45],
+      "lShoulder": [102, 142, -45], "rShoulder": [148, 142, -45],
+      "lElbow": [100, 186, -40], "rElbow": [150, 186, -40],
+      "lWrist": [110, 172, -2], "rWrist": [140, 172, -2],
+      "lHip": [113, 220, -45], "rHip": [137, 220, -45],
+      "lKnee": [113, 280, -45], "rKnee": [137, 280, -45],
+      "lAnkle": [113, 282, -101], "rAnkle": [137, 282, -101],
+      "lToe": [113, 289, -121], "rToe": [137, 289, -121]
+    },
+    {
+      "pelvis": [125, 254.6, 9.4], "chest": [125, 237.7, 45.6], "neck": [125, 221.6, 80], "head": [125, 211.5, 101.8],
+      "lHip": [113, 254.6, 9.4], "rHip": [137, 254.6, 9.4],
+      "lKnee": [113, 280, -45], "rKnee": [137, 280, -45],
+      "lShoulder": [102, 221.6, 80], "rShoulder": [148, 221.6, 80],
+      "lElbow": [98, 250, 45], "rElbow": [152, 250, 45],
+      "lWrist": [104, 280, 70], "rWrist": [146, 280, 70]
+    }
+  ]
+}

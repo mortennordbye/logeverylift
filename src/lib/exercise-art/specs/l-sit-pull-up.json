@@ -1,0 +1,43 @@
+{
+  "name": "L-sit Pull-up",
+  "primary": "back",
+  "secondary": ["biceps", "abs", "quads"],
+  "cue": "Lift your legs straight out level with your hips before the first rep. Keep them there the whole way up and down instead of letting them drop to help.",
+  "phases": ["Pull", "Lower"],
+  "anchor": "lWrist",
+  "hold": ["lWrist", "rWrist"],
+  "zoom": 0.75,
+  "keyframes": [
+    {
+      "head": [125, 48, 3], "neck": [125, 72, 0], "chest": [125, 110, -4], "pelvis": [125, 150, -10],
+      "lShoulder": [105.3, 84.3, 0], "rShoulder": [144.7, 84.3, 0],
+      "lElbow": [92.1, 40.2, 0], "rElbow": [157.9, 40.2, 0],
+      "lWrist": [80, 0, 0], "rWrist": [170, 0, 0],
+      "lHip": [113, 150, -10], "rHip": [137, 150, -10],
+      "lKnee": [116, 150, 50], "rKnee": [134, 150, 50],
+      "lAnkle": [120, 150, 106], "rAnkle": [130, 150, 106],
+      "lToe": [120, 146, 127], "rToe": [130, 146, 127]
+    },
+    {
+      "head": [125, 9, -14], "neck": [125, 32, -6], "chest": [125, 70, -10], "pelvis": [125, 110, -16],
+      "lShoulder": [103, 38.6, -6], "rShoulder": [147, 38.6, -6],
+      "lElbow": [57.2, 35.2, -3], "rElbow": [192.8, 35.2, -3],
+      "lWrist": [80, 0, 0], "rWrist": [170, 0, 0],
+      "lHip": [113, 110, -16], "rHip": [137, 110, -16],
+      "lKnee": [116, 110, 44], "rKnee": [134, 110, 44],
+      "lAnkle": [120, 110, 100], "rAnkle": [130, 110, 100],
+      "lToe": [120, 106, 121], "rToe": [130, 106, 121]
+    },
+    {
+      "head": [125, -28, -8], "neck": [125, -4, -12], "chest": [125, 34, -16], "pelvis": [125, 74, -22],
+      "lShoulder": [103, 2.8, -12], "rShoulder": [147, 2.8, -12],
+      "lElbow": [81.5, 42, -1], "rElbow": [168.5, 42, -1],
+      "lWrist": [80, 0, 0], "rWrist": [170, 0, 0],
+      "lHip": [113, 74, -22], "rHip": [137, 74, -22],
+      "lKnee": [116, 74, 38], "rKnee": [134, 74, 38],
+      "lAnkle": [120, 74, 94], "rAnkle": [130, 74, 94],
+      "lToe": [120, 70, 115], "rToe": [130, 70, 115]
+    }
+  ],
+  "props": [{ "type": "bar", "y": 0, "z": 0, "layer": "front" }]
+}

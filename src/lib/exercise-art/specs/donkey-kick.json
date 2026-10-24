@@ -1,0 +1,38 @@
+{
+  "name": "Donkey Kick",
+  "primary": "glutes",
+  "secondary": ["hamstrings"],
+  "cue": "Keep the knee bent and push the sole of your foot up toward the ceiling. Stop when the thigh is level with your back, without arching your lower back.",
+  "phases": ["Kick", "Lower"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "zoom": 0.9,
+  "keyframes": [
+    {
+      "head": [125, 190, -86],
+      "neck": [125, 198, -64],
+      "chest": [125, 210, -28],
+      "pelvis": [125, 222, 10],
+      "lShoulder": [102, 198, -64],
+      "rShoulder": [148, 198, -64],
+      "lElbow": [102, 244, -64],
+      "rElbow": [148, 244, -64],
+      "lWrist": [102, 286, -64],
+      "rWrist": [148, 286, -64],
+      "lHip": [113, 222, 10],
+      "rHip": [137, 222, 10],
+      "lKnee": [113, 282, 10],
+      "rKnee": [137, 282, 10],
+      "lAnkle": [113, 284, 66],
+      "rAnkle": [137, 284, 66],
+      "lToe": [113, 288, 87],
+      "rToe": [137, 288, 87]
+    },
+    {
+      "rKnee": [137, 224, 70],
+      "rAnkle": [137, 168, 70],
+      "rToe": [137, 168, 91]
+    }
+  ],
+  "props": []
+}
