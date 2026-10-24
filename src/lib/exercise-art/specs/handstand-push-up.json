@@ -1,0 +1,298 @@
+{
+  "name": "Handstand Push-up",
+  "primary": "shoulders",
+  "secondary": [
+    "triceps",
+    "abs"
+  ],
+  "cue": "Lower the top of your head to a spot a little in front of your hands so they make a triangle. Keep your elbows over your wrists and press back up until your arms lock.",
+  "phases": [
+    "Lower",
+    "Press"
+  ],
+  "anchor": "lWrist",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "zoom": 0.75,
+  "keyframes": [
+    {
+      "lWrist": [
+        97,
+        283,
+        -6
+      ],
+      "rWrist": [
+        153,
+        283,
+        -6
+      ],
+      "lElbow": [
+        100,
+        241,
+        -6
+      ],
+      "rElbow": [
+        150,
+        241,
+        -6
+      ],
+      "lShoulder": [
+        102,
+        195,
+        -6
+      ],
+      "rShoulder": [
+        148,
+        195,
+        -6
+      ],
+      "neck": [
+        125,
+        195,
+        -6
+      ],
+      "head": [
+        125,
+        218,
+        4
+      ],
+      "chest": [
+        125,
+        157,
+        -6
+      ],
+      "pelvis": [
+        125,
+        117,
+        -6
+      ],
+      "lHip": [
+        113,
+        117,
+        -6
+      ],
+      "rHip": [
+        137,
+        117,
+        -6
+      ],
+      "lKnee": [
+        116,
+        57,
+        -6
+      ],
+      "rKnee": [
+        134,
+        57,
+        -6
+      ],
+      "lAnkle": [
+        119,
+        1,
+        -6
+      ],
+      "rAnkle": [
+        131,
+        1,
+        -6
+      ],
+      "lToe": [
+        119,
+        -20,
+        -6
+      ],
+      "rToe": [
+        131,
+        -20,
+        -6
+      ]
+    },
+    {
+      "lElbow": [
+        97,
+        241,
+        -8
+      ],
+      "rElbow": [
+        153,
+        241,
+        -8
+      ],
+      "lShoulder": [
+        102,
+        208,
+        25
+      ],
+      "rShoulder": [
+        148,
+        208,
+        25
+      ],
+      "neck": [
+        125,
+        208,
+        25
+      ],
+      "head": [
+        125,
+        230,
+        32
+      ],
+      "chest": [
+        125,
+        170,
+        14
+      ],
+      "pelvis": [
+        125,
+        131,
+        1
+      ],
+      "lHip": [
+        113,
+        131,
+        1
+      ],
+      "rHip": [
+        137,
+        131,
+        1
+      ],
+      "lKnee": [
+        116,
+        72,
+        -9
+      ],
+      "rKnee": [
+        134,
+        72,
+        -9
+      ],
+      "lAnkle": [
+        119,
+        17,
+        -17
+      ],
+      "rAnkle": [
+        131,
+        17,
+        -17
+      ],
+      "lToe": [
+        119,
+        -4,
+        -19
+      ],
+      "rToe": [
+        131,
+        -4,
+        -19
+      ],
+      "rWrist": [
+        153,
+        283,
+        -6
+      ],
+      "lWrist": [
+        97,
+        283,
+        -6
+      ]
+    },
+    {
+      "lWrist": [
+        97,
+        283,
+        -6
+      ],
+      "rWrist": [
+        153,
+        283,
+        -6
+      ],
+      "lElbow": [
+        90,
+        241,
+        -7
+      ],
+      "rElbow": [
+        160,
+        241,
+        -7
+      ],
+      "lShoulder": [
+        102,
+        245,
+        34
+      ],
+      "rShoulder": [
+        148,
+        245,
+        34
+      ],
+      "neck": [
+        125,
+        245,
+        34
+      ],
+      "head": [
+        125,
+        267,
+        44
+      ],
+      "chest": [
+        125,
+        210,
+        17
+      ],
+      "pelvis": [
+        125,
+        176,
+        -3
+      ],
+      "lHip": [
+        113,
+        176,
+        -3
+      ],
+      "rHip": [
+        137,
+        176,
+        -3
+      ],
+      "lKnee": [
+        116,
+        117,
+        -15
+      ],
+      "rKnee": [
+        134,
+        117,
+        -15
+      ],
+      "lAnkle": [
+        119,
+        63,
+        -28
+      ],
+      "rAnkle": [
+        131,
+        63,
+        -28
+      ],
+      "lToe": [
+        119,
+        42,
+        -32
+      ],
+      "rToe": [
+        131,
+        42,
+        -32
+      ]
+    }
+  ],
+  "props": []
+}

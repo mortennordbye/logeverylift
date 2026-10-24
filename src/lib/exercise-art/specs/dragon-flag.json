@@ -1,0 +1,54 @@
+{
+  "name": "Dragon Flag",
+  "primary": "abs",
+  "secondary": ["back", "quads"],
+  "cue": "Keep your body in one straight line from shoulders to toes as you lower, with no bend at the hips. Only your upper back stays on the bench.",
+  "phases": ["Lower", "Raise"],
+  "anchor": "neck",
+  "camera": "top",
+  "zoom": 0.75,
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 215, -109],
+      "neck": [125, 214, -85],
+      "chest": [125, 177.9, -73.3],
+      "pelvis": [125, 139.8, -60.9],
+      "lShoulder": [102, 214, -85],
+      "rShoulder": [148, 214, -85],
+      "lElbow": [89.1, 193.8, -124.3],
+      "rElbow": [160.9, 193.8, -124.3],
+      "lWrist": [104, 233, -127],
+      "rWrist": [146, 233, -127],
+      "lHip": [113, 139.8, -60.9],
+      "rHip": [137, 139.8, -60.9],
+      "lKnee": [118.7, 82.8, -42.4],
+      "rKnee": [131.3, 82.8, -42.4],
+      "lAnkle": [118, 29.5, -25.1],
+      "rAnkle": [132, 29.5, -25.1],
+      "lToe": [118, 9.5, -18.6],
+      "rToe": [132, 9.5, -18.6]
+    },
+    {
+      "chest": [125, 208.7, -47.4],
+      "pelvis": [125, 203.1, -7.8],
+      "lHip": [113, 203.1, -7.8],
+      "rHip": [137, 203.1, -7.8],
+      "lKnee": [118.7, 194.8, 51.7],
+      "rKnee": [131.3, 194.8, 51.7],
+      "lAnkle": [118, 187, 107.1],
+      "rAnkle": [132, 187, 107.1],
+      "lToe": [118, 184.1, 127.9],
+      "rToe": [132, 184.1, 127.9]
+    }
+  ],
+  "props": [
+    {
+      "type": "bench",
+      "y": 230,
+      "z1": -131,
+      "z2": 40,
+      "width": 44
+    }
+  ]
+}

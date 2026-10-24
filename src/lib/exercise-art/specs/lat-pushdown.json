@@ -1,0 +1,174 @@
+{
+  "name": "Lat Pushdown",
+  "primary": "back",
+  "secondary": [
+    "triceps",
+    "abs"
+  ],
+  "cue": "Hinge forward a little, keep your arms nearly straight and push the bar down to your thighs with your lats. Do not let your elbows bend.",
+  "phases": [
+    "Push",
+    "Return"
+  ],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        70,
+        24
+      ],
+      "neck": [
+        125,
+        92,
+        12
+      ],
+      "chest": [
+        125,
+        128,
+        -4
+      ],
+      "pelvis": [
+        125,
+        164,
+        -22
+      ],
+      "lShoulder": [
+        103,
+        98,
+        12
+      ],
+      "rShoulder": [
+        147,
+        98,
+        12
+      ],
+      "lElbow": [
+        100.7,
+        86.5,
+        56.5
+      ],
+      "rElbow": [
+        149.3,
+        86.5,
+        56.5
+      ],
+      "lWrist": [
+        100.7,
+        69.3,
+        94.8
+      ],
+      "rWrist": [
+        149.3,
+        69.3,
+        94.8
+      ],
+      "lHip": [
+        113,
+        164,
+        -22
+      ],
+      "rHip": [
+        137,
+        164,
+        -22
+      ],
+      "lKnee": [
+        112,
+        222,
+        -7
+      ],
+      "rKnee": [
+        138,
+        222,
+        -7
+      ],
+      "lAnkle": [
+        112,
+        278,
+        -1
+      ],
+      "rAnkle": [
+        138,
+        278,
+        -1
+      ],
+      "lToe": [
+        110,
+        284,
+        19
+      ],
+      "rToe": [
+        140,
+        284,
+        19
+      ]
+    },
+    {
+      "lElbow": [
+        104,
+        115,
+        54
+      ],
+      "rElbow": [
+        146,
+        115,
+        54
+      ],
+      "lWrist": [
+        106,
+        131,
+        93
+      ],
+      "rWrist": [
+        144,
+        131,
+        93
+      ]
+    },
+    {
+      "lElbow": [
+        104,
+        142,
+        5
+      ],
+      "rElbow": [
+        146,
+        142,
+        5
+      ],
+      "lWrist": [
+        106,
+        184,
+        -3
+      ],
+      "rWrist": [
+        144,
+        184,
+        -3
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "cable",
+      "anchor": [
+        125,
+        36,
+        100
+      ],
+      "at": "lWrist",
+      "layer": "front"
+    },
+    {
+      "type": "cable",
+      "anchor": [
+        125,
+        36,
+        100
+      ],
+      "at": "rWrist",
+      "layer": "front"
+    }
+  ]
+}

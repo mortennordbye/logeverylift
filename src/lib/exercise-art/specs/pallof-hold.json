@@ -1,0 +1,28 @@
+{
+  "name": "Pallof Hold",
+  "primary": "abs",
+  "secondary": ["shoulders"],
+  "cue": "Stand side-on to the cable with the handle held straight out from your chest. Keep your hips and shoulders square while the cable tries to turn you toward it.",
+  "phases": ["Brace", "Hold"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 60, 3], "neck": [125, 84, 0], "chest": [125, 122, 0], "pelvis": [125, 160, 0],
+      "lShoulder": [102, 90, 0], "rShoulder": [148, 90, 0],
+      "lElbow": [112, 98, 44], "rElbow": [138, 98, 44],
+      "lWrist": [122, 104, 86], "rWrist": [128, 104, 86],
+      "lHip": [113, 161, 0], "rHip": [137, 163, 0],
+      "lKnee": [108, 220, 6], "rKnee": [142, 220, 6],
+      "lAnkle": [106, 278, -1], "rAnkle": [144, 278, -1],
+      "lToe": [104, 284, 19], "rToe": [146, 284, 19]
+    },
+    {
+      "lKnee": [108, 220, 12], "rKnee": [142, 220, 12],
+      "pelvis": [125, 162, -2], "lHip": [113, 163, -2], "rHip": [137, 165, -2]
+    }
+  ],
+  "hold": ["lWrist", "rWrist"],
+  "props": [
+    { "type": "cable", "anchor": [222, 111, 22], "at": "rWrist", "layer": "front" }
+  ]
+}

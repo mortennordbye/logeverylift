@@ -1,0 +1,40 @@
+{
+  "name": "Renegade Row",
+  "primary": "back",
+  "secondary": ["biceps", "abs", "shoulders"],
+  "cue": "Hold a high plank with your feet wide and your hips square to the floor. Row the dumbbell to your ribs without twisting or shifting your weight.",
+  "phases": ["Row", "Lower"],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "lAnkle": [103, 270.5, 104],
+      "rAnkle": [147, 270.5, 104],
+      "lToe": [103, 290, 96.1],
+      "rToe": [147, 290, 96.1],
+      "lKnee": [108, 247, 50],
+      "rKnee": [142, 247, 50],
+      "lHip": [113, 223, -4],
+      "rHip": [137, 223, -4],
+      "pelvis": [125, 223, -4],
+      "chest": [125, 208, -41],
+      "neck": [125, 193, -76],
+      "head": [125, 184, -98],
+      "lShoulder": [102, 193, -76],
+      "rShoulder": [148, 193, -76],
+      "lElbow": [100, 237, -76],
+      "rElbow": [150, 237, -76],
+      "lWrist": [104, 281, -76],
+      "rWrist": [146, 281, -76]
+    },
+    {
+      "rElbow": [151, 185, -31],
+      "rWrist": [150, 225, -43]
+    }
+  ],
+  "props": [
+    { "type": "dumbbell", "at": ["lWrist", "rWrist"], "along": "z" }
+  ]
+}
