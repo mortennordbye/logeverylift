@@ -930,6 +930,18 @@ export const MUSCLE_FILL = {
   line: "var(--card)",
 } as const;
 
+/**
+ * Fills for a heat map of the muscle map, light to strong. Steps are far apart
+ * so neighbouring levels stay distinguishable in both themes; untrained muscles
+ * use `MUSCLE_FILL.body` so even the first step stands out against them.
+ */
+export const HEAT_FILL = [
+  mix("var(--primary)", 45),
+  mix("var(--primary)", 65),
+  mix("var(--primary)", 85),
+  "var(--primary)",
+] as const;
+
 /** SVG markup (inside an `<svg viewBox={VIEWBOX}>`) for one view at `t`. `id` must be unique on the page. */
 export function renderSvg(spec: ArtSpec, view: View, t: number, id: string, phase: 0 | 1 = 0): string {
   const defs =
@@ -946,4 +958,39 @@ export function renderSvg(spec: ArtSpec, view: View, t: number, id: string, phas
   if (zoom === 1) return `<defs>${defs}</defs>${body}`;
   const [ox, oy] = zoomOrigin(view, cameraFor(spec, view));
   return `<defs>${defs}</defs><g transform="translate(${ox} ${oy}) scale(${zoom}) translate(${-ox} ${-oy})">${body}</g>`;
+}
+
+/**
+ * A square viewBox around everything drawn in one view at `t` (shadow left
+ * out), for a thumbnail that fills its tile instead of sitting small in the
+ * full card frame. Arcs are bounded by their radius around each end, so the
+ * box can run a little wide but never clips.
+ */
+export function figureViewBox(spec: ArtSpec, view: View, t: number): string {
+  let [x0, y0, x1, y1] = [Infinity, Infinity, -Infinity, -Infinity];
+  const add = (x: number, y: number, r = 0) => {
+    x0 = Math.min(x0, x - r); y0 = Math.min(y0, y - r);
+    x1 = Math.max(x1, x + r); y1 = Math.max(y1, y + r);
+  };
+  for (const s of buildScene(spec, view, t)) {
+    if (s.role === "shadow") continue;
+    const pad = (s.stroke ?? 0) / 2;
+    let [cx, cy] = [0, 0];
+    for (const [, cmd, args] of s.d.matchAll(/([MLCAahvZ])([^MLCAahvZ]*)/g)) {
+      const n = args.trim() ? args.trim().split(/[\s,]+/).map(Number) : [];
+      if (cmd === "M" || cmd === "L") [cx, cy] = [n[0], n[1]];
+      else if (cmd === "C") { add(n[0], n[1], pad); add(n[2], n[3], pad); [cx, cy] = [n[4], n[5]]; }
+      else if (cmd === "A") { add(cx, cy, Math.max(n[0], n[1])); [cx, cy] = [n[5], n[6]]; add(cx, cy, Math.max(n[0], n[1])); }
+      else if (cmd === "a") { add(cx, cy, Math.max(n[0], n[1])); [cx, cy] = [cx + n[5], cy + n[6]]; add(cx, cy, Math.max(n[0], n[1])); }
+      else if (cmd === "h") cx += n[0];
+      else if (cmd === "v") cy += n[0];
+      add(cx, cy, pad);
+    }
+  }
+  const zoom = zoomOf(spec, view);
+  const [ox, oy] = zoomOrigin(view, cameraFor(spec, view));
+  [x0, x1] = [ox + (x0 - ox) * zoom, ox + (x1 - ox) * zoom];
+  [y0, y1] = [oy + (y0 - oy) * zoom, oy + (y1 - oy) * zoom];
+  const side = Math.max(x1 - x0, y1 - y0) * 1.08;
+  return [(x0 + x1) / 2 - side / 2, (y0 + y1) / 2 - side / 2, side, side].map(f).join(" ");
 }
