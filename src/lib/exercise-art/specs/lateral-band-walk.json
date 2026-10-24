@@ -1,0 +1,31 @@
+{
+  "name": "Lateral Band Walk",
+  "primary": "glutes",
+  "secondary": ["quads"],
+  "cue": "Stay low in a quarter squat and push your knees out against the band. Step wide without letting your feet snap back together.",
+  "phases": ["Step out", "Step in"],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [125, 89, 17], "neck": [125, 111, 9], "chest": [125, 145, -7], "pelvis": [125, 181, -24],
+      "lShoulder": [103, 116, 7], "rShoulder": [147, 116, 7],
+      "lElbow": [99, 157, 22], "rElbow": [151, 157, 22],
+      "lWrist": [117, 140, 55], "rWrist": [133, 140, 55],
+      "lHip": [113, 183, -24], "rHip": [137, 183, -24],
+      "lKnee": [96, 225, 16], "rKnee": [154, 225, 16],
+      "lAnkle": [98, 278, -1], "rAnkle": [152, 278, -1],
+      "lToe": [93, 284, 19], "rToe": [157, 284, 19]
+    },
+    {
+      "pelvis": [129, 180, -24], "lHip": [117, 182, -24], "rHip": [141, 182, -24],
+      "lKnee": [99, 224, 15], "rKnee": [167, 215, 19],
+      "rAnkle": [176, 266, -1], "rToe": [181, 272, 19]
+    },
+    {
+      "pelvis": [133, 181, -24], "lHip": [121, 183, -24], "rHip": [145, 183, -24],
+      "lKnee": [101, 224, 15], "rKnee": [166, 226, 13],
+      "rAnkle": [180, 278, -1], "rToe": [185, 284, 19]
+    }
+  ],
+  "props": [{ "type": "band", "at": ["lKnee", "rKnee"] }]
+}

@@ -1,0 +1,46 @@
+{
+  "name": "Leg Press",
+  "primary": "quads",
+  "secondary": ["glutes"],
+  "cue": "Lower the sled until your knees reach about 90 degrees, but keep your lower back flat on the pad. Press through your whole foot and stop just short of locking your knees.",
+  "phases": ["Lower", "Press"],
+  "anchor": "pelvis",
+  "camera": "top",
+  "hold": ["lAnkle", "rAnkle"],
+  "keyframes": [
+    {
+      "head": [125, 177, -80],
+      "neck": [125, 198, -68],
+      "chest": [125, 217, -35],
+      "pelvis": [125, 237, 0],
+      "lShoulder": [103, 201, -66],
+      "rShoulder": [147, 201, -66],
+      "lElbow": [99, 222, -28],
+      "rElbow": [151, 222, -28],
+      "lWrist": [97, 258, -8],
+      "rWrist": [153, 258, -8],
+      "lHip": [113, 237, 0],
+      "rHip": [137, 237, 0],
+      "lKnee": [113, 184, 28],
+      "rKnee": [137, 184, 28],
+      "lAnkle": [113, 150, 73],
+      "rAnkle": [137, 150, 73],
+      "lToe": [113, 131, 66],
+      "rToe": [137, 131, 66]
+    },
+    {
+      "lKnee": [113, 178, -8],
+      "rKnee": [137, 178, -8],
+      "lAnkle": [113, 180, 48],
+      "rAnkle": [137, 180, 48],
+      "lToe": [113, 160, 41],
+      "rToe": [137, 160, 41]
+    }
+  ],
+  "props": [
+    { "type": "bench", "y": 252, "z1": -12, "z2": 28, "width": 44 },
+    { "type": "incline", "from": [250, -8], "to": [211, -76], "width": 44 },
+    { "type": "handles", "along": "z" },
+    { "type": "footplate", "facing": [0.342, -0.94], "rail": [110, 100] }
+  ]
+}

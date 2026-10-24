@@ -1,0 +1,84 @@
+{
+  "name": "Sled Push",
+  "primary": "quads",
+  "secondary": [
+    "glutes",
+    "calves",
+    "shoulders"
+  ],
+  "cue": "Lean into the sled with a flat back and your arms locked in place. Drive each knee forward and push off the ball of the foot with short, hard steps.",
+  "phases": [
+    "Drive",
+    "Return"
+  ],
+  "anchor": "lToe",
+  "zoom": 0.7,
+  "keyframes": [
+    {
+      "pelvis": [125, 188, -67],
+      "chest": [125, 161.2, -37.3],
+      "neck": [125, 135.8, -9],
+      "head": [125, 116.1, 4.7],
+      "lShoulder": [103, 140.8, -12],
+      "rShoulder": [147, 140.8, -12],
+      "lElbow": [100, 185.2, -0.1],
+      "rElbow": [150, 185.2, -0.1],
+      "lWrist": [103, 170.9, 39.3],
+      "rWrist": [147, 170.9, 39.3],
+      "lHip": [113, 188, -67],
+      "rHip": [137, 188, -67],
+      "lKnee": [112, 237.1, -32.6],
+      "lAnkle": [112, 278.9, -69.9],
+      "lToe": [112, 285.1, -49.8],
+      "rKnee": [138, 242.4, -92.4],
+      "rAnkle": [138, 271.8, -140],
+      "rToe": [138, 289, -127.9]
+    },
+    {
+      "pelvis": [125, 186, -55],
+      "chest": [125, 159.2, -25.3],
+      "neck": [125, 133.8, 3],
+      "head": [125, 114.1, 16.7],
+      "lShoulder": [103, 138.8, 0],
+      "rShoulder": [147, 138.8, 0],
+      "lElbow": [100, 183.2, 11.9],
+      "rElbow": [150, 183.2, 11.9],
+      "lWrist": [103, 168.9, 51.3],
+      "rWrist": [147, 168.9, 51.3],
+      "lHip": [113, 186, -55],
+      "rHip": [137, 186, -55],
+      "lKnee": [112, 238.2, -25.4],
+      "lAnkle": [112, 274.6, -68],
+      "lToe": [112, 285.1, -49.8],
+      "rKnee": [138, 244, -39.5],
+      "rAnkle": [138, 258.4, -93.6],
+      "rToe": [138, 277.5, -102.4]
+    },
+    {
+      "pelvis": [125, 184, -42],
+      "chest": [125, 157.2, -12.3],
+      "neck": [125, 131.8, 16],
+      "head": [125, 112.1, 29.7],
+      "lShoulder": [103, 136.8, 13],
+      "rShoulder": [147, 136.8, 13],
+      "lElbow": [100, 181.2, 24.9],
+      "rElbow": [150, 181.2, 24.9],
+      "lWrist": [103, 166.9, 64.3],
+      "rWrist": [147, 166.9, 64.3],
+      "lHip": [113, 184, -42],
+      "rHip": [137, 184, -42],
+      "lKnee": [112, 239.1, -18.1],
+      "lAnkle": [112, 270.3, -64.6],
+      "lToe": [112, 285.1, -49.8],
+      "rKnee": [138, 214, 10],
+      "rAnkle": [138, 266.6, -9.2],
+      "rToe": [138, 272.1, 11.1]
+    }
+  ],
+  "props": [
+    {
+      "type": "sled"
+    }
+  ],
+  "frontZoom": 0.9
+}

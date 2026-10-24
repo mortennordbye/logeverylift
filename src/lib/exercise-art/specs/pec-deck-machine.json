@@ -1,0 +1,29 @@
+{
+  "name": "Pec Deck Machine",
+  "primary": "chest",
+  "secondary": ["shoulders"],
+  "cue": "Keep your back against the pad and your elbows at shoulder height. Squeeze the pads together in front of your chest, then let them open slowly without your elbows drifting behind you.",
+  "phases": ["Squeeze", "Return"],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [125, 124, 2], "neck": [125, 148, 0], "chest": [125, 186, 0], "pelvis": [125, 226, 0],
+      "lShoulder": [103, 154, 0], "rShoulder": [147, 154, 0],
+      "lElbow": [60, 158, -16], "rElbow": [190, 158, -16],
+      "lWrist": [60, 116, -16], "rWrist": [190, 116, -16],
+      "lHip": [113, 228, 0], "rHip": [137, 228, 0],
+      "lKnee": [106, 231, 58], "rKnee": [144, 231, 58],
+      "lAnkle": [96, 279, 33], "rAnkle": [154, 279, 33],
+      "lToe": [95, 284, 53], "rToe": [155, 284, 53]
+    },
+    {
+      "lElbow": [117, 158, 43], "rElbow": [133, 158, 43],
+      "lWrist": [117, 116, 43], "rWrist": [133, 116, 43]
+    }
+  ],
+  "props": [
+    { "type": "bench", "y": 240, "z1": -35, "z2": 30, "width": 44 },
+    { "type": "incline", "from": [238, -18], "to": [128, -18], "width": 44 },
+    { "type": "handles", "at": ["lWrist", "rWrist"], "along": "y", "size": "pad", "pivot": [103, 70, -4] }
+  ]
+}

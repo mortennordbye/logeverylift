@@ -3,9 +3,9 @@
  * motion between keyframes, which the small preview cannot show reliably.
  */
 
-import { artSpecSchema, resolveFrames, type Point3 } from "./schema";
+import { artSpecSchema, drawnJoints, resolveFrames, type Point3 } from "./schema";
 import { poseAt, project, zoomed } from "./scene";
-import { FLOOR_Y, HEAD_RADIUS, JOINTS, type Joint } from "./skeleton";
+import { FLOOR_Y, HEAD_RADIUS, JOINTS, isHand, type Joint } from "./skeleton";
 
 const dist = (a: Point3, b: Point3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 /** Moments between keyframes the motion checks sample. */
@@ -20,7 +20,7 @@ export function checkSpec(raw: unknown): string[] {
   const spec = parsed.data;
   const problems: string[] = [];
   if (spec.secondary.includes(spec.primary)) problems.push(`secondary repeats the primary muscle "${spec.primary}"`);
-  const missing = JOINTS.filter((j) => !spec.keyframes[0][j]);
+  const missing = JOINTS.filter((j) => !isHand(j) && !spec.keyframes[0][j]);
   if (missing.length) return [...problems, `keyframe 0: missing ${missing.join(", ")}`];
 
   const { poses, misses } = resolveFrames(spec);
@@ -37,8 +37,9 @@ export function checkSpec(raw: unknown): string[] {
     const fits = ([x, y]: [number, number], bottom: boolean) => x >= 25 && x <= 225 && y >= 36 && (!bottom || y <= 296);
     return fits(front, spec.camera === "top") && fits([sx, sy], false);
   };
+  const joints = drawnJoints(spec);
   poses.forEach((pose, i) => {
-    for (const j of JOINTS) {
+    for (const j of joints) {
       if (pose[j][1] > FLOOR_Y + 2) problems.push(`keyframe ${i}: ${j} is below the floor (y ${pose[j][1].toFixed(0)})`);
       if (!inFrame(pose[j], j)) problems.push(`keyframe ${i}: ${j} is outside the frame`);
     }
@@ -61,7 +62,7 @@ export function checkSpec(raw: unknown): string[] {
   // A bar racked on the body (shoulders, hips) carries the hands with it only
   // if the hands are posed on it; catch them drifting off.
   for (const p of spec.props) {
-    if (p.type !== "barbell" || !p.at || p.at.every((j) => j.endsWith("Wrist"))) continue;
+    if (p.type !== "barbell" || !p.at || p.at.every((j) => j.endsWith("Wrist") || isHand(j))) continue;
     const at = p.at;
     for (const t of [0, ...SAMPLES, 1]) {
       const pose = poseAt(spec, t);
@@ -75,7 +76,7 @@ export function checkSpec(raw: unknown): string[] {
   }
   for (const t of SAMPLES) {
     const pose = poseAt(spec, t);
-    const sunk = JOINTS.find((j) => pose[j][1] > FLOOR_Y + 3);
+    const sunk = joints.find((j) => pose[j][1] > FLOOR_Y + 3);
     if (sunk) {
       problems.push(`${sunk} goes through the floor mid-rep (t=${t}); add a middle keyframe`);
       break;

@@ -1,0 +1,26 @@
+{
+  "name": "Wrist Curl",
+  "primary": "forearms",
+  "secondary": [],
+  "cue": "Rest your forearms on your thighs with the wrists just past the knees. Move only the hands and let the weight roll down to the fingers before curling it up.",
+  "phases": ["Curl", "Lower"],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [125, 145, 62], "neck": [125, 166, 50], "chest": [125, 193, 22], "pelvis": [125, 226, 0],
+      "lShoulder": [102, 166, 50], "rShoulder": [148, 166, 50],
+      "lElbow": [108, 212, 38], "rElbow": [142, 212, 38],
+      "lWrist": [106, 216, 80], "rWrist": [144, 216, 80],
+      "lHand": [106, 229, 85], "rHand": [144, 229, 85],
+      "lHip": [113, 228, 0], "rHip": [137, 228, 0],
+      "lKnee": [104, 231, 59], "rKnee": [146, 231, 59],
+      "lAnkle": [100, 279, 42], "rAnkle": [150, 279, 42],
+      "lToe": [99, 284, 62], "rToe": [151, 284, 62]
+    },
+    { "lHand": [106, 203, 86], "rHand": [144, 203, 86] }
+  ],
+  "props": [
+    { "type": "bench", "y": 240, "z1": -35, "z2": 30, "width": 44 },
+    { "type": "dumbbell", "at": ["lHand", "rHand"] }
+  ]
+}

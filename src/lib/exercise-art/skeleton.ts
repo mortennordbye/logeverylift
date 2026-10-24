@@ -39,8 +39,17 @@ export const JOINTS = [
   "head", "neck", "chest", "pelvis",
   "lShoulder", "rShoulder", "lElbow", "rElbow", "lWrist", "rWrist",
   "lHip", "rHip", "lKnee", "rKnee", "lAnkle", "rAnkle", "lToe", "rToe",
+  "lHand", "rHand",
 ] as const;
 export type Joint = (typeof JOINTS)[number];
+
+/**
+ * Hands are optional: most drawings end the arm at the wrist (a bar or handle
+ * sits there), and only a spec that poses a hand in its first keyframe gets
+ * one drawn and checked. Left out, a hand follows the forearm.
+ */
+export const HANDS = ["lHand", "rHand"] as const satisfies readonly Joint[];
+export const isHand = (j: Joint): boolean => j === "lHand" || j === "rHand";
 
 /**
  * Bones with their length. Lengths are fixed: every keyframe must match them
@@ -66,6 +75,8 @@ export const BONES: readonly { a: Joint; b: Joint; length: number }[] = [
   { a: "rKnee", b: "rAnkle", length: 56 },
   { a: "lAnkle", b: "lToe", length: 21 },
   { a: "rAnkle", b: "rToe", length: 21 },
+  { a: "lWrist", b: "lHand", length: 14 },
+  { a: "rWrist", b: "rHand", length: 14 },
 ];
 
 export const BONE_LENGTH = new Map<string, number>();
@@ -97,4 +108,5 @@ export const LIMBS: Limb[] = (["l", "r"] as const).flatMap((s): Limb[] => [
   { from: `${s}Ankle`, to: `${s}Toe`, r: [5, 3.2], muscles: [], kind: "leg" },
   { from: `${s}Shoulder`, to: `${s}Elbow`, r: [8.5, 6], muscles: UPPER_ARM, kind: "arm" },
   { from: `${s}Elbow`, to: `${s}Wrist`, r: [6, 4.5], muscles: ["forearms"], kind: "arm" },
+  { from: `${s}Wrist`, to: `${s}Hand`, r: [4.5, 4], muscles: [], kind: "arm" },
 ]);

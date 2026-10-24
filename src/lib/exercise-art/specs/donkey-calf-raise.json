@@ -1,0 +1,45 @@
+{
+  "name": "Donkey Calf Raise",
+  "primary": "calves",
+  "secondary": [],
+  "cue": "Keep your knees straight and your hips under the pad, and let your heels sink below the step before each rep. Rise all the way onto the balls of your feet and pause at the top.",
+  "phases": ["Rise", "Lower"],
+  "anchor": "lToe",
+  "zoom": 0.8,
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "head": [125, 128, 57],
+      "neck": [125, 133, 33],
+      "chest": [125, 137, -5],
+      "pelvis": [125, 139, -45],
+      "lShoulder": [103, 135, 31],
+      "rShoulder": [147, 135, 31],
+      "lElbow": [100, 172, 54],
+      "rElbow": [150, 172, 54],
+      "lWrist": [103, 170, 98],
+      "rWrist": [147, 170, 98],
+      "lHip": [113, 141, -45],
+      "rHip": [137, 141, -45],
+      "lKnee": [112, 201, -45],
+      "rKnee": [138, 201, -45],
+      "lAnkle": [112, 257, -45],
+      "rAnkle": [138, 257, -45],
+      "lToe": [110, 248, -26],
+      "rToe": [140, 248, -26]
+    },
+    {
+      "lAnkle": [112, 232, -40],
+      "rAnkle": [138, 232, -40],
+      "lElbow": [101, 146, 61],
+      "rElbow": [149, 146, 61],
+      "lWrist": [103, 170, 98],
+      "rWrist": [147, 170, 98]
+    }
+  ],
+  "props": [
+    { "type": "box", "y": 251, "z1": -33, "z2": 15, "width": 70, "layer": "front" },
+    { "type": "pad", "at": ["chest", "pelvis"], "offset": -16, "rail": [290, -66], "width": 44 },
+    { "type": "handles", "along": "x", "pivot": [262, 100], "layer": "back" }
+  ]
+}
