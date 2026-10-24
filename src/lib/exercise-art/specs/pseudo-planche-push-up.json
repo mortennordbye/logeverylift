@@ -1,0 +1,188 @@
+{
+  "name": "Pseudo Planche Push-up",
+  "primary": "chest",
+  "secondary": [
+    "shoulders",
+    "triceps",
+    "abs"
+  ],
+  "cue": "Keep your hands by your waist and your shoulders leaning well past them the whole rep. Lower with your elbows tucked back against your sides.",
+  "phases": [
+    "Lower",
+    "Push"
+  ],
+  "anchor": "lAnkle",
+  "camera": "top",
+  "zoom": 0.8,
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "lAnkle": [
+        115,
+        270.5,
+        115
+      ],
+      "rAnkle": [
+        135,
+        270.5,
+        115
+      ],
+      "lToe": [
+        115,
+        290,
+        107
+      ],
+      "rToe": [
+        135,
+        290,
+        107
+      ],
+      "lKnee": [
+        115,
+        252.2,
+        62.1
+      ],
+      "rKnee": [
+        135,
+        252.2,
+        62.1
+      ],
+      "lHip": [
+        113,
+        232.5,
+        5.4
+      ],
+      "rHip": [
+        137,
+        232.5,
+        5.4
+      ],
+      "pelvis": [
+        125,
+        232.5,
+        5.4
+      ],
+      "chest": [
+        125,
+        219.4,
+        -32.4
+      ],
+      "neck": [
+        125,
+        207,
+        -68.3
+      ],
+      "head": [
+        125,
+        193.8,
+        -88.3
+      ],
+      "lShoulder": [
+        102,
+        207,
+        -68.3
+      ],
+      "rShoulder": [
+        148,
+        207,
+        -68.3
+      ],
+      "lElbow": [
+        101,
+        245,
+        -46.7
+      ],
+      "rElbow": [
+        149,
+        245,
+        -46.7
+      ],
+      "lWrist": [
+        100,
+        283,
+        -25
+      ],
+      "rWrist": [
+        150,
+        283,
+        -25
+      ]
+    },
+    {
+      "lKnee": [
+        115,
+        265.4,
+        59.2
+      ],
+      "rKnee": [
+        135,
+        265.4,
+        59.2
+      ],
+      "lHip": [
+        113,
+        260,
+        -0.5
+      ],
+      "rHip": [
+        137,
+        260,
+        -0.5
+      ],
+      "pelvis": [
+        125,
+        260,
+        -0.5
+      ],
+      "chest": [
+        125,
+        256.4,
+        -40.4
+      ],
+      "neck": [
+        125,
+        253,
+        -78.2
+      ],
+      "head": [
+        125,
+        245,
+        -100.8
+      ],
+      "lShoulder": [
+        102,
+        253,
+        -78.2
+      ],
+      "rShoulder": [
+        148,
+        253,
+        -78.2
+      ],
+      "lElbow": [
+        93,
+        241.9,
+        -33.6
+      ],
+      "rElbow": [
+        157,
+        241.9,
+        -33.6
+      ],
+      "lWrist": [
+        100,
+        283,
+        -25
+      ],
+      "rWrist": [
+        150,
+        283,
+        -25
+      ]
+    }
+  ],
+  "props": []
+}
