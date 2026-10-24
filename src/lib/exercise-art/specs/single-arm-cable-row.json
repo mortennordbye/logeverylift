@@ -4,6 +4,7 @@
   "secondary": ["biceps", "shoulders", "forearms"],
   "cue": "Pull the handle to your side by driving the elbow back past your ribs. Let the shoulder reach forward at the start, but do not twist your whole torso to move the weight.",
   "phases": ["Pull", "Return"],
+  "worked": "right",
   "anchor": "pelvis",
   "hold": ["rWrist"],
   "keyframes": [

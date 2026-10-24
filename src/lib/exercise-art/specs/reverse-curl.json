@@ -1,7 +1,7 @@
 {
   "name": "Reverse Curl",
-  "primary": "biceps",
-  "secondary": ["forearms"],
+  "primary": "forearms",
+  "secondary": ["biceps"],
   "cue": "Hold the bar overhand and keep your wrists straight. Pin your elbows to your sides and lower the bar slowly.",
   "phases": ["Curl", "Lower"],
   "anchor": "lAnkle",
@@ -18,5 +18,5 @@
     },
     { "lWrist": [102, 109, 31], "rWrist": [148, 109, 31] }
   ],
-  "props": [{ "type": "barbell" }]
+  "props": [{ "type": "barbell", "grip": "overhand" }]
 }

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { muscleRoles } from "@/lib/exercise-art/load";
 import { CYCLE_MS, buildScene, capsule, cycleAt, poseAt, renderSvg } from "@/lib/exercise-art/scene";
 import { checkSpec } from "@/lib/exercise-art/check";
-import { artSpecSchema, slugify, type ArtSpec } from "@/lib/exercise-art/schema";
+import { artSpecSchema, resolvePoses, slugify, type ArtSpec } from "@/lib/exercise-art/schema";
 import { SPEC_LOADERS } from "@/lib/exercise-art/specs";
 
 const SPEC_DIR = path.resolve(__dirname, "../lib/exercise-art/specs");
@@ -180,6 +180,41 @@ describe("motion", () => {
     expect(x).toBeCloseTo(125 + (lAnkle[2] + rAnkle[2]) / 2 + 10 - 8, 0);
     expect(y).toBeCloseTo((lAnkle[1] + rAnkle[1]) / 2 - 4, 0);
     expect(side.some((s) => s.role === "steel" && s.stroke === 4)).toBe(true);
+  });
+
+  it("brings a loop back through its own return keyframes, not back through the way out", () => {
+    const hindu = artSpecSchema.parse(read("hindu-push-up.json"));
+    const poses = resolvePoses(hindu);
+    const near = (a: number[], b: number[]) => a.forEach((c, i) => expect(c).toBeCloseTo(b[i], 0));
+    // Way back: keyframes 2, 3, 4, 5, then 0, with t running 1 to 0.
+    near(poseAt(hindu, 1, 1).pelvis, poses[2].pelvis);
+    near(poseAt(hindu, 0.75, 1).pelvis, poses[3].pelvis);
+    near(poseAt(hindu, 0, 1).pelvis, poses[0].pelvis);
+    // The way out never visits the return keyframes.
+    near(poseAt(hindu, 0.5, 0).pelvis, poses[1].pelvis);
+  });
+
+  it("lights only the working side's limbs in one-sided work", () => {
+    const calf = artSpecSchema.parse(read("single-leg-calf-raise.json"));
+    const lit = (worked: "both" | "right") => buildScene({ ...calf, worked }, "front", 0).filter((s) => s.role === "primary").length;
+    expect(lit("right")).toBe(lit("both") - 1);
+  });
+
+  it("draws an overhand grip's knuckles and leaves an underhand grip plain", () => {
+    const seams = (grip: "overhand" | "underhand") =>
+      buildScene({ ...curl, props: [{ type: "barbell", grip, cambered: false, layer: "auto" }] }, "front", 0).filter((s) => s.role === "seam" && s.stroke === 1.3);
+    expect(seams("overhand")).toHaveLength(2);
+    expect(seams("underhand")).toHaveLength(0);
+  });
+
+  it("only draws hands for a spec that poses them", () => {
+    const hand = (spec: ArtSpec) => buildScene(spec, "front", 0).filter((s) => s.role === "limb").length;
+    const withHands = artSpecSchema.parse(read("wrist-curl.json"));
+    const without = {
+      ...withHands,
+      keyframes: withHands.keyframes.map((k) => Object.fromEntries(Object.entries(k).filter(([j]) => j !== "lHand" && j !== "rHand"))),
+    };
+    expect(hand(withHands)).toBe(hand(without) + 2);
   });
 
   it("needs a place for a roller that rides on no joints", () => {

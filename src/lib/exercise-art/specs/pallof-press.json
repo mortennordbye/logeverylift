@@ -4,6 +4,7 @@
   "secondary": ["shoulders"],
   "cue": "Stand side-on to the cable and press the handle straight out from your chest. Do not let the cable twist your hips or shoulders toward it.",
   "phases": ["Press", "Return"],
+  "sideCamera": "angled",
   "anchor": "lAnkle",
   "keyframes": [
     {
@@ -17,12 +18,12 @@
       "lToe": [104, 284, 19], "rToe": [146, 284, 19]
     },
     {
-      "lElbow": [112, 98, 44], "rElbow": [138, 98, 44],
-      "lWrist": [122, 104, 86], "rWrist": [128, 104, 86]
+      "lElbow": [112, 101, 42], "rElbow": [138, 101, 42],
+      "lWrist": [122, 111, 83], "rWrist": [128, 111, 83]
     }
   ],
   "hold": ["lWrist", "rWrist"],
   "props": [
-    { "type": "cable", "anchor": [222, 111, 22], "at": "rWrist", "layer": "front" }
+    { "type": "cable", "anchor": [222, 111, -10], "at": "rWrist", "layer": "front" }
   ]
 }

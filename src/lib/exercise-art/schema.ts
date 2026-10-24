@@ -12,14 +12,26 @@ export type Pose = Record<Joint, Point3>;
 const point3 = z.tuple([z.number(), z.number(), z.number()]);
 const joint = z.enum(JOINTS);
 const muscle = z.enum(MUSCLES as [Muscle, ...Muscle[]]);
-/** "auto" sorts the prop by depth with the body; "back"/"front" pin it behind or in front of everything. */
-const layer = z.enum(["auto", "back", "front"]);
+/**
+ * "auto" sorts the prop by depth with the body; "back"/"front" pin it behind
+ * or in front of everything. "body" (barbells only) sorts like "auto" but goes
+ * behind the head and torso in the side view whenever the bar is above the
+ * chest, so a bar held in a front rack or overhead never covers the face.
+ */
+const layer = z.enum(["auto", "back", "front", "body"]);
 
 const yz = z.tuple([z.number(), z.number()]);
 
 const prop = z.discriminatedUnion("type", [
   /** Bar along x through the midpoint of the joints (default: the wrists); `cambered` bends the middle into an EZ bar's W. */
-  z.object({ type: z.literal("barbell"), at: z.array(joint).min(1).optional(), cambered: z.boolean().default(false), layer: layer.default("auto") }),
+  z.object({
+    type: z.literal("barbell"),
+    at: z.array(joint).min(1).optional(),
+    cambered: z.boolean().default(false),
+    /** Draws a fist on the bar at each grip: "underhand" (palms up in a curl) or "overhand" (knuckles up). */
+    grip: z.enum(["underhand", "overhand"]).optional(),
+    layer: layer.default("auto"),
+  }),
   /**
    * One dumbbell per joint (default: the wrists); `along` is the handle's axis:
    * x for an overhand grip, z for a neutral one, "forearm" for a neutral grip
@@ -158,7 +170,23 @@ export const artSpecSchema = z.object({
    */
   hold: z.array(z.enum(["lWrist", "rWrist", "lAnkle", "rAnkle"])).default([]),
   /** "top" swaps the front view for a view from above, for lifts done lying down. */
-  camera: z.enum(["front", "top"]).default("front"),
+  camera: z.enum(["front", "top", "angled", "behind"]).default("front"),
+  /** "angled" turns the side view toward the front and a little above, for a movement the plain side view hides. */
+  sideCamera: z.enum(["side", "angled"]).default("side"),
+  /** One-sided work: only the limbs on that side light up. */
+  worked: z.enum(["both", "left", "right"]).default("both"),
+  /**
+   * "bounce" (default) plays the keyframes out and back. "loop" plays them
+   * out and then returns from the last straight to the first, for a movement
+   * whose way back is not its way out (a Hindu push-up).
+   */
+  cycle: z.enum(["bounce", "loop"]).default("bounce"),
+  /**
+   * For a "loop": the keyframe where the way back begins. Keyframes up to it
+   * are the way out; the ones after it, then the first, are the way back.
+   * Defaults to the last keyframe (straight back to the first).
+   */
+  turnAt: z.number().int().min(1).optional(),
   /**
    * Draws the whole figure smaller, round the middle of the floor (or of the
    * view from above), for poses too long for the frame at full size: a body

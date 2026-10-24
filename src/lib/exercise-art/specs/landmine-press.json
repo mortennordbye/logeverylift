@@ -4,6 +4,7 @@
   "secondary": ["shoulders", "triceps"],
   "cue": "Hold the end of the bar at your upper chest and press it up and forward along its arc until your arms are straight. Keep your ribs down instead of leaning back.",
   "phases": ["Press", "Lower"],
+  "camera": "angled",
   "anchor": "lAnkle",
   "hold": ["lWrist", "rWrist"],
   "zoom": 0.6,

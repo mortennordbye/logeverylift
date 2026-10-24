@@ -4,7 +4,7 @@
  */
 
 import { artSpecSchema, drawnJoints, resolveFrames, type Point3 } from "./schema";
-import { poseAt, project, zoomed } from "./scene";
+import { cameraFor, poseAt, project, zoomed } from "./scene";
 import { FLOOR_Y, HEAD_RADIUS, JOINTS, isHand, type Joint } from "./skeleton";
 
 const dist = (a: Point3, b: Point3) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
@@ -32,8 +32,8 @@ export function checkSpec(raw: unknown): string[] {
     // The head's top edge, or its near edge seen from above.
     const r = joint === "head" ? HEAD_RADIUS : 0;
     const top: Point3 = [p[0], p[1] - r, p[2]];
-    const front = spec.camera === "top" ? zoomed(project(p, "front", "top").at, "front", spec) : zoomed(project(top, "front", "front").at, "front", spec);
-    const [sx, sy] = zoomed(project(top, "side", spec.camera).at, "side", spec);
+    const front = spec.camera === "top" ? zoomed(project(p, "front", "top").at, "front", spec) : zoomed(project(top, "front", spec.camera).at, "front", spec);
+    const [sx, sy] = zoomed(project(top, "side", cameraFor(spec, "side")).at, "side", spec);
     const fits = ([x, y]: [number, number], bottom: boolean) => x >= 25 && x <= 225 && y >= 36 && (!bottom || y <= 296);
     return fits(front, spec.camera === "top") && fits([sx, sy], false);
   };
@@ -74,11 +74,13 @@ export function checkSpec(raw: unknown): string[] {
       }
     }
   }
-  for (const t of SAMPLES) {
-    const pose = poseAt(spec, t);
+  // A loop spec also has its own way back, from the last keyframe to the first.
+  const moments = [...SAMPLES.map((t) => [t, 0] as const), ...(spec.cycle === "loop" ? SAMPLES.map((t) => [t, 1] as const) : [])];
+  for (const [t, phase] of moments) {
+    const pose = poseAt(spec, t, phase);
     const sunk = joints.find((j) => pose[j][1] > FLOOR_Y + 3);
     if (sunk) {
-      problems.push(`${sunk} goes through the floor mid-rep (t=${t}); add a middle keyframe`);
+      problems.push(`${sunk} goes through the floor mid-rep (${phase ? "on the way back, " : ""}t=${t}); add a middle keyframe`);
       break;
     }
   }
