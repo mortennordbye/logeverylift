@@ -1,0 +1,174 @@
+{
+  "name": "Cable Crunch",
+  "primary": "abs",
+  "secondary": [],
+  "cue": "Keep your hips still and curl your ribs down toward your hips. Do not sit back on your heels to pull the weight down.",
+  "phases": [
+    "Crunch",
+    "Return"
+  ],
+  "anchor": "lKnee",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        124,
+        8
+      ],
+      "neck": [
+        125,
+        146,
+        0
+      ],
+      "chest": [
+        125,
+        184,
+        -2
+      ],
+      "pelvis": [
+        125,
+        224,
+        -4
+      ],
+      "lShoulder": [
+        103,
+        152,
+        0
+      ],
+      "rShoulder": [
+        147,
+        152,
+        0
+      ],
+      "lElbow": [
+        106,
+        142,
+        44
+      ],
+      "rElbow": [
+        144,
+        142,
+        44
+      ],
+      "lWrist": [
+        114,
+        118,
+        14
+      ],
+      "rWrist": [
+        136,
+        118,
+        14
+      ],
+      "lHip": [
+        113,
+        224,
+        -4
+      ],
+      "rHip": [
+        137,
+        224,
+        -4
+      ],
+      "lKnee": [
+        113,
+        284,
+        0
+      ],
+      "rKnee": [
+        137,
+        284,
+        0
+      ],
+      "lAnkle": [
+        113,
+        283,
+        -56
+      ],
+      "rAnkle": [
+        137,
+        283,
+        -56
+      ],
+      "lToe": [
+        113,
+        289,
+        -76
+      ],
+      "rToe": [
+        137,
+        289,
+        -76
+      ]
+    },
+    {
+      "chest": [
+        125,
+        189,
+        16
+      ],
+      "neck": [
+        125,
+        196,
+        53
+      ],
+      "head": [
+        125,
+        211,
+        72
+      ],
+      "lShoulder": [
+        103,
+        196,
+        51
+      ],
+      "rShoulder": [
+        147,
+        196,
+        51
+      ],
+      "lElbow": [
+        106,
+        238,
+        60
+      ],
+      "rElbow": [
+        144,
+        238,
+        60
+      ],
+      "lWrist": [
+        111,
+        205,
+        80
+      ],
+      "rWrist": [
+        139,
+        205,
+        80
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "cable",
+      "anchor": [
+        125,
+        40,
+        90
+      ],
+      "at": "lWrist",
+      "layer": "front"
+    },
+    {
+      "type": "cable",
+      "anchor": [
+        125,
+        40,
+        90
+      ],
+      "at": "rWrist",
+      "layer": "front"
+    }
+  ]
+}

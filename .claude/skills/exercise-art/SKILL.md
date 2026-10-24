@@ -139,6 +139,15 @@ hips a little at the switch.
 hides them behind the torso and the front view of a prone body is too small
 to read. Do not draw these until the renderer has a camera for it.
 
+**Balanced on bent arms** (crow, tuck planche): the hips are the highest
+point and the spine falls from them to the shoulders; a chest above the
+pelvis draws a hump. Bend the elbows to about 100 to 120 degrees so the
+upper arm is a shelf, and rest each knee just outside and on top of it.
+A knee cannot close past about 25 degrees: put the ankles behind and a
+little below the hips, not inside them. Going up from the squat, add a
+middle keyframe with the knees already on the arms and the feet just off
+the floor, or the legs sweep out straight behind.
+
 **Supported on the hands** (dip, and the top of anything pressed up on
 bars): at lockout the shoulders sit over the hands and the torso is close to
 upright, with only a slight lean; the lean grows on the way down. A body that

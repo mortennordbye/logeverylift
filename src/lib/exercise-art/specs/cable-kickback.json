@@ -1,0 +1,159 @@
+{
+  "name": "Cable Kickback",
+  "primary": "glutes",
+  "secondary": [
+    "hamstrings"
+  ],
+  "cue": "Kick the leg back by squeezing your glute, not by arching your lower back. Stop when the hip is fully open and keep your hips square.",
+  "phases": [
+    "Kick",
+    "Return"
+  ],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        72,
+        51
+      ],
+      "neck": [
+        125,
+        93,
+        39
+      ],
+      "chest": [
+        125,
+        125,
+        20
+      ],
+      "pelvis": [
+        125,
+        160,
+        0
+      ],
+      "lShoulder": [
+        102,
+        94,
+        39
+      ],
+      "rShoulder": [
+        148,
+        94,
+        39
+      ],
+      "lElbow": [
+        96,
+        128,
+        71
+      ],
+      "rElbow": [
+        154,
+        128,
+        71
+      ],
+      "lWrist": [
+        90,
+        162,
+        94
+      ],
+      "rWrist": [
+        160,
+        162,
+        94
+      ],
+      "lHip": [
+        113,
+        162,
+        0
+      ],
+      "rHip": [
+        137,
+        162,
+        0
+      ],
+      "lKnee": [
+        112,
+        222,
+        2
+      ],
+      "rKnee": [
+        138,
+        222,
+        2
+      ],
+      "lAnkle": [
+        112,
+        278,
+        -1
+      ],
+      "rAnkle": [
+        138,
+        277,
+        -8
+      ],
+      "lToe": [
+        110,
+        284,
+        19
+      ],
+      "rToe": [
+        139,
+        284,
+        12
+      ]
+    },
+    {
+      "rKnee": [
+        138,
+        218,
+        -22
+      ],
+      "rAnkle": [
+        138,
+        268,
+        -46
+      ],
+      "rToe": [
+        138,
+        278,
+        -28
+      ]
+    },
+    {
+      "rKnee": [
+        138,
+        208,
+        -39
+      ],
+      "rAnkle": [
+        138,
+        248,
+        -79
+      ],
+      "rToe": [
+        138,
+        268,
+        -83
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "bar",
+      "y": 162,
+      "z": 94,
+      "layer": "front"
+    },
+    {
+      "type": "cable",
+      "anchor": [
+        138,
+        282,
+        90
+      ],
+      "at": "rAnkle",
+      "layer": "front"
+    }
+  ]
+}

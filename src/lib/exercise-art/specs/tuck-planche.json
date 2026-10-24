@@ -1,0 +1,35 @@
+{
+  "name": "Tuck Planche",
+  "primary": "shoulders",
+  "secondary": ["chest", "triceps", "abs"],
+  "camera": "top",
+  "cue": "Keep your elbows locked and lean your shoulders past your hands. Round your upper back and pull your knees tight to your chest.",
+  "phases": ["Lean", "Lower"],
+  "anchor": "lWrist",
+  "hold": ["lWrist", "rWrist"],
+  "keyframes": [
+    {
+      "lWrist": [98, 283, 0], "rWrist": [152, 283, 0],
+      "lElbow": [100, 240, 1], "rElbow": [150, 240, 1],
+      "lShoulder": [102, 196, 2], "rShoulder": [148, 196, 2],
+      "neck": [125, 196, 2], "head": [125, 186, 24],
+      "chest": [125, 205, -35], "pelvis": [125, 220, -72],
+      "lHip": [113, 220, -72], "rHip": [137, 220, -72],
+      "lKnee": [115, 243.4, -16.8], "rKnee": [135, 243.4, -16.8],
+      "lAnkle": [117, 279, -60], "rAnkle": [133, 279, -60],
+      "lToe": [117, 290, -42.1], "rToe": [133, 290, -42.1]
+    },
+    {
+      "lWrist": [98, 283, 0], "rWrist": [152, 286, 0],
+      "lElbow": [100, 240, 10.4], "rElbow": [150, 242.5, 10.4],
+      "lShoulder": [102, 196, 22], "rShoulder": [148, 198, 22],
+      "neck": [125, 196, 22], "head": [125, 188, 45],
+      "chest": [125, 199, -16], "pelvis": [125, 190, -54],
+      "lHip": [113, 190, -54], "rHip": [137, 190, -54],
+      "lKnee": [115, 222, -4], "rKnee": [135, 222, -4],
+      "lAnkle": [117, 206, -56], "rAnkle": [133, 206, -56],
+      "lToe": [117, 201, -76], "rToe": [133, 201, -76]
+    }
+  ],
+  "props": []
+}

@@ -1,0 +1,35 @@
+{
+  "name": "Handstand Hold",
+  "primary": "shoulders",
+  "secondary": ["triceps", "abs"],
+  "cue": "Stack your hips and feet right over your hands and push the floor away so your shoulders reach toward your ears. Squeeze your legs together and do not let your back arch.",
+  "phases": ["Push tall", "Hold"],
+  "anchor": "lWrist",
+  "hold": ["lWrist", "rWrist"],
+  "zoom": 0.75,
+  "keyframes": [
+    {
+      "lWrist": [102, 283, 0], "rWrist": [148, 283, 0],
+      "lElbow": [102, 241, 0], "rElbow": [148, 241, 0],
+      "lShoulder": [102, 195, 0], "rShoulder": [148, 195, 0],
+      "neck": [125, 195, 0], "head": [125, 218, 10],
+      "chest": [125, 157, 0], "pelvis": [125, 117, 0],
+      "lHip": [113, 117, 0], "rHip": [137, 117, 0],
+      "lKnee": [116, 57, 0], "rKnee": [134, 57, 0],
+      "lAnkle": [119, 1, 0], "rAnkle": [131, 1, 0],
+      "lToe": [119, -20, 0], "rToe": [131, -20, 0]
+    },
+    {
+      "lWrist": [102, 283, 0], "rWrist": [148, 283, 0],
+      "lElbow": [103, 241, 0], "rElbow": [147, 241, 0],
+      "lShoulder": [104, 195, 0], "rShoulder": [146, 195, 0],
+      "neck": [125, 185.6, 0], "head": [125, 209, 10],
+      "chest": [125, 149, 0], "pelvis": [125, 109, 0],
+      "lHip": [113, 109, 0], "rHip": [137, 109, 0],
+      "lKnee": [116, 49, 0], "rKnee": [134, 49, 0],
+      "lAnkle": [119, -7, 0], "rAnkle": [131, -7, 0],
+      "lToe": [119, -28, 0], "rToe": [131, -28, 0]
+    }
+  ],
+  "props": []
+}
