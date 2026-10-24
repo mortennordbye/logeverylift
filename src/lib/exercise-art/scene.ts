@@ -8,8 +8,8 @@
  * component and the preview script, so what an agent checks is what ships.
  */
 
-import { resolvePoses, type ArtProp, type ArtSpec, type Point3, type Pose } from "./schema";
-import { BONES, CENTER_X, FLOOR_Y, HEAD_RADIUS, JOINTS, LIMBS, NEIGHBOURS, TOP_Y, type Camera, type Joint, type Muscle, type View } from "./skeleton";
+import { hasHands, resolvePoses, type ArtProp, type ArtSpec, type Point3, type Pose } from "./schema";
+import { BONES, CENTER_X, FLOOR_Y, HEAD_RADIUS, JOINTS, LIMBS, NEIGHBOURS, TOP_Y, isHand, type Camera, type Joint, type Muscle, type View } from "./skeleton";
 
 /** Where figures and equipment sit (checkSpec keeps joints inside it), so the figure fills its card. */
 export const VIEWBOX = "25 36 200 260";
@@ -97,11 +97,12 @@ export function poseAt(spec: ArtSpec, t: number): Pose {
   for (const held of new Set([...spec.hold, ...still])) {
     if (held === spec.anchor) continue;
     const target = [0, 1, 2].map((i) => lerp(a[held][i], b[held][i], u)) as Point3;
-    const toe = held === "lAnkle" ? "lToe" : held === "rAnkle" ? "rToe" : null;
-    const foot = toe ? sub(pose[toe], pose[held]) : null;
+    // The foot or hand past the held joint moves with it.
+    const tip = TIP[held];
+    const offset = sub(pose[tip], pose[held]);
     const [root, middle] = CHAIN[held];
     solveTwoBone(pose, root, middle, held, target);
-    if (toe && foot) pose[toe] = [0, 1, 2].map((i) => pose[held][i] + foot[i]) as Point3;
+    pose[tip] = [0, 1, 2].map((i) => pose[held][i] + offset[i]) as Point3;
   }
   return pose;
 }
@@ -112,6 +113,8 @@ const CHAIN = {
   lAnkle: ["lHip", "lKnee"],
   rAnkle: ["rHip", "rKnee"],
 } as const satisfies Record<string, [Joint, Joint]>;
+
+const TIP = { lWrist: "lHand", rWrist: "rHand", lAnkle: "lToe", rAnkle: "rToe" } as const satisfies Record<keyof typeof CHAIN, Joint>;
 
 /**
  * Put `end` on `target` (or as close as the limb reaches) and bend the middle
@@ -192,10 +195,16 @@ function zoomOrigin(view: View, camera: Camera): Point {
   return view === "front" && camera === "top" ? [CENTER_X, TOP_Y] : [CENTER_X, FLOOR_Y];
 }
 
+/** The spec's zoom for one view: `frontZoom` overrides `zoom` for the front (or top) view. */
+export function zoomOf(spec: ArtSpec, view: View): number {
+  return view === "front" ? (spec.frontZoom ?? spec.zoom) : spec.zoom;
+}
+
 /** Where a projected point lands once the spec's zoom is applied. */
 export function zoomed([x, y]: Point, view: View, spec: ArtSpec): Point {
   const [ox, oy] = zoomOrigin(view, spec.camera);
-  return [ox + (x - ox) * spec.zoom, oy + (y - oy) * spec.zoom];
+  const z = zoomOf(spec, view);
+  return [ox + (x - ox) * z, oy + (y - oy) * z];
 }
 
 const unit = (v: Point3): Point3 => {
@@ -292,7 +301,7 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
         // In the hands, the near plate is drawn just behind the near arm so
         // the grip stays readable. Racked on the body (a back squat), it goes
         // behind the figure rather than over the face.
-        const inHands = (p.at ?? wrists).every((j) => j.endsWith("Wrist"));
+        const inHands = (p.at ?? wrists).every((j) => j.endsWith("Wrist") || isHand(j));
         const near = Math.max(...joints.map((q) => q[0]));
         return [group(inHands ? near - 1 : -1e5, [
           { d: circle([x, y], 24), role: "plate" },
@@ -454,7 +463,7 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
     case "landmine": {
       const joints = (p.at ?? wrists).map((jn) => pose[jn]);
       const c = mean3(joints);
-      const pivot: Point3 = [CENTER_X, p.pivot[0], p.pivot[1]];
+      const pivot: Point3 = p.pivot.length === 3 ? p.pivot : [CENTER_X, p.pivot[0], p.pivot[1]];
       const d = unit(sub(c, pivot));
       // Hands on the end of the sleeve hold just past the plate; a handle under the bar sits just short of it.
       const past = p.plate === "past";
@@ -501,7 +510,91 @@ function propGroups(p: ArtProp, pose: Pose, view: View, camera: Camera): Group[]
       // From the front, a wall behind the lifter is a backdrop; one in front would hide them, so it is left out.
       return p.z < 0 ? [group(-1e6, [{ d: rect(36, 60, 178, FLOOR_Y - 60, 4), role: "equip" }])] : [];
     }
+    case "pole":
+      return [group(-1e6, [view === "side"
+        ? { d: rect(CENTER_X + p.z - 3, 36, 6, FLOOR_Y - 36, 3), role: "steel" }
+        : camera === "top"
+        ? { d: circle([p.x, TOP_Y + p.z], 5), role: "steel" }
+        : { d: rect(p.x - 3, 36, 6, FLOOR_Y - 36, 3), role: "steel" }])];
+    case "band": {
+      const pts = p.at.map((jn) => project(pose[jn], view, camera));
+      const d = pts.map(({ at: [x, y] }, i) => `${i ? "L" : "M"}${f(x)} ${f(y)}`).join("");
+      return [group(Math.max(...pts.map((q) => q.depth)) + 1, [{ d, role: "plate", stroke: 3.5 }])];
+    }
+    case "footplate": {
+      const c = mean3((p.at ?? ["lToe", "rToe", "lAnkle", "rAnkle"]).map((jn) => pose[jn]));
+      const face = unit([0, p.facing[0], p.facing[1]]);
+      // The plate sits just behind the soles, its long side across the facing direction.
+      const mid3: Point3 = [c[0], c[1] - face[1] * 5, c[2] - face[2] * 5];
+      const along: Point3 = [0, -face[2], face[1]];
+      const rail: Shape[] = p.rail ? [{ d: line(project(mid3, view, camera).at, project([c[0], p.rail[0], p.rail[1]], view, camera).at), role: "steel", stroke: 4 }] : [];
+      return [group(project(mid3, view, camera).depth, [...rail, ...slab(mid3, along, p.length, p.width, view, camera)])];
+    }
+    case "sled": {
+      const hands = (p.at ?? wrists).map((jn) => pose[jn]);
+      const z0 = mean3(hands)[2] - 6;
+      const top = FLOOR_Y - 24;
+      const base: Shape[] = view === "side"
+        ? [{ d: rect(CENTER_X + z0, top, 64, 24, 3), role: "equip" }]
+        : camera === "top"
+        ? [{ d: rect(CENTER_X - 30, TOP_Y + z0, 60, 64, 3), role: "equip" }]
+        : [{ d: rect(CENTER_X - 30, top, 60, 24, 3), role: "equip" }];
+      const weight: Point3 = [CENTER_X, top - 18, z0 + 42];
+      return [
+        group(project([CENTER_X, top, z0 + 32], view, camera).depth, [...base, { d: disc(weight, [1, 0, 0], 18, view, camera), role: "plate" }]),
+        ...hands.map((h) => {
+          const { at, depth } = project(h, view, camera);
+          return group(depth - 1, [{ d: line(at, project([h[0], top, h[2]], view, camera).at), role: "steel", stroke: 4 }]);
+        }),
+      ];
+    }
+    case "pad": {
+      const a = pose[p.at[0]];
+      const b = pose[p.at[1]];
+      const dy = b[1] - a[1];
+      const dz = b[2] - a[2];
+      const n = Math.hypot(dy, dz) || 1;
+      const shift = (q: Point3): Point3 => [CENTER_X, q[1] - (dz * p.offset) / n, q[2] + (dy * p.offset) / n];
+      const [a2, b2] = [shift(a), shift(b)];
+      const centre = mean3([a2, b2]);
+      const length = len3(sub(b2, a2)) + 16;
+      const rail: Shape[] = p.rail ? [{ d: line(project(b2, view, camera).at, project([CENTER_X, p.rail[0], p.rail[1]], view, camera).at), role: "steel", stroke: 4 }] : [];
+      return [group(project(centre, view, camera).depth, [...rail, ...slab(centre, unit(sub(b2, a2)), length, p.width, view, camera)])];
+    }
+    case "handles":
+      return (p.at ?? wrists).map((jn) => {
+        const side = jn.startsWith("l") ? -1 : jn.startsWith("r") ? 1 : 0;
+        const c: Point3 = [pose[jn][0] + side * p.out, pose[jn][1], pose[jn][2]];
+        const axis: Point3 = p.along === "x" ? [1, 0, 0] : p.along === "y" ? [0, 1, 0] : [0, 0, 1];
+        const [half, r] = p.size === "grip" ? [9, 2.6] : [17, 7];
+        const end = (k: number) => project([0, 1, 2].map((i) => c[i] + axis[i] * k) as Point3, view, camera).at;
+        const { at, depth } = project(c, view, camera);
+        const pivot: Point3 | null = !p.pivot ? null
+          : p.pivot.length === 3 ? [side > 0 ? 2 * CENTER_X - p.pivot[0] : p.pivot[0], p.pivot[1], p.pivot[2]]
+          : [c[0], p.pivot[0], p.pivot[1]];
+        const lever: Shape[] = pivot
+          ? [
+              { d: line(project(pivot, view, camera).at, at), role: "steel", stroke: 4 },
+              { d: circle(project(pivot, view, camera).at, 4.5), role: "steel" },
+            ]
+          : [];
+        return group(depth - 1, [...lever, { d: capsule(end(-half), end(half), r, r), role: p.size === "grip" ? "steel" : "equip" }]);
+      });
   }
+}
+
+/**
+ * A flat rectangular pad or plate centred on `c`: `length` along `along`,
+ * `width` across x. Seen edge-on it is a 9-thick bar, face-on a rounded slab.
+ */
+function slab(c: Point3, along: Point3, length: number, width: number, view: View, camera: Camera): Shape[] {
+  const corner = (u: number, v: number) => project([c[0] + v * width / 2, c[1] + along[1] * u * length / 2, c[2] + along[2] * u * length / 2], view, camera).at;
+  const pts = [corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1)];
+  const quad = pts.map(([x, y], i) => `${i ? "L" : "M"}${f(x)} ${f(y)}`).join("") + "Z";
+  return [
+    { d: quad, role: "equip" },
+    { d: capsule(corner(-1, 0), corner(1, 0), 4.5, 4.5), role: "equip" },
+  ];
 }
 
 /** A flat disc (plate, ring, wheel) of radius r facing `normal`, as the ellipse it projects to. */
@@ -524,6 +617,7 @@ function disc(c: Point3, normal: Point3, r: number, view: View, camera: Camera):
 /** Every shape of one view at movement position `t`, back to front. */
 export function buildScene(spec: ArtSpec, view: View, t: number): Shape[] {
   const pose = poseAt(spec, t);
+  const hands = hasHands(spec);
   const j = {} as Record<Joint, Point>;
   const depth = {} as Record<Joint, number>;
   for (const name of JOINTS) {
@@ -548,7 +642,7 @@ export function buildScene(spec: ArtSpec, view: View, t: number): Shape[] {
   const groups: Group[] = [
     { depth: torsoDepth, shapes: view === "front" ? frontTorso(j, (m) => role(m), spec.camera) : sideTorso(j, project(glutePoint(pose), view, spec.camera).at, (m) => role(m)) },
     { depth: Math.max(depth.head, torsoDepth + 0.1), shapes: [{ d: capsule(j.neck, j.head, 6.5, 6.5), role: "limb" }, { d: circle(j.head, HEAD_RADIUS), role: "head" }] },
-    ...LIMBS.map((l): Group => {
+    ...LIMBS.filter((l) => hands || !isHand(l.to)).map((l): Group => {
       const d = (depth[l.from] + depth[l.to]) / 2 + bias[l.kind];
       const far = view === "side" && d < torsoDepth;
       const shapes: Shape[] = [{ d: capsule(j[l.from], j[l.to], l.r[0], l.r[1]), role: role(l.muscles, far) }];
@@ -612,7 +706,8 @@ export function renderSvg(spec: ArtSpec, view: View, t: number, id: string): str
         : `<path d="${s.d}" style="fill:${SHADED.includes(s.role) || s.role === "shadow" ? `url(#${id}-${s.role})` : COLOR[s.role]}"/>`,
     )
     .join("");
-  if (spec.zoom === 1) return `<defs>${defs}</defs>${body}`;
+  const zoom = zoomOf(spec, view);
+  if (zoom === 1) return `<defs>${defs}</defs>${body}`;
   const [ox, oy] = zoomOrigin(view, spec.camera);
-  return `<defs>${defs}</defs><g transform="translate(${ox} ${oy}) scale(${spec.zoom}) translate(${-ox} ${-oy})">${body}</g>`;
+  return `<defs>${defs}</defs><g transform="translate(${ox} ${oy}) scale(${zoom}) translate(${-ox} ${-oy})">${body}</g>`;
 }

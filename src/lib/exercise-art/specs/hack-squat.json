@@ -1,0 +1,215 @@
+{
+  "name": "Hack Squat",
+  "primary": "quads",
+  "secondary": [
+    "glutes"
+  ],
+  "cue": "Keep your back and hips flat against the pad and let your knees travel forward over your toes. Go down until your thighs are at least parallel to the platform.",
+  "phases": [
+    "Squat",
+    "Stand"
+  ],
+  "anchor": "lAnkle",
+  "keyframes": [
+    {
+      "head": [
+        125,
+        91,
+        -82
+      ],
+      "neck": [
+        125,
+        112,
+        -70
+      ],
+      "chest": [
+        125,
+        145,
+        -50
+      ],
+      "pelvis": [
+        125,
+        179,
+        -30
+      ],
+      "lShoulder": [
+        103,
+        115,
+        -67
+      ],
+      "rShoulder": [
+        147,
+        115,
+        -67
+      ],
+      "lElbow": [
+        98,
+        154,
+        -53
+      ],
+      "rElbow": [
+        152,
+        154,
+        -53
+      ],
+      "lWrist": [
+        100,
+        112,
+        -57
+      ],
+      "rWrist": [
+        150,
+        112,
+        -57
+      ],
+      "lHip": [
+        113,
+        181,
+        -30
+      ],
+      "rHip": [
+        137,
+        181,
+        -30
+      ],
+      "lKnee": [
+        108,
+        221,
+        15
+      ],
+      "rKnee": [
+        142,
+        221,
+        15
+      ],
+      "lAnkle": [
+        105,
+        272,
+        38
+      ],
+      "rAnkle": [
+        145,
+        272,
+        38
+      ],
+      "lToe": [
+        100,
+        266,
+        58
+      ],
+      "rToe": [
+        150,
+        266,
+        58
+      ]
+    },
+    {
+      "head": [
+        125,
+        143,
+        -51
+      ],
+      "neck": [
+        125,
+        164,
+        -39
+      ],
+      "chest": [
+        125,
+        197,
+        -19
+      ],
+      "pelvis": [
+        125,
+        231,
+        1
+      ],
+      "lShoulder": [
+        103,
+        167,
+        -36
+      ],
+      "rShoulder": [
+        147,
+        167,
+        -36
+      ],
+      "lElbow": [
+        98,
+        206,
+        -22
+      ],
+      "rElbow": [
+        152,
+        206,
+        -22
+      ],
+      "lWrist": [
+        100,
+        164,
+        -26
+      ],
+      "rWrist": [
+        150,
+        164,
+        -26
+      ],
+      "lHip": [
+        113,
+        233,
+        1
+      ],
+      "rHip": [
+        137,
+        233,
+        1
+      ],
+      "lKnee": [
+        100,
+        220,
+        60
+      ],
+      "rKnee": [
+        150,
+        220,
+        60
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "pad",
+      "at": [
+        "pelvis",
+        "neck"
+      ],
+      "offset": 16,
+      "rail": [
+        270,
+        5
+      ],
+      "width": 44
+    },
+    {
+      "type": "footplate",
+      "facing": [
+        -0.96,
+        -0.29
+      ],
+      "rail": [
+        290,
+        40
+      ],
+      "length": 42
+    },
+    {
+      "type": "handles",
+      "along": "x",
+      "pivot": [
+        270,
+        5
+      ],
+      "layer": "back"
+    }
+  ]
+}

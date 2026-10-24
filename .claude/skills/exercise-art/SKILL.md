@@ -65,7 +65,15 @@ the worked muscles hide behind the thighs.
 
 Joints: `head` (centre of a radius-15 head), `neck` (base of the neck),
 `chest` (mid spine), `pelvis`, and `lShoulder rShoulder lElbow rElbow lWrist
-rWrist lHip rHip lKnee rKnee lAnkle rAnkle lToe rToe`.
+rWrist lHip rHip lKnee rKnee lAnkle rAnkle lToe rToe`, plus the optional
+`lHand rHand`.
+
+**Hands** are optional. Most drawings end the arm at the wrist, where the bar
+or handle sits, and leave them out. Pose them only when the hand itself moves
+against the forearm (wrist curl, reverse wrist curl): list `lHand` and `rHand`
+in keyframe 0 (14 past the wrist) and in each keyframe where they turn, and put
+the bar `at: ["lHand", "rHand"]`. A spec that lists them gets them drawn and
+checked; one that does not never shows them. A held wrist carries its hand along.
 
 **Bone lengths are fixed**, and applied for you: each keyframe is rebuilt
 outward from the anchor, every joint placed at its exact bone length in the
@@ -80,6 +88,7 @@ wrong joint). The lengths, for working out positions:
 | shoulder→elbow / elbow→wrist | 46 / 42 |
 | pelvis→hip | 12 |
 | hip→knee / knee→ankle / ankle→toe | 60 / 56 / 21 |
+| wrist→hand (optional) | 14 |
 
 A joint left out of a later keyframe keeps its direction from its parent, so
 moving an elbow carries the wrist along. Feet are the exception: an ankle or
@@ -105,7 +114,8 @@ squeeze it in: that tilts it in the top view. Set `"zoom"` (0.6 to 1, default
 1) instead. It draws the whole figure smaller round the middle of the floor
 (x 125, y 290), or of the top view (x 125, y 166), and `check` applies it to
 the frame. With `zoom` 0.8 the side view fits z within about ±125. Keep the
-spine on x = 125.
+spine on x = 125. `"frontZoom"` (0.6 to 2) overrides `zoom` for the front (or
+top) view alone; above 1 it enlarges a figure that is small from the front.
 
 **Hanging** (pull-up, chin-up, hanging leg raise): the legs hang straight down
 under the body, at most a slight knee bend, feet together. Do not tuck the
@@ -137,8 +147,12 @@ feet travel in straight lines and the knees are solved to fit, and lift the
 hips a little at the switch.
 
 **Hands under the chest** (close-grip and diamond push-up): the `top` camera
-hides them behind the torso and the front view of a prone body is too small
-to read. Do not draw these until the renderer has a camera for it.
+hides them behind the torso. Use the front camera with the lifter facing it
+(head toward +z, feet toward -z, so the head and arms are nearest the camera)
+and `frontZoom` about 1.6 to 1.8, so the narrow hands, the elbows tucked along
+the ribs and the chest dropping between them fill the front view; keep `zoom`
+about 0.8 for the side view. Check the side view still shows the body facing
+right as usual; it does when the head is toward +z.
 
 **Balanced on bent arms** (crow, tuck planche): the hips are the highest
 point and the spine falls from them to the shoulders; a chest above the
@@ -204,7 +218,7 @@ squat, hip thrust): there the hands ride along with the shoulders or hips,
 so leave the wrists free and pose them on the bar in each keyframe; `check`
 tells you if they drift off it.
 
-**Keyframes.** The first keyframe lists every joint. Later keyframes list only
+**Keyframes.** The first keyframe lists every joint (the hands only if the spec poses them). Later keyframes list only
 the joints that move; the rest carry over. Two is the norm. Each free bone
 turns along the shortest arc between its two directions, so one that turns
 close to 180° (an arm going from straight down to straight overhead) can take
@@ -238,11 +252,17 @@ cocked wrist.
 | `cable` | `anchor: [x, y, z], at` | line from a pulley to a joint |
 | `roller` | `y, z` (fixed) or `at` + `offset: [along, across]` (riding on joints), `pivot: [y, z]`, `width` | padded cylinder along x: a decline bench's leg hook or a seated curl's thigh pad (fixed), or a machine's shin pad (`at` both ankles). `offset` is in the shin's own frame, so the pad stays on the same spot as the knee bends: `along` past the ankle (negative moves it up the shin), `across` positive toward the side a shin pointing +z has on top (a hanging shin's front, a prone shin's calf). Leg extension `[-6, 9]`, seated curl `[-6, -9]`. `pivot` at the knee draws the lever arm |
 | `rings` | `at` (default both wrists), `y` (strap top, default 36) | one ring per joint on a strap straight up: a full ring from the side, edge-on from the front |
-| `landmine` | `pivot: [y, z]` (on the centre line, near the floor), `at` (default both wrists), `plate` `below` (default) or `past` | bar from the floor pivot to the hands, which hold the end of the sleeve, with a plate 18 below them toward the pivot; `past` puts it 14 past them instead, for a T-bar row's handle under the bar (landmine press, T-bar row) |
+| `landmine` | `pivot: [y, z]` (on the centre line, near the floor) or `[x, y, z]` (off to one side, for a lifter standing side-on; it may lie outside the frame and the bar runs out of it), `at` (default both wrists), `plate` `below` (default) or `past` | bar from the floor pivot to the hands, which hold the end of the sleeve, with a plate 18 below them toward the pivot; `past` puts it 14 past them instead, for a T-bar row's handle under the bar (landmine press, T-bar row) |
 | `plate` | `at` (default both wrists), `facing` `x`, `y` or `z` (default, face to the front camera), `radius` (22), `hang` | weight plate at the joints' midpoint; `hang` puts it below them, pinched by its top edge (plate pinch: one prop per hand) |
 | `ball` | `at` (default both wrists), `radius` (14) | medicine ball at the joints' midpoint |
 | `wheel` | `at` (default both wrists) | ab wheel with its hub at the hands: put the wrists 13 above the floor (y 277) so it rolls on it |
 | `wall` | `z` | wall along x at depth z, floor to ceiling. From the front it is a backdrop when behind the lifter (z < 0) and left out when in front |
+| `pole` | `x, z` | vertical pole from the floor to the top of the frame (human flag) |
+| `band` | `at` (two or more joints) | resistance band stretched through the joints in order: a loop round both knees or ankles (lateral band walk) |
+| `footplate` | `facing: [y, z]` (from the plate toward the lifter), `at` (default both toes and ankles), `rail: [y, z]`, `width` (60), `length` (56) | flat plate just behind the soles, turned to face the lifter, on a rail to the `rail` point: a leg press sled that moves with the feet, or a hack squat platform where the feet stay planted |
+| `sled` | `at` (default both wrists) | push sled: an upright post down from each hand to a weighted sled on the floor in front of them; it moves with the hands |
+| `pad` | `at: [a, b]`, `offset` (16), `rail: [y, z]`, `width` (40) | pad that rides along the body from joint a to b, moved `offset` across that line (positive behind an upright back, like `roller`): a hack squat back pad from `pelvis` to `neck`, sliding on a rail |
+| `handles` | `at` (default both wrists), `along` `x`, `y` or `z`, `size` `grip` or `pad`, `out`, `pivot` (`[y, z]` at the joint's own x, or `[x, y, z]` for the l side, mirrored for r) | a machine handle (`grip`) or padded arm (`pad`) at each joint on a lever from the pivot: machine shoulder press grips, pec deck arm pads at the forearms, hip abduction pads `out` 12 outside the knees |
 
 **If the equipment is not in this table, do not fake it with another prop.**
 Batch 2 tried: a vertical `box` as an incline backrest (the back hung in the
@@ -251,8 +271,7 @@ fixed-axis dumbbell for a hammer curl (the handle ran along the forearm).
 Each failed review twice and cost a full fix round. Stop, write no spec, and
 say in your result which prop is missing and what it should look like; a
 renderer change in `src/lib/exercise-art/scene.ts` and `schema.ts` comes
-first. Leg Press and Hack Squat stay undrawn until there is a sled prop (a reclined back
-pad and a footplate the feet push).
+first.
 
 Held weights sort by depth with the body; the near plate of a barbell in the
 side view sits just behind the near arm, so the grip stays readable.

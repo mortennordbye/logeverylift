@@ -1,0 +1,29 @@
+{
+  "name": "Hip Abduction Machine",
+  "primary": "glutes",
+  "secondary": [],
+  "cue": "Sit tall against the pad and push your knees out with your hips, not by leaning. Let the pads come back in slowly instead of letting them slam together.",
+  "phases": ["Open", "Return"],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [125, 120, -6], "neck": [125, 144, -8], "chest": [125, 182, -6], "pelvis": [125, 222, 0],
+      "lShoulder": [103, 150, -8], "rShoulder": [147, 150, -8],
+      "lElbow": [98, 194, -6], "rElbow": [152, 194, -6],
+      "lWrist": [90, 234, 6], "rWrist": [160, 234, 6],
+      "lHip": [113, 224, 0], "rHip": [137, 224, 0],
+      "lKnee": [116, 226, 60], "rKnee": [134, 226, 60],
+      "lAnkle": [116, 282, 60], "rAnkle": [134, 282, 60],
+      "lToe": [116, 288, 80], "rToe": [134, 288, 80]
+    },
+    {
+      "lKnee": [84, 236, 51], "rKnee": [166, 236, 51]
+    }
+  ],
+  "props": [
+    { "type": "bench", "y": 236, "z1": -30, "z2": 40, "width": 44 },
+    { "type": "incline", "from": [234, -16], "to": [124, -24], "width": 44 },
+    { "type": "handles", "at": ["lWrist", "rWrist"], "along": "z", "size": "grip" },
+    { "type": "handles", "at": ["lKnee", "rKnee"], "along": "y", "size": "pad", "out": 12, "pivot": [118, 252, 6] }
+  ]
+}

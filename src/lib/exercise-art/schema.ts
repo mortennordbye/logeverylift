@@ -4,7 +4,7 @@
  */
 
 import { z } from "zod";
-import { BONE_LENGTH, JOINTS, MUSCLES, NEIGHBOURS, type Joint, type Muscle } from "./skeleton";
+import { BONE_LENGTH, HANDS, JOINTS, MUSCLES, NEIGHBOURS, isHand, type Joint, type Muscle } from "./skeleton";
 
 export type Point3 = [number, number, number];
 export type Pose = Record<Joint, Point3>;
@@ -14,6 +14,8 @@ const joint = z.enum(JOINTS);
 const muscle = z.enum(MUSCLES as [Muscle, ...Muscle[]]);
 /** "auto" sorts the prop by depth with the body; "back"/"front" pin it behind or in front of everything. */
 const layer = z.enum(["auto", "back", "front"]);
+
+const yz = z.tuple([z.number(), z.number()]);
 
 const prop = z.discriminatedUnion("type", [
   /** Bar along x through the midpoint of the joints (default: the wrists); `cambered` bends the middle into an EZ bar's W. */
@@ -63,8 +65,8 @@ const prop = z.discriminatedUnion("type", [
   z.object({ type: z.literal("box"), y: z.number(), z1: z.number(), z2: z.number(), width: z.number().positive(), layer: layer.default("back") }),
   /** Gymnastic rings: one ring per joint (default: the wrists), each on a strap straight up to height `y`. */
   z.object({ type: z.literal("rings"), at: z.array(joint).min(1).optional(), y: z.number().default(36), layer: layer.default("auto") }),
-  /** Landmine: a bar from a floor pivot at [y, z] (on the centre line) through the midpoint of the joints (default: the wrists), with a plate just below the hands (on the end of the sleeve), or with `plate: "past"` just past them (a T-bar row's handle under the bar). */
-  z.object({ type: z.literal("landmine"), pivot: z.tuple([z.number(), z.number()]), at: z.array(joint).min(1).optional(), plate: z.enum(["below", "past"]).default("below"), layer: layer.default("auto") }),
+  /** Landmine: a bar from a floor pivot at [y, z] on the centre line (or [x, y, z] off to one side, where it may lie outside the frame) through the midpoint of the joints (default: the wrists), with a plate just below the hands (on the end of the sleeve), or with `plate: "past"` just past them (a T-bar row's handle under the bar). */
+  z.object({ type: z.literal("landmine"), pivot: yz.or(point3), at: z.array(joint).min(1).optional(), plate: z.enum(["below", "past"]).default("below"), layer: layer.default("auto") }),
   /**
    * Weight plate at the midpoint of the joints (default: the wrists), its face
    * toward `facing`; `hang` puts it below the joints, pinched by its top edge.
@@ -83,6 +85,59 @@ const prop = z.discriminatedUnion("type", [
   z.object({ type: z.literal("wheel"), at: z.array(joint).min(1).optional(), layer: layer.default("auto") }),
   /** Wall along x at depth z, floor to ceiling (wall sit, wall ball). */
   z.object({ type: z.literal("wall"), z: z.number(), layer: layer.default("back") }),
+  /** Vertical pole from the floor to the top of the frame at [x, z] (human flag). */
+  z.object({ type: z.literal("pole"), x: z.number(), z: z.number(), layer: layer.default("back") }),
+  /** Resistance band stretched through the joints in order (a loop round both knees or ankles). */
+  z.object({ type: z.literal("band"), at: z.array(joint).min(2), layer: layer.default("front") }),
+  /**
+   * Footplate pressed by the feet (leg press, hack squat): a flat plate
+   * `width` across and `length` along, its face against the joints' midpoint
+   * (default: both toes and ankles) and turned toward `facing` [y, z], the
+   * direction from the plate to the lifter. `rail` [y, z] draws the track
+   * from the plate's centre to there.
+   */
+  z.object({
+    type: z.literal("footplate"),
+    at: z.array(joint).min(1).optional(),
+    facing: yz,
+    rail: yz.optional(),
+    width: z.number().positive().default(60),
+    length: z.number().positive().default(56),
+    layer: layer.default("back"),
+  }),
+  /** Push sled: an upright post rising to each joint (default: the wrists) from a weighted sled on the floor in front of them. */
+  z.object({ type: z.literal("sled"), at: z.array(joint).min(1).optional(), layer: layer.default("auto") }),
+  /**
+   * Pad that rides along the body from joint `at[0]` to `at[1]` (a hack
+   * squat's back pad), moved `offset` across that line in its own frame,
+   * positive being the side a bone pointing +z has on top (behind an upright
+   * back), like `roller`. `rail` [y, z] draws the track from the pad's far
+   * end to there.
+   */
+  z.object({
+    type: z.literal("pad"),
+    at: z.tuple([joint, joint]),
+    offset: z.number().default(16),
+    rail: yz.optional(),
+    width: z.number().positive().default(40),
+    layer: layer.default("back"),
+  }),
+  /**
+   * A machine's handle or pad at each joint (default: the wrists), on a lever
+   * from `pivot` ([y, z] at the joint's own x, or [x, y, z] for the l side,
+   * mirrored for the r side). `along` is the handle's axis; `size` "grip"
+   * is a handle in the hand, "pad" a padded arm or knee pad. `out` moves it
+   * that far outward from the joint (a hip abduction pad outside the knee).
+   */
+  z.object({
+    type: z.literal("handles"),
+    at: z.array(joint).min(1).optional(),
+    along: z.enum(["x", "y", "z"]).default("x"),
+    size: z.enum(["grip", "pad"]).default("grip"),
+    out: z.number().default(0),
+    pivot: yz.or(point3).optional(),
+    layer: layer.default("auto"),
+  }),
 ]);
 
 export const artSpecSchema = z.object({
@@ -110,6 +165,12 @@ export const artSpecSchema = z.object({
    * lying flat from head to heels in a plank or push-up.
    */
   zoom: z.number().min(0.6).max(1).default(1),
+  /**
+   * Zoom for the front (or top) view alone, overriding `zoom` there: above 1
+   * it enlarges a figure that is small from the front, such as a push-up seen
+   * head-on with the hands under the chest.
+   */
+  frontZoom: z.number().min(0.6).max(2).optional(),
   /**
    * Keyframe 0 is where the lifter sets up before the first rep. It lists
    * every joint; later keyframes list only the joints that move. Bone lengths
@@ -158,10 +219,13 @@ export function resolveFrames(spec: ArtSpec): { poses: Pose[]; misses: Miss[] } 
         const length = BONE_LENGTH.get(`${parent}-${child}`)!;
         const listed = frame[child];
         const planted = !listed && FEET.has(child) ? prev![child] : null;
-        const dir = listed ? sub(listed, out[parent]!) : planted ? sub(planted, out[parent]!) : sub(prev![child], prev![parent]);
+        // A hand left out of the first keyframe carries straight on from the forearm.
+        const forearm = !prev && isHand(child) ? sub(out[parent]!, out[parent === "lWrist" ? "lElbow" : "rElbow"]!) : null;
+        const dir = listed ? sub(listed, out[parent]!) : planted ? sub(planted, out[parent]!) : forearm ?? sub(prev![child], prev![parent]);
         const n = len3(dir) || 1;
         const placed: Point3 = [0, 1, 2].map((k) => out[parent]![k] + (dir[k] / n) * length) as Point3;
-        if (listed && len3(sub(listed, placed)) > length * 0.15) {
+        // A hand is short enough that the wrist settling a few units would trip 15%.
+        if (listed && len3(sub(listed, placed)) > (isHand(child) ? 6 : length * 0.15)) {
           misses.push({ frame: i, joint: child, parent, off: len3(sub(listed, placed)), length });
         }
         out[child] = placed;
@@ -171,6 +235,16 @@ export function resolveFrames(spec: ArtSpec): { poses: Pose[]; misses: Miss[] } 
     poses.push(out as Pose);
   });
   return { poses, misses };
+}
+
+/** Whether the spec poses the hands (and so has them drawn and checked). */
+export function hasHands(spec: ArtSpec): boolean {
+  return HANDS.some((h) => spec.keyframes[0][h]);
+}
+
+/** The joints a spec draws: all of them, less the hands unless it poses them. */
+export function drawnJoints(spec: ArtSpec): Joint[] {
+  return hasHands(spec) ? [...JOINTS] : JOINTS.filter((j) => !isHand(j));
 }
 
 export function resolvePoses(spec: ArtSpec): Pose[] {

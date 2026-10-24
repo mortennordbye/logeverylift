@@ -1,0 +1,26 @@
+{
+  "name": "Reverse Wrist Curl",
+  "primary": "forearms",
+  "secondary": [],
+  "cue": "Rest your forearms on your thighs with the wrists just past the knees. Lift the backs of your hands with the wrist only and keep the forearms still.",
+  "phases": ["Lift", "Lower"],
+  "anchor": "pelvis",
+  "keyframes": [
+    {
+      "head": [125, 152, 70], "neck": [125, 172, 54], "chest": [125, 196, 28], "pelvis": [125, 226, 0],
+      "lShoulder": [102, 174, 54], "rShoulder": [148, 174, 54],
+      "lElbow": [108, 216, 36], "rElbow": [142, 216, 36],
+      "lWrist": [106, 218, 78], "rWrist": [144, 218, 78],
+      "lHand": [106, 228, 88], "rHand": [144, 228, 88],
+      "lHip": [113, 228, 0], "rHip": [137, 228, 0],
+      "lKnee": [106, 231, 60], "rKnee": [144, 231, 60],
+      "lAnkle": [102, 279, 34], "rAnkle": [148, 279, 34],
+      "lToe": [101, 284, 54], "rToe": [149, 284, 54]
+    },
+    { "lHand": [106, 208, 88], "rHand": [144, 208, 88] }
+  ],
+  "props": [
+    { "type": "bench", "y": 240, "z1": -35, "z2": 30, "width": 44 },
+    { "type": "dumbbell", "at": ["lHand", "rHand"] }
+  ]
+}

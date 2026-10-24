@@ -1,0 +1,60 @@
+{
+  "name": "Diamond Push-up",
+  "primary": "triceps",
+  "secondary": [
+    "chest",
+    "shoulders",
+    "abs"
+  ],
+  "cue": "Put your hands together under your chest with thumbs and index fingers forming a diamond. Keep your elbows close to your ribs as you lower, not flared out.",
+  "phases": [
+    "Lower",
+    "Push"
+  ],
+  "anchor": "lAnkle",
+  "zoom": 0.8,
+  "frontZoom": 1.7,
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "keyframes": [
+    {
+      "lAnkle": [115, 270.5, -104],
+      "rAnkle": [135, 270.5, -104],
+      "lToe": [115, 290, -96.1],
+      "rToe": [135, 290, -96.1],
+      "lKnee": [115, 249.6, -52.1],
+      "rKnee": [135, 249.6, -52.1],
+      "lHip": [113, 227.1, 3.6],
+      "rHip": [137, 227.1, 3.6],
+      "pelvis": [125, 227.1, 3.6],
+      "chest": [125, 212.1, 40.6],
+      "neck": [125, 197.9, 75.9],
+      "head": [125, 188.9, 98.1],
+      "lShoulder": [102, 197.9, 75.9],
+      "rShoulder": [148, 197.9, 75.9],
+      "lElbow": [107.4, 242.8, 67.5],
+      "rElbow": [142.6, 242.8, 67.5],
+      "lWrist": [117, 283, 60],
+      "rWrist": [133, 283, 60]
+    },
+    {
+      "lKnee": [115, 268.4, -48],
+      "rKnee": [135, 268.4, -48],
+      "lHip": [113, 266, 11.9],
+      "rHip": [137, 266, 11.9],
+      "pelvis": [125, 266, 11.9],
+      "chest": [125, 264.5, 51.9],
+      "neck": [125, 263, 89.9],
+      "head": [125, 262.1, 113.8],
+      "lShoulder": [102, 263, 89.9],
+      "rShoulder": [148, 263, 89.9],
+      "lElbow": [100.9, 246.5, 47],
+      "rElbow": [149.1, 246.5, 47],
+      "lWrist": [117, 283, 60],
+      "rWrist": [133, 283, 60]
+    }
+  ],
+  "props": []
+}
