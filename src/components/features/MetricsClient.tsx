@@ -27,9 +27,15 @@ import {
   logWeightEntry,
   type WeightEntry,
 } from "@/lib/actions/profile";
+import { ExerciseIllustration, useArtSpec } from "@/components/features/ExerciseIllustration";
+import { ExerciseThumb } from "@/components/features/ExerciseThumb";
+import { MuscleMap } from "@/components/features/MuscleMap";
 import { PrFeedList } from "@/components/features/PrFeedList";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import type { ArtThumb } from "@/lib/exercise-art/load";
 import { estimate1RM } from "@/lib/utils/progression";
+import { HEAT_FILL } from "@/lib/exercise-art/scene";
+import { weeklyVolumeHeat } from "@/lib/utils/weekly-volume-heat";
 import {
   formatEnduranceDistance,
   formatEndurancePace,
@@ -200,6 +206,16 @@ function WeeklyVolumeSection({ data }: { data: WeeklyMuscleVolume[] }) {
         <SectionLabel>This Week · Volume vs Target</SectionLabel>
         <span className="text-xs text-muted-foreground">10–20 sets/muscle</span>
       </div>
+      <MuscleMap heat={weeklyVolumeHeat(data)} className="block h-40 w-full" />
+      <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <span>1 set</span>
+        <span className="flex gap-0.5">
+          {HEAT_FILL.map((fill) => (
+            <span key={fill} className="h-2.5 w-6 first:rounded-l-full last:rounded-r-full" style={{ background: fill }} />
+          ))}
+        </span>
+        <span>{data[0].targetMin}+ sets</span>
+      </div>
       <div className="space-y-2">
         {data.map((row) => {
           // Visualise against an upper bound 25 % over targetMax so the bar
@@ -365,7 +381,22 @@ function MoodDistributionSection({ data }: { data: MoodDistribution[] }) {
   );
 }
 
-function TopProgressingSection({ data }: { data: TopProgressingExercise[] }) {
+/** The exercise's still in a row tile, or `fallback` (a rank or icon) when it has none. */
+function RowArt({ thumb, label, fallback }: { thumb: ArtThumb | undefined; label: string; fallback: React.ReactNode }) {
+  return (
+    <div className="w-11 h-11 rounded-xl bg-card flex-none flex items-center justify-center overflow-hidden text-xs text-muted-foreground">
+      {thumb ? <ExerciseThumb thumb={thumb} label={label} className="block h-full w-full p-1" /> : fallback}
+    </div>
+  );
+}
+
+function TopProgressingSection({
+  data,
+  thumbs = {},
+}: {
+  data: TopProgressingExercise[];
+  thumbs?: Record<number, ArtThumb>;
+}) {
   if (data.length === 0) return null;
 
   return (
@@ -378,11 +409,9 @@ function TopProgressingSection({ data }: { data: TopProgressingExercise[] }) {
         {data.map((ex, i) => (
           <div
             key={ex.exerciseId}
-            className="flex items-center gap-3 px-1 py-3 min-h-[44px]"
+            className="flex items-center gap-3 px-1 py-2 min-h-[44px]"
           >
-            <span className="w-5 text-xs text-muted-foreground text-center flex-none">
-              {i + 1}
-            </span>
+            <RowArt thumb={thumbs[ex.exerciseId]} label={ex.exerciseName} fallback={i + 1} />
             <div className="flex-1 min-w-0">
               <div className="text-sm font-medium truncate">{ex.exerciseName}</div>
               <div className="text-xs text-muted-foreground">
@@ -1573,6 +1602,7 @@ type Props = {
   readinessData: ReadinessPerformancePoint[];
   weeklyMuscleVolume: WeeklyMuscleVolume[];
   prFeed: PrFeedEntry[];
+  artThumbs: Record<number, ArtThumb>;
   initialTab: Tab;
 };
 
@@ -1595,6 +1625,7 @@ export function MetricsClient({
   readinessData,
   weeklyMuscleVolume,
   prFeed,
+  artThumbs,
   initialTab,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
@@ -1609,6 +1640,8 @@ export function MetricsClient({
   const [cycleError, setCycleError] = useState<string | null>(null);
 
   const selectedRecord = personalRecords.find((r) => r.exerciseId === selectedId);
+  // Only exercises with a thumb are built-ins with a drawing; a custom one may share a name.
+  const selectedArt = useArtSpec(selectedRecord && artThumbs[selectedRecord.exerciseId] ? selectedRecord.exerciseName : null);
 
   function selectExercise(exerciseId: number) {
     if (exerciseId === selectedId) return;
@@ -1706,7 +1739,7 @@ export function MetricsClient({
             <ReadinessPerformanceSection data={readinessData} />
 
             {/* ── Top Gaining Exercises ──────────────────────────────── */}
-            <TopProgressingSection data={topProgressing} />
+            <TopProgressingSection data={topProgressing} thumbs={artThumbs} />
 
             {/* ── Personal Records ───────────────────────────────────── */}
             <div className="rounded-2xl bg-muted p-4">
@@ -1726,9 +1759,7 @@ export function MetricsClient({
                           isSelected ? "bg-background/70" : ""
                         }`}
                       >
-                        <span className="w-5 text-xs text-muted-foreground text-center flex-none">
-                          {i + 1}
-                        </span>
+                        <RowArt thumb={artThumbs[pr.exerciseId]} label={pr.exerciseName} fallback={i + 1} />
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">
                             {pr.exerciseName}
@@ -1764,6 +1795,7 @@ export function MetricsClient({
                   )}
                   <TrendingUp className="w-4 h-4 text-muted-foreground flex-none" />
                 </div>
+                {selectedArt && <ExerciseIllustration key={selectedArt.name} spec={selectedArt} compact />}
                 {!isPending && (
                   <div key={selectedId}>
                     <ProgressChart data={progressData} />
@@ -1779,7 +1811,7 @@ export function MetricsClient({
             )}
           </>
         ) : activeTab === "records" ? (
-          <PrFeedList prs={prFeed} />
+          <PrFeedList prs={prFeed} thumbs={artThumbs} />
         ) : (
           <CycleView
             cycles={cycles}

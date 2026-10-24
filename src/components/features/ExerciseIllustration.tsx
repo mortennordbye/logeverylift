@@ -1,5 +1,6 @@
 "use client";
 
+import { loadArtSpec } from "@/lib/exercise-art/load";
 import type { ArtSpec } from "@/lib/exercise-art/schema";
 import { VIEWBOX, cycleAt, renderSvg } from "@/lib/exercise-art/scene";
 import { VIEWS } from "@/lib/exercise-art/skeleton";
@@ -7,6 +8,24 @@ import { Pause, Play } from "lucide-react";
 import { useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
 
 const LABELS = { front: "Front", top: "Top", angled: "Angle", behind: "Behind", side: "Side" } as const;
+
+const SIDE_ONLY = ["side"] as const;
+
+/**
+ * The drawing for a built-in exercise, or null while it loads, when there is
+ * none, or when `name` is null (no exercise, or a custom one). Keyed by name
+ * so switching exercises never shows the previous drawing.
+ */
+export function useArtSpec(name: string | null): ArtSpec | null {
+  const [loaded, setLoaded] = useState<{ name: string; spec: ArtSpec | null } | null>(null);
+  useEffect(() => {
+    if (name === null) return;
+    let current = true;
+    void loadArtSpec(name).then((spec) => { if (current) setLoaded({ name, spec }); });
+    return () => { current = false; };
+  }, [name]);
+  return name !== null && loaded?.name === name ? loaded.spec : null;
+}
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 function subscribeReducedMotion(onChange: () => void) {
@@ -19,9 +38,11 @@ function subscribeReducedMotion(onChange: () => void) {
  * Front and side view of an exercise, moving through its range of motion.
  * Starts paused on the top of the movement when the system asks for reduced
  * motion. Frames are painted straight into the SVGs, not through React state,
- * so the loop does not re-render the page every frame.
+ * so the loop does not re-render the page every frame. `compact` shows the side
+ * view alone, without captions or the cue, for a card that is about something else.
  */
-export function ExerciseIllustration({ spec }: { spec: ArtSpec }) {
+export function ExerciseIllustration({ spec, compact = false }: { spec: ArtSpec; compact?: boolean }) {
+  const views = compact ? SIDE_ONLY : VIEWS;
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");
   const svgs = useRef<Record<string, SVGSVGElement | null>>({});
   const elapsed = useRef(0);
@@ -33,7 +54,7 @@ export function ExerciseIllustration({ spec }: { spec: ArtSpec }) {
 
   useEffect(() => {
     const paint = (t: number, phase: 0 | 1) => {
-      for (const v of VIEWS) {
+      for (const v of views) {
         const svg = svgs.current[v];
         if (svg) svg.innerHTML = renderSvg(spec, v, t, `${id}${v}`, phase);
       }
@@ -55,7 +76,7 @@ export function ExerciseIllustration({ spec }: { spec: ArtSpec }) {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [spec, playing, id]);
+  }, [spec, playing, id, views]);
 
   return (
     <section aria-label="How to do it" className="bg-card rounded-2xl px-4 pt-2 pb-4">
@@ -73,20 +94,20 @@ export function ExerciseIllustration({ spec }: { spec: ArtSpec }) {
         </button>
       </div>
       <div className="flex gap-2">
-        {VIEWS.map((v) => (
+        {views.map((v) => (
           <figure key={v} className="flex min-w-0 flex-1 flex-col items-center gap-1">
             <svg
               ref={(el) => { svgs.current[v] = el; }}
               viewBox={VIEWBOX}
-              className="block h-56 w-full"
+              className={`block w-full ${compact ? "h-44" : "h-56"}`}
               role="img"
               aria-label={`${spec.name}, ${LABELS[v === "front" ? spec.camera : v].toLowerCase()} view`}
             />
-            <figcaption className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{LABELS[v === "front" ? spec.camera : v]}</figcaption>
+            {!compact && <figcaption className="text-xs font-medium uppercase tracking-wider text-muted-foreground">{LABELS[v === "front" ? spec.camera : v]}</figcaption>}
           </figure>
         ))}
       </div>
-      <p className="mt-2 text-sm leading-relaxed">{spec.cue}</p>
+      {!compact && <p className="mt-2 text-sm leading-relaxed">{spec.cue}</p>}
     </section>
   );
 }

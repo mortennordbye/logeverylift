@@ -15,9 +15,11 @@ import {
 } from "@/lib/actions/metrics";
 import { getWeightHistory } from "@/lib/actions/profile";
 import { db } from "@/db";
+import { exercises } from "@/db/schema/exercises";
 import { users } from "@/db/schema/users";
+import { loadArtThumbs } from "@/lib/exercise-art/load";
 import { requireSession } from "@/lib/utils/session";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 type Props = {
   searchParams: Promise<{ tab?: string }>;
@@ -67,6 +69,21 @@ export default async function MetricsPage({ searchParams }: Props) {
   ]);
   const initialTab = (await searchParams).tab === "records" ? "records" : "alltime";
 
+  // Stills for every exercise the lists show. Built-ins only: a custom
+  // exercise that shares a name is not the movement that was drawn.
+  const listedIds = [
+    ...metrics.personalRecords.map((r) => r.exerciseId),
+    ...(topProgressResult.success ? topProgressResult.data.map((r) => r.exerciseId) : []),
+    ...(prFeedResult.success ? prFeedResult.data.map((r) => r.exerciseId) : []),
+  ];
+  const builtIns = listedIds.length
+    ? await db
+        .select({ id: exercises.id, name: exercises.name })
+        .from(exercises)
+        .where(and(inArray(exercises.id, [...new Set(listedIds)]), eq(exercises.isCustom, false)))
+    : [];
+  const artThumbs = await loadArtThumbs(builtIns);
+
   return (
     <MetricsClient
       weekly={metrics.weekly}
@@ -87,6 +104,7 @@ export default async function MetricsPage({ searchParams }: Props) {
       readinessData={readinessResult.success ? readinessResult.data : []}
       weeklyMuscleVolume={weeklyVolumeResult.success ? weeklyVolumeResult.data : []}
       prFeed={prFeedResult.success ? prFeedResult.data : []}
+      artThumbs={artThumbs}
       initialTab={initialTab}
     />
   );
