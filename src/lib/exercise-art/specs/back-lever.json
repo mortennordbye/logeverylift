@@ -1,0 +1,215 @@
+{
+  "name": "Back Lever",
+  "primary": "back",
+  "secondary": [
+    "shoulders",
+    "biceps",
+    "glutes"
+  ],
+  "camera": "top",
+  "cue": "Keep your arms locked straight and squeeze your glutes so your body stays one flat line. Lower only as far as you can hold without your hips sagging.",
+  "phases": [
+    "Lower",
+    "Raise"
+  ],
+  "anchor": "lWrist",
+  "hold": [
+    "lWrist",
+    "rWrist"
+  ],
+  "zoom": 0.7,
+  "keyframes": [
+    {
+      "head": [
+        125,
+        210,
+        -8
+      ],
+      "neck": [
+        125,
+        186,
+        -8
+      ],
+      "chest": [
+        125,
+        148,
+        -8
+      ],
+      "pelvis": [
+        125,
+        108,
+        -8
+      ],
+      "lShoulder": [
+        102,
+        186,
+        -8
+      ],
+      "rShoulder": [
+        148,
+        186,
+        -8
+      ],
+      "lElbow": [
+        98.5,
+        143,
+        -14
+      ],
+      "rElbow": [
+        151.5,
+        143,
+        -14
+      ],
+      "lWrist": [
+        95,
+        100,
+        -20.6
+      ],
+      "rWrist": [
+        155,
+        100,
+        -20.6
+      ],
+      "lHip": [
+        113,
+        108,
+        -8
+      ],
+      "rHip": [
+        137,
+        108,
+        -8
+      ],
+      "lKnee": [
+        113,
+        48,
+        -8
+      ],
+      "rKnee": [
+        137,
+        48,
+        -8
+      ],
+      "lAnkle": [
+        115,
+        -8,
+        -8
+      ],
+      "rAnkle": [
+        135,
+        -8,
+        -8
+      ],
+      "lToe": [
+        115,
+        -29,
+        -11
+      ],
+      "rToe": [
+        135,
+        -29,
+        -11
+      ]
+    },
+    {
+      "head": [
+        125,
+        155,
+        -112
+      ],
+      "neck": [
+        125,
+        157,
+        -88
+      ],
+      "chest": [
+        125,
+        157,
+        -50
+      ],
+      "pelvis": [
+        125,
+        157,
+        -10
+      ],
+      "lShoulder": [
+        102,
+        157,
+        -88
+      ],
+      "rShoulder": [
+        148,
+        157,
+        -88
+      ],
+      "lElbow": [
+        98.3,
+        127.4,
+        -52.7
+      ],
+      "rElbow": [
+        151.7,
+        127.4,
+        -52.7
+      ],
+      "lWrist": [
+        95,
+        100,
+        -20.6
+      ],
+      "rWrist": [
+        155,
+        100,
+        -20.6
+      ],
+      "lHip": [
+        113,
+        157,
+        -10
+      ],
+      "rHip": [
+        137,
+        157,
+        -10
+      ],
+      "lKnee": [
+        113,
+        157,
+        50
+      ],
+      "rKnee": [
+        137,
+        157,
+        50
+      ],
+      "lAnkle": [
+        115,
+        157,
+        106
+      ],
+      "rAnkle": [
+        135,
+        157,
+        106
+      ],
+      "lToe": [
+        115,
+        160,
+        127
+      ],
+      "rToe": [
+        135,
+        160,
+        127
+      ]
+    }
+  ],
+  "props": [
+    {
+      "type": "bar",
+      "y": 100,
+      "z": -20.6,
+      "layer": "front"
+    }
+  ]
+}

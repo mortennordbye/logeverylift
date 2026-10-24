@@ -148,6 +148,19 @@ little below the hips, not inside them. Going up from the squat, add a
 middle keyframe with the knees already on the arms and the feet just off
 the floor, or the legs sweep out straight behind.
 
+**Front rack** (power clean, front squat, clean and press): the skeleton
+has no hand, so the bar sits at the wrist joint and a fully folded arm
+cannot put the elbow up and forward. Put the wrists about 15 above and 15
+in front of the shoulder joints, tilt the head back a little so the chin
+clears the bar, and accept elbows a bit below horizontal. Do not let the
+bar rise past rack height in the turnover and drop back onto it.
+
+**A foot swept along the floor** (get-up leg sweep): a held ankle travels
+in a straight line, so a line passing close to the hip makes the knee
+solver bend the knee up toward the chest. Add keyframes that carry the
+foot round on the floor (in front, out to the side, behind) and sample
+`poseAt` to confirm the knee stays below the hip.
+
 **Supported on the hands** (dip, and the top of anything pressed up on
 bars): at lockout the shoulders sit over the hands and the torso is close to
 upright, with only a slight lean; the lean grows on the way down. A body that

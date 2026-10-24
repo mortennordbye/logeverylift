@@ -1,0 +1,66 @@
+{
+  "name": "Turkish Get-Up",
+  "primary": "shoulders",
+  "secondary": ["abs", "glutes", "quads"],
+  "cue": "Keep the bell arm locked and your eyes on the bell the whole way up. Move one step at a time instead of rushing to stand.",
+  "phases": ["Get up", "Get down"],
+  "anchor": "rAnkle",
+  "hold": ["lWrist", "lAnkle"],
+  "zoom": 0.75,
+  "keyframes": [
+    {
+      "head": [125, 273, -102], "neck": [125, 273, -78], "chest": [125, 273, -40], "pelvis": [125, 273, 0],
+      "lShoulder": [102, 273, -74], "rShoulder": [148, 273, -74], "lElbow": [96, 279, -29], "rElbow": [148, 227, -74],
+      "lWrist": [55, 283, -35], "rWrist": [148, 185, -74], "lHip": [113, 273, 0], "rHip": [137, 273, 0],
+      "lKnee": [106, 272, 58], "rKnee": [139, 230, 42], "lAnkle": [100, 279, 114], "rAnkle": [140, 279, 70],
+      "lToe": [100, 259, 120], "rToe": [140, 284, 91]
+    },
+    {
+      "chest": [120, 236, -15], "neck": [115, 200, -30], "head": [111, 178, -40], "lShoulder": [93, 206, -32],
+      "rShoulder": [137, 194, -28], "lElbow": [74, 245, -33], "lWrist": [55, 283, -35], "rElbow": [137, 148, -28],
+      "rWrist": [137, 106, -28]
+    },
+    {
+      "pelvis": [125, 232, 5], "lHip": [113, 232, 5], "rHip": [137, 230, 3], "chest": [117, 210, -25],
+      "neck": [108, 193, -58], "head": [103, 179, -77], "lShoulder": [89, 202, -46], "rShoulder": [130, 184, -58],
+      "lElbow": [72, 243, -40], "lWrist": [55, 283, -35], "rElbow": [130, 138, -58], "rWrist": [130, 96, -58],
+      "rKnee": [140, 224, 62], "lKnee": [106, 252, 60]
+    },
+    {
+      "lKnee": [112, 283, 37], "lAnkle": [112, 282, 93], "lToe": [112, 261, 95]
+    },
+    {
+      "lKnee": [110, 283, 34], "lAnkle": [56, 282, 34], "lToe": [56, 261, 36]
+    },
+    {
+      "lKnee": [112, 283, 20], "lAnkle": [112, 280, -30], "lToe": [112, 286, -10]
+    },
+    {
+      "pelvis": [125, 224, 5], "lHip": [113, 224, 5], "rHip": [137, 224, 5], "chest": [96, 197, -5],
+      "neck": [68, 175, -18], "head": [50, 161, -26], "lShoulder": [53, 192, -23], "rShoulder": [83, 158, -13],
+      "lElbow": [54, 237, -29], "lWrist": [55, 283, -35], "rElbow": [83, 112, -13], "rWrist": [83, 70, -13],
+      "rKnee": [140, 223, 68], "lKnee": [113, 283, 8], "lAnkle": [113, 270, -45], "lToe": [113, 286, -32]
+    },
+    {
+      "pelvis": [125, 223, 8], "lHip": [113, 223, 8], "rHip": [137, 223, 8], "chest": [125, 183, 8],
+      "neck": [125, 145, 8], "head": [125, 121, 8], "lShoulder": [102, 151, 8], "rShoulder": [148, 151, 8],
+      "lElbow": [96, 197, 10], "lWrist": [94, 239, 12], "rElbow": [150, 105, 8], "rWrist": [151, 63, 8],
+      "rKnee": [140, 223, 68], "lKnee": [113, 283, 8], "lAnkle": [113, 270, -45], "lToe": [113, 286, -32]
+    },
+    {
+      "pelvis": [125, 181, 28], "lHip": [113, 181, 28], "rHip": [137, 181, 28], "chest": [125, 141, 28],
+      "neck": [125, 103, 28], "head": [125, 79, 28], "lShoulder": [103, 109, 28], "rShoulder": [147, 109, 28],
+      "lElbow": [100, 155, 28], "lWrist": [99, 197, 30], "rElbow": [149, 63, 28], "rWrist": [150, 21, 28],
+      "lKnee": [113, 237, 6], "lAnkle": [113, 266, -40], "lToe": [113, 284, -30]
+    },
+    {
+      "pelvis": [125, 160, 70], "lHip": [113, 162, 70], "rHip": [137, 162, 70], "chest": [125, 120, 70],
+      "neck": [125, 82, 70], "head": [125, 58, 70], "lShoulder": [103, 88, 70], "rShoulder": [147, 88, 70],
+      "lElbow": [100, 134, 70], "lWrist": [99, 176, 72], "rElbow": [149, 42, 70], "rWrist": [150, 0, 70],
+      "rKnee": [139, 222, 71], "lKnee": [111, 222, 70], "lAnkle": [110, 278, 70], "lToe": [110, 284, 90]
+    }
+  ],
+  "props": [
+    { "type": "kettlebell", "at": ["rWrist"], "along": "forearm" }
+  ]
+}

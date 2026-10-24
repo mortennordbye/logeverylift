@@ -1,0 +1,30 @@
+{
+  "name": "L-sit",
+  "primary": "abs",
+  "secondary": ["quads", "triceps", "shoulders"],
+  "cue": "Lock your elbows and push your shoulders down away from your ears. Keep your legs straight and level with your hips.",
+  "phases": ["Lift", "Lower"],
+  "anchor": "lWrist",
+  "hold": ["lWrist", "rWrist"],
+  "zoom": 0.8,
+  "keyframes": [
+    {
+      "head": [125, 46, -10], "neck": [125, 70, -12], "chest": [125, 108, -16], "pelvis": [125, 148, -22],
+      "lShoulder": [102, 72, -12], "rShoulder": [148, 72, -12],
+      "lElbow": [98, 118, -14], "rElbow": [152, 118, -14],
+      "lWrist": [93, 160, -15], "rWrist": [157, 160, -15],
+      "lHip": [113, 148, -22], "rHip": [137, 148, -22],
+      "lKnee": [115, 207, -10], "rKnee": [135, 207, -10],
+      "lAnkle": [117, 250, -45], "rAnkle": [133, 250, -45],
+      "lToe": [117, 270, -50], "rToe": [133, 270, -50]
+    },
+    {
+      "lKnee": [115, 148, 38], "rKnee": [135, 148, 38],
+      "lAnkle": [117, 148, 94], "rAnkle": [133, 148, 94],
+      "lToe": [117, 144, 115], "rToe": [133, 144, 115]
+    }
+  ],
+  "props": [
+    { "type": "bars", "y": 162, "z1": -60, "z2": 35, "width": 64 }
+  ]
+}

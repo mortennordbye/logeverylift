@@ -1,0 +1,57 @@
+{
+  "name": "Front Lever",
+  "primary": "back",
+  "secondary": ["abs", "shoulders", "forearms"],
+  "cue": "Keep your arms straight and press the bar down toward your hips. Lock your hips so your body is one straight line, not piked or sagging.",
+  "phases": ["Extend", "Tuck"],
+  "anchor": "lWrist",
+  "hold": ["lWrist", "rWrist"],
+  "camera": "top",
+  "zoom": 0.7,
+  "keyframes": [
+    {
+      "head": [125, 47, -99],
+      "neck": [125, 50.4, -75],
+      "chest": [125, 50.4, -37],
+      "pelvis": [125, 50.4, 3],
+      "lShoulder": [102, 50.4, -75],
+      "rShoulder": [148, 50.4, -75],
+      "lElbow": [98.5, 11, -51.6],
+      "rElbow": [151.5, 11, -51.6],
+      "lWrist": [95, -25, -30],
+      "rWrist": [155, -25, -30],
+      "lHip": [113, 50.4, 3],
+      "rHip": [137, 50.4, 3],
+      "lKnee": [117, 20, -49],
+      "rKnee": [133, 20, -49],
+      "lAnkle": [121, 39.6, 3.6],
+      "rAnkle": [129, 39.6, 3.6],
+      "lToe": [121, 46, 23],
+      "rToe": [129, 46, 23]
+    },
+    {
+      "lKnee": [117, 12, 49],
+      "rKnee": [133, 12, 49],
+      "lAnkle": [121, 52, 89],
+      "rAnkle": [129, 52, 89],
+      "lToe": [121, 65, 106],
+      "rToe": [129, 65, 106]
+    },
+    {
+      "lKnee": [117, 50.4, 63],
+      "rKnee": [133, 50.4, 63],
+      "lAnkle": [121, 50.4, 119],
+      "rAnkle": [129, 50.4, 119],
+      "lToe": [121, 46, 140],
+      "rToe": [129, 46, 140]
+    }
+  ],
+  "props": [
+    {
+      "type": "bar",
+      "y": -25,
+      "z": -30,
+      "layer": "front"
+    }
+  ]
+}
