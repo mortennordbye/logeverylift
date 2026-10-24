@@ -44,4 +44,18 @@ describe("checkRateLimit", () => {
     expect(checkRateLimit(a, window)).not.toBeNull();
     expect(checkRateLimit(b, window)).not.toBeNull();
   });
+
+  it("keeps a long window's entries when a shorter window's call prunes old buckets", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T00:00:00Z"));
+    const day = { windowMs: 24 * 60 * 60_000, max: 1 };
+    const daily = "t-gc-day";
+    expect(checkRateLimit(daily, day)).toBeNull();
+    vi.advanceTimersByTime(2 * 60 * 60_000);
+    // Force the opportunistic prune on a call with a one-hour window.
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    checkRateLimit("t-gc-hour", { windowMs: 60 * 60_000, max: 5 });
+    vi.restoreAllMocks();
+    expect(checkRateLimit(daily, day)).not.toBeNull();
+  });
 });

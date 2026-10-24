@@ -15,7 +15,9 @@ type Window = {
   label?: string;
 };
 
-const buckets = new Map<string, number[]>();
+// Each bucket keeps its own window, so the prune below never cuts one key's
+// timestamps by another key's (shorter) window.
+const buckets = new Map<string, { windowMs: number; times: number[] }>();
 
 export function clientIp(req: Request | NextRequest): string {
   const headers = req.headers;
@@ -41,24 +43,24 @@ export function checkRateLimit(
 
   const existing = buckets.get(key);
   // Drop expired timestamps in-place.
-  const recent = existing ? existing.filter((t) => t > cutoff) : [];
+  const recent = existing ? existing.times.filter((t) => t > cutoff) : [];
 
   if (recent.length >= window.max) {
     const oldest = recent[0];
     const retryMs = Math.max(0, oldest + window.windowMs - now);
-    buckets.set(key, recent);
+    buckets.set(key, { windowMs: window.windowMs, times: recent });
     return { retryAfterSeconds: Math.ceil(retryMs / 1000) };
   }
 
   recent.push(now);
-  buckets.set(key, recent);
+  buckets.set(key, { windowMs: window.windowMs, times: recent });
 
   // Opportunistic GC: every ~1024 calls, prune empty buckets.
   if (Math.random() < 1 / 1024) {
     for (const [k, v] of buckets) {
-      const live = v.filter((t) => t > cutoff);
+      const live = v.times.filter((t) => t > now - v.windowMs);
       if (live.length === 0) buckets.delete(k);
-      else if (live.length < v.length) buckets.set(k, live);
+      else if (live.length < v.times.length) buckets.set(k, { windowMs: v.windowMs, times: live });
     }
   }
 
