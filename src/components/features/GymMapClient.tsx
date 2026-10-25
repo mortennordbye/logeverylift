@@ -9,6 +9,14 @@ import { Loader2, MapPin, UserCheck, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+// lucide's Dumbbell, as markup: Leaflet markers are HTML strings, not React.
+const DUMBBELL_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="w-[55%] h-[55%]" aria-hidden="true">' +
+  '<path d="M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z"/>' +
+  '<path d="m2.5 21.5 1.4-1.4"/><path d="m20.1 3.9 1.4-1.4"/>' +
+  '<path d="M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z"/>' +
+  '<path d="m9.6 14.4 4.8-4.8"/></svg>';
+
 // Southern Norway, for a map with no gyms on it yet.
 const DEFAULT_VIEW: [number, number] = [60.5, 9.5];
 
@@ -28,10 +36,16 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
     let cancelled = false;
     void import("leaflet").then((L) => {
       if (cancelled || !mapRef.current) return;
-      map = L.map(mapRef.current, { zoomControl: false });
+      map = L.map(mapRef.current, { zoomControl: false, attributionControl: false });
+      L.control.attribution({ prefix: false }).addTo(map);
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        // Standard OSM tiles are bright and loud; inverted and muted they make
+        // a dark map in either theme, which the glowing pins stand out on.
+        // One filter chain: Tailwind's separate filter classes always run
+        // brightness before invert, which brightened the map instead.
+        className: "[filter:invert(1)_hue-rotate(180deg)_brightness(0.6)_contrast(1.25)_saturate(0.3)]",
       }).addTo(map);
       // View first: Leaflet only creates marker elements once the map has one.
       const mine = pins.find((p) => p.id === myGymId);
@@ -40,14 +54,25 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
         map.fitBounds(L.latLngBounds(pins.map((p) => [p.lat, p.lng])), { padding: [40, 40], maxZoom: 13 });
       } else map.setView(DEFAULT_VIEW, 5);
       for (const pin of pins) {
-        const size = 18 + 2 * Math.min(pin.memberCount, 10);
-        const color = pin.id === myGymId ? "bg-orange-500" : "bg-primary";
+        const mine = pin.id === myGymId;
+        const size = mine ? 44 : 38;
+        const look = mine
+          ? "from-orange-400 to-orange-600 shadow-orange-500/70"
+          : "from-sky-400 to-indigo-600 shadow-sky-500/60";
         const marker = L.marker([pin.lat, pin.lng], {
           icon: L.divIcon({
             className: "",
-            html: `<span class="block w-full h-full rounded-full border-2 border-background shadow ${color}"></span>`,
+            // A glowing dumbbell, a pulse on your own gym, and the member count
+            // as a badge so the map says something before a tap.
+            html:
+              `<span class="relative block w-full h-full">` +
+              (mine ? `<span class="absolute inset-0 rounded-full bg-orange-500/50 animate-ping"></span>` : "") +
+              `<span class="relative flex items-center justify-center w-full h-full rounded-full bg-gradient-to-br text-white ring-2 ring-white/85 shadow-[0_0_18px] ${look}">${DUMBBELL_SVG}</span>` +
+              `<span class="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-neutral-900 text-[11px] font-bold tabular-nums flex items-center justify-center shadow">${pin.memberCount}</span>` +
+              `</span>`,
             iconSize: [size, size],
           }),
+          zIndexOffset: mine ? 1000 : 0,
         })
           .addTo(map)
           .on("click", () => openGym(pin));
@@ -81,12 +106,14 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
   return (
     <>
       {/* isolate: Leaflet's panes use z-index 400+, which would otherwise sit over the sheet. */}
-      <div ref={mapRef} data-testid="gym-map" className="flex-1 isolate" />
+      <div className="flex-1 flex mx-4 mb-3 rounded-2xl overflow-hidden border border-border isolate">
+        <div ref={mapRef} data-testid="gym-map" className="flex-1" />
+      </div>
 
       {myGymId === null && (
         <Link
           href="/more/account/gym"
-          className="mx-4 my-3 flex items-center justify-center gap-2 h-11 rounded-xl bg-primary text-primary-foreground text-sm font-medium active:opacity-80"
+          className="mx-4 mb-3 flex items-center justify-center gap-2 h-11 rounded-xl bg-primary text-primary-foreground text-sm font-medium active:opacity-80"
         >
           <MapPin className="w-4 h-4" />
           Add your gym

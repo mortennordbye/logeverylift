@@ -10,6 +10,7 @@ vi.mock("leaflet", () => {
   return {
     map: () => map,
     tileLayer: () => layer,
+    control: { attribution: () => layer },
     divIcon: () => ({}),
     latLngBounds: () => ({}),
     marker: () => {

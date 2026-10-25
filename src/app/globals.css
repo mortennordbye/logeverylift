@@ -316,3 +316,19 @@ select {
     scroll-behavior: auto !important;
   }
 }
+
+/* Leaflet (gym map): its chrome in the app's colours rather than its own. */
+.leaflet-container {
+  background: var(--muted);
+  font: inherit;
+}
+.leaflet-container .leaflet-control-attribution.leaflet-control {
+  background: color-mix(in oklab, var(--background) 75%, transparent);
+  color: var(--muted-foreground);
+  font-size: 10px;
+  border-top-left-radius: 8px;
+  padding: 1px 6px;
+}
+.leaflet-container .leaflet-control-attribution a {
+  color: inherit;
+}
