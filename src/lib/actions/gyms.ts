@@ -3,6 +3,15 @@
 import { db } from "@/db";
 import { friendships, gyms, users } from "@/db/schema";
 import { checkRateLimit } from "@/lib/rate-limit";
+import {
+  displayName,
+  listableParents,
+  metresBetween,
+  nameMatches,
+  parseKartverket,
+  parseRegisterUnits,
+  type RegisterUnit,
+} from "@/lib/utils/brreg-gyms";
 import { OSM_HEADERS, parseNominatim, parseOverpass, roundCoordinate, type GymResult } from "@/lib/utils/osm-gyms";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult, UserSearchResult } from "@/types/workout";
@@ -18,7 +27,8 @@ const searchGymsSchema = z.union([
   z.object({ lat: z.number().min(-90).max(90), lng: z.number().min(-180).max(180) }),
 ]);
 
-const setPrimaryGymSchema = z.object({ osmRef: z.string().regex(/^(node|way|relation)\/\d+$/).nullable() });
+// An OpenStreetMap element, or "brreg/<orgnr>" for a gym only the business register has.
+const setPrimaryGymSchema = z.object({ osmRef: z.string().regex(/^((node|way|relation)\/\d+|brreg\/\d{9})$/).nullable() });
 
 const gymMembersSchema = z.object({ gymId: z.number().int().positive() });
 
@@ -31,8 +41,8 @@ const NOMINATIM_LIMIT = { windowMs: 1_000, max: 1 };
 const SEARCH_CACHE_MS = 60 * 60 * 1000;
 const SEARCH_CACHE_MAX = 500;
 const searchCache = new Map<string, { at: number; data: GymResult[] }>();
-// Every gym a search returned, by osmRef: these came from OpenStreetMap through
-// this server, so picking one needs no second lookup.
+// Every gym a search returned, by osmRef: these came from OpenStreetMap or the
+// business register through this server, so picking one needs no second lookup.
 const foundGyms = new Map<string, { at: number; gym: GymResult }>();
 
 function remember(results: GymResult[]) {
@@ -60,6 +70,65 @@ async function nominatim(path: "search" | "lookup", params: Record<string, strin
   return parseNominatim(await res.json());
 }
 
+const REGISTER_HEADERS = { Accept: "application/json" };
+// A register gym this close to an OpenStreetMap one is the same gym. Not by
+// name: chains share one, and their branches can be a few hundred metres apart.
+const SAME_GYM_M = 150;
+
+/**
+ * Gyms from the Brønnøysund business register, placed by Kartverket's address
+ * search. Only the units' business addresses are sent to Kartverket.
+ */
+async function registerGyms(units: RegisterUnit[]): Promise<GymResult[]> {
+  if (units.length === 0) return [];
+  const parents = [...new Set(units.map((u) => u.parent).filter((p): p is string => p !== null))];
+  const res = await fetch(
+    `https://data.brreg.no/enhetsregisteret/api/enheter?organisasjonsnummer=${parents.join(",")}&size=${parents.length}`,
+    { headers: REGISTER_HEADERS, signal: AbortSignal.timeout(8000) },
+  );
+  if (!res.ok) throw new Error(`brreg ${res.status}`);
+  const listable = listableParents(await res.json());
+
+  const placed = await Promise.all(
+    units
+      .filter((u) => u.parent !== null && listable.has(u.parent))
+      .slice(0, 15)
+      .map(async (u): Promise<GymResult | null> => {
+        const url = new URL("https://ws.geonorge.no/adresser/v1/sok");
+        url.search = new URLSearchParams({ sok: u.street, kommunenummer: u.municipality, treffPerSide: "1" }).toString();
+        const geo = await fetch(url, { headers: REGISTER_HEADERS, signal: AbortSignal.timeout(8000) });
+        const point = geo.ok ? parseKartverket(await geo.json()) : null;
+        if (!point) return null;
+        const town = u.postalTown && displayName(u.postalTown);
+        return { osmRef: `brreg/${u.orgnr}`, name: displayName(u.name), ...point, address: [u.street, town].filter(Boolean).join(", ") };
+      }),
+  );
+  return placed.filter((g): g is GymResult => g !== null);
+}
+
+/**
+ * Register gyms whose name holds every word of the search, at most 15. The
+ * register's word search takes one word and pages alphabetically, so ask for
+ * each word and filter the answer with the fewest hits.
+ */
+async function registerSearch(query: string): Promise<GymResult[]> {
+  const words = query.split(/\s+/).filter((w) => w.length >= 2).slice(0, 3);
+  const pages = await Promise.all(
+    words.map(async (word) => {
+      const url = new URL("https://data.brreg.no/enhetsregisteret/api/underenheter");
+      url.search = new URLSearchParams({ navn: word, navnMetodeForSoek: "FORTLOEPENDE", size: "200" }).toString();
+      const res = await fetch(url, { headers: REGISTER_HEADERS, signal: AbortSignal.timeout(8000) });
+      if (!res.ok) throw new Error(`brreg ${res.status}`);
+      const json = await res.json();
+      return { json, total: Number(json?.page?.totalElements ?? Infinity) };
+    }),
+  );
+  const fewest = pages.sort((a, b) => a.total - b.total)[0];
+  if (!fewest) return [];
+  const units = parseRegisterUnits(fewest.json).filter((u) => nameMatches(u.name, query));
+  return registerGyms(units.slice(0, 50));
+}
+
 /** Imported gyms within NEAR_ME_RADIUS_M of the point, nearest first, at most 30. */
 async function importedGymsNear(lat: number, lng: number): Promise<GymResult[]> {
   const dLat = NEAR_ME_RADIUS_M / 111_320;
@@ -68,9 +137,8 @@ async function importedGymsNear(lat: number, lng: number): Promise<GymResult[]> 
     .select({ osmRef: gyms.osmRef, name: gyms.name, lat: gyms.lat, lng: gyms.lng, address: gyms.address })
     .from(gyms)
     .where(and(isNotNull(gyms.importedAt), between(gyms.lat, lat - dLat, lat + dLat), between(gyms.lng, lng - dLng, lng + dLng)));
-  const metres = (g: GymResult) => Math.hypot((g.lat - lat) * 111_320, (g.lng - lng) * 111_320 * Math.cos((lat * Math.PI) / 180));
   return rows
-    .map((g) => ({ g, d: metres(g) }))
+    .map((g) => ({ g, d: metresBetween({ lat, lng }, g) }))
     .filter((r) => r.d <= NEAR_ME_RADIUS_M)
     .sort((a, b) => a.d - b.d)
     .slice(0, 30)
@@ -78,8 +146,9 @@ async function importedGymsNear(lat: number, lng: number): Promise<GymResult[]> 
 }
 
 /**
- * Find gyms on OpenStreetMap by name (Nominatim) or near a point (the imported
- * gyms, or Overpass where none are imported). The request goes from the
+ * Find gyms by name (Nominatim, plus the Norwegian business register for gyms
+ * OpenStreetMap lacks) or near a point (the imported gyms, or Overpass where
+ * none are imported). The request goes from the
  * server, so OSM never sees the user's IP, and a point is rounded to about a
  * kilometre before it is sent. Nothing here is stored.
  */
@@ -99,7 +168,18 @@ export async function searchGyms(data: unknown): Promise<ActionResult<GymResult[
 
   try {
     if (key !== null) {
-      const results = await nominatim("search", { q: key, limit: "20" });
+      // The register is a second source, so name search still works without it.
+      const [osm, register] = await Promise.all([
+        nominatim("search", { q: key, limit: "20" }),
+        registerSearch(key).catch((e) => {
+          console.error("[searchGyms] register_failed", e instanceof Error ? e.message : "unknown");
+          return [];
+        }),
+      ]);
+      const results = [
+        ...osm,
+        ...register.filter((r) => !osm.some((o) => metresBetween(o, r) < SAME_GYM_M)),
+      ];
       remember(results);
       if (searchCache.size >= SEARCH_CACHE_MAX) searchCache.delete(searchCache.keys().next().value!);
       searchCache.set(key, { at: Date.now(), data: results });
@@ -157,7 +237,13 @@ export async function setPrimaryGym(data: unknown): Promise<ActionResult<void>> 
       else {
         const recent = foundGyms.get(osmRef);
         let found = recent && Date.now() - recent.at < SEARCH_CACHE_MS ? recent.gym : undefined;
-        if (!found) {
+        if (!found && osmRef.startsWith("brreg/")) {
+          const res = await fetch(`https://data.brreg.no/enhetsregisteret/api/underenheter/${osmRef.slice(6)}`, {
+            headers: REGISTER_HEADERS,
+            signal: AbortSignal.timeout(8000),
+          });
+          if (res.ok) [found] = await registerGyms(parseRegisterUnits(await res.json()));
+        } else if (!found) {
           if (!(await nominatimSlot())) return { success: false, error: "Too many searches. Try again in a moment." };
           // "node/123" → "N123"
           const [type, id] = osmRef.split("/");
@@ -165,7 +251,7 @@ export async function setPrimaryGym(data: unknown): Promise<ActionResult<void>> 
             (g) => g.osmRef === osmRef,
           );
         }
-        if (!found) return { success: false, error: "That place isn't a gym on OpenStreetMap" };
+        if (!found) return { success: false, error: "That place isn't a gym we can find" };
         await db.insert(gyms).values(found).onConflictDoNothing({ target: gyms.osmRef });
         const [row] = await db.select({ id: gyms.id }).from(gyms).where(eq(gyms.osmRef, osmRef));
         gymId = row.id;

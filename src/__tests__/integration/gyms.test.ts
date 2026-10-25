@@ -22,6 +22,7 @@ const cafeLookup = { ...satsLookup, osm_id: 124, category: "amenity", type: "caf
 
 let clock = new Date("2030-01-01T00:00:00Z").getTime();
 let fetchMock: ReturnType<typeof vi.fn>;
+const callsTo = (host: string) => fetchMock.mock.calls.filter((c) => String(c[0]).includes(host));
 
 beforeEach(() => {
   // Each test starts clear of the in-memory rate limits and search cache.
@@ -81,7 +82,7 @@ describe("setPrimaryGym", () => {
     await searchGyms({ query: "sats majorstuen" });
     // Same second as the search, which holds the shared Nominatim slot.
     expect(await setPrimaryGym({ osmRef: "node/555" })).toEqual({ success: true, data: undefined });
-    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(callsTo("nominatim")).toHaveLength(1);
   });
 
   it("waits out the shared Nominatim slot instead of refusing a pick", async () => {
@@ -198,8 +199,9 @@ describe("searchGyms", () => {
     expect(await searchGyms({ query: "SATS" })).toEqual({ success: true, data: [] });
     vi.setSystemTime((clock += 2_000));
     expect(await searchGyms({ query: "sats " })).toEqual({ success: true, data: [] });
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const url = String(fetchMock.mock.calls[0][0]);
+    expect(callsTo("nominatim")).toHaveLength(1);
+    expect(callsTo("data.brreg.no/enhetsregisteret/api/underenheter")).toHaveLength(1);
+    const url = String(callsTo("nominatim")[0][0]);
     expect(url).toContain("nominatim.openstreetmap.org/search");
     expect(url).toContain("q=sats");
   });
@@ -276,5 +278,105 @@ describe("importGyms", () => {
     fetchMock.mockResolvedValueOnce(overpass([]));
     await importGymsIfStale(["NO"]);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("business register gyms", () => {
+  // What data.brreg.no and Kartverket answer, by URL.
+  const regUnit = (orgnr: string, navn: string, parent: string, street: string) => ({
+    organisasjonsnummer: orgnr,
+    overordnetEnhet: parent,
+    navn,
+    naeringskode1: { kode: "86.210" },
+    beliggenhetsadresse: { adresse: [street], poststed: "OSLO", kommunenummer: "0301" },
+  });
+  const nydalen = regUnit("934609050", "STERK HELSE OG TRENING NYDALEN AS", "834391422", "Maridalsveien 323");
+  const loren = regUnit("995016141", "STERK HELSE OG TRENING LØREN AS", "834391422", "Lørenveien 44");
+  const soleTrader = regUnit("900000001", "STERK TRENING KARI", "900000002", "Hjemmeveien 1");
+  const points: Record<string, { lat: number; lon: number }> = {
+    "Maridalsveien 323": { lat: 59.9543, lon: 10.7612 },
+    "Lørenveien 44": { lat: 59.9305, lon: 10.7929 },
+    "Hjemmeveien 1": { lat: 59.9, lon: 10.8 },
+  };
+
+  function serveRegister(osm: unknown[] = []) {
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const u = new URL(String(url));
+      if (u.host.includes("nominatim")) return new Response(JSON.stringify(osm));
+      if (u.pathname.endsWith("/underenheter")) return new Response(JSON.stringify({ _embedded: { underenheter: [nydalen, loren, soleTrader] } }));
+      if (u.pathname.endsWith("/underenheter/934609050")) return new Response(JSON.stringify(nydalen));
+      if (u.pathname.endsWith("/underenheter/900000001")) return new Response(JSON.stringify(soleTrader));
+      if (u.pathname.endsWith("/enheter"))
+        return new Response(
+          JSON.stringify({
+            _embedded: {
+              enheter: [
+                { organisasjonsnummer: "834391422", organisasjonsform: { kode: "AS" } },
+                { organisasjonsnummer: "900000002", organisasjonsform: { kode: "ENK" } },
+              ],
+            },
+          }),
+        );
+      if (u.host === "ws.geonorge.no") {
+        const p = points[u.searchParams.get("sok")!];
+        return new Response(JSON.stringify({ adresser: p ? [{ representasjonspunkt: p }] : [] }));
+      }
+      return new Response("[]");
+    });
+  }
+
+  it("finds a gym OpenStreetMap lacks by name, but not one OSM already has or a sole trader", async () => {
+    // OSM has the Løren gym, a few metres from the register's address for it.
+    serveRegister([{ ...satsLookup, osm_id: 77, name: "Sterk", lat: "59.9304", lon: "10.7928", display_name: "Sterk, Lørenveien, Oslo" }]);
+    asUser((await createUser()).id);
+
+    const result = await searchGyms({ query: "sterk" });
+    expect(result.success && result.data).toEqual([
+      { osmRef: "node/77", name: "Sterk", lat: 59.9304, lng: 10.7928, address: "Lørenveien, Oslo" },
+      { osmRef: "brreg/934609050", name: "Sterk Helse og Trening Nydalen", lat: 59.9543, lng: 10.7612, address: "Maridalsveien 323, Oslo" },
+    ]);
+    // Kartverket only ever sees the gyms' addresses.
+    expect(callsTo("geonorge").map((c) => new URL(String(c[0])).searchParams.get("sok")).sort()).toEqual([
+      "Lørenveien 44",
+      "Maridalsveien 323",
+    ]);
+
+    expect(await setPrimaryGym({ osmRef: "brreg/934609050" })).toEqual({ success: true, data: undefined });
+    const [row] = await db.select().from(gyms).where(eq(gyms.osmRef, "brreg/934609050"));
+    expect(row).toMatchObject({ name: "Sterk Helse og Trening Nydalen", lat: 59.9543, lng: 10.7612 });
+  });
+
+  it("filters the register's answer for the rarest word of a multi-word search", async () => {
+    serveRegister();
+    const serve = fetchMock.getMockImplementation() as (url: string | URL) => Promise<Response>;
+    fetchMock.mockImplementation(async (url: string | URL) => {
+      const u = new URL(String(url));
+      if (!u.pathname.endsWith("/underenheter")) return serve(url);
+      // "nydalen" is the common word here; its first page holds no Sterk.
+      const word = u.searchParams.get("navn");
+      expect(u.searchParams.get("navnMetodeForSoek")).toBe("FORTLOEPENDE");
+      const units = word === "sterk" ? [nydalen, loren] : [];
+      return new Response(JSON.stringify({ _embedded: { underenheter: units }, page: { totalElements: word === "sterk" ? 97 : 201 } }));
+    });
+    asUser((await createUser()).id);
+    const result = await searchGyms({ query: "Sterk Nydalen" });
+    expect(result.success && result.data.map((g) => g.osmRef)).toEqual(["brreg/934609050"]);
+  });
+
+  it("looks a register gym up again when picked without a search, and refuses a sole trader", async () => {
+    serveRegister();
+    asUser((await createUser()).id);
+    expect(await setPrimaryGym({ osmRef: "brreg/934609050" })).toEqual({ success: true, data: undefined });
+    expect((await setPrimaryGym({ osmRef: "brreg/900000001" })).success).toBe(false);
+    expect(await db.select({ ref: gyms.osmRef }).from(gyms)).toEqual([{ ref: "brreg/934609050" }]);
+  });
+
+  it("still answers from OpenStreetMap when the register is down", async () => {
+    fetchMock.mockImplementation(async (url: string | URL) =>
+      String(url).includes("nominatim") ? new Response(JSON.stringify([satsLookup])) : new Response("down", { status: 503 }),
+    );
+    asUser((await createUser()).id);
+    const result = await searchGyms({ query: "sats majorstuen" });
+    expect(result.success && result.data.map((g) => g.osmRef)).toEqual(["node/123"]);
   });
 });

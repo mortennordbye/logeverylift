@@ -138,8 +138,8 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
       )}
 
       <p className="text-xs text-muted-foreground">
-        Gym data © OpenStreetMap contributors. Searches go through our server; a location is rounded to about a
-        kilometre and never stored.
+        Gym data © OpenStreetMap contributors, and from Brønnøysundregistrene (NLOD) placed with © Kartverket.
+        Searches go through our server; a location is rounded to about a kilometre and never stored.
       </p>
 
       <BottomSheet open={picked !== null} onClose={() => setPicked(null)}>
