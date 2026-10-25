@@ -34,7 +34,8 @@ export async function register() {
   void purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();
 
-  // Copy gyms from OpenStreetMap for "Gyms near me"; checked daily, runs weekly.
+  // Copy gyms from OpenStreetMap for "Gyms near me". Runs weekly; checked
+  // hourly, so an import the busy Overpass server turns away is retried soon.
   const gymCountries = env.GYM_IMPORT_COUNTRIES;
   if (gymCountries) {
     const { importGymsIfStale } = await import("@/lib/gym-import");
@@ -43,7 +44,7 @@ export async function register() {
         console.error("[importGyms] failed", err instanceof Error ? err.message : "unknown"),
       );
     void importGyms();
-    setInterval(importGyms, 24 * 60 * 60 * 1000).unref();
+    setInterval(importGyms, 60 * 60 * 1000).unref();
   }
 
   const adminEmail = env.ADMIN_EMAIL;
