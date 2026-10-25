@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { gyms, users } from "@/db/schema";
 import { getGymMap, getGymMembers, searchGyms, setPrimaryGym } from "@/lib/actions/gyms";
+import { importGyms, importGymsIfStale } from "@/lib/gym-import";
 import { eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createUser } from "./factories";
@@ -134,6 +135,29 @@ describe("gym map", () => {
 });
 
 describe("searchGyms", () => {
+  it("answers near me from the imported gyms, nearest first, without asking Overpass", async () => {
+    const importedAt = new Date();
+    await db.insert(gyms).values([
+      { osmRef: "node/1", name: "Far", lat: 59.95, lng: 10.71, address: null, importedAt },
+      { osmRef: "node/2", name: "Near", lat: 59.931, lng: 10.711, address: "Kirkeveien 1", importedAt },
+      { osmRef: "node/3", name: "Other town", lat: 60.39, lng: 5.32, address: null, importedAt },
+    ]);
+    asUser((await createUser()).id);
+
+    const result = await searchGyms({ lat: 59.93, lng: 10.71 });
+    expect(result.success && result.data.map((g) => g.name)).toEqual(["Near", "Far"]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("asks Overpass where nothing is imported, even next to a gym someone picked", async () => {
+    await db.insert(gyms).values({ osmRef: "node/7", name: "Picked abroad", lat: 52.52, lng: 13.4, address: null });
+    fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ elements: [] })));
+    asUser((await createUser()).id);
+
+    expect(await searchGyms({ lat: 52.52, lng: 13.4 })).toEqual({ success: true, data: [] });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("sends Overpass only a rounded position, for gyms and sports centres", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(JSON.stringify({ elements: [{ type: "node", id: 1, lat: 59.93, lon: 10.71, tags: { name: "3T" } }] })),
@@ -199,5 +223,58 @@ describe("searchGyms", () => {
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ elements: [] })));
     asUser((await createUser()).id);
     expect((await searchGyms({ lat: 59.9, lng: 10.7 })).success).toBe(true);
+  });
+});
+
+describe("importGyms", () => {
+  const overpass = (elements: unknown[]) => new Response(JSON.stringify({ elements }));
+
+  it("upserts every named gym in the country and drops ones OSM no longer has, unless picked", async () => {
+    const old = new Date(clock - 30 * 86_400_000);
+    await db.insert(gyms).values([
+      { osmRef: "node/1", name: "Old name", lat: 59.9, lng: 10.7, address: null, importedAt: old },
+      { osmRef: "node/2", name: "Closed", lat: 59.9, lng: 10.7, address: null, importedAt: old },
+      { osmRef: "node/3", name: "Closed but picked", lat: 59.9, lng: 10.7, address: null, importedAt: old },
+    ]);
+    const [picked] = await db.select({ id: gyms.id }).from(gyms).where(eq(gyms.osmRef, "node/3"));
+    const u = await createUser();
+    await db.update(users).set({ primaryGymId: picked.id }).where(eq(users.id, u.id));
+    fetchMock.mockResolvedValueOnce(
+      overpass([
+        { type: "node", id: 1, lat: 59.91, lon: 10.71, tags: { name: "New name" } },
+        { type: "way", id: 5, center: { lat: 60.39, lon: 5.32 }, tags: { name: "Bergen gym" } },
+        { type: "node", id: 6, lat: 60, lon: 10, tags: {} },
+      ]),
+    );
+
+    expect(await importGyms(["NO"])).toBe(2);
+    const body = decodeURIComponent(String(fetchMock.mock.calls[0][1].body));
+    expect(body).toContain('"ISO3166-1"="NO"');
+
+    const rows = await db.select().from(gyms).orderBy(gyms.osmRef);
+    expect(rows.map((r) => [r.osmRef, r.name])).toEqual([
+      ["node/1", "New name"],
+      ["node/3", "Closed but picked"],
+      ["way/5", "Bergen gym"],
+    ]);
+    expect(rows[0].importedAt!.getTime()).toBeGreaterThan(old.getTime());
+  });
+
+  it("leaves the gyms alone when Overpass fails", async () => {
+    await db.insert(gyms).values({ osmRef: "node/1", name: "Kept", lat: 59.9, lng: 10.7, address: null, importedAt: new Date(0) });
+    fetchMock.mockResolvedValueOnce(new Response("at capacity", { status: 504 }));
+    await expect(importGyms(["NO"])).rejects.toThrow("overpass 504");
+    expect(await db.select().from(gyms)).toHaveLength(1);
+  });
+
+  it("runs only when the last import is a week old", async () => {
+    await db.insert(gyms).values({ osmRef: "node/1", name: "Fresh", lat: 59.9, lng: 10.7, address: null, importedAt: new Date(clock - 86_400_000) });
+    await importGymsIfStale(["NO"]);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    await db.update(gyms).set({ importedAt: new Date(clock - 8 * 86_400_000) });
+    fetchMock.mockResolvedValueOnce(overpass([]));
+    await importGymsIfStale(["NO"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

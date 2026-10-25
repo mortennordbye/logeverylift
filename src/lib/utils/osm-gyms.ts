@@ -4,6 +4,9 @@
  * tested on recorded ones.
  */
 
+// Nominatim and Overpass ask for an identifying User-Agent.
+export const OSM_HEADERS = { "User-Agent": "LogEveryLift (+https://logeverylift.com)", Accept: "application/json" };
+
 export type GymResult = {
   osmRef: string; // "node/123", "way/456", "relation/789"
   name: string;
