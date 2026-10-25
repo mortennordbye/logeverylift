@@ -112,3 +112,31 @@ describe("0058: drop duplicate logs of one program set before keying on it", () 
     ]);
   });
 });
+
+describe("0067: create workout_reactions where 0022 was skipped", () => {
+  const file = "0067_restore_workout_reactions.sql";
+  const run = async () => {
+    for (const s of readFileSync(path.resolve(__dirname, "../../../drizzle", file), "utf8").split("--> statement-breakpoint")) {
+      await db.execute(sql.raw(s));
+    }
+  };
+  const constraints = async () =>
+    (
+      await db.execute<{ conname: string }>(
+        sql`SELECT conname FROM pg_constraint WHERE conrelid = 'workout_reactions'::regclass ORDER BY conname`,
+      )
+    ).rows.map((r) => r.conname);
+
+  it("rebuilds the table on a database that never got it, and is a no-op where it exists", async () => {
+    const before = await constraints();
+    await db.execute(sql`DROP TABLE "workout_reactions"`);
+    try {
+      await run();
+      expect(await constraints()).toEqual(before);
+      await run();
+      expect(await constraints()).toEqual(before);
+    } finally {
+      await db.execute(sql.raw(statement(file, 'CREATE TABLE IF NOT EXISTS "workout_reactions"')));
+    }
+  });
+});
