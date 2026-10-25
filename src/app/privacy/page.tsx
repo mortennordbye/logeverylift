@@ -112,6 +112,13 @@ export default function PrivacyPage() {
           at all. Our server receives your exact position for that search and does not store it.
         </li>
         <li>
+          <strong>Brønnøysundregistrene and Kartverket</strong> (Norway), to find gyms OpenStreetMap doesn&apos;t
+          have. A gym search by name also goes, from our server, to the business register run by
+          Brønnøysundregistrene, which sees the words you searched for but not your IP address or who you are.
+          Kartverket&apos;s address service is then asked where the gyms it found are. It only receives those
+          gyms&apos; business addresses, nothing about you.
+        </li>
+        <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they
           leave the server, and Google does not have the key.
         </li>
