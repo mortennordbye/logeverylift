@@ -1,3 +1,7 @@
+import { eq } from "drizzle-orm";
+import { exerciseNotes, users } from "../src/db/schema";
+import { e2eUser } from "./fixtures/env";
+import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
 
 /**
@@ -36,4 +40,49 @@ test("the exercise detail scrolls its last row clear of the bottom nav", async (
       return row && nav ? nav.y - (row.y + row.height) : -1;
     })
     .toBeGreaterThanOrEqual(8);
+});
+
+/**
+ * The library links each exercise to its own page: progress, records,
+ * history, and a note the lifter keeps on it.
+ */
+test("the library opens an exercise page whose note saves", async ({ page }, testInfo) => {
+  await page.goto("/exercises");
+  const search = page.getByRole("textbox", { name: "Search" });
+  const row = page.getByRole("button", { name: /^Barbell Curl/ }).first();
+  await expect(async () => {
+    await search.fill("");
+    await search.fill("Barbell Curl");
+    await expect(row).toBeVisible({ timeout: 1_000 });
+  }).toPass();
+  await row.click();
+  await page.getByRole("link", { name: "History, records and notes" }).click();
+
+  await expect(page).toHaveURL(/\/exercises\/\d+$/);
+  // Scoped to the new page: for a moment the library's own "Barbell Curl"
+  // heading is still sliding out underneath.
+  await expect(page.getByRole("main").getByRole("heading", { name: "Barbell Curl", level: 1 })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Records" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
+
+  const note = page.getByRole("textbox", { name: "Your note" });
+  await note.fill("Elbows pinned");
+  await note.blur();
+
+  const [user] = await testDb()
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
+  await expect
+    .poll(async () => {
+      const rows = await testDb()
+        .select({ note: exerciseNotes.note })
+        .from(exerciseNotes)
+        .where(eq(exerciseNotes.userId, user.id));
+      return rows.map((r) => r.note);
+    })
+    .toEqual(["Elbows pinned"]);
+
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "Your note" })).toHaveValue("Elbows pinned");
 });

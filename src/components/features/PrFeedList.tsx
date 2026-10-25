@@ -13,7 +13,7 @@ const PR_TYPE_LABEL: Record<string, string> = {
 };
 
 /** Subtitle describing what kind of record this is. */
-function prTypeLabel(pr: PrFeedEntry): string {
+export function prTypeLabel(pr: PrFeedEntry): string {
   if (pr.prType === "distance") {
     return `Longest ${disciplineConfig(pr.discipline).label.toLowerCase()}`;
   }
@@ -23,7 +23,7 @@ function prTypeLabel(pr: PrFeedEntry): string {
   return PR_TYPE_LABEL[pr.prType] ?? pr.prType;
 }
 
-function formatPrValue(pr: PrFeedEntry): string {
+export function formatPrValue(pr: PrFeedEntry): string {
   const { prType, value, weightKg } = pr;
   if (prType === "weight") return `${value} kg`;
   if (prType === "estimated_1rm") return `~${Math.round(value)} kg 1RM`;

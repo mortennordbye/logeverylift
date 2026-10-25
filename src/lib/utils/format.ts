@@ -31,6 +31,18 @@ export function formatDateLong(d: Date): string {
   return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
 }
 
+/** "5 Mar" for a YYYY-MM-DD date. */
+export function formatDateShort(date: string): string {
+  const d = new Date(date + "T00:00:00");
+  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+/** Training volume: "850 kg", or tonnes from 1000 kg ("1.2t"). */
+export function formatVolume(kg: number): string {
+  if (kg >= 1000) return `${(kg / 1000).toFixed(1)}t`;
+  return `${Math.round(kg)} kg`;
+}
+
 export function formatDuration(minutes: number): string {
   if (minutes < 60) return `${minutes} min`;
   const h = Math.floor(minutes / 60);

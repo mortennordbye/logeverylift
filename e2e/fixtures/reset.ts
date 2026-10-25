@@ -10,6 +10,7 @@ import {
   aiSetupPlans,
   customWeightUsage,
   dismissedMakeups,
+  exerciseNotes,
   exercisePrs,
   exercises,
   friendships,
@@ -72,6 +73,7 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(aiGenerations).where(eq(aiGenerations.userId, userId));
     await tx.delete(customWeightUsage).where(eq(customWeightUsage.userId, userId));
     await tx.delete(dismissedMakeups).where(eq(dismissedMakeups.userId, userId));
+    await tx.delete(exerciseNotes).where(eq(exerciseNotes.userId, userId));
     await tx.delete(userWeightEntries).where(eq(userWeightEntries.userId, userId));
     await tx.delete(exercises).where(eq(exercises.userId, userId));
     await tx

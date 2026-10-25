@@ -5,6 +5,7 @@ import {
   aiSetupPlans,
   customWeightUsage,
   dismissedMakeups,
+  exerciseNotes,
   exercisePrs,
   exercises,
   feedback,
@@ -90,6 +91,7 @@ export async function collectUserData(userId: string) {
       : [],
     exercise_prs: await db.select().from(exercisePrs).where(eq(exercisePrs.userId, userId)),
     exercises: await db.select().from(exercises).where(eq(exercises.userId, userId)),
+    exercise_notes: await db.select().from(exerciseNotes).where(eq(exerciseNotes.userId, userId)),
     programs: programRows,
     program_exercises: programExerciseRows,
     program_sets: programExerciseIds.length

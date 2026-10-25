@@ -18,6 +18,7 @@ export * from "./ai-setup-plans";
 export * from "./auth";
 export * from "./custom-weight-usage";
 export * from "./dismissed-makeups";
+export * from "./exercise-notes";
 export * from "./exercise-prs";
 export * from "./feedback";
 export * from "./friendships";

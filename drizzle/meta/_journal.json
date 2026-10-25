@@ -477,6 +477,13 @@
       "when": 1792944908711,
       "tag": "0067_restore_workout_reactions",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1792951485776,
+      "tag": "0068_exercise_notes",
+      "breakpoints": true
     }
   ]
 }

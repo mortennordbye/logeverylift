@@ -23,6 +23,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -105,7 +106,7 @@ function SearchBar({ value, onChange }: { value: string; onChange: (v: string) =
 
 // ─── Detail View ──────────────────────────────────────────────────────────────
 
-function DetailView({ exercise }: { exercise: Exercise }) {
+function DetailView({ exercise, showProgressLink }: { exercise: Exercise; showProgressLink: boolean }) {
   const rows: { label: string; value: string }[] = [
     { label: "Title", value: exercise.name },
     // "Format" = how the exercise is tracked (timed vs reps). Distinct from the
@@ -179,6 +180,15 @@ function DetailView({ exercise }: { exercise: Exercise }) {
           </div>
         ))}
       </div>
+      {showProgressLink && (
+        <Link
+          href={`/exercises/${exercise.id}`}
+          className="flex items-center justify-between bg-card rounded-2xl px-4 py-3.5 active:opacity-70"
+        >
+          <span className="text-foreground">History, records and notes</span>
+          <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        </Link>
+      )}
       </div>
     </>
   );
@@ -577,7 +587,8 @@ export function ExercisesClient({
       </>
     );
   } else if (selectedExercise) {
-    content = <DetailView exercise={selectedExercise} />;
+    // Not from the picker: following the link would abandon the exercise being added.
+    content = <DetailView exercise={selectedExercise} showProgressLink={!onSelectExercise} />;
   } else if (view !== "menu" && subCategory !== null) {
     const config = GROUP_CONFIG[view as keyof typeof GROUP_CONFIG];
     const filtered = config ? exercises.filter((ex) => ex[config.key] === subCategory) : [];

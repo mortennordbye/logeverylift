@@ -59,6 +59,7 @@ import {
   AlignEndVerticalIcon,
   CheckCheckIcon,
   ChevronLeftIcon,
+  ChevronRightIcon,
   ChevronsUpIcon,
   CircleSlashIcon,
   DumbbellIcon,
@@ -787,7 +788,16 @@ export function WorkoutSetsClient({
 
       {/* Exercise title */}
       <div className="px-4 pb-4 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">{exerciseName}</h1>
+        <h1 className="text-3xl font-bold tracking-tight">
+          {exerciseId ? (
+            <Link href={`/exercises/${exerciseId}`} className="active:opacity-70">
+              {exerciseName}
+              <ChevronRightIcon aria-hidden className="inline h-6 w-6 ml-1 align-middle text-muted-foreground/50" />
+            </Link>
+          ) : (
+            exerciseName
+          )}
+        </h1>
         {isWorkout ? (
           savedNotes && (
             <p className="mt-1 text-sm text-muted-foreground whitespace-pre-line">{savedNotes}</p>
