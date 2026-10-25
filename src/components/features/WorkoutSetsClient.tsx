@@ -11,6 +11,7 @@ import {
   setProgramExerciseType,
   updateProgramExerciseIncrement,
   updateProgramExerciseIncrementReps,
+  updateProgramExerciseNotes,
 } from "@/lib/actions/programs";
 import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
 import {
@@ -177,6 +178,8 @@ type Props = {
   exerciseTypeDefault?: string | null;
   /** Per-program override of the exercise type; null = inherit the default. */
   exerciseTypeOverride?: string | null;
+  /** Setup cues for this exercise in this program (seat height, grip). */
+  notes?: string | null;
   initialEditing?: boolean;
 };
 
@@ -204,6 +207,7 @@ export function WorkoutSetsClient({
   progressionSuppressEffortPrompt: initialSuppressEffortPrompt = false,
   exerciseTypeDefault = null,
   exerciseTypeOverride: initialTypeOverride = null,
+  notes: initialNotes = null,
   initialEditing = false,
 }: Props) {
   const router = useRouter();
@@ -215,6 +219,8 @@ export function WorkoutSetsClient({
   const [increment, setIncrement] = useState(initialIncrement);
   const [incrementReps, setIncrementReps] = useState(initialIncrementReps);
   const [typeOverride, setTypeOverride] = useState<string | null>(initialTypeOverride);
+  const [notes, setNotes] = useState(initialNotes ?? "");
+  const [savedNotes, setSavedNotes] = useState(initialNotes ?? "");
   const [applyToPlan, setApplyToPlan] = useState(initialApplyToPlan);
   const [suppressEffortPrompt, setSuppressEffortPrompt] = useState(
     initialSuppressEffortPrompt,
@@ -601,6 +607,19 @@ export function WorkoutSetsClient({
     router.refresh();
   }
 
+  async function handleNotesBlur() {
+    const next = notes.trim();
+    if (next === savedNotes) return;
+    const result = await callAction(updateProgramExerciseNotes({ programExerciseId, notes: next }));
+    if (!result.success) {
+      setNotes(savedNotes);
+      saveFailed();
+      return;
+    }
+    setNotes(next);
+    setSavedNotes(next);
+  }
+
   // null hands the step back to the automatic ladder (load zone, experience,
   // equipment), which is where every exercise starts.
   async function handleIncrementChange(newIncrement: number | null) {
@@ -735,6 +754,21 @@ export function WorkoutSetsClient({
       {/* Exercise title */}
       <div className="px-4 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">{exerciseName}</h1>
+        {isWorkout ? (
+          savedNotes && (
+            <p className="mt-1 text-sm text-muted-foreground whitespace-pre-line">{savedNotes}</p>
+          )
+        ) : (
+          <textarea
+            aria-label="Setup notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value.slice(0, 500))}
+            onBlur={handleNotesBlur}
+            placeholder="Setup notes: seat height, grip, cues"
+            rows={2}
+            className="mt-2 w-full rounded-xl bg-muted px-3 py-2 text-base placeholder:text-muted-foreground/70 focus:outline-none focus:ring-2 focus:ring-primary/40"
+          />
+        )}
       </div>
 
       {/* Progression badge + 1RM badge + apply-to-all.

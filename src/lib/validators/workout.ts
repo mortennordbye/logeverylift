@@ -220,6 +220,12 @@ export const setProgramExerciseTypeSchema = z.object({
     .nullable(),
 });
 
+// Setup cues for one exercise in a program (seat height, grip). Blank clears it.
+export const updateProgramExerciseNotesSchema = z.object({
+  programExerciseId: z.number().int().positive(),
+  notes: z.string().trim().max(500),
+});
+
 // How many qualifying sessions this exercise needs before a bump is suggested.
 // null restores the shared REQUIRED_HITS default. The ceiling is the consensus
 // window — asking for more hits than the window holds is unsatisfiable.

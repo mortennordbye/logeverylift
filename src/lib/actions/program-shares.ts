@@ -201,7 +201,8 @@ export async function copySharedProgram(
             programId: newProgramId,
             exerciseId: pe.exerciseId,
             orderIndex: pe.orderIndex,
-            notes: pe.notes ?? undefined,
+            // Notes stay with the owner: they are free text and can say
+            // things about their health, and friends never see notes.
             overloadIncrementKg: pe.overloadIncrementKg ?? undefined,
             overloadIncrementReps: pe.overloadIncrementReps ?? 0,
             progressionMode: pe.progressionMode ?? "manual",

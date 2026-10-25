@@ -79,6 +79,11 @@ export function HistoryClient({ sessions }: { sessions: SessionWithStats[] }) {
                       <p className="text-sm text-muted-foreground mt-0.5">
                         {formatDate(new Date(session.startTime))}
                       </p>
+                      {session.intendedDate && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Make-up for {formatDate(new Date(`${session.intendedDate}T00:00:00`))}
+                        </p>
+                      )}
                     </div>
                     {session.durationMinutes > 0 && (
                       <span className="text-sm text-muted-foreground tabular-nums shrink-0">

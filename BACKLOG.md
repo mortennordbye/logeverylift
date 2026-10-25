@@ -28,13 +28,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A request for one of these specific metrics.
 - **Touchpoints:** `src/db/schema/workout-sets.ts`, `src/components/features/SetEditView.tsx`, `src/components/features/LogRunModal.tsx`.
 
-### Surface make-up attribution in the history view
-- **Planned:** see [`docs/plans/show-hidden-data.md`](docs/plans/show-hidden-data.md).
-- **What:** The `workout_sessions.intended_date` column now exists and is set when a session is started via a "Make up" prompt (`?makeup=YYYY-MM-DD`); the missed-workout logic consumes it to clear the original missed day. What remains is cosmetic: the history view still labels a make-up with today's date — it won't say "this was Monday's push." Render `intendedDate` on the history row when present.
-- **Why deferred:** The functional half (make-up clears the missed slot, correct cycle progression) shipped; the display label is cosmetic and wasn't requested.
-- **Unblocked by:** A user reporting that make-up sessions look wrong in the history view.
-- **Touchpoints:** `src/lib/actions/workout-sets.ts` (history query already selects `intendedDate`), `src/components/features/` history row component.
-
 ### Two workouts in one day — rotation walker edge case
 - **What:** `walkRotation` in `src/lib/utils/cycle-position.ts` consumes at most one completed session per calendar day. If a user logs two workouts on the same date, the second one doesn't advance the rotation cursor.
 - **Why deferred:** Vanishingly rare in practice; the previous modulo-counter version had the inverse limitation (double-counted, arguably more wrong).
@@ -53,12 +46,11 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A real iOS device repro showing either gap bites in practice. Then: persist the exercise timer's `endsAt` alongside `restTimerEnds` and rehydrate on mount; and/or debounce-persist SetEditView field state to a draft key cleared on Save/navigation.
 - **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (exercise timer state + resync effects), `src/contexts/workout-session-context.tsx` (persistence keys), `src/components/features/SetEditView.tsx` (draft state).
 
-### Surface failed sets in history & metrics
-- **Planned:** see [`docs/plans/show-hidden-data.md`](docs/plans/show-hidden-data.md).
-- **What:** `workout_sets.is_failed` is now logged (explicit failed-set flag, Jun 2026) and shown in-workout (red ✕). History rows and the metrics/PR views don't yet read it — a failed set currently just shows its low `actualReps`. A dedicated "failed" badge in `/history` and exclusion/annotation in PR/volume math would make it explicit.
-- **Why deferred:** The flag is captured and progression already reacts to `actualReps < targetReps`; surfacing it in history/metrics is additive polish.
-- **Unblocked by:** Wanting failed sets visually distinct in history. Add `isFailed` to the history query + `HistoryRow`, render a badge, and decide whether failed sets count toward volume.
-- **Touchpoints:** `src/lib/actions/workout-sets.ts` (history query ~line 711), `src/components/features/` history/metrics components, `src/lib/utils/progression.ts` (optional: treat `isFailed` as a hard fail).
+### Count failed sets correctly in PR and volume math
+- **What:** Failed sets (`workout_sets.is_failed`) now show a "Failed" badge in session detail, but PR detection and volume totals still treat them like any other logged set. Decide whether a failed set can set a PR and whether it counts toward volume, then apply that in the metrics and PR code.
+- **Why deferred:** Display was the planned scope of the show-hidden-data brief; changing what counts as a PR or as volume is a training-logic decision nobody has made yet.
+- **Unblocked by:** A decision on the rule (e.g. failed sets never set a PR but still count as volume).
+- **Touchpoints:** `src/lib/actions/workout-sets.ts` (PR detection in `logWorkoutSet`, history volume in `getCompletedSessions`), `src/components/features/SessionDetailClient.tsx` (session volume), `src/lib/utils/progression.ts` (optional: treat `isFailed` as a hard fail).
 
 ### Exercise-type: laterality dimension + backfill precision
 - **What:** Exercise type shipped as a single flat enum (compound/accessory/isolation/plyometric/isometric) with a per-program override (Jun 2026). Two follow-ups: (1) the **unilateral/bilateral** laterality axis was intentionally left out — it's orthogonal (a Bulgarian split squat is compound *and* unilateral) and folding it into the one enum would be wrong; (2) the **library backfill is coarse** — `0039` derives type from `movement_pattern`, so cable/dumbbell isolation work tagged `push`/`pull` (curls, raises, flyes, pushdowns) is currently mislabeled `compound` (≈142 of ~196 rows landed on compound). The editor lets users correct individual exercises, but the bulk default is rough.

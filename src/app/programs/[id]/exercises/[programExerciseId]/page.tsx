@@ -52,6 +52,7 @@ export default async function ProgramExerciseDetailPage({ params, searchParams }
       progressionApplyToPlan={pe.progressionApplyToPlan}
       progressionSuppressEffortPrompt={pe.progressionSuppressEffortPrompt}
       exerciseTypeDefault={pe.exercise.exerciseType}
+      notes={pe.notes}
       exerciseTypeOverride={pe.exerciseType}
     />
   );
