@@ -426,6 +426,9 @@ export const reorderProgramSetsSchema = z.object({
 
 export const addWarmupSetsSchema = z.object({
   programExerciseId: z.number().int().positive(),
+  // The first set's weight as the lifter sees it today, which can differ from
+  // the plan after a suggestion was taken. Absent = the plan's.
+  workingKg: z.number().positive().max(1000).optional(),
 });
 
 export const deleteProgramSetSchema = z.object({

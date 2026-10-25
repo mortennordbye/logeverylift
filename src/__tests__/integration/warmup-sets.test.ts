@@ -73,6 +73,32 @@ describe("addWarmupSets", () => {
     expect(row.setNumber).toBe(5);
   });
 
+  it("ramps to today's weight when the client sends it", async () => {
+    expect((await addWarmupSets({ programExerciseId, workingKg: 85 })).success).toBe(true);
+    const sets = await plan();
+    expect(sets.slice(0, 4).map((s) => Number(s.weightKg))).toEqual([20, 35, 50, 67.5]);
+  });
+
+  it("leaves finished workouts in the order they were done", async () => {
+    const [first] = setIds;
+    const finished = (await createSession(userId, null, { isCompleted: true })).id;
+    await db.insert(workoutSets).values({
+      sessionId: finished,
+      exerciseId,
+      programExerciseId,
+      programSetId: first,
+      setNumber: 1,
+      actualReps: 5,
+      weightKg: "100",
+      restTimeSeconds: 90,
+    });
+
+    expect((await addWarmupSets({ programExerciseId })).success).toBe(true);
+
+    const [row] = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, finished));
+    expect(row.setNumber).toBe(1);
+  });
+
   it("refuses a second run", async () => {
     expect((await addWarmupSets({ programExerciseId })).success).toBe(true);
     const again = await addWarmupSets({ programExerciseId });

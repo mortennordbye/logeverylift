@@ -293,14 +293,16 @@ export function WorkoutSetsClient({
 
   const isRunning = (exerciseCategory === "cardio" && !exerciseIsTimed) || exerciseDiscipline != null;
   const isBarbell = equipment === "barbell" && !isRunning && !exerciseIsTimed;
-  // The server ramps from the plan's first set, so this reads the plan too,
-  // not today's override of it.
+  // Ramps to the weight the first row shows, today's override included. Not
+  // offered once every set is logged: warm-ups after the work are no use.
+  const firstSetKg = Number(displaySets[0]?.weightKg ?? 0);
   const canAddWarmups =
     isBarbell &&
     !isEditing &&
     sets.length > 0 &&
     !sets.some((s) => s.setType === "warmup") &&
-    warmupRamp(Number(sets[0].weightKg ?? 0)).length > 0;
+    !sets.every((s) => workoutSession?.completedSetIds.has(s.id)) &&
+    warmupRamp(firstSetKg).length > 0;
 
   // Seeds a preset's default rep range, which has to contain the prescription
   // it is given. The *lowest* working target, so the range the preset picks can
@@ -694,7 +696,7 @@ export function WorkoutSetsClient({
 
   async function handleAddWarmups() {
     setAddingWarmups(true);
-    const result = await callAction(addWarmupSets({ programExerciseId }));
+    const result = await callAction(addWarmupSets({ programExerciseId, workingKg: firstSetKg }));
     setAddingWarmups(false);
     if (!result.success) {
       showToast({ variant: "error", message: result.error });

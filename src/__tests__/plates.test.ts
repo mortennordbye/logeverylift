@@ -36,6 +36,7 @@ describe("formatPlates", () => {
 
   it("says what can't be loaded", () => {
     expect(formatPlates(61)).toBe("20 per side, 1 kg short");
+    expect(formatPlates(21)).toBe("Empty bar, 1 kg short");
   });
 
   it("has nothing to say below the bar", () => {

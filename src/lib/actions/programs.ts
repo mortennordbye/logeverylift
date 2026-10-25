@@ -1118,7 +1118,8 @@ const WARMUP_REST_SECONDS = 60;
 
 /**
  * Puts a warm-up ramp (see warmupRamp) in front of a barbell exercise's sets,
- * worked out from the first working set's weight. Every existing set moves
+ * worked out from the first working set's weight: today's, when the client
+ * sends it, else the plan's. Every existing set moves
  * down by the number of warm-ups, and so do the rows already logged against
  * them in workouts still in progress, the same way reorderProgramSets moves
  * them: the list sends positions in the new order from here on.
@@ -1129,7 +1130,7 @@ export async function addWarmupSets(
   const auth = await requireSession();
   const validation = addWarmupSetsSchema.safeParse(data);
   if (!validation.success) return { success: false, error: "Invalid input" };
-  const { programExerciseId } = validation.data;
+  const { programExerciseId, workingKg } = validation.data;
   try {
     const result = await db.transaction(async (tx): Promise<
       { error: string } | { programId: number; inserted: ProgramSet[] }
@@ -1159,7 +1160,7 @@ export async function addWarmupSets(
         return { error: "This exercise already has warm-up sets" };
       }
       const first = existing[0];
-      const ramp = first ? warmupRamp(Number(first.weightKg ?? 0)) : [];
+      const ramp = first ? warmupRamp(workingKg ?? Number(first.weightKg ?? 0)) : [];
       if (ramp.length === 0) return { error: "Set a working weight above the bar first" };
 
       const openSessions = tx

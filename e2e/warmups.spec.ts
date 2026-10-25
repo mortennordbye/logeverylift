@@ -57,3 +57,12 @@ test("generating warm-ups mid-workout keeps the logged set and logs the warm-up"
   ]);
   expect(logged[1].programSetId).toBe(firstWorkingId);
 });
+
+test("a dumbbell exercise gets no plate line and no warm-up button", async ({ page }) => {
+  await openWorkout(page);
+  await page.locator('a[href*="/exercises/"]', { hasText: "Incline Dumbbell Press" }).first().click();
+  await page.waitForURL(/\/workout\/exercises\/\d+$/);
+  await expect(page.getByTestId("set-row").first()).toBeVisible();
+  await expect(page.getByTestId("set-plates")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Generate warm-ups" })).toHaveCount(0);
+});

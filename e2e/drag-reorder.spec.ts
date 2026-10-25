@@ -15,12 +15,6 @@ import { openFirstExercise, openWorkout, stableBox, trackActions, waitForLiveSes
  * that later took its place, and the screen gave no sign of it until history.
  */
 
-// The full iPhone 14 Pro screen, as the installed PWA gets it. Playwright's
-// 660 px default leaves room for Safari's toolbars, and at that height the
-// third set's centre falls inside dnd-kit's auto-scroll band at the bottom of
-// the list, so the list scrolls mid-drop and the set lands one row low.
-test.use({ viewport: { width: 393, height: 852 } });
-
 /**
  * Drag `handle` onto `target` the way a finger does: press, travel past dnd-kit's
  * 8 px activation distance in small steps, release over the target.

@@ -39,8 +39,7 @@ export function platesPerSide(
 export function formatPlates(totalKg: number): string | null {
   if (totalKg < BAR_KG) return null;
   const { perSide, remainderKg } = platesPerSide(totalKg);
-  if (perSide.length === 0) return "Empty bar";
-  const line = `${perSide.join(" + ")} per side`;
+  const line = perSide.length === 0 ? "Empty bar" : `${perSide.join(" + ")} per side`;
   return remainderKg > 0 ? `${line}, ${remainderKg} kg short` : line;
 }
 

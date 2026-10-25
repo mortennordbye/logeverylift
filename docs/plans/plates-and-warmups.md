@@ -29,14 +29,19 @@ without typing each one. Neither exists. Warm-ups can only be tagged by hand on 
   - check ownership, and that the exercise is a barbell one
   - lock the slot's row, so a double tap can't add the ramp twice
   - refuse if the exercise already has warm-up sets
-  - base the ramp on the first set's weight (with no warm-ups yet, that is the first working set)
+  - base the ramp on the first set's weight (with no warm-ups yet, that is the first working set):
+    today's weight when the client sends it as `workingKg`, so a taken suggestion counts, else
+    the plan's
   - insert the warm-ups before it and renumber the rest
   - renumber logged sets in open sessions the way `reorderProgramSets` does
 - **UI:**
   - "Generate warm-ups" button in `WorkoutSetsClient.tsx`, only for barbell exercises with no
-    warm-up sets and a working weight set. Call it through `callAction`.
+    warm-up sets and a working weight set, hidden once every set is logged. Call it through
+    `callAction`.
   - Per-side plate line ("20 + 5 + 1.25 per side") in `SetEditView.tsx` and on barbell set rows
-    in `WorkoutSetsList.tsx`. Show the remainder when the weight can't be loaded exactly.
+    in `WorkoutSetsList.tsx`. Show the remainder when the weight can't be loaded exactly. Leave
+    it off rows in edit mode: the taller rows pushed drop targets into dnd-kit's auto-scroll
+    band on a 660 px screen.
 - Plate set and bar weight are fixed for now. Per-user plates belong to a later units/equipment
   feature.
 

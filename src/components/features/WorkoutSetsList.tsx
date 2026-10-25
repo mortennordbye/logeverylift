@@ -1855,7 +1855,9 @@ function SortableSetRow({
             )}
           </p>
         )}
-        {isBarbell && formatPlates(Number(set.weightKg ?? 0)) && (
+        {/* Left out while reordering: the extra line makes rows taller to drag,
+            and on a short screen pushes drop targets into the auto-scroll band. */}
+        {isBarbell && !isEditing && formatPlates(Number(set.weightKg ?? 0)) && (
           <p className="text-xs text-muted-foreground" data-testid="set-plates">
             {formatPlates(Number(set.weightKg ?? 0))}
           </p>
