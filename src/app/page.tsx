@@ -1,5 +1,6 @@
 import { AiCheckinCard } from "@/components/features/AiCheckinCard";
 import { DeclineMakeupButton } from "@/components/features/DeclineMakeupButton";
+import { PolicyUpdateNotice } from "@/components/features/PolicyUpdateNotice";
 import { SharePromptLoader } from "@/components/features/SharePromptLoader";
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
 import { WeeklyGoalProgress } from "@/components/features/WeeklyGoalProgress";
@@ -8,7 +9,7 @@ import { getPendingCheckin } from "@/lib/actions/ai-checkin";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/actions/workout-sets";
-import { needsTermsConsent } from "@/lib/consent";
+import { needsPolicyNotice, needsTermsConsent } from "@/lib/consent";
 import { parseDateStr } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
 import Link from "next/link";
@@ -62,13 +63,14 @@ export default async function Home() {
   const todayProgram = info?.todaySlot?.program ?? null;
 
   // Batch remaining queries in parallel, including insight now that we know todayProgram
-  const [statsResult, sessionsResult, insight, checkinResult] = await Promise.all([
+  const [statsResult, sessionsResult, insight, checkinResult, policyNotice] = await Promise.all([
     getWorkoutStats(),
     getCompletedSessions(monday),
     todayProgram
       ? getWorkoutInsight(todayProgram.id, cycleResult).catch(() => undefined)
       : Promise.resolve(undefined),
     getPendingCheckin(),
+    needsPolicyNotice(session),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
 
@@ -138,6 +140,8 @@ export default async function Home() {
 
       {/* Content */}
       <div className="flex-1 flex flex-col gap-3 px-6 min-h-0 overflow-hidden pb-4">
+
+        {policyNotice && <PolicyUpdateNotice />}
 
         {checkin && <AiCheckinCard id={checkin.id} cycleName={checkin.cycleName} />}
 

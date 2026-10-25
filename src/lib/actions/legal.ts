@@ -28,12 +28,29 @@ export async function acceptTerms(data: unknown): Promise<ActionResult<undefined
     const now = new Date();
     await db
       .update(users)
-      .set({ termsVersion: LEGAL_VERSION, termsAcceptedAt: now, healthConsentAt: now })
+      .set({ termsVersion: LEGAL_VERSION, policySeenVersion: LEGAL_VERSION, termsAcceptedAt: now, healthConsentAt: now })
       .where(eq(users.id, auth.user.id));
     revalidatePath("/");
     return { success: true, data: undefined };
   } catch (e) {
     console.error("[acceptTerms] failed", e);
+    return { success: false, error: "Failed to save. Please try again." };
+  }
+}
+
+const policySeenSchema = z.object({ version: z.literal(LEGAL_VERSION) });
+
+/** Record that the caller has been told about the current policy version. */
+export async function markPolicySeen(data: unknown): Promise<ActionResult<undefined>> {
+  const auth = await requireSession();
+  const parsed = policySeenSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Invalid input" };
+  try {
+    await db.update(users).set({ policySeenVersion: LEGAL_VERSION }).where(eq(users.id, auth.user.id));
+    revalidatePath("/");
+    return { success: true, data: undefined };
+  } catch (e) {
+    console.error("[markPolicySeen] failed", e);
     return { success: false, error: "Failed to save. Please try again." };
   }
 }

@@ -58,7 +58,7 @@ async function main() {
   try {
     const emails = Array.from({ length: workers }, (_, i) => e2eUser(i).email);
     await db.query(
-      `UPDATE "user" SET terms_version = $1, terms_accepted_at = now(), health_consent_at = now()
+      `UPDATE "user" SET terms_version = $1, policy_seen_version = $1, terms_accepted_at = now(), health_consent_at = now()
        WHERE email = ANY($2)`,
       [LEGAL_VERSION, emails],
     );

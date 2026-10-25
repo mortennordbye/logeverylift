@@ -212,8 +212,9 @@ export default function PrivacyPage() {
 
       <h2>Changes</h2>
       <p>
-        When this policy changes in a way that matters, the date at the top changes and the app asks you to accept the
-        new version. See also the <Link href="/terms">terms of use</Link>.
+        When this policy changes in a way that matters, the date at the top changes and the app tells you on the home
+        screen. When a change needs your consent again, such as a new kind of health data or a new purpose, the app
+        asks you to accept the new version. See also the <Link href="/terms">terms of use</Link>.
       </p>
     </LegalPage>
   );

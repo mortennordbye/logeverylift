@@ -13,7 +13,7 @@ Three files have to agree with each other and with the code:
 2. [`src/app/privacy/page.tsx`](../../../src/app/privacy/page.tsx), what users are told. Written from the inventory.
 3. [`src/app/terms/page.tsx`](../../../src/app/terms/page.tsx), the terms, including the early-access disclaimer (no uptime guarantee, data loss possible, best-effort security).
 
-The version users accepted is `LEGAL_VERSION` in [`src/lib/constants/legal.ts`](../../../src/lib/constants/legal.ts). Bumping it sends every user through `/consent` on their next visit to the home screen.
+Two versions live in [`src/lib/constants/legal.ts`](../../../src/lib/constants/legal.ts). `LEGAL_VERSION` is the current policy: bumping it shows each user a one-time "We updated the privacy policy" card on the home screen. `CONSENT_VERSION` is the oldest accepted version that still counts: raising it sends every user through `/consent` again. Raise it only when users must accept again, since each raise blocks everyone's home screen.
 
 ## Checklist for a change
 
@@ -25,13 +25,13 @@ Go through each question. A "yes" means work in this PR, not a BACKLOG entry.
    - Leave credentials (hashes, tokens, secrets) out of the export with `columnsWithout`.
    - Give it `onDelete: "cascade"` (or `set null` where another user's row must survive), so account deletion removes it.
    - If another user's rows can reference it (like custom exercises in copied programs), make sure deleting the owner can't delete the other user's data. See `handOverSharedCustomExercises`.
-2. **Health-type data?** Body measurements, heart rate, pain, injury, illness, mood, sleep and free-text notes are special category. They are covered by the health-data consent given at sign-up only if the inventory and the policy name the category. If it's a new kind of data, list it and bump `LEGAL_VERSION`.
+2. **Health-type data?** Body measurements, heart rate, pain, injury, illness, mood, sleep and free-text notes are special category. They are covered by the health-data consent given at sign-up only if the inventory and the policy name the category. If it's a new kind of data, list it, bump `LEGAL_VERSION` and raise `CONSENT_VERSION` to match: health-data consent has to cover it.
 3. **Data leaving the server?** Any new `fetch` to a third party with user data, or a new script or SDK in the browser:
    - Name the recipient, what is sent, the country and the transfer basis in both the inventory and the policy.
    - Send the minimum. An age band rather than a birth year, never the email or name unless the feature needs it.
    - If the user doesn't strictly need it for the service, gate it behind an opt-in like `aiConsentAt`, and enforce it in the Server Action, not only in the UI.
    - Check the provider's terms for EEA restrictions. Google's free Gemini API tier, for example, is not allowed for apps serving EEA users.
-   - Bump `LEGAL_VERSION`.
+   - Bump `LEGAL_VERSION`. A new recipient is told, not asked: leave `CONSENT_VERSION` alone.
 4. **New browser storage?**
    - Strictly necessary storage needs no banner, but it must be listed in the inventory.
    - Anything for analytics or tracking needs prior consent (ekomloven §3-15), which the app doesn't have. Don't add it without building that first.
@@ -44,7 +44,8 @@ Go through each question. A "yes" means work in this PR, not a BACKLOG entry.
 
 - Edit the inventory first, then the page.
 - Only write claims you've checked against the code or the config: open the file, run the query, read the provider's current terms. The policy is a legal statement; a wrong claim in it is worse than a missing one.
-- Bump `LEGAL_VERSION` (to today's date) when what is collected, why, who receives it, or the user's obligations change. Wording fixes need no bump.
+- Bump `LEGAL_VERSION` (to today's date, with `.2`, `.3` for later changes the same day) when what is collected, why, who receives it, or the user's obligations change. Wording fixes need no bump.
+- Raise `CONSENT_VERSION` to the new `LEGAL_VERSION` only for a new kind of health data, a new purpose, or new obligations in the terms.
 - Keep the early-access notice (`EarlyAccessNotice` in `src/components/features/LegalPage.tsx`) honest about uptime, data loss and security. Don't disclaim GDPR security or breach duties: they can't be waived by contract.
 - Plain language, no em dashes, short sentences.
 

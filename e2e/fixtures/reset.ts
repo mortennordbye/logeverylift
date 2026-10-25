@@ -85,6 +85,7 @@ export async function resetE2EUser(email: string): Promise<void> {
       .update(users)
       .set({
         termsVersion: LEGAL_VERSION,
+        policySeenVersion: LEGAL_VERSION,
         termsAcceptedAt: now,
         healthConsentAt: now,
         aiConsentAt: null,

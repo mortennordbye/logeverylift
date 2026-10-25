@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { users } from "../src/db/schema";
-import { LEGAL_VERSION } from "../src/lib/constants/legal";
+import { CONSENT_VERSION, LEGAL_VERSION } from "../src/lib/constants/legal";
 import { e2eUser } from "./fixtures/env";
 import { expect, test } from "./fixtures/test";
 import { testDb } from "./fixtures/reset";
@@ -22,6 +22,28 @@ test("asks a user behind on the terms to accept them before home", async ({ page
 
   const [row] = await testDb().select().from(users).where(eq(users.email, email));
   expect(row.termsVersion).toBe(LEGAL_VERSION);
+});
+
+test("tells a user once that the policy changed, without asking them to accept again", async ({ page }, testInfo) => {
+  const email = e2eUser(testInfo.parallelIndex).email;
+  await testDb()
+    .update(users)
+    .set({ termsVersion: CONSENT_VERSION, policySeenVersion: "2000-01-01" })
+    .where(eq(users.email, email));
+
+  await page.goto("/");
+  const notice = page.getByText("We updated the privacy policy");
+  await expect(notice).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/");
+  await page.getByRole("button", { name: "Got it" }).click();
+  await expect(notice).toBeHidden();
+
+  const [row] = await testDb().select().from(users).where(eq(users.email, email));
+  expect(row.policySeenVersion).toBe(LEGAL_VERSION);
+  expect(row.termsVersion).toBe(CONSENT_VERSION);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "LogEveryLift" })).toBeVisible();
+  await expect(notice).toBeHidden();
 });
 
 test("the privacy policy and terms are readable signed out", async ({ browser }) => {
