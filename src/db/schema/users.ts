@@ -19,11 +19,14 @@ export const users = pgTable("user", {
   // either way). Null until first asked. See src/lib/utils/share-prompt.ts.
   sharePromptAt: timestamp("share_prompt_at"),
   // GDPR consent records (src/lib/constants/legal.ts). termsVersion is the
-  // LEGAL_VERSION last accepted; the home screen asks again when it is behind.
+  // LEGAL_VERSION last accepted; the home screen asks again when it is older
+  // than CONSENT_VERSION. policySeenVersion is the LEGAL_VERSION the user was
+  // last told about; the home screen says the policy changed when it differs.
   // healthConsentAt is explicit consent to body and training data (Art. 9),
   // given together with the terms. aiConsentAt is the separate opt-in to
   // sending the AI request to an outside model; null until given.
   termsVersion: text("terms_version"),
+  policySeenVersion: text("policy_seen_version"),
   termsAcceptedAt: timestamp("terms_accepted_at"),
   healthConsentAt: timestamp("health_consent_at"),
   aiConsentAt: timestamp("ai_consent_at"),

@@ -1,8 +1,8 @@
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { acceptTerms, setAiConsent } from "@/lib/actions/legal";
-import { needsTermsConsent } from "@/lib/consent";
-import { LEGAL_VERSION } from "@/lib/constants/legal";
+import { acceptTerms, markPolicySeen, setAiConsent } from "@/lib/actions/legal";
+import { needsPolicyNotice, needsTermsConsent } from "@/lib/consent";
+import { CONSENT_VERSION, LEGAL_VERSION } from "@/lib/constants/legal";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createUser } from "./factories";
@@ -31,6 +31,7 @@ describe("acceptTerms", () => {
     });
     const u = await row();
     expect(u.termsVersion).toBe(LEGAL_VERSION);
+    expect(u.policySeenVersion).toBe(LEGAL_VERSION);
     expect(u.termsAcceptedAt).not.toBeNull();
     expect(u.healthConsentAt).not.toBeNull();
     expect(await needsTermsConsent(sessionFor(userId))).toBe(false);
@@ -44,8 +45,34 @@ describe("acceptTerms", () => {
 });
 
 describe("needsTermsConsent", () => {
+  it("asks again only when the accepted version is older than CONSENT_VERSION", async () => {
+    await db.update(users).set({ termsVersion: CONSENT_VERSION }).where(eq(users.id, userId));
+    expect(await needsTermsConsent(sessionFor(userId))).toBe(false);
+    await db.update(users).set({ termsVersion: "2000-01-01" }).where(eq(users.id, userId));
+    expect(await needsTermsConsent(sessionFor(userId))).toBe(true);
+  });
+
   it("never asks an admin who is viewing the app as the user", async () => {
     expect(await needsTermsConsent(sessionFor(userId, "admin-1"))).toBe(false);
+  });
+});
+
+describe("policy update notice", () => {
+  it("tells a user behind on the policy once, then not after they dismiss it", async () => {
+    await db
+      .update(users)
+      .set({ termsVersion: CONSENT_VERSION, policySeenVersion: "2000-01-01" })
+      .where(eq(users.id, userId));
+    expect(await needsTermsConsent(sessionFor(userId))).toBe(false);
+    expect(await needsPolicyNotice(sessionFor(userId))).toBe(true);
+    expect(await markPolicySeen({ version: LEGAL_VERSION })).toEqual({ success: true, data: undefined });
+    expect(await needsPolicyNotice(sessionFor(userId))).toBe(false);
+    // Dismissing the notice is not accepting the terms.
+    expect((await row()).termsVersion).toBe(CONSENT_VERSION);
+  });
+
+  it("is never shown to an admin viewing the app as the user", async () => {
+    expect(await needsPolicyNotice(sessionFor(userId, "admin-1"))).toBe(false);
   });
 });
 

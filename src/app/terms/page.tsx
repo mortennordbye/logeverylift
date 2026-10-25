@@ -68,8 +68,9 @@ export default function TermsPage() {
 
       <h2>Changes and law</h2>
       <p>
-        We may change these terms. When a change matters, the date at the top changes and the app asks you to
-        accept the new version; if you don&apos;t, you can delete your account. Norwegian law applies. Questions:{" "}
+        We may change these terms. When a change matters, the date at the top changes and the app tells you. When a
+        change adds obligations for you, the app asks you to accept the new version; if you don&apos;t, you can delete
+        your account. Norwegian law applies. Questions:{" "}
         <a href={`mailto:${CONTROLLER.email}`}>{CONTROLLER.email}</a>.
       </p>
     </LegalPage>
