@@ -1,12 +1,12 @@
 "use server";
 
 import { db } from "@/db";
-import { exercises } from "@/db/schema";
+import { exerciseNotes, exercises, programExercises, programs } from "@/db/schema";
 import { getSystemExercises } from "@/lib/data/exercises";
 import { requireSession } from "@/lib/utils/session";
-import { createExerciseSchema } from "@/lib/validators/workout";
+import { createExerciseSchema, upsertExerciseNoteSchema } from "@/lib/validators/workout";
 import type { ActionResult, Exercise } from "@/types/workout";
-import { asc, eq, and } from "drizzle-orm";
+import { asc, eq, and, exists, isNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -182,5 +182,92 @@ export async function updateCustomExercise(
   } catch (error) {
     console.error("[updateCustomExercise] failed", error);
     return { success: false, error: "Failed to update exercise. Please try again." };
+  }
+}
+
+/**
+ * The exercise if this user can see it: a built-in one, their own custom one,
+ * or another user's custom one that a program they copied still uses.
+ */
+async function findVisibleExercise(exerciseId: number, userId: string) {
+  const [row] = await db
+    .select()
+    .from(exercises)
+    .where(
+      and(
+        eq(exercises.id, exerciseId),
+        or(
+          isNull(exercises.userId),
+          eq(exercises.userId, userId),
+          exists(
+            db
+              .select({ id: programExercises.id })
+              .from(programExercises)
+              .innerJoin(programs, eq(programs.id, programExercises.programId))
+              .where(and(eq(programExercises.exerciseId, exercises.id), eq(programs.userId, userId))),
+          ),
+        ),
+      ),
+    );
+  return row ?? null;
+}
+
+/**
+ * An exercise for its detail page, with the current user's own note on it.
+ */
+export async function getExerciseWithNote(
+  exerciseId: number,
+): Promise<ActionResult<{ exercise: Exercise; note: string | null }>> {
+  const auth = await requireSession();
+  try {
+    const exercise = await findVisibleExercise(exerciseId, auth.user.id);
+    if (!exercise) return { success: false, error: "Not found" };
+    const [row] = await db
+      .select({ note: exerciseNotes.note })
+      .from(exerciseNotes)
+      .where(and(eq(exerciseNotes.userId, auth.user.id), eq(exerciseNotes.exerciseId, exerciseId)));
+    return { success: true, data: { exercise, note: row?.note ?? null } };
+  } catch (error) {
+    console.error("[getExerciseWithNote] failed", { exerciseId }, error);
+    return { success: false, error: "Failed to load exercise" };
+  }
+}
+
+/**
+ * Save the current user's note on an exercise. An empty note deletes it.
+ */
+export async function upsertExerciseNote(data: unknown): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+  const parsed = upsertExerciseNoteSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const { exerciseId, note } = parsed.data;
+  try {
+    if (!(await findVisibleExercise(exerciseId, auth.user.id))) {
+      return { success: false, error: "Not found" };
+    }
+    if (note === "") {
+      await db
+        .delete(exerciseNotes)
+        .where(and(eq(exerciseNotes.userId, auth.user.id), eq(exerciseNotes.exerciseId, exerciseId)));
+    } else {
+      await db
+        .insert(exerciseNotes)
+        .values({ userId: auth.user.id, exerciseId, note })
+        .onConflictDoUpdate({
+          target: [exerciseNotes.userId, exerciseNotes.exerciseId],
+          set: { note, updatedAt: new Date() },
+        });
+    }
+    revalidatePath(`/exercises/${exerciseId}`);
+    return { success: true, data: undefined };
+  } catch (error) {
+    console.error("[upsertExerciseNote] failed", { exerciseId }, error);
+    return { success: false, error: "Failed to save note" };
   }
 }

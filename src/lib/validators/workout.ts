@@ -226,6 +226,11 @@ export const updateProgramExerciseNotesSchema = z.object({
   notes: z.string().trim().max(500),
 });
 
+export const upsertExerciseNoteSchema = z.object({
+  exerciseId: z.number().int().positive(),
+  note: z.string().trim().max(1000),
+});
+
 // How many qualifying sessions this exercise needs before a bump is suggested.
 // null restores the shared REQUIRED_HITS default. The ceiling is the consensus
 // window — asking for more hits than the window holds is unsatisfiable.

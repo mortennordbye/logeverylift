@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { exercisePrs, exercises, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { isUnverifiedPr } from "@/lib/utils/pr-provenance";
@@ -85,6 +85,25 @@ export type ExerciseProgress = {
   maxWeightKg: number;
   repsAtMaxWeight: number;
   totalVolume: number;
+};
+
+/** One completed session's sets of a single exercise, for its history list. */
+export type ExerciseHistorySession = {
+  sessionId: number;
+  date: string;
+  sets: {
+    id: number;
+    setNumber: number;
+    setType: string;
+    actualReps: number;
+    weightKg: string;
+    durationSeconds: number | null;
+    distanceMeters: number | null;
+    rir: number | null;
+    rpe: number | null;
+    isFailed: boolean;
+    notes: string | null;
+  }[];
 };
 
 export type MetricsData = {
@@ -1181,45 +1200,70 @@ export async function getRecentPRs(
 ): Promise<ActionResult<PrFeedEntry[]>> {
   const auth = await requireSession();
   try {
-    const rows = await db
-      .select({
-        id: exercisePrs.id,
-        exerciseId: exercisePrs.exerciseId,
-        exerciseName: exercises.name,
-        discipline: exercises.discipline,
-        prType: exercisePrs.prType,
-        value: exercisePrs.value,
-        weightKg: exercisePrs.weightKg,
-        distanceMeters: exercisePrs.distanceMeters,
-        bracket: exercisePrs.bracket,
-        achievedAt: exercisePrs.achievedAt,
-        supersededAt: exercisePrs.supersededAt,
-      })
-      .from(exercisePrs)
-      .innerJoin(exercises, eq(exercisePrs.exerciseId, exercises.id))
-      .where(eq(exercisePrs.userId, auth.user.id))
-      .orderBy(desc(exercisePrs.achievedAt))
-      .limit(limit);
-
-    const data: PrFeedEntry[] = rows.map((r) => ({
-      id: r.id,
-      exerciseId: r.exerciseId,
-      exerciseName: r.exerciseName,
-      prType: r.prType as PrFeedEntry["prType"],
-      value: Number(r.value),
-      weightKg: r.weightKg != null ? Number(r.weightKg) : null,
-      discipline: (r.discipline as Discipline | null) ?? null,
-      distanceMeters: r.distanceMeters != null ? Number(r.distanceMeters) : null,
-      bracket: r.bracket ?? null,
-      achievedAt: r.achievedAt.toISOString(),
-      isCurrent: r.supersededAt == null,
-      unverified: isUnverifiedPr(r.prType, r.achievedAt.toISOString()),
-    }));
+    const data = await fetchPrFeed(eq(exercisePrs.userId, auth.user.id), limit);
     return { success: true, data };
   } catch (err) {
     console.error("[getRecentPRs] failed", err);
     return { success: false, error: "Failed to load PRs" };
   }
+}
+
+/** The current user's standing records on one exercise, newest first. */
+export async function getExerciseRecords(
+  exerciseId: number,
+): Promise<ActionResult<PrFeedEntry[]>> {
+  const auth = await requireSession();
+  try {
+    const data = await fetchPrFeed(
+      and(
+        eq(exercisePrs.userId, auth.user.id),
+        eq(exercisePrs.exerciseId, exerciseId),
+        isNull(exercisePrs.supersededAt),
+      ),
+    );
+    return { success: true, data };
+  } catch (err) {
+    console.error("[getExerciseRecords] failed", { exerciseId }, err);
+    return { success: false, error: "Failed to load records" };
+  }
+}
+
+/** PR rows matching `where`, newest first. `where` must filter by user. */
+async function fetchPrFeed(where: SQL | undefined, limit = 100): Promise<PrFeedEntry[]> {
+  const rows = await db
+    .select({
+      id: exercisePrs.id,
+      exerciseId: exercisePrs.exerciseId,
+      exerciseName: exercises.name,
+      discipline: exercises.discipline,
+      prType: exercisePrs.prType,
+      value: exercisePrs.value,
+      weightKg: exercisePrs.weightKg,
+      distanceMeters: exercisePrs.distanceMeters,
+      bracket: exercisePrs.bracket,
+      achievedAt: exercisePrs.achievedAt,
+      supersededAt: exercisePrs.supersededAt,
+    })
+    .from(exercisePrs)
+    .innerJoin(exercises, eq(exercisePrs.exerciseId, exercises.id))
+    .where(where)
+    .orderBy(desc(exercisePrs.achievedAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.id,
+    exerciseId: r.exerciseId,
+    exerciseName: r.exerciseName,
+    prType: r.prType as PrFeedEntry["prType"],
+    value: Number(r.value),
+    weightKg: r.weightKg != null ? Number(r.weightKg) : null,
+    discipline: (r.discipline as Discipline | null) ?? null,
+    distanceMeters: r.distanceMeters != null ? Number(r.distanceMeters) : null,
+    bracket: r.bracket ?? null,
+    achievedAt: r.achievedAt.toISOString(),
+    isCurrent: r.supersededAt == null,
+    unverified: isUnverifiedPr(r.prType, r.achievedAt.toISOString()),
+  }));
 }
 
 // ── Exported actions ───────────────────────────────────────────────────────
@@ -1277,12 +1321,14 @@ export async function getExerciseProgress(
         ),
       )
       .groupBy(workoutSessions.date, workoutSessions.id)
-      .orderBy(asc(workoutSessions.date))
+      // Newest first so the limit keeps the latest sessions, then reversed for
+      // the chart, which reads left to right.
+      .orderBy(desc(workoutSessions.date), desc(workoutSessions.id))
       .limit(16);
 
     return {
       success: true,
-      data: rows.map((r) => ({
+      data: rows.reverse().map((r) => ({
         date: r.date,
         maxWeightKg: Number(r.maxWeightKg),
         repsAtMaxWeight: Number(r.repsAtMaxWeight ?? 1),
@@ -1292,6 +1338,69 @@ export async function getExerciseProgress(
   } catch (err) {
     console.error("[getExerciseProgress] failed", err);
     return { success: false, error: "Failed to load progress" };
+  }
+}
+
+/**
+ * The current user's last 20 completed sessions with this exercise, newest
+ * first, each with its sets of it in order.
+ */
+export async function getExerciseHistory(
+  exerciseId: number,
+): Promise<ActionResult<ExerciseHistorySession[]>> {
+  const auth = await requireSession();
+  try {
+    const sessions = await db
+      .selectDistinct({ id: workoutSessions.id, date: workoutSessions.date })
+      .from(workoutSessions)
+      .innerJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
+      .where(
+        and(
+          eq(workoutSessions.userId, auth.user.id),
+          eq(workoutSessions.isCompleted, true),
+          eq(workoutSets.exerciseId, exerciseId),
+        ),
+      )
+      .orderBy(desc(workoutSessions.date), desc(workoutSessions.id))
+      .limit(20);
+    if (sessions.length === 0) return { success: true, data: [] };
+
+    // Scoped to the sessions above, which are already the user's own.
+    const sets = await db
+      .select({
+        id: workoutSets.id,
+        sessionId: workoutSets.sessionId,
+        setNumber: workoutSets.setNumber,
+        setType: workoutSets.setType,
+        actualReps: workoutSets.actualReps,
+        weightKg: workoutSets.weightKg,
+        durationSeconds: workoutSets.durationSeconds,
+        distanceMeters: workoutSets.distanceMeters,
+        rir: workoutSets.rir,
+        rpe: workoutSets.rpe,
+        isFailed: workoutSets.isFailed,
+        notes: workoutSets.notes,
+      })
+      .from(workoutSets)
+      .where(
+        and(
+          inArray(workoutSets.sessionId, sessions.map((s) => s.id)),
+          eq(workoutSets.exerciseId, exerciseId),
+        ),
+      )
+      .orderBy(asc(workoutSets.setNumber), asc(workoutSets.id));
+
+    return {
+      success: true,
+      data: sessions.map((s) => ({
+        sessionId: s.id,
+        date: s.date,
+        sets: sets.filter((set) => set.sessionId === s.id),
+      })),
+    };
+  } catch (err) {
+    console.error("[getExerciseHistory] failed", { exerciseId }, err);
+    return { success: false, error: "Failed to load history" };
   }
 }
 
