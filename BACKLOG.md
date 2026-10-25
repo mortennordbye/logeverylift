@@ -164,6 +164,12 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Unblocked by:** Reproduce first: apply a suggestion to a set, then hard-reload that set's `/sets/[setId]` URL and check whether the editor shows the adjusted or the program value. If adjusted, there is nothing to fix.
 - **Touchpoints:** `src/components/features/SetEditView.tsx` (the `useState` block, ~lines 125–160), `src/contexts/workout-session-context.tsx` (`useRenderedOverrides` and the restore effect).
 
+### The program setup-notes spec lost its typed text once on CI
+- **What:** In CI run 40220530214 (PR #156, 2026-10-25), `program exercise notes save on the program and show in the workout` in `e2e/hidden-data.spec.ts` failed on WebKit: the text it filled into "Setup notes" was gone by the end, and `updateProgramExerciseNotes` was never called (the trace has one Server Action POST, a no-argument call returning `0`). The spec already waits for React to hydrate the textarea before filling it, so the likely cause is the screen remounting shortly after hydration, which would also wipe text a real user had started typing. It passed 15 of 15 locally and on every main run.
+- **Why deferred:** Found while shipping the exercise detail page, which does not change that screen; the cause was not found in the time spent.
+- **Unblocked by:** Repeat the spec under CPU throttling (or on CI with `--repeat-each`) and log mounts of `WorkoutSetsClient` to confirm or rule out a remount; the run's `playwright-report-shard-1` artifact has the trace.
+- **Touchpoints:** `e2e/hidden-data.spec.ts`, `src/components/features/WorkoutSetsClient.tsx` (`handleNotesBlur`), `src/components/features/PageTransition.tsx`.
+
 ### One e2e worker started on the sign-in page in a main CI run
 - **What:** In CI run 40006288669 (the merge of #117, 2026-10-23), every spec in one WebKit worker of E2E shard 1 (`parallelIndex` 1, seven specs across ai-setup, consent, exercise-timer, page-transition, progression-suggestion and readiness) failed because the page was the sign-in form, as if that worker's saved session was invalid from its first spec on. Its `authenticate worker 1` setup had passed. The same commit passed on the PR, and a re-run of the failed jobs passed.
 - **Why deferred:** Found while shipping an unrelated illustration batch; the logs show no server error, and the cause was not found in the time spent.
