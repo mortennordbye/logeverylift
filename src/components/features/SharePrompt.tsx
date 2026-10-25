@@ -18,7 +18,7 @@ let shownThisSession = false;
  * appears once and then stays away for the interval in
  * src/lib/utils/share-prompt.ts, whether or not the user answers.
  */
-export function SharePrompt() {
+export function SharePrompt({ friendCode }: { friendCode: string | null }) {
   const [open, setOpen] = useState(() => !shownThisSession);
   const { showToast } = useToast();
 
@@ -36,7 +36,7 @@ export function SharePrompt() {
 
   async function handleShare() {
     close();
-    if ((await shareApp(window.location.origin)) === "copied") {
+    if ((await shareApp(window.location.origin, friendCode)) === "copied") {
       showToast({ message: "Link copied" });
     }
   }

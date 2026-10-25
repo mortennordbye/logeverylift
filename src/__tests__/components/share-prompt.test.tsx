@@ -14,7 +14,7 @@ async function renderPrompt() {
   const { ToastProvider } = await import("@/contexts/toast-context");
   return render(
     <ToastProvider>
-      <SharePrompt />
+      <SharePrompt friendCode={null} />
     </ToastProvider>,
   );
 }
@@ -38,11 +38,11 @@ describe("SharePrompt", () => {
     // mount the card again from a render made before the ask was recorded.
     const { SharePrompt } = await import("@/components/features/SharePrompt");
     const { ToastProvider } = await import("@/contexts/toast-context");
-    const first = render(<ToastProvider><SharePrompt /></ToastProvider>);
+    const first = render(<ToastProvider><SharePrompt friendCode={null} /></ToastProvider>);
     await act(async () => screen.getByRole("button", { name: "Not now" }).click());
     first.unmount();
 
-    render(<ToastProvider><SharePrompt /></ToastProvider>);
+    render(<ToastProvider><SharePrompt friendCode={null} /></ToastProvider>);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(markSharePromptSeen).toHaveBeenCalledOnce();
   });

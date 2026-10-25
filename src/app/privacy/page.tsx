@@ -122,6 +122,11 @@ export default function PrivacyPage() {
         heart rate zones and readiness are never shown to them.
       </p>
       <p>
+        <strong>Invite links:</strong> the link you share from the app carries a code tied to your account. Someone
+        who creates an account through it starts as your friend, and either of you can remove the other in Friends.
+        The code only works for new accounts, and the page it opens does not show your name.
+      </p>
+      <p>
         <strong>Support and debugging:</strong> the controller can view the app as a given user to investigate a
         problem. This is used only when needed to fix something, and such a session is marked as one in the
         database.

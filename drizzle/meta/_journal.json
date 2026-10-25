@@ -442,6 +442,13 @@
       "when": 1792914906675,
       "tag": "0062_friends_seen_at",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1792916930511,
+      "tag": "0063_friend_code",
+      "breakpoints": true
     }
   ]
 }
