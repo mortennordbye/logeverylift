@@ -13,6 +13,7 @@ import { z } from "zod";
 // Nominatim and Overpass ask for an identifying User-Agent.
 const OSM_HEADERS = { "User-Agent": "LogEveryLift (+https://logeverylift.com)", Accept: "application/json" };
 const NEAR_ME_RADIUS_M = 3000;
+const NEAR_ME_BUSY = "Finding gyms near you isn't working right now. Try again later, or search by name.";
 
 const searchGymsSchema = z.union([
   z.object({ query: z.string().trim().min(2).max(100) }),
@@ -90,20 +91,30 @@ export async function searchGyms(data: unknown): Promise<ActionResult<GymResult[
     }
 
     const { lat, lng } = parsed.data as { lat: number; lng: number };
-    const query = `[out:json][timeout:10];nwr["leisure"~"^(fitness_centre|sports_centre)$"](around:${NEAR_ME_RADIUS_M},${roundCoordinate(lat)},${roundCoordinate(lng)});out center 30;`;
-    const res = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      headers: { ...OSM_HEADERS, "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ data: query }).toString(),
-      signal: AbortSignal.timeout(12000),
-    });
-    if (!res.ok) throw new Error(`overpass ${res.status}`);
-    const results = parseOverpass(await res.json());
-    remember(results);
-    return { success: true, data: results };
+    const query = `[out:json][timeout:25];nwr["leisure"~"^(fitness_centre|sports_centre)$"](around:${NEAR_ME_RADIUS_M},${roundCoordinate(lat)},${roundCoordinate(lng)});out center 30;`;
+    // The public Overpass server is often at capacity: it answers 502/504 at
+    // once, or takes 20-40 s. Retry a busy answer once, then point at name
+    // search, which runs on Nominatim and stays fast.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+      const res = await fetch("https://overpass-api.de/api/interpreter", {
+        method: "POST",
+        headers: { ...OSM_HEADERS, "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ data: query }).toString(),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (res.ok) {
+        const results = parseOverpass(await res.json());
+        remember(results);
+        return { success: true, data: results };
+      }
+      console.error("[searchGyms] overpass_busy", res.status);
+      if (res.status !== 502 && res.status !== 504 && res.status !== 429) break;
+    }
+    return { success: false, error: NEAR_ME_BUSY };
   } catch (e) {
     console.error("[searchGyms] failed", e instanceof Error ? e.message : "unknown");
-    return { success: false, error: "Gym search is unavailable right now" };
+    return { success: false, error: key === null ? NEAR_ME_BUSY : "Gym search is unavailable right now" };
   }
 }
 

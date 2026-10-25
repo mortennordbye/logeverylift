@@ -14,13 +14,13 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GymResult[] | null>(null);
-  const [searching, setSearching] = useState(false);
+  const [searching, setSearching] = useState<false | "name" | "near">(false);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState<GymResult | null>(null);
   const [saving, setSaving] = useState(false);
 
   async function runSearch(input: { query: string } | { lat: number; lng: number }) {
-    setSearching(true);
+    setSearching("query" in input ? "name" : "near");
     setError("");
     const result = await callAction(searchGyms(input));
     setSearching(false);
@@ -39,7 +39,7 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
       setError("Location isn't available on this device");
       return;
     }
-    setSearching(true);
+    setSearching("near");
     setError("");
     navigator.geolocation.getCurrentPosition(
       (pos) => void runSearch({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
@@ -93,7 +93,7 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
         />
         <button
           type="submit"
-          disabled={searching || query.trim().length < 2}
+          disabled={searching !== false || query.trim().length < 2}
           aria-label="Search"
           className="w-12 rounded-xl bg-primary text-primary-foreground flex items-center justify-center active:opacity-80 disabled:opacity-50"
         >
@@ -102,7 +102,7 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
       </form>
       <button
         onClick={handleNearMe}
-        disabled={searching}
+        disabled={searching !== false}
         className="w-full h-11 rounded-xl border border-border flex items-center justify-center gap-2 text-sm font-medium active:opacity-70 disabled:opacity-50"
       >
         <LocateFixed className="w-4 h-4" />
@@ -112,8 +112,11 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
       {error && <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">{error}</p>}
 
       {searching ? (
-        <div className="flex justify-center py-6">
+        <div className="flex flex-col items-center gap-2 py-6">
           <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          {searching === "near" && (
+            <p className="text-xs text-muted-foreground">Looking for gyms around you. This can take up to half a minute.</p>
+          )}
         </div>
       ) : results !== null && (
         results.length === 0 ? (
