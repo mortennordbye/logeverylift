@@ -65,7 +65,7 @@ test("an invite link opens the front page and keeps the token through sign-up", 
   }
 });
 
-test("signing up through a friend's share link starts the two as friends", async ({ page }, testInfo) => {
+test("signing up through a friend's share link sends them a friend request", async ({ page }, testInfo) => {
   const [inviter] = await testDb()
     .select({ id: users.id })
     .from(users)
@@ -78,7 +78,7 @@ test("signing up through a friend's share link starts the two as friends", async
     await page.goto(`/welcome?ref=${code}`);
     await page.locator(`a[href="/signup?ref=${code}"]`).first().click();
     await page.waitForURL((url) => url.pathname === "/signup");
-    await expect(page.getByText("You'll start as friends with the person who invited you")).toBeVisible();
+    await expect(page.getByText("The person who invited you gets a friend request from you")).toBeVisible();
 
     await page.waitForLoadState("networkidle");
     await page.getByLabel("Name").fill("Referred Friend");
@@ -90,8 +90,8 @@ test("signing up through a friend's share link starts the two as friends", async
     await page.waitForURL((url) => url.pathname === "/");
 
     const [created] = await testDb().select({ id: users.id }).from(users).where(eq(users.email, email));
-    const rows = await testDb().select().from(friendships).where(eq(friendships.addresseeId, created.id));
-    expect(rows).toEqual([expect.objectContaining({ requesterId: inviter.id, status: "accepted" })]);
+    const rows = await testDb().select().from(friendships).where(eq(friendships.requesterId, created.id));
+    expect(rows).toEqual([expect.objectContaining({ addresseeId: inviter.id, status: "pending" })]);
   } finally {
     await testDb().delete(users).where(eq(users.email, email));
     await testDb().update(users).set({ friendCode: null }).where(eq(users.id, inviter.id));

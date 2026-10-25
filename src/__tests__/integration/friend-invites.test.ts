@@ -29,7 +29,7 @@ describe("getMyFriendCode", () => {
 });
 
 describe("redeemFriendCode", () => {
-  it("makes a new account friends with the person whose link it used, once", async () => {
+  it("sends the person whose link a new account used a friend request, once", async () => {
     const inviter = await createUser();
     const code = await codeOf(inviter.id);
     const newcomer = await createUser();
@@ -39,7 +39,9 @@ describe("redeemFriendCode", () => {
 
     const rows = await db.select().from(friendships);
     expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ requesterId: inviter.id, addresseeId: newcomer.id, status: "accepted" });
+    // A request for the sharer to approve, not a friendship: a forwarded link
+    // must not show a stranger their workouts.
+    expect(rows[0]).toMatchObject({ requesterId: newcomer.id, addresseeId: inviter.id, status: "pending" });
   });
 
   it("does nothing for an account older than an hour", async () => {
@@ -62,6 +64,15 @@ describe("redeemFriendCode", () => {
     const newcomer = await createUser();
     await db.insert(friendships).values({ requesterId: newcomer.id, addresseeId: inviter.id, status: "declined" });
     expect(await redeemAs(newcomer.id, code)).toBe(false);
+  });
+
+  it("sends one request even when redeemed twice at once", async () => {
+    const inviter = await createUser();
+    const code = await codeOf(inviter.id);
+    const newcomer = await createUser();
+    asUser(newcomer.id);
+    await Promise.all([redeemFriendCode({ code }), redeemFriendCode({ code })]);
+    expect(await db.select().from(friendships)).toHaveLength(1);
   });
 
   it("rejects malformed input", async () => {

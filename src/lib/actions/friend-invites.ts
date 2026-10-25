@@ -4,7 +4,7 @@ import { db } from "@/db";
 import { friendships, users } from "@/db/schema";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
-import { and, eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull, or, sql } from "drizzle-orm";
 import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
@@ -34,7 +34,8 @@ export async function getMyFriendCode(): Promise<ActionResult<string>> {
 }
 
 /**
- * Make the person whose link a new account signed up through its friend. Runs
+ * Send the person whose link a new account signed up through a friend
+ * request from it, for them to accept. Runs
  * right after sign-up; an unknown code, the user's own code, an account older
  * than REDEEM_WINDOW_MS or an existing friendship (any status) is a no-op.
  */
@@ -54,20 +55,27 @@ export async function redeemFriendCode(data: unknown): Promise<ActionResult<{ co
       return { success: true, data: { connected: false } };
     }
 
-    const [existing] = await db
-      .select({ id: friendships.id })
-      .from(friendships)
-      .where(
-        or(
-          and(eq(friendships.requesterId, me), eq(friendships.addresseeId, inviter.id)),
-          and(eq(friendships.requesterId, inviter.id), eq(friendships.addresseeId, me)),
-        ),
-      )
-      .limit(1);
-    if (existing) return { success: true, data: { connected: false } };
-
-    await db.insert(friendships).values({ requesterId: inviter.id, addresseeId: me, status: "accepted" });
-    return { success: true, data: { connected: true } };
+    // Check and insert under a lock on the pair, so two redeems at once
+    // (two tabs, a retried request) can't both insert.
+    const connected = await db.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${[me, inviter.id].sort().join(":")}))`);
+      const [existing] = await tx
+        .select({ id: friendships.id })
+        .from(friendships)
+        .where(
+          or(
+            and(eq(friendships.requesterId, me), eq(friendships.addresseeId, inviter.id)),
+            and(eq(friendships.requesterId, inviter.id), eq(friendships.addresseeId, me)),
+          ),
+        )
+        .limit(1);
+      if (existing) return false;
+      // A request for the sharer to approve: a forwarded link must not show a
+      // stranger their workouts.
+      await tx.insert(friendships).values({ requesterId: me, addresseeId: inviter.id, status: "pending" });
+      return true;
+    });
+    return { success: true, data: { connected } };
   } catch (e) {
     console.error("[redeemFriendCode] failed", e);
     return { success: false, error: "Failed to connect" };

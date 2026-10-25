@@ -42,3 +42,8 @@ export const sendNudgeSchema = z.object({
 export const friendSessionSchema = z.object({
   sessionId: z.number().int().positive(),
 });
+
+export const markFriendsSeenSchema = z.object({
+  // ISO 8601 in UTC; keeps the database's microseconds (a Date would drop them).
+  at: z.string().datetime(),
+});

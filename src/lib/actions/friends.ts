@@ -8,11 +8,13 @@ import {
   searchUsersSchema,
   sendFriendRequestSchema,
   friendSessionSchema,
+  markFriendsSeenSchema,
   sendNudgeSchema,
   toggleReactionSchema,
   updateActivityPrivacySchema,
 } from "@/lib/validators/friends";
 import { loggedSetLabel } from "@/lib/utils/format";
+import { checkRateLimit } from "@/lib/rate-limit";
 import { requireSession } from "@/lib/utils/session";
 import type {
   ActionResult,
@@ -30,6 +32,19 @@ import type {
 } from "@/types/workout";
 import { and, count, eq, gt, gte, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+
+const DECLINE_COOLDOWN_MS = 30 * 24 * 60 * 60 * 1000;
+
+/** The database's clock, for stamping what the Friends page has read. */
+export async function getFriendsReadTime(): Promise<string> {
+  await requireSession();
+  // As text, to keep microseconds: a reaction in the same millisecond as the
+  // read must not fall on the seen side of it.
+  const { rows } = await db.execute<{ now: string }>(
+    sql`select to_char(now() at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as now`,
+  );
+  return rows[0].now;
+}
 
 // ─── Reaction summary ────────────────────────────────────────────────────────
 
@@ -153,6 +168,10 @@ export async function sendFriendRequest(data: unknown): Promise<ActionResult<voi
   if (addresseeId === me) {
     return { success: false, error: "You cannot add yourself as a friend" };
   }
+  // The gym map lists strangers, so cap how many people one account can ask.
+  if (checkRateLimit(`friend-requests:${me}`, { windowMs: 60 * 60 * 1000, max: 20 })) {
+    return { success: false, error: "Too many friend requests. Try again later." };
+  }
 
   try {
     // Check the target user exists
@@ -176,7 +195,11 @@ export async function sendFriendRequest(data: unknown): Promise<ActionResult<voi
       if (existing.status === "pending") {
         return { success: false, error: "A friend request already exists" };
       }
-      // declined — delete the old row so a fresh request can be sent
+      // Declined: a fresh request only after 30 days, so a no isn't met with
+      // the same request again straight away.
+      if (existing.updatedAt > new Date(Date.now() - DECLINE_COOLDOWN_MS)) {
+        return { success: false, error: "You can't send this person a request right now" };
+      }
       await db.delete(friendships).where(eq(friendships.id, existing.id));
     }
 
@@ -1010,15 +1033,12 @@ export async function getFriendsBadgeCount(): Promise<ActionResult<number>> {
   const me = session.user.id;
 
   try {
-    const [user] = await db
-      .select({ seenAt: users.friendsSeenAt })
-      .from(users)
-      .where(eq(users.id, me))
-      .limit(1);
-    // Nudges only show for 48 h, so older ones never count.
-    const nudgeCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    const nudgeSince = user?.seenAt && user.seenAt > nudgeCutoff ? user.seenAt : nudgeCutoff;
-    const reactionSince = user?.seenAt ?? new Date(0);
+    // Compared in SQL: read into a JS Date, the seen mark would lose its
+    // microseconds and count an item from the same millisecond as unseen.
+    const seenAt = sql`(select ${users.friendsSeenAt} from ${users} where ${users.id} = ${me})`;
+    // Nudges only show for 48 h and reactions for 7 days, so older never count.
+    const nudgeSince = sql`greatest(${seenAt}, now() - interval '48 hours')`;
+    const reactionSince = sql`greatest(${seenAt}, now() - interval '7 days')`;
 
     const [[requests], [nudgeCount], [reactionCount]] = await Promise.all([
       db
@@ -1043,12 +1063,24 @@ export async function getFriendsBadgeCount(): Promise<ActionResult<number>> {
   }
 }
 
-export async function markFriendsSeen(): Promise<ActionResult<void>> {
+/**
+ * Mark friend activity seen up to `at`: the database time the Friends page
+ * read it (getFriendsReadTime), so anything arriving after the read still
+ * counts. Never moves the mark back, never past now.
+ */
+export async function markFriendsSeen(data: unknown): Promise<ActionResult<void>> {
   const session = await requireSession();
+  const parsed = markFriendsSeenSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Invalid input" };
   try {
-    // The database clock, like the defaultNow() on nudges and reactions, so a
-    // skew between app and database can't hide or resurface an item.
-    await db.update(users).set({ friendsSeenAt: sql`now()` }).where(eq(users.id, session.user.id));
+    const at = parsed.data.at;
+    await db
+      .update(users)
+      .set({
+        friendsSeenAt: sql`greatest(${users.friendsSeenAt}, least(${at}::timestamp, now()))`,
+      })
+      .where(eq(users.id, session.user.id));
+    revalidatePath("/more");
     return { success: true, data: undefined };
   } catch (e) {
     console.error("[markFriendsSeen] failed", e);
