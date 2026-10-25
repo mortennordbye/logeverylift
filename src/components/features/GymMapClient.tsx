@@ -9,6 +9,14 @@ import { Loader2, MapPin, UserCheck, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 
+// lucide's Dumbbell, as markup: Leaflet markers are HTML strings, not React.
+const DUMBBELL_SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round" class="w-[55%] h-[55%]" aria-hidden="true">' +
+  '<path d="M17.596 12.768a2 2 0 1 0 2.829-2.829l-1.768-1.767a2 2 0 0 0 2.828-2.829l-2.828-2.828a2 2 0 0 0-2.829 2.828l-1.767-1.768a2 2 0 1 0-2.829 2.829z"/>' +
+  '<path d="m2.5 21.5 1.4-1.4"/><path d="m20.1 3.9 1.4-1.4"/>' +
+  '<path d="M5.343 21.485a2 2 0 1 0 2.829-2.828l1.767 1.768a2 2 0 1 0 2.829-2.829l-6.364-6.364a2 2 0 1 0-2.829 2.829l1.768 1.767a2 2 0 0 0-2.828 2.829z"/>' +
+  '<path d="m9.6 14.4 4.8-4.8"/></svg>';
+
 // Southern Norway, for a map with no gyms on it yet.
 const DEFAULT_VIEW: [number, number] = [60.5, 9.5];
 
@@ -33,10 +41,11 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
       L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        // Standard OSM tiles are loud; mute them, and in dark mode invert them
-        // to match the app instead of a bright rectangle in a dark page.
-        className:
-          "saturate-[0.35] brightness-[1.04] dark:invert dark:hue-rotate-180 dark:brightness-[0.8] dark:contrast-[0.9] dark:saturate-[0.3]",
+        // Standard OSM tiles are bright and loud; inverted and muted they make
+        // a dark map in either theme, which the glowing pins stand out on.
+        // One filter chain: Tailwind's separate filter classes always run
+        // brightness before invert, which brightened the map instead.
+        className: "[filter:invert(1)_hue-rotate(180deg)_brightness(0.6)_contrast(1.25)_saturate(0.3)]",
       }).addTo(map);
       // View first: Leaflet only creates marker elements once the map has one.
       const mine = pins.find((p) => p.id === myGymId);
@@ -46,13 +55,21 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
       } else map.setView(DEFAULT_VIEW, 5);
       for (const pin of pins) {
         const mine = pin.id === myGymId;
-        const size = mine ? 34 : 28;
-        const color = mine ? "bg-orange-500 text-white" : "bg-primary text-primary-foreground";
+        const size = mine ? 44 : 38;
+        const look = mine
+          ? "from-orange-400 to-orange-600 shadow-orange-500/70"
+          : "from-sky-400 to-indigo-600 shadow-sky-500/60";
         const marker = L.marker([pin.lat, pin.lng], {
           icon: L.divIcon({
             className: "",
-            // A pill with the member count, so the map says something before a tap.
-            html: `<span class="flex items-center justify-center w-full h-full rounded-full ring-[3px] ring-background shadow-lg text-xs font-bold tabular-nums ${color}">${pin.memberCount}</span>`,
+            // A glowing dumbbell, a pulse on your own gym, and the member count
+            // as a badge so the map says something before a tap.
+            html:
+              `<span class="relative block w-full h-full">` +
+              (mine ? `<span class="absolute inset-0 rounded-full bg-orange-500/50 animate-ping"></span>` : "") +
+              `<span class="relative flex items-center justify-center w-full h-full rounded-full bg-gradient-to-br text-white ring-2 ring-white/85 shadow-[0_0_18px] ${look}">${DUMBBELL_SVG}</span>` +
+              `<span class="absolute -top-1.5 -right-1.5 min-w-5 h-5 px-1 rounded-full bg-white text-neutral-900 text-[11px] font-bold tabular-nums flex items-center justify-center shadow">${pin.memberCount}</span>` +
+              `</span>`,
             iconSize: [size, size],
           }),
           zIndexOffset: mine ? 1000 : 0,
