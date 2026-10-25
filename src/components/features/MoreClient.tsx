@@ -106,7 +106,7 @@ const adminItem: MoreItem = {
   description: "Users, insights, and test data",
 };
 
-export function MoreClient({ role }: { role: string }) {
+export function MoreClient({ role, friendsBadge }: { role: string; friendsBadge: number }) {
   const isAdmin = role === "admin";
   const { data: session } = authClient.useSession();
   const [stopping, setStopping] = useState(false);
@@ -192,6 +192,14 @@ export function MoreClient({ role }: { role: string }) {
                           {item.description}
                         </div>
                       </div>
+                      {"href" in item && item.href === "/more/friends" && friendsBadge > 0 && (
+                        <span
+                          aria-label={`${friendsBadge} new`}
+                          className="min-w-5 h-5 px-1.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold flex items-center justify-center flex-none"
+                        >
+                          {friendsBadge}
+                        </span>
+                      )}
                       <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
                     </>
                   );

@@ -1,5 +1,13 @@
 import { FriendsClient } from "@/components/features/FriendsClient";
-import { getFriends, getFriendsActivityFeed, getFriendsLeaderboard, getPendingRequests, getReceivedNudges } from "@/lib/actions/friends";
+import {
+  getFriends,
+  getFriendsActivityFeed,
+  getFriendsLeaderboard,
+  getPendingRequests,
+  getReactionsToMyWorkouts,
+  getReceivedNudges,
+  markFriendsSeen,
+} from "@/lib/actions/friends";
 import { requireSession } from "@/lib/utils/session";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
@@ -7,13 +15,17 @@ import Link from "next/link";
 export default async function FriendsPage() {
   const session = await requireSession();
 
-  const [friendsResult, pendingResult, feedResult, leaderboardResult, nudgesResult] = await Promise.all([
-    getFriends(),
-    getPendingRequests(),
-    getFriendsActivityFeed(),
-    getFriendsLeaderboard(),
-    getReceivedNudges(),
-  ]);
+  const [friendsResult, pendingResult, feedResult, leaderboardResult, nudgesResult, reactionsResult] =
+    await Promise.all([
+      getFriends(),
+      getPendingRequests(),
+      getFriendsActivityFeed(),
+      getFriendsLeaderboard(),
+      getReceivedNudges(),
+      getReactionsToMyWorkouts(),
+    ]);
+  // Everything above is now on screen, so it stops counting towards the badge.
+  await markFriendsSeen();
 
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
@@ -34,6 +46,7 @@ export default async function FriendsPage() {
         activityFeed={feedResult.success ? feedResult.data : []}
         leaderboard={leaderboardResult.success ? leaderboardResult.data : []}
         nudges={nudgesResult.success ? nudgesResult.data : []}
+        reactions={reactionsResult.success ? reactionsResult.data : []}
         currentUserId={session.user.id}
       />
     </div>

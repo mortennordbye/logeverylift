@@ -25,7 +25,7 @@
  */
 
 import { db } from "@/db";
-import { exercisePrs, exercises, programExercises, programSets, programs, users, workoutSessions, workoutSets } from "@/db/schema";
+import { exercisePrs, exercises, programExercises, programSets, programs, users, workoutReactions, workoutSessions, workoutSets } from "@/db/schema";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import {
     matchingPaceBrackets,
@@ -1066,7 +1066,7 @@ export async function getSessionDetail(
 ): Promise<ActionResult<SessionDetail>> {
   const auth = await requireSession();
   try {
-    const [[sessionRow], setsRows] = await Promise.all([
+    const [[sessionRow], setsRows, reactions] = await Promise.all([
       db
         .select({
           id: workoutSessions.id,
@@ -1103,6 +1103,18 @@ export async function getSessionDetail(
           ),
         )
         .orderBy(workoutSets.exerciseId, workoutSets.setNumber),
+      db
+        .select({ emoji: workoutReactions.emoji, fromName: users.name })
+        .from(workoutReactions)
+        .innerJoin(users, eq(users.id, workoutReactions.userId))
+        .innerJoin(workoutSessions, eq(workoutSessions.id, workoutReactions.sessionId))
+        .where(
+          and(
+            eq(workoutReactions.sessionId, sessionId),
+            eq(workoutSessions.userId, auth.user.id),
+          ),
+        )
+        .orderBy(workoutReactions.createdAt),
     ]);
 
     if (!sessionRow) {
@@ -1131,6 +1143,7 @@ export async function getSessionDetail(
         ...sessionRow,
         programName: sessionRow.programName ?? null,
         setsByExercise: Array.from(exerciseMap.values()),
+        reactions,
       },
     };
   } catch (error) {

@@ -1,8 +1,8 @@
 "use client";
 
-import { shareProgram } from "@/lib/actions/program-shares";
+import { getOutgoingShares, revokeShare, shareProgram } from "@/lib/actions/program-shares";
 import { callAction } from "@/lib/utils/stale-bundle";
-import type { FriendWithActivity } from "@/types/workout";
+import type { FriendWithActivity, OutgoingShare } from "@/types/workout";
 import { Check, Download, Loader2, Share2, Users } from "lucide-react";
 import { useState } from "react";
 
@@ -15,22 +15,37 @@ interface Props {
 
 export function ProgramShareButton({ programId, friends, onExport, exporting }: Props) {
   const [open, setOpen] = useState(false);
-  const [sharingTo, setSharingTo] = useState<string | null>(null);
-  const [sharedTo, setSharedTo] = useState<Set<string>>(new Set());
+  const [busyFor, setBusyFor] = useState<string | null>(null);
+  const [shares, setShares] = useState<OutgoingShare[]>([]);
+
+  async function loadShares() {
+    const result = await callAction(getOutgoingShares(programId));
+    if (result.success) setShares(result.data);
+  }
+
+  function handleOpen() {
+    setOpen(true);
+    void loadShares();
+  }
 
   async function handleShare(friendUserId: string) {
-    setSharingTo(friendUserId);
+    setBusyFor(friendUserId);
     const result = await callAction(shareProgram({ programId, friendUserId }));
-    if (result.success) {
-      setSharedTo((prev) => new Set([...prev, friendUserId]));
-    }
-    setSharingTo(null);
+    if (result.success) await loadShares();
+    setBusyFor(null);
+  }
+
+  async function handleRevoke(friendUserId: string, shareId: number) {
+    setBusyFor(friendUserId);
+    const result = await callAction(revokeShare(shareId));
+    if (result.success) await loadShares();
+    setBusyFor(null);
   }
 
   return (
     <>
       <button
-        onClick={() => setOpen(true)}
+        onClick={handleOpen}
         className="flex items-center gap-1.5 h-9 px-3 rounded-lg border border-border text-sm font-medium active:opacity-70"
       >
         <Share2 className="w-4 h-4" />
@@ -62,8 +77,10 @@ export function ProgramShareButton({ programId, friends, onExport, exporting }: 
 
             <div className="overflow-y-auto divide-y divide-border">
               {friends.length > 0 && friends.map((friend) => {
-                const alreadyShared = sharedTo.has(friend.userId);
-                const loading = sharingTo === friend.userId;
+                // Only a share the friend hasn't copied yet can be taken back;
+                // once copied, the program is theirs.
+                const pending = shares.find((s) => s.sharedWithUserId === friend.userId && s.copiedProgramId === null);
+                const loading = busyFor === friend.userId;
                 const initials = friend.name
                   .split(" ")
                   .map((w) => w[0])
@@ -82,11 +99,21 @@ export function ProgramShareButton({ programId, friends, onExport, exporting }: 
                       )}
                     </div>
                     <p className="flex-1 font-medium truncate">{friend.name}</p>
-                    {alreadyShared ? (
-                      <div className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400 shrink-0">
-                        <Check className="w-4 h-4" />
-                        Sent
-                      </div>
+                    {pending ? (
+                      <>
+                        <div className="flex items-center gap-1 text-sm text-green-600 dark:text-green-400 shrink-0">
+                          <Check className="w-4 h-4" />
+                          Sent
+                        </div>
+                        <button
+                          onClick={() => handleRevoke(friend.userId, pending.shareId)}
+                          disabled={loading}
+                          aria-label={`Revoke share with ${friend.name}`}
+                          className="h-11 px-2 text-sm text-destructive font-medium active:opacity-70 disabled:opacity-50 shrink-0"
+                        >
+                          {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : "Revoke"}
+                        </button>
+                      </>
                     ) : (
                       <button
                         onClick={() => handleShare(friend.userId)}

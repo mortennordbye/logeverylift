@@ -435,6 +435,13 @@
       "when": 1792739186186,
       "tag": "0061_gdpr_consent",
       "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1792914906675,
+      "tag": "0062_friends_seen_at",
+      "breakpoints": true
     }
   ]
 }

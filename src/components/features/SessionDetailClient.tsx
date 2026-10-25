@@ -114,6 +114,11 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
         {detail.notes && (
           <p className="mt-3 text-sm text-muted-foreground">{detail.notes}</p>
         )}
+        {detail.reactions.length > 0 && (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {detail.reactions.map((r) => `${r.emoji} ${r.fromName}`).join(" · ")}
+          </p>
+        )}
 
         {/* Exercises */}
         <div className="mt-6 space-y-6">

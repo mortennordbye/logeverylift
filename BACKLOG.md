@@ -256,11 +256,11 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Unblocked by:** A need for immediate revocation — then call `auth.api.getSession({ query: { disableCookieCache: true } })` inside `requireAdmin()` / the ban check, or drop `cookieCache`.
 - **Touchpoints:** `src/lib/auth.ts`, `src/lib/utils/session.ts`.
 
-### Minor: weight float comparison logs redundant history entries; reactions ignore privacy flag
-- **What:** (1) MCP `update_profile` / `manage_weight` and their Server-Action originals compare a JS double against a Postgres `real` weight with `!==`, so re-sending the same weight can log a duplicate `user_weight_entry`. (2) `friends.ts toggleReaction` doesn't check the target's `showActivityToFriends` flag, so a friend can react to a session a user has hidden.
-- **Why deferred:** Both are low-harm (data-quality / minor privacy), not data loss or a leak.
-- **Unblocked by:** Caring about history cleanliness (round/compare at 0.01) or the privacy flag (add the `showActivityToFriends` check to `toggleReaction`).
-- **Touchpoints:** `src/lib/mcp/tools/profile.ts`, `src/lib/actions/profile.ts`, `src/lib/actions/friends.ts`.
+### Minor: weight float comparison logs redundant history entries
+- **What:** MCP `update_profile` / `manage_weight` and their Server-Action originals compare a JS double against a Postgres `real` weight with `!==`, so re-sending the same weight can log a duplicate `user_weight_entry`.
+- **Why deferred:** Low-harm data-quality issue, not data loss or a leak.
+- **Unblocked by:** Caring about history cleanliness (round/compare at 0.01).
+- **Touchpoints:** `src/lib/mcp/tools/profile.ts`, `src/lib/actions/profile.ts`.
 
 ### MCP OAuth dynamic client registration is open
 - **What:** The Better Auth `mcp` plugin exposes a dynamic client `registration_endpoint`, so any client can self-register an OAuth app. Access still requires the user to log in and consent, so this isn't a data-exposure hole — but it allows unbounded `oauth_application` rows.
