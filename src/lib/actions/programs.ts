@@ -9,11 +9,13 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exercise-type";
+import { warmupRamp } from "@/lib/utils/plates";
 import { judgingRuleChanged, type ProgressionAdvance } from "@/lib/utils/progression";
 import { requireSession } from "@/lib/utils/session";
 import {
   addExerciseToProgramSchema,
   addProgramSetSchema,
+  addWarmupSetsSchema,
   applyProgressionToPlanSchema,
   createProgramSchema,
   deleteProgramSetSchema,
@@ -1108,6 +1110,94 @@ export async function reorderProgramSets(
   } catch (err) {
     console.error("[reorderProgramSets] failed", err);
     return { success: false, error: "Failed to reorder sets" };
+  }
+}
+
+/** Rest after each generated warm-up set. */
+const WARMUP_REST_SECONDS = 60;
+
+/**
+ * Puts a warm-up ramp (see warmupRamp) in front of a barbell exercise's sets,
+ * worked out from the first working set's weight. Every existing set moves
+ * down by the number of warm-ups, and so do the rows already logged against
+ * them in workouts still in progress, the same way reorderProgramSets moves
+ * them: the list sends positions in the new order from here on.
+ */
+export async function addWarmupSets(
+  data: unknown,
+): Promise<ActionResult<ProgramSet[]>> {
+  const auth = await requireSession();
+  const validation = addWarmupSetsSchema.safeParse(data);
+  if (!validation.success) return { success: false, error: "Invalid input" };
+  const { programExerciseId } = validation.data;
+  try {
+    const result = await db.transaction(async (tx): Promise<
+      { error: string } | { programId: number; inserted: ProgramSet[] }
+    > => {
+      // Locks the slot so a double tap can't add the ramp twice: the second
+      // call waits here, then sees the first one's warm-ups.
+      const [pe] = await tx
+        .select({
+          programId: programExercises.programId,
+          userId: programs.userId,
+          equipment: exercises.equipment,
+        })
+        .from(programExercises)
+        .innerJoin(programs, eq(programs.id, programExercises.programId))
+        .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+        .where(eq(programExercises.id, programExerciseId))
+        .for("update", { of: programExercises });
+      if (!pe || pe.userId !== auth.user.id) return { error: "Not found" };
+      if (pe.equipment !== "barbell") return { error: "Warm-ups are for barbell exercises" };
+
+      const existing = await tx
+        .select()
+        .from(programSets)
+        .where(eq(programSets.programExerciseId, programExerciseId))
+        .orderBy(asc(programSets.setNumber), asc(programSets.id));
+      if (existing.some((s) => s.setType === "warmup")) {
+        return { error: "This exercise already has warm-up sets" };
+      }
+      const first = existing[0];
+      const ramp = first ? warmupRamp(Number(first.weightKg ?? 0)) : [];
+      if (ramp.length === 0) return { error: "Set a working weight above the bar first" };
+
+      const openSessions = tx
+        .select({ id: workoutSessions.id })
+        .from(workoutSessions)
+        .where(and(eq(workoutSessions.userId, auth.user.id), eq(workoutSessions.isCompleted, false)));
+      for (const [index, set] of existing.entries()) {
+        const setNumber = ramp.length + index + 1;
+        await tx.update(programSets).set({ setNumber }).where(eq(programSets.id, set.id));
+        await tx
+          .update(workoutSets)
+          .set({ setNumber })
+          .where(and(eq(workoutSets.programSetId, set.id), inArray(workoutSets.sessionId, openSessions)));
+      }
+      const inserted = await tx
+        .insert(programSets)
+        .values(
+          ramp.map((step, index) => ({
+            programExerciseId,
+            setNumber: index + 1,
+            targetReps: step.reps,
+            weightKg: String(step.weightKg),
+            restTimeSeconds: WARMUP_REST_SECONDS,
+            setType: "warmup",
+          })),
+        )
+        .returning();
+      return { programId: pe.programId, inserted };
+    });
+    if ("error" in result) return { success: false, error: result.error };
+
+    revalidatePath(`/programs/${result.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${result.programId}/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${result.programId}/workout`);
+    return { success: true, data: result.inserted };
+  } catch (err) {
+    console.error("[addWarmupSets] failed", err);
+    return { success: false, error: "Failed to add warm-up sets" };
   }
 }
 

@@ -2,6 +2,7 @@
 
 import { WorkoutSetsList } from "@/components/features/WorkoutSetsList";
 import {
+  addWarmupSets,
   applyProgressionToPlan,
   deleteProgramSet,
   setProgramExerciseApplyToPlan,
@@ -23,6 +24,8 @@ import {
 import { useToast } from "@/contexts/toast-context";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { sanitizeDecimalInput } from "@/lib/utils/format";
+import type { Equipment } from "@/lib/utils/picker-options";
+import { warmupRamp } from "@/lib/utils/plates";
 import {
   DELOAD_PCT,
   DELOAD_THRESHOLD,
@@ -180,6 +183,8 @@ type Props = {
   exerciseTypeOverride?: string | null;
   /** Setup cues for this exercise in this program (seat height, grip). */
   notes?: string | null;
+  /** Barbell exercises get the plate line and the warm-up generator. */
+  equipment?: Equipment | null;
   initialEditing?: boolean;
 };
 
@@ -208,6 +213,7 @@ export function WorkoutSetsClient({
   exerciseTypeDefault = null,
   exerciseTypeOverride: initialTypeOverride = null,
   notes: initialNotes = null,
+  equipment = null,
   initialEditing = false,
 }: Props) {
   const router = useRouter();
@@ -226,6 +232,7 @@ export function WorkoutSetsClient({
     initialSuppressEffortPrompt,
   );
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [addingWarmups, setAddingWarmups] = useState(false);
   const { showToast } = useToast();
   // Every sheet write reverts on failure; this says so instead of leaving the
   // lifter to notice the chip they tapped is no longer lit.
@@ -285,6 +292,15 @@ export function WorkoutSetsClient({
   });
 
   const isRunning = (exerciseCategory === "cardio" && !exerciseIsTimed) || exerciseDiscipline != null;
+  const isBarbell = equipment === "barbell" && !isRunning && !exerciseIsTimed;
+  // The server ramps from the plan's first set, so this reads the plan too,
+  // not today's override of it.
+  const canAddWarmups =
+    isBarbell &&
+    !isEditing &&
+    sets.length > 0 &&
+    !sets.some((s) => s.setType === "warmup") &&
+    warmupRamp(Number(sets[0].weightKg ?? 0)).length > 0;
 
   // Seeds a preset's default rep range, which has to contain the prescription
   // it is given. The *lowest* working target, so the range the preset picks can
@@ -676,6 +692,22 @@ export function WorkoutSetsClient({
     router.refresh();
   }
 
+  async function handleAddWarmups() {
+    setAddingWarmups(true);
+    const result = await callAction(addWarmupSets({ programExerciseId }));
+    setAddingWarmups(false);
+    if (!result.success) {
+      showToast({ variant: "error", message: result.error });
+      return;
+    }
+    const added = result.data;
+    setSets((prev) => [
+      ...added,
+      ...prev.map((s) => ({ ...s, setNumber: s.setNumber + added.length })),
+    ]);
+    router.refresh();
+  }
+
   async function handleDeleteSet(setId: number) {
     const previous = sets;
     setSets((prev) => prev.filter((s) => s.id !== setId));
@@ -853,7 +885,17 @@ export function WorkoutSetsClient({
             onApplyRepSuggestion={isWorkout ? applyRepSuggestion : undefined}
             hideEffortPrompt={suppressEffortPrompt || axes.advance === "none"}
             progressionScope={axes.scope}
+            isBarbell={isBarbell}
           />
+        )}
+        {canAddWarmups && (
+          <button
+            onClick={handleAddWarmups}
+            disabled={addingWarmups}
+            className="w-full min-h-[44px] mt-2 mb-4 rounded-xl bg-muted text-sm font-semibold text-primary active:opacity-70 disabled:opacity-50"
+          >
+            Generate warm-ups
+          </button>
         )}
       </div>
 

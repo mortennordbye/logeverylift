@@ -54,6 +54,7 @@ export default async function ProgramExerciseDetailPage({ params, searchParams }
       exerciseTypeDefault={pe.exercise.exerciseType}
       notes={pe.notes}
       exerciseTypeOverride={pe.exerciseType}
+      equipment={pe.exercise.equipment}
     />
   );
 }

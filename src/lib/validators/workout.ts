@@ -424,6 +424,10 @@ export const reorderProgramSetsSchema = z.object({
   orderedIds: z.array(z.number().int().positive()).min(1),
 });
 
+export const addWarmupSetsSchema = z.object({
+  programExerciseId: z.number().int().positive(),
+});
+
 export const deleteProgramSetSchema = z.object({
   programSetId: z.number().int().positive(),
 });

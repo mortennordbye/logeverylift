@@ -57,6 +57,7 @@ export default async function WorkoutExerciseSetsPage({ params }: Props) {
       exerciseTypeDefault={pe.exercise.exerciseType}
       notes={pe.notes}
       exerciseTypeOverride={pe.exerciseType}
+      equipment={pe.exercise.equipment}
     />
   );
 }
