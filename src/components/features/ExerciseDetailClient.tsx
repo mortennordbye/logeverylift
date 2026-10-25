@@ -5,7 +5,7 @@ import { formatPrValue, prTypeLabel } from "@/components/features/PrFeedList";
 import { useToast } from "@/contexts/toast-context";
 import { upsertExerciseNote } from "@/lib/actions/exercises";
 import type { ExerciseHistorySession, ExerciseProgress, PrFeedEntry } from "@/lib/actions/metrics";
-import { formatDateShort, loggedSetLabel } from "@/lib/utils/format";
+import { formatDateShort, loggedSetLabel, toDateString } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { Exercise } from "@/types/workout";
 import { ChevronLeftIcon, ChevronRight, Trophy } from "lucide-react";
@@ -107,7 +107,7 @@ export function ExerciseDetailClient({
                   <Trophy className="w-4 h-4 text-yellow-600 flex-none" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium">{prTypeLabel(pr)}</p>
-                    <p className="text-xs text-muted-foreground">{formatDateShort(pr.achievedAt.slice(0, 10))}</p>
+                    <p className="text-xs text-muted-foreground">{formatDateShort(toDateString(new Date(pr.achievedAt)))}</p>
                   </div>
                   <span className="text-sm font-semibold tabular-nums">{formatPrValue(pr)}</span>
                 </li>

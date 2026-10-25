@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { exerciseNotes, users } from "../src/db/schema";
+import { exerciseNotes, programExercises, programs, users } from "../src/db/schema";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
@@ -85,4 +85,31 @@ test("the library opens an exercise page whose note saves", async ({ page }, tes
 
   await page.reload();
   await expect(page.getByRole("textbox", { name: "Your note" })).toHaveValue("Elbows pinned");
+});
+
+/**
+ * The exercise title on the workout's sets screen opens the exercise page,
+ * and Back returns to the workout.
+ */
+test("the workout's exercise title opens its page and Back returns", async ({ page }, testInfo) => {
+  const [user] = await testDb()
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
+  const [slot] = await testDb()
+    .select({ id: programExercises.id, programId: programExercises.programId, exerciseId: programExercises.exerciseId })
+    .from(programExercises)
+    .innerJoin(programs, eq(programs.id, programExercises.programId))
+    .where(eq(programs.userId, user.id))
+    .limit(1);
+  const workoutUrl = `/programs/${slot.programId}/workout/exercises/${slot.id}`;
+
+  await page.goto(workoutUrl);
+  await page.getByRole("heading", { level: 1 }).getByRole("link").click();
+
+  await expect(page).toHaveURL(new RegExp(`/exercises/${slot.exerciseId}$`));
+  await expect(page.getByRole("main").getByRole("heading", { name: "Records" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`${workoutUrl}$`));
 });

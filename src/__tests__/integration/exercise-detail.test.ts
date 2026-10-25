@@ -3,7 +3,7 @@ import { exerciseNotes, exercisePrs, workoutSets } from "@/db/schema";
 import { getExerciseWithNote, upsertExerciseNote } from "@/lib/actions/exercises";
 import { getExerciseHistory, getExerciseProgress, getExerciseRecords } from "@/lib/actions/metrics";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createExercise, createSession, createUser } from "./factories";
+import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
 
 let userId: string;
@@ -55,6 +55,28 @@ describe("getExerciseHistory", () => {
     expect(result.data.map((s) => s.date)).toEqual(["2026-02-08", "2026-02-01"]);
     expect(result.data[0].sessionId).toBe(latest.id);
     expect(result.data[0].sets).toMatchObject([{ setNumber: 1, actualReps: 5, weightKg: "105.00" }]);
+  });
+
+  it("keeps the latest 20 sessions and only this exercise's sets", async () => {
+    const otherExercise = (await createExercise()).id;
+    for (let day = 1; day <= 22; day++) {
+      const session = await logSession(userId, `2026-01-${String(day).padStart(2, "0")}`, 100);
+      await db.insert(workoutSets).values({
+        sessionId: session.id,
+        exerciseId: otherExercise,
+        setNumber: 2,
+        actualReps: 8,
+        weightKg: "40",
+        restTimeSeconds: 90,
+      });
+    }
+
+    const result = await getExerciseHistory(exerciseId);
+    if (!result.success) throw new Error(result.error);
+    expect(result.data).toHaveLength(20);
+    expect(result.data[0].date).toBe("2026-01-22");
+    expect(result.data[19].date).toBe("2026-01-03");
+    expect(result.data.every((s) => s.sets.length === 1 && s.sets[0].weightKg === "100.00")).toBe(true);
   });
 
   it("never returns another user's sets", async () => {
@@ -116,6 +138,23 @@ describe("upsertExerciseNote", () => {
         { userId: otherId, note: "Theirs" },
       ]),
     );
+  });
+
+  it("rejects a note over 1000 characters", async () => {
+    const result = await upsertExerciseNote({ exerciseId, note: "x".repeat(1001) });
+    expect(result.success).toBe(false);
+    expect(await storedNotes()).toEqual([]);
+  });
+
+  it("allows another user's custom exercise that one of the user's programs uses", async () => {
+    // A copied shared program keeps pointing at the sharer's custom exercise.
+    const otherId = (await createUser()).id;
+    const theirs = (await createExercise({ isCustom: true, userId: otherId })).id;
+    await createProgram(userId, [{ exerciseId: theirs, sets: [{}] }]);
+
+    expect((await upsertExerciseNote({ exerciseId: theirs, note: "Their cue" })).success).toBe(true);
+    const detail = await getExerciseWithNote(theirs);
+    expect(detail.success && detail.data.note).toBe("Their cue");
   });
 
   it("refuses another user's custom exercise", async () => {

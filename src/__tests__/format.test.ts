@@ -2,11 +2,13 @@ import { describe, expect, it } from "vitest";
 import {
   buildRunSetSummary,
   buildSetSummary,
+  formatDateShort,
   formatEnduranceDistance,
   formatEndurancePace,
   formatSpeedKmh,
   formatSwimPace,
   formatTime,
+  formatVolume,
   loggedSetLabel,
   normalizeDecimal,
   restToken,
@@ -268,5 +270,21 @@ describe("loggedSetLabel", () => {
   it("shows a dash when nothing was recorded", () => {
     expect(loggedSetLabel(set, false)).toBe("—");
     expect(loggedSetLabel(set, true)).toBe("—");
+  });
+});
+
+describe("formatDateShort", () => {
+  it("shows day and short month for a YYYY-MM-DD date", () => {
+    expect(formatDateShort("2026-03-05")).toBe("5 Mar");
+    expect(formatDateShort("2026-12-31")).toBe("31 Dec");
+  });
+});
+
+describe("formatVolume", () => {
+  it("shows whole kilograms under a tonne and tonnes from 1000 kg", () => {
+    expect(formatVolume(850.4)).toBe("850 kg");
+    expect(formatVolume(999.4)).toBe("999 kg");
+    expect(formatVolume(1000)).toBe("1.0t");
+    expect(formatVolume(1250)).toBe("1.3t");
   });
 });
