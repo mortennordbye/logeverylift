@@ -53,7 +53,7 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
 
   async function save(gym: GymResult | null) {
     setSaving(true);
-    const result = await callAction(setPrimaryGym({ gym }));
+    const result = await callAction(setPrimaryGym({ osmRef: gym?.osmRef ?? null }));
     setSaving(false);
     if (!result.success) {
       setError(result.error);

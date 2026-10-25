@@ -104,9 +104,10 @@ export default function PrivacyPage() {
         <li>
           <strong>OpenStreetMap</strong>, for the gym map. When you open the map, your browser loads map images from
           the OpenStreetMap Foundation (UK, covered by an EU adequacy decision), which sees your IP address. Gym
-          searches go through our server, so OpenStreetMap&apos;s search services (Nominatim and Overpass) see the
-          name you searched for or, for &quot;Gyms near me&quot;, your position rounded to about a kilometre, but not
-          your IP address or who you are. Your position is not stored.
+          searches go through our server, so the OpenStreetMap search services see the name you searched for
+          (Nominatim, run by the OpenStreetMap Foundation, UK) or, for &quot;Gyms near me&quot;, your position rounded
+          to about a kilometre (Overpass, run by FOSSGIS e.V., Germany), but not your IP address or who you are. Our
+          server receives your exact position for that search and does not store it.
         </li>
         <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they

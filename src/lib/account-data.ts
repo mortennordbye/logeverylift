@@ -9,6 +9,7 @@ import {
   exercises,
   feedback,
   friendships,
+  gyms,
   inviteTokens,
   nudges,
   oauthAccessTokens,
@@ -65,6 +66,15 @@ export async function collectUserData(userId: string) {
   return {
     exportedAt: new Date().toISOString(),
     user,
+    // The gym behind user.primaryGymId, so the export says which one it is.
+    primaryGym: user?.primaryGymId
+      ? ((
+          await db
+            .select({ name: gyms.name, address: gyms.address, osmRef: gyms.osmRef })
+            .from(gyms)
+            .where(eq(gyms.id, user.primaryGymId))
+        )[0] ?? null)
+      : null,
     account: await db
       .select(columnsWithout(accounts, ["password", "accessToken", "refreshToken", "idToken"]))
       .from(accounts)
