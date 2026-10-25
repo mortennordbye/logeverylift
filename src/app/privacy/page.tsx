@@ -115,8 +115,11 @@ export default function PrivacyPage() {
       </ul>
       <p>
         <strong>Other users</strong> can find you by your name, or by your full email address if they already know
-        it. Your email is never shown to them. Friends see your name and avatar, whether you worked out today (you can
-        turn this off in Account), reactions and nudges between you, and programs you share with them.
+        it. Your email is never shown to them. Friends see your name and avatar, reactions and nudges between you, and
+        programs you share with them. Unless you turn off &quot;Show workout activity to friends&quot; in Account,
+        they also see your completed workouts: the program, date, duration, how you felt, each exercise with its sets
+        (weight, reps, time, distance), your personal records, streak and weekly volume. Your notes, effort ratings,
+        heart rate zones and readiness are never shown to them.
       </p>
       <p>
         <strong>Support and debugging:</strong> the controller can view the app as a given user to investigate a

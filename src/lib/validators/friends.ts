@@ -38,3 +38,7 @@ export const toggleReactionSchema = z.object({
 export const sendNudgeSchema = z.object({
   toUserId: z.string().min(1),
 });
+
+export const friendSessionSchema = z.object({
+  sessionId: z.number().int().positive(),
+});

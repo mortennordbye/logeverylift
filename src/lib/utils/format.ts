@@ -121,6 +121,34 @@ export function formatDistanceKm(meters: number): string {
 }
 
 /**
+ * The main text for a logged set in a session's detail: distance, time and
+ * pace for a run, otherwise time, "reps × weight" or bare reps. "—" when
+ * nothing was recorded.
+ */
+export function loggedSetLabel(
+  set: { distanceMeters: number | null; durationSeconds: number | null; weightKg: unknown; actualReps: number },
+  isRun: boolean,
+): string {
+  if (isRun) {
+    return (
+      [
+        set.distanceMeters ? formatDistanceKm(set.distanceMeters) : null,
+        set.durationSeconds != null ? formatTime(Number(set.durationSeconds)) : null,
+        set.distanceMeters && set.durationSeconds
+          ? formatPace(Number(set.durationSeconds), set.distanceMeters)
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" · ") || "—"
+    );
+  }
+  if (set.durationSeconds != null) return formatTime(Number(set.durationSeconds));
+  if (Number(set.weightKg) > 0) return `${set.actualReps} × ${Number(set.weightKg)}kg`;
+  if (set.actualReps > 0) return `${set.actualReps} reps`;
+  return "—";
+}
+
+/**
  * Format a distance for an endurance discipline. Swim (meter input) shows
  * meters under 1 km ("750 m"), everything else uses km.
  */

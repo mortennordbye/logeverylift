@@ -7,6 +7,7 @@ import {
   formatSpeedKmh,
   formatSwimPace,
   formatTime,
+  loggedSetLabel,
   normalizeDecimal,
   restToken,
   sanitizeDecimalInput,
@@ -243,5 +244,29 @@ describe("sanitizeDecimalInput", () => {
 
   it("returns empty string when there are no digits", () => {
     expect(sanitizeDecimalInput("abc")).toBe("");
+  });
+});
+
+describe("loggedSetLabel", () => {
+  const set = { distanceMeters: null, durationSeconds: null, weightKg: "0", actualReps: 0 };
+
+  it("shows reps × weight for a loaded set", () => {
+    expect(loggedSetLabel({ ...set, weightKg: "80", actualReps: 5 }, false)).toBe("5 × 80kg");
+  });
+
+  it("shows bare reps for a bodyweight set and time for a timed one", () => {
+    expect(loggedSetLabel({ ...set, actualReps: 12 }, false)).toBe("12 reps");
+    expect(loggedSetLabel({ ...set, durationSeconds: 45 }, false)).toBe("00:45");
+  });
+
+  it("shows distance, time and pace for a run", () => {
+    expect(loggedSetLabel({ ...set, distanceMeters: 5000, durationSeconds: 1500 }, true)).toBe(
+      "5 km · 25:00 · 5:00 /km",
+    );
+  });
+
+  it("shows a dash when nothing was recorded", () => {
+    expect(loggedSetLabel(set, false)).toBe("—");
+    expect(loggedSetLabel(set, true)).toBe("—");
   });
 });

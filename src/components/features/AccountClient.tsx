@@ -445,7 +445,7 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
             >
               <div className="flex-1 text-left">
                 <p className="text-sm font-medium">Show workout activity to friends</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Friends can see when you worked out today</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Friends can see your workouts, sets and streak</p>
               </div>
               <div
                 className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${

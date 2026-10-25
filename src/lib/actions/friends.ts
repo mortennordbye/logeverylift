@@ -7,16 +7,19 @@ import {
   respondToFriendRequestSchema,
   searchUsersSchema,
   sendFriendRequestSchema,
+  friendSessionSchema,
   sendNudgeSchema,
   toggleReactionSchema,
   updateActivityPrivacySchema,
 } from "@/lib/validators/friends";
+import { loggedSetLabel } from "@/lib/utils/format";
 import { requireSession } from "@/lib/utils/session";
 import type {
   ActionResult,
   FriendActivityItem,
   FriendProfileStats,
   FriendSessionCard,
+  FriendSessionDetail,
   FriendWithActivity,
   LeaderboardEntry,
   PendingRequest,
@@ -27,6 +30,16 @@ import type {
 } from "@/types/workout";
 import { and, count, eq, gt, gte, ilike, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+
+// ─── Reaction summary ────────────────────────────────────────────────────────
+
+/** One entry per reaction emoji, in a fixed order, with counts and whether I reacted. */
+function summarizeReactions(rows: { emoji: string; reactorId: string }[], me: string): ReactionSummary[] {
+  return ["🔥", "💪", "👏"].map((emoji) => {
+    const matching = rows.filter((r) => r.emoji === emoji);
+    return { emoji, count: matching.length, reactedByMe: matching.some((r) => r.reactorId === me) };
+  });
+}
 
 // ─── Streak utility ───────────────────────────────────────────────────────
 
@@ -477,16 +490,9 @@ export async function getFriendsActivityFeed(): Promise<ActionResult<FriendActiv
           .where(inArray(workoutReactions.sessionId, sessionIds))
       : [];
 
-    // Aggregate reactions per session
-    const reactionsBySession = new Map<number, Map<string, { count: number; reactedByMe: boolean }>>();
+    const reactionsBySession = new Map<number, typeof reactionRows>();
     for (const r of reactionRows) {
-      if (!reactionsBySession.has(r.sessionId)) reactionsBySession.set(r.sessionId, new Map());
-      const emojiMap = reactionsBySession.get(r.sessionId)!;
-      const existing = emojiMap.get(r.emoji) ?? { count: 0, reactedByMe: false };
-      emojiMap.set(r.emoji, {
-        count: existing.count + 1,
-        reactedByMe: existing.reactedByMe || r.reactorId === me,
-      });
+      reactionsBySession.set(r.sessionId, [...(reactionsBySession.get(r.sessionId) ?? []), r]);
     }
 
     // Batch-fetch 90-day session dates for streak calculation
@@ -520,11 +526,7 @@ export async function getFriendsActivityFeed(): Promise<ActionResult<FriendActiv
           ? Math.max(1, Math.round((r.endTime.getTime() - r.startTime.getTime()) / 60000))
           : 0;
 
-      const emojiMap = reactionsBySession.get(r.sessionId);
-      const reactions: ReactionSummary[] = ["🔥", "💪", "👏"].map((emoji) => {
-        const r = emojiMap?.get(emoji);
-        return { emoji, count: r?.count ?? 0, reactedByMe: r?.reactedByMe ?? false };
-      });
+      const reactions = summarizeReactions(reactionsBySession.get(r.sessionId) ?? [], me);
 
       return {
         friendshipId: r.friendshipId,
@@ -1051,5 +1053,106 @@ export async function markFriendsSeen(): Promise<ActionResult<void>> {
   } catch (e) {
     console.error("[markFriendsSeen] failed", e);
     return { success: false, error: "Failed to update" };
+  }
+}
+
+// ─── Friend workout detail ───────────────────────────────────────────────────
+
+export async function getFriendSessionDetail(data: unknown): Promise<ActionResult<FriendSessionDetail>> {
+  const session = await requireSession();
+  const me = session.user.id;
+  const parsed = friendSessionSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Invalid input" };
+  const { sessionId } = parsed.data;
+
+  try {
+    // Same visibility as the feed: a completed session of an accepted friend
+    // who shares activity with friends.
+    const [ws] = await db
+      .select({
+        ownerId: workoutSessions.userId,
+        ownerName: users.name,
+        date: workoutSessions.date,
+        startTime: workoutSessions.startTime,
+        endTime: workoutSessions.endTime,
+        source: workoutSessions.source,
+        feeling: workoutSessions.feeling,
+        programName: programs.name,
+      })
+      .from(workoutSessions)
+      .innerJoin(users, eq(users.id, workoutSessions.userId))
+      .innerJoin(
+        friendships,
+        and(
+          eq(friendships.status, "accepted"),
+          or(
+            and(eq(friendships.requesterId, me), eq(friendships.addresseeId, workoutSessions.userId)),
+            and(eq(friendships.addresseeId, me), eq(friendships.requesterId, workoutSessions.userId)),
+          ),
+        ),
+      )
+      .leftJoin(programs, eq(programs.id, workoutSessions.programId))
+      .where(
+        and(
+          eq(workoutSessions.id, sessionId),
+          eq(workoutSessions.isCompleted, true),
+          eq(users.showActivityToFriends, true),
+        ),
+      )
+      .limit(1);
+
+    if (!ws) return { success: false, error: "Workout not found" };
+
+    const [setRows, reactionRows] = await Promise.all([
+      db
+        .select({
+          exerciseId: workoutSets.exerciseId,
+          exerciseName: exercises.name,
+          category: exercises.category,
+          setNumber: workoutSets.setNumber,
+          distanceMeters: workoutSets.distanceMeters,
+          durationSeconds: workoutSets.durationSeconds,
+          weightKg: workoutSets.weightKg,
+          actualReps: workoutSets.actualReps,
+        })
+        .from(workoutSets)
+        .innerJoin(exercises, eq(exercises.id, workoutSets.exerciseId))
+        .where(and(eq(workoutSets.sessionId, sessionId), eq(workoutSets.isCompleted, true)))
+        .orderBy(workoutSets.exerciseId, workoutSets.setNumber),
+      db
+        .select({ emoji: workoutReactions.emoji, reactorId: workoutReactions.userId })
+        .from(workoutReactions)
+        .where(eq(workoutReactions.sessionId, sessionId)),
+    ]);
+
+    const byExercise = new Map<number, FriendSessionDetail["exercises"][number]>();
+    for (const row of setRows) {
+      const group = byExercise.get(row.exerciseId) ?? { exerciseName: row.exerciseName, sets: [] };
+      group.sets.push({ setNumber: row.setNumber, label: loggedSetLabel(row, row.category === "cardio") });
+      byExercise.set(row.exerciseId, group);
+    }
+
+    return {
+      success: true,
+      data: {
+        sessionId,
+        ownerId: ws.ownerId,
+        ownerName: ws.ownerName,
+        date: ws.date,
+        startTime: ws.startTime,
+        programName: ws.programName ?? null,
+        // Auto-completed cycle days have no real duration.
+        durationMinutes:
+          ws.source !== "auto" && ws.endTime && ws.startTime
+            ? Math.max(1, Math.round((ws.endTime.getTime() - ws.startTime.getTime()) / 60000))
+            : 0,
+        feeling: ws.feeling ?? null,
+        exercises: [...byExercise.values()],
+        reactions: summarizeReactions(reactionRows, me),
+      },
+    };
+  } catch (e) {
+    console.error("[getFriendSessionDetail] failed", e);
+    return { success: false, error: "Failed to load workout" };
   }
 }

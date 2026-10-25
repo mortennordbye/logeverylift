@@ -1,6 +1,7 @@
 import { db } from "@/db";
-import { friendships, nudges, users, workoutReactions } from "@/db/schema";
+import { friendships, nudges, users, workoutReactions, workoutSessions, workoutSets } from "@/db/schema";
 import {
+  getFriendSessionDetail,
   getFriendsBadgeCount,
   getReactionsToMyWorkouts,
   markFriendsSeen,
@@ -10,7 +11,7 @@ import {
 import { getSessionDetail } from "@/lib/actions/workout-sets";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createSession, createUser } from "./factories";
+import { createExercise, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
 
 let meId: string;
@@ -127,5 +128,55 @@ describe("getFriendsBadgeCount", () => {
       .values({ fromUserId: friend.id, toUserId: meId, createdAt: new Date(Date.now() - 49 * 3600_000) });
     await db.update(users).set({ friendsSeenAt: null }).where(eq(users.id, meId));
     expect(await badge()).toBe(0);
+  });
+});
+
+describe("getFriendSessionDetail", () => {
+  async function friendSession({ friend = true, showActivityToFriends = true } = {}) {
+    const owner = await createUser({ name: "Owner", showActivityToFriends });
+    if (friend) {
+      await db.insert(friendships).values({ requesterId: owner.id, addresseeId: meId, status: "accepted" });
+    }
+    const session = await createSession(owner.id, null, { isCompleted: true, notes: "knee hurt" });
+    const exercise = await createExercise({ name: "Squat" });
+    await db.insert(workoutSets).values({
+      sessionId: session.id,
+      exerciseId: exercise.id,
+      setNumber: 1,
+      actualReps: 5,
+      weightKg: "100",
+      restTimeSeconds: 120,
+      rir: 2,
+      notes: "felt heavy",
+    });
+    return session;
+  }
+
+  it("shows a friend's sets as labels, without notes or effort", async () => {
+    const session = await friendSession();
+    const result = await getFriendSessionDetail({ sessionId: session.id });
+    if (!result.success) throw new Error(result.error);
+    expect(result.data.ownerName).toBe("Owner");
+    expect(result.data.exercises).toEqual([{ exerciseName: "Squat", sets: [{ setNumber: 1, label: "5 × 100kg" }] }]);
+    const json = JSON.stringify(result.data);
+    expect(json).not.toContain("knee hurt");
+    expect(json).not.toContain("felt heavy");
+    expect(json).not.toMatch(/"(rir|rpe|readiness|notes|heartRateZone)"/);
+  });
+
+  it("refuses someone who is not a friend", async () => {
+    const session = await friendSession({ friend: false });
+    expect((await getFriendSessionDetail({ sessionId: session.id })).success).toBe(false);
+  });
+
+  it("refuses a friend who hides activity from friends", async () => {
+    const session = await friendSession({ showActivityToFriends: false });
+    expect((await getFriendSessionDetail({ sessionId: session.id })).success).toBe(false);
+  });
+
+  it("refuses a workout that is still in progress", async () => {
+    const session = await friendSession();
+    await db.update(workoutSessions).set({ isCompleted: false }).where(eq(workoutSessions.id, session.id));
+    expect((await getFriendSessionDetail({ sessionId: session.id })).success).toBe(false);
   });
 });

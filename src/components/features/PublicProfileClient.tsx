@@ -5,6 +5,7 @@ import { removeFriend, respondToFriendRequest, sendFriendRequest, sendNudge } fr
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { FriendProfileStats, FriendSessionCard } from "@/types/workout";
 import { Check, Dumbbell, Loader2, UserCheck, UserMinus, UserPlus } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -54,13 +55,13 @@ function streakLabel(streak: number): string {
   return "🔥";
 }
 
-function SessionRow({ session }: { session: FriendSessionCard }) {
+function SessionRow({ session, href }: { session: FriendSessionCard; href: string }) {
   const timeLabel = session.startTime
     ? `${relativeDay(session.startTime)}, ${formatTime(session.startTime)}`
     : relativeDay(new Date(session.date + "T12:00:00"));
 
   return (
-    <div className="px-4 py-3">
+    <Link href={href} className="block px-4 py-3 active:bg-muted/50">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium truncate">
@@ -80,7 +81,7 @@ function SessionRow({ session }: { session: FriendSessionCard }) {
         </div>
         <p className="text-xs text-muted-foreground shrink-0">{timeLabel}</p>
       </div>
-    </div>
+    </Link>
   );
 }
 
@@ -250,7 +251,7 @@ export function PublicProfileClient({
           </p>
           <div className="divide-y divide-border border-y border-border">
             {profileStats.recentSessions.map((s) => (
-              <SessionRow key={s.sessionId} session={s} />
+              <SessionRow key={s.sessionId} session={s} href={`/more/friends/${profile.id}/sessions/${s.sessionId}`} />
             ))}
           </div>
         </section>
