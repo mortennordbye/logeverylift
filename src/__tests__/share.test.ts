@@ -21,7 +21,7 @@ describe("shareApp", () => {
     });
   });
 
-  it("adds the sharer's friend code so the new account starts as their friend", async () => {
+  it("adds the sharer's friend code so the new account sends them a friend request", async () => {
     const share = vi.fn().mockResolvedValue(undefined);
     stubNavigator({ share });
     await shareApp(origin, "abc_DEF-123");

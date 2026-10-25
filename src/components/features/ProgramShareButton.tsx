@@ -17,6 +17,7 @@ export function ProgramShareButton({ programId, friends, onExport, exporting }: 
   const [open, setOpen] = useState(false);
   const [busyFor, setBusyFor] = useState<string | null>(null);
   const [shares, setShares] = useState<OutgoingShare[]>([]);
+  const [error, setError] = useState("");
 
   async function loadShares() {
     const result = await callAction(getOutgoingShares(programId));
@@ -25,20 +26,24 @@ export function ProgramShareButton({ programId, friends, onExport, exporting }: 
 
   function handleOpen() {
     setOpen(true);
+    setError("");
     void loadShares();
   }
 
   async function handleShare(friendUserId: string) {
     setBusyFor(friendUserId);
     const result = await callAction(shareProgram({ programId, friendUserId }));
-    if (result.success) await loadShares();
+    setError(result.success ? "" : result.error);
+    // Also on failure: "already shared" means the list was out of date.
+    await loadShares();
     setBusyFor(null);
   }
 
   async function handleRevoke(friendUserId: string, shareId: number) {
     setBusyFor(friendUserId);
     const result = await callAction(revokeShare(shareId));
-    if (result.success) await loadShares();
+    setError(result.success ? "" : result.error);
+    await loadShares();
     setBusyFor(null);
   }
 
@@ -75,6 +80,11 @@ export function ProgramShareButton({ programId, friends, onExport, exporting }: 
               </button>
             </div>
 
+            {error && (
+              <p role="alert" className="mx-4 mt-3 rounded-xl bg-destructive/10 px-4 py-2 text-sm text-destructive">
+                {error}
+              </p>
+            )}
             <div className="overflow-y-auto divide-y divide-border">
               {friends.length > 0 && friends.map((friend) => {
                 // Only a share the friend hasn't copied yet can be taken back;

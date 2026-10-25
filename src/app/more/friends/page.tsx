@@ -5,9 +5,10 @@ import {
   getFriendsLeaderboard,
   getPendingRequests,
   getReactionsToMyWorkouts,
+  getFriendsReadTime,
   getReceivedNudges,
-  markFriendsSeen,
 } from "@/lib/actions/friends";
+import { MarkFriendsSeen } from "@/components/features/MarkFriendsSeen";
 import { requireSession } from "@/lib/utils/session";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
@@ -15,6 +16,8 @@ import Link from "next/link";
 export default async function FriendsPage() {
   const session = await requireSession();
 
+  // Taken before the reads: anything arriving after them stays unseen.
+  const readAt = await getFriendsReadTime();
   const [friendsResult, pendingResult, feedResult, leaderboardResult, nudgesResult, reactionsResult] =
     await Promise.all([
       getFriends(),
@@ -24,8 +27,7 @@ export default async function FriendsPage() {
       getReceivedNudges(),
       getReactionsToMyWorkouts(),
     ]);
-  // Everything above is now on screen, so it stops counting towards the badge.
-  await markFriendsSeen();
+  const allLoaded = [pendingResult, nudgesResult, reactionsResult].every((r) => r.success);
 
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
@@ -40,6 +42,7 @@ export default async function FriendsPage() {
         <h1 className="text-3xl font-bold tracking-tight">Friends</h1>
       </div>
 
+      {allLoaded && <MarkFriendsSeen at={readAt} />}
       <FriendsClient
         friends={friendsResult.success ? friendsResult.data : []}
         pendingRequests={pendingResult.success ? pendingResult.data : []}

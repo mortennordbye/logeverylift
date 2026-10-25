@@ -79,6 +79,12 @@ test("a reaction to my workout shows a badge until I open Friends", async ({ pag
     await expect(page.getByRole("link", { name: new RegExp(`${friend.name} 🔥 your`) })).toBeVisible();
     await expect(page.getByTestId("friends-badge")).toBeHidden();
 
+    // Back on More within the router's 30 s cache: the count must be gone too.
+    await page.getByRole("link", { name: "More" }).first().click();
+    await page.waitForURL("**/more");
+    await expect(page.getByLabel("1 new")).toBeHidden();
+    await page.goBack();
+
     await page.getByRole("link", { name: new RegExp(`${friend.name} 🔥 your`) }).click();
     await expect(page.getByText(`🔥 ${friend.name}`)).toBeVisible();
   });
@@ -125,5 +131,24 @@ test("a friend's workout opens from the feed, sets shown and notes kept private"
     await expect
       .poll(async () => (await db.select().from(workoutReactions).where(eq(workoutReactions.sessionId, session.id))).length)
       .toBe(1);
+  });
+});
+
+test("a failed revoke says why instead of doing nothing", async ({ page }, testInfo) => {
+  await withFriend(testInfo.parallelIndex, async (me, friend) => {
+    const db = testDb();
+    const [program] = await db.select({ id: programs.id }).from(programs).where(eq(programs.userId, me)).limit(1);
+    await db.insert(programShares).values({ programId: program.id, sharedByUserId: me, sharedWithUserId: friend.id });
+
+    await page.goto(`/programs/${program.id}`);
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    const revoke = page.getByRole("button", { name: `Revoke share with ${friend.name}` });
+    await expect(revoke).toBeVisible();
+    // Revoked elsewhere (another device) while this sheet was open.
+    await db.delete(programShares).where(eq(programShares.programId, program.id));
+
+    await revoke.click();
+    await expect(page.getByRole("alert").filter({ hasText: "Share not found" })).toBeVisible();
+    await expect(revoke).toBeHidden();
   });
 });

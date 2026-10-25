@@ -17,7 +17,7 @@ export function SignupForm() {
   // token's use is counted; everyone else signs up directly.
   const searchParams = useSearchParams();
   const inviteToken = searchParams.get("token")?.trim() ?? "";
-  // A friend's share link (/welcome?ref=...): the new account starts as their friend.
+  // A friend's share link (/welcome?ref=...): the new account sends them a friend request.
   const friendCode = searchParams.get("ref")?.trim() ?? "";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -149,7 +149,7 @@ export function SignupForm() {
 
       {friendCode && (
         <p className="text-sm text-muted-foreground">
-          You&apos;ll start as friends with the person who invited you. You can remove them in Friends.
+          The person who invited you gets a friend request from you. They see your workouts only once they accept.
         </p>
       )}
 

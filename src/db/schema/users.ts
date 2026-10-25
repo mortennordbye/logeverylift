@@ -42,7 +42,7 @@ export const users = pgTable("user", {
   // (the "Missed this week" make-up card and the rotation "X days overdue" badge).
   missedWorkoutsEnabled: boolean("missed_workouts_enabled").notNull().default(true),
   // The code in this user's share link (/welcome?ref=...). Whoever signs up
-  // through it starts as their friend. Made on first share.
+  // through it sends them a friend request. Made on first share.
   friendCode: text("friend_code").unique(),
   // Where the user usually trains. Setting it is the opt-in to being listed
   // under that gym on the gym map, which every user can see.

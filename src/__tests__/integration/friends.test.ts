@@ -2,10 +2,12 @@ import { db } from "@/db";
 import { friendships, nudges, users, workoutReactions, workoutSessions, workoutSets } from "@/db/schema";
 import {
   getFriendSessionDetail,
+  getFriendsReadTime,
   getFriendsBadgeCount,
   getReactionsToMyWorkouts,
   markFriendsSeen,
   searchUsers,
+  sendFriendRequest,
   toggleReaction,
 } from "@/lib/actions/friends";
 import { getSessionDetail } from "@/lib/actions/workout-sets";
@@ -100,6 +102,8 @@ describe("reactions to my workouts", () => {
   });
 });
 
+const dbNow = getFriendsReadTime;
+
 describe("getFriendsBadgeCount", () => {
   async function badge() {
     const result = await getFriendsBadgeCount();
@@ -117,8 +121,39 @@ describe("getFriendsBadgeCount", () => {
 
     expect(await badge()).toBe(3);
 
-    await markFriendsSeen();
+    await markFriendsSeen({ at: await dbNow() });
     expect(await badge()).toBe(1);
+  });
+
+  it("still counts what arrived after the moment the page was read", async () => {
+    const friend = await createUser();
+    const mine = await createSession(meId, null, { isCompleted: true });
+    const readAt = await dbNow();
+    await db.insert(workoutReactions).values({ sessionId: mine.id, userId: friend.id, emoji: "🔥" });
+    await markFriendsSeen({ at: readAt });
+    expect(await badge()).toBe(1);
+  });
+
+  it("never moves the seen mark backwards", async () => {
+    const friend = await createUser();
+    const mine = await createSession(meId, null, { isCompleted: true });
+    await db.insert(workoutReactions).values({ sessionId: mine.id, userId: friend.id, emoji: "🔥" });
+    await markFriendsSeen({ at: await dbNow() });
+    await markFriendsSeen({ at: new Date(Date.now() - 3600_000).toISOString() });
+    expect(await badge()).toBe(0);
+  });
+
+  it("before the page was ever opened, counts reactions only as far back as the list shows them", async () => {
+    const friend = await createUser();
+    const mine = await createSession(meId, null, { isCompleted: true });
+    await db.insert(workoutReactions).values({
+      sessionId: mine.id,
+      userId: friend.id,
+      emoji: "🔥",
+      createdAt: new Date(Date.now() - 8 * 24 * 3600_000),
+    });
+    await db.update(users).set({ friendsSeenAt: null }).where(eq(users.id, meId));
+    expect(await badge()).toBe(0);
   });
 
   it("ignores nudges older than the 48 hours they are shown for", async () => {
@@ -174,9 +209,37 @@ describe("getFriendSessionDetail", () => {
     expect((await getFriendSessionDetail({ sessionId: session.id })).success).toBe(false);
   });
 
+  it("refuses a friend request that is still pending", async () => {
+    const owner = await createUser({ name: "Asker" });
+    await db.insert(friendships).values({ requesterId: owner.id, addresseeId: meId, status: "pending" });
+    const session = await createSession(owner.id, null, { isCompleted: true });
+    expect((await getFriendSessionDetail({ sessionId: session.id })).success).toBe(false);
+  });
+
   it("refuses a workout that is still in progress", async () => {
     const session = await friendSession();
     await db.update(workoutSessions).set({ isCompleted: false }).where(eq(workoutSessions.id, session.id));
     expect((await getFriendSessionDetail({ sessionId: session.id })).success).toBe(false);
+  });
+});
+
+describe("sendFriendRequest", () => {
+  it("can't be re-sent within 30 days of being declined", async () => {
+    const other = await createUser();
+    await db.insert(friendships).values({ requesterId: meId, addresseeId: other.id, status: "declined", updatedAt: new Date() });
+    expect((await sendFriendRequest({ addresseeId: other.id })).success).toBe(false);
+
+    await db.update(friendships).set({ updatedAt: new Date(Date.now() - 31 * 24 * 3600_000) });
+    expect((await sendFriendRequest({ addresseeId: other.id })).success).toBe(true);
+  });
+
+  it("is limited to 20 an hour per sender", async () => {
+    const results = [];
+    for (let i = 0; i < 21; i++) {
+      const other = await createUser();
+      results.push((await sendFriendRequest({ addresseeId: other.id })).success);
+    }
+    expect(results.filter(Boolean)).toHaveLength(20);
+    expect(results.at(-1)).toBe(false);
   });
 });

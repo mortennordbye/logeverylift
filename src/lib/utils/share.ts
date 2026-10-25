@@ -10,8 +10,8 @@ export type ShareOutcome = "shared" | "copied" | "cancelled";
  * Open the native share sheet with an invite to the public landing page, or
  * copy the invite to the clipboard where there is no share sheet (most
  * desktop browsers). Closing the share sheet counts as cancelled. With the
- * sharer's friend code, whoever signs up through the link starts as their
- * friend (redeemFriendCode).
+ * sharer's friend code, whoever signs up through the link sends them a
+ * friend request (redeemFriendCode).
  */
 export async function shareApp(origin: string, friendCode?: string | null): Promise<ShareOutcome> {
   const url = friendCode ? `${origin}/welcome?ref=${encodeURIComponent(friendCode)}` : `${origin}/welcome`;
