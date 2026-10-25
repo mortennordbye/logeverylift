@@ -31,6 +31,9 @@ Several things are already stored but never shown, so users can't see or use the
   `HistoryClient.tsx`.
 - **Friends:** `getFriendSessionDetail` in `src/lib/actions/friends.ts` stays unchanged. Friends
   don't see failed flags or exercise notes.
+- **Shared programs:** `copySharedProgram` in `src/lib/actions/program-shares.ts` used to copy
+  `program_exercises.notes` into the friend's copy. Found while building this; it now leaves notes
+  behind, since notes are free text and the privacy policy says friends never see them.
 
 ## Files
 `src/lib/actions/programs.ts`, `src/components/features/WorkoutSetsClient.tsx`,

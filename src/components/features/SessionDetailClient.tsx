@@ -159,6 +159,11 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
                           ) : (
                             loggedSetLabel(set, false)
                           )}
+                          {set.isFailed && (
+                            <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase text-destructive bg-destructive/15 rounded-full px-1.5 py-0.5">
+                              Failed
+                            </span>
+                          )}
                         </span>
                         <span className="text-muted-foreground w-16 text-right">
                           {/* Three states, not two: effort logged as RIR, effort

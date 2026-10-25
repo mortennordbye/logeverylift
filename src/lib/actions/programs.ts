@@ -26,6 +26,7 @@ import {
   setProgramExerciseSetDefaultsSchema,
   setProgramExerciseSuppressEffortPromptSchema,
   setProgramExerciseTypeSchema,
+  updateProgramExerciseNotesSchema,
   updateProgramSchema,
   updateProgramSetSchema,
 } from "@/lib/validators/workout";
@@ -343,6 +344,49 @@ export async function setProgramExerciseType(
   } catch (err) {
     console.error("[setProgramExerciseType] failed", err);
     return { success: false, error: "Failed to update exercise type" };
+  }
+}
+
+/**
+ * Set (or clear) the setup notes on a program exercise. Blank stores null.
+ */
+export async function updateProgramExerciseNotes(
+  data: unknown,
+): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+  const validation = updateProgramExerciseNotesSchema.safeParse(data);
+  if (!validation.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: validation.error.flatten().fieldErrors,
+    };
+  }
+  const { programExerciseId, notes } = validation.data;
+  try {
+    const [check] = await db
+      .select({ userId: programs.userId })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programExercises.id, programExerciseId))
+      .limit(1);
+    if (!check || check.userId !== auth.user.id) {
+      return { success: false, error: "Not found" };
+    }
+    const [pe] = await db
+      .update(programExercises)
+      .set({ notes: notes === "" ? null : notes })
+      .where(eq(programExercises.id, programExerciseId))
+      .returning({ programId: programExercises.programId });
+    if (pe) {
+      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
+      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
+      revalidatePath(`/programs/${pe.programId}`);
+    }
+    return { success: true, data: undefined };
+  } catch (err) {
+    console.error("[updateProgramExerciseNotes] failed", err);
+    return { success: false, error: "Failed to update notes" };
   }
 }
 

@@ -55,6 +55,7 @@ export default async function WorkoutExerciseSetsPage({ params }: Props) {
       progressionApplyToPlan={pe.progressionApplyToPlan}
       progressionSuppressEffortPrompt={pe.progressionSuppressEffortPrompt}
       exerciseTypeDefault={pe.exercise.exerciseType}
+      notes={pe.notes}
       exerciseTypeOverride={pe.exerciseType}
     />
   );
