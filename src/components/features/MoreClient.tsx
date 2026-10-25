@@ -106,7 +106,15 @@ const adminItem: MoreItem = {
   description: "Users, insights, and test data",
 };
 
-export function MoreClient({ role, friendsBadge }: { role: string; friendsBadge: number }) {
+export function MoreClient({
+  role,
+  friendsBadge,
+  friendCode,
+}: {
+  role: string;
+  friendsBadge: number;
+  friendCode: string | null;
+}) {
   const isAdmin = role === "admin";
   const { data: session } = authClient.useSession();
   const [stopping, setStopping] = useState(false);
@@ -138,7 +146,7 @@ export function MoreClient({ role, friendsBadge }: { role: string; friendsBadge:
   }
 
   async function handleShare() {
-    if ((await shareApp(window.location.origin)) === "copied") {
+    if ((await shareApp(window.location.origin, friendCode)) === "copied") {
       showToast({ message: "Link copied" });
     }
   }

@@ -40,6 +40,9 @@ export const users = pgTable("user", {
   // When false, the home screen stops surfacing missed-workout / overdue prompts
   // (the "Missed this week" make-up card and the rotation "X days overdue" badge).
   missedWorkoutsEnabled: boolean("missed_workouts_enabled").notNull().default(true),
+  // The code in this user's share link (/welcome?ref=...). Whoever signs up
+  // through it starts as their friend. Made on first share.
+  friendCode: text("friend_code").unique(),
   // The admin whose invite (token or direct account creation) let this user in.
   // Null for open self-signups. Drives the "Invited by founder" badge.
   invitedById: text("invited_by_id").references((): AnyPgColumn => users.id, {

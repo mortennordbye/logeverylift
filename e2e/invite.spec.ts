@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
-import { inviteTokens, users } from "../src/db/schema";
+import { friendships, inviteTokens, users } from "../src/db/schema";
 import { LEGAL_VERSION } from "../src/lib/constants/legal";
 import { e2eUser } from "./fixtures/env";
 import { expect, test } from "./fixtures/test";
@@ -62,5 +62,38 @@ test("an invite link opens the front page and keeps the token through sign-up", 
   } finally {
     await testDb().delete(users).where(eq(users.email, email));
     await testDb().delete(inviteTokens).where(eq(inviteTokens.id, tokenId));
+  }
+});
+
+test("signing up through a friend's share link starts the two as friends", async ({ page }, testInfo) => {
+  const [inviter] = await testDb()
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
+  const code = `e2e${testInfo.parallelIndex}${Date.now()}`;
+  await testDb().update(users).set({ friendCode: code }).where(eq(users.id, inviter.id));
+  const email = `referred-${testInfo.parallelIndex}-${Date.now()}@test.local`;
+
+  try {
+    await page.goto(`/welcome?ref=${code}`);
+    await page.locator(`a[href="/signup?ref=${code}"]`).first().click();
+    await page.waitForURL((url) => url.pathname === "/signup");
+    await expect(page.getByText("You'll start as friends with the person who invited you")).toBeVisible();
+
+    await page.waitForLoadState("networkidle");
+    await page.getByLabel("Name").fill("Referred Friend");
+    await page.getByLabel("Email").fill(email);
+    await page.getByLabel("Password").fill("correct-horse-battery");
+    await page.getByRole("checkbox", { name: /I accept the terms of use/ }).check();
+    await page.getByRole("checkbox", { name: /I consent to LogEveryLift storing/ }).check();
+    await page.getByRole("button", { name: "Create Account" }).click();
+    await page.waitForURL((url) => url.pathname === "/");
+
+    const [created] = await testDb().select({ id: users.id }).from(users).where(eq(users.email, email));
+    const rows = await testDb().select().from(friendships).where(eq(friendships.addresseeId, created.id));
+    expect(rows).toEqual([expect.objectContaining({ requesterId: inviter.id, status: "accepted" })]);
+  } finally {
+    await testDb().delete(users).where(eq(users.email, email));
+    await testDb().update(users).set({ friendCode: null }).where(eq(users.id, inviter.id));
   }
 });

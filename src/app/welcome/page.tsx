@@ -101,7 +101,7 @@ const COPY = {
 };
 
 type Props = {
-  searchParams: Promise<{ lang?: string; token?: string }>;
+  searchParams: Promise<{ lang?: string; token?: string; ref?: string }>;
 };
 
 export default async function WelcomePage({ searchParams }: Props) {
@@ -111,14 +111,21 @@ export default async function WelcomePage({ searchParams }: Props) {
   const params = await searchParams;
   const lang = params.lang === "no" ? "no" : "en";
   const t = COPY[lang];
-  // Invite links land here with ?token=...; carry it through the language
-  // switch and on to sign-up so the token's use is still counted.
+  // Invite links land here with ?token=... (admin invites, counted on use)
+  // or ?ref=... (a user's share link, which makes the two friends); carry
+  // both through the language switch and on to sign-up.
   const token = params.token?.trim() ?? "";
+  const ref = params.ref?.trim() ?? "";
   const welcomeHref = (l: "en" | "no") => {
-    const q = new URLSearchParams({ ...(l === "no" && { lang: "no" }), ...(token && { token }) }).toString();
+    const q = new URLSearchParams({
+      ...(l === "no" && { lang: "no" }),
+      ...(token && { token }),
+      ...(ref && { ref }),
+    }).toString();
     return q ? `/welcome?${q}` : "/welcome";
   };
-  const signupHref = token ? `/signup?token=${encodeURIComponent(token)}` : "/signup";
+  const signupQuery = new URLSearchParams({ ...(token && { token }), ...(ref && { ref }) }).toString();
+  const signupHref = signupQuery ? `/signup?${signupQuery}` : "/signup";
 
   return (
     // Body is position:fixed (globals.css), so the page scrolls in its own container.

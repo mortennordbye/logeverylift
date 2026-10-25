@@ -21,6 +21,15 @@ describe("shareApp", () => {
     });
   });
 
+  it("adds the sharer's friend code so the new account starts as their friend", async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    stubNavigator({ share });
+    await shareApp(origin, "abc_DEF-123");
+    expect(share).toHaveBeenCalledWith(
+      expect.objectContaining({ url: "https://example.test/welcome?ref=abc_DEF-123" }),
+    );
+  });
+
   it("copies the invite where there is no share sheet", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     stubNavigator({ clipboard: { writeText } as unknown as Clipboard });

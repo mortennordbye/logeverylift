@@ -1,6 +1,7 @@
 "use client";
 
 import { ConsentChecks, type ConsentState } from "@/components/features/ConsentChecks";
+import { redeemFriendCode } from "@/lib/actions/friend-invites";
 import { registerWithToken } from "@/lib/actions/invite-tokens";
 import { acceptTerms } from "@/lib/actions/legal";
 import { LEGAL_VERSION } from "@/lib/constants/legal";
@@ -14,7 +15,10 @@ import { useState } from "react";
 export function SignupForm() {
   // Invite links (/signup?token=...) still go through registerWithToken so the
   // token's use is counted; everyone else signs up directly.
-  const inviteToken = useSearchParams().get("token")?.trim() ?? "";
+  const searchParams = useSearchParams();
+  const inviteToken = searchParams.get("token")?.trim() ?? "";
+  // A friend's share link (/welcome?ref=...): the new account starts as their friend.
+  const friendCode = searchParams.get("ref")?.trim() ?? "";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,6 +30,11 @@ export function SignupForm() {
   // screen asks again (src/app/consent), so it never blocks the sign-up.
   async function recordConsent() {
     await callAction(acceptTerms({ version: LEGAL_VERSION, ...consent })).catch(() => {});
+  }
+
+  // Also after sign-in. A failure only means starting without the friend.
+  async function connectInviter() {
+    if (friendCode) await callAction(redeemFriendCode({ code: friendCode })).catch(() => {});
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -51,7 +60,10 @@ export function SignupForm() {
         password,
       });
       // Account was created; fall back to signing in manually.
-      if (!signInResult.error) await recordConsent();
+      if (!signInResult.error) {
+        await recordConsent();
+        await connectInviter();
+      }
       window.location.href = signInResult.error ? "/login" : "/";
       return;
     }
@@ -76,6 +88,7 @@ export function SignupForm() {
     }
 
     await recordConsent();
+    await connectInviter();
     window.location.href = "/";
   }
 
@@ -133,6 +146,12 @@ export function SignupForm() {
       </div>
 
       <ConsentChecks value={consent} onChange={(v) => { setConsent(v); setError(""); }} />
+
+      {friendCode && (
+        <p className="text-sm text-muted-foreground">
+          You&apos;ll start as friends with the person who invited you. You can remove them in Friends.
+        </p>
+      )}
 
       {error && (
         <p className="rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
