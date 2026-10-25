@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { accounts, exercises, sessions, users, workoutSets } from "@/db/schema";
+import { accounts, exercises, gyms, sessions, users, workoutSets } from "@/db/schema";
 import { exportMyData } from "@/lib/actions/account";
 import { collectUserData, handOverSharedCustomExercises, purgeExpiredSessions } from "@/lib/account-data";
 import { eq, sql } from "drizzle-orm";
@@ -69,6 +69,16 @@ describe("collectUserData", () => {
 });
 
 describe("exportMyData", () => {
+  it("names the primary gym, not just its id", async () => {
+    const [gym] = await db
+      .insert(gyms)
+      .values({ osmRef: "node/77", name: "SATS Majorstuen", lat: 59.93, lng: 10.71, address: "Kirkeveien 12" })
+      .returning();
+    await db.update(users).set({ primaryGymId: gym.id }).where(eq(users.id, meId));
+    const data = await collectUserData(meId);
+    expect(data.primaryGym).toEqual({ name: "SATS Majorstuen", address: "Kirkeveien 12", osmRef: "node/77" });
+  });
+
   it("exports the caller's data", async () => {
     asUser(meId);
     const result = await exportMyData();

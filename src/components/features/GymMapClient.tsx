@@ -18,6 +18,9 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
   const [members, setMembers] = useState<GymMember[] | null>(null);
   const [requested, setRequested] = useState<Set<string>>(new Set());
   const [busyId, setBusyId] = useState<string | null>(null);
+  // The gym whose members the sheet is waiting for: a slower answer for a gym
+  // tapped earlier must not fill the sheet of the one tapped since.
+  const openGymId = useRef<number | null>(null);
 
   // Leaflet touches window on import, so it loads in the browser only.
   useEffect(() => {
@@ -61,10 +64,11 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
   }, [pins, myGymId]);
 
   async function openGym(pin: GymPin) {
+    openGymId.current = pin.id;
     setSelected(pin);
     setMembers(null);
     const result = await callAction(getGymMembers({ gymId: pin.id }));
-    setMembers(result.success ? result.data : []);
+    if (openGymId.current === pin.id) setMembers(result.success ? result.data : []);
   }
 
   async function handleAdd(userId: string) {
