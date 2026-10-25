@@ -151,6 +151,24 @@ describe("searchGyms", () => {
     expect(body).not.toContain("59.9296");
   });
 
+  it("retries a busy Overpass once, then says to search by name", async () => {
+    asUser((await createUser()).id);
+    fetchMock
+      .mockResolvedValueOnce(new Response("at capacity", { status: 502 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ elements: [{ type: "node", id: 9, lat: 59.93, lon: 10.71, tags: { name: "3T" } }] })),
+      );
+    const first = await searchGyms({ lat: 59.93, lng: 10.71 });
+    expect(first.success && first.data.map((g) => g.name)).toEqual(["3T"]);
+
+    vi.setSystemTime((clock += 2_000));
+    fetchMock
+      .mockResolvedValueOnce(new Response("at capacity", { status: 502 }))
+      .mockResolvedValueOnce(new Response("at capacity", { status: 504 }));
+    const second = await searchGyms({ lat: 59.93, lng: 10.71 });
+    expect(second).toEqual({ success: false, error: expect.stringContaining("search by name") });
+  });
+
   it("searches Nominatim by name, and answers a repeat from cache", async () => {
     asUser((await createUser()).id);
     expect(await searchGyms({ query: "SATS" })).toEqual({ success: true, data: [] });
