@@ -20,11 +20,12 @@ All tables live in the app's Postgres in the homelab (Norway). Every user-owned 
 | Training log | `workout_sessions` (notes, feeling, readiness), `workout_sets` (reps, weight, duration, distance, heart rate zone, RIR/RPE, failed, notes), `exercise_prs`, `custom_weight_usage`, `dismissed_makeups`, `exercises` (custom) | The core service | Art. 6(1)(b) + 9(2)(a) | Until account deletion |
 | Plans | `programs`, `program_exercises`, `program_sets`, `training_cycles`, `training_cycle_slots`, `ai_setup_plans`, `ai_generations` | The core service, AI Setup daily limit | Art. 6(1)(b) | Until account deletion |
 | Social | `friendships`, `nudges`, `workout_reactions`, `program_shares`, `invite_token`, `user.friendsSeenAt` (when the Friends page was last opened, for the badge), `user.friendCode` (the code in the user's share link; a new account signing up through it, within an hour, starts as the sharer's friend via `redeemFriendCode`) | Friends features | Art. 6(1)(b) | Until either side deletes |
+| Primary gym (optional) | `user.primaryGymId` | Gym map: listing the user under the gym they pick | Art. 6(1)(b), on the user's choice (setting it is the opt-in) | Until the user removes it or deletes the account |
 | Feedback | `feedback` | Improving the app | Art. 6(1)(f) | Until account deletion |
 | Sessions | `session` (IP address, user agent, `impersonatedBy`) | Keeping users signed in, security | Art. 6(1)(f) | Purged after expiry (30 days from last use) by `purgeExpiredSessions` |
 | MCP connections | `oauth_application`, `oauth_access_token`, `oauth_consent` | User-connected AI assistants | Art. 6(1)(b), on the user's instruction | Until revoked or account deletion |
 
-Not personal data: `ai_plan_cache` (keyed by a hash of an age band, gender, goals and the request; no user id), `ai_model_configs`, built-in `exercises`.
+Not personal data: `gyms` (public OpenStreetMap places, no user id; who trains where is `user.primaryGymId`), `ai_plan_cache` (keyed by a hash of an age band, gender, goals and the request; no user id), `ai_model_configs`, built-in `exercises`.
 
 Health data (Art. 9): body weight and its history, heart rate zones, readiness, feeling, RPE/RIR, failed sets, free-text notes, "joints to avoid" in AI Setup picks. Treated as special category; the basis is explicit consent given at sign-up (`acceptTerms` in `src/lib/actions/legal.ts`).
 
@@ -42,6 +43,9 @@ Health data (Art. 9): body weight and its history, heart rate zones, readiness, 
 | Google Drive (Google) | Encrypted backups only, no key | Off-site backup | Data is unreadable to Google |
 | OpenRouter and its model providers | AI Setup edit request (see `buildEditInput` in `src/lib/utils/ai-prompt.ts`) | AI editing | Explicit opt-in, `aiConsentAt`; Art. 49(1)(a) for third countries. Free models may retain and train |
 | Other users | Friends: name, avatar, reactions, nudges, shared programs; unless `showActivityToFriends` is off, completed workouts (program, date, duration, feeling, per-exercise set labels from `getFriendSessionDetail`, PRs, streak, weekly volume). Never notes, RIR/RPE, heart rate zone or readiness | Friends | Art. 6(1)(b); feeling under the Art. 9(2)(a) consent |
+| OpenStreetMap Foundation (UK) | Browser IP when the gym map loads its tiles (`GymMapClient`) | Map display | UK adequacy decision |
+| Nominatim / Overpass (OpenStreetMap services) | From our server (`searchGyms`): the gym name typed, or a position rounded to 2 decimals (`roundCoordinate`). No IP, no user identity, nothing stored | Gym search | No personal data leaves for a name search; a rounded position is not linked to a person |
+| Other users (gym map) | Name and avatar of users who picked a primary gym, listed under that gym to every user (`getGymMembers`) | Gym map | Art. 6(1)(b), opt-in |
 | AI assistants the user connects (MCP) | Profile, weight, programs, cycles | User's instruction | The user's own choice |
 
 Not used: Gemini API (its free tier is not allowed for apps serving EEA users; `getEnabledModels` filters the `google` provider out), Sentry (no DSN in prod; if enabled, add it here and to the policy), analytics, ads, email sending.

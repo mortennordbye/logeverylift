@@ -42,6 +42,9 @@ export default function PrivacyPage() {
           you create.
         </li>
         <li>
+          <strong>Primary gym</strong>, if you pick one: which gym, taken from OpenStreetMap.
+        </li>
+        <li>
           <strong>Feedback</strong> you send from the app.
         </li>
         <li>
@@ -99,6 +102,13 @@ export default function PrivacyPage() {
           Framework and Cloudflare&apos;s standard contractual clauses.
         </li>
         <li>
+          <strong>OpenStreetMap</strong>, for the gym map. When you open the map, your browser loads map images from
+          the OpenStreetMap Foundation (UK, covered by an EU adequacy decision), which sees your IP address. Gym
+          searches go through our server, so OpenStreetMap&apos;s search services (Nominatim and Overpass) see the
+          name you searched for or, for &quot;Gyms near me&quot;, your position rounded to about a kilometre, but not
+          your IP address or who you are. Your position is not stored.
+        </li>
+        <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they
           leave the server, and Google does not have the key.
         </li>
@@ -120,6 +130,11 @@ export default function PrivacyPage() {
         they also see your completed workouts: the program, date, duration, how you felt, each exercise with its sets
         (weight, reps, time, distance), your personal records, streak and weekly volume. Your notes, effort ratings,
         heart rate zones and readiness are never shown to them.
+      </p>
+      <p>
+        <strong>Gym map:</strong> if you pick a primary gym, everyone on LogEveryLift can see your name and avatar
+        listed under that gym on the map, and send you a friend request. Only the gym is shown, never when you train.
+        You can remove it in Account at any time.
       </p>
       <p>
         <strong>Invite links:</strong> the link you share from the app carries a code tied to your account. Someone
