@@ -29,6 +29,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/db/schema/workout-sets.ts`, `src/components/features/SetEditView.tsx`, `src/components/features/LogRunModal.tsx`.
 
 ### Surface make-up attribution in the history view
+- **Planned:** see [`docs/plans/show-hidden-data.md`](docs/plans/show-hidden-data.md).
 - **What:** The `workout_sessions.intended_date` column now exists and is set when a session is started via a "Make up" prompt (`?makeup=YYYY-MM-DD`); the missed-workout logic consumes it to clear the original missed day. What remains is cosmetic: the history view still labels a make-up with today's date — it won't say "this was Monday's push." Render `intendedDate` on the history row when present.
 - **Why deferred:** The functional half (make-up clears the missed slot, correct cycle progression) shipped; the display label is cosmetic and wasn't requested.
 - **Unblocked by:** A user reporting that make-up sessions look wrong in the history view.
@@ -53,6 +54,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (exercise timer state + resync effects), `src/contexts/workout-session-context.tsx` (persistence keys), `src/components/features/SetEditView.tsx` (draft state).
 
 ### Surface failed sets in history & metrics
+- **Planned:** see [`docs/plans/show-hidden-data.md`](docs/plans/show-hidden-data.md).
 - **What:** `workout_sets.is_failed` is now logged (explicit failed-set flag, Jun 2026) and shown in-workout (red ✕). History rows and the metrics/PR views don't yet read it — a failed set currently just shows its low `actualReps`. A dedicated "failed" badge in `/history` and exclusion/annotation in PR/volume math would make it explicit.
 - **Why deferred:** The flag is captured and progression already reacts to `actualReps < targetReps`; surfacing it in history/metrics is additive polish.
 - **Unblocked by:** Wanting failed sets visually distinct in history. Add `isFailed` to the history query + `HistoryRow`, render a badge, and decide whether failed sets count toward volume.
@@ -195,6 +197,7 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Touchpoints:** `src/lib/actions/workout-sets.ts`, `src/lib/actions/workout-sessions.ts`, `src/contexts/pending-queue-context.tsx`, `src/components/features/WorkoutSetsList.tsx`.
 
 ### Out-of-app push notifications via Service Worker
+- **Planned:** see [`docs/plans/web-push-and-reminders.md`](docs/plans/web-push-and-reminders.md).
 - **What:** Today the app uses the browser Notification API (in-app only). Real out-of-app push needs a Service Worker registration + `pushManager.subscribe()` + server-side delivery.
 - **Why deferred:** Not blocking any current flow.
 - **Unblocked by:** Product decision that out-of-app push is needed.

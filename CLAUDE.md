@@ -20,6 +20,12 @@ squashed), so branch off `main` for anything new.
 Do not start from `docs/specs/smart-incrementation.md` alone: it accurately
 describes the engine as it is today, which the plan is replacing.
 
+## Feature build briefs
+
+Seven features are planned as standalone briefs in
+[`docs/plans/README.md`](docs/plans/README.md), with build order and status. To build
+one, read its brief and follow it; each is written to need no conversation history.
+
 ## Personal data and the privacy policy
 
 The app is open to the public and stores health data, so GDPR applies. Before changing anything that stores, shows, logs or sends user data, or touches browser storage, the privacy policy or the terms, use the `privacy-compliance` skill (`.claude/skills/privacy-compliance/SKILL.md`). The record of processing is [`docs/privacy/data-inventory.md`](docs/privacy/data-inventory.md).
