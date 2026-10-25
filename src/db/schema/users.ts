@@ -1,4 +1,5 @@
 import { boolean, integer, pgTable, real, text, timestamp, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { gyms } from "./gyms";
 
 export const users = pgTable("user", {
   id: text("id").primaryKey(),
@@ -43,6 +44,9 @@ export const users = pgTable("user", {
   // The code in this user's share link (/welcome?ref=...). Whoever signs up
   // through it starts as their friend. Made on first share.
   friendCode: text("friend_code").unique(),
+  // Where the user usually trains. Setting it is the opt-in to being listed
+  // under that gym on the gym map, which every user can see.
+  primaryGymId: integer("primary_gym_id").references(() => gyms.id, { onDelete: "set null" }),
   // The admin whose invite (token or direct account creation) let this user in.
   // Null for open self-signups. Drives the "Invited by founder" badge.
   invitedById: text("invited_by_id").references((): AnyPgColumn => users.id, {

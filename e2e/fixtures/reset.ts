@@ -89,6 +89,7 @@ export async function resetE2EUser(email: string): Promise<void> {
         healthConsentAt: now,
         aiConsentAt: null,
         friendsSeenAt: now,
+        primaryGymId: null,
       })
       .where(eq(users.id, userId));
   });

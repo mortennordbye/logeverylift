@@ -4,7 +4,7 @@ import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { shareApp } from "@/lib/utils/share";
-import { BarChart2, CalendarDays, ChevronRight, Clock, FileText, Library, LogOut, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
+import { BarChart2, CalendarDays, ChevronRight, Clock, FileText, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -59,6 +59,12 @@ const groups: { title: string; items: MoreItem[] }[] = [
         href: "/more/friends",
         icon: Users,
         description: "Connect and share programs with friends",
+      },
+      {
+        label: "Gym map",
+        href: "/more/gyms",
+        icon: MapPin,
+        description: "See who trains at your gym",
       },
       {
         label: "Invite a friend",

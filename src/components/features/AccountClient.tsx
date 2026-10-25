@@ -10,7 +10,8 @@ import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { clearLocalUserData, unsyncedChangeCount } from "@/lib/utils/local-data";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { CheckCircle2, Download, KeyRound, LogOut, Trash2 } from "lucide-react";
+import { CheckCircle2, ChevronRight, Download, KeyRound, LogOut, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 type Gender = "male" | "female" | "other" | "prefer_not_to_say";
@@ -33,6 +34,7 @@ interface AccountClientProps {
   profile: UserProfile;
   showActivityToFriends: boolean;
   aiConsent: boolean;
+  primaryGymName: string | null;
 }
 
 interface ProfileState extends UserProfile {
@@ -184,7 +186,7 @@ function NumberRow({
   );
 }
 
-export function AccountClient({ name, email, role, invited, profile: initialProfile, showActivityToFriends: initialActivityPrivacy, aiConsent: initialAiConsent }: AccountClientProps) {
+export function AccountClient({ name, email, role, invited, profile: initialProfile, showActivityToFriends: initialActivityPrivacy, aiConsent: initialAiConsent, primaryGymName }: AccountClientProps) {
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -459,6 +461,18 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
                 />
               </div>
             </button>
+            <Link
+              href="/more/account/gym"
+              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 border-t border-border/50"
+            >
+              <div className="flex-1 text-left min-w-0">
+                <p className="text-sm font-medium">Primary gym</p>
+                <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {primaryGymName ? `${primaryGymName} · shown on the gym map` : "Not set · you're not on the gym map"}
+                </p>
+              </div>
+              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+            </Link>
             {/* Turning AI editing on happens in AI Setup, next to what it sends. */}
             {initialAiConsent && (
               <button

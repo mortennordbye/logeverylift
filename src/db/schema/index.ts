@@ -21,6 +21,7 @@ export * from "./dismissed-makeups";
 export * from "./exercise-prs";
 export * from "./feedback";
 export * from "./friendships";
+export * from "./gyms";
 export * from "./nudges";
 export * from "./program-shares";
 export * from "./invite-tokens";

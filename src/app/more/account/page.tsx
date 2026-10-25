@@ -1,6 +1,7 @@
 import { AccountClient } from "@/components/features/AccountClient";
 import { parseUserGoals } from "@/lib/utils/goals";
 import { db } from "@/db";
+import { gyms } from "@/db/schema/gyms";
 import { users } from "@/db/schema/users";
 import { requireSession } from "@/lib/utils/session";
 import { eq } from "drizzle-orm";
@@ -10,6 +11,9 @@ import Link from "next/link";
 export default async function AccountPage() {
   const session = await requireSession();
   const user = await db.query.users.findFirst({ where: eq(users.id, session.user.id) });
+  const gym = user?.primaryGymId
+    ? await db.query.gyms.findFirst({ where: eq(gyms.id, user.primaryGymId), columns: { name: true } })
+    : undefined;
 
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
@@ -39,6 +43,7 @@ export default async function AccountPage() {
         }}
         showActivityToFriends={user?.showActivityToFriends ?? true}
         aiConsent={!!user?.aiConsentAt}
+        primaryGymName={gym?.name ?? null}
       />
     </div>
   );
