@@ -3,15 +3,13 @@
 import { db } from "@/db";
 import { friendships, gyms, users } from "@/db/schema";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { parseNominatim, parseOverpass, roundCoordinate, type GymResult } from "@/lib/utils/osm-gyms";
+import { OSM_HEADERS, parseNominatim, parseOverpass, roundCoordinate, type GymResult } from "@/lib/utils/osm-gyms";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult, UserSearchResult } from "@/types/workout";
-import { and, count, eq, or } from "drizzle-orm";
+import { and, between, count, eq, isNotNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-// Nominatim and Overpass ask for an identifying User-Agent.
-const OSM_HEADERS = { "User-Agent": "LogEveryLift (+https://logeverylift.com)", Accept: "application/json" };
 const NEAR_ME_RADIUS_M = 3000;
 const NEAR_ME_BUSY = "Finding gyms near you isn't working right now. Try again later, or search by name.";
 
@@ -62,10 +60,28 @@ async function nominatim(path: "search" | "lookup", params: Record<string, strin
   return parseNominatim(await res.json());
 }
 
+/** Imported gyms within NEAR_ME_RADIUS_M of the point, nearest first, at most 30. */
+async function importedGymsNear(lat: number, lng: number): Promise<GymResult[]> {
+  const dLat = NEAR_ME_RADIUS_M / 111_320;
+  const dLng = dLat / Math.cos((lat * Math.PI) / 180);
+  const rows = await db
+    .select({ osmRef: gyms.osmRef, name: gyms.name, lat: gyms.lat, lng: gyms.lng, address: gyms.address })
+    .from(gyms)
+    .where(and(isNotNull(gyms.importedAt), between(gyms.lat, lat - dLat, lat + dLat), between(gyms.lng, lng - dLng, lng + dLng)));
+  const metres = (g: GymResult) => Math.hypot((g.lat - lat) * 111_320, (g.lng - lng) * 111_320 * Math.cos((lat * Math.PI) / 180));
+  return rows
+    .map((g) => ({ g, d: metres(g) }))
+    .filter((r) => r.d <= NEAR_ME_RADIUS_M)
+    .sort((a, b) => a.d - b.d)
+    .slice(0, 30)
+    .map((r) => r.g);
+}
+
 /**
- * Find gyms on OpenStreetMap by name (Nominatim) or near a point (Overpass).
- * The request goes from the server, so OSM never sees the user's IP, and a
- * point is rounded to about a kilometre first. Nothing here is stored.
+ * Find gyms on OpenStreetMap by name (Nominatim) or near a point (the imported
+ * gyms, or Overpass where none are imported). The request goes from the
+ * server, so OSM never sees the user's IP, and a point is rounded to about a
+ * kilometre before it is sent. Nothing here is stored.
  */
 export async function searchGyms(data: unknown): Promise<ActionResult<GymResult[]>> {
   const auth = await requireSession();
@@ -91,6 +107,10 @@ export async function searchGyms(data: unknown): Promise<ActionResult<GymResult[
     }
 
     const { lat, lng } = parsed.data as { lat: number; lng: number };
+    // Where gyms are imported (src/lib/gym-import.ts), answer from the database.
+    const nearby = await importedGymsNear(lat, lng);
+    if (nearby.length > 0) return { success: true, data: nearby };
+
     const query = `[out:json][timeout:25];nwr["leisure"~"^(fitness_centre|sports_centre)$"](around:${NEAR_ME_RADIUS_M},${roundCoordinate(lat)},${roundCoordinate(lng)});out center 30;`;
     // The public Overpass server is often at capacity: it answers 502/504 at
     // once, or takes 20-40 s. Retry a busy answer once, then point at name

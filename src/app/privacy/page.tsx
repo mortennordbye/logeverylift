@@ -107,8 +107,9 @@ export default function PrivacyPage() {
           access logs, only in error logs for up to 7 days, and may use Cloudflare to deliver the map. Gym
           searches go through our server, so the OpenStreetMap search services see the name you searched for
           (Nominatim, run by the OpenStreetMap Foundation, UK) or, for &quot;Gyms near me&quot;, your position rounded
-          to about a kilometre (Overpass, run by FOSSGIS e.V., Germany), but not your IP address or who you are. Our
-          server receives your exact position for that search and does not store it.
+          to about a kilometre (Overpass, run by FOSSGIS e.V., Germany), but not your IP address or who you are. In
+          Norway, &quot;Gyms near me&quot; uses our own copy of OpenStreetMap&apos;s gyms, so your position is not sent
+          at all. Our server receives your exact position for that search and does not store it.
         </li>
         <li>
           <strong>Google Drive</strong> stores an off-site copy of the backups. The backups are encrypted before they

@@ -1,9 +1,10 @@
 import { pgTable, real, serial, text, timestamp } from "drizzle-orm/pg-core";
 
 /**
- * Gyms users have picked as their primary gym, copied from OpenStreetMap when
- * first picked. Public place data, not personal data: who trains where lives
- * on user.primaryGymId.
+ * Gyms from OpenStreetMap: every gym in the imported countries
+ * (src/lib/gym-import.ts), plus any other gym a user picked as their primary
+ * gym, copied when first picked. Public place data, not personal data: who
+ * trains where lives on user.primaryGymId.
  */
 export const gyms = pgTable("gyms", {
   id: serial("id").primaryKey(),
@@ -13,5 +14,7 @@ export const gyms = pgTable("gyms", {
   lat: real("lat").notNull(),
   lng: real("lng").notNull(),
   address: text("address"),
+  // Last import that found this gym. Null for a gym only copied when picked.
+  importedAt: timestamp("imported_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });

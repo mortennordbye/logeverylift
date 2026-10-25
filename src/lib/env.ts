@@ -19,6 +19,14 @@ const envSchema = z.object({
   ADMIN_PASSWORD: z.string().min(8).optional(),
   ADMIN_NAME: z.string().default("Admin"),
   SENTRY_DSN: z.string().url().optional(),
+  // Countries (ISO 3166-1 codes, comma-separated, e.g. "NO") whose gyms are
+  // copied from OpenStreetMap weekly, so "Gyms near me" answers from the
+  // database there (src/lib/gym-import.ts). Unset: no import.
+  GYM_IMPORT_COUNTRIES: z
+    .string()
+    .regex(/^[A-Z]{2}(,[A-Z]{2})*$/)
+    .transform((v) => v.split(","))
+    .optional(),
   // Stable key Next.js uses to hash Server Action IDs. When unset, Next.js
   // generates a fresh key per build, so cached client bundles can't talk to
   // freshly-deployed server pods ("Failed to find Server Action" errors).
@@ -46,6 +54,7 @@ function loadEnv(): Env {
       ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
       ADMIN_NAME: process.env.ADMIN_NAME,
       SENTRY_DSN: process.env.SENTRY_DSN,
+      GYM_IMPORT_COUNTRIES: process.env.GYM_IMPORT_COUNTRIES,
       NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY:
         process.env.NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY,
     });
