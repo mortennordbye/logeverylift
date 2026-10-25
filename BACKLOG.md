@@ -22,12 +22,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A request for 7-day training. Then add a 7-day split to `autoSplit` (for example push/pull/legs twice plus a conditioning or mobility day), add 7 to `TEMPLATE_DAYS`, and extend the combination tests.
 - **Touchpoints:** `src/lib/utils/plan-templates.ts` (`TEMPLATE_DAYS`, `autoSplit`, `SPLIT_DAYS`), `src/__tests__/plan-templates.test.ts`.
 
-### Manage program shares: see and revoke who a program is shared with
-- **What:** Sharing a program with a friend works (`ProgramShareButton` calls `shareProgram`), and the friend sees it under More → Friends → Shared programs. But the sharer has no way to see who they've shared a program with or to take a share back. The server side exists and is unused: `getOutgoingShares(programId)` lists a program's shares and `revokeShare(shareId)` removes one, both owner-checked. A screen (for example a "Shared with" list in the program's share sheet, each row with a Revoke button) is missing.
-- **Why deferred:** Found during the 2026-10-21 dead-code cleanup (#77). The two actions were kept rather than deleted because they're a missing feature, not dead code; nobody has asked to revoke a share yet.
-- **Unblocked by:** Wanting to manage shares. Build the list into the share UI, call `getOutgoingShares` on open and `revokeShare` per row, and add an e2e spec for share then revoke. If it's decided the feature isn't wanted, delete both actions instead.
-- **Touchpoints:** `src/lib/actions/program-shares.ts` (`getOutgoingShares`, `revokeShare`), `src/components/features/ProgramShareButton.tsx`, `src/components/features/SharedProgramsClient.tsx`.
-
 ### Sport-specific endurance fields (pool length, bike power/cadence, swim stroke)
 - **What:** The set editor captures distance/duration/incline/HR-zone only. Triathletes often want pool length, swim stroke, or bike power/cadence. The schema has no columns for these.
 - **Why deferred:** Not needed to log and track the three disciplines; add when a concrete need appears.
