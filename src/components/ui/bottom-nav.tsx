@@ -62,12 +62,14 @@ export function BottomNav() {
   }, []);
 
   // Friend requests, nudges and reactions waiting on the Friends page. Checked
-  // when the app opens or comes back to the foreground, and on the More and
-  // Friends pages, where the count changes (opening Friends clears it).
+  // when the app opens or comes back to the foreground, and when moving
+  // between More, Friends and the rest, where the count changes. On Friends
+  // itself it is all on screen, so the dot is off and nothing is fetched: the
+  // page marks it seen in its streamed part, which can land after this effect.
   const hideNav = pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
   const badgeScope = pathname === "/more" ? "more" : pathname.startsWith("/more/friends") ? "friends" : "other";
   useEffect(() => {
-    if (hideNav) return;
+    if (hideNav || badgeScope === "friends") return;
     const refresh = () => {
       getFriendsBadgeCount()
         .then((r) => {
@@ -116,7 +118,7 @@ export function BottomNav() {
           const active = isActive(item.label, href);
           const showDot = item.label === "Workout" && workoutPath !== null;
           const showGeneratingDot = item.label === "More" && isGenerating;
-          const showFriendsDot = item.label === "More" && !isGenerating && friendsBadge > 0;
+          const showFriendsDot = item.label === "More" && !isGenerating && friendsBadge > 0 && badgeScope !== "friends";
 
           return (
             <Link
