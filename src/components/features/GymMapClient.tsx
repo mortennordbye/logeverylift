@@ -36,8 +36,13 @@ export function GymMapClient({ pins, myGymId }: { pins: GymPin[]; myGymId: numbe
   useEffect(() => {
     let map: import("maplibre-gl").Map | null = null;
     let cancelled = false;
-    void import("maplibre-gl").then(({ default: maplibregl }) => {
+    void import("maplibre-gl").then((maplibregl) => {
       if (cancelled || !mapRef.current) return;
+      // MapLibre 6 finds its worker next to its own file, which the bundler
+      // moves; reference the worker so it's emitted and served, and say where.
+      maplibregl.setWorkerUrl(
+        new URL("../../../node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs", import.meta.url).href,
+      );
       const mine = pins.find((p) => p.id === myGymId);
       map = new maplibregl.Map({
         container: mapRef.current,

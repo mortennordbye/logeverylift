@@ -25,7 +25,7 @@ vi.mock("maplibre-gl", () => {
       return this;
     }
   }
-  return { default: { Map, LngLatBounds, Marker } };
+  return { Map, LngLatBounds, Marker, setWorkerUrl: () => {} };
 });
 vi.mock("maplibre-gl/dist/maplibre-gl.css", () => ({}));
 

@@ -28,9 +28,16 @@ test("the gym map lists who trains there, and a member can be added or the gym r
   await db.update(users).set({ primaryGymId: gym.id }).where(eq(users.id, me.id));
 
   try {
+    // MapLibre reports a worker it can't load as a console error, not a page
+    // error, and the pins still render; catch it here.
+    const consoleErrors: string[] = [];
+    page.on("console", (m) => {
+      if (m.type() === "error") consoleErrors.push(m.text());
+    });
     // Each worker's gym sits apart from the others', so its pin is the one under the click.
     await page.goto("/more/gyms");
     await page.getByRole("button", { name: `${gym.name}, 2 members` }).click();
+    expect(consoleErrors.filter((e) => /worker/i.test(e))).toEqual([]);
     const sheet = page.getByRole("dialog");
     await expect(sheet.getByRole("heading", { name: gym.name })).toBeVisible();
     await expect(sheet.getByText("You", { exact: true })).toBeVisible();

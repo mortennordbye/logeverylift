@@ -46,7 +46,7 @@
     "drizzle-orm": "^0.45.1",
     "framer-motion": "^11.18.2",
     "lucide-react": "^0.577.0",
-    "maplibre-gl": "^5.24.0",
+    "maplibre-gl": "^6.15.0",
     "mcp-handler": "^1.1.0",
     "next": "16.4.2",
     "pg": "^8.20.0",
