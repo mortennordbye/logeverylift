@@ -102,8 +102,9 @@ export default function PrivacyPage() {
           Framework and Cloudflare&apos;s standard contractual clauses.
         </li>
         <li>
-          <strong>OpenStreetMap</strong>, for the gym map. When you open the map, your browser loads map images from
-          the OpenStreetMap Foundation (UK, covered by an EU adequacy decision), which sees your IP address. Gym
+          <strong>OpenFreeMap and OpenStreetMap</strong>, for the gym map. When you open the map, your browser loads
+          the map from OpenFreeMap (Hungary), which sees your IP address. It says it keeps no IP addresses in its
+          access logs, only in error logs for up to 7 days, and may use Cloudflare to deliver the map. Gym
           searches go through our server, so the OpenStreetMap search services see the name you searched for
           (Nominatim, run by the OpenStreetMap Foundation, UK) or, for &quot;Gyms near me&quot;, your position rounded
           to about a kilometre (Overpass, run by FOSSGIS e.V., Germany), but not your IP address or who you are. Our

@@ -2,31 +2,32 @@
 import { act, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-// Leaflet needs a real browser; a stand-in that keeps each pin's click handler.
-const clicks: Array<() => void> = [];
-vi.mock("leaflet", () => {
-  const map = { setView: () => map, fitBounds: () => map, remove: () => {} };
-  const layer = { addTo: () => layer };
-  return {
-    map: () => map,
-    tileLayer: () => layer,
-    control: { attribution: () => layer },
-    divIcon: () => ({}),
-    latLngBounds: () => ({}),
-    marker: () => {
-      const marker = {
-        addTo: () => marker,
-        on: (_event: string, fn: () => void) => {
-          clicks.push(fn);
-          return marker;
-        },
-        getElement: () => undefined,
-      };
-      return marker;
-    },
-  };
+// MapLibre needs WebGL; a stand-in that keeps each pin's element, so the test
+// clicks the real button the component built.
+const pins: HTMLElement[] = [];
+vi.mock("maplibre-gl", () => {
+  class Map {
+    touchZoomRotate = { disableRotation: () => {} };
+    fitBounds() {}
+    remove() {}
+  }
+  class LngLatBounds {
+    extend() {}
+  }
+  class Marker {
+    constructor({ element }: { element: HTMLElement }) {
+      pins.push(element);
+    }
+    setLngLat() {
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+  }
+  return { default: { Map, LngLatBounds, Marker } };
 });
-vi.mock("leaflet/dist/leaflet.css", () => ({}));
+vi.mock("maplibre-gl/dist/maplibre-gl.css", () => ({}));
 
 type Member = { id: string; name: string; image: null; friendshipStatus: "none"; isMe: boolean };
 const pending = new Map<number, (members: Member[]) => void>();
@@ -43,14 +44,10 @@ describe("GymMapClient", () => {
   it("shows the members of the gym tapped last, whichever answer arrives first", async () => {
     const { GymMapClient } = await import("@/components/features/GymMapClient");
     render(<GymMapClient pins={[pin(1, "Gym A"), pin(2, "Gym B")]} myGymId={null} />);
-    await waitFor(() => expect(clicks).toHaveLength(2));
+    await waitFor(() => expect(pins).toHaveLength(2));
 
-    act(() => {
-      clicks[0]();
-    });
-    act(() => {
-      clicks[1]();
-    });
+    act(() => pins[0].click());
+    act(() => pins[1].click());
     await act(async () => pending.get(2)!([member("Bea")]));
     await act(async () => pending.get(1)!([member("Arne")]));
 
