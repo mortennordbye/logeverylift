@@ -20,7 +20,7 @@ when the brief was written.
 | # | Brief | Status | Schema change | Critical flow |
 |---|---|---|---|---|
 | 1 | [Show hidden data](show-hidden-data.md) | done | no | no |
-| 2 | [Plate calculator and warm-ups](plates-and-warmups.md) | todo | no | yes |
+| 2 | [Plate calculator and warm-ups](plates-and-warmups.md) | done | no | yes |
 | 3 | [Exercise detail page](exercise-detail-page.md) | todo | yes | no |
 | 4 | [Edit past sessions](edit-past-sessions.md) | todo | no | yes |
 | 5 | [Quick workout and session-only swap](quick-workout-and-swap.md) | todo | yes | yes |

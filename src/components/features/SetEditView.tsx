@@ -15,6 +15,7 @@ import {
 } from "@/lib/utils/exercise-type";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
 import { type Equipment, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
+import { formatPlates } from "@/lib/utils/plates";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { markProgrammaticBack } from "@/lib/utils/nav-intent";
@@ -696,7 +697,14 @@ function SetEditForm({
               className="w-full flex items-center justify-between py-4 border-b border-border transition-colors hover:bg-muted/50 active:bg-muted/70"
             >
               <span className="text-base font-medium">Weight (kg)</span>
-              <span className="text-base text-muted-foreground">{weight}</span>
+              <span className="flex flex-col items-end">
+                <span className="text-base text-muted-foreground">{weight}</span>
+                {equipment === "barbell" && formatPlates(weight) && (
+                  <span className="text-xs text-muted-foreground" data-testid="set-plates">
+                    {formatPlates(weight)}
+                  </span>
+                )}
+              </span>
             </button>
 
             {/* Exercise type — edits the per-program override on the exercise

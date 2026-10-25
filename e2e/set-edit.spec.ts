@@ -36,7 +36,8 @@ test("a cold load of the editor shows the session's corrected values, and saving
   }, setId);
 
   await page.goto(url);
-  await expect(page.getByRole("button", { name: /^Weight \(kg\)\s*82\.5$/ })).toBeVisible();
+  // Barbell sets follow the weight with the plate line, so the name runs on.
+  await expect(page.getByRole("button", { name: /^Weight \(kg\)\s*82\.5(\s|$)/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Reps done\s*6$/ })).toBeVisible();
 
   await page.getByRole("button", { name: "Save", exact: true }).click();

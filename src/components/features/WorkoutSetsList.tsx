@@ -9,6 +9,7 @@ import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { useToast } from "@/contexts/toast-context";
 import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
 import { formatEnduranceDistance, formatEndurancePace, formatTime } from "@/lib/utils/format";
+import { formatPlates } from "@/lib/utils/plates";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { haptics } from "@/lib/utils/haptics";
 import { buildSetLog } from "@/lib/utils/set-log";
@@ -96,6 +97,8 @@ type WorkoutSetsListProps = {
   hideEffortPrompt?: boolean;
   /** Which sets decide a session, and so which set the effort prompt asks about. */
   progressionScope?: ProgressionScope;
+  /** Shows the plates per side under each set's weight. */
+  isBarbell?: boolean;
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -122,6 +125,7 @@ export function WorkoutSetsList({
   onApplyRepSuggestion,
   hideEffortPrompt = false,
   progressionScope = "all",
+  isBarbell = false,
 }: WorkoutSetsListProps) {
   const router = useRouter();
   const workoutSession = useWorkoutSession();
@@ -978,6 +982,7 @@ export function WorkoutSetsList({
                     overrideActualReps={isWorkout ? renderedOverrides[item.set.id]?.actualReps : undefined}
                     failed={isWorkout ? (renderedOverrides[item.set.id]?.isFailed ?? false) : false}
                     hasPR={prSetIds.has(item.set.id)}
+                    isBarbell={isBarbell}
                   />
                   {isEditing && flatItems[index + 1]?.type !== "rest" && (
                     <InsertRestButton onClick={() => insertRest(index + 1)} />
@@ -1613,6 +1618,7 @@ function SortableSetRow({
   overrideActualReps,
   failed,
   hasPR,
+  isBarbell = false,
 }: {
   id: string;
   set: ProgramSet;
@@ -1645,6 +1651,7 @@ function SortableSetRow({
   overrideActualReps?: number;
   failed?: boolean;
   hasPR?: boolean;
+  isBarbell?: boolean;
 }) {
   const {
     attributes,
@@ -1846,6 +1853,13 @@ function SortableSetRow({
                 · {overrideActualReps} done
               </span>
             )}
+          </p>
+        )}
+        {/* Left out while reordering: the extra line makes rows taller to drag,
+            and on a short screen pushes drop targets into the auto-scroll band. */}
+        {isBarbell && !isEditing && formatPlates(Number(set.weightKg ?? 0)) && (
+          <p className="text-xs text-muted-foreground" data-testid="set-plates">
+            {formatPlates(Number(set.weightKg ?? 0))}
           </p>
         )}
         {overrideNotes && (
