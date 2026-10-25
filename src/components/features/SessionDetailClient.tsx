@@ -1,7 +1,7 @@
 "use client";
 
 import { deleteWorkoutSession } from "@/lib/actions/workout-sessions";
-import { formatDistanceKm, formatPace, formatTime } from "@/lib/utils/format";
+import { formatDistanceKm, loggedSetLabel } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { SessionDetail } from "@/types/workout";
 import { ChevronLeftIcon, Dumbbell, Trash2 } from "lucide-react";
@@ -146,17 +146,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
                         <span className="font-medium flex-1 text-center">
                           {isRun ? (
                             <>
-                              <span>
-                                {[
-                                  set.distanceMeters ? formatDistanceKm(set.distanceMeters) : null,
-                                  set.durationSeconds != null ? formatTime(Number(set.durationSeconds)) : null,
-                                  set.distanceMeters && set.durationSeconds
-                                    ? formatPace(Number(set.durationSeconds), set.distanceMeters)
-                                    : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ") || "—"}
-                              </span>
+                              <span>{loggedSetLabel(set, true)}</span>
                               {(set.inclinePercent != null || set.heartRateZone != null) && (
                                 <span className="block text-xs text-muted-foreground mt-0.5">
                                   {[
@@ -166,13 +156,9 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
                                 </span>
                               )}
                             </>
-                          ) : set.durationSeconds != null
-                            ? formatTime(Number(set.durationSeconds))
-                            : Number(set.weightKg) > 0
-                            ? `${set.actualReps} × ${Number(set.weightKg)}kg`
-                            : set.actualReps > 0
-                            ? `${set.actualReps} reps`
-                            : "—"}
+                          ) : (
+                            loggedSetLabel(set, false)
+                          )}
                         </span>
                         <span className="text-muted-foreground w-16 text-right">
                           {/* Three states, not two: effort logged as RIR, effort

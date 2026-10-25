@@ -2,7 +2,7 @@
 
 The record of processing (GDPR Art. 30) for LogEveryLift, and the source the privacy policy (`src/app/privacy/page.tsx`) is written from. When a change adds, moves or shares personal data, update this file and the policy in the same PR, and bump `LEGAL_VERSION` (`src/lib/constants/legal.ts`) if users need to accept the change. The `privacy-compliance` skill (`.claude/skills/privacy-compliance/SKILL.md`) has the checklist.
 
-Facts last checked 2026-10-23.
+Facts last checked 2026-10-25.
 
 ## Controller
 
@@ -41,7 +41,7 @@ Health data (Art. 9): body weight and its history, heart rate zones, readiness, 
 | Cloudflare (USA) | All HTTP traffic incl. IP | Proxy, TLS, DDoS protection | EU-US DPF, SCCs in Cloudflare's DPA |
 | Google Drive (Google) | Encrypted backups only, no key | Off-site backup | Data is unreadable to Google |
 | OpenRouter and its model providers | AI Setup edit request (see `buildEditInput` in `src/lib/utils/ai-prompt.ts`) | AI editing | Explicit opt-in, `aiConsentAt`; Art. 49(1)(a) for third countries. Free models may retain and train |
-| Other users | Name, avatar, today's activity (toggle), reactions, nudges, shared programs | Friends | Art. 6(1)(b) |
+| Other users | Friends: name, avatar, reactions, nudges, shared programs; unless `showActivityToFriends` is off, completed workouts (program, date, duration, feeling, per-exercise set labels from `getFriendSessionDetail`, PRs, streak, weekly volume). Never notes, RIR/RPE, heart rate zone or readiness | Friends | Art. 6(1)(b); feeling under the Art. 9(2)(a) consent |
 | AI assistants the user connects (MCP) | Profile, weight, programs, cycles | User's instruction | The user's own choice |
 
 Not used: Gemini API (its free tier is not allowed for apps serving EEA users; `getEnabledModels` filters the `google` provider out), Sentry (no DSN in prod; if enabled, add it here and to the policy), analytics, ads, email sending.

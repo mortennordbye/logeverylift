@@ -184,7 +184,7 @@ function ActivityFeedCard({ item }: { item: FriendActivityItem }) {
   return (
     <div className="px-4 py-3">
       <Link
-        href={`/more/friends/${item.userId}`}
+        href={`/more/friends/${item.userId}/sessions/${item.sessionId}`}
         className="block active:opacity-70 transition-opacity"
       >
         <div className="flex items-start gap-3">

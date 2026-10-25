@@ -347,6 +347,23 @@ export type FriendSessionCard = {
   prHighlight: { exerciseName: string; value: number } | null;
 };
 
+/**
+ * A friend's workout as friends see it: set labels only. Notes, effort
+ * (RIR/RPE), heart rate and readiness are health data and stay private.
+ */
+export type FriendSessionDetail = {
+  sessionId: number;
+  ownerId: string;
+  ownerName: string;
+  date: string;
+  startTime: Date | null;
+  programName: string | null;
+  durationMinutes: number;
+  feeling: string | null;
+  exercises: Array<{ exerciseName: string; sets: Array<{ setNumber: number; label: string }> }>;
+  reactions: ReactionSummary[];
+};
+
 export type ReceivedNudge = {
   id: number;
   fromUserId: string;
