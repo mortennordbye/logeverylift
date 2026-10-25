@@ -90,6 +90,7 @@ export type SessionWithStats = WorkoutSession & {
 export type SessionDetail = WorkoutSession & {
   programName: string | null;
   setsByExercise: Array<{ exerciseName: string; exerciseCategory: string; sets: WorkoutSet[] }>;
+  reactions: Array<{ emoji: string; fromName: string }>;
 };
 
 // Training Cycles
@@ -351,6 +352,16 @@ export type ReceivedNudge = {
   fromUserId: string;
   fromName: string;
   fromImage: string | null;
+  createdAt: string; // ISO string
+};
+
+export type ReceivedReaction = {
+  id: number;
+  sessionId: number;
+  emoji: string;
+  fromName: string;
+  fromImage: string | null;
+  programName: string | null;
   createdAt: string; // ISO string
 };
 

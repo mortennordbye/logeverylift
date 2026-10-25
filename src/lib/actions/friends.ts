@@ -21,6 +21,7 @@ import type {
   LeaderboardEntry,
   PendingRequest,
   ReceivedNudge,
+  ReceivedReaction,
   ReactionSummary,
   UserSearchResult,
 } from "@/types/workout";
@@ -817,7 +818,14 @@ export async function toggleReaction(
     const [ws] = await db
       .select({ ownerId: workoutSessions.userId })
       .from(workoutSessions)
-      .where(and(eq(workoutSessions.id, sessionId), eq(workoutSessions.isCompleted, true)))
+      .innerJoin(users, eq(users.id, workoutSessions.userId))
+      .where(
+        and(
+          eq(workoutSessions.id, sessionId),
+          eq(workoutSessions.isCompleted, true),
+          eq(users.showActivityToFriends, true),
+        ),
+      )
       .limit(1);
 
     if (!ws) return { success: false, error: "Workout not found" };
@@ -949,5 +957,99 @@ export async function getReceivedNudges(): Promise<ActionResult<ReceivedNudge[]>
     };
   } catch {
     return { success: false, error: "Failed to fetch nudges" };
+  }
+}
+
+// ─── Reactions to my workouts ────────────────────────────────────────────────
+
+export async function getReactionsToMyWorkouts(): Promise<ActionResult<ReceivedReaction[]>> {
+  const session = await requireSession();
+  const me = session.user.id;
+
+  try {
+    const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const rows = await db
+      .select({
+        id: workoutReactions.id,
+        sessionId: workoutReactions.sessionId,
+        emoji: workoutReactions.emoji,
+        fromName: users.name,
+        fromImage: users.image,
+        programName: programs.name,
+        createdAt: workoutReactions.createdAt,
+      })
+      .from(workoutReactions)
+      .innerJoin(workoutSessions, eq(workoutSessions.id, workoutReactions.sessionId))
+      .innerJoin(users, eq(users.id, workoutReactions.userId))
+      .leftJoin(programs, eq(programs.id, workoutSessions.programId))
+      .where(and(eq(workoutSessions.userId, me), gt(workoutReactions.createdAt, cutoff)))
+      .orderBy(sql`${workoutReactions.createdAt} desc`)
+      .limit(20);
+
+    return {
+      success: true,
+      data: rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() })),
+    };
+  } catch (e) {
+    console.error("[getReactionsToMyWorkouts] failed", e);
+    return { success: false, error: "Failed to fetch reactions" };
+  }
+}
+
+// ─── Friends badge ───────────────────────────────────────────────────────────
+
+/**
+ * What the More tab badge counts: friend requests waiting for an answer, plus
+ * nudges and reactions to my workouts that arrived since I last opened the
+ * Friends page.
+ */
+export async function getFriendsBadgeCount(): Promise<ActionResult<number>> {
+  const session = await requireSession();
+  const me = session.user.id;
+
+  try {
+    const [user] = await db
+      .select({ seenAt: users.friendsSeenAt })
+      .from(users)
+      .where(eq(users.id, me))
+      .limit(1);
+    // Nudges only show for 48 h, so older ones never count.
+    const nudgeCutoff = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    const nudgeSince = user?.seenAt && user.seenAt > nudgeCutoff ? user.seenAt : nudgeCutoff;
+    const reactionSince = user?.seenAt ?? new Date(0);
+
+    const [[requests], [nudgeCount], [reactionCount]] = await Promise.all([
+      db
+        .select({ n: count() })
+        .from(friendships)
+        .where(and(eq(friendships.addresseeId, me), eq(friendships.status, "pending"))),
+      db
+        .select({ n: count() })
+        .from(nudges)
+        .where(and(eq(nudges.toUserId, me), gt(nudges.createdAt, nudgeSince))),
+      db
+        .select({ n: count() })
+        .from(workoutReactions)
+        .innerJoin(workoutSessions, eq(workoutSessions.id, workoutReactions.sessionId))
+        .where(and(eq(workoutSessions.userId, me), gt(workoutReactions.createdAt, reactionSince))),
+    ]);
+
+    return { success: true, data: requests.n + nudgeCount.n + reactionCount.n };
+  } catch (e) {
+    console.error("[getFriendsBadgeCount] failed", e);
+    return { success: false, error: "Failed to count friend activity" };
+  }
+}
+
+export async function markFriendsSeen(): Promise<ActionResult<void>> {
+  const session = await requireSession();
+  try {
+    // The database clock, like the defaultNow() on nudges and reactions, so a
+    // skew between app and database can't hide or resurface an item.
+    await db.update(users).set({ friendsSeenAt: sql`now()` }).where(eq(users.id, session.user.id));
+    return { success: true, data: undefined };
+  } catch (e) {
+    console.error("[markFriendsSeen] failed", e);
+    return { success: false, error: "Failed to update" };
   }
 }

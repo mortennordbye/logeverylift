@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { assertTestDatabase } from "../../scripts/lib/test-database";
@@ -12,6 +12,7 @@ import {
   dismissedMakeups,
   exercisePrs,
   exercises,
+  friendships,
   programs,
   trainingCycles,
   users,
@@ -73,13 +74,22 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(dismissedMakeups).where(eq(dismissedMakeups.userId, userId));
     await tx.delete(userWeightEntries).where(eq(userWeightEntries.userId, userId));
     await tx.delete(exercises).where(eq(exercises.userId, userId));
+    await tx
+      .delete(friendships)
+      .where(or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)));
     await seedDemoData(tx, userId, seededRandom(20261021));
     // Terms accepted, so the home screen doesn't send every spec to /consent;
     // AI editing not opted in, as for a new user.
     const now = new Date();
     await tx
       .update(users)
-      .set({ termsVersion: LEGAL_VERSION, termsAcceptedAt: now, healthConsentAt: now, aiConsentAt: null })
+      .set({
+        termsVersion: LEGAL_VERSION,
+        termsAcceptedAt: now,
+        healthConsentAt: now,
+        aiConsentAt: null,
+        friendsSeenAt: now,
+      })
       .where(eq(users.id, userId));
   });
 }

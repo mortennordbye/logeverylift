@@ -34,6 +34,9 @@ export const users = pgTable("user", {
   goals: text("goals").$type<string>(), // JSON array of Goal values, e.g. '["strength","muscle_gain"]'
   experienceLevel: text("experience_level").$type<"beginner" | "intermediate" | "advanced">(),
   showActivityToFriends: boolean("show_activity_to_friends").notNull().default(true),
+  // Last time the user opened the Friends page. Nudges and reactions newer
+  // than this count towards the badge on the More tab.
+  friendsSeenAt: timestamp("friends_seen_at"),
   // When false, the home screen stops surfacing missed-workout / overdue prompts
   // (the "Missed this week" make-up card and the rotation "X days overdue" badge).
   missedWorkoutsEnabled: boolean("missed_workouts_enabled").notNull().default(true),

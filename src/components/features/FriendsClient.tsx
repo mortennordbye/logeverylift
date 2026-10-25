@@ -4,7 +4,14 @@ import { InvitedBadge } from "@/components/features/InvitedBadge";
 import { respondToFriendRequest, removeFriend } from "@/lib/actions/friends";
 import { WorkoutReactions } from "@/components/features/WorkoutReactions";
 import { callAction } from "@/lib/utils/stale-bundle";
-import type { FriendActivityItem, FriendWithActivity, LeaderboardEntry, PendingRequest, ReceivedNudge } from "@/types/workout";
+import type {
+  FriendActivityItem,
+  FriendWithActivity,
+  LeaderboardEntry,
+  PendingRequest,
+  ReceivedNudge,
+  ReceivedReaction,
+} from "@/types/workout";
 import { Dumbbell, UserPlus, Users, ChevronRight, Check, X, UserMinus, Gift, Trophy } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -16,6 +23,7 @@ interface Props {
   activityFeed: FriendActivityItem[];
   leaderboard: LeaderboardEntry[];
   nudges: ReceivedNudge[];
+  reactions: ReceivedReaction[];
   currentUserId: string;
 }
 
@@ -266,7 +274,7 @@ function LeaderboardSection({ entries }: { entries: LeaderboardEntry[] }) {
   );
 }
 
-export function FriendsClient({ friends, pendingRequests, activityFeed, leaderboard, nudges }: Props) {
+export function FriendsClient({ friends, pendingRequests, activityFeed, leaderboard, nudges, reactions }: Props) {
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<number | null>(null);
   const [removingId, setRemovingId] = useState<number | null>(null);
@@ -324,6 +332,31 @@ export function FriendsClient({ friends, pendingRequests, activityFeed, leaderbo
                 </div>
                 <p className="text-xs text-muted-foreground shrink-0">{relativeTimeLabel(nudge.createdAt)}</p>
               </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Reactions to my workouts */}
+      {reactions.length > 0 && (
+        <section className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-4 py-2">
+            Reactions
+          </p>
+          <div className="divide-y divide-border border-y border-border">
+            {reactions.map((reaction) => (
+              <Link
+                key={reaction.id}
+                href={`/history/${reaction.sessionId}`}
+                className="flex items-center gap-3 px-4 py-3 active:bg-muted/50"
+              >
+                <Avatar name={reaction.fromName} image={reaction.fromImage} />
+                <p className="flex-1 min-w-0 text-sm truncate">
+                  <span className="font-medium">{reaction.fromName}</span> {reaction.emoji} your{" "}
+                  {reaction.programName ?? "workout"}
+                </p>
+                <p className="text-xs text-muted-foreground shrink-0">{relativeTimeLabel(reaction.createdAt)}</p>
+              </Link>
             ))}
           </div>
         </section>

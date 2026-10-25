@@ -19,7 +19,7 @@ All tables live in the app's Postgres in the homelab (Norway). Every user-owned 
 | Profile (optional) | `user` (gender, birth year, height, weight, goals, experience), `user_weight_entry` | Plans, progression, AI Setup | Art. 9(2)(a) explicit consent | Until deleted by user or account deletion |
 | Training log | `workout_sessions` (notes, feeling, readiness), `workout_sets` (reps, weight, duration, distance, heart rate zone, RIR/RPE, failed, notes), `exercise_prs`, `custom_weight_usage`, `dismissed_makeups`, `exercises` (custom) | The core service | Art. 6(1)(b) + 9(2)(a) | Until account deletion |
 | Plans | `programs`, `program_exercises`, `program_sets`, `training_cycles`, `training_cycle_slots`, `ai_setup_plans`, `ai_generations` | The core service, AI Setup daily limit | Art. 6(1)(b) | Until account deletion |
-| Social | `friendships`, `nudges`, `workout_reactions`, `program_shares`, `invite_token` | Friends features | Art. 6(1)(b) | Until either side deletes |
+| Social | `friendships`, `nudges`, `workout_reactions`, `program_shares`, `invite_token`, `user.friendsSeenAt` (when the Friends page was last opened, for the badge) | Friends features | Art. 6(1)(b) | Until either side deletes |
 | Feedback | `feedback` | Improving the app | Art. 6(1)(f) | Until account deletion |
 | Sessions | `session` (IP address, user agent, `impersonatedBy`) | Keeping users signed in, security | Art. 6(1)(f) | Purged after expiry (30 days from last use) by `purgeExpiredSessions` |
 | MCP connections | `oauth_application`, `oauth_access_token`, `oauth_consent` | User-connected AI assistants | Art. 6(1)(b), on the user's instruction | Until revoked or account deletion |
