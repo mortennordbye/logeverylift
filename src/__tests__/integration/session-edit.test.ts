@@ -163,6 +163,20 @@ describe("updateLoggedSet", () => {
     expect(await allRecords()).toEqual(before);
   });
 
+  it("rebuilds from the set's own time when the session's start is later than it", async () => {
+    // The start comes from the phone's clock and the set's time from the
+    // server's, so a phone running ahead puts the start after its sets.
+    const { sessionId, setId } = await finished("2026-10-01", 200);
+    await db
+      .update(workoutSessions)
+      .set({ startTime: new Date("2026-10-01T17:02:00Z") })
+      .where(eq(workoutSessions.id, sessionId));
+
+    expect((await edit(setId, 100)).success).toBe(true);
+    expect(await currentRecords()).toContain("weight:100");
+    expect(await currentRecords()).not.toContain("weight:200");
+  });
+
   it("refuses another user's set", async () => {
     const { setId } = await finished("2026-10-01", 100);
     asUser((await createUser()).id);
@@ -217,6 +231,30 @@ describe("updateWorkoutSession", () => {
     expect(await updateWorkoutSession({ sessionId, date: "2026-09-30", notes: "mine now" })).toMatchObject({ success: false });
     const [session] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, sessionId));
     expect(session).toMatchObject({ date: "2026-10-01", notes: null });
+  });
+
+  it("moves the records of sets logged before the session's start", async () => {
+    await finished("2026-10-01", 100);
+    const skewed = await finished("2026-10-08", 110);
+    await db
+      .update(workoutSessions)
+      .set({ startTime: new Date("2026-10-08T17:02:00Z") })
+      .where(eq(workoutSessions.id, skewed.sessionId));
+
+    expect((await updateWorkoutSession({ sessionId: skewed.sessionId, date: "2026-09-24", notes: null })).success).toBe(true);
+    expect(await weightChain()).toEqual([{ value: 110, day: "2026-09-24", current: true }]);
+  });
+
+  it("refuses a move across the start of honest rep logging, either way", async () => {
+    await finished("2026-08-10", 90);
+    const after = await finished("2026-09-05", 100);
+    const before = await finished("2026-08-20", 95);
+    const records = await allRecords();
+
+    expect(await updateWorkoutSession({ sessionId: after.sessionId, date: "2026-08-25", notes: null })).toMatchObject({ success: false });
+    expect(await updateWorkoutSession({ sessionId: before.sessionId, date: "2026-09-10", notes: null })).toMatchObject({ success: false });
+    expect(await allRecords()).toEqual(records);
+    expect(await currentRecords()).toContain("weight:100");
   });
 
   it("refuses an auto session", async () => {
