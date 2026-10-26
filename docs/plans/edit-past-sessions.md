@@ -56,6 +56,11 @@ Deleting a session (from history, or discarding a workout) rebuilds its exercise
 the same way, so a deleted session takes its records with it. `deleteWorkoutSession` moved
 to `workout-sets.ts` for that.
 
+Correcting or un-logging a set mid-workout uses the rebuild too when anything came after the
+set (a later set, or a record dated after it), since a rollback there left two current
+records. Otherwise it still rolls back. Live records are dated by their set's time, so a
+re-log that lands late from the offline queue doesn't date its record after later sets.
+
 The rebuild starts at the earlier of the session's start and its sets' times. The start
 comes from the phone's clock and a set's time from the server's, so a phone running ahead
 puts the start after its sets.
