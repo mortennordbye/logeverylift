@@ -132,6 +132,22 @@ export const logWorkoutSetSchema = z.object({
   wasEasy: z.boolean().default(false),
 });
 
+/** A correction to a set in a finished session, made from history. */
+export const updateLoggedSetSchema = z.object({
+  setId: z.number().int().positive(),
+  weightKg: z.number().min(0, "Weight cannot be negative").max(1000, "Weight must be under 1000kg"),
+  actualReps: z.number().int().min(0, "Reps cannot be negative").max(1000),
+  isFailed: z.boolean(),
+  notes: z.string().trim().max(500, "Notes must be 500 characters or less").nullable(),
+});
+
+/** A correction to a finished session's day or notes, made from history. */
+export const updateWorkoutSessionSchema = z.object({
+  sessionId: z.number().int().positive(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  notes: z.string().trim().max(1000, "Notes must be 1000 characters or less").nullable(),
+});
+
 /**
  * Un-log Workout Set Schema
  *
