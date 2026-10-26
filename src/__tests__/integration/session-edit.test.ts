@@ -262,6 +262,26 @@ describe("updateWorkoutSession", () => {
     expect(await updateWorkoutSession({ sessionId: auto.id, date: "2026-09-30", notes: null })).toMatchObject({ success: false });
   });
 
+  it("moves a session to today even when its time of day is still to come", async () => {
+    // Three days ago, an hour later in the day than now: moved to today, it
+    // would start an hour from now.
+    const start = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000 + 60 * 60 * 1000);
+    const session = await createSession(userId, programId, {
+      date: start.toISOString().slice(0, 10),
+      startTime: start,
+      endTime: new Date(start.getTime() + 30 * 60 * 1000),
+      isCompleted: true,
+    });
+    const today = new Date(start.getTime() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    const result = await updateWorkoutSession({ sessionId: session.id, date: today, notes: null });
+    expect(result.success).toBe(true);
+    const [row] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, session.id));
+    expect(row.date).toBe(today);
+    expect(row.endTime!.getTime()).toBeLessThanOrEqual(Date.now());
+    expect(row.endTime!.getTime() - row.startTime.getTime()).toBe(30 * 60 * 1000);
+  });
+
   it("refuses a day in the future", async () => {
     const { sessionId } = await finished("2026-10-01", 100);
     const nextYear = `${new Date().getUTCFullYear() + 1}-01-01`;

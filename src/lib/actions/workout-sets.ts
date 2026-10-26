@@ -686,7 +686,8 @@ export async function updateLoggedSet(data: unknown): Promise<ActionResult<Worko
  * Correct a finished session's day or notes from history.
  *
  * Moving the day shifts the start and end time, and each set's logged time, by
- * the same number of days, so the session keeps its shape and its sets replay
+ * the same number of days (pulled back to end now if that day is today and its
+ * time of day hasn't come yet), so the session keeps its shape and its sets replay
  * in the right place. Every exercise in it then has its records rebuilt from
  * the earlier of the old and new day.
  *
@@ -733,8 +734,14 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
       if (existing.source === "auto") return "Sessions the app logged for you can't be edited";
       if (!existing.isCompleted) return "Finish the workout before editing it from history";
 
+      // The date is the lifter's local day, which the server doesn't know. No
+      // time zone is more than 14 hours ahead of UTC, so no day after this one
+      // has started anywhere.
+      const now = Date.now();
+      if (date > new Date(now + 14 * 60 * 60 * 1000).toISOString().slice(0, 10)) {
+        return "A workout can't be moved into the future";
+      }
       const shiftDays = Math.round((Date.parse(date) - Date.parse(existing.date)) / DAY_MS);
-      const shift = (t: Date) => new Date(t.getTime() + shiftDays * DAY_MS);
       const [{ firstSet, lastSet }] = await tx
         .select({
           firstSet: sql<Date | null>`MIN(${workoutSets.createdAt})`.mapWith(workoutSets.createdAt),
@@ -742,12 +749,16 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
         })
         .from(workoutSets)
         .where(eq(workoutSets.sessionId, sessionId));
+      // Moving it to today can put its time of day after now. Then the whole
+      // session is pulled back to end now, keeping its shape.
+      const latest = Math.max(
+        existing.startTime.getTime(),
+        existing.endTime?.getTime() ?? 0,
+        lastSet?.getTime() ?? 0,
+      );
+      const shiftMs = shiftDays * DAY_MS - Math.max(0, latest + shiftDays * DAY_MS - now);
+      const shift = (t: Date) => new Date(t.getTime() + shiftMs);
       const newStart = shift(existing.startTime);
-      // Checked on instants rather than the date string, which is the lifter's
-      // local day and can be a day ahead of the server's.
-      if (newStart.getTime() > Date.now() || (lastSet && shift(lastSet).getTime() > Date.now())) {
-        return "Moving it to that day would put it later than now";
-      }
       // Records on either side of the start of honest rep logging are kept
       // differently (D-10), so a move across it would drop records the rebuild
       // can't replay, or leave frozen ones dated on the old day.
@@ -755,7 +766,7 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
         return `A workout can't be moved across ${HONEST_REPS_FROM}`;
       }
 
-      const exerciseIds = shiftDays === 0
+      const exerciseIds = shiftMs === 0
         ? []
         : (await tx
             .selectDistinct({ id: workoutSets.exerciseId })
@@ -775,11 +786,11 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
           notes: notes || null,
         })
         .where(eq(workoutSessions.id, sessionId));
-      if (shiftDays === 0) return null;
+      if (shiftMs === 0) return null;
 
       await tx
         .update(workoutSets)
-        .set({ createdAt: sql`${workoutSets.createdAt} + make_interval(days => ${shiftDays})` })
+        .set({ createdAt: sql`${workoutSets.createdAt} + ${shiftMs} * interval '1 millisecond'` })
         .where(eq(workoutSets.sessionId, sessionId));
       // As in completeWorkoutSession: a logged session replaces the auto one
       // for its day, so the day isn't counted twice.
@@ -798,7 +809,7 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
       // The earlier of the old and new day, and of the start and the first set
       // on it (the start is the phone's clock, the sets the server's).
       const oldFrom = earliest(existing.startTime, firstSet ?? existing.startTime);
-      const from = shiftDays < 0 ? shift(oldFrom) : oldFrom;
+      const from = earliest(oldFrom, shift(oldFrom));
       for (const id of exerciseIds) await rebuildPRsFrom(tx, auth.user.id, id, from);
       return null;
     });
