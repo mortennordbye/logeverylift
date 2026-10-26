@@ -26,7 +26,8 @@ failed flag or a session logged on the wrong day can't be fixed without losing t
   rebuild can't be exported to another file.
   - A date change shifts the start and end time by the same number of days.
   - Refuse auto sessions.
-  - Refuse a future date.
+  - Refuse a future date: a day after the latest local today anywhere (UTC+14). Moved to
+    today with a time of day still to come, the session is pulled back to end now.
 - **Rebuilding records:** `rebuildPRsFrom(tx, userId, exerciseId, fromStartTime)` in
   `workout-sets.ts`, run under `lockRecords` in the same transaction as the edit. It:
   1. deletes this exercise's records achieved at or after `fromStartTime`, and un-supersedes
@@ -38,7 +39,7 @@ failed flag or a session logged on the wrong day can't be fixed without losing t
      session's sets' `created_at` by the same days, since that is the time a replay dates a
      record by
 - **UI:** an Edit mode in `SessionDetailClient.tsx`: a per-set sheet (weight, reps, failed,
-  notes), a date picker, and session notes. All calls go through `callAction`. Revalidate
+  notes), a date picker, and session notes, saved by Done. All calls go through `callAction`. Revalidate
   `/history`, the session page and `/more/metrics`.
 
 ## Decision: how strict the replay is

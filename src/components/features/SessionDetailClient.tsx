@@ -83,17 +83,22 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
     router.push("/history");
   }
 
-  async function handleSaveSession() {
-    setSavingSession(true);
-    const result = await callAction(
-      updateWorkoutSession({ sessionId: detail.id, date, notes: notes.trim() || null }),
-    );
-    setSavingSession(false);
-    if (!result.success) {
-      showToast({ variant: "error", message: result.error });
-      return;
+  // Done saves the date and notes, as iOS does, so leaving edit mode never
+  // drops a change. A failed save stays in edit mode with the change intact.
+  async function handleDone() {
+    if (sessionChanged) {
+      setSavingSession(true);
+      const result = await callAction(
+        updateWorkoutSession({ sessionId: detail.id, date, notes: notes.trim() || null }),
+      );
+      setSavingSession(false);
+      if (!result.success) {
+        showToast({ variant: "error", message: result.error });
+        return;
+      }
+      router.refresh();
     }
-    router.refresh();
+    setEditing(false);
   }
 
   return (
@@ -107,14 +112,19 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
         <div className="flex items-center gap-1">
           {editable && (
             <button
-              onClick={() => {
-                setEditing((e) => !e);
-                setDate(detail.date);
-                setNotes(detail.notes ?? "");
-              }}
-              className="min-h-[44px] px-3 text-sm font-semibold text-primary active:opacity-70"
+              onClick={
+                editing
+                  ? handleDone
+                  : () => {
+                      setDate(detail.date);
+                      setNotes(detail.notes ?? "");
+                      setEditing(true);
+                    }
+              }
+              disabled={savingSession || (editing && !date)}
+              className="min-h-[44px] px-3 text-sm font-semibold text-primary active:opacity-70 disabled:opacity-40"
             >
-              {editing ? "Done" : "Edit"}
+              {savingSession ? "Saving..." : editing ? "Done" : "Edit"}
             </button>
           )}
           <button
@@ -184,13 +194,6 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
                 Records from before {formatDateShort(HONEST_REPS_FROM)} stay as they were.
               </p>
             )}
-            <button
-              onClick={handleSaveSession}
-              disabled={!sessionChanged || !date || savingSession}
-              className="w-full min-h-[44px] rounded-xl bg-primary text-sm font-semibold text-primary-foreground active:opacity-80 disabled:opacity-40"
-            >
-              {savingSession ? "Saving..." : "Save date and notes"}
-            </button>
             {detail.setsByExercise.length > 0 && (
               <p className="text-xs text-muted-foreground">Tap a set to correct it.</p>
             )}
