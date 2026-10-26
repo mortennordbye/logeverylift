@@ -48,7 +48,13 @@ The rule that an estimated-1RM record needs RIR 3 or less shipped on 2026-08-31 
 record rules have not changed since. So replaying any set from 2026-09-01 on reproduces the
 record it earned at the time unless the edit changed it, and no later record disappears.
 Records from before that date are frozen by D-10: an edit to an older session saves the set
-but leaves those records as they are, and the edit form says so.
+but leaves those records as they are, and the edit form says so. A date move across
+2026-09-01 is refused: moving back would drop records the rebuild can't replay, and moving
+forward would leave frozen records dated on the old day.
+
+The rebuild starts at the earlier of the session's start and its sets' times. The start
+comes from the phone's clock and a set's time from the server's, so a phone running ahead
+puts the start after its sets.
 
 ## Files
 `src/lib/actions/workout-sets.ts`, `src/lib/validators/workout.ts`,

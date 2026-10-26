@@ -619,7 +619,6 @@ export async function updateLoggedSet(data: unknown): Promise<ActionResult<Worko
         userId: workoutSessions.userId,
         sessionId: workoutSessions.id,
         isCompleted: workoutSessions.isCompleted,
-        startTime: workoutSessions.startTime,
         exerciseId: workoutSets.exerciseId,
       })
       .from(workoutSets)
@@ -632,12 +631,20 @@ export async function updateLoggedSet(data: unknown): Promise<ActionResult<Worko
 
     const row = await db.transaction(async (tx) => {
       await lockRecords(tx, auth.user.id, existing.exerciseId);
+      // Read under the lock, so a date move that just committed is seen.
+      const [times] = await tx
+        .select({ startTime: workoutSessions.startTime, createdAt: workoutSets.createdAt })
+        .from(workoutSets)
+        .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
+        .where(eq(workoutSets.id, setId));
       const [row] = await tx
         .update(workoutSets)
         .set({ weightKg: weightKg.toString(), actualReps, isFailed, notes: notes || null })
         .where(eq(workoutSets.id, setId))
         .returning();
-      await rebuildPRsFrom(tx, auth.user.id, existing.exerciseId, existing.startTime);
+      // The start is the phone's clock and the set's time the server's, so
+      // either can be the earlier; the rebuild has to cover the set.
+      await rebuildPRsFrom(tx, auth.user.id, existing.exerciseId, earliest(times.startTime, times.createdAt));
       return row;
     });
 
@@ -658,10 +665,11 @@ export async function updateLoggedSet(data: unknown): Promise<ActionResult<Worko
  * Moving the day shifts the start and end time, and each set's logged time, by
  * the same number of days, so the session keeps its shape and its sets replay
  * in the right place. Every exercise in it then has its records rebuilt from
- * the earlier of the old and new start.
+ * the earlier of the old and new day.
  *
  * Auto sessions are refused: the app wrote them for a cycle day, and their day
- * is the cycle's. So is a day that would put the session in the future.
+ * is the cycle's. So is a day that would put the session in the future, and a
+ * move across HONEST_REPS_FROM.
  */
 export async function updateWorkoutSession(data: unknown): Promise<ActionResult<undefined>> {
   const auth = await requireSession();
@@ -705,6 +713,12 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
     if (newStart.getTime() > Date.now()) {
       return { success: false, error: "A workout can't be moved into the future" };
     }
+    // Records on either side of the start of honest rep logging are kept
+    // differently (D-10), so a move across it would drop records the rebuild
+    // can't replay, or leave frozen ones dated on the old day.
+    if ((existing.startTime < HONEST_REPS_FROM_TIME) !== (newStart < HONEST_REPS_FROM_TIME)) {
+      return { success: false, error: `A workout can't be moved across ${HONEST_REPS_FROM}` };
+    }
 
     await db.transaction(async (tx) => {
       const exerciseIds = shiftDays === 0
@@ -729,6 +743,10 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
         .where(eq(workoutSessions.id, sessionId));
       if (shiftDays === 0) return;
 
+      const [{ firstSet }] = await tx
+        .select({ firstSet: sql<Date | null>`MIN(${workoutSets.createdAt})`.mapWith(workoutSets.createdAt) })
+        .from(workoutSets)
+        .where(eq(workoutSets.sessionId, sessionId));
       await tx
         .update(workoutSets)
         .set({ createdAt: sql`${workoutSets.createdAt} + make_interval(days => ${shiftDays})` })
@@ -747,7 +765,10 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
             ),
           );
       }
-      const from = shiftDays < 0 ? newStart : existing.startTime;
+      // The earlier of the old and new day, and of the start and the first set
+      // on it (the start is the phone's clock, the sets the server's).
+      const oldFrom = earliest(existing.startTime, firstSet ?? existing.startTime);
+      const from = shiftDays < 0 ? shift(oldFrom) : oldFrom;
       for (const id of exerciseIds) await rebuildPRsFrom(tx, auth.user.id, id, from);
     });
 
@@ -783,6 +804,13 @@ async function rollbackPRsForSet(tx: Tx, userId: string, setId: number): Promise
   }
 }
 
+/** The instant honest rep logging started, as isUnverifiedPr reads HONEST_REPS_FROM. */
+const HONEST_REPS_FROM_TIME = new Date(`${HONEST_REPS_FROM}T00:00:00Z`);
+
+function earliest(a: Date, b: Date): Date {
+  return a < b ? a : b;
+}
+
 /**
  * Rebuild one exercise's records from `from` onward, for an edit to a set or a
  * session that already has later history.
@@ -802,8 +830,7 @@ async function rollbackPRsForSet(tx: Tx, userId: string, setId: number): Promise
  * Call under lockRecords for this exercise, in the edit's transaction.
  */
 async function rebuildPRsFrom(tx: Tx, userId: string, exerciseId: number, from: Date): Promise<void> {
-  const frozenBefore = new Date(`${HONEST_REPS_FROM}T00:00:00Z`);
-  const since = from > frozenBefore ? from : frozenBefore;
+  const since = from > HONEST_REPS_FROM_TIME ? from : HONEST_REPS_FROM_TIME;
   const ofExercise = and(eq(exercisePrs.userId, userId), eq(exercisePrs.exerciseId, exerciseId));
 
   const dropped = tx

@@ -226,7 +226,9 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
                       onKeyDown={
                         editing
                           ? (e) => {
-                              if (e.key === "Enter" || e.key === " ") setEditingSet({ set, isRun });
+                              if (e.key !== "Enter" && e.key !== " ") return;
+                              e.preventDefault();
+                              setEditingSet({ set, isRun });
                             }
                           : undefined
                       }
