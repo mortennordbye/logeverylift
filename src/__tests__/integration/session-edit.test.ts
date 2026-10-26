@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { exercisePrs, workoutSessions, workoutSets } from "@/db/schema";
-import { deleteWorkoutSession, logWorkoutSet, updateLoggedSet, updateWorkoutSession } from "@/lib/actions/workout-sets";
+import { deleteWorkoutSession, logWorkoutSet, unlogWorkoutSet, updateLoggedSet, updateWorkoutSession } from "@/lib/actions/workout-sets";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";
@@ -307,5 +307,90 @@ describe("deleteWorkoutSession", () => {
 
     expect((await deleteWorkoutSession(live.id)).success).toBe(true);
     expect(await currentRecords()).toEqual(["estimated_1rm:116.67", "reps_at_weight:5@100", "weight:100"]);
+  });
+});
+
+describe("record chain edges", () => {
+  /** Log set `n` of a two-set slot in a live session. */
+  async function liveTwoSets() {
+    const { program, slots } = await createProgram(userId, [{ exerciseId, sets: [{}, {}] }]);
+    const live = await createSession(userId, program.id);
+    const log = (n: number, weightKg: number, actualReps = 5) =>
+      logWorkoutSet({
+        sessionId: live.id,
+        exerciseId,
+        setNumber: n,
+        programSetId: slots[0].setIds[n - 1],
+        targetReps: 5,
+        actualReps,
+        weightKg,
+        rir: 2,
+        restTimeSeconds: 120,
+        isCompleted: true,
+        isFailed: false,
+        wasEasy: false,
+      });
+    return { live, slots, log };
+  }
+
+  it("correcting an earlier set mid-workout after a later one beat it keeps one current record", async () => {
+    await finished("2026-10-01", 90);
+    const { log } = await liveTwoSets();
+    await log(1, 100);
+    await log(2, 105);
+
+    expect((await log(1, 100, 4)).success).toBe(true);
+    expect((await currentRecords()).filter((r) => r.startsWith("weight"))).toEqual(["weight:105"]);
+  });
+
+  it("correcting an earlier set down makes a later set the record it now is", async () => {
+    await finished("2026-10-01", 90);
+    const { log } = await liveTwoSets();
+    await log(1, 100);
+    await log(2, 98);
+
+    await log(1, 92);
+    expect((await currentRecords()).filter((r) => r.startsWith("weight"))).toEqual(["weight:98"]);
+  });
+
+  it("un-logging an earlier set mid-workout after a later one beat it keeps one current record", async () => {
+    await finished("2026-10-01", 90);
+    const { live, slots, log } = await liveTwoSets();
+    await log(1, 100);
+    await log(2, 105);
+
+    await unlogWorkoutSet({ sessionId: live.id, exerciseId, setNumber: 1, programSetId: slots[0].setIds[0] });
+    expect((await currentRecords()).filter((r) => r.startsWith("weight"))).toEqual(["weight:105"]);
+  });
+
+  it("keeps a record whose re-log dated it after the edit point", async () => {
+    const first = await finished("2026-10-20", 100);
+    const second = await finished("2026-10-21", 95);
+    // A re-log of the first set that landed late, from the offline queue: the
+    // set keeps its time, its record is dated when it arrived.
+    await db.execute(sql`UPDATE exercise_prs SET achieved_at = '2026-10-22T09:00:00Z' WHERE set_id = ${first.setId}`);
+
+    expect((await deleteWorkoutSession(second.sessionId)).success).toBe(true);
+    expect((await currentRecords()).filter((r) => r.startsWith("weight"))).toEqual(["weight:100"]);
+  });
+
+  it("restores a record that lost its link to the one that beat it", async () => {
+    await finished("2026-09-05", 100);
+    const later = await finished("2026-10-01", 110);
+    // Rows the superseded_by_id backfill (migration 0059) could not link.
+    await db.execute(sql`UPDATE exercise_prs SET superseded_by_id = NULL`);
+
+    expect((await edit(later.setId, 90)).success).toBe(true);
+    expect((await currentRecords()).filter((r) => r.startsWith("weight"))).toEqual(["weight:100"]);
+  });
+
+  it("two saves of the same date move shift the sets once", async () => {
+    const { sessionId, setId } = await finished("2026-10-10", 100);
+    await Promise.all([
+      updateWorkoutSession({ sessionId, date: "2026-10-09", notes: null }),
+      updateWorkoutSession({ sessionId, date: "2026-10-09", notes: null }),
+    ]);
+    const [set] = await db.select().from(workoutSets).where(eq(workoutSets.id, setId));
+    expect(set.createdAt.toISOString()).toBe("2026-10-09T17:00:00.000Z");
   });
 });

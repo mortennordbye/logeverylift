@@ -64,6 +64,7 @@ import type {
 } from "@/types/workout";
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 /**
  * The plan slot a logged set belongs to.
@@ -454,6 +455,18 @@ export async function logWorkoutSet(
         })
         .returning();
 
+      // A re-log of a set with later sets or records after it (correcting set 1
+      // once set 2 is logged) changes the chain they were built on: rebuild it.
+      // A rollback there restored the record set 1 had beaten while set 2's
+      // record stayed current, leaving two.
+      if (await hasLaterHistory(tx, auth.user.id, exerciseId, set)) {
+        await detectNonCritical(tx, "pr_rebuild_failed", async (sp) => {
+          await rebuildPRsFrom(sp, auth.user.id, exerciseId, set.createdAt);
+          return [];
+        });
+        return { set, newPRs: [] };
+      }
+
       // A re-log replaces the set's values, so the records the old values earned
       // go first. Otherwise correcting a mistyped 200 kg to 100 kg left the 200 kg
       // record standing, and nothing would ever beat it.
@@ -472,6 +485,9 @@ export async function logWorkoutSet(
           // A logged RIR, or the one derived from a legacy RPE. Null means the
           // lifter said nothing, which gates the 1RM record out entirely.
           rir: setValues.rir ?? (setValues.rpe != null ? rirFromRpe(setValues.rpe) : null),
+          // Dated by the set, so a re-log landing late from the offline queue
+          // doesn't date the record after sets that came later.
+          at: set.createdAt,
         })));
       }
       // Endurance PRs (swim/bike/run): distance + pace-per-bracket. Independent of
@@ -484,6 +500,7 @@ export async function logWorkoutSet(
           setId: set.id,
           distanceMeters,
           durationSeconds: durationSeconds ?? 0,
+          at: set.createdAt,
         })));
       }
       return { set, newPRs };
@@ -566,7 +583,7 @@ export async function unlogWorkoutSet(
     await db.transaction(async (tx) => {
       await lockRecords(tx, auth.user.id, exerciseId);
       const [existing] = await tx
-        .select({ id: workoutSets.id })
+        .select({ id: workoutSets.id, createdAt: workoutSets.createdAt })
         .from(workoutSets)
         .where(and(eq(workoutSets.sessionId, sessionId), setRowKey(resolved.slot, exerciseId, setNumber)))
         .limit(1);
@@ -576,6 +593,12 @@ export async function unlogWorkoutSet(
       // the replay queue from looping.
       if (!existing) return;
 
+      // As for a re-log: with later history the chain is rebuilt without it.
+      if (await hasLaterHistory(tx, auth.user.id, exerciseId, existing)) {
+        await tx.delete(workoutSets).where(eq(workoutSets.id, existing.id));
+        await rebuildPRsFrom(tx, auth.user.id, exerciseId, existing.createdAt);
+        return;
+      }
       await rollbackPRsForSet(tx, auth.user.id, existing.id);
       await tx.delete(workoutSets).where(eq(workoutSets.id, existing.id));
     });
@@ -684,43 +707,54 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
   const { sessionId, date, notes } = parsed.data;
 
   try {
-    const [existing] = await db
-      .select({
-        userId: workoutSessions.userId,
-        programId: workoutSessions.programId,
-        date: workoutSessions.date,
-        startTime: workoutSessions.startTime,
-        endTime: workoutSessions.endTime,
-        isCompleted: workoutSessions.isCompleted,
-        source: workoutSessions.source,
-      })
+    const [owner] = await db
+      .select({ userId: workoutSessions.userId })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, sessionId));
-    assertOwner(existing, auth.user.id);
-    if (existing.source === "auto") {
-      return { success: false, error: "Sessions the app logged for you can't be edited" };
-    }
-    if (!existing.isCompleted) {
-      return { success: false, error: "Finish the workout before editing it from history" };
-    }
+    assertOwner(owner, auth.user.id);
 
     const DAY_MS = 24 * 60 * 60 * 1000;
-    const shiftDays = Math.round((Date.parse(date) - Date.parse(existing.date)) / DAY_MS);
-    const shift = (t: Date) => new Date(t.getTime() + shiftDays * DAY_MS);
-    const newStart = shift(existing.startTime);
-    // Checked on the start instant rather than the date string, which is the
-    // lifter's local day and can be a day ahead of the server's.
-    if (newStart.getTime() > Date.now()) {
-      return { success: false, error: "A workout can't be moved into the future" };
-    }
-    // Records on either side of the start of honest rep logging are kept
-    // differently (D-10), so a move across it would drop records the rebuild
-    // can't replay, or leave frozen ones dated on the old day.
-    if ((existing.startTime < HONEST_REPS_FROM_TIME) !== (newStart < HONEST_REPS_FROM_TIME)) {
-      return { success: false, error: `A workout can't be moved across ${HONEST_REPS_FROM}` };
-    }
+    const refused = await db.transaction(async (tx) => {
+      // Read under a row lock, so two saves of the same move (two tabs, a
+      // double tap) run one after the other and the second shifts nothing.
+      // NO KEY UPDATE, so it doesn't block a set being logged into the session.
+      const [existing] = await tx
+        .select({
+          programId: workoutSessions.programId,
+          date: workoutSessions.date,
+          startTime: workoutSessions.startTime,
+          endTime: workoutSessions.endTime,
+          isCompleted: workoutSessions.isCompleted,
+          source: workoutSessions.source,
+        })
+        .from(workoutSessions)
+        .where(eq(workoutSessions.id, sessionId))
+        .for("no key update");
+      if (existing.source === "auto") return "Sessions the app logged for you can't be edited";
+      if (!existing.isCompleted) return "Finish the workout before editing it from history";
 
-    await db.transaction(async (tx) => {
+      const shiftDays = Math.round((Date.parse(date) - Date.parse(existing.date)) / DAY_MS);
+      const shift = (t: Date) => new Date(t.getTime() + shiftDays * DAY_MS);
+      const [{ firstSet, lastSet }] = await tx
+        .select({
+          firstSet: sql<Date | null>`MIN(${workoutSets.createdAt})`.mapWith(workoutSets.createdAt),
+          lastSet: sql<Date | null>`MAX(${workoutSets.createdAt})`.mapWith(workoutSets.createdAt),
+        })
+        .from(workoutSets)
+        .where(eq(workoutSets.sessionId, sessionId));
+      const newStart = shift(existing.startTime);
+      // Checked on instants rather than the date string, which is the lifter's
+      // local day and can be a day ahead of the server's.
+      if (newStart.getTime() > Date.now() || (lastSet && shift(lastSet).getTime() > Date.now())) {
+        return "Moving it to that day would put it later than now";
+      }
+      // Records on either side of the start of honest rep logging are kept
+      // differently (D-10), so a move across it would drop records the rebuild
+      // can't replay, or leave frozen ones dated on the old day.
+      if ((existing.startTime < HONEST_REPS_FROM_TIME) !== (newStart < HONEST_REPS_FROM_TIME)) {
+        return `A workout can't be moved across ${HONEST_REPS_FROM}`;
+      }
+
       const exerciseIds = shiftDays === 0
         ? []
         : (await tx
@@ -741,12 +775,8 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
           notes: notes || null,
         })
         .where(eq(workoutSessions.id, sessionId));
-      if (shiftDays === 0) return;
+      if (shiftDays === 0) return null;
 
-      const [{ firstSet }] = await tx
-        .select({ firstSet: sql<Date | null>`MIN(${workoutSets.createdAt})`.mapWith(workoutSets.createdAt) })
-        .from(workoutSets)
-        .where(eq(workoutSets.sessionId, sessionId));
       await tx
         .update(workoutSets)
         .set({ createdAt: sql`${workoutSets.createdAt} + make_interval(days => ${shiftDays})` })
@@ -770,7 +800,9 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
       const oldFrom = earliest(existing.startTime, firstSet ?? existing.startTime);
       const from = shiftDays < 0 ? shift(oldFrom) : oldFrom;
       for (const id of exerciseIds) await rebuildPRsFrom(tx, auth.user.id, id, from);
+      return null;
     });
+    if (refused) return { success: false, error: refused };
 
     revalidatePath("/history");
     revalidatePath(`/history/${sessionId}`);
@@ -796,6 +828,9 @@ export async function deleteWorkoutSession(
   sessionId: number,
 ): Promise<ActionResult<undefined>> {
   const auth = await requireSession();
+  if (!z.number().int().positive().safeParse(sessionId).success) {
+    return { success: false, error: "Invalid input" };
+  }
 
   try {
     const [existing] = await db
@@ -805,14 +840,29 @@ export async function deleteWorkoutSession(
     assertOwner(existing, auth.user.id);
 
     await db.transaction(async (tx) => {
-      const exercisesInSession = await tx
-        .select({ id: workoutSets.exerciseId, firstSet: sql<Date>`MIN(${workoutSets.createdAt})`.mapWith(workoutSets.createdAt) })
-        .from(workoutSets)
-        .where(eq(workoutSets.sessionId, sessionId))
-        .groupBy(workoutSets.exerciseId)
-        // One order everywhere, so two edits can't wait on each other's locks.
-        .orderBy(asc(workoutSets.exerciseId));
-      for (const { id } of exercisesInSession) await lockRecords(tx, auth.user.id, id);
+      const exercisesNow = () =>
+        tx
+          .select({ id: workoutSets.exerciseId, firstSet: sql<Date>`MIN(${workoutSets.createdAt})`.mapWith(workoutSets.createdAt) })
+          .from(workoutSets)
+          .where(eq(workoutSets.sessionId, sessionId))
+          .groupBy(workoutSets.exerciseId)
+          // One order everywhere, so two edits can't wait on each other's locks.
+          .orderBy(asc(workoutSets.exerciseId));
+      const locked = new Set<number>();
+      for (const { id } of await exercisesNow()) {
+        await lockRecords(tx, auth.user.id, id);
+        locked.add(id);
+      }
+      // Then the row, which a set being logged into the session needs too, so
+      // none can land between reading the exercises and the delete (discarding
+      // while a log is in flight). Taken after the record locks so a log holding
+      // one isn't left waiting on the row while this waits on its lock. A set
+      // that committed in between shows up in the second read.
+      await tx.select({ id: workoutSessions.id }).from(workoutSessions).where(eq(workoutSessions.id, sessionId)).for("update");
+      const exercisesInSession = await exercisesNow();
+      for (const { id } of exercisesInSession) {
+        if (!locked.has(id)) await lockRecords(tx, auth.user.id, id);
+      }
 
       await tx.delete(workoutSessions).where(eq(workoutSessions.id, sessionId));
       for (const { id, firstSet } of exercisesInSession) {
@@ -855,6 +905,34 @@ async function rollbackPRsForSet(tx: Tx, userId: string, setId: number): Promise
 /** The instant honest rep logging started, as isUnverifiedPr reads HONEST_REPS_FROM. */
 const HONEST_REPS_FROM_TIME = new Date(`${HONEST_REPS_FROM}T00:00:00Z`);
 
+/**
+ * Does anything come after this set for its exercise: a later set, or a
+ * record (from a set since deleted) dated after it? Then its records are part
+ * of a chain later history was built on.
+ */
+async function hasLaterHistory(
+  tx: Tx,
+  userId: string,
+  exerciseId: number,
+  set: { id: number; createdAt: Date },
+): Promise<boolean> {
+  // As a UTC string: node-postgres sends a Date in local time, and a column
+  // without a time zone drops the offset.
+  const at = set.createdAt.toISOString();
+  const { rows } = await tx.execute<{ later: boolean }>(sql`
+    SELECT EXISTS (
+      SELECT 1 FROM ${workoutSets} ws
+      JOIN ${workoutSessions} s ON s.id = ws.session_id
+      WHERE s.user_id = ${userId} AND ws.exercise_id = ${exerciseId} AND ws.id <> ${set.id}
+        AND ws.created_at > ${at}
+    ) OR EXISTS (
+      SELECT 1 FROM ${exercisePrs} p
+      WHERE p.user_id = ${userId} AND p.exercise_id = ${exerciseId}
+        AND p.set_id IS DISTINCT FROM ${set.id} AND p.achieved_at > ${at}
+    ) AS later`);
+  return rows[0]?.later === true;
+}
+
 function earliest(a: Date, b: Date): Date {
   return a < b ? a : b;
 }
@@ -881,16 +959,37 @@ async function rebuildPRsFrom(tx: Tx, userId: string, exerciseId: number, from: 
   const since = from > HONEST_REPS_FROM_TIME ? from : HONEST_REPS_FROM_TIME;
   const ofExercise = and(eq(exercisePrs.userId, userId), eq(exercisePrs.exerciseId, exerciseId));
 
-  const dropped = tx
-    .select({ id: exercisePrs.id })
-    .from(exercisePrs)
-    .where(and(ofExercise, gte(exercisePrs.achievedAt, since)));
-  // Before the delete: the FK would null the link.
+  // Dropped: records of the sets the replay below covers, chosen by the set's
+  // time rather than the record's, since a re-log once dated its record when
+  // it landed. A record whose set is gone goes by its own date.
+  const replayedSets = tx
+    .select({ id: workoutSets.id })
+    .from(workoutSets)
+    .where(and(eq(workoutSets.exerciseId, exerciseId), gte(workoutSets.createdAt, since)));
+  const isDropped = and(
+    ofExercise,
+    or(
+      inArray(exercisePrs.setId, replayedSets),
+      and(isNull(exercisePrs.setId), gte(exercisePrs.achievedAt, since)),
+    ),
+  );
+  const dropped = tx.select({ id: exercisePrs.id }).from(exercisePrs).where(isDropped);
+  // Before the delete: the FK would null the link. A record beaten before
+  // superseded_by_id existed may have no link (migration 0059 could not fill
+  // every one); beaten at or after `since`, its beater is being dropped too.
   await tx
     .update(exercisePrs)
     .set({ supersededAt: null, supersededById: null })
-    .where(and(ofExercise, inArray(exercisePrs.supersededById, dropped)));
-  await tx.delete(exercisePrs).where(and(ofExercise, gte(exercisePrs.achievedAt, since)));
+    .where(
+      and(
+        ofExercise,
+        or(
+          inArray(exercisePrs.supersededById, dropped),
+          and(isNull(exercisePrs.supersededById), gte(exercisePrs.supersededAt, since)),
+        ),
+      ),
+    );
+  await tx.delete(exercisePrs).where(isDropped);
 
   const replay = await tx
     .select({ set: workoutSets })

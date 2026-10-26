@@ -77,6 +77,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
     const result = await callAction(deleteWorkoutSession(detail.id));
     if (!result.success) {
       setDeleting(false);
+      showToast({ variant: "error", message: result.error });
       return;
     }
     router.push("/history");
@@ -301,6 +302,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
       </div>
 
       <SetEditSheet
+        frozen={detail.date < HONEST_REPS_FROM}
         target={editingSet}
         onClose={() => setEditingSet(null)}
         onSaved={() => {
@@ -354,17 +356,19 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
  * distance and time as logged; only the flag and note change.
  */
 function SetEditSheet({
+  frozen,
   target,
   onClose,
   onSaved,
 }: {
+  frozen: boolean;
   target: { set: WorkoutSet; isRun: boolean } | null;
   onClose: () => void;
   onSaved: () => void;
 }) {
   return (
     <BottomSheet open={target != null} onClose={onClose}>
-      {target && <SetEditForm key={target.set.id} {...target} onClose={onClose} onSaved={onSaved} />}
+      {target && <SetEditForm key={target.set.id} {...target} frozen={frozen} onClose={onClose} onSaved={onSaved} />}
     </BottomSheet>
   );
 }
@@ -372,11 +376,13 @@ function SetEditSheet({
 function SetEditForm({
   set,
   isRun,
+  frozen,
   onClose,
   onSaved,
 }: {
   set: WorkoutSet;
   isRun: boolean;
+  frozen: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -390,7 +396,7 @@ function SetEditForm({
   const weightKg = Number(weight);
   const actualReps = Number(reps);
   const valid =
-    weight !== "" && reps !== "" && weightKg >= 0 && weightKg < 1000 && Number.isInteger(actualReps) && actualReps >= 0;
+    weight !== "" && reps !== "" && weightKg >= 0 && weightKg < 1000 && Number.isInteger(actualReps) && actualReps >= 0 && actualReps <= 1000;
 
   async function handleSave() {
     setSaving(true);
@@ -455,6 +461,11 @@ function SetEditForm({
           className={`${INPUT_CLASS} mt-1 resize-none`}
         />
       </label>
+      {frozen && (
+        <p className="text-xs text-muted-foreground">
+          Records from before {formatDateShort(HONEST_REPS_FROM)} stay as they were.
+        </p>
+      )}
       <div className="grid grid-cols-2 gap-3">
         <button
           onClick={onClose}
