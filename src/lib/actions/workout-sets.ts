@@ -33,11 +33,14 @@ import {
     type Discipline,
 } from "@/lib/utils/discipline";
 import { parseUserGoals } from "@/lib/utils/goals";
+import { HONEST_REPS_FROM } from "@/lib/utils/pr-provenance";
 import { rirFromRpe, rpeFromRir } from "@/lib/utils/rir";
-import { requireSession } from "@/lib/utils/session";
+import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
     logWorkoutSetSchema,
     unlogWorkoutSetSchema,
+    updateLoggedSetSchema,
+    updateWorkoutSessionSchema,
 } from "@/lib/validators/workout";
 import {
     buildSuggestion,
@@ -59,7 +62,7 @@ import type {
     WorkoutSet,
     WorkoutStats,
 } from "@/types/workout";
-import { and, desc, eq, gte, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -590,6 +593,176 @@ export async function unlogWorkoutSet(
 }
 
 /**
+ * Correct a set in a finished session from history: weight, reps, the failed
+ * flag and its note.
+ *
+ * The set may be older than records that came after it, so its exercise's
+ * records are rebuilt from the session's start (rebuildPRsFrom), not rolled
+ * back. A rollback leaves two current records once a later set has beaten
+ * this one.
+ */
+export async function updateLoggedSet(data: unknown): Promise<ActionResult<WorkoutSet>> {
+  const auth = await requireSession();
+  const parsed = updateLoggedSetSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const { setId, weightKg, actualReps, isFailed, notes } = parsed.data;
+
+  try {
+    const [existing] = await db
+      .select({
+        userId: workoutSessions.userId,
+        sessionId: workoutSessions.id,
+        isCompleted: workoutSessions.isCompleted,
+        startTime: workoutSessions.startTime,
+        exerciseId: workoutSets.exerciseId,
+      })
+      .from(workoutSets)
+      .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
+      .where(eq(workoutSets.id, setId));
+    assertOwner(existing, auth.user.id);
+    if (!existing.isCompleted) {
+      return { success: false, error: "Finish the workout before editing it from history" };
+    }
+
+    const row = await db.transaction(async (tx) => {
+      await lockRecords(tx, auth.user.id, existing.exerciseId);
+      const [row] = await tx
+        .update(workoutSets)
+        .set({ weightKg: weightKg.toString(), actualReps, isFailed, notes: notes || null })
+        .where(eq(workoutSets.id, setId))
+        .returning();
+      await rebuildPRsFrom(tx, auth.user.id, existing.exerciseId, existing.startTime);
+      return row;
+    });
+
+    revalidatePath("/history");
+    revalidatePath(`/history/${existing.sessionId}`);
+    revalidatePath("/more/metrics");
+    return { success: true, data: row };
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { success: false, error: e.message };
+    console.error("[updateLoggedSet] failed", { setId }, e);
+    return { success: false, error: "Failed to save the set" };
+  }
+}
+
+/**
+ * Correct a finished session's day or notes from history.
+ *
+ * Moving the day shifts the start and end time, and each set's logged time, by
+ * the same number of days, so the session keeps its shape and its sets replay
+ * in the right place. Every exercise in it then has its records rebuilt from
+ * the earlier of the old and new start.
+ *
+ * Auto sessions are refused: the app wrote them for a cycle day, and their day
+ * is the cycle's. So is a day that would put the session in the future.
+ */
+export async function updateWorkoutSession(data: unknown): Promise<ActionResult<undefined>> {
+  const auth = await requireSession();
+  const parsed = updateWorkoutSessionSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const { sessionId, date, notes } = parsed.data;
+
+  try {
+    const [existing] = await db
+      .select({
+        userId: workoutSessions.userId,
+        programId: workoutSessions.programId,
+        date: workoutSessions.date,
+        startTime: workoutSessions.startTime,
+        endTime: workoutSessions.endTime,
+        isCompleted: workoutSessions.isCompleted,
+        source: workoutSessions.source,
+      })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.id, sessionId));
+    assertOwner(existing, auth.user.id);
+    if (existing.source === "auto") {
+      return { success: false, error: "Sessions the app logged for you can't be edited" };
+    }
+    if (!existing.isCompleted) {
+      return { success: false, error: "Finish the workout before editing it from history" };
+    }
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const shiftDays = Math.round((Date.parse(date) - Date.parse(existing.date)) / DAY_MS);
+    const shift = (t: Date) => new Date(t.getTime() + shiftDays * DAY_MS);
+    const newStart = shift(existing.startTime);
+    // Checked on the start instant rather than the date string, which is the
+    // lifter's local day and can be a day ahead of the server's.
+    if (newStart.getTime() > Date.now()) {
+      return { success: false, error: "A workout can't be moved into the future" };
+    }
+
+    await db.transaction(async (tx) => {
+      const exerciseIds = shiftDays === 0
+        ? []
+        : (await tx
+            .selectDistinct({ id: workoutSets.exerciseId })
+            .from(workoutSets)
+            .where(eq(workoutSets.sessionId, sessionId)))
+            .map((r) => r.id)
+            // One order everywhere, so two edits can't wait on each other's locks.
+            .sort((a, b) => a - b);
+      for (const id of exerciseIds) await lockRecords(tx, auth.user.id, id);
+
+      await tx
+        .update(workoutSessions)
+        .set({
+          date,
+          startTime: newStart,
+          endTime: existing.endTime ? shift(existing.endTime) : null,
+          notes: notes || null,
+        })
+        .where(eq(workoutSessions.id, sessionId));
+      if (shiftDays === 0) return;
+
+      await tx
+        .update(workoutSets)
+        .set({ createdAt: sql`${workoutSets.createdAt} + make_interval(days => ${shiftDays})` })
+        .where(eq(workoutSets.sessionId, sessionId));
+      // As in completeWorkoutSession: a logged session replaces the auto one
+      // for its day, so the day isn't counted twice.
+      if (existing.programId != null) {
+        await tx
+          .delete(workoutSessions)
+          .where(
+            and(
+              eq(workoutSessions.userId, auth.user.id),
+              eq(workoutSessions.programId, existing.programId),
+              eq(workoutSessions.date, date),
+              eq(workoutSessions.source, "auto"),
+            ),
+          );
+      }
+      const from = shiftDays < 0 ? newStart : existing.startTime;
+      for (const id of exerciseIds) await rebuildPRsFrom(tx, auth.user.id, id, from);
+    });
+
+    revalidatePath("/history");
+    revalidatePath(`/history/${sessionId}`);
+    revalidatePath("/more/metrics");
+    return { success: true, data: undefined };
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { success: false, error: e.message };
+    console.error("[updateWorkoutSession] failed", { sessionId }, e);
+    return { success: false, error: "Failed to save the workout" };
+  }
+}
+
+/**
  * Undo the PR rows a single set produced: delete each, and make the record it
  * beat current again (followed through `supersededById`, so it is exactly the
  * displaced row, including the right load or pace bracket).
@@ -607,6 +780,84 @@ async function rollbackPRsForSet(tx: Tx, userId: string, setId: number): Promise
       .set({ supersededAt: null, supersededById: null })
       .where(and(eq(exercisePrs.userId, userId), eq(exercisePrs.supersededById, pr.id)));
     await tx.delete(exercisePrs).where(eq(exercisePrs.id, pr.id));
+  }
+}
+
+/**
+ * Rebuild one exercise's records from `from` onward, for an edit to a set or a
+ * session that already has later history.
+ *
+ * rollbackPRsForSet only undoes a record while it is still current; once a
+ * later set has beaten it, the chain after it was built on the old value. So
+ * every record from the edit point on is dropped, the records they had beaten
+ * are made current again, and every set from that point is replayed in order
+ * under today's rules, dated by when the set happened.
+ *
+ * Never reaches back past HONEST_REPS_FROM: records from before honest rep
+ * logging are frozen (D-10), so an edit to an older set saves the set and
+ * leaves those records as they are. The record rules have not changed since
+ * that date, so a replay reproduces every record it rewrites unless the edit
+ * changed it.
+ *
+ * Call under lockRecords for this exercise, in the edit's transaction.
+ */
+async function rebuildPRsFrom(tx: Tx, userId: string, exerciseId: number, from: Date): Promise<void> {
+  const frozenBefore = new Date(`${HONEST_REPS_FROM}T00:00:00Z`);
+  const since = from > frozenBefore ? from : frozenBefore;
+  const ofExercise = and(eq(exercisePrs.userId, userId), eq(exercisePrs.exerciseId, exerciseId));
+
+  const dropped = tx
+    .select({ id: exercisePrs.id })
+    .from(exercisePrs)
+    .where(and(ofExercise, gte(exercisePrs.achievedAt, since)));
+  // Before the delete: the FK would null the link.
+  await tx
+    .update(exercisePrs)
+    .set({ supersededAt: null, supersededById: null })
+    .where(and(ofExercise, inArray(exercisePrs.supersededById, dropped)));
+  await tx.delete(exercisePrs).where(and(ofExercise, gte(exercisePrs.achievedAt, since)));
+
+  const replay = await tx
+    .select({ set: workoutSets })
+    .from(workoutSets)
+    .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
+    .where(
+      and(
+        eq(workoutSessions.userId, userId),
+        eq(workoutSets.exerciseId, exerciseId),
+        eq(workoutSets.isCompleted, true),
+        gte(workoutSets.createdAt, since),
+      ),
+    )
+    .orderBy(asc(workoutSets.createdAt), asc(workoutSets.id));
+
+  for (const { set } of replay) {
+    const weightKg = Number(set.weightKg);
+    const at = set.createdAt;
+    // The same conditions logWorkoutSet applies when the set is logged.
+    if (set.actualReps > 0 && weightKg > 0) {
+      await detectAndRecordPRs(tx, {
+        userId,
+        exerciseId,
+        sessionId: set.sessionId,
+        setId: set.id,
+        weightKg,
+        actualReps: set.actualReps,
+        rir: set.rir ?? (set.rpe != null ? rirFromRpe(set.rpe) : null),
+        at,
+      });
+    }
+    if (set.distanceMeters != null && set.distanceMeters > 0) {
+      await detectAndRecordEndurancePRs(tx, {
+        userId,
+        exerciseId,
+        sessionId: set.sessionId,
+        setId: set.id,
+        distanceMeters: set.distanceMeters,
+        durationSeconds: set.durationSeconds ?? 0,
+        at,
+      });
+    }
   }
 }
 
@@ -650,17 +901,24 @@ type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
  * Insert a new record and mark the one it beat (if any) as superseded by it.
  * The link is what un-logging or correcting the set follows to put the old
  * record back (rollbackPRsForSet).
+ *
+ * `at` is when the set happened. Omitted for a set logged now; a rebuild
+ * (rebuildPRsFrom) passes the set's own time so the chain dates from history.
  */
 async function recordPR(
   tx: Tx,
   beaten: { id: number } | undefined,
   values: typeof exercisePrs.$inferInsert,
+  at?: Date,
 ): Promise<void> {
-  const [inserted] = await tx.insert(exercisePrs).values(values).returning({ id: exercisePrs.id });
+  const [inserted] = await tx
+    .insert(exercisePrs)
+    .values(at ? { ...values, achievedAt: at } : values)
+    .returning({ id: exercisePrs.id });
   if (beaten) {
     await tx
       .update(exercisePrs)
-      .set({ supersededAt: new Date(), supersededById: inserted.id })
+      .set({ supersededAt: at ?? new Date(), supersededById: inserted.id })
       .where(and(eq(exercisePrs.id, beaten.id), isNull(exercisePrs.supersededAt)));
   }
 }
@@ -673,6 +931,7 @@ async function detectAndRecordPRs(tx: Tx, {
   weightKg,
   actualReps,
   rir,
+  at,
 }: {
   userId: string;
   exerciseId: number;
@@ -682,6 +941,8 @@ async function detectAndRecordPRs(tx: Tx, {
   actualReps: number;
   /** Logged reps in reserve, or null when the lifter reported nothing. */
   rir: number | null;
+  /** When the set happened, for a replay. Omitted means now. */
+  at?: Date;
 }): Promise<PRResult[]> {
   const newPRs: PRResult[] = [];
 
@@ -710,7 +971,7 @@ async function detectAndRecordPRs(tx: Tx, {
         value: weightKg.toFixed(2),
         sessionId,
         setId,
-      });
+      }, at);
       newPRs.push({
         type: "weight",
         value: weightKg,
@@ -752,7 +1013,7 @@ async function detectAndRecordPRs(tx: Tx, {
           weightKg: weightKg.toFixed(2),
           sessionId,
           setId,
-        });
+        }, at);
         newPRs.push({
           type: "estimated_1rm",
           value: Math.round(new1RM * 10) / 10,
@@ -788,7 +1049,7 @@ async function detectAndRecordPRs(tx: Tx, {
           weightKg: weightKg.toFixed(2),
           sessionId,
           setId,
-        });
+        }, at);
         newPRs.push({
           type: "reps_at_weight",
           value: actualReps,
@@ -816,6 +1077,7 @@ async function detectAndRecordEndurancePRs(tx: Tx, {
   setId,
   distanceMeters,
   durationSeconds,
+  at,
 }: {
   userId: string;
   exerciseId: number;
@@ -823,6 +1085,8 @@ async function detectAndRecordEndurancePRs(tx: Tx, {
   setId: number;
   distanceMeters: number;
   durationSeconds: number;
+  /** When the set happened, for a replay. Omitted means now. */
+  at?: Date;
 }): Promise<PRResult[]> {
   const newPRs: PRResult[] = [];
   if (distanceMeters <= 0) return newPRs;
@@ -859,7 +1123,7 @@ async function detectAndRecordEndurancePRs(tx: Tx, {
         distanceMeters,
         sessionId,
         setId,
-      });
+      }, at);
       newPRs.push({
         type: "distance",
         value: distanceMeters,
@@ -900,7 +1164,7 @@ async function detectAndRecordEndurancePRs(tx: Tx, {
             bracket: bracket.label,
             sessionId,
             setId,
-          });
+          }, at);
           newPRs.push({
             type: "pace",
             value: durationSeconds,

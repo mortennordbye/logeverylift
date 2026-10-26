@@ -22,7 +22,7 @@ when the brief was written.
 | 1 | [Show hidden data](show-hidden-data.md) | done | no | no |
 | 2 | [Plate calculator and warm-ups](plates-and-warmups.md) | done | no | yes |
 | 3 | [Exercise detail page](exercise-detail-page.md) | done | yes | no |
-| 4 | [Edit past sessions](edit-past-sessions.md) | todo | no | yes |
+| 4 | [Edit past sessions](edit-past-sessions.md) | done | no | yes |
 | 5 | [Quick workout and session-only swap](quick-workout-and-swap.md) | todo | yes | yes |
 | 6 | [Share card and recap](share-card-and-recap.md) | todo | no | no |
 | 7 | [Web push and reminders](web-push-and-reminders.md) | todo | yes | yes (rest timer) |
