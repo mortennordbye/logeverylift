@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { exercisePrs, workoutSessions, workoutSets } from "@/db/schema";
-import { logWorkoutSet, updateLoggedSet, updateWorkoutSession } from "@/lib/actions/workout-sets";
+import { deleteWorkoutSession, logWorkoutSet, updateLoggedSet, updateWorkoutSession } from "@/lib/actions/workout-sets";
 import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";
@@ -273,5 +273,39 @@ describe("updateWorkoutSession", () => {
     const auto = await createSession(userId, programId, { date: "2026-10-03", isCompleted: true, source: "auto" });
     expect((await updateWorkoutSession({ sessionId, date: "2026-10-03", notes: null })).success).toBe(true);
     expect(await db.select().from(workoutSessions).where(eq(workoutSessions.id, auto.id))).toEqual([]);
+  });
+});
+
+describe("deleteWorkoutSession", () => {
+  it("takes the session's records with it and restores the ones they beat", async () => {
+    await finished("2026-10-01", 100);
+    const later = await finished("2026-10-08", 110);
+
+    expect((await deleteWorkoutSession(later.sessionId)).success).toBe(true);
+    expect(await weightChain()).toEqual([{ value: 100, day: "2026-10-01", current: true }]);
+    expect(await currentRecords()).toEqual(["estimated_1rm:116.67", "reps_at_weight:5@100", "weight:100"]);
+  });
+
+  it("a discarded workout leaves no records behind", async () => {
+    await finished("2026-10-01", 100);
+    const live = await createSession(userId, programId);
+    await logWorkoutSet({
+      sessionId: live.id,
+      exerciseId,
+      setNumber: 1,
+      programSetId,
+      targetReps: 5,
+      actualReps: 5,
+      weightKg: 120,
+      rir: 2,
+      restTimeSeconds: 120,
+      isCompleted: true,
+      isFailed: false,
+      wasEasy: false,
+    });
+    expect(await currentRecords()).toContain("weight:120");
+
+    expect((await deleteWorkoutSession(live.id)).success).toBe(true);
+    expect(await currentRecords()).toEqual(["estimated_1rm:116.67", "reps_at_weight:5@100", "weight:100"]);
   });
 });

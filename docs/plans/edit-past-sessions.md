@@ -52,6 +52,10 @@ but leaves those records as they are, and the edit form says so. A date move acr
 2026-09-01 is refused: moving back would drop records the rebuild can't replay, and moving
 forward would leave frozen records dated on the old day.
 
+Deleting a session (from history, or discarding a workout) rebuilds its exercises' records
+the same way, so a deleted session takes its records with it. `deleteWorkoutSession` moved
+to `workout-sets.ts` for that.
+
 The rebuild starts at the earlier of the session's start and its sets' times. The start
 comes from the phone's clock and a set's time from the server's, so a phone running ahead
 puts the start after its sets.

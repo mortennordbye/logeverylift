@@ -4,10 +4,9 @@ import { reorderProgramExercises, reorderProgramSets } from "@/lib/actions/progr
 import {
   completeWorkoutSession,
   createWorkoutSession,
-  deleteWorkoutSession,
   isSessionResumable,
 } from "@/lib/actions/workout-sessions";
-import { logWorkoutSet } from "@/lib/actions/workout-sets";
+import { deleteWorkoutSession, logWorkoutSet } from "@/lib/actions/workout-sets";
 import { asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";

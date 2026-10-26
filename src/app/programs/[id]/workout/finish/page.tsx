@@ -3,8 +3,8 @@
 import {
   completeWorkoutSession,
   createWorkoutSession,
-  deleteWorkoutSession,
 } from "@/lib/actions/workout-sessions";
+import { deleteWorkoutSession } from "@/lib/actions/workout-sets";
 import { updateProgramSet } from "@/lib/actions/programs";
 import { usePendingQueue } from "@/contexts/pending-queue-context";
 import { useToast } from "@/contexts/toast-context";

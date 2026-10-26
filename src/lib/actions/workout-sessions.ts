@@ -203,29 +203,6 @@ export async function closeStaleOpenSessions(): Promise<void> {
   }
 }
 
-export async function deleteWorkoutSession(
-  sessionId: number,
-): Promise<ActionResult<undefined>> {
-  const auth = await requireSession();
-
-  try {
-    const [existing] = await db
-      .select({ userId: workoutSessions.userId })
-      .from(workoutSessions)
-      .where(eq(workoutSessions.id, sessionId));
-    assertOwner(existing, auth.user.id);
-
-    await db.delete(workoutSessions).where(eq(workoutSessions.id, sessionId));
-    revalidatePath("/history");
-    revalidatePath("/");
-    return { success: true, data: undefined };
-  } catch (e) {
-    if (e instanceof ForbiddenError) return { success: false, error: e.message };
-    console.error("[deleteWorkoutSession] failed", e);
-    return { success: false, error: "Failed to delete workout session" };
-  }
-}
-
 type LastSession = {
   feeling: string | null;
   notes: string | null;

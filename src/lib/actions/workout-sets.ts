@@ -784,6 +784,54 @@ export async function updateWorkoutSession(data: unknown): Promise<ActionResult<
 }
 
 /**
+ * Delete a session with its sets, from history or by discarding a workout,
+ * and take its records with it.
+ *
+ * Its sets earned records when they were logged, and a later set may have
+ * beaten those since, so each exercise in it has its records rebuilt from the
+ * session's earliest time (rebuildPRsFrom). Records from before
+ * HONEST_REPS_FROM stay, as they do for an edit.
+ */
+export async function deleteWorkoutSession(
+  sessionId: number,
+): Promise<ActionResult<undefined>> {
+  const auth = await requireSession();
+
+  try {
+    const [existing] = await db
+      .select({ userId: workoutSessions.userId, startTime: workoutSessions.startTime })
+      .from(workoutSessions)
+      .where(eq(workoutSessions.id, sessionId));
+    assertOwner(existing, auth.user.id);
+
+    await db.transaction(async (tx) => {
+      const exercisesInSession = await tx
+        .select({ id: workoutSets.exerciseId, firstSet: sql<Date>`MIN(${workoutSets.createdAt})`.mapWith(workoutSets.createdAt) })
+        .from(workoutSets)
+        .where(eq(workoutSets.sessionId, sessionId))
+        .groupBy(workoutSets.exerciseId)
+        // One order everywhere, so two edits can't wait on each other's locks.
+        .orderBy(asc(workoutSets.exerciseId));
+      for (const { id } of exercisesInSession) await lockRecords(tx, auth.user.id, id);
+
+      await tx.delete(workoutSessions).where(eq(workoutSessions.id, sessionId));
+      for (const { id, firstSet } of exercisesInSession) {
+        await rebuildPRsFrom(tx, auth.user.id, id, earliest(existing.startTime, firstSet));
+      }
+    });
+
+    revalidatePath("/history");
+    revalidatePath("/");
+    revalidatePath("/more/metrics");
+    return { success: true, data: undefined };
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { success: false, error: e.message };
+    console.error("[deleteWorkoutSession] failed", { sessionId }, e);
+    return { success: false, error: "Failed to delete workout session" };
+  }
+}
+
+/**
  * Undo the PR rows a single set produced: delete each, and make the record it
  * beat current again (followed through `supersededById`, so it is exactly the
  * displaced row, including the right load or pace bracket).
