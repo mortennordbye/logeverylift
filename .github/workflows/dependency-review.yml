@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/dependency-review-action@v5.0.0
         with:
-          # better-auth advisories fixed only in 1.7, each needing a plugin this app
-          # does not enable (magic link with social sign-in, device authorization,
-          # OAuth proxy). Drop these once better-auth is on 1.7 (BACKLOG.md).
-          allow-ghsas: GHSA-965c-763c-88jm, GHSA-q84f-53jg-9ppm, GHSA-r4xp-prcw-77qf
+          # better-auth advisories fixed only in 1.7 that need setup this app does not
+          # have: magic link with social sign-in, device authorization, OAuth proxy, and
+          # database-stored rate limits. Drop these once better-auth is on 1.7 (BACKLOG.md).
+          allow-ghsas: GHSA-965c-763c-88jm, GHSA-q84f-53jg-9ppm, GHSA-r4xp-prcw-77qf, GHSA-44jh-23m7-hpcf
