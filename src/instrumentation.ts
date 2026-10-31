@@ -5,6 +5,22 @@ import * as Sentry from "@sentry/nextjs";
 export const onRequestError = Sentry.captureRequestError;
 
 export async function register() {
+  // Request and database traces to the homelab's collector. Registered before
+  // anything loads `pg`, or its queries go untraced. Not with Sentry: both would
+  // claim the global tracer provider.
+  if (
+    process.env.NEXT_RUNTIME === "nodejs" &&
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT &&
+    !process.env.SENTRY_DSN
+  ) {
+    const { registerOTel } = await import("@vercel/otel");
+    const { PgInstrumentation } = await import("@opentelemetry/instrumentation-pg");
+    registerOTel({
+      serviceName: "logeverylift",
+      instrumentations: ["fetch", new PgInstrumentation()],
+    });
+  }
+
   // Sentry runs in both nodejs and edge runtimes. Load the matching config.
   // No-op when SENTRY_DSN is unset (see config files).
   if (process.env.NEXT_RUNTIME === "nodejs") {
