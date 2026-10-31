@@ -25,9 +25,6 @@ updates:
       # Past 1.59, some server-action responses never report finished, so e2e settle() times out; see BACKLOG.md.
       - dependency-name: "@playwright/test"
         versions: [">=1.60.0"]
-      # 6.16 trips a WebKit blob error in the e2e on Playwright 1.59's WebKit; lifts with Playwright.
-      - dependency-name: "maplibre-gl"
-        versions: [">=6.16.0"]
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

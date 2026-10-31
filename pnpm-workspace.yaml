@@ -5,6 +5,3 @@ allowBuilds:
   msw: false
   sharp: false
   unrs-resolver: false
-# 7.1 turns react-hooks/set-state-in-effect into an error across 18 effects; see BACKLOG.md.
-overrides:
-  eslint-plugin-react-hooks: 7.0.1
