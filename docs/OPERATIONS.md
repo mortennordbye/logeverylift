@@ -79,6 +79,7 @@ Do **not** treat the Docker `postgres_data` volume in `docker-compose.yml` as a 
   - `error.tsx` and `global-error.tsx` also `Sentry.captureException(error)` to catch client-side React errors.
   - To wire source maps, add `SENTRY_AUTH_TOKEN` to CI and wrap `next.config.ts` with `withSentryConfig`. Currently skipped — runtime SDK works without it.
 - **Console logging:** Tag pattern is `[actionName] short_tag`. Grep container logs with `docker-compose logs app | grep -E '\[\w+\]'`.
+- **Traces:** OpenTelemetry via `@vercel/otel`, registered in `instrumentation.ts` only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set and `SENTRY_DSN` is not (both would claim the global tracer provider). Spans cover Next.js routes and rendering, outgoing `fetch`, and every `pg` query (statement text with `$n` placeholders, never the values). Prod sends OTLP/HTTP to the homelab's Alloy, which strips query strings and client addresses before Tempo keeps the traces for 24 hours; Traefik starts each trace, so the app's spans hang under the ingress span.
 - **Metrics export:** Not configured. Add when latency or error rate becomes a question worth answering.
 
 ## Test coverage

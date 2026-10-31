@@ -32,6 +32,7 @@ Health data (Art. 9): body weight and its history, heart rate zones, readiness, 
 ## Outside the database
 
 - **Server logs** (Loki in the homelab): 7 days. Rate-limit warnings in `src/app/api/auth/[...all]/route.ts` include the client IP. Server Actions log ids and short tags only, never names, emails or request bodies (CLAUDE.md, Safety rules).
+- **Request traces** (Tempo in the homelab): 24 hours. Timings of each request, the route and path (which can hold record ids), outgoing API calls by host and path, and database query text with placeholders, never the values. Alloy removes query strings and client IP addresses before they are stored. No names, emails, notes or request bodies (`src/instrumentation.ts`, the homelab's `k8s/talos/infra/loki/alloy-values.yaml`).
 - **Backups:** daily `pg_dump`, kept 30 days on the homelab NAS; off-site copy to Google Drive by Synology Hyper Backup, client-side encrypted, Smart Recycle up to 30 versions. The policy promises rotation within 90 days.
 - **Browser** (`src/lib/utils/local-data.ts` lists what survives sign-out): session cookie and its 5-minute cache cookie; localStorage `activeWorkout`, `restTimerEnds`, `workoutOverrides`, `workoutReadiness`, `pendingMutationQueue`, `ai_generating`, `ai_pending_edit`, `ai_pending_error`, `weeklyGoal`, admin backups, and display settings (`theme`, `accentColor`, `customAccentHex`, `uiScale`); service worker caches. All strictly necessary, so no consent banner (ekomloven §3-15). `clearLocalUserData` empties everything but display settings on sign-out and deletion.
 

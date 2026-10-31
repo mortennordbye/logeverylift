@@ -172,6 +172,7 @@ export default function PrivacyPage() {
         </li>
         <li>Login sessions, with IP address and user agent: 30 days after last use.</li>
         <li>Server logs: 7 days.</li>
+        <li>Request traces (how long each request and database query took, without their contents): 24 hours.</li>
       </ul>
 
       <h2>On your device</h2>
