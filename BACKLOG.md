@@ -140,6 +140,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Switching to the current LTS (Node 24) in all `FROM` lines, `.github/workflows/ci.yml` and `e2e-nightly.yml`, and `@types/node`; drop the runner's `apk upgrade` if the new base is current. Dependabot's docker PR proposes 25, which is not an LTS line.
 - **Touchpoints:** `Dockerfile`, `.github/workflows/ci.yml`, `.github/workflows/e2e-nightly.yml`, `package.json`.
 
+### Playwright is held at 1.59.1
+- **What:** `@playwright/test` is pinned to 1.59.1, with the CI container and its version guard to match, and Dependabot ignores newer releases. On 1.64.1, `e2e/set-edit.spec.ts` "a note saved on a logged set" fails about half the time on two CPUs: some server-action responses on the set editor never report finished (the trace shows no body received), so `trackActions` in `e2e/helpers.ts` never sees zero in flight and `settle()` times out. The app is unchanged; the same branch passes 14/14 on 1.59.1.
+- **Why deferred:** It arrived with a dependency CVE cleanup; whether the fix belongs in `trackActions` (count a response as done at headers, or drop requests left open by a client navigation) or in how the app reads action responses wants its own investigation.
+- **Unblocked by:** Reproducing with `pnpm test:e2e e2e/set-edit.spec.ts --project=chromium --repeat-each=6` in the Playwright image limited to two CPUs, finding the first release past 1.59 that fails, and fixing `trackActions` or the app. Then lift the pin, the image tag and guard in `.github/workflows/ci.yml` and `e2e-nightly.yml`, and the Dependabot ignore.
+- **Touchpoints:** `package.json`, `e2e/helpers.ts`, `e2e/set-edit.spec.ts`, `.github/workflows/ci.yml`, `.github/workflows/e2e-nightly.yml`, `.github/dependabot.yml`.
+
 ### Adopt eslint-plugin-react-hooks 7.1
 - **What:** `pnpm-workspace.yaml` overrides `eslint-plugin-react-hooks` to 7.0.1. 7.1 makes `react-hooks/set-state-in-effect` an error, and 18 effects fail it, most of them reading `localStorage` on mount (`src/contexts/pending-queue-context.tsx` and the settings contexts).
 - **Why deferred:** It arrived transitively in a dependency CVE cleanup; rewriting 18 effects is a behaviour change in client state, not a version bump.
