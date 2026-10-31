@@ -3,7 +3,7 @@
 # ==================================
 
 # Stage 1: Install dependencies
-FROM node:20-alpine AS deps
+FROM node:25-alpine AS deps
 # Pinned to the major CI installs (.github/workflows/ci.yml, pnpm/action-setup).
 # Unpinned, this pulled whatever pnpm was newest at build time, and pnpm 11 turned
 # ERR_PNPM_IGNORED_BUILDS from a warning into a hard failure — so `pnpm install`
@@ -19,7 +19,7 @@ RUN pnpm install
 # ============================================================
 # NEW Stage 2: Development (Fast Local Building)
 # ============================================================
-FROM node:20-alpine AS dev
+FROM node:25-alpine AS dev
 RUN npm install -g pnpm@10 tsx
 WORKDIR /app
 
@@ -40,7 +40,7 @@ CMD ["pnpm", "next", "dev", "--turbo", "-H", "0.0.0.0"]
 # ============================================================
 # Stage 3: Build application (Production only)
 # ============================================================
-FROM node:20-alpine AS builder
+FROM node:25-alpine AS builder
 RUN npm install -g pnpm@10
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -59,7 +59,7 @@ RUN pnpm exec esbuild scripts/migrate.ts scripts/seed.ts --bundle --platform=nod
 # ============================================================
 # Stage 4: Production runner
 # ============================================================
-FROM node:20-alpine AS runner
+FROM node:25-alpine AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
