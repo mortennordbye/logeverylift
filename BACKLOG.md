@@ -134,6 +134,18 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Deciding whether a weighted hold should progress weight at a fixed time, time at a fixed weight, or alternate. Then: write `weightKg` in the timed branch of the program-edit save, show it on the timed row, and add a load step to the `duration` case in the engine.
 - **Touchpoints:** `src/components/features/SetEditView.tsx:348` (timed save omits weight), `src/components/features/WorkoutSetsList.tsx:1742` (timed row shows time only), `src/lib/utils/progression.ts:1634` (the `duration` case).
 
+### Node 20 is past end of life
+- **What:** Every Dockerfile stage builds on `node:20-alpine` and CI runs `node-version: 20`. Node 20 left LTS in April 2026, so the base image is no longer rebuilt; the runner runs `apk upgrade` to pick up Alpine fixes, and Node's own security releases no longer reach the app.
+- **Why deferred:** A Node major moves the dev image, CI and the production runtime together and wants a full e2e pass on its own, not folded into a CVE cleanup.
+- **Unblocked by:** Switching to the current LTS (Node 24) in all `FROM` lines, `.github/workflows/ci.yml` and `e2e-nightly.yml`, and `@types/node`; drop the runner's `apk upgrade` if the new base is current. Dependabot's docker PR proposes 25, which is not an LTS line.
+- **Touchpoints:** `Dockerfile`, `.github/workflows/ci.yml`, `.github/workflows/e2e-nightly.yml`, `package.json`.
+
+### Adopt eslint-plugin-react-hooks 7.1
+- **What:** `pnpm-workspace.yaml` overrides `eslint-plugin-react-hooks` to 7.0.1. 7.1 makes `react-hooks/set-state-in-effect` an error, and 18 effects fail it, most of them reading `localStorage` on mount (`src/contexts/pending-queue-context.tsx` and the settings contexts).
+- **Why deferred:** It arrived transitively in a dependency CVE cleanup; rewriting 18 effects is a behaviour change in client state, not a version bump.
+- **Unblocked by:** Rewriting each flagged effect (lazy `useState` initialisers or `useSyncExternalStore` for storage reads), then removing the override and running `pnpm verify` plus the e2e suite.
+- **Touchpoints:** `pnpm-workspace.yaml`, `src/contexts/`, `eslint.config.mjs`.
+
 ## Cycle periodization (spec divergences)
 
 Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spec pass (2026-08-25 @ `91c1646`). Rule IDs are `PZ-n`; divergence IDs `D1`-`D8` are the rows of that spec's Divergences table.
@@ -220,6 +232,12 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Touchpoints:** `docs/specs/README.md` (the standard), `docs/specs/TEMPLATE.md`, `docs/README.md` (the Specs index), `.claude/skills/feature-spec/SKILL.md`.
 
 ## MCP server
+
+### Move the MCP OAuth server off better-auth's removed `mcp` plugin
+- **What:** better-auth 1.7 removed the `mcp` plugin and `withMcpAuth` that the MCP endpoint authenticates with; its replacement is the separate `@better-auth/oauth-provider` package. `package.json` holds better-auth at `~1.6.22` and Dependabot ignores 1.7 so its grouped PR stays green.
+- **Why deferred:** Every better-auth advisory that affects this app (refresh-token replay and `redirect_uri` XSS in `mcp`, the account-takeover fixes) is fixed in 1.6.x. The two fixed only in 1.7.7 hit magic-link and OAuth-proxy sign-in, which the app does not use. Migrating changes the OAuth tables and likely signs out every connected MCP client, so it wants its own change and a privacy-skill pass.
+- **Unblocked by:** better-auth 1.6 stopping security releases, or an advisory against 1.6 that applies here. Then swap `mcp()` for the oauth-provider plugin, migrate `oauth_application` / `oauth_access_token` / `oauth_consent`, rewrite the endpoint's auth wrapper and the `.well-known` routes, remove the Dependabot ignore, and run the MCP e2e flow.
+- **Touchpoints:** `src/lib/auth.ts`, `src/app/api/[transport]/route.ts`, `src/app/.well-known/`, `src/db/schema/auth.ts`, `.github/dependabot.yml`, `package.json`.
 
 ### Redis-backed SSE stream resumption for the MCP server
 - **What:** The MCP endpoint (`src/app/api/[transport]/route.ts`) runs `createMcpHandler` without a `redisUrl`. With Streamable HTTP, a long-running tool call holds an open response; across multiple instances a session that starts on one can't resume on another, so clients can drop mid-call.

@@ -18,6 +18,10 @@ updates:
     groups:
       npm-minor-patch:
         update-types: ["minor", "patch"]
+    # 1.7 removed the mcp plugin the MCP endpoint authenticates with; see BACKLOG.md.
+    ignore:
+      - dependency-name: "better-auth"
+        versions: [">=1.7.0"]
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
