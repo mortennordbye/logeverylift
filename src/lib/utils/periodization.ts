@@ -318,3 +318,63 @@ export function formatPeriodizationSummary(
   if (p.adaptationNote) note = `${note} ${p.adaptationNote}`;
   return { headline, note };
 }
+
+/** A set's endurance values and anchors, as stored. */
+export type AnchoredSet = {
+  distanceMeters: number | null;
+  durationSeconds: number | null;
+  peakDistanceMeters: number | null;
+  peakDurationSeconds: number | null;
+};
+
+/**
+ * The anchors a periodized set should carry after an edit (PZ-36, PZ-37), or
+ * null when the set is not periodized and has none to carry.
+ *
+ * The value written in `mode` is this week's, so its peak is the value over
+ * this week's `share` of peak. Re-derived only when the value changed: the
+ * stored value is itself a rounded `peak x share`, and dividing it back out on
+ * every save would walk the peak a little further on each one. Switching to
+ * time drops the distance anchor; switching to distance from time drops the
+ * time anchor; a set anchored on both keeps its time anchor on a distance edit,
+ * following the time value by the same keep-or-re-derive rule.
+ */
+export function reanchoredPeaks(
+  stored: AnchoredSet,
+  next: { distanceMeters: number | null; durationSeconds: number | null },
+  mode: "distance" | "duration",
+  share: number,
+): { peakDistanceMeters: number | null; peakDurationSeconds: number | null } | null {
+  if (stored.peakDistanceMeters == null && stored.peakDurationSeconds == null) return null;
+  const derive = (value: number) => Math.round(value / (share > 0 ? share : 1));
+  // Kept when the value is untouched, re-derived when it moved, gone with it.
+  const follow = (value: number | null, was: number | null, peak: number) =>
+    value == null ? null : value === was ? peak : derive(value);
+  if (mode === "distance") {
+    const value = next.distanceMeters;
+    return {
+      peakDistanceMeters:
+        value == null
+          ? null
+          : stored.peakDistanceMeters != null
+            ? follow(value, stored.distanceMeters, stored.peakDistanceMeters)
+            : derive(value),
+      // A set anchored on both keeps its time anchor, following its own value;
+      // one switching back from time drops it.
+      peakDurationSeconds:
+        stored.peakDistanceMeters != null && stored.peakDurationSeconds != null
+          ? follow(next.durationSeconds, stored.durationSeconds, stored.peakDurationSeconds)
+          : null,
+    };
+  }
+  const value = next.durationSeconds;
+  return {
+    peakDistanceMeters: null,
+    peakDurationSeconds:
+      value == null
+        ? null
+        : stored.peakDurationSeconds != null && value === stored.durationSeconds
+          ? stored.peakDurationSeconds
+          : derive(value),
+  };
+}

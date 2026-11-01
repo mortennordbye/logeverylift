@@ -712,9 +712,10 @@ describe("importProgramSchema progression settings", () => {
   }
 
   it("round-trips the gate and the opt-in", () => {
-    const e = parsed({ hits: 3, applyToPlan: true });
+    const e = parsed({ hits: 3, applyToPlan: true, suppressEffortPrompt: true });
     expect(e?.hits).toBe(3);
     expect(e?.applyToPlan).toBe(true);
+    expect(e?.suppressEffortPrompt).toBe(true);
   });
 
   it("accepts payloads exported before these fields existed", () => {
@@ -722,6 +723,7 @@ describe("importProgramSchema progression settings", () => {
     expect(e).toBeDefined();
     expect(e?.hits).toBeUndefined();
     expect(e?.applyToPlan).toBeUndefined();
+    expect(e?.suppressEffortPrompt).toBeUndefined();
   });
 
   it("coerces an out-of-range gate to null rather than rejecting the import", () => {

@@ -313,15 +313,25 @@ function SetEditForm({
         // During a workout: only update the duration target override (distance target is program-level)
         workoutSession?.setOverride(set.id, { targetReps: 0, weightKg: 0, durationSeconds: duration > 0 ? duration : undefined, notes: noteValue });
       } else if (runMode === "distance") {
-        // Convert a time-periodized set back to distance: anchor the entered distance, clear the time anchor.
-        const anchor = isPeriodized && set.peakDistanceMeters == null
-          ? { peakDistanceMeters: distanceMeters, peakDurationSeconds: null }
+        // A periodized set's typed distance is this week's, and the server
+        // re-derives the anchors from it (PZ-36, PZ-37: switching back from
+        // time also drops the time anchor).
+        // An untouched value is left out: the weekly sync owns it, and a page
+        // left open across the week boundary would write last week's back.
+        const anchor = isPeriodized
+          ? { anchor: "distance" as const }
           : {};
-        if (!(await savePlan({ id: set.id, distanceMeters, durationSeconds: duration > 0 ? duration : undefined, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
+        const sentDistance = isPeriodized && distanceMeters === set.distanceMeters ? undefined : distanceMeters;
+        const durationValue = duration > 0 ? duration : undefined;
+        const sentDuration = isPeriodized && durationValue === (set.durationSeconds ?? undefined) ? undefined : durationValue;
+        if (!(await savePlan({ id: set.id, distanceMeters: sentDistance, durationSeconds: sentDuration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
       } else {
-        // Time mode: anchor the entered duration as the peak (and drop the distance anchor) for periodized sets.
-        const anchor = isPeriodized ? { peakDurationSeconds: duration, peakDistanceMeters: null } : {};
-        if (!(await savePlan({ id: set.id, distanceMeters: null, durationSeconds: duration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
+        // Time mode: the typed duration is this week's, and the server
+        // re-derives the time anchor from it and drops the distance one (PZ-36, PZ-37).
+        const anchor = isPeriodized ? { anchor: "duration" as const } : {};
+        const sentDuration =
+          isPeriodized && set.distanceMeters == null && duration === set.durationSeconds ? undefined : duration;
+        if (!(await savePlan({ id: set.id, distanceMeters: null, durationSeconds: sentDuration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
       }
     } else if (isWorkout) {
       // During a workout, changes apply to the active session only — never write back to
@@ -349,7 +359,7 @@ function SetEditForm({
         }
       }
     } else if (isTimed) {
-      if (!(await savePlan({ id: set.id, durationSeconds: duration, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null }))) return;
+      if (!(await savePlan({ id: set.id, durationSeconds: duration, weightKg: weight, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null }))) return;
     } else {
       if (!(await savePlan({ id: set.id, targetReps: reps, weightKg: weight, setType, restTimeSeconds: restSeconds, targetRir: prescribedRir }))) return;
     }
@@ -402,6 +412,25 @@ function SetEditForm({
     markProgrammaticBack();
     router.back();
   };
+
+  // The load row, shared by rep sets and timed sets. A timed set can carry a
+  // load too (a weighted hold), and progresses it at a fixed time.
+  const weightRow = (
+    <button
+      onClick={() => { setWeightStr(String(weight)); setShowWeightPicker(true); }}
+      className="w-full flex items-center justify-between py-4 border-b border-border transition-colors hover:bg-muted/50 active:bg-muted/70"
+    >
+      <span className="text-base font-medium">Weight (kg)</span>
+      <span className="flex flex-col items-end">
+        <span className="text-base text-muted-foreground">{weight}</span>
+        {equipment === "barbell" && formatPlates(weight) && (
+          <span className="text-xs text-muted-foreground" data-testid="set-plates">
+            {formatPlates(weight)}
+          </span>
+        )}
+      </span>
+    </button>
+  );
 
   return (
     <>
@@ -624,6 +653,8 @@ function SetEditForm({
               </span>
             </button>
 
+            {weightRow}
+
             {/* Opt-in prep time before the countdown starts (e.g. getting into
                 a handstand). Shown as an amber lead-in slice on the timer ring. */}
             <div className="py-4 border-b border-border">
@@ -691,21 +722,7 @@ function SetEditForm({
               </button>
             )}
 
-            {/* Weight */}
-            <button
-              onClick={() => { setWeightStr(String(weight)); setShowWeightPicker(true); }}
-              className="w-full flex items-center justify-between py-4 border-b border-border transition-colors hover:bg-muted/50 active:bg-muted/70"
-            >
-              <span className="text-base font-medium">Weight (kg)</span>
-              <span className="flex flex-col items-end">
-                <span className="text-base text-muted-foreground">{weight}</span>
-                {equipment === "barbell" && formatPlates(weight) && (
-                  <span className="text-xs text-muted-foreground" data-testid="set-plates">
-                    {formatPlates(weight)}
-                  </span>
-                )}
-              </span>
-            </button>
+            {weightRow}
 
             {/* Exercise type — edits the per-program override on the exercise
                 (applies to every set of this exercise in this program). */}

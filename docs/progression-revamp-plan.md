@@ -303,6 +303,7 @@ The test of the model is whether it expresses what lifters do without a special 
 | **Double progression, top set** | range | none | first | 1 | double | -10% after 3 | Top set drives progression, back-offs follow. |
 | **Autoregulated** | fixed or range | RIR 1-3 | all | 2 | load or double | -10% after 3 | RPE/RIR-based training. Load only moves when the prescribed reps came with the prescribed reserve. **Regress is not `hold`:** auto-deloading when effort runs hot is the main reason to train this way, and this is the only preset that can detect a grind. Giving it `hold` would be the one scheme able to see the problem and forbidden from acting. |
 | **Rep ladder** | fixed | none | all | 1 | reps | hold | Bodyweight work with no load to add. Chin-ups, push-ups. Needs `E-17`'s ceiling and zero-increment fix, or it climbs to 40 reps and, out of the box, never moves at all. |
+| **Rep ladder, confirmed** | fixed | none | all | 2 | reps | hold | The same ladder on a two-session gate. Added after the rebuild: it is what `0051` left every `reps` exercise on (a null gate is 2), and without it those read Custom. |
 | **Duration** | fixed or range | none | all | 2 | duration | hold | Planks, holds, carries, steady cardio. |
 | **Distance** | fixed or range | none | all | 2 | distance | hold | Running, rowing, endurance. |
 | **Manual** | any | any | n/a | n/a | none | n/a | Shows what you did last time, proposes nothing. |

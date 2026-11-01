@@ -1,6 +1,7 @@
 import { ProgramDetailClient } from "@/components/features/ProgramDetailClient";
 import { getFriends } from "@/lib/actions/friends";
 import { getProgramWithExercises } from "@/lib/actions/programs";
+import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
 import { getLastCompletedSession } from "@/lib/actions/workout-sessions";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
@@ -17,6 +18,8 @@ export default async function ProgramDetailPage({ params, searchParams }: Props)
   if (isNaN(programId)) notFound();
 
   await requireSession();
+  // Shows a periodized set's target, so this week's sync runs first (PZ-29).
+  await syncActiveCyclePeriodization();
   const [programResult, lastSessionResult, friendsResult] = await Promise.all([
     getProgramWithExercises(programId),
     getLastCompletedSession(programId),

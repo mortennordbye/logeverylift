@@ -424,6 +424,9 @@ export const updateProgramSetSchema = programSetFields
     // endurance set's mode is switched. Null clears the anchor.
     peakDistanceMeters: z.number().int().min(0).nullable().optional(),
     peakDurationSeconds: z.number().int().min(0).nullable().optional(),
+    // On a periodized set: the distance or duration written is this week's
+    // value, and the server re-derives that dimension's peak from it (PZ-36).
+    anchor: z.enum(["distance", "duration"]).optional(),
     // Null on either clears the range back to a fixed target.
     repRangeMin: z.number().int().positive().max(1000).nullable().optional(),
     repRangeMax: z.number().int().positive().max(1000).nullable().optional(),
@@ -515,6 +518,7 @@ const importProgramEntrySchema = z.object({
             .catch(undefined),
           readiness: z.enum(PROGRESSION_READINESSES).optional().catch(undefined),
           applyToPlan: z.boolean().optional().catch(false),
+          suppressEffortPrompt: z.boolean().optional().catch(false),
           exercise: z.object({
             name: z.string().min(1).max(100),
             category: z.enum(["strength", "cardio", "flexibility"]).catch("strength"),

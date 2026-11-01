@@ -512,6 +512,8 @@ export type ExportedProgram = {
       readiness?: string;
       /** Whether accepting a bump rewrites the planned sets. */
       applyToPlan?: boolean;
+      /** Whether the in-workout effort prompt is hidden for this exercise. */
+      suppressEffortPrompt?: boolean;
       exercise: {
         name: string;
         category: string;

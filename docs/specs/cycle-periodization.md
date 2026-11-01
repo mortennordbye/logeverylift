@@ -1,8 +1,8 @@
 # Cycle periodization
 
 > **Status:** implemented
-> **Last verified:** 2026-08-29 against `47aacbc`
-> **Source of truth:** `src/lib/utils/periodization.ts`, `src/lib/actions/training-cycles.ts` (`getActiveCycleForUser`, `getCyclePeriodization`, `getProgramPeriodization`, `computeCycleAdaptation`, `syncPeriodizedTargets`)
+> **Last verified:** 2026-08-29 against `47aacbc`; PZ-29, PZ-36, PZ-37 and PZ-40 re-verified 2026-11-01 when D4 and D8 closed
+> **Source of truth:** `src/lib/utils/periodization.ts`, `src/lib/actions/training-cycles.ts` (`getActiveCycleForUser`, `getCyclePeriodization`, `getProgramPeriodization`, `syncActiveCyclePeriodization`), `src/lib/periodization-sync.ts` (`computeCycleAdaptation`, `syncPeriodizedTargets`, `syncDueCycle`, `periodizationShare`)
 >
 > Stale check: `git log 47aacbc..HEAD -- src/lib/utils/periodization.ts src/lib/actions/training-cycles.ts`
 
@@ -234,10 +234,10 @@ It fires when `lastSyncedWeek !== currentWeek` and stamps `lastSyncedWeek` at th
 *Covered by:* `none`.
 
 ### PZ-29 — The sync is lazy: it happens on the first visit of a new week, not at the week boundary
-Nothing runs on a schedule. Until the athlete opens a page that calls `getActiveCycleForUser` (`/`, `/new-workout`, or the workout page's insight query), the plan still shows the previous week's targets.
+Nothing runs on a schedule. Until the athlete opens a page that syncs, the plan still shows the previous week's targets. The pages that do: `/` and `/new-workout` through `getActiveCycleForUser`; the workout page and the in-workout exercise page, which await `syncActiveCyclePeriodization` **before** reading any program set, so the first render of a new week already shows its targets; and `/cycles/[id]` through `getCyclePeriodization` (PZ-40).
 
-*Why:* the app has no scheduler, and adding one for a write that only matters when someone is looking would be a large amount of infrastructure for no user-visible gain. The consequence is accepted: the plan is correct from the moment it is read, not from midnight.
-*Covered by:* `none`.
+*Why:* the app has no scheduler, and adding one for a write that only matters when someone is looking would be a large amount of infrastructure for no user-visible gain. The consequence is accepted: the plan is correct from the moment it is read, not from midnight. Awaiting the sync before the reads is what makes "from the moment it is read" true: run beside them, the read of `program_sets` won and showed last week's targets under this week's header (D4).
+*Covered by:* `integration/training-cycles.test.ts` — "syncActiveCyclePeriodization".
 
 ### PZ-30 — The sync selects sets by anchor
 A row is rewritten only when it has a distance anchor or a duration anchor. Everything else in the cycle is left alone, `sessionRole` included: the role decides *what* is rewritten on a selected row (PZ-32), never *whether* the row is selected.
@@ -272,17 +272,21 @@ The rows updated are reached by id from a query joined through `programExercises
 
 ## Manual edits against the curve — PZ-36…37
 
-### PZ-36 — The curve owns a periodized set's weekly target
-An athlete who edits `distanceMeters` on an anchored set changes this week's number only. The next sync overwrites it from the anchor.
+### PZ-36 — A number typed on a periodized set is this week's, and the anchor follows it
+The curve still owns the weekly target, so a typed number cannot just sit in `distanceMeters` until the next sync overwrites it. Saving a periodized set from the program editor sends `anchor` with the dimension it is periodized on, and `updateProgramSet` re-derives that dimension's peak from the saved value: peak = value / this week's share, where the share is the curve times the cycle's `adaptationPct`, the same factor the sync scales by (`periodizationShare` in `src/lib/periodization-sync.ts`). It runs a due weekly sync first: until this week has synced, `adaptationPct` is last week's, and a value divided by it would not survive the sync. `updateProgramSet` then reads the row again, so an untouched value is compared with this week's synced one rather than last week's. The program editor pages (program, exercise and both set editors) sync before they render, and the set editor leaves a periodized set's distance or time out of the save when it was not changed, so a page left open across the week boundary cannot write last week's number back. The typed value stays this week's target, and later weeks follow the new peak. When the program is in no active cycle the share is 1 and the typed value is the peak. Only a set that already carries an anchor is re-anchored.
 
-*Why:* the anchor is the prescription of record (PZ-1); a typed-in number for one week is not a change of intent about the block. See the Divergences table — whether this should be silent is unresolved.
-*Covered by:* `none`.
+The peak is re-derived only when the saved value differs from the stored one (`reanchoredPeaks` in `periodization.ts`). The stored value is itself a rounded `peak x share`, so dividing it back out on a save that changed only the rest time would move the peak a little on every save. The MCP `edit_program_exercise` update replaces a slot's sets wholesale and has no anchor fields, so it carries each old row's anchors and `sessionRole` across by set number through the same function; before, an agent's edit dropped the sets out of the block.
+
+The re-derived peak is not exact: the sync rounds a distance to 100 m and a duration to 30 s, so a typed 5250 m can read 5200 or 5300 once a later week rescales it.
+
+*Why:* an edit used to be overwritten up to a week later with no warning, while a mode switch on the same set re-anchored, so the two paths disagreed about what an edit meant (D8). The typed number is the athlete's statement of what they can do now; making it the anchor of record keeps the block shaped around it.
+*Covered by:* `periodization.test.ts` — "reanchoredPeaks (PZ-36, PZ-37)"; `integration/training-cycles.test.ts` — "editing a periodized set re-anchors it (PZ-36)", "editing a periodized set right after a week rollover", "MCP edit_program_exercise keeps a periodized set in the block"; `components/set-edit-periodized.test.tsx`.
 
 ### PZ-37 — Switching a periodized set between distance and time moves the anchor
-When an anchored set's mode is switched, the entered value becomes the new anchor and the old anchor is cleared, so the set stays periodized in its new mode. An unanchored set gains no anchor from a mode switch.
+When an anchored set's mode is switched, the entered value is re-anchored in the new mode the same way as PZ-36 (it is this week's value, and the new peak is derived from it), and the old anchor is cleared, so the set stays periodized in its new mode. An unanchored set gains no anchor from a mode switch.
 
-*Why:* without this a set switched to time mode would keep a distance anchor the sync could no longer apply, silently dropping out of the block. Not anchoring ordinary sets keeps the periodized/not distinction an explicit property of the plan rather than something a mode toggle can create by accident.
-*Covered by:* `none`.
+*Why:* without this a set switched to time mode would keep a distance anchor the sync could no longer apply, silently dropping out of the block. Not anchoring ordinary sets keeps the periodized/not distinction an explicit property of the plan rather than something a mode toggle can create by accident. The entered value used to become the peak itself, so the next sync scaled it *down*; treating it as this week's value is what PZ-36 does too.
+*Covered by:* `integration/training-cycles.test.ts` — "re-anchors a switch to time on the time peak and drops the distance one".
 
 ## Reporting — PZ-38…43
 
@@ -301,8 +305,10 @@ An active cycle's week is derived from `startDate` and clamped to the block leng
 ### PZ-40 — The reported multiplier is the effective one
 The percent shown is `curve x adaptationPct`, not the raw curve value.
 
+For an active cycle whose current week has not been synced, `getCyclePeriodization` runs the sync first and reports the adaptation it produced, never the previous week's.
+
 *Why:* the displayed number has to match what is actually prescribed in the plan, or the athlete finds a set that disagrees with the header. The nudge is part of the prescription, so it is part of the number.
-*Covered by:* `none`.
+*Covered by:* `integration/training-cycles.test.ts` — "syncs a new week first, so it never reports last week's adaptation".
 
 ### PZ-41 — A program reports periodization only through an active cycle
 `getProgramPeriodization` resolves the program to a slot in an *active* cycle owned by the session user, then defers to PZ-38. A program in a draft or completed cycle, or in none, reports null.
@@ -361,13 +367,13 @@ Verified against `periodization.ts`, `training-cycles.ts`, `page.tsx` and `SetEd
 | D1 | PZ-39 | The reported week of an active cycle is between 1 and the block length | **Closed 2026-09-14.** `startDate` used to be parsed as UTC midnight and compared against local midnight, so a timezone ahead of UTC showed "Week 0" on the start day and three screens disagreed. It is now parsed as a local date (`parseDateStr`), and every week derivation goes through `cycleWeek` in `cycle-position.ts`, which clamps to 1..N: `getActiveCycleForUser`, `getCyclePeriodization`, the shorten guard in `updateTrainingCycle` and the MCP tool, and `CyclesListClient`. Start dates are written in the same local frame (`toDateStr`). Pinned under Oslo, New York and UTC in `cycle-position.test.ts` | closed |
 | D2 | PZ-2, PZ-39 | The last day of a block is the last day inside it | **Closed 2026-09-14** with D1. `cycleWeek` reports the block over from `startDate + durationWeeks x 7` onward, so the day after the last day completes the cycle instead of reporting "Week 25/24" | closed |
 | D3 | PZ-33 | Main strength lifts periodize their reps and rest by phase | **Closed 2026-08-29** by deleting the mechanism rather than building a producer for it. The *strengthPhaseRecipe* helper, the `sessionRole = "strength"` branch in `syncPeriodizedTargets` and both stale docblocks are gone; rules PZ-18, PZ-19 and PZ-33 are retired and the reasoning is preserved above. Strength is flat for the whole block, which is what the generator already built and its tests already asserted | closed |
-| D4 | PZ-29, PZ-40 | What a page shows for a week matches what the plan holds for that week | On the first visit of a new cycle-week the workout page's `Promise.all` (`programs/[id]/workout/page.tsx:28`) starts `getProgramWithExercises` — reading `program_sets` — concurrently with `getWorkoutInsight`, whose nested `getActiveCycleForUser` performs the sync. The render shows last week's targets under this week's header. `/cycles/[id]` never triggers a sync at all, so it can report a new week's phase against the previous week's `adaptationPct`. Both self-correct on the next load | open |
+| D4 | PZ-29, PZ-40 | What a page shows for a week matches what the plan holds for that week | On the first visit of a new cycle-week the workout page's `Promise.all` (`programs/[id]/workout/page.tsx:28`) starts `getProgramWithExercises` — reading `program_sets` — concurrently with `getWorkoutInsight`, whose nested `getActiveCycleForUser` performs the sync. The render shows last week's targets under this week's header. `/cycles/[id]` never triggers a sync at all, so it can report a new week's phase against the previous week's `adaptationPct`. Both self-correct on the next load. **Closed 2026-11-01:** both workout pages await `syncActiveCyclePeriodization` before their reads, and `getCyclePeriodization` syncs an active cycle before reporting it (PZ-29, PZ-40) | closed |
 | D5 | PZ-38 | A periodized cycle reports its periodization | **Closed 2026-09-14.** The gate used to check the distance anchor only, so a cycle switched entirely to time mode was synced but reported null. The gate and the sync now share one predicate, `hasPeakAnchor`. Not covered by a test: the action has no database test harness | closed |
 | D6 | PZ-28 | Changing the block's shape re-derives its targets | **Closed 2026-09-14.** `updateTrainingCycle` and the MCP `manage_training_cycle` update clear `lastSyncedWeek` when `durationWeeks` changes, so the next read re-syncs. Not extended to `upsertCycleSlot`: a program assigned to a slot mid-week still waits for the next week boundary | closed |
 | D7 | PZ-2 | Every block length the generator can produce can be edited | **Closed 2026-09-14.** `CYCLE_DURATION_WEEKS` in `validators/training-cycles.ts` is the one list. The create, update and import schemas, the MCP tool, both cycle forms and the generator's `snapWeeks` all read it, so a generated 24, 36 or 52-week block can be edited | closed |
-| D8 | PZ-36 | Undecided | Editing an anchored set's distance *in distance mode* writes the value but leaves the anchor (`SetEditView.tsx:250-253`), so the next sync reverts it silently — while a **mode switch** on the same set does re-anchor (`:256`). Whether a direct edit should re-anchor, warn, or revert silently has never been decided | open — intent needed |
+| D8 | PZ-36 | Undecided | Editing an anchored set's distance *in distance mode* writes the value but leaves the anchor (`SetEditView.tsx:250-253`), so the next sync reverts it silently — while a **mode switch** on the same set does re-anchor (`:256`). Whether a direct edit should re-anchor, warn, or revert silently has never been decided. **Closed 2026-11-01:** decided as re-anchor. A typed value on a periodized set is this week's, and the server re-derives the peak from it on every save, mode switch included (PZ-36, PZ-37) | closed |
 
-Two remain open, D4 and D8, and are tracked in `BACKLOG.md` under **Cycle periodization (spec divergences)**. D8 needs an intent decision before any code change — the spec cannot state a rule for it until then. The rest are closed.
+All eight are closed.
 
 Already tracked in `BACKLOG.md` rather than repeated here: the absence of objective recovery signals feeding PZ-20…24 (§ New features — "Wearable-based autoregulation (Tier B) for triathlon plans").
 
@@ -403,18 +409,18 @@ Already tracked in `BACKLOG.md` rather than repeated here: the absence of object
 | PZ-26 | none |
 | PZ-27 | none |
 | PZ-28 | none |
-| PZ-29 | none |
+| PZ-29 | `integration/training-cycles.test.ts` — "syncActiveCyclePeriodization" |
 | PZ-30 | none |
 | PZ-31 | none |
 | PZ-32 | none |
 | PZ-33 | retired |
 | PZ-34 | none |
 | PZ-35 | none |
-| PZ-36 | none |
-| PZ-37 | none |
+| PZ-36 | `integration/training-cycles.test.ts` — "editing a periodized set re-anchors it (PZ-36)"; `components/set-edit-periodized.test.tsx` |
+| PZ-37 | `integration/training-cycles.test.ts` — "re-anchors a switch to time on the time peak and drops the distance one" |
 | PZ-38 | none |
 | PZ-39 | `cycle-position.test.ts` — "is week 1 on the start day, whatever the time", "is over on the day after, and never reports a week past the block", "never reports week 0 before the start" (the week arithmetic only; the status branches are untested) |
-| PZ-40 | none |
+| PZ-40 | `integration/training-cycles.test.ts` — "syncs a new week first, so it never reports last week's adaptation" |
 | PZ-41 | none |
 | PZ-42 | `periodization.test.ts` — "describes a ramping build week with weeks-until-peak and percent", "flags deload weeks in the headline", "singularizes the week unit when peak is one week away", "announces taper countdown once at peak", "describes the taper phase", "holds steady for maintain goal" |
 | PZ-43 | `periodization.test.ts` — "appends the no-wearable adaptation note when present" |

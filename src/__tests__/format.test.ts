@@ -288,3 +288,10 @@ describe("formatVolume", () => {
     expect(formatVolume(1250)).toBe("1.3t");
   });
 });
+
+describe("setToken — a weighted hold", () => {
+  it("names the load beside the time", () => {
+    const s = { durationSeconds: 30, weightKg: "20.00", restTimeSeconds: 0 } as unknown as ProgramSet;
+    expect(setToken(s, true)).toBe("00:30 · 20kg");
+  });
+});

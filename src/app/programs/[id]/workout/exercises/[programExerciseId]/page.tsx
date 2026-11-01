@@ -4,6 +4,7 @@
 
 import { WorkoutSetsClient } from "@/components/features/WorkoutSetsClient";
 import { getProgramWithExercises } from "@/lib/actions/programs";
+import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
 import { getProgressiveSuggestions } from "@/lib/actions/workout-sets";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
@@ -19,6 +20,9 @@ export default async function WorkoutExerciseSetsPage({ params }: Props) {
   if (isNaN(programId) || isNaN(peId)) notFound();
 
   await requireSession();
+  // A PWA restored straight onto an exercise skips the workout page, so this
+  // page runs the weekly sync before reading the sets too (PZ-29).
+  await syncActiveCyclePeriodization();
   const [result, suggestionsResult] = await Promise.all([
     getProgramWithExercises(programId),
     getProgressiveSuggestions(programId),

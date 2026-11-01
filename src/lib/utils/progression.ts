@@ -166,6 +166,21 @@ export function effectiveAdvance(
 }
 
 /**
+ * The regress an exercise can actually run. A back-off cuts the load, so only
+ * the advances that progress load or reps can do one; a timed or distance
+ * scheme left on "backoff" (migration 0051 wrote that for timed exercises on
+ * the old weight mode) holds instead. Like `effectiveAdvance`, the sheet, the
+ * rule sentence and the engine all read through this, and the stored column is
+ * not rewritten.
+ */
+export function effectiveRegress(
+  regress: ProgressionRegress,
+  advance: ProgressionAdvance,
+): ProgressionRegress {
+  return advance === "load" || advance === "double" || advance === "reps" ? regress : "hold";
+}
+
+/**
  * Whether a settings write changes how a session is judged, and so has to
  * stamp `progression_config_at` (E-13). Only the advance, the scope and the
  * gate do; regress, readiness and the back-off numbers act on the verdicts
@@ -421,6 +436,13 @@ export type ProgramSetData = {
    * Missing entries fall back to `targetReps`.
    */
   slotTargets?: Record<number, number | null>;
+  /**
+   * Every working set's planned weight in this slot, keyed by set number. Read
+   * only to stop a missed session logged above the plan (a one-off heavy
+   * single) from becoming the base of a held or retry suggestion. Missing =
+   * no plan known, and the logged weight stands.
+   */
+  plannedWeights?: Record<number, number | null>;
 };
 
 /**
@@ -1002,6 +1024,8 @@ export function describeProgressionRule(input: {
   backoffAfter?: number | null;
   /** Axis 8. */
   readiness?: string | null;
+  /** A timed exercise carrying a load: it adds weight at a fixed time. */
+  weighted?: boolean;
   /**
    * The sets carry a cycle anchor, so the training cycle prescribes their
    * duration or distance weekly and progression never writes it (SI-30a).
@@ -1066,7 +1090,9 @@ export function describeProgressionRule(input: {
       rule = `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once ${subject} hits ${reps}${withReserve} ${sessions}.`;
       break;
     case "duration":
-      rule = `+${incrementReps > 0 ? incrementReps : 10}s once ${subject} holds the target duration ${sessions}.`;
+      rule = input.weighted
+        ? `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} at the same time once ${subject} holds the target duration ${sessions}.`
+        : `+${incrementReps > 0 ? incrementReps : 10}s once ${subject} holds the target duration ${sessions}.`;
       break;
     case "distance":
       rule = `+${(incrementReps > 0 ? incrementReps : 500) / 1000}km once ${subject} covers the target distance ${sessions}.`;
@@ -1080,7 +1106,7 @@ export function describeProgressionRule(input: {
   // the reps stall progresses one dimension and regresses another.
   const pct = input.backoffPct ?? DELOAD_PCT;
   const after = input.backoffAfter ?? DELOAD_THRESHOLD;
-  if (toRegress(input.regress) === "backoff") {
+  if (effectiveRegress(toRegress(input.regress), toAdvance(input.advance)) === "backoff") {
     rule += ` Back off ${pct}% after ${after} workout${after === 1 ? "" : "s"} short of target.`;
   }
 
@@ -1361,6 +1387,21 @@ export function buildSuggestion(
 
   const roundToInc = (kg: number) => roundToNearest(kg, incrementKg);
 
+  // The plan the logged weights are measured against. Under scope "all" the
+  // exercise works at its heaviest set, so that is the plan a session's load
+  // (the max across its sets) is compared with.
+  const planFor = (setNumber: number): number | null =>
+    ps.plannedWeights?.[setNumber] ?? null;
+  const plannedValues = Object.values(ps.plannedWeights ?? {}).filter(
+    (kg): kg is number => kg != null,
+  );
+  const slotPlan =
+    scope === "all"
+      ? plannedValues.length > 0
+        ? Math.max(...plannedValues)
+        : null
+      : planFor(ps.setNumber);
+
   // ── Estimated 1RM from the reference set ───────────────────────────────────
   // Display only, and gated on logged effort (SI-D1). Epley on a set the lifter
   // stopped four reps short of failure is not a 1RM estimate, and with effort
@@ -1416,7 +1457,17 @@ export function buildSuggestion(
   const latestOutcome = outcomes[0];
   // Load is incidental to a plank or a run, so the "at this load or heavier"
   // clause only applies where load is the thing being progressed.
-  const compareLoad = advance !== "duration" && advance !== "distance";
+  //
+  // A weighted hold is the exception: it progresses its load at a fixed time,
+  // so a hold at a lighter load is not a clear at this one.
+  // Decided from the plan when it is known, which is what the settings sheet
+  // reads too, so its sentence and the engine agree; from the log otherwise.
+  const weightedHold =
+    advance === "duration" &&
+    (ps.plannedWeights != null
+      ? Object.values(ps.plannedWeights).some((kg) => (kg ?? 0) > 0)
+      : currentLoad > 0);
+  const compareLoad = (advance !== "duration" && advance !== "distance") || weightedHold;
   // What SI-11 compares against: the load the sets the scope reads are working
   // at, which under scope "all" is the same maximum currentLoad uses.
   const decidingLoad = latestOutcome.loadKg;
@@ -1447,9 +1498,7 @@ export function buildSuggestion(
   // A back-off cuts the load, so it needs a load to cut. Duration and distance
   // sets carry a weight only incidentally, and the two advances that suggest
   // nothing have nothing to back off from either.
-  const canDeload =
-    regress === "backoff" &&
-    (advance === "load" || advance === "double" || advance === "reps");
+  const canDeload = effectiveRegress(regress, advance) === "backoff";
   // Recovering ground (SI-18) asks whether the load or the reps dropped, which
   // is a question about what is being progressed rather than about whether a
   // back-off is configured. The two used to share one flag.
@@ -1564,7 +1613,23 @@ export function buildSuggestion(
   ) {
     const prev = outcomes[1];
 
-    if (prev.loadKg > decidingLoad + LOAD_EPSILON) {
+    // A heavier session that missed, at a load nothing in the plan or the
+    // engine led to, is a one-off attempt (a heavy single), not ground to
+    // reclaim. "Led to" is the plan or one increment above the heaviest load
+    // cleared in the window, which is as far as a chip ever goes: the plan
+    // alone is not enough, because taking a chip moves only the session
+    // unless the slot opted in to writing the plan, so the planned weight
+    // routinely sits well below what the lifter works at. One that cleared
+    // the heavier weight still counts.
+    const heaviestCleared = outcomes.reduce(
+      (m, o) => (o.status === "cleared" ? Math.max(m, o.loadKg) : m),
+      0,
+    );
+    const prevMissedAbovePlan =
+      prev.status === "missed" &&
+      slotPlan != null &&
+      prev.loadKg > Math.max(slotPlan, heaviestCleared + incrementKg) + LOAD_EPSILON;
+    if (prev.loadKg > decidingLoad + LOAD_EPSILON && !prevMissedAbovePlan) {
       // Weight decreased — only retry if the drop was a one-off, not a deload
       const prevFailStreak = countConsecutiveMisses(outcomes.slice(1));
       const wasIntentionalDeload = prevFailStreak >= backoffAfter - 1;
@@ -1769,6 +1834,22 @@ export function buildSuggestion(
           ...basedOnWithDuration,
           reason: "held-anchored",
         };
+        break;
+      }
+      // A weighted hold (Pallof Hold on a cable, a loaded carry) adds load and
+      // keeps the time: the time is the prescription, the load is what grows.
+      // Without a load it is a plain hold, and the time grows instead.
+      if (weightedHold) {
+        suggestion =
+          shouldProgress && incrementKg > 0
+            ? {
+                // From what was held; a plan nobody has logged against yet
+                // starts from the plan.
+                suggestedWeightKg: roundToInc((currentLoad > 0 ? currentLoad : (slotPlan ?? 0)) + incrementKg),
+                ...basedOnWithDuration,
+                reason: "progressed",
+              }
+            : { suggestedWeightKg: baseWeight, ...basedOnWithDuration, reason: heldReason };
         break;
       }
       if (targetDuration != null && shouldProgress) {

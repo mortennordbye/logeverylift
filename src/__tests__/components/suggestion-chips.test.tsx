@@ -2,7 +2,7 @@
 import { WorkoutSetsList } from "@/components/features/WorkoutSetsList";
 import type { ProgressionScope } from "@/lib/utils/progression";
 import type { ProgramSet, SetSuggestion } from "@/types/workout";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -12,10 +12,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 let completedSetIds = new Set<number>();
+let overrides: Record<number, object> = {};
+const onApplySuggestion = vi.fn();
 vi.mock("@/contexts/workout-session-context", () => ({
   useWorkoutSession: () => ({
     sessionId: 1,
-    overrides: {},
+    overrides,
     completedSetIds,
     restTimerEnds: {},
     setOverride: vi.fn(),
@@ -81,7 +83,7 @@ function mount(
       exerciseId={2}
       sessionId={1}
       suggestions={suggestions}
-      onApplySuggestion={vi.fn()}
+      onApplySuggestion={onApplySuggestion}
       onApplyRepSuggestion={vi.fn()}
       progressionScope={progressionScope}
     />,
@@ -90,6 +92,8 @@ function mount(
 
 beforeEach(() => {
   completedSetIds = new Set();
+  overrides = {};
+  onApplySuggestion.mockReset();
 });
 
 describe("suggestion chips", () => {
@@ -179,5 +183,83 @@ describe("progress dots once the advance is taken", () => {
       1: suggestion({ reason: "progressed-reps", suggestedWeightKg: 80, suggestedReps: 9 }),
     });
     expect(label()).toBe("Progress: 0 of 2 sessions since the increase");
+  });
+});
+
+describe("one chip per exercise", () => {
+  const three = () => [makeSet(1), makeSet(2), makeSet(3)];
+  const same = () => ({ 1: suggestion(), 2: suggestion(), 3: suggestion() });
+
+  it("shows a shared bump once, on the first set, for all of them", () => {
+    mount(three(), same());
+    const chips = screen.getAllByRole("button", { name: /82\.5kg/ });
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent).toBe("↑ 82.5kg · all 3 sets");
+    // Each set still says what it did last time.
+    expect(screen.getAllByText("Last: 80kg (Good)")).toHaveLength(3);
+  });
+
+  it("keeps one chip per set when the sets disagree", () => {
+    mount(three(), { ...same(), 3: suggestion({ suggestedWeightKg: 85 }) });
+    expect(screen.getAllByRole("button", { name: /↑ 82\.5kg$/ })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /↑ 85kg$/ })).toBeTruthy();
+  });
+
+  it("stays live after its own set is logged while another set can still take it", () => {
+    completedSetIds = new Set([1]);
+    mount(three(), same());
+    const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
+    expect(chip.getAttribute("aria-disabled")).toBe("false");
+  });
+
+  it("ticks once every set it covers carries the bump", () => {
+    mount(
+      [makeSet(1, { weightKg: "82.50" }), makeSet(2, { weightKg: "82.50" }), makeSet(3, { weightKg: "82.50" })],
+      same(),
+    );
+    const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
+    expect(chip.textContent).toBe("✓ 82.5kg · all 3 sets");
+    expect(chip.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("writes every unlogged set it covers, one edited by hand included", () => {
+    // Set 2 was changed to 81 kg in the set editor; set 1 is already logged.
+    overrides = { 2: { weightKg: 81 } };
+    completedSetIds = new Set([1]);
+    mount([makeSet(1), makeSet(2, { weightKg: "81.00" }), makeSet(3)], same());
+    fireEvent.click(screen.getByRole("button", { name: /82\.5kg · all 3 sets/ }));
+    expect(onApplySuggestion.mock.calls.map((c) => c[0])).toEqual([2, 3]);
+    // Overrides from logging do not split the group: still one chip.
+    expect(screen.getAllByRole("button", { name: /82\.5kg/ })).toHaveLength(1);
+  });
+
+  it("still reads as not taken once every set is logged at the old weight", () => {
+    completedSetIds = new Set([1, 2, 3]);
+    mount(three(), same());
+    const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
+    expect(chip.textContent).toBe("↑ 82.5kg · all 3 sets");
+    expect(chip.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("points the way the sets it moves go, not the way the first set goes", () => {
+    // Set 1 is already at 82.5; set 2 still lacks it.
+    completedSetIds = new Set([1, 2]);
+    mount([makeSet(1, { weightKg: "82.50" }), makeSet(2), makeSet(3, { weightKg: "82.50" })], same());
+    expect(screen.getByRole("button", { name: /82\.5kg · all 3 sets/ }).textContent).toBe("↑ 82.5kg · all 3 sets");
+  });
+
+  it("never lowers a set raised by hand above an upward bump", () => {
+    overrides = { 1: { weightKg: 85 } };
+    mount([makeSet(1, { weightKg: "85.00" }), makeSet(2), makeSet(3)], same());
+    const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
+    expect(chip.textContent).toBe("↑ 82.5kg · all 3 sets");
+    fireEvent.click(chip);
+    expect(onApplySuggestion.mock.calls.map((c) => c[0])).toEqual([2, 3]);
+  });
+
+  it("leaves held sets alone, since there is nothing to apply", () => {
+    const held = suggestion({ reason: "held", suggestedWeightKg: 80 });
+    mount(three(), { 1: held, 2: held, 3: held });
+    expect(screen.getAllByRole("button", { name: /^Progress/ })).toHaveLength(3);
   });
 });
