@@ -4,15 +4,15 @@
 
 # Stage 1: Install dependencies
 FROM node:24-alpine AS deps
-# Pinned to the major CI installs (.github/workflows/ci.yml, pnpm/action-setup).
-# Unpinned, this pulled whatever pnpm was newest at build time, and pnpm 11 turned
-# ERR_PNPM_IGNORED_BUILDS from a warning into a hard failure — so `pnpm install`
-# started failing here and in the image CI pushes, with no change to this repo.
-# Keep it pinned, and keep it matching CI: an image built by a different package
-# manager than the one the tests ran under is not the thing that was tested.
-RUN npm install -g pnpm@10
+# Pinned to the exact version in package.json's `packageManager`, which is what
+# CI's pnpm/action-setup reads. Unpinned, this pulled whatever pnpm was newest at
+# build time, and a new major once broke `pnpm install` here with no change to
+# this repo. An image built by a different package manager than the one the
+# tests ran under is not the thing that was tested. Every `allowBuilds` entry in
+# pnpm-workspace.yaml is false, so no dependency runs an install script.
+RUN npm install -g pnpm@11.28.9
 WORKDIR /app
-COPY package.json pnpm-lock.yaml* ./
+COPY package.json pnpm-lock.yaml* pnpm-workspace.yaml ./
 # In dev, we don't use --frozen-lockfile to allow adding packages easily
 RUN pnpm install
 
@@ -20,7 +20,7 @@ RUN pnpm install
 # NEW Stage 2: Development (Fast Local Building)
 # ============================================================
 FROM node:24-alpine AS dev
-RUN npm install -g pnpm@10 tsx
+RUN npm install -g pnpm@11.28.9 tsx
 WORKDIR /app
 
 # Copy node_modules from deps stage
@@ -41,7 +41,7 @@ CMD ["pnpm", "next", "dev", "--turbo", "-H", "0.0.0.0"]
 # Stage 3: Build application (Production only)
 # ============================================================
 FROM node:24-alpine AS builder
-RUN npm install -g pnpm@10
+RUN npm install -g pnpm@11.28.9
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .

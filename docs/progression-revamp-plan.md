@@ -71,7 +71,7 @@ Stated precisely, because "tested" hides more than it says. Anything not on this
 
 | Check | State |
 |---|---|
-| `pnpm verify` — typecheck, eslint, `check:docs`, 544 unit tests | Passes. Run it with `--config.verify-deps-before-run=false` until the pnpm 11 item in `BACKLOG.md` is resolved. |
+| `pnpm verify` — typecheck, eslint, `check:docs`, 544 unit tests | Passes. |
 | `next build` | Compiles. |
 | Migrations `0046`-`0051` | All 52 apply to an empty Postgres 16, `drizzle-kit check` reports no drift, **and they have now run against the populated dev database** (283 sessions, 166 sets, 35 PRs). `0051`'s backfill was also replayed over a fixture row carrying every legacy mode value including null, and produced §10's table exactly. Untested against production **volume**, not against production *shape*. |
 | `CLAUDE.md` smoke pass | Run 2026-08-29, 8 of 9 steps. Step 5 (timed-set countdown) skipped: no seeded program has a timed set. Found one bug, since fixed. |
@@ -180,7 +180,7 @@ Facts a cold session must not re-derive, re-decide, or accidentally undo. Each i
 
 1. **This section (§0)**, especially "What to do next" and "What has actually been verified".
 2. [`releases/progression-rebuild.md`](releases/progression-rebuild.md), so you know what you are about to tell people.
-3. `BACKLOG.md`, for the two known bugs and the pnpm 11 item. Nothing else here is required to push.
+3. `BACKLOG.md`, for the two known bugs. Nothing else here is required to push.
 
 **If you are changing the engine** — anything from a bug fix to a new scheme:
 

@@ -2,6 +2,7 @@
   "name": "logeverylift",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.28.9",
   "scripts": {
     "setup": "bash scripts/ai-bootstrap.sh",
     "dev": "echo 'ERROR: Use make dev instead. This project runs in containers only.' && exit 1",
