@@ -34,3 +34,7 @@ updates:
     groups:
       docker:
         patterns: ["*"]
+    # Stay on the LTS line; odd-numbered Node majors are never LTS.
+    ignore:
+      - dependency-name: "node"
+        versions: [">=25.0.0"]
