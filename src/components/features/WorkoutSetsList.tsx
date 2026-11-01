@@ -1866,6 +1866,7 @@ function SortableSetRow({
         ) : isTimed || set.durationSeconds != null ? (
           <p className="text-lg font-medium" data-testid="set-prescription">
             {formatTime(overrideDurationSeconds ?? Number(set.durationSeconds ?? 60))}
+            {Number(set.weightKg ?? 0) > 0 && ` · ${Number(set.weightKg)}kg`}
             {(overrideStartDelaySeconds ?? set.startDelaySeconds ?? 0) > 0 && (
               <span className="text-xs text-muted-foreground font-normal ml-1.5">
                 +{overrideStartDelaySeconds ?? set.startDelaySeconds}s

@@ -1024,6 +1024,8 @@ export function describeProgressionRule(input: {
   backoffAfter?: number | null;
   /** Axis 8. */
   readiness?: string | null;
+  /** A timed exercise carrying a load: it adds weight at a fixed time. */
+  weighted?: boolean;
   /**
    * The sets carry a cycle anchor, so the training cycle prescribes their
    * duration or distance weekly and progression never writes it (SI-30a).
@@ -1088,7 +1090,9 @@ export function describeProgressionRule(input: {
       rule = `${incrementReps > 0 ? `+${incrementReps} rep${incrementReps === 1 ? "" : "s"}` : "More reps"} at the same weight once ${subject} hits ${reps}${withReserve} ${sessions}.`;
       break;
     case "duration":
-      rule = `+${incrementReps > 0 ? incrementReps : 10}s once ${subject} holds the target duration ${sessions}.`;
+      rule = input.weighted
+        ? `${incrementKg != null && incrementKg > 0 ? `+${incrementKg}kg` : "More weight"} at the same time once ${subject} holds the target duration ${sessions}.`
+        : `+${incrementReps > 0 ? incrementReps : 10}s once ${subject} holds the target duration ${sessions}.`;
       break;
     case "distance":
       rule = `+${(incrementReps > 0 ? incrementReps : 500) / 1000}km once ${subject} covers the target distance ${sessions}.`;
@@ -1453,7 +1457,11 @@ export function buildSuggestion(
   const latestOutcome = outcomes[0];
   // Load is incidental to a plank or a run, so the "at this load or heavier"
   // clause only applies where load is the thing being progressed.
-  const compareLoad = advance !== "duration" && advance !== "distance";
+  //
+  // A weighted hold is the exception: it progresses its load at a fixed time,
+  // so a hold at a lighter load is not a clear at this one.
+  const weightedHold = advance === "duration" && currentLoad > 0;
+  const compareLoad = (advance !== "duration" && advance !== "distance") || weightedHold;
   // What SI-11 compares against: the load the sets the scope reads are working
   // at, which under scope "all" is the same maximum currentLoad uses.
   const decidingLoad = latestOutcome.loadKg;
@@ -1821,6 +1829,20 @@ export function buildSuggestion(
           ...basedOnWithDuration,
           reason: "held-anchored",
         };
+        break;
+      }
+      // A weighted hold (Pallof Hold on a cable, a loaded carry) adds load and
+      // keeps the time: the time is the prescription, the load is what grows.
+      // Without a load it is a plain hold, and the time grows instead.
+      if (weightedHold) {
+        suggestion =
+          shouldProgress && incrementKg > 0
+            ? {
+                suggestedWeightKg: roundToInc(currentLoad + incrementKg),
+                ...basedOnWithDuration,
+                reason: "progressed",
+              }
+            : { suggestedWeightKg: holdWeight, ...basedOnWithDuration, reason: heldReason };
         break;
       }
       if (targetDuration != null && shouldProgress) {

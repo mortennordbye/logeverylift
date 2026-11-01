@@ -26,6 +26,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import { sanitizeDecimalInput } from "@/lib/utils/format";
 import type { Equipment } from "@/lib/utils/picker-options";
 import { warmupRamp } from "@/lib/utils/plates";
+import { sharedSuggestionSets } from "@/lib/utils/suggestion-chip";
 import {
   DELOAD_PCT,
   DELOAD_THRESHOLD,
@@ -375,6 +376,12 @@ export function WorkoutSetsClient({
   const showEffortCap = selectedPreset?.requiresEffortCap === true || effortCap != null;
   const hasConditionalSlot = isRepsMeasure || showEffortCap;
 
+  // A timed exercise carrying a load is a weighted hold: it adds weight at a
+  // fixed time (see the duration advance in buildSuggestion).
+  const isBodyweight =
+    workingSets.length > 0 && workingSets.every((s) => Number(s.weightKg ?? 0) === 0);
+  const weightedHold = !!exerciseIsTimed && !isRunning && !isBodyweight && workingSets.length > 0;
+
   // Layer 2. Built from the live axis values every render, so it describes what
   // the engine will do rather than what the sheet last wrote.
   const ruleSentence = describeProgressionRule({
@@ -393,6 +400,7 @@ export function WorkoutSetsClient({
     backoffPct: axes.backoffPct,
     backoffAfter: axes.backoffAfter,
     readiness: axes.readiness,
+    weighted: weightedHold,
     anchored,
   });
 
@@ -408,15 +416,19 @@ export function WorkoutSetsClient({
   // Reserving per-exercise rather than fixing the sheet to 80vh keeps the
   // timed/running sheets (one reachable section) from becoming a mostly-empty
   // full-height card.
-  const incrementSections: ("weight" | "reps" | "time" | "distance")[] =
-    isRunning ? ["distance"] : exerciseIsTimed ? ["time"] : ["weight", "reps"];
+  // A weighted hold's one section is the weight step rather than the time one.
+  const incrementSections: ("weight" | "reps" | "time" | "distance")[] = isRunning
+    ? ["distance"]
+    : exerciseIsTimed
+      ? [weightedHold ? "weight" : "time"]
+      : ["weight", "reps"];
   // Which increments the engine actually reads for this scheme. Load on a
   // bodyweight exercise has no weight to add, so it climbs reps; double
   // progression uses both, the rep step inside the range and the load at the top.
-  const isBodyweight =
-    workingSets.length > 0 && workingSets.every((s) => Number(s.weightKg ?? 0) === 0);
   const showWeightIncrement =
-    axes.advance === "double" || (axes.advance === "load" && !isBodyweight);
+    axes.advance === "double" ||
+    (axes.advance === "load" && !isBodyweight) ||
+    (axes.advance === "duration" && weightedHold);
   const showRepIncrement =
     axes.advance === "reps" ||
     axes.advance === "double" ||
@@ -451,6 +463,13 @@ export function WorkoutSetsClient({
 
   // Only label the chip with a weight when every pending set lands on the same
   // one — sets progress independently, so they can legitimately disagree.
+  // The set list folds a suggestion every set shares into one chip; this is
+  // the same test, so the header does not offer the same tap a second time.
+  const sharedInList =
+    sharedSuggestionSets(
+      sets.map((s) => s.id),
+      suggestions,
+    ) != null;
   const pendingWeights = pending.map((p) => p.weightKg);
   const pendingWeight =
     pendingWeights.length > 0 &&
@@ -844,8 +863,10 @@ export function WorkoutSetsClient({
           </span>
         )}
         {/* One tap instead of one per set. Only worth showing when there is
-            more than one set to take, otherwise the set's own chip is closer. */}
-        {pending.length > 1 && (
+            more than one set to take, otherwise the set's own chip is closer,
+            and not when the sets share one suggestion: the list already shows
+            that as a single chip for all of them (SI-48). */}
+        {pending.length > 1 && !sharedInList && (
           <button
             onClick={applyAllPending}
             className="ml-auto min-h-[44px] px-3.5 rounded-full bg-primary text-primary-foreground text-xs font-semibold active:scale-95 transition-all"

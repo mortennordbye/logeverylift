@@ -262,7 +262,7 @@ While an advance is on offer the dots show the run that earned it. Once the set 
 *Covered by:* `components/suggestion-chips.test.tsx` — "progress dots once the advance is taken"; `e2e/progression-suggestion.spec.ts` — "two clean sessions offer a bump, and taking it writes the plan".
 
 ### SI-48 — One chip speaks for every set that shares the suggestion
-When two or more sets of an exercise carry a suggestion and all of them propose the same move (same reason and same suggested weight, reps, time and distance), and that move is one a chip applies, the chip is shown once, on the first of those sets, labelled `· all N sets` (`sharedSuggestionSets` in `src/lib/utils/suggestion-chip.ts`). The other sets keep their "Last:" line and their dots and show no chip. The shared chip stays live while any set it covers that is not yet logged still lacks the suggested value, including after its own set is logged, and tapping it applies to exactly the sets the sibling propagation already wrote to. When the sets disagree, each keeps its own chip.
+When two or more sets of an exercise carry a suggestion and all of them propose the same move (same reason and same suggested weight, reps, time and distance), and that move is one a chip applies, the chip is shown once, on the first of those sets, labelled `· all N sets` (`sharedSuggestionSets` in `src/lib/utils/suggestion-chip.ts`). The other sets keep their "Last:" line and their dots and show no chip. The shared chip stays live while any set it covers that is not yet logged still lacks the suggested value, including after its own set is logged, and tapping it applies to exactly the sets the sibling propagation already wrote to. When the sets disagree, each keeps its own chip, and the header's apply-all button (`Apply N sets`, or `↑ 82.5kg · N sets` when they agree on a weight) is the one-tap path. The header button is not shown while the shared chip is, since both would apply the same thing.
 
 Which sets are grouped is decided from the suggestions alone, never from what has been logged or applied, so the chip cannot jump between rows during a workout.
 
@@ -434,6 +434,12 @@ Suggest **`targetDuration` + secondsIncrement**, defaulting to 10s when unconfig
 
 *Why:* the increment is added to the target, not to what was held. Beating a 60s target by 30s used to make 90s the new prescription, so one good session permanently reset what counted as clearing and the plan ratcheted away from the lifter on their best day. Half of `A5`.
 *Covered by:* `progressive-suggestions.test.ts` — the "time mode" block; "adds the increment to the target, not to what was held".
+
+### SI-29a — A weighted hold adds weight at a fixed time
+A timed set that carries a load (a Pallof Hold on a cable, a loaded carry) progresses the load and keeps the time: once the gate clears, suggest the current load plus the weight increment, with reason `progressed`, and leave the duration alone. Clearing is still holding the target time, but like SI-11 a hold only counts at the current load or heavier. With no load the set is a plain hold and SI-29 applies. An anchored set still holds (SI-30a). There is no back-off (SI-44). The program editor plans the weight on a timed set, the set row and the summary show it beside the time (`00:30 · 20kg`), and the progression sheet offers the weight step instead of the time step when the exercise's working sets carry a load.
+
+*Why:* a weighted hold could only grow its time, and saving the set from the program editor dropped the weight entirely.
+*Covered by:* `progressive-suggestions.test.ts` — "a weighted hold"; `components/set-edit-timed-weight.test.tsx`; `format.test.ts` — "setToken — a weighted hold".
 
 ### SI-30 — `distance`
 Suggest **`targetDistance` + metresIncrement**, defaulting to 500 m. Weight is always reported as 0.

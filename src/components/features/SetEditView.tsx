@@ -349,7 +349,7 @@ function SetEditForm({
         }
       }
     } else if (isTimed) {
-      if (!(await savePlan({ id: set.id, durationSeconds: duration, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null }))) return;
+      if (!(await savePlan({ id: set.id, durationSeconds: duration, weightKg: weight, setType, restTimeSeconds: restSeconds, startDelaySeconds: startDelay > 0 ? startDelay : null }))) return;
     } else {
       if (!(await savePlan({ id: set.id, targetReps: reps, weightKg: weight, setType, restTimeSeconds: restSeconds, targetRir: prescribedRir }))) return;
     }
@@ -402,6 +402,25 @@ function SetEditForm({
     markProgrammaticBack();
     router.back();
   };
+
+  // The load row, shared by rep sets and timed sets. A timed set can carry a
+  // load too (a weighted hold), and progresses it at a fixed time.
+  const weightRow = (
+    <button
+      onClick={() => { setWeightStr(String(weight)); setShowWeightPicker(true); }}
+      className="w-full flex items-center justify-between py-4 border-b border-border transition-colors hover:bg-muted/50 active:bg-muted/70"
+    >
+      <span className="text-base font-medium">Weight (kg)</span>
+      <span className="flex flex-col items-end">
+        <span className="text-base text-muted-foreground">{weight}</span>
+        {equipment === "barbell" && formatPlates(weight) && (
+          <span className="text-xs text-muted-foreground" data-testid="set-plates">
+            {formatPlates(weight)}
+          </span>
+        )}
+      </span>
+    </button>
+  );
 
   return (
     <>
@@ -624,6 +643,8 @@ function SetEditForm({
               </span>
             </button>
 
+            {weightRow}
+
             {/* Opt-in prep time before the countdown starts (e.g. getting into
                 a handstand). Shown as an amber lead-in slice on the timer ring. */}
             <div className="py-4 border-b border-border">
@@ -691,21 +712,7 @@ function SetEditForm({
               </button>
             )}
 
-            {/* Weight */}
-            <button
-              onClick={() => { setWeightStr(String(weight)); setShowWeightPicker(true); }}
-              className="w-full flex items-center justify-between py-4 border-b border-border transition-colors hover:bg-muted/50 active:bg-muted/70"
-            >
-              <span className="text-base font-medium">Weight (kg)</span>
-              <span className="flex flex-col items-end">
-                <span className="text-base text-muted-foreground">{weight}</span>
-                {equipment === "barbell" && formatPlates(weight) && (
-                  <span className="text-xs text-muted-foreground" data-testid="set-plates">
-                    {formatPlates(weight)}
-                  </span>
-                )}
-              </span>
-            </button>
+            {weightRow}
 
             {/* Exercise type — edits the per-program override on the exercise
                 (applies to every set of this exercise in this program). */}
