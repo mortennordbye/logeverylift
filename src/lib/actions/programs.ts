@@ -8,7 +8,9 @@
 
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
+import { periodizationShare } from "@/lib/periodization-sync";
 import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exercise-type";
+import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { warmupRamp } from "@/lib/utils/plates";
 import { judgingRuleChanged, type ProgressionAdvance } from "@/lib/utils/progression";
 import { requireSession } from "@/lib/utils/session";
@@ -982,11 +984,17 @@ export async function updateProgramSet(
       return { success: false, error: "Invalid input" };
     }
 
-    const { id, ...rest } = validation.data;
+    const { id, anchor, ...rest } = validation.data;
 
     // Verify ownership via programSet → programExercise → program
     const [check] = await db
-      .select({ userId: programs.userId, programId: programs.id, programExerciseId: programExercises.id })
+      .select({
+        userId: programs.userId,
+        programId: programs.id,
+        programExerciseId: programExercises.id,
+        peakDistanceMeters: programSets.peakDistanceMeters,
+        peakDurationSeconds: programSets.peakDurationSeconds,
+      })
       .from(programSets)
       .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
       .innerJoin(programs, eq(programs.id, programExercises.programId))
@@ -999,6 +1007,36 @@ export async function updateProgramSet(
     const updates = Object.fromEntries(
       Object.entries(rest).filter(([, v]) => v !== undefined),
     ) as Partial<typeof programSets.$inferInsert>;
+    // PZ-36: a number typed on a periodized set is this week's, so its peak is
+    // re-derived from it rather than left for the next sync to overwrite it
+    // with. Only a set that is already periodized can be re-anchored.
+    if (anchor && (check.peakDistanceMeters != null || check.peakDurationSeconds != null)) {
+      // The share runs a due weekly sync, which may rewrite this row, so the
+      // stored values are read again after it: compared with the pre-sync
+      // ones, an untouched value would be written back over the new week's.
+      const share = await periodizationShare(check.programId, auth.user.id);
+      const [stored] = await db
+        .select({
+          distanceMeters: programSets.distanceMeters,
+          durationSeconds: programSets.durationSeconds,
+          peakDistanceMeters: programSets.peakDistanceMeters,
+          peakDurationSeconds: programSets.peakDurationSeconds,
+        })
+        .from(programSets)
+        .where(eq(programSets.id, id));
+      const peaks = reanchoredPeaks(
+        stored,
+        {
+          distanceMeters:
+            updates.distanceMeters !== undefined ? updates.distanceMeters : stored.distanceMeters,
+          durationSeconds:
+            updates.durationSeconds !== undefined ? updates.durationSeconds : stored.durationSeconds,
+        },
+        anchor,
+        share,
+      );
+      if (peaks) Object.assign(updates, peaks);
+    }
     const [ps] = await db
       .update(programSets)
       .set(updates)
@@ -1241,6 +1279,7 @@ export async function exportProgram(
         backAfter: pe.progressionBackoffAfter,
         readiness: pe.progressionReadiness,
         applyToPlan: pe.progressionApplyToPlan ?? false,
+        suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
         exercise: {
           name: pe.exercise.name,
           category: pe.exercise.category,
@@ -1310,6 +1349,7 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
             backAfter: pe.progressionBackoffAfter,
             readiness: pe.progressionReadiness,
             applyToPlan: pe.progressionApplyToPlan ?? false,
+            suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
             exercise: {
               name: pe.exercise.name,
               category: pe.exercise.category,
@@ -1483,6 +1523,7 @@ export async function importProgram(
                 ? { progressionReadiness: slot.readiness }
                 : {}),
               progressionApplyToPlan: slot.applyToPlan ?? false,
+              progressionSuppressEffortPrompt: slot.suppressEffortPrompt ?? false,
               exerciseType: overrideType,
             })
             .returning({ id: programExercises.id });

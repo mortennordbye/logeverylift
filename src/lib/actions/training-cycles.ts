@@ -7,21 +7,16 @@
  */
 
 import { db } from "@/db";
-import { dismissedMakeups, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users, workoutSessions, workoutSets } from "@/db/schema";
+import { dismissedMakeups, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users, workoutSessions } from "@/db/schema";
 import {
-  computeAdaptationFactor,
   deloadCadenceForLevel,
-  intervalPhaseRecipe,
-  meanLoggedRpe,
   periodizedLoad,
   phaseLabel,
   phaseLayout,
-  scaledDistance,
-  scaledDuration,
-  type AthleteLevel,
   type TrainingGoal,
   type TrainingPhase,
 } from "@/lib/utils/periodization";
+import { hasPeakAnchor, syncDueCycle, syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
   createTrainingCycleSchema,
@@ -49,7 +44,7 @@ import {
   resolveRotation,
   toDateStr,
 } from "@/lib/utils/cycle-position";
-import { and, asc, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -118,6 +113,31 @@ export async function getAllCyclesWithSlots(): Promise<ActionResult<TrainingCycl
   } catch (err) {
     return { success: false, error: String(err) };
   }
+}
+
+/**
+ * Run the active cycle's weekly periodization sync if this week's has not run
+ * yet. Pages that read program sets await it *before* reading them: run in the
+ * same Promise.all as the read, the read won and showed last week's targets
+ * under this week's header (PZ-29). A no-op when the user has no active cycle,
+ * when it is over (getActiveCycleForUser completes it), or when the week is
+ * already synced, which is one indexed read.
+ */
+export async function syncActiveCyclePeriodization(): Promise<ActionResult<null>> {
+  const auth = await requireSession();
+  try {
+    await syncDueCycle(auth.user.id);
+    return { success: true, data: null };
+  } catch (e) {
+    console.error("[syncActiveCyclePeriodization] failed", e);
+    return { success: false, error: "Failed to sync the training cycle" };
+  }
+}
+
+function startOfToday(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
 }
 
 export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleInfo | null>> {
@@ -491,15 +511,6 @@ export async function setMissedWorkoutsEnabled(
   }
 }
 
-/**
- * A set is periodized when it carries either peak anchor. Shared by the sync and
- * the periodization summary so the two cannot disagree about which cycles count.
- */
-const hasPeakAnchor = or(
-  isNotNull(programSets.peakDistanceMeters),
-  isNotNull(programSets.peakDurationSeconds),
-);
-
 export type CyclePeriodization = {
   goal: TrainingGoal;
   currentWeek: number;
@@ -552,8 +563,18 @@ export async function getCyclePeriodization(
 
     const totalWeeks = cycle.durationWeeks;
     let currentWeek = 1;
+    // The adaptation this summary scales by is the sync's output, so a new
+    // week's phase must not be reported against last week's adaptation (PZ-40).
+    let adaptationPct = cycle.adaptationPct;
+    let adaptationNote = cycle.adaptationNote ?? null;
     if (cycle.status === "active" && cycle.startDate) {
-      currentWeek = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, new Date()).currentWeek;
+      const week = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, startOfToday());
+      currentWeek = week.currentWeek;
+      if (!week.isOver && cycle.lastSyncedWeek !== currentWeek) {
+        const adaptation = await syncPeriodizedTargets(cycle.id, auth.user.id, cycle.slots, currentWeek, totalWeeks, cycle.goal, cycle.athleteLevel);
+        adaptationPct = adaptation.pct;
+        adaptationNote = adaptation.note || null;
+      }
     } else if (cycle.status === "completed") {
       currentWeek = totalWeeks;
     }
@@ -564,7 +585,7 @@ export async function getCyclePeriodization(
     const taperStart = rampWeeks + peakWeeks + 1;
     // Show the *effective* volume — the curve after the no-wearable nudge — so the
     // displayed % matches what's actually prescribed this week.
-    const effectiveMultiplier = Math.round(load.multiplier * cycle.adaptationPct) / 100;
+    const effectiveMultiplier = Math.round(load.multiplier * adaptationPct) / 100;
 
     return {
       success: true,
@@ -578,7 +599,7 @@ export async function getCyclePeriodization(
         isDeload: load.isDeload,
         weeksUntilPeak: Math.max(0, peakStart - currentWeek),
         weeksUntilTaper: Math.max(0, taperStart - currentWeek),
-        adaptationNote: cycle.adaptationNote ?? null,
+        adaptationNote,
       },
     };
   } catch (err) {
@@ -613,146 +634,6 @@ export async function getProgramPeriodization(
   } catch (err) {
     return { success: false, error: String(err) };
   }
-}
-
-/**
- * No-wearable performance nudge. Looks at the last 7 days of completed sessions
- * for this cycle's programs and returns a percent to apply on top of the curve:
- * adherence (did the prescribed sessions happen), pre-workout readiness, and RPE.
- * Neutral (100) on week 1 or when there's no signal — it never moves on no data.
- */
-async function computeCycleAdaptation(
-  userId: string,
-  programIds: number[],
-  currentWeek: number,
-): Promise<{ pct: number; note: string }> {
-  if (currentWeek < 2 || programIds.length === 0) return { pct: 100, note: "" };
-
-  const since = new Date();
-  since.setDate(since.getDate() - 7);
-  const sinceStr = since.toISOString().split("T")[0];
-
-  const recent = await db
-    .select({ id: workoutSessions.id, readiness: workoutSessions.readiness })
-    .from(workoutSessions)
-    .where(
-      and(
-        eq(workoutSessions.userId, userId),
-        eq(workoutSessions.isCompleted, true),
-        inArray(workoutSessions.programId, programIds),
-        gte(workoutSessions.date, sinceStr),
-      ),
-    );
-
-  // Scheduled sessions/week ≈ the number of training (non-rest) slots.
-  const adherence = Math.min(1, recent.length / programIds.length);
-
-  const readinessVals = recent
-    .map((r) => r.readiness)
-    .filter((x): x is number => x != null);
-  const avgReadiness = readinessVals.length
-    ? readinessVals.reduce((a, b) => a + b, 0) / readinessVals.length
-    : null;
-
-  // rpe is RIR-derived (rpe = 10 − rir) for sets logged with Reps In Reserve,
-  // so this average is a real effort signal — the avgRpe ≤ 6 "push" condition in
-  // computeAdaptationFactor corresponds to averaging ≥ 4 reps in reserve.
-  //
-  // Sets with no logged effort are dropped, not counted as zero: the average is
-  // "how hard the logged sets were", and a week where nobody answered stays the
-  // no-signal case (null) that leaves the block neutral.
-  let avgRpe: number | null = null;
-  if (recent.length > 0) {
-    const rpeRows = await db
-      .select({ rpe: workoutSets.rpe })
-      .from(workoutSets)
-      .where(inArray(workoutSets.sessionId, recent.map((r) => r.id)));
-    avgRpe = meanLoggedRpe(rpeRows.map((r) => r.rpe));
-  }
-
-  return computeAdaptationFactor({ adherence, avgReadiness, avgRpe });
-}
-
-/**
- * Scale a periodized cycle's endurance targets to the given week. For each
- * endurance set with a stored peak, distance_meters = peak × curve(week) and/or
- * duration_seconds = peak × curve(week) (time mode). Idempotent per week via
- * training_cycles.last_synced_week. No-op (beyond the marker) for cycles with no
- * peak anchors (i.e. non-triathlon cycles).
- */
-async function syncPeriodizedTargets(
-  cycleId: number,
-  userId: string,
-  slots: TrainingCycleWithSlots["slots"],
-  currentWeek: number,
-  durationWeeks: number,
-  goal: TrainingGoal,
-  athleteLevel: AthleteLevel | null,
-): Promise<void> {
-  const programIds = slots
-    .map((s) => s.programId)
-    .filter((id): id is number => id != null);
-
-  const { phase, multiplier } = periodizedLoad(
-    currentWeek,
-    durationWeeks,
-    goal,
-    deloadCadenceForLevel(athleteLevel),
-  );
-  const recipe = intervalPhaseRecipe(phase);
-
-  // No-wearable performance nudge from the last 7 days. Skipped on week 1 (no
-  // history yet) so a fresh cycle is never eased for "missing" sessions.
-  const adaptation = await computeCycleAdaptation(userId, programIds, currentWeek);
-  const effective = multiplier * (adaptation.pct / 100);
-
-  if (programIds.length > 0) {
-    const peakSets = await db
-      .select({
-        id: programSets.id,
-        peakDistance: programSets.peakDistanceMeters,
-        peakDuration: programSets.peakDurationSeconds,
-        sessionRole: programSets.sessionRole,
-      })
-      .from(programSets)
-      .innerJoin(programExercises, eq(programSets.programExerciseId, programExercises.id))
-      .where(
-        and(
-          inArray(programExercises.programId, programIds),
-          hasPeakAnchor,
-        ),
-      );
-
-    if (peakSets.length > 0) {
-      await Promise.all(
-        peakSets.map((ps) => {
-          const update: {
-            distanceMeters?: number;
-            durationSeconds?: number;
-            targetHeartRateZone?: number;
-            restTimeSeconds?: number;
-          } = {};
-          if (ps.peakDistance != null) update.distanceMeters = scaledDistance(ps.peakDistance, effective);
-          if (ps.peakDuration != null) update.durationSeconds = scaledDuration(ps.peakDuration, effective);
-          // Phase-aware: the quality session's hard reps swap zone/recovery by phase.
-          if (ps.sessionRole === "work") {
-            update.targetHeartRateZone = recipe.zone;
-            update.restTimeSeconds = recipe.restSeconds;
-          }
-          return db.update(programSets).set(update).where(eq(programSets.id, ps.id));
-        }),
-      );
-    }
-  }
-
-  await db
-    .update(trainingCycles)
-    .set({
-      lastSyncedWeek: currentWeek,
-      adaptationPct: adaptation.pct,
-      adaptationNote: adaptation.note || null,
-    })
-    .where(eq(trainingCycles.id, cycleId));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

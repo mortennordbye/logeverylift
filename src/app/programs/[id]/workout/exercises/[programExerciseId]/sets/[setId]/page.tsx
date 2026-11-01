@@ -6,6 +6,7 @@
 
 import { SetEditView } from "@/components/features/SetEditView";
 import { getProgramWithExercises } from "@/lib/actions/programs";
+import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
 import { ChevronLeftIcon } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -25,6 +26,10 @@ export default async function SetEditPage({ params }: Props) {
   const setIdNum = Number(setId);
 
   if (isNaN(programId) || isNaN(peId) || isNaN(setIdNum)) notFound();
+
+  // Shows a periodized set's target, so this week's sync runs first (PZ-29).
+
+  await syncActiveCyclePeriodization();
 
   const result = await getProgramWithExercises(programId);
   if (!result.success) notFound();

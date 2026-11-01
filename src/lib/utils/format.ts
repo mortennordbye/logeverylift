@@ -59,7 +59,10 @@ export function toDateString(d: Date): string {
 
 export function setToken(s: ProgramSet, isTimed = false): string {
   if (isTimed || s.durationSeconds != null) {
-    return formatTime(Number(s.durationSeconds ?? 60));
+    // A weighted hold (Pallof Hold, loaded carry) names its load too.
+    const kg = Number(s.weightKg ?? 0);
+    const time = formatTime(Number(s.durationSeconds ?? 60));
+    return kg > 0 ? `${time} · ${kg}kg` : time;
   }
   const weight = Number(s.weightKg ?? 0);
   const reps = s.targetReps ?? "?";

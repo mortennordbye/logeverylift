@@ -1708,6 +1708,7 @@ export async function getProgressiveSuggestions(
         programExerciseId: programExercises.id,
         setNumber: programSets.setNumber,
         targetReps: programSets.targetReps,
+        weightKg: programSets.weightKg,
         repRangeMin: programSets.repRangeMin,
         repRangeMax: programSets.repRangeMax,
         durationSeconds: programSets.durationSeconds,
@@ -1917,6 +1918,10 @@ export async function getProgressiveSuggestions(
     for (const ps of programData) {
       // Any set marked anything other than "working" is excluded from
       // progression entirely.
+      //
+      // A set already logged in the active session is deliberately *not*
+      // skipped: its row still shows "Last:", the dots and the settled chip,
+      // all read from this suggestion (SI-47, SI-48).
       if (ps.setType && ps.setType !== "working") continue;
 
       const sessions = windows.get(ps.programExerciseId) ?? [];
@@ -1958,6 +1963,10 @@ export async function getProgressiveSuggestions(
         // Each logged row is judged against its own set's target, so one
         // session reads the same for every set of the slot.
         slotTargets: Object.fromEntries(working.map((w) => [w.setNumber, w.targetReps])),
+        // Only consulted when a session missed above the plan.
+        plannedWeights: Object.fromEntries(
+          working.map((w) => [w.setNumber, w.weightKg != null ? Number(w.weightKg) : null]),
+        ),
         // E-13. Compared against the session's own plain date, so the
         // granularity is a day: a session logged earlier on the day the setting
         // changed still counts. The engine holds anything older inert rather

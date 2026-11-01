@@ -224,8 +224,10 @@ The in-workout effort prompt follows the same rule (`effortPromptSet`): it asks 
 
 This only silences the UI nudge. It does not change SI-10/SI-10a: a cap still decides clearing exactly as before, for any effort that does get logged some other way (the miss sheet's RIR chips).
 
+The flag travels with the program: `exportProgram` and `exportAllPrograms` write it as `suppressEffortPrompt` next to `applyToPlan`, and `importProgram` restores it. An export written before the field existed imports with the prompt shown.
+
 *Why:* SI-10's opt-in principle — "nobody is blocked by a setting they did not choose" — was previously expressed only through the cap itself. An exercise with no progression engagement could still carry a stale cap and get nagged anyway; an exercise with active progression could have a lifter who simply doesn't want to answer. Both are opt-outs the cap alone couldn't express.
-*Covered by:* none.
+*Covered by:* the export round-trip in `integration/progression.test.ts` ("export and import keep the effort-prompt suppression") and `validators.test.ts` ("round-trips the gate and the opt-in").
 
 ### SI-43a — Suppressing the prompt while a cap and an active advance both stand leaves the exercise permanently unknown
 Turning the toggle on for an exercise that still has `progressionAdvance` other than `none` and a `targetRir` cap prescribed does not touch the cap or the advance — it only stops anything from ever supplying the RIR that SI-10 reads. Per SI-10a, every session on that exercise's deciding set then resolves to `unknown`, indefinitely: never a clear, never a miss.
@@ -258,6 +260,16 @@ While an advance is on offer the dots show the run that earned it. Once the set 
 
 *Why:* "2 of 2" next to a bump already taken read as progress still banked toward another one.
 *Covered by:* `components/suggestion-chips.test.tsx` — "progress dots once the advance is taken"; `e2e/progression-suggestion.spec.ts` — "two clean sessions offer a bump, and taking it writes the plan".
+
+### SI-48 — One chip speaks for every set that shares the suggestion
+When two or more sets of an exercise carry a suggestion and all of them propose the same move (same reason and same suggested weight, reps, time and distance), and that move is one a chip applies, the chip is shown once, on the first of those sets, labelled `· all N sets` (`sharedSuggestionSets` in `src/lib/utils/suggestion-chip.ts`). The other sets keep their "Last:" line and their dots and show no chip. The shared chip stays tappable while any set it covers that is not yet logged still lacks the suggested value, including after its own set is logged. Tapping it writes every unlogged set in the group that still lacks the value and would move the way the chip points, one the lifter edited by hand included, since it says "all N sets"; a set already past the value (raised by hand above an upward bump) is left alone, so the tap never lowers it. The arrow is read off those sets, not off the first set. The per-set chips keep their old rule of skipping a set with an override. Its arrow turns to a tick only once every set it covers carries the value, logged sets included, so sets logged at the old weight still read "↑", as a single set's chip does. When the sets disagree, each keeps its own chip, and the header's apply-all button (`Apply N sets`, or `↑ 82.5kg · N sets` when they agree on a weight) is the one-tap path. The header button is not shown while the shared chip is, since both would apply the same thing.
+
+Which sets are grouped is decided from the suggestions alone, never from what has been logged, applied or overridden, so the chip cannot jump between rows during a workout.
+
+The suggestion is still computed for a set that is already logged in the active session. A logged row keeps its "Last:" line, its dots and its settled chip (SI-47), all of which read the suggestion, and the engine call per set is a pure function over a window that is fetched once per slot.
+
+*Why:* under scope `all` every working set showed the same `↑ 82.5 kg`, and one tap already applied it to all of them.
+*Covered by:* `components/suggestion-chips.test.tsx` — "one chip per exercise"; `suggestion-chip.test.ts`.
 
 ### SI-13 — A set marked "felt easy" satisfies the gate on its own
 When the gate is *not* already met, the most recent logged set is `wasEasy`, and that set met its target (SI-9), progression is offered as if consensus existed. The resulting suggestion is flagged `easyOverride` so the UI can say why.
@@ -333,6 +345,12 @@ When the previous session was heavier than the most recent one, suggest returnin
 
 *Why:* the common case is a bad day or a loading mistake, and the lifter wants their weight back. The guard exists because immediately proposing the weight someone just deloaded away from would undo the deload.
 *Covered by:* `progressive-suggestions.test.ts` — the "recovery (retry)" and "deload→retry guard" blocks.
+
+### SI-18a — A missed heavy single is not offered back
+A previous session that **missed** at a load the plan and the engine never led to is a one-off attempt, not ground to reclaim, and SI-18 does not offer it back. "Led to" means at or below the larger of the plan (the heaviest planned working set under scope `all`, this set's otherwise; `plannedWeights` on `ProgramSetData`) and the heaviest load cleared in the window plus one increment. The plan alone is not enough: taking a chip moves only the session unless the slot opted in to writing the plan (SI-40), so the planned weight routinely sits below what the lifter works at, and a miss one step past their cleared load is an ordinary attempt to take back. A heavier session that **cleared** is always offered back. With no planned weight known, SI-18 applies unchanged.
+
+*Why:* one heavy single could resurface as a "retry 100 kg" chip the next session, built from a set that never met its target.
+*Covered by:* `progressive-suggestions.test.ts` — "a missed heavy session above the plan"; `integration/progression.test.ts` — "does not offer a missed heavy single back as a retry".
 
 ### SI-19 — Same weight with fewer reps is offered back
 When the previous session used the same weight but more reps, suggest matching that rep count.
@@ -417,6 +435,12 @@ Suggest **`targetDuration` + secondsIncrement**, defaulting to 10s when unconfig
 *Why:* the increment is added to the target, not to what was held. Beating a 60s target by 30s used to make 90s the new prescription, so one good session permanently reset what counted as clearing and the plan ratcheted away from the lifter on their best day. Half of `A5`.
 *Covered by:* `progressive-suggestions.test.ts` — the "time mode" block; "adds the increment to the target, not to what was held".
 
+### SI-29a — A weighted hold adds weight at a fixed time
+A timed set that carries a load (a Pallof Hold on a cable, a loaded carry) progresses the load and keeps the time: once the gate clears, suggest the current load plus the weight increment, with reason `progressed`, and leave the duration alone. Clearing is still holding the target time, but like SI-11 a hold only counts at the current load or heavier. Whether the set is weighted is read from the plan when the slot's planned weights are known, the same data the progression sheet reads, so its sentence and the engine agree; from the logged load otherwise. A plan with a load that has never been logged with one starts from the plan. With no load the set is a plain hold and SI-29 applies. An anchored set still holds (SI-30a). There is no back-off (SI-44). The program editor plans the weight on a timed set, the set row and the summary show it beside the time (`00:30 · 20kg`), and the progression sheet offers the weight step instead of the time step when the exercise's working sets carry a load.
+
+*Why:* a weighted hold could only grow its time, and saving the set from the program editor dropped the weight entirely.
+*Covered by:* `progressive-suggestions.test.ts` — "a weighted hold"; `components/set-edit-timed-weight.test.tsx`; `format.test.ts` — "setToken — a weighted hold".
+
 ### SI-30 — `distance`
 Suggest **`targetDistance` + metresIncrement**, defaulting to 500 m. Weight is always reported as 0.
 
@@ -448,11 +472,13 @@ The sheet shows the rep step wherever the engine reads it: under `reps`, under `
 ### SI-44 — The sheet and the engine run the same advance
 An advance the exercise cannot move is snapped before anything reads it, by one function (`effectiveAdvance`): a timed exercise runs on `duration`, a run on anything but `distance` is `manual`, and `manual` and `none` are left alone. The progression sheet displays the snapped value and `getProgressiveSuggestions` passes the same value to the engine.
 
-*Why:* the sheet used to snap and the engine did not, so a timed exercise left on `load` by migration `0051` was described as "Duration" while the engine judged it by reps a timed set never logs, and it held forever. The stored column is not rewritten; that is the data question `BACKLOG.md` keeps open ("Two shapes left by migration 0051").
-*Covered by:* `progressive-suggestions.test.ts` — the `effectiveAdvance` block; `integration/progression.test.ts` — "runs the scheme the sheet shows: a load advance on a timed exercise runs on duration".
+*Why:* the sheet used to snap and the engine did not, so a timed exercise left on `load` by migration `0051` was described as "Duration" while the engine judged it by reps a timed set never logs, and it held forever. The stored column is not rewritten.
+
+The regress is snapped the same way, by `effectiveRegress`: a back-off cuts the load, so only `load`, `double` and `reps` can run one, and any other advance runs `hold`. The engine's back-off check, the rule sentence and the sheet all read through it, and the sheet does not offer the back-off controls on a timed or distance exercise. Migration `0051` left timed exercises on `load` with `backoff`; they read as the Duration preset, and their sentence no longer promises a back-off the engine never made.
+*Covered by:* `progressive-suggestions.test.ts` — the `effectiveAdvance` block; `integration/progression.test.ts` — "runs the scheme the sheet shows: a load advance on a timed exercise runs on duration"; `progression-presets.test.ts` — "the two shapes migration 0051 left behind".
 
 ### SI-33 — The `reason` code is the contract
-Fourteen values. "Both consumers" is wrong and has been since it was written: **eight sites across four files** branch on a reason, and a new code has to be walked through all of them in the change that adds it — the render switch, the sibling-apply dedup, the `*Pending` computations, the readiness downgrade, the `easyOverride` prefix match, the insight's exercise status, its `progressedCount` filter, and the stagnating headline's `heldCount` filter.
+Fourteen values. "Both consumers" is wrong and has been since it was written: **eight sites across four files** branch on a reason, and a new code has to be walked through all of them in the change that adds it — the render switch, the sibling-apply dedup and the pending check (`sameSuggestion`, `suggestionPending` and `CHIP_REASONS` in `suggestion-chip.ts`), the readiness downgrade, the `easyOverride` prefix match, the insight's exercise status, its `progressedCount` filter, and the stagnating headline's `heldCount` filter.
 
 | Reason | Meaning | Ratchet writes? |
 |---|---|---|

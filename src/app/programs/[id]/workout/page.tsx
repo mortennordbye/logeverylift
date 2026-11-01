@@ -7,7 +7,10 @@
 
 import { WorkoutSessionClient } from "@/components/features/WorkoutSessionClient";
 import { getProgramWithExercises } from "@/lib/actions/programs";
-import { getProgramPeriodization } from "@/lib/actions/training-cycles";
+import {
+  getProgramPeriodization,
+  syncActiveCyclePeriodization,
+} from "@/lib/actions/training-cycles";
 import { getLastCompletedSession } from "@/lib/actions/workout-sessions";
 import { getWorkoutInsight } from "@/lib/actions/workout-sets";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
@@ -24,6 +27,9 @@ export default async function WorkoutSessionPage({ params }: Props) {
   if (isNaN(programId)) notFound();
 
   await requireSession();
+  // Before the reads below, not beside them: they show this week's targets, and
+  // the sync is what writes them (PZ-29).
+  await syncActiveCyclePeriodization();
 
   const [result, lastSessionResult, insight, periodizationResult] = await Promise.all([
     getProgramWithExercises(programId),

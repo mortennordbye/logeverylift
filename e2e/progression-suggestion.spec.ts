@@ -121,11 +121,11 @@ test("two clean sessions offer a bump, and taking it writes the plan", async ({ 
   await page.reload();
 
   const next = slot.weightKg + 2.5;
-  const chip = page.getByTestId("set-row").first().getByRole("button", { name: `↑ ${next}kg` });
+  const chip = page.getByTestId("set-row").first().getByRole("button", { name: new RegExp(`^↑ ${next}kg`) });
   await expect(chip).toBeVisible({ timeout: 10_000 });
   await tapAndSave(page, chip, { bodyIncludes: '"updates"' });
 
-  await expect(page.getByTestId("set-row").first().getByRole("button", { name: `✓ ${next}kg` })).toBeVisible();
+  await expect(page.getByTestId("set-row").first().getByRole("button", { name: new RegExp(`^✓ ${next}kg`) })).toBeVisible();
   // The run that earned the bump is spent once it is taken.
   await expect(
     page.getByTestId("set-row").first().getByRole("button", { name: "Progress: 0 of 2 sessions since the increase" }),
@@ -143,7 +143,7 @@ test("a low-readiness day under reduce is lighter today and leaves the plan alon
   await testDb().update(workoutSessions).set({ readiness: 1 }).where(eq(workoutSessions.id, sessionId));
   await page.reload();
 
-  const chip = page.getByTestId("set-row").first().getByRole("button", { name: /— lighter today$/ });
+  const chip = page.getByTestId("set-row").first().getByRole("button", { name: /— lighter today/ });
   await expect(chip).toBeVisible({ timeout: 10_000 });
   const settled = trackActions(page);
   await chip.click();
