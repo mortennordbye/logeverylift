@@ -90,13 +90,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** The review. If required or wanted, write it to `docs/privacy/dpia.md` from the inventory.
 - **Touchpoints:** `docs/privacy/data-inventory.md`.
 
-## Smart-progression UX (deferred long-term)
-
-### pnpm 11 is pinned away from, not migrated to
-- **What:** The Dockerfile installs `pnpm@10` at every stage, matching the major CI's `pnpm/action-setup` pins. It used to install whatever was newest, and when pnpm 11 shipped it turned `ERR_PNPM_IGNORED_BUILDS` into a hard error, so `pnpm install` began failing inside the image — breaking `make dev` and the production image CI pushes, with no change to this repo. Pinning restored the tested toolchain; it did not resolve the underlying question. Eight packages have build scripts pnpm has been *ignoring* all along (`sharp`, three `esbuild` versions, `unrs-resolver`, `lefthook`, `@sentry/cli`, `msw`), and `sharp` is the one that matters — Next.js uses it for image optimization, and it is a native module whose install script is what fetches its binaries.
-- **Why deferred:** Allowing a package to build decides which packages may run arbitrary code at install time, and it changes what actually gets built in the image. That is a supply-chain decision, not a build fix, and it wants to land on its own rather than folded into an unrelated release. Until then every entry under `allowBuilds` in `pnpm-workspace.yaml` is `false` (#43). pnpm 11 had written them as unresolved placeholders, which failed its dependency check before any script ran, the pre-push `pnpm verify` included. `false` is what pnpm 10 already did, so nothing is built that was not built before, and local `pnpm` commands and the hook no longer need a flag or an environment variable.
-- **Unblocked by:** Deciding which entries to flip to `true`, then verifying that image optimization still behaves — if `sharp` has never been built, the current production image is already running without it and allowing it would change that behaviour rather than preserve it. Check before assuming either way.
-- **Touchpoints:** `Dockerfile` (four `npm install -g pnpm@10` lines), `.github/workflows/ci.yml:34-37`, `pnpm-workspace.yaml`.
 
 ## Codebase hygiene (deferred long-term)
 
