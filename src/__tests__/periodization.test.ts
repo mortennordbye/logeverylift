@@ -324,6 +324,14 @@ describe("reanchoredPeaks (PZ-36, PZ-37)", () => {
     expect(reanchoredPeaks(both, { distanceMeters: 3200, durationSeconds: 1200 }, "distance", 0.8)?.peakDurationSeconds).toBe(1500);
   });
 
+  it("re-derives the time anchor of a doubly anchored set when its time changed too", () => {
+    const both = { ...distanceSet, durationSeconds: 1200, peakDurationSeconds: 1500 };
+    expect(reanchoredPeaks(both, { distanceMeters: 4000, durationSeconds: 960 }, "distance", 0.8)).toEqual({
+      peakDistanceMeters: 5000,
+      peakDurationSeconds: 1200,
+    });
+  });
+
   it("gives a set that was never periodized no anchor", () => {
     const plain = { distanceMeters: 4000, durationSeconds: null, peakDistanceMeters: null, peakDurationSeconds: null };
     expect(reanchoredPeaks(plain, { distanceMeters: 3200, durationSeconds: null }, "distance", 0.8)).toBeNull();

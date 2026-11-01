@@ -2,7 +2,7 @@
 import { WorkoutSetsList } from "@/components/features/WorkoutSetsList";
 import type { ProgressionScope } from "@/lib/utils/progression";
 import type { ProgramSet, SetSuggestion } from "@/types/workout";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let completedSetIds = new Set<number>();
 let overrides: Record<number, object> = {};
+const onApplySuggestion = vi.fn();
 vi.mock("@/contexts/workout-session-context", () => ({
   useWorkoutSession: () => ({
     sessionId: 1,
@@ -82,7 +83,7 @@ function mount(
       exerciseId={2}
       sessionId={1}
       suggestions={suggestions}
-      onApplySuggestion={vi.fn()}
+      onApplySuggestion={onApplySuggestion}
       onApplyRepSuggestion={vi.fn()}
       progressionScope={progressionScope}
     />,
@@ -92,6 +93,7 @@ function mount(
 beforeEach(() => {
   completedSetIds = new Set();
   overrides = {};
+  onApplySuggestion.mockReset();
 });
 
 describe("suggestion chips", () => {
@@ -220,16 +222,23 @@ describe("one chip per exercise", () => {
     expect(chip.getAttribute("aria-disabled")).toBe("true");
   });
 
-  it("gives a set edited away from the bump its own chip, and does not wait on it", () => {
-    // Set 2 was changed to 81 kg in the set editor: the shared tap will not
-    // overwrite it, so the shared chip covers sets 1 and 3 and can tick.
+  it("writes every unlogged set it covers, one edited by hand included", () => {
+    // Set 2 was changed to 81 kg in the set editor; set 1 is already logged.
     overrides = { 2: { weightKg: 81 } };
-    mount(
-      [makeSet(1, { weightKg: "82.50" }), makeSet(2, { weightKg: "81.00" }), makeSet(3, { weightKg: "82.50" })],
-      same(),
-    );
-    expect(screen.getByRole("button", { name: /82\.5kg · all 2 sets/ }).getAttribute("aria-disabled")).toBe("true");
-    expect(screen.getByRole("button", { name: /^↑ 82\.5kg$/ })).toBeTruthy();
+    completedSetIds = new Set([1]);
+    mount([makeSet(1), makeSet(2, { weightKg: "81.00" }), makeSet(3)], same());
+    fireEvent.click(screen.getByRole("button", { name: /82\.5kg · all 3 sets/ }));
+    expect(onApplySuggestion.mock.calls.map((c) => c[0])).toEqual([2, 3]);
+    // Overrides from logging do not split the group: still one chip.
+    expect(screen.getAllByRole("button", { name: /82\.5kg/ })).toHaveLength(1);
+  });
+
+  it("still reads as not taken once every set is logged at the old weight", () => {
+    completedSetIds = new Set([1, 2, 3]);
+    mount(three(), same());
+    const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
+    expect(chip.textContent).toBe("↑ 82.5kg · all 3 sets");
+    expect(chip.getAttribute("aria-disabled")).toBe("true");
   });
 
   it("leaves held sets alone, since there is nothing to apply", () => {

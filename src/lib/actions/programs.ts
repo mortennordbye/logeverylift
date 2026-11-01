@@ -992,8 +992,6 @@ export async function updateProgramSet(
         userId: programs.userId,
         programId: programs.id,
         programExerciseId: programExercises.id,
-        distanceMeters: programSets.distanceMeters,
-        durationSeconds: programSets.durationSeconds,
         peakDistanceMeters: programSets.peakDistanceMeters,
         peakDurationSeconds: programSets.peakDurationSeconds,
       })
@@ -1013,16 +1011,29 @@ export async function updateProgramSet(
     // re-derived from it rather than left for the next sync to overwrite it
     // with. Only a set that is already periodized can be re-anchored.
     if (anchor && (check.peakDistanceMeters != null || check.peakDurationSeconds != null)) {
+      // The share runs a due weekly sync, which may rewrite this row, so the
+      // stored values are read again after it: compared with the pre-sync
+      // ones, an untouched value would be written back over the new week's.
+      const share = await periodizationShare(check.programId, auth.user.id);
+      const [stored] = await db
+        .select({
+          distanceMeters: programSets.distanceMeters,
+          durationSeconds: programSets.durationSeconds,
+          peakDistanceMeters: programSets.peakDistanceMeters,
+          peakDurationSeconds: programSets.peakDurationSeconds,
+        })
+        .from(programSets)
+        .where(eq(programSets.id, id));
       const peaks = reanchoredPeaks(
-        check,
+        stored,
         {
           distanceMeters:
-            updates.distanceMeters !== undefined ? updates.distanceMeters : check.distanceMeters,
+            updates.distanceMeters !== undefined ? updates.distanceMeters : stored.distanceMeters,
           durationSeconds:
-            updates.durationSeconds !== undefined ? updates.durationSeconds : check.durationSeconds,
+            updates.durationSeconds !== undefined ? updates.durationSeconds : stored.durationSeconds,
         },
         anchor,
-        await periodizationShare(check.programId, auth.user.id),
+        share,
       );
       if (peaks) Object.assign(updates, peaks);
     }

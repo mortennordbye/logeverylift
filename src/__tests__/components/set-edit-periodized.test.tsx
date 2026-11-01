@@ -61,13 +61,20 @@ async function save() {
 }
 
 describe("SetEditView — a periodized endurance set", () => {
-  it("asks for the distance peak to be re-derived from the saved distance", async () => {
+  it("asks for a re-anchor and leaves an untouched distance to the sync", async () => {
     render(<SetEditView set={run({})} isRunning />);
     await save();
-    expect(updateProgramSet).toHaveBeenCalledWith(
-      expect.objectContaining({ id: 7, distanceMeters: 4000, anchor: "distance" }),
-    );
-    expect(updateProgramSet.mock.calls[0][0]).not.toHaveProperty("peakDistanceMeters");
+    const sent = updateProgramSet.mock.calls[0][0];
+    expect(sent).toMatchObject({ id: 7, anchor: "distance" });
+    // A page open across the week boundary would otherwise write last week's back.
+    expect(sent.distanceMeters).toBeUndefined();
+    expect(sent).not.toHaveProperty("peakDistanceMeters");
+  });
+
+  it("sends the distance of a plain set as before", async () => {
+    render(<SetEditView set={run({ peakDistanceMeters: null })} isRunning />);
+    await save();
+    expect(updateProgramSet.mock.calls[0][0].distanceMeters).toBe(4000);
   });
 
   it("sends no anchor for a set that is not periodized", async () => {

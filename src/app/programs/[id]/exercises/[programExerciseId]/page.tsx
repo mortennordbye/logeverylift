@@ -7,6 +7,7 @@
 
 import { WorkoutSetsClient } from "@/components/features/WorkoutSetsClient";
 import { getProgramWithExercises } from "@/lib/actions/programs";
+import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
 import { notFound } from "next/navigation";
 
 type Props = {
@@ -20,6 +21,10 @@ export default async function ProgramExerciseDetailPage({ params, searchParams }
   const programId = Number(id);
   const peId = Number(programExerciseId);
   if (isNaN(programId) || isNaN(peId)) notFound();
+
+  // Shows a periodized set's target, so this week's sync runs first (PZ-29).
+
+  await syncActiveCyclePeriodization();
 
   const result = await getProgramWithExercises(programId);
   if (!result.success) notFound();

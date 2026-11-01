@@ -316,15 +316,22 @@ function SetEditForm({
         // A periodized set's typed distance is this week's, and the server
         // re-derives the anchors from it (PZ-36, PZ-37: switching back from
         // time also drops the time anchor).
+        // An untouched value is left out: the weekly sync owns it, and a page
+        // left open across the week boundary would write last week's back.
         const anchor = isPeriodized
           ? { anchor: "distance" as const }
           : {};
-        if (!(await savePlan({ id: set.id, distanceMeters, durationSeconds: duration > 0 ? duration : undefined, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
+        const sentDistance = isPeriodized && distanceMeters === set.distanceMeters ? undefined : distanceMeters;
+        const durationValue = duration > 0 ? duration : undefined;
+        const sentDuration = isPeriodized && durationValue === (set.durationSeconds ?? undefined) ? undefined : durationValue;
+        if (!(await savePlan({ id: set.id, distanceMeters: sentDistance, durationSeconds: sentDuration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
       } else {
         // Time mode: the typed duration is this week's, and the server
         // re-derives the time anchor from it and drops the distance one (PZ-36, PZ-37).
         const anchor = isPeriodized ? { anchor: "duration" as const } : {};
-        if (!(await savePlan({ id: set.id, distanceMeters: null, durationSeconds: duration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
+        const sentDuration =
+          isPeriodized && set.distanceMeters == null && duration === set.durationSeconds ? undefined : duration;
+        if (!(await savePlan({ id: set.id, distanceMeters: null, durationSeconds: sentDuration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
       }
     } else if (isWorkout) {
       // During a workout, changes apply to the active session only — never write back to

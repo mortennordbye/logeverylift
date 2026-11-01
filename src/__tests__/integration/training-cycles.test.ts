@@ -103,6 +103,19 @@ describe("editing a periodized set right after a week rollover", () => {
     expect(ps.distanceMeters).toBe(3200);
     expect((await cycle()).lastSyncedWeek).toBe(1);
   });
+
+  it("compares an untouched value with the new week's, not last week's", async () => {
+    // A build block's week 1 is 60% of peak: 5150 m syncs to 3100 m (rounded).
+    // The page synced before it rendered, so it shows 3100; only the rest time
+    // changed. Compared with the pre-sync 3000 it reads as an edit, and dividing
+    // the rounded 3100 back out moves the peak to 5167.
+    await db.update(trainingCycles).set({ goal: "build" }).where(eq(trainingCycles.id, cycleId));
+    await db.update(programSets).set({ peakDistanceMeters: 5150 }).where(eq(programSets.id, setId));
+    await updateProgramSet({ id: setId, distanceMeters: 3100, restTimeSeconds: 120, anchor: "distance" });
+    const [ps] = await db.select().from(programSets).where(eq(programSets.id, setId));
+    expect(ps.peakDistanceMeters).toBe(5150);
+    expect(ps.distanceMeters).toBe(3100);
+  });
 });
 
 describe("editing a periodized set re-anchors it (PZ-36)", () => {

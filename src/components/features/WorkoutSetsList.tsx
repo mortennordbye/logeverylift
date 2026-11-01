@@ -898,6 +898,11 @@ export function WorkoutSetsList({
   function siblingsForApply(targetSetId: number): number[] {
     const target = suggestions?.[targetSetId];
     if (!target) return [targetSetId];
+    // The shared chip says "all N sets", so it writes every unlogged set in its
+    // group, one the lifter edited by hand included (SI-48).
+    if (sharedIds != null && targetSetId === sharedIds[0]) {
+      return sharedIds.filter((id) => !activeCompletedSets.has(id));
+    }
     return flatItems
       .filter((i): i is SetFlatItem => i.type === "set")
       .filter((item) => !activeCompletedSets.has(item.set.id))
@@ -920,35 +925,21 @@ export function WorkoutSetsList({
         suggestions,
       )
     : null;
-  // A set the lifter has edited away from the suggestion (it has an override
-  // and still lacks the value) is one siblingsForApply will not write, so the
-  // shared chip cannot speak for it: it keeps a chip of its own, and the shared
-  // one neither counts it nor waits on it. It only gets there through the set
-  // editor, so the chip appears on the way back, not under a finger.
-  const diverged = (id: number) => {
-    const item = flatItems.find((i): i is SetFlatItem => i.type === "set" && i.set.id === id);
-    const s = suggestions?.[id];
-    return (
-      item != null &&
-      s != null &&
-      workoutSession?.overrides[id] != null &&
-      suggestionPending(s, item.set)
-    );
-  };
-  const leadId = sharedIds?.[0];
-  const covered = sharedIds?.filter((id) => id === leadId || !diverged(id)) ?? [];
   function sharedChipFor(setId: number): SharedChip | undefined {
-    if (covered.length < 2 || !covered.includes(setId)) return undefined;
-    if (setId !== leadId) return { role: "follower" };
+    if (!sharedIds?.includes(setId)) return undefined;
+    if (setId !== sharedIds[0]) return { role: "follower" };
     const lead = suggestions![setId];
-    const pending = flatItems.some(
-      (i) =>
-        i.type === "set" &&
-        covered.includes(i.set.id) &&
-        !activeCompletedSets.has(i.set.id) &&
-        suggestionPending(lead, i.set),
+    const groupSets = flatItems.filter(
+      (i): i is SetFlatItem => i.type === "set" && sharedIds.includes(i.set.id),
     );
-    return { role: "lead", count: covered.length, pending };
+    // The arrow says whether the bump was taken anywhere it covers, logged
+    // sets included, so sets logged at the old weight still read "↑", as a
+    // single set does. The chip stays tappable while an unlogged set lacks it.
+    const pending = groupSets.some((i) => suggestionPending(lead, i.set));
+    const actionable = groupSets.some(
+      (i) => !activeCompletedSets.has(i.set.id) && suggestionPending(lead, i.set),
+    );
+    return { role: "lead", count: sharedIds.length, pending, actionable };
   }
 
   const handleApplySuggestion = onApplySuggestion
@@ -1630,7 +1621,9 @@ function SuggestionChip({
 
 // ─── Sortable set row ─────────────────────────────────────────────────────────
 
-type SharedChip = { role: "lead"; count: number; pending: boolean } | { role: "follower" };
+type SharedChip =
+  | { role: "lead"; count: number; pending: boolean; actionable: boolean }
+  | { role: "follower" };
 
 function SortableSetRow({
   id,
@@ -1935,7 +1928,7 @@ function SortableSetRow({
           // has the bump to take, including after its own set is logged.
           const leadsGroup = sharedChip?.role === "lead";
           const chipPending = leadsGroup ? sharedChip.pending : pending;
-          const applied = leadsGroup ? !chipPending : !pending || isCompleted;
+          const applied = leadsGroup ? !sharedChip.actionable : !pending || isCompleted;
           const groupSuffix = leadsGroup ? ` · all ${sharedChip.count} sets` : "";
           const lastValue = isRunning
             ? suggestion.basedOnDistanceMeters != null

@@ -336,7 +336,8 @@ export type AnchoredSet = {
  * stored value is itself a rounded `peak x share`, and dividing it back out on
  * every save would walk the peak a little further on each one. Switching to
  * time drops the distance anchor; switching to distance from time drops the
- * time anchor; a set anchored on both keeps the other one on a distance edit.
+ * time anchor; a set anchored on both keeps its time anchor on a distance edit,
+ * following the time value by the same keep-or-re-derive rule.
  */
 export function reanchoredPeaks(
   stored: AnchoredSet,
@@ -346,16 +347,24 @@ export function reanchoredPeaks(
 ): { peakDistanceMeters: number | null; peakDurationSeconds: number | null } | null {
   if (stored.peakDistanceMeters == null && stored.peakDurationSeconds == null) return null;
   const derive = (value: number) => Math.round(value / (share > 0 ? share : 1));
+  // Kept when the value is untouched, re-derived when it moved, gone with it.
+  const follow = (value: number | null, was: number | null, peak: number) =>
+    value == null ? null : value === was ? peak : derive(value);
   if (mode === "distance") {
     const value = next.distanceMeters;
     return {
       peakDistanceMeters:
         value == null
           ? null
-          : stored.peakDistanceMeters != null && value === stored.distanceMeters
-            ? stored.peakDistanceMeters
+          : stored.peakDistanceMeters != null
+            ? follow(value, stored.distanceMeters, stored.peakDistanceMeters)
             : derive(value),
-      peakDurationSeconds: stored.peakDistanceMeters != null ? stored.peakDurationSeconds : null,
+      // A set anchored on both keeps its time anchor, following its own value;
+      // one switching back from time drops it.
+      peakDurationSeconds:
+        stored.peakDistanceMeters != null && stored.peakDurationSeconds != null
+          ? follow(next.durationSeconds, stored.durationSeconds, stored.peakDurationSeconds)
+          : null,
     };
   }
   const value = next.durationSeconds;
