@@ -1917,6 +1917,10 @@ export async function getProgressiveSuggestions(
     for (const ps of programData) {
       // Any set marked anything other than "working" is excluded from
       // progression entirely.
+      //
+      // A set already logged in the active session is deliberately *not*
+      // skipped: its row still shows "Last:", the dots and the settled chip,
+      // all read from this suggestion (SI-47, SI-48).
       if (ps.setType && ps.setType !== "working") continue;
 
       const sessions = windows.get(ps.programExerciseId) ?? [];

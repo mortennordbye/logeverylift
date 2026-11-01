@@ -261,6 +261,16 @@ While an advance is on offer the dots show the run that earned it. Once the set 
 *Why:* "2 of 2" next to a bump already taken read as progress still banked toward another one.
 *Covered by:* `components/suggestion-chips.test.tsx` — "progress dots once the advance is taken"; `e2e/progression-suggestion.spec.ts` — "two clean sessions offer a bump, and taking it writes the plan".
 
+### SI-48 — One chip speaks for every set that shares the suggestion
+When two or more sets of an exercise carry a suggestion and all of them propose the same move (same reason and same suggested weight, reps, time and distance), and that move is one a chip applies, the chip is shown once, on the first of those sets, labelled `· all N sets` (`sharedSuggestionSets` in `src/lib/utils/suggestion-chip.ts`). The other sets keep their "Last:" line and their dots and show no chip. The shared chip stays live while any set it covers that is not yet logged still lacks the suggested value, including after its own set is logged, and tapping it applies to exactly the sets the sibling propagation already wrote to. When the sets disagree, each keeps its own chip.
+
+Which sets are grouped is decided from the suggestions alone, never from what has been logged or applied, so the chip cannot jump between rows during a workout.
+
+The suggestion is still computed for a set that is already logged in the active session. A logged row keeps its "Last:" line, its dots and its settled chip (SI-47), all of which read the suggestion, and the engine call per set is a pure function over a window that is fetched once per slot.
+
+*Why:* under scope `all` every working set showed the same `↑ 82.5 kg`, and one tap already applied it to all of them.
+*Covered by:* `components/suggestion-chips.test.tsx` — "one chip per exercise"; `suggestion-chip.test.ts`.
+
 ### SI-13 — A set marked "felt easy" satisfies the gate on its own
 When the gate is *not* already met, the most recent logged set is `wasEasy`, and that set met its target (SI-9), progression is offered as if consensus existed. The resulting suggestion is flagged `easyOverride` so the UI can say why.
 
@@ -454,7 +464,7 @@ An advance the exercise cannot move is snapped before anything reads it, by one 
 *Covered by:* `progressive-suggestions.test.ts` — the `effectiveAdvance` block; `integration/progression.test.ts` — "runs the scheme the sheet shows: a load advance on a timed exercise runs on duration".
 
 ### SI-33 — The `reason` code is the contract
-Fourteen values. "Both consumers" is wrong and has been since it was written: **eight sites across four files** branch on a reason, and a new code has to be walked through all of them in the change that adds it — the render switch, the sibling-apply dedup, the `*Pending` computations, the readiness downgrade, the `easyOverride` prefix match, the insight's exercise status, its `progressedCount` filter, and the stagnating headline's `heldCount` filter.
+Fourteen values. "Both consumers" is wrong and has been since it was written: **eight sites across four files** branch on a reason, and a new code has to be walked through all of them in the change that adds it — the render switch, the sibling-apply dedup and the pending check (`sameSuggestion`, `suggestionPending` and `CHIP_REASONS` in `suggestion-chip.ts`), the readiness downgrade, the `easyOverride` prefix match, the insight's exercise status, its `progressedCount` filter, and the stagnating headline's `heldCount` filter.
 
 | Reason | Meaning | Ratchet writes? |
 |---|---|---|

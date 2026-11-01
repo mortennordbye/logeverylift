@@ -181,3 +181,46 @@ describe("progress dots once the advance is taken", () => {
     expect(label()).toBe("Progress: 0 of 2 sessions since the increase");
   });
 });
+
+describe("one chip per exercise", () => {
+  const three = () => [makeSet(1), makeSet(2), makeSet(3)];
+  const same = () => ({ 1: suggestion(), 2: suggestion(), 3: suggestion() });
+
+  it("shows a shared bump once, on the first set, for all of them", () => {
+    mount(three(), same());
+    const chips = screen.getAllByRole("button", { name: /82\.5kg/ });
+    expect(chips).toHaveLength(1);
+    expect(chips[0].textContent).toBe("↑ 82.5kg · all 3 sets");
+    // Each set still says what it did last time.
+    expect(screen.getAllByText("Last: 80kg (Good)")).toHaveLength(3);
+  });
+
+  it("keeps one chip per set when the sets disagree", () => {
+    mount(three(), { ...same(), 3: suggestion({ suggestedWeightKg: 85 }) });
+    expect(screen.getAllByRole("button", { name: /↑ 82\.5kg$/ })).toHaveLength(2);
+    expect(screen.getByRole("button", { name: /↑ 85kg$/ })).toBeTruthy();
+  });
+
+  it("stays live after its own set is logged while another set can still take it", () => {
+    completedSetIds = new Set([1]);
+    mount(three(), same());
+    const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
+    expect(chip.getAttribute("aria-disabled")).toBe("false");
+  });
+
+  it("ticks once every set it covers carries the bump", () => {
+    mount(
+      [makeSet(1, { weightKg: "82.50" }), makeSet(2, { weightKg: "82.50" }), makeSet(3, { weightKg: "82.50" })],
+      same(),
+    );
+    const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
+    expect(chip.textContent).toBe("✓ 82.5kg · all 3 sets");
+    expect(chip.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("leaves held sets alone, since there is nothing to apply", () => {
+    const held = suggestion({ reason: "held", suggestedWeightKg: 80 });
+    mount(three(), { 1: held, 2: held, 3: held });
+    expect(screen.getAllByRole("button", { name: /^Progress/ })).toHaveLength(3);
+  });
+});

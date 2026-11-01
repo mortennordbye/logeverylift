@@ -26,6 +26,11 @@ import {
 } from "@/lib/utils/progression";
 import { rirFromRpe } from "@/lib/utils/rir";
 import {
+  sameSuggestion,
+  sharedSuggestionSets,
+  suggestionPending,
+} from "@/lib/utils/suggestion-chip";
+import {
   DndContext,
   KeyboardSensor,
   PointerSensor,
@@ -899,16 +904,34 @@ export function WorkoutSetsList({
       .filter((item) => {
         if (workoutSession?.overrides[item.set.id]) return item.set.id === targetSetId;
         const s = suggestions?.[item.set.id];
-        return (
-          s != null &&
-          s.reason === target.reason &&
-          s.suggestedWeightKg === target.suggestedWeightKg &&
-          s.suggestedReps === target.suggestedReps &&
-          s.suggestedDurationSeconds === target.suggestedDurationSeconds &&
-          s.suggestedDistanceMeters === target.suggestedDistanceMeters
-        );
+        return s != null && sameSuggestion(s, target);
       })
       .map((item) => item.set.id);
+  }
+
+  // One chip per exercise when every set proposes the same move (scope "all"
+  // makes that the normal case): the first of them shows it for all, the rest
+  // keep their history line and drop the duplicate chip. The chip is live while
+  // any set it covers could still take the bump, which is exactly the set
+  // siblingsForApply would write to.
+  const sharedIds = isWorkout
+    ? sharedSuggestionSets(
+        flatItems.filter((i): i is SetFlatItem => i.type === "set").map((i) => i.set.id),
+        suggestions,
+      )
+    : null;
+  function sharedChipFor(setId: number): SharedChip | undefined {
+    if (!sharedIds?.includes(setId)) return undefined;
+    if (setId !== sharedIds[0]) return { role: "follower" };
+    const lead = suggestions![setId];
+    const pending = flatItems.some(
+      (i) =>
+        i.type === "set" &&
+        sharedIds.includes(i.set.id) &&
+        !activeCompletedSets.has(i.set.id) &&
+        suggestionPending(lead, i.set),
+    );
+    return { role: "lead", count: sharedIds.length, pending };
   }
 
   const handleApplySuggestion = onApplySuggestion
@@ -983,6 +1006,7 @@ export function WorkoutSetsList({
                     failed={isWorkout ? (renderedOverrides[item.set.id]?.isFailed ?? false) : false}
                     hasPR={prSetIds.has(item.set.id)}
                     isBarbell={isBarbell}
+                    sharedChip={sharedChipFor(item.set.id)}
                   />
                   {isEditing && flatItems[index + 1]?.type !== "rest" && (
                     <InsertRestButton onClick={() => insertRest(index + 1)} />
@@ -1589,6 +1613,8 @@ function SuggestionChip({
 
 // ─── Sortable set row ─────────────────────────────────────────────────────────
 
+type SharedChip = { role: "lead"; count: number; pending: boolean } | { role: "follower" };
+
 function SortableSetRow({
   id,
   set,
@@ -1619,6 +1645,7 @@ function SortableSetRow({
   failed,
   hasPR,
   isBarbell = false,
+  sharedChip,
 }: {
   id: string;
   set: ProgramSet;
@@ -1652,6 +1679,11 @@ function SortableSetRow({
   failed?: boolean;
   hasPR?: boolean;
   isBarbell?: boolean;
+  /**
+   * This set shares its suggestion with the exercise's other working sets: the
+   * lead shows the one chip for all of them, followers show none.
+   */
+  sharedChip?: SharedChip;
 }) {
   const {
     attributes,
@@ -1876,43 +1908,17 @@ function SortableSetRow({
         {isWorkout && suggestion && (() => {
           const currentWeight = Number(set.weightKg ?? 0);
           const currentReps = set.targetReps ?? 0;
-          const weightPending =
-            (suggestion.reason === "progressed" ||
-              suggestion.reason === "deload" ||
-              suggestion.reason === "re-approach") &&
-            currentWeight !== suggestion.suggestedWeightKg;
-          const retryWeightPending =
-            suggestion.reason === "retry" &&
-            suggestion.suggestedReps === undefined &&
-            currentWeight !== suggestion.suggestedWeightKg;
-          // The three below compare against the set's current value like the
-          // weight chips above, rather than just asking whether the suggestion
-          // exists. Without that they were pending forever: taking the bump
-          // never turned the chip's arrow into a tick, so a timed or endurance
-          // set gave no sign the tap had registered.
-          const retryRepsPending =
-            suggestion.reason === "retry" &&
-            suggestion.suggestedReps !== undefined &&
-            suggestion.suggestedReps !== currentReps;
-          // A reset moves two numbers at once, so it is outstanding while
-          // either of them is still to be taken.
-          const resetPending =
-            suggestion.reason === "reset" &&
-            (currentWeight !== suggestion.suggestedWeightKg ||
-              (suggestion.suggestedReps !== undefined &&
-                suggestion.suggestedReps !== currentReps));
-          const repsPending =
-            suggestion.reason === "progressed-reps" &&
-            suggestion.suggestedReps !== undefined &&
-            suggestion.suggestedReps > currentReps;
-          const timePending =
-            suggestion.reason === "progressed-time" &&
-            suggestion.suggestedDurationSeconds !== undefined &&
-            suggestion.suggestedDurationSeconds !== (set.durationSeconds ?? 0);
-          const distancePending =
-            suggestion.reason === "progressed-distance" &&
-            suggestion.suggestedDistanceMeters !== undefined &&
-            suggestion.suggestedDistanceMeters !== (set.distanceMeters ?? 0);
+          // Compared against the set's current value rather than just asking
+          // whether the suggestion exists. Without that a timed or endurance
+          // chip stayed pending forever and never showed the tap registered.
+          const pending = suggestionPending(suggestion, set);
+          // One chip speaks for every set that shares the suggestion (see
+          // sharedSuggestionSets). It stays live while any set it covers still
+          // has the bump to take, including after its own set is logged.
+          const leadsGroup = sharedChip?.role === "lead";
+          const chipPending = leadsGroup ? sharedChip.pending : pending;
+          const applied = leadsGroup ? !chipPending : !pending || isCompleted;
+          const groupSuffix = leadsGroup ? ` · all ${sharedChip.count} sets` : "";
           const lastValue = isRunning
             ? suggestion.basedOnDistanceMeters != null
               ? formatEnduranceDistance(cfg.inputUnit, suggestion.basedOnDistanceMeters)
@@ -1947,17 +1953,15 @@ function SortableSetRow({
           // the new one, so the next session starts from zero. While the bump
           // is still on offer the full run stays, since it explains the chip.
           const advanceTaken =
-            (suggestion.reason === "progressed" && !weightPending) ||
-            (suggestion.reason === "reset" && !resetPending) ||
-            (suggestion.reason === "progressed-reps" &&
-              suggestion.suggestedReps !== undefined &&
-              !repsPending) ||
-            (suggestion.reason === "progressed-time" &&
-              suggestion.suggestedDurationSeconds !== undefined &&
-              !timePending) ||
-            (suggestion.reason === "progressed-distance" &&
-              suggestion.suggestedDistanceMeters !== undefined &&
-              !distancePending);
+            !pending &&
+            (suggestion.reason === "progressed" ||
+              suggestion.reason === "reset" ||
+              (suggestion.reason === "progressed-reps" &&
+                suggestion.suggestedReps !== undefined) ||
+              (suggestion.reason === "progressed-time" &&
+                suggestion.suggestedDurationSeconds !== undefined) ||
+              (suggestion.reason === "progressed-distance" &&
+                suggestion.suggestedDistanceMeters !== undefined));
           const banked = liveMiss || advanceTaken ? 0 : suggestion.hitsAchieved;
 
           return (
@@ -2022,12 +2026,14 @@ function SortableSetRow({
                   </button>
                 )}
               </div>
-              {/* Second line: action buttons + readiness label */}
+              {/* Second line: action buttons + readiness label. Left out on a
+                  set whose chip is shown once for the whole exercise. */}
+              {sharedChip?.role !== "follower" && (
               <div className="flex items-center gap-2 mt-1 flex-wrap">
                 {suggestion.reason === "progressed" && (
                   <SuggestionChip
                     tone="primary"
-                    applied={!weightPending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
                     {/* Direction comes from the comparison, not the reason: a
@@ -2035,13 +2041,14 @@ function SortableSetRow({
                         after a lighter session a "progressed" value can sit
                         below the weight on the row. It is still worth offering
                         for today's session — it just isn't an increase. */}
-                    {!weightPending
+                    {!chipPending
                       ? "✓"
                       : suggestion.suggestedWeightKg > currentWeight
                       ? "↑"
                       : "↓"}{" "}
                     {`${suggestion.suggestedWeightKg}kg`}
                     {suggestion.easyOverride && " — felt easy"}
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {/* Coming back after a break. Rendered apart from a deload
@@ -2052,95 +2059,103 @@ function SortableSetRow({
                 {suggestion.reason === "re-approach" && (
                   <SuggestionChip
                     tone="orange"
-                    applied={!weightPending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
-                    {weightPending ? "↓" : "✓"} {suggestion.suggestedWeightKg}kg — back after a break
+                    {chipPending ? "↓" : "✓"} {suggestion.suggestedWeightKg}kg — back after a break
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "deload" && (
                   <SuggestionChip
                     tone="orange"
-                    applied={!weightPending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
                     {/* A readiness back-off is for today only and never reaches
                         the plan; a real back-off follows repeated misses. */}
-                    {weightPending ? "↓" : "✓"} {suggestion.suggestedWeightKg}kg —{" "}
+                    {chipPending ? "↓" : "✓"} {suggestion.suggestedWeightKg}kg —{" "}
                     {suggestion.readinessModulated ? "lighter today" : "back off"}
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "retry" && suggestion.suggestedReps === undefined && (
                   <SuggestionChip
                     tone="amber"
-                    applied={!retryWeightPending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg)}
                   >
                     {/* Same as the progressed chip: a retry is measured against
                         history, so it can still sit below the weight on the row. */}
-                    {!retryWeightPending
+                    {!chipPending
                       ? "✓"
                       : suggestion.suggestedWeightKg > currentWeight
                       ? "↑"
                       : "↓"}{" "}
                     {suggestion.suggestedWeightKg}kg — retry
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "retry" && suggestion.suggestedReps !== undefined && (
                   <SuggestionChip
                     tone="amber"
-                    applied={!retryRepsPending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, suggestion.suggestedReps)}
                   >
-                    {!retryRepsPending
+                    {!chipPending
                       ? "✓"
                       : (suggestion.suggestedReps ?? 0) > currentReps
                       ? "↑"
                       : "↓"}{" "}
                     {suggestion.suggestedReps} reps — retry
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "progressed-reps" && suggestion.suggestedReps !== undefined && (
                   <SuggestionChip
                     tone="primary"
-                    applied={!repsPending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplyRepSuggestion?.(set.id, suggestion.suggestedReps!)}
                   >
-                    {repsPending ? "↑" : "✓"} {suggestion.suggestedReps} reps
+                    {chipPending ? "↑" : "✓"} {suggestion.suggestedReps} reps
                     {suggestion.easyOverride && " — felt easy"}
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "reset" && suggestion.suggestedReps !== undefined && (
                   <SuggestionChip
                     tone="primary"
-                    applied={!resetPending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, suggestion.suggestedReps)}
                   >
                     {/* Both halves in one chip, because they are one move: the
                         reps drop is what the heavier load costs. Applying only
                         the weight would leave the lifter chasing the top of
                         the range at a load they have just earned. */}
-                    {resetPending ? "↑" : "✓"} {suggestion.suggestedWeightKg}kg —
+                    {chipPending ? "↑" : "✓"} {suggestion.suggestedWeightKg}kg —
                     back to {suggestion.suggestedReps} reps
                     {suggestion.easyOverride && " — felt easy"}
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "progressed-time" && suggestion.suggestedDurationSeconds !== undefined && (
                   <SuggestionChip
                     tone="primary"
-                    applied={!timePending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, suggestion.suggestedDurationSeconds)}
                   >
-                    {timePending ? "↑" : "✓"} {formatTime(suggestion.suggestedDurationSeconds)} duration
+                    {chipPending ? "↑" : "✓"} {formatTime(suggestion.suggestedDurationSeconds)} duration
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {suggestion.reason === "progressed-distance" && suggestion.suggestedDistanceMeters !== undefined && (
                   <SuggestionChip
                     tone="primary"
-                    applied={!distancePending || isCompleted}
+                    applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, undefined, suggestion.suggestedDistanceMeters)}
                   >
-                    {distancePending ? "↑" : "✓"} {formatEnduranceDistance(cfg.inputUnit, suggestion.suggestedDistanceMeters)}
+                    {chipPending ? "↑" : "✓"} {formatEnduranceDistance(cfg.inputUnit, suggestion.suggestedDistanceMeters)}
+                    {groupSuffix}
                   </SuggestionChip>
                 )}
                 {/* Distinct from "held", which renders nothing but the dots.
@@ -2172,6 +2187,7 @@ function SortableSetRow({
                   </span>
                 )}
               </div>
+              )}
             </div>
           );
         })()}
