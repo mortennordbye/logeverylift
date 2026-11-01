@@ -30,7 +30,6 @@ export default async function ProgramSetEditPage({ params, searchParams }: Props
   if (isNaN(programId) || isNaN(peId) || isNaN(setIdNum)) notFound();
 
   // Shows a periodized set's target, so this week's sync runs first (PZ-29).
-
   await syncActiveCyclePeriodization();
 
   const result = await getProgramWithExercises(programId);
