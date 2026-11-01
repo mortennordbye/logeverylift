@@ -3,7 +3,7 @@
 # ==================================
 
 # Stage 1: Install dependencies
-FROM node:20-alpine AS deps
+FROM node:24-alpine AS deps
 # Pinned to the major CI installs (.github/workflows/ci.yml, pnpm/action-setup).
 # Unpinned, this pulled whatever pnpm was newest at build time, and pnpm 11 turned
 # ERR_PNPM_IGNORED_BUILDS from a warning into a hard failure — so `pnpm install`
@@ -19,7 +19,7 @@ RUN pnpm install
 # ============================================================
 # NEW Stage 2: Development (Fast Local Building)
 # ============================================================
-FROM node:20-alpine AS dev
+FROM node:24-alpine AS dev
 RUN npm install -g pnpm@10 tsx
 WORKDIR /app
 
@@ -40,7 +40,7 @@ CMD ["pnpm", "next", "dev", "--turbo", "-H", "0.0.0.0"]
 # ============================================================
 # Stage 3: Build application (Production only)
 # ============================================================
-FROM node:20-alpine AS builder
+FROM node:24-alpine AS builder
 RUN npm install -g pnpm@10
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -59,7 +59,7 @@ RUN pnpm exec esbuild scripts/migrate.ts scripts/seed.ts --bundle --platform=nod
 # ============================================================
 # Stage 4: Production runner
 # ============================================================
-FROM node:20-alpine AS runner
+FROM node:24-alpine AS runner
 WORKDIR /app
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
@@ -67,8 +67,6 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 # Nothing runs npm at runtime; left in, its bundled tar, sigstore and pacote ship as CVEs.
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
-# node:20-alpine is past end of life and no longer rebuilt, so take Alpine's fixes here.
-RUN apk upgrade --no-cache
 
 # --chown at copy time: a later `RUN chown -R` would re-write every file into
 # a new layer and double the image size.

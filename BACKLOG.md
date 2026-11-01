@@ -134,12 +134,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Deciding whether a weighted hold should progress weight at a fixed time, time at a fixed weight, or alternate. Then: write `weightKg` in the timed branch of the program-edit save, show it on the timed row, and add a load step to the `duration` case in the engine.
 - **Touchpoints:** `src/components/features/SetEditView.tsx:348` (timed save omits weight), `src/components/features/WorkoutSetsList.tsx:1742` (timed row shows time only), `src/lib/utils/progression.ts:1634` (the `duration` case).
 
-### Node 20 is past end of life
-- **What:** Every Dockerfile stage builds on `node:20-alpine` and CI runs `node-version: 20`. Node 20 left LTS in April 2026, so the base image is no longer rebuilt; the runner runs `apk upgrade` to pick up Alpine fixes, and Node's own security releases no longer reach the app.
-- **Why deferred:** A Node major moves the dev image, CI and the production runtime together and wants a full e2e pass on its own, not folded into a CVE cleanup.
-- **Unblocked by:** Switching to the current LTS (Node 24) in all `FROM` lines, `.github/workflows/ci.yml` and `e2e-nightly.yml`, and `@types/node`; drop the runner's `apk upgrade` if the new base is current. Dependabot's docker PR proposes 25, which is not an LTS line.
-- **Touchpoints:** `Dockerfile`, `.github/workflows/ci.yml`, `.github/workflows/e2e-nightly.yml`, `package.json`.
-
 ### Playwright is held at 1.59.1
 - **What:** `@playwright/test` stays on 1.59.1, with the CI container and its version guard to match, and Dependabot ignores newer releases. On 1.64.1, `e2e/set-edit.spec.ts` "a note saved on a logged set" fails about half the time on two CPUs: some server-action responses on the set editor never report finished (the trace shows no body received), so `trackActions` in `e2e/helpers.ts` never sees zero in flight and `settle()` times out. The app is unchanged; the same branch passes 14/14 on 1.59.1.
 - **Why deferred:** It arrived with a dependency CVE cleanup; whether the fix belongs in `trackActions` (count a response as done at headers, or drop requests left open by a client navigation) or in how the app reads action responses wants its own investigation.
