@@ -120,6 +120,44 @@ export async function getAllCyclesWithSlots(): Promise<ActionResult<TrainingCycl
   }
 }
 
+/**
+ * Run the active cycle's weekly periodization sync if this week's has not run
+ * yet. Pages that read program sets await it *before* reading them: run in the
+ * same Promise.all as the read, the read won and showed last week's targets
+ * under this week's header (PZ-29). A no-op when the user has no active cycle,
+ * when it is over (getActiveCycleForUser completes it), or when the week is
+ * already synced, which is one indexed read.
+ */
+export async function syncActiveCyclePeriodization(): Promise<ActionResult<null>> {
+  const auth = await requireSession();
+  const userId = auth.user.id;
+  try {
+    const cycle = await db.query.trainingCycles.findFirst({
+      where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active")),
+      with: { slots: true },
+    });
+    if (!cycle?.startDate) return { success: true, data: null };
+    const { currentWeek, isOver } = cycleWeek(
+      parseDateStr(cycle.startDate),
+      cycle.durationWeeks,
+      startOfToday(),
+    );
+    if (!isOver && cycle.lastSyncedWeek !== currentWeek) {
+      await syncPeriodizedTargets(cycle.id, userId, cycle.slots, currentWeek, cycle.durationWeeks, cycle.goal, cycle.athleteLevel);
+    }
+    return { success: true, data: null };
+  } catch (e) {
+    console.error("[syncActiveCyclePeriodization] failed", e);
+    return { success: false, error: "Failed to sync the training cycle" };
+  }
+}
+
+function startOfToday(): Date {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return today;
+}
+
 export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleInfo | null>> {
   const auth = await requireSession();
   const userId = auth.user.id;
@@ -552,8 +590,18 @@ export async function getCyclePeriodization(
 
     const totalWeeks = cycle.durationWeeks;
     let currentWeek = 1;
+    // The adaptation this summary scales by is the sync's output, so a new
+    // week's phase must not be reported against last week's adaptation (PZ-40).
+    let adaptationPct = cycle.adaptationPct;
+    let adaptationNote = cycle.adaptationNote ?? null;
     if (cycle.status === "active" && cycle.startDate) {
-      currentWeek = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, new Date()).currentWeek;
+      const week = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, startOfToday());
+      currentWeek = week.currentWeek;
+      if (!week.isOver && cycle.lastSyncedWeek !== currentWeek) {
+        const adaptation = await syncPeriodizedTargets(cycle.id, auth.user.id, cycle.slots, currentWeek, totalWeeks, cycle.goal, cycle.athleteLevel);
+        adaptationPct = adaptation.pct;
+        adaptationNote = adaptation.note || null;
+      }
     } else if (cycle.status === "completed") {
       currentWeek = totalWeeks;
     }
@@ -564,7 +612,7 @@ export async function getCyclePeriodization(
     const taperStart = rampWeeks + peakWeeks + 1;
     // Show the *effective* volume — the curve after the no-wearable nudge — so the
     // displayed % matches what's actually prescribed this week.
-    const effectiveMultiplier = Math.round(load.multiplier * cycle.adaptationPct) / 100;
+    const effectiveMultiplier = Math.round(load.multiplier * adaptationPct) / 100;
 
     return {
       success: true,
@@ -578,7 +626,7 @@ export async function getCyclePeriodization(
         isDeload: load.isDeload,
         weeksUntilPeak: Math.max(0, peakStart - currentWeek),
         weeksUntilTaper: Math.max(0, taperStart - currentWeek),
-        adaptationNote: cycle.adaptationNote ?? null,
+        adaptationNote,
       },
     };
   } catch (err) {
@@ -683,12 +731,12 @@ async function computeCycleAdaptation(
 async function syncPeriodizedTargets(
   cycleId: number,
   userId: string,
-  slots: TrainingCycleWithSlots["slots"],
+  slots: { programId: number | null }[],
   currentWeek: number,
   durationWeeks: number,
   goal: TrainingGoal,
   athleteLevel: AthleteLevel | null,
-): Promise<void> {
+): Promise<{ pct: number; note: string }> {
   const programIds = slots
     .map((s) => s.programId)
     .filter((id): id is number => id != null);
@@ -753,6 +801,7 @@ async function syncPeriodizedTargets(
       adaptationNote: adaptation.note || null,
     })
     .where(eq(trainingCycles.id, cycleId));
+  return adaptation;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

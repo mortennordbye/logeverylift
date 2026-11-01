@@ -11,6 +11,7 @@ import {
   uncoupledAcwr,
   type PeriodizationSummaryInput,
   type TrainingGoal,
+  reanchoredPeaks,
 } from "@/lib/utils/periodization";
 
 describe("phaseLayout", () => {
@@ -283,5 +284,48 @@ describe("scaledDuration", () => {
   it("never goes below 30 s", () => {
     expect(scaledDuration(60, 0.1)).toBe(30);
     expect(scaledDuration(3600, 0)).toBe(30);
+  });
+});
+
+describe("reanchoredPeaks (PZ-36, PZ-37)", () => {
+  const distanceSet = { distanceMeters: 4000, durationSeconds: null, peakDistanceMeters: 5000, peakDurationSeconds: null };
+
+  it("derives the peak from a changed value as this week's share", () => {
+    expect(reanchoredPeaks(distanceSet, { distanceMeters: 3200, durationSeconds: null }, "distance", 0.8)).toEqual({
+      peakDistanceMeters: 4000,
+      peakDurationSeconds: null,
+    });
+  });
+
+  it("keeps the peak when the value did not change, so it never drifts", () => {
+    expect(reanchoredPeaks(distanceSet, { distanceMeters: 4000, durationSeconds: null }, "distance", 0.83)).toEqual({
+      peakDistanceMeters: 5000,
+      peakDurationSeconds: null,
+    });
+  });
+
+  it("moves the anchor to time on a switch and drops the distance one", () => {
+    expect(reanchoredPeaks(distanceSet, { distanceMeters: null, durationSeconds: 1200 }, "duration", 0.8)).toEqual({
+      peakDistanceMeters: null,
+      peakDurationSeconds: 1500,
+    });
+  });
+
+  it("moves the anchor back to distance and drops the time one", () => {
+    const timeSet = { distanceMeters: null, durationSeconds: 1200, peakDistanceMeters: null, peakDurationSeconds: 1500 };
+    expect(reanchoredPeaks(timeSet, { distanceMeters: 4000, durationSeconds: 1200 }, "distance", 0.8)).toEqual({
+      peakDistanceMeters: 5000,
+      peakDurationSeconds: null,
+    });
+  });
+
+  it("keeps a second anchor on a distance edit when the set carries both", () => {
+    const both = { ...distanceSet, durationSeconds: 1200, peakDurationSeconds: 1500 };
+    expect(reanchoredPeaks(both, { distanceMeters: 3200, durationSeconds: 1200 }, "distance", 0.8)?.peakDurationSeconds).toBe(1500);
+  });
+
+  it("gives a set that was never periodized no anchor", () => {
+    const plain = { distanceMeters: 4000, durationSeconds: null, peakDistanceMeters: null, peakDurationSeconds: null };
+    expect(reanchoredPeaks(plain, { distanceMeters: 3200, durationSeconds: null }, "distance", 0.8)).toBeNull();
   });
 });

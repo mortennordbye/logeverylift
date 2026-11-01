@@ -313,14 +313,17 @@ function SetEditForm({
         // During a workout: only update the duration target override (distance target is program-level)
         workoutSession?.setOverride(set.id, { targetReps: 0, weightKg: 0, durationSeconds: duration > 0 ? duration : undefined, notes: noteValue });
       } else if (runMode === "distance") {
-        // Convert a time-periodized set back to distance: anchor the entered distance, clear the time anchor.
-        const anchor = isPeriodized && set.peakDistanceMeters == null
-          ? { peakDistanceMeters: distanceMeters, peakDurationSeconds: null }
+        // A periodized set's typed distance is this week's, and the server
+        // re-derives the anchors from it (PZ-36, PZ-37: switching back from
+        // time also drops the time anchor).
+        const anchor = isPeriodized
+          ? { anchor: "distance" as const }
           : {};
         if (!(await savePlan({ id: set.id, distanceMeters, durationSeconds: duration > 0 ? duration : undefined, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
       } else {
-        // Time mode: anchor the entered duration as the peak (and drop the distance anchor) for periodized sets.
-        const anchor = isPeriodized ? { peakDurationSeconds: duration, peakDistanceMeters: null } : {};
+        // Time mode: the typed duration is this week's, and the server
+        // re-derives the time anchor from it and drops the distance one (PZ-36, PZ-37).
+        const anchor = isPeriodized ? { anchor: "duration" as const } : {};
         if (!(await savePlan({ id: set.id, distanceMeters: null, durationSeconds: duration, inclinePercent: inclinePercent ?? undefined, targetHeartRateZone: targetHeartRateZone ?? undefined, setType, restTimeSeconds: restSeconds, ...anchor }))) return;
       }
     } else if (isWorkout) {

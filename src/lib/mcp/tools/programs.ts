@@ -9,6 +9,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
+import { periodizationShare } from "@/lib/periodization-share";
 import {
   MAX_BACKOFF_AFTER,
   MAX_BACKOFF_PCT,
@@ -23,6 +24,7 @@ import {
   judgingRuleChanged,
   type ProgressionAdvance,
 } from "@/lib/utils/progression";
+import { reanchoredPeaks } from "@/lib/utils/periodization";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
@@ -431,13 +433,42 @@ export function registerProgramTools(server: McpServer, userId: string) {
                 .where(eq(programExercises.id, programExerciseId));
             }
             if (args.sets !== undefined) {
+              // The replace has no fields for a cycle's anchors, so they would
+              // vanish with the old rows and the sets would silently drop out
+              // of the block. Carry them across by set number, re-derived the
+              // way an edit in the app re-derives them (PZ-36, PZ-37).
+              const old = await tx
+                .select({
+                  setNumber: programSets.setNumber,
+                  distanceMeters: programSets.distanceMeters,
+                  durationSeconds: programSets.durationSeconds,
+                  peakDistanceMeters: programSets.peakDistanceMeters,
+                  peakDurationSeconds: programSets.peakDurationSeconds,
+                  sessionRole: programSets.sessionRole,
+                })
+                .from(programSets)
+                .where(eq(programSets.programExerciseId, programExerciseId));
+              const oldByNumber = new Map(old.map((o) => [o.setNumber, o]));
+              const share = old.some(
+                (o) => o.peakDistanceMeters != null || o.peakDurationSeconds != null,
+              )
+                ? await periodizationShare(owner.programId, userId)
+                : 1;
               await tx
                 .delete(programSets)
                 .where(eq(programSets.programExerciseId, programExerciseId));
               if (args.sets.length > 0) {
-                await tx
-                  .insert(programSets)
-                  .values(args.sets.map((s) => setValues(programExerciseId, s)));
+                await tx.insert(programSets).values(
+                  args.sets.map((s) => {
+                    const row = setValues(programExerciseId, s);
+                    const prev = oldByNumber.get(s.setNumber);
+                    if (!prev) return row;
+                    const mode =
+                      row.distanceMeters != null ? "distance" : row.durationSeconds != null ? "duration" : null;
+                    const peaks = mode ? reanchoredPeaks(prev, row, mode, share) : null;
+                    return peaks ? { ...row, ...peaks, sessionRole: prev.sessionRole } : row;
+                  }),
+                );
               }
             }
           });

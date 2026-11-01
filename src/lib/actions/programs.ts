@@ -8,7 +8,9 @@
 
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
+import { periodizationShare } from "@/lib/periodization-share";
 import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exercise-type";
+import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { warmupRamp } from "@/lib/utils/plates";
 import { judgingRuleChanged, type ProgressionAdvance } from "@/lib/utils/progression";
 import { requireSession } from "@/lib/utils/session";
@@ -982,11 +984,19 @@ export async function updateProgramSet(
       return { success: false, error: "Invalid input" };
     }
 
-    const { id, ...rest } = validation.data;
+    const { id, anchor, ...rest } = validation.data;
 
     // Verify ownership via programSet → programExercise → program
     const [check] = await db
-      .select({ userId: programs.userId, programId: programs.id, programExerciseId: programExercises.id })
+      .select({
+        userId: programs.userId,
+        programId: programs.id,
+        programExerciseId: programExercises.id,
+        distanceMeters: programSets.distanceMeters,
+        durationSeconds: programSets.durationSeconds,
+        peakDistanceMeters: programSets.peakDistanceMeters,
+        peakDurationSeconds: programSets.peakDurationSeconds,
+      })
       .from(programSets)
       .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
       .innerJoin(programs, eq(programs.id, programExercises.programId))
@@ -999,6 +1009,23 @@ export async function updateProgramSet(
     const updates = Object.fromEntries(
       Object.entries(rest).filter(([, v]) => v !== undefined),
     ) as Partial<typeof programSets.$inferInsert>;
+    // PZ-36: a number typed on a periodized set is this week's, so its peak is
+    // re-derived from it rather than left for the next sync to overwrite it
+    // with. Only a set that is already periodized can be re-anchored.
+    if (anchor && (check.peakDistanceMeters != null || check.peakDurationSeconds != null)) {
+      const peaks = reanchoredPeaks(
+        check,
+        {
+          distanceMeters:
+            updates.distanceMeters !== undefined ? updates.distanceMeters : check.distanceMeters,
+          durationSeconds:
+            updates.durationSeconds !== undefined ? updates.durationSeconds : check.durationSeconds,
+        },
+        anchor,
+        await periodizationShare(check.programId, auth.user.id),
+      );
+      if (peaks) Object.assign(updates, peaks);
+    }
     const [ps] = await db
       .update(programSets)
       .set(updates)
