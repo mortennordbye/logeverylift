@@ -241,6 +241,22 @@ describe("one chip per exercise", () => {
     expect(chip.getAttribute("aria-disabled")).toBe("true");
   });
 
+  it("points the way the sets it moves go, not the way the first set goes", () => {
+    // Set 1 is already at 82.5; set 2 still lacks it.
+    completedSetIds = new Set([1, 2]);
+    mount([makeSet(1, { weightKg: "82.50" }), makeSet(2), makeSet(3, { weightKg: "82.50" })], same());
+    expect(screen.getByRole("button", { name: /82\.5kg · all 3 sets/ }).textContent).toBe("↑ 82.5kg · all 3 sets");
+  });
+
+  it("never lowers a set raised by hand above an upward bump", () => {
+    overrides = { 1: { weightKg: 85 } };
+    mount([makeSet(1, { weightKg: "85.00" }), makeSet(2), makeSet(3)], same());
+    const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
+    expect(chip.textContent).toBe("↑ 82.5kg · all 3 sets");
+    fireEvent.click(chip);
+    expect(onApplySuggestion.mock.calls.map((c) => c[0])).toEqual([2, 3]);
+  });
+
   it("leaves held sets alone, since there is nothing to apply", () => {
     const held = suggestion({ reason: "held", suggestedWeightKg: 80 });
     mount(three(), { 1: held, 2: held, 3: held });

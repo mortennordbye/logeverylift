@@ -103,3 +103,20 @@ export function sharedSuggestionSets(
     ? withSuggestion
     : null;
 }
+
+/**
+ * The number a suggestion moves on a set, and where it moves it to: reps for a
+ * rep climb or rep retry, time and distance for theirs, weight otherwise.
+ */
+export function chipMove(s: ChipSuggestion, set: ChipSet): { from: number; to: number } {
+  if ((s.reason === "progressed-reps" || s.reason === "retry") && s.suggestedReps !== undefined) {
+    return { from: set.targetReps ?? 0, to: s.suggestedReps };
+  }
+  if (s.reason === "progressed-time" && s.suggestedDurationSeconds !== undefined) {
+    return { from: set.durationSeconds ?? 0, to: s.suggestedDurationSeconds };
+  }
+  if (s.reason === "progressed-distance" && s.suggestedDistanceMeters !== undefined) {
+    return { from: set.distanceMeters ?? 0, to: s.suggestedDistanceMeters };
+  }
+  return { from: Number(set.weightKg ?? 0), to: s.suggestedWeightKg };
+}

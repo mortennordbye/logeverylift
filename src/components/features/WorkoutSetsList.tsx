@@ -26,6 +26,7 @@ import {
 } from "@/lib/utils/progression";
 import { rirFromRpe } from "@/lib/utils/rir";
 import {
+  chipMove,
   sameSuggestion,
   sharedSuggestionSets,
   suggestionPending,
@@ -901,7 +902,9 @@ export function WorkoutSetsList({
     // The shared chip says "all N sets", so it writes every unlogged set in its
     // group, one the lifter edited by hand included (SI-48).
     if (sharedIds != null && targetSetId === sharedIds[0]) {
-      return sharedIds.filter((id) => !activeCompletedSets.has(id));
+      return (shared?.moving ?? [])
+        .map((i) => i.set.id)
+        .filter((id) => !activeCompletedSets.has(id));
     }
     return flatItems
       .filter((i): i is SetFlatItem => i.type === "set")
@@ -925,21 +928,40 @@ export function WorkoutSetsList({
         suggestions,
       )
     : null;
+  // The sets the shared chip moves: those that still lack the value, in the
+  // direction most of the bump goes. A set already past it (raised by hand
+  // above an upward bump) is left alone, so one tap never lowers it.
+  function sharedMoving() {
+    if (!sharedIds) return null;
+    const lead = suggestions![sharedIds[0]];
+    const lacking = flatItems.filter(
+      (i): i is SetFlatItem =>
+        i.type === "set" && sharedIds.includes(i.set.id) && suggestionPending(lead, i.set),
+    );
+    const rises = lacking.some((i) => {
+      const m = chipMove(lead, i.set);
+      return m.to > m.from;
+    });
+    const moving = lacking.filter((i) => {
+      const m = chipMove(lead, i.set);
+      return rises ? m.to > m.from : m.to < m.from;
+    });
+    return { rises, moving };
+  }
+  const shared = sharedMoving();
   function sharedChipFor(setId: number): SharedChip | undefined {
-    if (!sharedIds?.includes(setId)) return undefined;
+    if (!sharedIds || !shared || !sharedIds.includes(setId)) return undefined;
     if (setId !== sharedIds[0]) return { role: "follower" };
-    const lead = suggestions![setId];
-    const groupSets = flatItems.filter(
-      (i): i is SetFlatItem => i.type === "set" && sharedIds.includes(i.set.id),
-    );
     // The arrow says whether the bump was taken anywhere it covers, logged
-    // sets included, so sets logged at the old weight still read "↑", as a
-    // single set does. The chip stays tappable while an unlogged set lacks it.
-    const pending = groupSets.some((i) => suggestionPending(lead, i.set));
-    const actionable = groupSets.some(
-      (i) => !activeCompletedSets.has(i.set.id) && suggestionPending(lead, i.set),
-    );
-    return { role: "lead", count: sharedIds.length, pending, actionable };
+    // sets included, so sets logged at the old weight still read as not taken,
+    // as a single set does. The chip stays tappable while an unlogged set lacks it.
+    return {
+      role: "lead",
+      count: sharedIds.length,
+      pending: shared.moving.length > 0,
+      actionable: shared.moving.some((i) => !activeCompletedSets.has(i.set.id)),
+      rises: shared.rises,
+    };
   }
 
   const handleApplySuggestion = onApplySuggestion
@@ -1622,7 +1644,7 @@ function SuggestionChip({
 // ─── Sortable set row ─────────────────────────────────────────────────────────
 
 type SharedChip =
-  | { role: "lead"; count: number; pending: boolean; actionable: boolean }
+  | { role: "lead"; count: number; pending: boolean; actionable: boolean; rises: boolean }
   | { role: "follower" };
 
 function SortableSetRow({
@@ -1930,6 +1952,9 @@ function SortableSetRow({
           const chipPending = leadsGroup ? sharedChip.pending : pending;
           const applied = leadsGroup ? !sharedChip.actionable : !pending || isCompleted;
           const groupSuffix = leadsGroup ? ` · all ${sharedChip.count} sets` : "";
+          // Up or down: the shared chip reads it off the sets it moves, a
+          // single chip off its own set.
+          const rises = (to: number, from: number) => (leadsGroup ? sharedChip.rises : to > from);
           const lastValue = isRunning
             ? suggestion.basedOnDistanceMeters != null
               ? formatEnduranceDistance(cfg.inputUnit, suggestion.basedOnDistanceMeters)
@@ -2054,7 +2079,7 @@ function SortableSetRow({
                         for today's session — it just isn't an increase. */}
                     {!chipPending
                       ? "✓"
-                      : suggestion.suggestedWeightKg > currentWeight
+                      : rises(suggestion.suggestedWeightKg, currentWeight)
                       ? "↑"
                       : "↓"}{" "}
                     {`${suggestion.suggestedWeightKg}kg`}
@@ -2100,7 +2125,7 @@ function SortableSetRow({
                         history, so it can still sit below the weight on the row. */}
                     {!chipPending
                       ? "✓"
-                      : suggestion.suggestedWeightKg > currentWeight
+                      : rises(suggestion.suggestedWeightKg, currentWeight)
                       ? "↑"
                       : "↓"}{" "}
                     {suggestion.suggestedWeightKg}kg — retry
@@ -2115,7 +2140,7 @@ function SortableSetRow({
                   >
                     {!chipPending
                       ? "✓"
-                      : (suggestion.suggestedReps ?? 0) > currentReps
+                      : rises(suggestion.suggestedReps ?? 0, currentReps)
                       ? "↑"
                       : "↓"}{" "}
                     {suggestion.suggestedReps} reps — retry

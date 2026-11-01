@@ -77,6 +77,25 @@ describe("SetEditView — a periodized endurance set", () => {
     expect(updateProgramSet.mock.calls[0][0].distanceMeters).toBe(4000);
   });
 
+  it("leaves an untouched time out of a distance-mode save too", async () => {
+    render(<SetEditView set={run({ durationSeconds: 1500, peakDurationSeconds: 1800 })} isRunning />);
+    await save();
+    expect(updateProgramSet.mock.calls[0][0].durationSeconds).toBeUndefined();
+  });
+
+  it("leaves an untouched time out of a time-mode save", async () => {
+    render(
+      <SetEditView
+        set={run({ distanceMeters: null, peakDistanceMeters: null, durationSeconds: 1500, peakDurationSeconds: 1800 })}
+        isRunning
+      />,
+    );
+    await save();
+    const sent = updateProgramSet.mock.calls[0][0];
+    expect(sent).toMatchObject({ anchor: "duration", distanceMeters: null });
+    expect(sent.durationSeconds).toBeUndefined();
+  });
+
   it("sends no anchor for a set that is not periodized", async () => {
     render(<SetEditView set={run({ peakDistanceMeters: null })} isRunning />);
     await save();
