@@ -1241,6 +1241,7 @@ export async function exportProgram(
         backAfter: pe.progressionBackoffAfter,
         readiness: pe.progressionReadiness,
         applyToPlan: pe.progressionApplyToPlan ?? false,
+        suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
         exercise: {
           name: pe.exercise.name,
           category: pe.exercise.category,
@@ -1310,6 +1311,7 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
             backAfter: pe.progressionBackoffAfter,
             readiness: pe.progressionReadiness,
             applyToPlan: pe.progressionApplyToPlan ?? false,
+            suppressEffortPrompt: pe.progressionSuppressEffortPrompt ?? false,
             exercise: {
               name: pe.exercise.name,
               category: pe.exercise.category,
@@ -1483,6 +1485,7 @@ export async function importProgram(
                 ? { progressionReadiness: slot.readiness }
                 : {}),
               progressionApplyToPlan: slot.applyToPlan ?? false,
+              progressionSuppressEffortPrompt: slot.suppressEffortPrompt ?? false,
               exerciseType: overrideType,
             })
             .returning({ id: programExercises.id });

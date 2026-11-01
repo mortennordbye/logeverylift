@@ -224,8 +224,10 @@ The in-workout effort prompt follows the same rule (`effortPromptSet`): it asks 
 
 This only silences the UI nudge. It does not change SI-10/SI-10a: a cap still decides clearing exactly as before, for any effort that does get logged some other way (the miss sheet's RIR chips).
 
+The flag travels with the program: `exportProgram` and `exportAllPrograms` write it as `suppressEffortPrompt` next to `applyToPlan`, and `importProgram` restores it. An export written before the field existed imports with the prompt shown.
+
 *Why:* SI-10's opt-in principle — "nobody is blocked by a setting they did not choose" — was previously expressed only through the cap itself. An exercise with no progression engagement could still carry a stale cap and get nagged anyway; an exercise with active progression could have a lifter who simply doesn't want to answer. Both are opt-outs the cap alone couldn't express.
-*Covered by:* none.
+*Covered by:* the export round-trip in `integration/progression.test.ts` ("export and import keep the effort-prompt suppression") and `validators.test.ts` ("round-trips the gate and the opt-in").
 
 ### SI-43a — Suppressing the prompt while a cap and an active advance both stand leaves the exercise permanently unknown
 Turning the toggle on for an exercise that still has `progressionAdvance` other than `none` and a `targetRir` cap prescribed does not touch the cap or the advance — it only stops anything from ever supplying the RIR that SI-10 reads. Per SI-10a, every session on that exercise's deciding set then resolves to `unknown`, indefinitely: never a clear, never a miss.

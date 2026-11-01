@@ -3,11 +3,15 @@ import {
   exercisePrs,
   programExercises,
   programSets,
+  programs,
   workoutSets,
 } from "@/db/schema";
 import {
   addProgramSet,
   applyProgressionToPlan,
+  exportAllPrograms,
+  exportProgram,
+  importProgram,
   setProgramExerciseProgression,
   updateProgramExerciseIncrement,
 } from "@/lib/actions/programs";
@@ -411,5 +415,31 @@ describe("getWorkoutInsight on a low-readiness day", () => {
   it("claims no adjustment when every exercise ignores readiness", async () => {
     const insight = await lowReadinessDay("ignore");
     expect(insight.detail).not.toMatch(/reduced|lighter|increases/);
+  });
+});
+
+describe("export and import keep the effort-prompt suppression (SI-43)", () => {
+  it("restores the flag on the imported copy, from either export", async () => {
+    await db
+      .update(programExercises)
+      .set({ progressionSuppressEffortPrompt: true })
+      .where(eq(programExercises.id, slotId));
+
+    const one = await exportProgram(programId);
+    const all = await exportAllPrograms();
+    if (!one.success || !all.success) throw new Error("export failed");
+    expect(one.data.program.exercises[0].suppressEffortPrompt).toBe(true);
+    expect(all.data.programs[0].exercises[0].suppressEffortPrompt).toBe(true);
+
+    const imported = await importProgram(one.data);
+    expect(imported.success).toBe(true);
+    const rows = await db
+      .select({ id: programExercises.id, flag: programExercises.progressionSuppressEffortPrompt })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programs.userId, userId));
+    expect(rows).toHaveLength(2);
+    const copy = rows.find((r) => r.id !== slotId);
+    expect(copy?.flag).toBe(true);
   });
 });

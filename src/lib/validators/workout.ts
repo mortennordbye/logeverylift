@@ -515,6 +515,7 @@ const importProgramEntrySchema = z.object({
             .catch(undefined),
           readiness: z.enum(PROGRESSION_READINESSES).optional().catch(undefined),
           applyToPlan: z.boolean().optional().catch(false),
+          suppressEffortPrompt: z.boolean().optional().catch(false),
           exercise: z.object({
             name: z.string().min(1).max(100),
             category: z.enum(["strength", "cardio", "flexibility"]).catch("strength"),
