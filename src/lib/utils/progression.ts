@@ -421,6 +421,13 @@ export type ProgramSetData = {
    * Missing entries fall back to `targetReps`.
    */
   slotTargets?: Record<number, number | null>;
+  /**
+   * Every working set's planned weight in this slot, keyed by set number. Read
+   * only to stop a missed session logged above the plan (a one-off heavy
+   * single) from becoming the base of a held or retry suggestion. Missing =
+   * no plan known, and the logged weight stands.
+   */
+  plannedWeights?: Record<number, number | null>;
 };
 
 /**
@@ -1361,6 +1368,21 @@ export function buildSuggestion(
 
   const roundToInc = (kg: number) => roundToNearest(kg, incrementKg);
 
+  // The plan the logged weights are measured against. Under scope "all" the
+  // exercise works at its heaviest set, so that is the plan a session's load
+  // (the max across its sets) is compared with.
+  const planFor = (setNumber: number): number | null =>
+    ps.plannedWeights?.[setNumber] ?? null;
+  const plannedValues = Object.values(ps.plannedWeights ?? {}).filter(
+    (kg): kg is number => kg != null,
+  );
+  const slotPlan =
+    scope === "all"
+      ? plannedValues.length > 0
+        ? Math.max(...plannedValues)
+        : null
+      : planFor(ps.setNumber);
+
   // ── Estimated 1RM from the reference set ───────────────────────────────────
   // Display only, and gated on logged effort (SI-D1). Epley on a set the lifter
   // stopped four reps short of failure is not a 1RM estimate, and with effort
@@ -1564,7 +1586,14 @@ export function buildSuggestion(
   ) {
     const prev = outcomes[1];
 
-    if (prev.loadKg > decidingLoad + LOAD_EPSILON) {
+    // A heavier session that missed above the plan is a one-off attempt, not
+    // ground to reclaim: retrying it would put a failed heavy single back on
+    // the bar. One that cleared the heavier weight still counts.
+    const prevMissedAbovePlan =
+      prev.status === "missed" &&
+      slotPlan != null &&
+      prev.loadKg > slotPlan + LOAD_EPSILON;
+    if (prev.loadKg > decidingLoad + LOAD_EPSILON && !prevMissedAbovePlan) {
       // Weight decreased — only retry if the drop was a one-off, not a deload
       const prevFailStreak = countConsecutiveMisses(outcomes.slice(1));
       const wasIntentionalDeload = prevFailStreak >= backoffAfter - 1;
@@ -1620,6 +1649,16 @@ export function buildSuggestion(
     ...basedOn,
     reason: heldReason,
   });
+  // What a hold holds at. Normally what this set did last time; but when that
+  // session missed above the plan, the plan is what is being held, and the
+  // heavier number stays only in "Last:" as the fact it is.
+  const thisPlan = planFor(ps.setNumber);
+  const holdWeight =
+    latestOutcome.status === "missed" &&
+    thisPlan != null &&
+    baseWeight > thisPlan + LOAD_EPSILON
+      ? thisPlan
+      : baseWeight;
 
   switch (advance) {
     case "none":
@@ -1658,7 +1697,7 @@ export function buildSuggestion(
           reason: "progressed",
         };
       } else {
-        suggestion = held(baseWeight);
+        suggestion = held(holdWeight);
       }
       break;
 
@@ -1678,7 +1717,7 @@ export function buildSuggestion(
           reason: "progressed-reps",
         };
       } else {
-        suggestion = held(baseWeight);
+        suggestion = held(holdWeight);
       }
       break;
     }
@@ -1698,7 +1737,7 @@ export function buildSuggestion(
       const target = ps.targetReps ?? reference.targetReps ?? null;
 
       if (!shouldProgress) {
-        suggestion = held(baseWeight);
+        suggestion = held(holdWeight);
         break;
       }
 

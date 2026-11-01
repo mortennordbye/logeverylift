@@ -505,6 +505,63 @@ describe("buildSuggestion — readiness modulation", () => {
   });
 });
 
+// ─── A missed session above the plan is not a base ─────────────────────────────
+
+describe("buildSuggestion — a missed heavy session above the plan", () => {
+  const plan80 = makePs({ plannedWeights: { 1: 80 } });
+
+  it("holds at the planned weight, not at a heavy single that missed", () => {
+    const rows = [
+      makeSession({ weightKg: "100.00", actualReps: 1, date: "2024-01-03" }),
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-02" }),
+    ];
+    const result = buildSuggestion(rows, plan80, null);
+    expect(result?.reason).toBe("held");
+    expect(result?.suggestedWeightKg).toBe(80);
+    // "Last:" still reports what was actually lifted.
+    expect(result?.basedOnWeightKg).toBe(100);
+  });
+
+  it("does not offer to retry a heavy single that missed", () => {
+    const rows = [
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-03" }),
+      makeSession({ weightKg: "100.00", actualReps: 1, date: "2024-01-02" }),
+    ];
+    const result = buildSuggestion(rows, plan80, null);
+    expect(result?.reason).not.toBe("retry");
+  });
+
+  it("still retries a heavier weight that was cleared", () => {
+    const rows = [
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-03" }),
+      makeSession({ weightKg: "85.00", actualReps: 8, date: "2024-01-02" }),
+    ];
+    const result = buildSuggestion(rows, plan80, null);
+    expect(result?.reason).toBe("retry");
+    expect(result?.suggestedWeightKg).toBe(85);
+  });
+
+  it("measures a scope-all retry against the heaviest planned set", () => {
+    const ps = makePs({ plannedWeights: { 1: 80, 2: 85 } });
+    const rows = [
+      makeMultiSession([{ weightKg: "80.00" }, { weightKg: "80.00" }], { date: "2024-01-03" }),
+      makeMultiSession([{ weightKg: "85.00", actualReps: 6 }, { weightKg: "85.00", actualReps: 6 }], {
+        date: "2024-01-02",
+      }),
+    ];
+    // 85 is the plan for set 2, so a miss there is not above the plan.
+    expect(buildSuggestion(rows, ps, null)?.reason).toBe("retry");
+  });
+
+  it("keeps the logged weight when no plan is known", () => {
+    const rows = [
+      makeSession({ weightKg: "100.00", actualReps: 1, date: "2024-01-03" }),
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-02" }),
+    ];
+    expect(buildSuggestion(rows, makePs(), null)?.suggestedWeightKg).toBe(100);
+  });
+});
+
 // ─── Bug fix: deload → retry false positive ───────────────────────────────────
 
 describe("buildSuggestion — deload→retry guard", () => {

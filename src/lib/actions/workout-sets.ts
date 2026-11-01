@@ -1708,6 +1708,7 @@ export async function getProgressiveSuggestions(
         programExerciseId: programExercises.id,
         setNumber: programSets.setNumber,
         targetReps: programSets.targetReps,
+        weightKg: programSets.weightKg,
         repRangeMin: programSets.repRangeMin,
         repRangeMax: programSets.repRangeMax,
         durationSeconds: programSets.durationSeconds,
@@ -1962,6 +1963,10 @@ export async function getProgressiveSuggestions(
         // Each logged row is judged against its own set's target, so one
         // session reads the same for every set of the slot.
         slotTargets: Object.fromEntries(working.map((w) => [w.setNumber, w.targetReps])),
+        // Only consulted when a session missed above the plan.
+        plannedWeights: Object.fromEntries(
+          working.map((w) => [w.setNumber, w.weightKg != null ? Number(w.weightKg) : null]),
+        ),
         // E-13. Compared against the session's own plain date, so the
         // granularity is a day: a session logged earlier on the day the setting
         // changed still counts. The engine holds anything older inert rather

@@ -346,6 +346,12 @@ When the previous session was heavier than the most recent one, suggest returnin
 *Why:* the common case is a bad day or a loading mistake, and the lifter wants their weight back. The guard exists because immediately proposing the weight someone just deloaded away from would undo the deload.
 *Covered by:* `progressive-suggestions.test.ts` — the "recovery (retry)" and "deload→retry guard" blocks.
 
+### SI-18a — A missed session above the plan is never a base
+A session that **missed** at a load heavier than the plan, such as a one-off heavy single, is not ground to reclaim and not a weight to hold at. SI-18 does not offer it back, and a hold that follows it holds at the planned weight instead of the logged one. The plan is this set's planned weight for the hold, and the heaviest planned working set under scope `all` for the retry, since that is what a session's load is measured as there (`plannedWeights` on `ProgramSetData`). A heavier session that **cleared** is still offered back. "Last:" keeps reporting what was lifted. With no planned weight known, the logged weight stands.
+
+*Why:* the base used to be whatever was logged last, so one heavy single could resurface as a "retry 100 kg" chip the next session, built from a set that never met its target.
+*Covered by:* `progressive-suggestions.test.ts` — "a missed heavy session above the plan"; `integration/progression.test.ts` — "holds at the planned weight after a heavy single that missed".
+
 ### SI-19 — Same weight with fewer reps is offered back
 When the previous session used the same weight but more reps, suggest matching that rep count.
 

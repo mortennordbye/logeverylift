@@ -109,6 +109,17 @@ describe("getProgressiveSuggestions", () => {
     }
   });
 
+  it("holds at the planned weight after a heavy single that missed", async () => {
+    await logCompletedSession(daysAgo(4), allClear());
+    await logCompletedSession(daysAgo(2), [{ reps: 1, weightKg: "100" }, { reps: 8 }, { reps: 8 }]);
+
+    const r = await getProgressiveSuggestions(programId);
+    if (!r.success) throw new Error(r.error);
+    expect(r.data[setIds[0]]?.reason).toBe("held");
+    expect(r.data[setIds[0]]?.suggestedWeightKg).toBe(80);
+    expect(r.data[setIds[0]]?.basedOnWeightKg).toBe(100);
+  });
+
   it("returns nothing for a program the caller does not own", async () => {
     await logCompletedSession(daysAgo(4), allClear());
     await logCompletedSession(daysAgo(2), allClear());
