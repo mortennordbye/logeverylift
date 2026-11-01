@@ -228,7 +228,6 @@ export function WorkoutSetsClient({
   const [increment, setIncrement] = useState(initialIncrement);
   const [incrementReps, setIncrementReps] = useState(initialIncrementReps);
   const [typeOverride, setTypeOverride] = useState<string | null>(initialTypeOverride);
-  const [notes, setNotes] = useState(initialNotes ?? "");
   const [savedNotes, setSavedNotes] = useState(initialNotes ?? "");
   const [applyToPlan, setApplyToPlan] = useState(initialApplyToPlan);
   const [suppressEffortPrompt, setSuppressEffortPrompt] = useState(
@@ -648,16 +647,21 @@ export function WorkoutSetsClient({
     router.refresh();
   }
 
-  async function handleNotesBlur() {
-    const next = notes.trim();
+  // Uncontrolled on purpose: the text lives in the DOM and is read on blur.
+  // Controlled, a re-render that landed while the lifter was typing (the nav's
+  // prefetches and badge fetch arrive just after hydration) could put React's
+  // stale value back over what they had typed, and the blur then saved nothing.
+  async function handleNotesBlur(e: React.FocusEvent<HTMLTextAreaElement>) {
+    const el = e.currentTarget;
+    const next = el.value.trim();
     if (next === savedNotes) return;
     const result = await callAction(updateProgramExerciseNotes({ programExerciseId, notes: next }));
     if (!result.success) {
-      setNotes(savedNotes);
+      el.value = savedNotes;
       saveFailed();
       return;
     }
-    setNotes(next);
+    el.value = next;
     setSavedNotes(next);
   }
 
@@ -827,8 +831,8 @@ export function WorkoutSetsClient({
         ) : (
           <textarea
             aria-label="Setup notes"
-            value={notes}
-            onChange={(e) => setNotes(e.target.value.slice(0, 500))}
+            defaultValue={savedNotes}
+            maxLength={500}
             onBlur={handleNotesBlur}
             placeholder="Setup notes: seat height, grip, cues"
             rows={2}
