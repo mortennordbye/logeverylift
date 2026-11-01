@@ -1,6 +1,7 @@
 "use client";
 
 import { authClient } from "@/lib/auth-client";
+import { signInRedirect } from "@/lib/utils/sign-in-redirect";
 import { Loader2 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -41,15 +42,8 @@ function LoginFormContent() {
       return;
     }
 
-    // Only follow same-origin relative paths. Anything else (an absolute URL,
-    // protocol-relative "//evil.com", or "/\evil.com") is an open-redirect /
-    // phishing pivot and is discarded in favour of the home page.
-    const raw = searchParams.get("from") ?? "/";
-    const from =
-      raw.startsWith("/") && !raw.startsWith("//") && !raw.startsWith("/\\")
-        ? raw
-        : "/";
-    window.location.href = from;
+    const target = signInRedirect(result.data, searchParams.get("from"));
+    if (target) window.location.href = target;
   }
 
   return (

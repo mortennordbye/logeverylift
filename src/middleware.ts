@@ -12,7 +12,7 @@ const PUBLIC_PATHS = [
   "/api/health",
   "/api/ready",
   // MCP server: clients authenticate with an OAuth Bearer token (not the
-  // session cookie), so skip the cookie check here — withMcpAuth enforces auth
+  // session cookie), so skip the cookie check here — requireMcpAuth enforces auth
   // inside the route. The .well-known routes serve OAuth discovery metadata and
   // must be reachable by unauthenticated MCP clients.
   "/api/mcp",

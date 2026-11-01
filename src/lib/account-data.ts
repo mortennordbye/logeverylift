@@ -14,8 +14,10 @@ import {
   inviteTokens,
   nudges,
   oauthAccessTokens,
-  oauthApplications,
+  oauthClientResources,
+  oauthClients,
   oauthConsents,
+  oauthRefreshTokens,
   programExercises,
   programSets,
   programShares,
@@ -120,14 +122,23 @@ export async function collectUserData(userId: string) {
       .from(programShares)
       .where(or(eq(programShares.sharedByUserId, userId), eq(programShares.sharedWithUserId, userId))),
     invite_token: await db.select().from(inviteTokens).where(eq(inviteTokens.createdBy, userId)),
-    oauth_application: await db
-      .select(columnsWithout(oauthApplications, ["clientSecret"]))
-      .from(oauthApplications)
-      .where(eq(oauthApplications.userId, userId)),
+    oauth_client: await db
+      .select(columnsWithout(oauthClients, ["clientSecret"]))
+      .from(oauthClients)
+      .where(eq(oauthClients.userId, userId)),
+    oauth_client_resource: await db
+      .select(getTableColumns(oauthClientResources))
+      .from(oauthClientResources)
+      .innerJoin(oauthClients, eq(oauthClients.clientId, oauthClientResources.clientId))
+      .where(eq(oauthClients.userId, userId)),
     oauth_access_token: await db
-      .select(columnsWithout(oauthAccessTokens, ["accessToken", "refreshToken"]))
+      .select(columnsWithout(oauthAccessTokens, ["token"]))
       .from(oauthAccessTokens)
       .where(eq(oauthAccessTokens.userId, userId)),
+    oauth_refresh_token: await db
+      .select(columnsWithout(oauthRefreshTokens, ["token", "rotationReplayResponse"]))
+      .from(oauthRefreshTokens)
+      .where(eq(oauthRefreshTokens.userId, userId)),
     oauth_consent: await db.select().from(oauthConsents).where(eq(oauthConsents.userId, userId)),
   };
 }
@@ -172,4 +183,15 @@ export async function handOverSharedCustomExercises(userId: string) {
  */
 export async function purgeExpiredSessions() {
   await db.delete(sessions).where(lt(sessions.expiresAt, new Date()));
+}
+
+/**
+ * Delete expired MCP access and refresh tokens. Every token refresh writes a
+ * new pair and nothing removes the old ones, so a connected assistant would
+ * otherwise grow these tables for as long as the account exists.
+ */
+export async function purgeExpiredOAuthTokens() {
+  const now = new Date();
+  await db.delete(oauthAccessTokens).where(lt(oauthAccessTokens.expiresAt, now));
+  await db.delete(oauthRefreshTokens).where(lt(oauthRefreshTokens.expiresAt, now));
 }

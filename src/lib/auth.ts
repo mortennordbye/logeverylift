@@ -1,9 +1,14 @@
 import { db } from "@/db";
 import {
   accounts,
+  jwks,
   oauthAccessTokens,
-  oauthApplications,
+  oauthClientAssertions,
+  oauthClientResources,
+  oauthClients,
   oauthConsents,
+  oauthRefreshTokens,
+  oauthResources,
   sessions,
   users,
   verifications,
@@ -14,7 +19,11 @@ import { env, trustedOrigins } from "@/lib/env";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin, mcp } from "better-auth/plugins";
+import { admin, jwt } from "better-auth/plugins";
+import { mcp } from "@better-auth/mcp";
+
+/** The MCP endpoint's URL: the audience its access tokens are bound to. */
+export const MCP_RESOURCE = `${env.BETTER_AUTH_URL}/api/mcp`;
 
 export const auth = betterAuth({
   database: drizzleAdapter(db, {
@@ -24,9 +33,14 @@ export const auth = betterAuth({
       session: sessions,
       account: accounts,
       verification: verifications,
-      oauthApplication: oauthApplications,
+      jwks,
+      oauthClient: oauthClients,
+      oauthResource: oauthResources,
+      oauthClientResource: oauthClientResources,
+      oauthRefreshToken: oauthRefreshTokens,
       oauthAccessToken: oauthAccessTokens,
       oauthConsent: oauthConsents,
+      oauthClientAssertion: oauthClientAssertions,
     },
   }),
   emailAndPassword: {
@@ -75,14 +89,26 @@ export const auth = betterAuth({
       defaultRole: "user",
       adminRole: ["admin"],
     }),
+    // Signs the MCP access tokens; requireMcpAuth checks them against its JWKS.
+    jwt(),
     // OAuth provider for the MCP server (src/app/api/[transport]). MCP clients
-    // run the OAuth flow against this app; unauthenticated MCP calls are sent to
-    // the login page. Adds the oauth_application / oauth_access_token /
-    // oauth_consent tables (see src/db/schema/auth.ts).
+    // register themselves, send the user through /login and /oauth/consent, and
+    // get a token bound to MCP_RESOURCE. Tables: see src/db/schema/auth.ts.
     mcp({
       loginPage: "/login",
+      consentPage: "/oauth/consent",
+      resource: MCP_RESOURCE,
+      // MCP clients register without a session (RFC 7591), as they did on the
+      // 1.6 plugin. Access still needs the user's login and consent.
+      allowDynamicClientRegistration: true,
+      allowUnauthenticatedClientRegistration: true,
+      // Desktop clients (Claude Code, Cursor) register a loopback callback
+      // without saying they are native; "web" would reject it.
+      clientRegistrationDefaultApplicationType: "infer",
     }),
   ],
+  // The jwt plugin's GET /token hands a session a JWT; nothing here needs it.
+  disabledPaths: ["/token"],
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
   trustedOrigins: trustedOrigins(),

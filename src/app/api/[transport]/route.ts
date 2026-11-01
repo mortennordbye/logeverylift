@@ -5,26 +5,28 @@
  * profile/weight to any MCP client (Claude Desktop/Code, etc.). The endpoint
  * resolves to /api/mcp.
  *
- * Auth: `withMcpAuth` (Better Auth MCP plugin) validates the OAuth bearer token
- * on every request and hands us the access-token record. We pass only
- * `session.userId` into the tools — userId is never a tool parameter, so a
+ * Auth: `requireMcpAuth` (@better-auth/mcp) verifies the OAuth bearer token on
+ * every request (signature against the app's JWKS, issuer, expiry, and an
+ * audience of MCP_RESOURCE) and hands us its claims. We pass only the token's
+ * subject, the user id, into the tools — userId is never a tool parameter, so a
  * client can never act on another user's data. Unauthenticated calls get a 401
- * that kicks off the OAuth flow (see the .well-known discovery routes).
+ * whose WWW-Authenticate header starts the OAuth flow (see the .well-known
+ * discovery routes).
  */
 
-import { auth } from "@/lib/auth";
+import { MCP_RESOURCE, auth } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/mcp/rate-limit";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
-import { withMcpAuth } from "better-auth/plugins";
+import { requireMcpAuth } from "@better-auth/mcp";
 import { createMcpHandler } from "mcp-handler";
 
-const handler = withMcpAuth(auth, (req, session) => {
-  // withMcpAuth only invokes us with a validated token, but never register
+function serve(req: Request, claims: { sub?: string }) {
+  // requireMcpAuth only invokes us with a verified token, but never register
   // user-scoped tools without a concrete userId — a falsy id must fail closed,
   // not fall through to queries scoped to `undefined`.
-  const userId = session.userId;
+  const userId = claims.sub;
   if (!userId) {
     return new Response(
       JSON.stringify({
@@ -58,6 +60,8 @@ const handler = withMcpAuth(auth, (req, session) => {
     {},
     { basePath: "/api" },
   )(req);
-});
+}
+
+const handler = requireMcpAuth(auth, serve, { resource: MCP_RESOURCE });
 
 export { handler as DELETE, handler as GET, handler as POST };

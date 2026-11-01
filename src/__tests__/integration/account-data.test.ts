@@ -1,7 +1,22 @@
 import { db } from "@/db";
-import { accounts, exercises, gyms, sessions, users, workoutSets } from "@/db/schema";
+import {
+  accounts,
+  exercises,
+  gyms,
+  oauthAccessTokens,
+  oauthClients,
+  oauthRefreshTokens,
+  sessions,
+  users,
+  workoutSets,
+} from "@/db/schema";
 import { exportMyData } from "@/lib/actions/account";
-import { collectUserData, handOverSharedCustomExercises, purgeExpiredSessions } from "@/lib/account-data";
+import {
+  collectUserData,
+  handOverSharedCustomExercises,
+  purgeExpiredOAuthTokens,
+  purgeExpiredSessions,
+} from "@/lib/account-data";
 import { eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createExercise, createSession, createUser } from "./factories";
@@ -55,8 +70,25 @@ describe("collectUserData", () => {
       expiresAt: now, createdAt: now, updatedAt: now,
     });
 
+    // An MCP client the user connected, with its tokens.
+    await db.insert(oauthClients).values({
+      id: "cl-1", clientId: "client-1", clientSecret: "client-secret", userId: meId,
+      name: "Claude", redirectUris: ["http://localhost/cb"],
+    });
+    await db.insert(oauthRefreshTokens).values({
+      id: "rt-1", token: "refresh-secret", rotationReplayResponse: "replay-secret", clientId: "client-1",
+      userId: meId, scopes: ["openid"], expiresAt: now, createdAt: now,
+    });
+    await db.insert(oauthAccessTokens).values({
+      id: "at-1", token: "access-secret", clientId: "client-1", userId: meId, refreshId: "rt-1",
+      scopes: ["openid"], expiresAt: now, createdAt: now,
+    });
+
     const data = await collectUserData(meId);
     expect(data.user.weightKg).toBe(81);
+    expect(data.oauth_client.map((c) => c.name)).toEqual(["Claude"]);
+    expect(data.oauth_access_token.map((t) => t.id)).toEqual(["at-1"]);
+    expect(data.oauth_refresh_token.map((t) => t.id)).toEqual(["rt-1"]);
     expect(data.workout_sessions.map((s) => s.id)).toEqual([mine.session.id]);
     expect(data.workout_sets.map((s) => s.id)).toEqual([mine.set.id]);
     expect(data.session[0].ipAddress).toBe("10.0.0.1");
@@ -64,6 +96,9 @@ describe("collectUserData", () => {
     const json = JSON.stringify(data);
     expect(json).not.toContain("hash-secret");
     expect(json).not.toContain("token-secret");
+    for (const secret of ["client-secret", "refresh-secret", "replay-secret", "access-secret"]) {
+      expect(json).not.toContain(secret);
+    }
     expect(json).not.toContain(otherId);
   });
 });
@@ -116,5 +151,20 @@ describe("purgeExpiredSessions", () => {
     }
     await purgeExpiredSessions();
     expect((await db.select({ id: sessions.id }).from(sessions)).map((s) => s.id)).toEqual(["live"]);
+  });
+});
+
+describe("purgeExpiredOAuthTokens", () => {
+  it("deletes expired MCP tokens and keeps live ones", async () => {
+    const now = Date.now();
+    await db.insert(oauthClients).values({ id: "cl-1", clientId: "client-1", redirectUris: ["http://localhost/cb"] });
+    for (const [id, expiresAt] of [["old", now - 1000], ["live", now + 60_000]] as const) {
+      const common = { clientId: "client-1", userId: meId, scopes: ["openid"], createdAt: new Date(now) };
+      await db.insert(oauthRefreshTokens).values({ id: `rt-${id}`, token: `rt-${id}`, expiresAt: new Date(expiresAt), ...common });
+      await db.insert(oauthAccessTokens).values({ id: `at-${id}`, token: `at-${id}`, expiresAt: new Date(expiresAt), ...common });
+    }
+    await purgeExpiredOAuthTokens();
+    expect((await db.select({ id: oauthAccessTokens.id }).from(oauthAccessTokens)).map((t) => t.id)).toEqual(["at-live"]);
+    expect((await db.select({ id: oauthRefreshTokens.id }).from(oauthRefreshTokens)).map((t) => t.id)).toEqual(["rt-live"]);
   });
 });
