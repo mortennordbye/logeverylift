@@ -7,6 +7,7 @@ import {
   presetSetDefaults,
   toAxes,
 } from "@/lib/utils/progression-presets";
+import { describeProgressionRule, effectiveAdvance, effectiveRegress, toAdvance, toRegress } from "@/lib/utils/progression";
 
 /** The raw column values an exercise with nothing configured carries. */
 const defaults = {
@@ -179,6 +180,46 @@ describe("presetSetDefaults", () => {
         const axes = toAxes({ ...defaults, ...p.axes, hasRange, hasEffortCap });
         expect(matchPreset(axes)?.id, `${p.id} from ${JSON.stringify(start)}`).toBe(p.id);
       }
+    }
+  });
+});
+
+describe("the two shapes migration 0051 left behind", () => {
+  it("names a rep ladder on the default two-session gate", () => {
+    // reps with progression_required_hits null: the engine gates on REQUIRED_HITS.
+    expect(presetLabel(toAxes({ ...defaults, advance: "reps", regress: "hold" }))).toBe(
+      "Rep ladder, confirmed",
+    );
+    expect(presetLabel(toAxes({ ...defaults, advance: "reps", regress: "hold", requiredHits: 1 }))).toBe(
+      "Rep ladder",
+    );
+  });
+
+  it("reads a timed exercise left on load with a back-off as Duration", () => {
+    // What the sheet does on open: snap both axes to what the engine can run.
+    const advance = effectiveAdvance(toAdvance("load"), { isTimed: true, isRunning: false });
+    const regress = effectiveRegress(toRegress("backoff"), advance);
+    expect(regress).toBe("hold");
+    expect(presetLabel(toAxes({ ...defaults, advance, regress }))).toBe("Duration");
+  });
+
+  it("does not promise a back-off a timed or distance scheme cannot make", () => {
+    for (const advance of ["duration", "distance"]) {
+      const rule = describeProgressionRule({
+        advance,
+        incrementKg: null,
+        incrementReps: 0,
+        targetReps: null,
+        requiredHits: 2,
+        scope: "all",
+        effortCap: null,
+        regress: "backoff",
+        backoffPct: 10,
+        backoffAfter: 3,
+        readiness: "hold",
+        anchored: false,
+      });
+      expect(rule).not.toMatch(/Back off/);
     }
   });
 });

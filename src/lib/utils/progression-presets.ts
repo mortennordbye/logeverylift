@@ -125,6 +125,18 @@ export const PROGRESSION_PRESETS: readonly ProgressionPreset[] = [
     measures: ["reps"],
   },
   {
+    // The rep ladder as it ran before the rebuild, gated on two sessions. It
+    // is what migration 0051 left every rep-mode exercise on (a null gate is
+    // REQUIRED_HITS), so it gets a name rather than reading Custom.
+    id: "rep-ladder-confirmed",
+    label: "Rep ladder, confirmed",
+    description: "Same, but prove the reps twice before adding one.",
+    axes: { advance: "reps", scope: "all", requiredHits: REQUIRED_HITS, ...HOLD, readiness: "hold" },
+    requiresRange: null,
+    requiresEffortCap: false,
+    measures: ["reps"],
+  },
+  {
     id: "duration",
     label: "Duration",
     description: "Hold it longer. Planks, carries, steady cardio.",

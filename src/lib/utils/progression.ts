@@ -166,6 +166,21 @@ export function effectiveAdvance(
 }
 
 /**
+ * The regress an exercise can actually run. A back-off cuts the load, so only
+ * the advances that progress load or reps can do one; a timed or distance
+ * scheme left on "backoff" (migration 0051 wrote that for timed exercises on
+ * the old weight mode) holds instead. Like `effectiveAdvance`, the sheet, the
+ * rule sentence and the engine all read through this, and the stored column is
+ * not rewritten.
+ */
+export function effectiveRegress(
+  regress: ProgressionRegress,
+  advance: ProgressionAdvance,
+): ProgressionRegress {
+  return advance === "load" || advance === "double" || advance === "reps" ? regress : "hold";
+}
+
+/**
  * Whether a settings write changes how a session is judged, and so has to
  * stamp `progression_config_at` (E-13). Only the advance, the scope and the
  * gate do; regress, readiness and the back-off numbers act on the verdicts
@@ -1087,7 +1102,7 @@ export function describeProgressionRule(input: {
   // the reps stall progresses one dimension and regresses another.
   const pct = input.backoffPct ?? DELOAD_PCT;
   const after = input.backoffAfter ?? DELOAD_THRESHOLD;
-  if (toRegress(input.regress) === "backoff") {
+  if (effectiveRegress(toRegress(input.regress), toAdvance(input.advance)) === "backoff") {
     rule += ` Back off ${pct}% after ${after} workout${after === 1 ? "" : "s"} short of target.`;
   }
 
@@ -1469,9 +1484,7 @@ export function buildSuggestion(
   // A back-off cuts the load, so it needs a load to cut. Duration and distance
   // sets carry a weight only incidentally, and the two advances that suggest
   // nothing have nothing to back off from either.
-  const canDeload =
-    regress === "backoff" &&
-    (advance === "load" || advance === "double" || advance === "reps");
+  const canDeload = effectiveRegress(regress, advance) === "backoff";
   // Recovering ground (SI-18) asks whether the load or the reps dropped, which
   // is a question about what is being progressed rather than about whether a
   // back-off is configured. The two used to share one flag.

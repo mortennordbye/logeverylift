@@ -33,6 +33,7 @@ import {
   REQUIRED_HITS,
   describeProgressionRule,
   effectiveAdvance,
+  effectiveRegress,
   pendingProgressions,
   type PendingProgression,
   type ProgressionAdvance,
@@ -247,14 +248,16 @@ export function WorkoutSetsClient({
     // Snap a stale advance onto something the exercise can actually do. A
     // strength scheme on a plank has no measure to move. The engine reads
     // through the same function, so the sheet shows what actually runs.
+    const advance = effectiveAdvance(toAdvance(initialAdvance), {
+      isTimed: !!exerciseIsTimed,
+      isRunning: exerciseCategory === "cardio" && !exerciseIsTimed,
+    });
     return {
-      advance: effectiveAdvance(toAdvance(initialAdvance), {
-        isTimed: !!exerciseIsTimed,
-        isRunning: exerciseCategory === "cardio" && !exerciseIsTimed,
-      }),
+      advance,
       scope: toScope(initialScope),
       requiredHits: initialRequiredHits,
-      regress: toRegress(initialRegress),
+      // Same snap for the regress: a timed or distance scheme cannot back off.
+      regress: effectiveRegress(toRegress(initialRegress), advance),
       backoffPct: initialBackoffPct ?? DELOAD_PCT,
       backoffAfter: initialBackoffAfter ?? DELOAD_THRESHOLD,
       readiness: toReadiness(initialReadiness),
@@ -1553,6 +1556,11 @@ export function WorkoutSetsClient({
                       </div>
 
 
+                      {/* A back-off cuts the load, which only a reps scheme
+                          has to cut (effectiveRegress), so a timed or distance
+                          exercise is not offered one. */}
+                      {isRepsMeasure && (
+                      <>
                       <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
                         <TrendingDownIcon className="h-3.5 w-3.5" aria-hidden="true" />
                         When you keep missing
@@ -1617,6 +1625,9 @@ export function WorkoutSetsClient({
                             )}
                           </div>
                         </>
+                      )}
+
+                      </>
                       )}
 
                       <p className="text-xs text-muted-foreground uppercase tracking-wider px-4 pt-2 pb-1 flex items-center gap-1.5">
