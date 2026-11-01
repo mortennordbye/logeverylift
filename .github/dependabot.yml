@@ -22,9 +22,6 @@ updates:
     ignore:
       - dependency-name: "better-auth"
         versions: [">=1.7.0"]
-      # Past 1.59, some server-action responses never report finished, so e2e settle() times out; see BACKLOG.md.
-      - dependency-name: "@playwright/test"
-        versions: [">=1.60.0"]
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

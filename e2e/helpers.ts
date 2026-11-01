@@ -1,4 +1,4 @@
-import { expect, type Locator, type Page, type Request } from "@playwright/test";
+import { expect, type Locator, type Page, type Request, type Response } from "@playwright/test";
 
 /**
  * Tap a control that saves through Server Actions, and wait for every write it
@@ -46,19 +46,25 @@ export async function tapAndSave(
   let inFlight = 0;
   let started = 0;
   let lastActivity = Date.now();
+  // A request settles once, at whichever of the events below comes first.
+  const tracked = new Set<Request>();
   const onRequest = (r: Request) => {
     if (!isAction(r)) return;
+    tracked.add(r);
     inFlight++;
     started++;
     lastActivity = Date.now();
   };
   const onSettled = (r: Request) => {
-    if (!isAction(r)) return;
+    if (!tracked.delete(r)) return;
     inFlight--;
     lastActivity = Date.now();
   };
+  // Settled at the response headers, as in `trackActions` below.
+  const onResponse = (res: Response) => onSettled(res.request());
 
   page.on("request", onRequest);
+  page.on("response", onResponse);
   page.on("requestfinished", onSettled);
   page.on("requestfailed", onSettled);
 
@@ -66,6 +72,7 @@ export async function tapAndSave(
     for (let attempt = 0; attempt < attempts; attempt++) {
       started = 0;
       inFlight = 0;
+      tracked.clear();
       await control.click();
 
       // A tap that lands while the route is re-rendering is accepted and then
@@ -96,6 +103,7 @@ export async function tapAndSave(
     );
   } finally {
     page.off("request", onRequest);
+    page.off("response", onResponse);
     page.off("requestfinished", onSettled);
     page.off("requestfailed", onSettled);
   }
@@ -177,6 +185,11 @@ export function trackActions(page: Page, quietMs = 500): () => Promise<void> {
     inFlight--;
     lastActivity = Date.now();
   };
+  // Done at the response headers: Next sends them only after the action has
+  // run, so the write is in. Waiting for the body is not safe: a client
+  // navigation can drop it mid-stream, and on Playwright 1.64 that request
+  // then reports neither finished nor failed.
+  page.on("response", (res) => done(res.request()));
   page.on("requestfinished", done);
   page.on("requestfailed", done);
   return async () => {
