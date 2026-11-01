@@ -1460,7 +1460,13 @@ export function buildSuggestion(
   //
   // A weighted hold is the exception: it progresses its load at a fixed time,
   // so a hold at a lighter load is not a clear at this one.
-  const weightedHold = advance === "duration" && currentLoad > 0;
+  // Decided from the plan when it is known, which is what the settings sheet
+  // reads too, so its sentence and the engine agree; from the log otherwise.
+  const weightedHold =
+    advance === "duration" &&
+    (ps.plannedWeights != null
+      ? Object.values(ps.plannedWeights).some((kg) => (kg ?? 0) > 0)
+      : currentLoad > 0);
   const compareLoad = (advance !== "duration" && advance !== "distance") || weightedHold;
   // What SI-11 compares against: the load the sets the scope reads are working
   // at, which under scope "all" is the same maximum currentLoad uses.
@@ -1607,13 +1613,22 @@ export function buildSuggestion(
   ) {
     const prev = outcomes[1];
 
-    // A heavier session that missed above the plan is a one-off attempt, not
-    // ground to reclaim: retrying it would put a failed heavy single back on
-    // the bar. One that cleared the heavier weight still counts.
+    // A heavier session that missed, at a load nothing in the plan or the
+    // engine led to, is a one-off attempt (a heavy single), not ground to
+    // reclaim. "Led to" is the plan or one increment above the heaviest load
+    // cleared in the window, which is as far as a chip ever goes: the plan
+    // alone is not enough, because taking a chip moves only the session
+    // unless the slot opted in to writing the plan, so the planned weight
+    // routinely sits well below what the lifter works at. One that cleared
+    // the heavier weight still counts.
+    const heaviestCleared = outcomes.reduce(
+      (m, o) => (o.status === "cleared" ? Math.max(m, o.loadKg) : m),
+      0,
+    );
     const prevMissedAbovePlan =
       prev.status === "missed" &&
       slotPlan != null &&
-      prev.loadKg > slotPlan + LOAD_EPSILON;
+      prev.loadKg > Math.max(slotPlan, heaviestCleared + incrementKg) + LOAD_EPSILON;
     if (prev.loadKg > decidingLoad + LOAD_EPSILON && !prevMissedAbovePlan) {
       // Weight decreased — only retry if the drop was a one-off, not a deload
       const prevFailStreak = countConsecutiveMisses(outcomes.slice(1));
@@ -1670,16 +1685,6 @@ export function buildSuggestion(
     ...basedOn,
     reason: heldReason,
   });
-  // What a hold holds at. Normally what this set did last time; but when that
-  // session missed above the plan, the plan is what is being held, and the
-  // heavier number stays only in "Last:" as the fact it is.
-  const thisPlan = planFor(ps.setNumber);
-  const holdWeight =
-    latestOutcome.status === "missed" &&
-    thisPlan != null &&
-    baseWeight > thisPlan + LOAD_EPSILON
-      ? thisPlan
-      : baseWeight;
 
   switch (advance) {
     case "none":
@@ -1718,7 +1723,7 @@ export function buildSuggestion(
           reason: "progressed",
         };
       } else {
-        suggestion = held(holdWeight);
+        suggestion = held(baseWeight);
       }
       break;
 
@@ -1738,7 +1743,7 @@ export function buildSuggestion(
           reason: "progressed-reps",
         };
       } else {
-        suggestion = held(holdWeight);
+        suggestion = held(baseWeight);
       }
       break;
     }
@@ -1758,7 +1763,7 @@ export function buildSuggestion(
       const target = ps.targetReps ?? reference.targetReps ?? null;
 
       if (!shouldProgress) {
-        suggestion = held(holdWeight);
+        suggestion = held(baseWeight);
         break;
       }
 
@@ -1838,11 +1843,13 @@ export function buildSuggestion(
         suggestion =
           shouldProgress && incrementKg > 0
             ? {
-                suggestedWeightKg: roundToInc(currentLoad + incrementKg),
+                // From what was held; a plan nobody has logged against yet
+                // starts from the plan.
+                suggestedWeightKg: roundToInc((currentLoad > 0 ? currentLoad : (slotPlan ?? 0)) + incrementKg),
                 ...basedOnWithDuration,
                 reason: "progressed",
               }
-            : { suggestedWeightKg: holdWeight, ...basedOnWithDuration, reason: heldReason };
+            : { suggestedWeightKg: baseWeight, ...basedOnWithDuration, reason: heldReason };
         break;
       }
       if (targetDuration != null && shouldProgress) {

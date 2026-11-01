@@ -8,7 +8,7 @@
 
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
-import { periodizationShare } from "@/lib/periodization-share";
+import { periodizationShare } from "@/lib/periodization-sync";
 import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exercise-type";
 import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { warmupRamp } from "@/lib/utils/plates";

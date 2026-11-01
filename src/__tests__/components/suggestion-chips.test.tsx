@@ -12,10 +12,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 let completedSetIds = new Set<number>();
+let overrides: Record<number, object> = {};
 vi.mock("@/contexts/workout-session-context", () => ({
   useWorkoutSession: () => ({
     sessionId: 1,
-    overrides: {},
+    overrides,
     completedSetIds,
     restTimerEnds: {},
     setOverride: vi.fn(),
@@ -90,6 +91,7 @@ function mount(
 
 beforeEach(() => {
   completedSetIds = new Set();
+  overrides = {};
 });
 
 describe("suggestion chips", () => {
@@ -216,6 +218,18 @@ describe("one chip per exercise", () => {
     const chip = screen.getByRole("button", { name: /82\.5kg · all 3 sets/ });
     expect(chip.textContent).toBe("✓ 82.5kg · all 3 sets");
     expect(chip.getAttribute("aria-disabled")).toBe("true");
+  });
+
+  it("gives a set edited away from the bump its own chip, and does not wait on it", () => {
+    // Set 2 was changed to 81 kg in the set editor: the shared tap will not
+    // overwrite it, so the shared chip covers sets 1 and 3 and can tick.
+    overrides = { 2: { weightKg: 81 } };
+    mount(
+      [makeSet(1, { weightKg: "82.50" }), makeSet(2, { weightKg: "81.00" }), makeSet(3, { weightKg: "82.50" })],
+      same(),
+    );
+    expect(screen.getByRole("button", { name: /82\.5kg · all 2 sets/ }).getAttribute("aria-disabled")).toBe("true");
+    expect(screen.getByRole("button", { name: /^↑ 82\.5kg$/ })).toBeTruthy();
   });
 
   it("leaves held sets alone, since there is nothing to apply", () => {

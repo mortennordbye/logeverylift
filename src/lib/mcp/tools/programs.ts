@@ -9,7 +9,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
-import { periodizationShare } from "@/lib/periodization-share";
+import { periodizationShare } from "@/lib/periodization-sync";
 import {
   MAX_BACKOFF_AFTER,
   MAX_BACKOFF_PCT,
@@ -422,6 +422,11 @@ export function registerProgramTools(server: McpServer, userId: string) {
             peUpdates.progressionConfigAt = new Date();
           }
 
+          // Before the transaction: the share runs a due weekly sync, which
+          // rewrites this slot's sets, and the replace below must read them after.
+          const share =
+            args.sets !== undefined ? await periodizationShare(owner.programId, userId) : 1;
+
           // Apply the slot edits and the wholesale set-replace in one
           // transaction: deleting the old sets must roll back if the re-insert
           // fails, otherwise the slot is left with no sets (data loss).
@@ -449,11 +454,6 @@ export function registerProgramTools(server: McpServer, userId: string) {
                 .from(programSets)
                 .where(eq(programSets.programExerciseId, programExerciseId));
               const oldByNumber = new Map(old.map((o) => [o.setNumber, o]));
-              const share = old.some(
-                (o) => o.peakDistanceMeters != null || o.peakDurationSeconds != null,
-              )
-                ? await periodizationShare(owner.programId, userId)
-                : 1;
               await tx
                 .delete(programSets)
                 .where(eq(programSets.programExerciseId, programExerciseId));

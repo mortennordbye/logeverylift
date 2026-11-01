@@ -920,18 +920,35 @@ export function WorkoutSetsList({
         suggestions,
       )
     : null;
+  // A set the lifter has edited away from the suggestion (it has an override
+  // and still lacks the value) is one siblingsForApply will not write, so the
+  // shared chip cannot speak for it: it keeps a chip of its own, and the shared
+  // one neither counts it nor waits on it. It only gets there through the set
+  // editor, so the chip appears on the way back, not under a finger.
+  const diverged = (id: number) => {
+    const item = flatItems.find((i): i is SetFlatItem => i.type === "set" && i.set.id === id);
+    const s = suggestions?.[id];
+    return (
+      item != null &&
+      s != null &&
+      workoutSession?.overrides[id] != null &&
+      suggestionPending(s, item.set)
+    );
+  };
+  const leadId = sharedIds?.[0];
+  const covered = sharedIds?.filter((id) => id === leadId || !diverged(id)) ?? [];
   function sharedChipFor(setId: number): SharedChip | undefined {
-    if (!sharedIds?.includes(setId)) return undefined;
-    if (setId !== sharedIds[0]) return { role: "follower" };
+    if (covered.length < 2 || !covered.includes(setId)) return undefined;
+    if (setId !== leadId) return { role: "follower" };
     const lead = suggestions![setId];
     const pending = flatItems.some(
       (i) =>
         i.type === "set" &&
-        sharedIds.includes(i.set.id) &&
+        covered.includes(i.set.id) &&
         !activeCompletedSets.has(i.set.id) &&
         suggestionPending(lead, i.set),
     );
-    return { role: "lead", count: sharedIds.length, pending };
+    return { role: "lead", count: covered.length, pending };
   }
 
   const handleApplySuggestion = onApplySuggestion

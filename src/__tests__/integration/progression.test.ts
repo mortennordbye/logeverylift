@@ -109,15 +109,13 @@ describe("getProgressiveSuggestions", () => {
     }
   });
 
-  it("holds at the planned weight after a heavy single that missed", async () => {
-    await logCompletedSession(daysAgo(4), allClear());
-    await logCompletedSession(daysAgo(2), [{ reps: 1, weightKg: "100" }, { reps: 8 }, { reps: 8 }]);
+  it("does not offer a missed heavy single back as a retry", async () => {
+    await logCompletedSession(daysAgo(4), [{ reps: 1, weightKg: "100" }, { reps: 1, weightKg: "100" }, { reps: 1, weightKg: "100" }]);
+    await logCompletedSession(daysAgo(2), allClear());
 
     const r = await getProgressiveSuggestions(programId);
     if (!r.success) throw new Error(r.error);
-    expect(r.data[setIds[0]]?.reason).toBe("held");
-    expect(r.data[setIds[0]]?.suggestedWeightKg).toBe(80);
-    expect(r.data[setIds[0]]?.basedOnWeightKg).toBe(100);
+    expect(r.data[setIds[0]]?.reason).not.toBe("retry");
   });
 
   it("returns nothing for a program the caller does not own", async () => {

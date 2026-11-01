@@ -354,7 +354,7 @@ describe("buildSuggestion — time mode", () => {
 });
 
 describe("buildSuggestion — a weighted hold", () => {
-  const ps = makePs({ advance: "duration", durationSeconds: 30, overloadIncrementKg: "2.50" });
+  const ps = makePs({ advance: "duration", durationSeconds: 30, overloadIncrementKg: "2.50", plannedWeights: { 1: 20 } });
   const held = (kg: string, secs = 30) =>
     makeSessions(REQUIRED_HITS, { weightKg: kg, durationSeconds: secs, actualReps: 0, targetReps: null });
 
@@ -379,8 +379,18 @@ describe("buildSuggestion — a weighted hold", () => {
     expect(buildSuggestion(rows, ps, null)?.reason).toBe("held");
   });
 
-  it("grows the time when there is no load", () => {
+  it("decides it from the plan, the same as the settings sheet", () => {
+    // Logged at 10 kg against a plan of none: the plan says plain hold.
+    const plain = makePs({ advance: "duration", durationSeconds: 30, plannedWeights: { 1: 0 } });
+    expect(buildSuggestion(held("10.00"), plain, null)?.reason).toBe("progressed-time");
+    // Planned at 20 kg, never logged with weight: starts from the plan.
     const result = buildSuggestion(held("0"), ps, null);
+    expect(result?.reason).toBe("progressed");
+    expect(result?.suggestedWeightKg).toBe(22.5);
+  });
+
+  it("grows the time when there is no load", () => {
+    const result = buildSuggestion(held("0"), makePs({ advance: "duration", durationSeconds: 30 }), null);
     expect(result?.reason).toBe("progressed-time");
     expect(result?.suggestedDurationSeconds).toBe(40);
   });
@@ -554,19 +564,7 @@ describe("buildSuggestion — readiness modulation", () => {
 // ─── A missed session above the plan is not a base ─────────────────────────────
 
 describe("buildSuggestion — a missed heavy session above the plan", () => {
-  const plan80 = makePs({ plannedWeights: { 1: 80 } });
-
-  it("holds at the planned weight, not at a heavy single that missed", () => {
-    const rows = [
-      makeSession({ weightKg: "100.00", actualReps: 1, date: "2024-01-03" }),
-      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-02" }),
-    ];
-    const result = buildSuggestion(rows, plan80, null);
-    expect(result?.reason).toBe("held");
-    expect(result?.suggestedWeightKg).toBe(80);
-    // "Last:" still reports what was actually lifted.
-    expect(result?.basedOnWeightKg).toBe(100);
-  });
+  const plan80 = makePs({ plannedWeights: { 1: 80 }, overloadIncrementKg: "2.50" });
 
   it("does not offer to retry a heavy single that missed", () => {
     const rows = [
@@ -599,12 +597,24 @@ describe("buildSuggestion — a missed heavy session above the plan", () => {
     expect(buildSuggestion(rows, ps, null)?.reason).toBe("retry");
   });
 
-  it("keeps the logged weight when no plan is known", () => {
+  it("still retries a chip-earned load the plan never caught up with", () => {
+    // Taking a chip moves only the session by default, so the plan sits at 60
+    // while the lifter works at 77.5. 80 is one step past what was cleared.
     const rows = [
-      makeSession({ weightKg: "100.00", actualReps: 1, date: "2024-01-03" }),
-      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-02" }),
+      makeSession({ weightKg: "77.50", actualReps: 8, date: "2024-01-03" }),
+      makeSession({ weightKg: "80.00", actualReps: 7, date: "2024-01-02" }),
     ];
-    expect(buildSuggestion(rows, makePs(), null)?.suggestedWeightKg).toBe(100);
+    const result = buildSuggestion(rows, makePs({ plannedWeights: { 1: 60 }, overloadIncrementKg: "2.50" }), null);
+    expect(result?.reason).toBe("retry");
+    expect(result?.suggestedWeightKg).toBe(80);
+  });
+
+  it("retries as before when no plan is known", () => {
+    const rows = [
+      makeSession({ weightKg: "80.00", actualReps: 8, date: "2024-01-03" }),
+      makeSession({ weightKg: "100.00", actualReps: 1, date: "2024-01-02" }),
+    ];
+    expect(buildSuggestion(rows, makePs(), null)?.reason).toBe("retry");
   });
 });
 

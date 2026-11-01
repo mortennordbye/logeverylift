@@ -93,8 +93,21 @@ describe("getCyclePeriodization", () => {
   });
 });
 
+describe("editing a periodized set right after a week rollover", () => {
+  it("syncs the new week before dividing, so the edit survives the sync", async () => {
+    // Not yet synced this week: adaptationPct is last week's 80. Week 1's own
+    // nudge is neutral, so the share is 1 and the typed value is the peak.
+    await updateProgramSet({ id: setId, distanceMeters: 3200, anchor: "distance" });
+    const [ps] = await db.select().from(programSets).where(eq(programSets.id, setId));
+    expect(ps.peakDistanceMeters).toBe(3200);
+    expect(ps.distanceMeters).toBe(3200);
+    expect((await cycle()).lastSyncedWeek).toBe(1);
+  });
+});
+
 describe("editing a periodized set re-anchors it (PZ-36)", () => {
-  // This week is already synced at 80% of peak, so the typed number is 80%.
+  // This week is already synced at 80% of peak (as a later week with a
+  // missed-session nudge would be), so the typed number is 80%.
   beforeEach(async () => {
     await db.update(trainingCycles).set({ lastSyncedWeek: 1 }).where(eq(trainingCycles.id, cycleId));
   });

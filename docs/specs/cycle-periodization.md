@@ -2,7 +2,7 @@
 
 > **Status:** implemented
 > **Last verified:** 2026-08-29 against `47aacbc`; PZ-29, PZ-36, PZ-37 and PZ-40 re-verified 2026-11-01 when D4 and D8 closed
-> **Source of truth:** `src/lib/utils/periodization.ts`, `src/lib/actions/training-cycles.ts` (`getActiveCycleForUser`, `getCyclePeriodization`, `getProgramPeriodization`, `computeCycleAdaptation`, `syncPeriodizedTargets`)
+> **Source of truth:** `src/lib/utils/periodization.ts`, `src/lib/actions/training-cycles.ts` (`getActiveCycleForUser`, `getCyclePeriodization`, `getProgramPeriodization`, `syncActiveCyclePeriodization`), `src/lib/periodization-sync.ts` (`computeCycleAdaptation`, `syncPeriodizedTargets`, `syncDueCycle`, `periodizationShare`)
 >
 > Stale check: `git log 47aacbc..HEAD -- src/lib/utils/periodization.ts src/lib/actions/training-cycles.ts`
 
@@ -273,14 +273,14 @@ The rows updated are reached by id from a query joined through `programExercises
 ## Manual edits against the curve — PZ-36…37
 
 ### PZ-36 — A number typed on a periodized set is this week's, and the anchor follows it
-The curve still owns the weekly target, so a typed number cannot just sit in `distanceMeters` until the next sync overwrites it. Saving a periodized set from the program editor sends `anchor` with the dimension it is periodized on, and `updateProgramSet` re-derives that dimension's peak from the saved value: peak = value / this week's share, where the share is the curve times the cycle's `adaptationPct`, the same factor the sync scales by (`periodizationShare`). The typed value stays this week's target, and later weeks follow the new peak. When the program is in no active cycle the share is 1 and the typed value is the peak. Only a set that already carries an anchor is re-anchored.
+The curve still owns the weekly target, so a typed number cannot just sit in `distanceMeters` until the next sync overwrites it. Saving a periodized set from the program editor sends `anchor` with the dimension it is periodized on, and `updateProgramSet` re-derives that dimension's peak from the saved value: peak = value / this week's share, where the share is the curve times the cycle's `adaptationPct`, the same factor the sync scales by (`periodizationShare` in `src/lib/periodization-sync.ts`). It runs a due weekly sync first: until this week has synced, `adaptationPct` is last week's, and a value divided by it would not survive the sync. The typed value stays this week's target, and later weeks follow the new peak. When the program is in no active cycle the share is 1 and the typed value is the peak. Only a set that already carries an anchor is re-anchored.
 
 The peak is re-derived only when the saved value differs from the stored one (`reanchoredPeaks` in `periodization.ts`). The stored value is itself a rounded `peak x share`, so dividing it back out on a save that changed only the rest time would move the peak a little on every save. The MCP `edit_program_exercise` update replaces a slot's sets wholesale and has no anchor fields, so it carries each old row's anchors and `sessionRole` across by set number through the same function; before, an agent's edit dropped the sets out of the block.
 
 The re-derived peak is not exact: the sync rounds a distance to 100 m and a duration to 30 s, so a typed 5250 m can read 5200 or 5300 once a later week rescales it.
 
 *Why:* an edit used to be overwritten up to a week later with no warning, while a mode switch on the same set re-anchored, so the two paths disagreed about what an edit meant (D8). The typed number is the athlete's statement of what they can do now; making it the anchor of record keeps the block shaped around it.
-*Covered by:* `periodization.test.ts` — "reanchoredPeaks (PZ-36, PZ-37)"; `integration/training-cycles.test.ts` — "editing a periodized set re-anchors it (PZ-36)", "MCP edit_program_exercise keeps a periodized set in the block"; `components/set-edit-periodized.test.tsx`.
+*Covered by:* `periodization.test.ts` — "reanchoredPeaks (PZ-36, PZ-37)"; `integration/training-cycles.test.ts` — "editing a periodized set re-anchors it (PZ-36)", "editing a periodized set right after a week rollover", "MCP edit_program_exercise keeps a periodized set in the block"; `components/set-edit-periodized.test.tsx`.
 
 ### PZ-37 — Switching a periodized set between distance and time moves the anchor
 When an anchored set's mode is switched, the entered value is re-anchored in the new mode the same way as PZ-36 (it is this week's value, and the new peak is derived from it), and the old anchor is cleared, so the set stays periodized in its new mode. An unanchored set gains no anchor from a mode switch.
