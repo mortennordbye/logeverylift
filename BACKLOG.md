@@ -221,12 +221,6 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 
 ## MCP server
 
-### Move the MCP OAuth server off better-auth's removed `mcp` plugin
-- **What:** better-auth 1.7 removed the `mcp` plugin and `withMcpAuth` that the MCP endpoint authenticates with; its replacement is the separate `@better-auth/oauth-provider` package. `package.json` holds better-auth at `~1.6.22` and Dependabot ignores 1.7 so its grouped PR stays green.
-- **Why deferred:** Every better-auth advisory that affects this app (refresh-token replay and `redirect_uri` XSS in `mcp`, the account-takeover fixes) is fixed in 1.6.x. The two fixed only in 1.7.7 hit magic-link and OAuth-proxy sign-in, which the app does not use. Migrating changes the OAuth tables and likely signs out every connected MCP client, so it wants its own change and a privacy-skill pass.
-- **Unblocked by:** better-auth 1.6 stopping security releases, or an advisory against 1.6 that applies here. Then swap `mcp()` for the oauth-provider plugin, migrate `oauth_application` / `oauth_access_token` / `oauth_consent`, rewrite the endpoint's auth wrapper and the `.well-known` routes, remove the Dependabot ignore and the four `allow-ghsas` entries in `.github/workflows/dependency-review.yml`, and run the MCP e2e flow.
-- **Touchpoints:** `src/lib/auth.ts`, `src/app/api/[transport]/route.ts`, `src/app/.well-known/`, `src/db/schema/auth.ts`, `.github/dependabot.yml`, `.github/workflows/dependency-review.yml`, `package.json`.
-
 ### Redis-backed SSE stream resumption for the MCP server
 - **What:** The MCP endpoint (`src/app/api/[transport]/route.ts`) runs `createMcpHandler` without a `redisUrl`. With Streamable HTTP, a long-running tool call holds an open response; across multiple instances a session that starts on one can't resume on another, so clients can drop mid-call.
 - **Why deferred:** The app currently runs as a **single instance**, where this can't happen. Only relevant if/when it scales to multiple replicas.
@@ -264,10 +258,10 @@ Findings from the [`cycle-periodization`](docs/specs/cycle-periodization.md) spe
 - **Touchpoints:** `src/lib/mcp/tools/profile.ts`, `src/lib/actions/profile.ts`.
 
 ### MCP OAuth dynamic client registration is open
-- **What:** The Better Auth `mcp` plugin exposes a dynamic client `registration_endpoint`, so any client can self-register an OAuth app. Access still requires the user to log in and consent, so this isn't a data-exposure hole — but it allows unbounded `oauth_application` rows.
-- **Why deferred:** Standard MCP behavior; fine for current scale. The gate that matters (user auth + consent) is in place.
-- **Unblocked by:** A need to restrict registration — add trusted-client config to the `mcp()` plugin, or prune stale/unused `oauth_application` rows on a schedule.
-- **Touchpoints:** `src/lib/auth.ts`, `src/db/schema/auth.ts` (`oauth_application`).
+- **What:** The `mcp()` plugin in `src/lib/auth.ts` runs with `allowDynamicClientRegistration` and `allowUnauthenticatedClientRegistration`, so any client can self-register an OAuth client (RFC 7591). Access still requires the user to log in and consent, so this isn't a data-exposure hole, but it allows unbounded `oauth_client` rows. MCP 2026-07-28 deprecates this in favour of Client ID Metadata Documents (`@better-auth/cimd`), which the app does not offer yet; a client that only speaks CIMD cannot connect.
+- **Why deferred:** Registration is what today's MCP clients use, and the gate that matters (user login + consent) is in place. CIMD makes the server fetch client-supplied URLs, which needs its own SSRF-safe transport and review.
+- **Unblocked by:** A need to restrict registration, or a client that needs CIMD. Then add `cimd()` with `metadataProfile: "mcp-2026-07-28"` and turn off unauthenticated registration, or prune stale `oauth_client` rows on a schedule.
+- **Touchpoints:** `src/lib/auth.ts`, `src/db/schema/auth.ts` (`oauthClients`).
 
 ### Run an independent security-review pass over the MCP + auth changes
 - **What:** A security audit (Jun 2026) fixed the critical/high auth + MCP data-integrity findings (cross-user `getProgressiveSuggestions`/`upsertCycleSlot` leaks, `ai-model-configs` admin gating, login open-redirect, placeholder-secret boot guard, non-atomic MCP writes, validation gaps, rate-limit eviction). A fresh, independent pass was offered but deferred for time.

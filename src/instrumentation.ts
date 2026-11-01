@@ -42,11 +42,13 @@ export async function register() {
   const { registerShutdown } = await import("@/lib/shutdown");
   await registerShutdown();
 
-  // Expired sessions hold an IP address and user agent; drop them at boot and
-  // daily after that.
-  const { purgeExpiredSessions } = await import("@/lib/account-data");
-  const purge = () =>
+  // Expired sessions hold an IP address and user agent, and expired MCP
+  // tokens pile up with every refresh; drop them at boot and daily after that.
+  const { purgeExpiredOAuthTokens, purgeExpiredSessions } = await import("@/lib/account-data");
+  const purge = () => {
     purgeExpiredSessions().catch((err) => console.error("[purgeExpiredSessions] failed", err));
+    purgeExpiredOAuthTokens().catch((err) => console.error("[purgeExpiredOAuthTokens] failed", err));
+  };
   void purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();
 

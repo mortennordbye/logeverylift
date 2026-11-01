@@ -23,7 +23,7 @@ All tables live in the app's Postgres in the homelab (Norway). Every user-owned 
 | Primary gym (optional) | `user.primaryGymId` | Gym map: listing the user under the gym they pick | Art. 6(1)(b), on the user's choice (setting it is the opt-in) | Until the user removes it or deletes the account |
 | Feedback | `feedback` | Improving the app | Art. 6(1)(f) | Until account deletion |
 | Sessions | `session` (IP address, user agent, `impersonatedBy`) | Keeping users signed in, security | Art. 6(1)(f) | Purged after expiry (30 days from last use) by `purgeExpiredSessions` |
-| MCP connections | `oauth_application`, `oauth_access_token`, `oauth_consent` | User-connected AI assistants | Art. 6(1)(b), on the user's instruction | Until revoked or account deletion |
+| MCP connections | `oauth_client`, `oauth_client_resource`, `oauth_access_token`, `oauth_refresh_token`, `oauth_consent` | User-connected AI assistants | Art. 6(1)(b), on the user's instruction | Expired access and refresh tokens purged by `purgeExpiredOAuthTokens`; the rest until account deletion |
 
 Not personal data: `gyms` (public OpenStreetMap places, no user id; who trains where is `user.primaryGymId`), `ai_plan_cache` (keyed by a hash of an age band, gender, goals and the request; no user id), `ai_model_configs`, built-in `exercises`.
 

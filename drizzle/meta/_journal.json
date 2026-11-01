@@ -484,6 +484,13 @@
       "when": 1792951485776,
       "tag": "0068_exercise_notes",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1793522663144,
+      "tag": "0069_better_auth_oauth_provider",
+      "breakpoints": true
     }
   ]
 }
