@@ -50,6 +50,8 @@ type Props = {
   discipline?: Discipline | null;
   /** Exercise's equipment — picks the weight presets (see weightOptionsFor). */
   equipment?: Equipment | null;
+  /** Learned stack pattern, when there is one; replaces the equipment presets. */
+  weightStack?: string | null;
 };
 
 export function NewSetView({
@@ -63,6 +65,7 @@ export function NewSetView({
   isRunning = false,
   discipline = null,
   equipment = null,
+  weightStack = null,
 }: Props) {
   const router = useRouter();
   const cfg = disciplineConfig(discipline);
@@ -108,7 +111,7 @@ export function NewSetView({
   const weightScrollRef = useRef<HTMLDivElement>(null);
   const repsScrollRef = useRef<HTMLDivElement>(null);
 
-  const WEIGHT_OPTIONS = weightOptionsFor(equipment);
+  const WEIGHT_OPTIONS = weightOptionsFor(equipment, weightStack);
   // A typed-in weight gets its own circle rather than lighting up the nearest
   // preset — see withCustomOption.
   const weightOptions = withCustomOption(WEIGHT_OPTIONS, weight);

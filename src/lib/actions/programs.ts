@@ -13,7 +13,7 @@ import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exe
 import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { warmupRamp } from "@/lib/utils/plates";
 import { judgingRuleChanged, type ProgressionAdvance } from "@/lib/utils/progression";
-import { requireSession } from "@/lib/utils/session";
+import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
   addExerciseToProgramSchema,
   addProgramSetSchema,
@@ -45,6 +45,7 @@ import type {
 } from "@/types/workout";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Programs
@@ -304,6 +305,42 @@ export async function updateProgramExerciseIncrement(
     return { success: true, data: undefined };
   } catch (err) {
     return { success: false, error: String(err) };
+  }
+}
+
+const clearWeightStackSchema = z.object({ programExerciseId: z.number().int().positive() });
+
+/** Forget a learned stack pattern. The next custom weight teaches a new one. */
+export async function clearWeightStack(data: unknown): Promise<ActionResult<void>> {
+  const auth = await requireSession();
+  const parsed = clearWeightStackSchema.safeParse(data);
+  if (!parsed.success) {
+    return {
+      success: false,
+      error: "Invalid input",
+      fieldErrors: parsed.error.flatten().fieldErrors,
+    };
+  }
+  const { programExerciseId } = parsed.data;
+  try {
+    const [existing] = await db
+      .select({ userId: programs.userId, programId: programs.id })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(eq(programExercises.id, programExerciseId));
+    assertOwner(existing, auth.user.id);
+
+    await db
+      .update(programExercises)
+      .set({ weightStack: null })
+      .where(eq(programExercises.id, programExerciseId));
+    revalidatePath(`/programs/${existing.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${existing.programId}/exercises/${programExerciseId}`);
+    return { success: true, data: undefined };
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { success: false, error: e.message };
+    console.error("[clearWeightStack] failed", { programExerciseId }, e);
+    return { success: false, error: "Failed to forget the stack" };
   }
 }
 

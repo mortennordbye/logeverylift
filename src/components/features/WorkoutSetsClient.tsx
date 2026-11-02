@@ -4,6 +4,7 @@ import { WorkoutSetsList } from "@/components/features/WorkoutSetsList";
 import {
   addWarmupSets,
   applyProgressionToPlan,
+  clearWeightStack,
   deleteProgramSet,
   setProgramExerciseApplyToPlan,
   setProgramExerciseProgression,
@@ -27,6 +28,7 @@ import { sanitizeDecimalInput } from "@/lib/utils/format";
 import type { Equipment } from "@/lib/utils/picker-options";
 import { warmupRamp } from "@/lib/utils/plates";
 import { sharedSuggestionSets } from "@/lib/utils/suggestion-chip";
+import { stackLabel, usableStack } from "@/lib/utils/weight-stacks";
 import {
   DELOAD_PCT,
   DELOAD_THRESHOLD,
@@ -188,6 +190,8 @@ type Props = {
   notes?: string | null;
   /** Barbell exercises get the plate line and the warm-up generator. */
   equipment?: Equipment | null;
+  /** Stack pattern learned from logged custom weights, shown in the sheet. */
+  weightStack?: string | null;
   initialEditing?: boolean;
 };
 
@@ -217,6 +221,7 @@ export function WorkoutSetsClient({
   exerciseTypeOverride: initialTypeOverride = null,
   notes: initialNotes = null,
   equipment = null,
+  weightStack: initialWeightStack = null,
   initialEditing = false,
 }: Props) {
   const router = useRouter();
@@ -226,6 +231,8 @@ export function WorkoutSetsClient({
   const [customRepInput, setCustomRepInput] = useState("");
   const [sets, setSets] = useState(initial);
   const [increment, setIncrement] = useState(initialIncrement);
+  const [weightStack, setWeightStack] = useState(initialWeightStack);
+  const learnedStackLabel = stackLabel(usableStack(weightStack, equipment));
   const [incrementReps, setIncrementReps] = useState(initialIncrementReps);
   const [typeOverride, setTypeOverride] = useState<string | null>(initialTypeOverride);
   const [savedNotes, setSavedNotes] = useState(initialNotes ?? "");
@@ -674,6 +681,18 @@ export function WorkoutSetsClient({
     const result = await callAction(updateProgramExerciseIncrement(programExerciseId, newIncrement));
     if (!result.success) {
       setIncrement(previous);
+      saveFailed();
+      return;
+    }
+    router.refresh();
+  }
+
+  async function handleForgetStack() {
+    const previous = weightStack;
+    setWeightStack(null);
+    const result = await callAction(clearWeightStack({ programExerciseId }));
+    if (!result.success) {
+      setWeightStack(previous);
       saveFailed();
       return;
     }
@@ -1295,6 +1314,19 @@ export function WorkoutSetsClient({
                           className="shrink-0 px-4 py-1.5 rounded-lg bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-30 active:scale-95 transition-all"
                         >
                           Set
+                        </button>
+                      </div>
+                    )}
+                    {learnedStackLabel && (
+                      <div className="flex items-center justify-between gap-3 px-4 py-1 border-t border-border">
+                        <p className="text-sm text-muted-foreground">
+                          Learned stack: {learnedStackLabel}
+                        </p>
+                        <button
+                          onClick={handleForgetStack}
+                          className="min-h-11 shrink-0 px-3 text-sm font-semibold text-primary active:scale-95 transition-all"
+                        >
+                          Forget
                         </button>
                       </div>
                     )}

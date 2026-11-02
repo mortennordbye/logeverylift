@@ -2717,3 +2717,69 @@ describe("effortPromptSet — asks about the set that decides (D-8)", () => {
     expect(effortPromptSet(sets([2, 2, 2]), "first", () => false)).toBeNull();
   });
 });
+
+describe("a learned weight stack", () => {
+  const cleared = (weightKg: string) => makeSessions(REQUIRED_HITS, { weightKg });
+  const cable = (o: Partial<ProgramSetData> = {}) => makePs({ equipment: "cable", ...o });
+
+  it("suggests the next weight on the stack, not the old 1.25 grid", () => {
+    // Without a pattern this is the bug: 18 kg suggests 18.75 kg.
+    expect(buildSuggestion(cleared("18"), cable(), null)?.suggestedWeightKg).toBe(18.75);
+    expect(buildSuggestion(cleared("18"), cable({ weightStack: "kg4_5" }), null)?.suggestedWeightKg).toBe(22.5);
+  });
+
+  it("follows an offset stack", () => {
+    const ps = cable({ weightStack: "lb15_top10" });
+    expect(buildSuggestion(cleared("18.1"), ps, null)?.suggestedWeightKg).toBe(24.9);
+  });
+
+  it("snaps a manual increment to something the stack can load", () => {
+    const ps = cable({ weightStack: "kg4_5", overloadIncrementKg: "5" });
+    expect(buildSuggestion(cleared("18"), ps, null)?.suggestedWeightKg).toBe(22.5);
+  });
+
+  it("does not go below one step of the stack, even on a smaller manual increment", () => {
+    const ps = cable({ weightStack: "kg4_5", overloadIncrementKg: "1.25" });
+    expect(buildSuggestion(cleared("18"), ps, null)?.suggestedWeightKg).toBe(22.5);
+  });
+
+  it("still honours a manual increment of zero", () => {
+    const ps = cable({ weightStack: "kg4_5", overloadIncrementKg: "0" });
+    expect(buildSuggestion(cleared("18"), ps, null)?.suggestedWeightKg).toBe(18);
+  });
+
+  it("lands a back-off on the stack", () => {
+    const stuck = makeSessions(DELOAD_THRESHOLD, { weightKg: "45", actualReps: 4, targetReps: 8 });
+    const suggestion = buildSuggestion(stuck, cable({ weightStack: "kg4_5" }), null);
+    expect(suggestion?.reason).toBe("deload");
+    expect(suggestion?.suggestedWeightKg).toBe(40.5);
+  });
+
+  it("always drops at least one weight on a back-off", () => {
+    // 10% off 18 is 16.2, whose nearest weight on this stack is 18 again.
+    const stuck = makeSessions(DELOAD_THRESHOLD, { weightKg: "18", actualReps: 4, targetReps: 8 });
+    const suggestion = buildSuggestion(stuck, cable({ weightStack: "kg4_5" }), null);
+    expect(suggestion?.reason).toBe("deload");
+    expect(suggestion?.suggestedWeightKg).toBe(13.5);
+  });
+
+  it("never backs off upward, or below the lowest weight", () => {
+    const stuck = (weightKg: string) =>
+      makeSessions(DELOAD_THRESHOLD, { weightKg, actualReps: 4, targetReps: 8 });
+    expect(buildSuggestion(stuck("2.2"), cable({ weightStack: "kg5" }), null)?.suggestedWeightKg).toBe(2.2);
+    expect(buildSuggestion(stuck("4.5"), cable({ weightStack: "kg4_5" }), null)?.suggestedWeightKg).toBe(4.5);
+  });
+
+  it("ignores a stack once the exercise is on equipment with its own steps", () => {
+    const barbell = makePs({ equipment: "barbell" });
+    expect(buildSuggestion(cleared("60"), { ...barbell, weightStack: "kg4_5" }, null)).toEqual(
+      buildSuggestion(cleared("60"), barbell, null),
+    );
+  });
+
+  it("gives identical output with a retired pattern and with none", () => {
+    expect(buildSuggestion(cleared("18"), cable({ weightStack: "retired" }), null)).toEqual(
+      buildSuggestion(cleared("18"), cable(), null),
+    );
+  });
+});

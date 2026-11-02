@@ -1,4 +1,5 @@
 import type { equipmentEnum } from "@/db/schema/exercises";
+import { isOnStack, stackRungs, usableStack } from "@/lib/utils/weight-stacks";
 
 /**
  * Insert a manually typed value into a preset list as its own option.
@@ -45,6 +46,35 @@ const LADDERS: Partial<Record<Equipment, number[]>> = {
   cable: [0, ...steps(1.25, 1.25, 16), ...steps(22.5, 2.5, 52)],
 };
 
-export function weightOptionsFor(equipment: Equipment | null | undefined): number[] {
+/** Patterns go higher than this, but a heavier weight can be typed. */
+const PICKER_TOP_KG = 200;
+
+/**
+ * A learned stack pattern, when the exercise has one, replaces the equipment's
+ * ladder: those are the weights this machine actually has.
+ */
+export function weightOptionsFor(
+  equipment: Equipment | null | undefined,
+  weightStack?: string | null,
+): number[] {
+  const rungs = stackRungs(usableStack(weightStack, equipment));
+  if (rungs) return [0, ...rungs.filter((rung) => rung <= PICKER_TOP_KG)];
   return (equipment && LADDERS[equipment]) || DEFAULT_LADDER;
+}
+
+/**
+ * Whether a logged weight tells us something about the stack.
+ *
+ * With no pattern, multiples of 1.25 never count: the engine suggests them on
+ * every cable and machine, including ones the ladder lacks above 20 kg (41.25),
+ * so accepting its own suggestion must not read as the lifter's stack.
+ */
+export function isCustomWeight(
+  kg: number,
+  weightStack: string | null | undefined,
+  equipment: Equipment | null | undefined,
+): boolean {
+  const rungs = stackRungs(usableStack(weightStack, equipment));
+  if (rungs) return !isOnStack(kg, rungs);
+  return !weightOptionsFor(equipment).includes(kg) && !Number.isInteger(kg / 1.25);
 }

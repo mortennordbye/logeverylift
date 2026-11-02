@@ -51,6 +51,7 @@ import {
     toScope,
 } from "@/lib/utils/progression";
 import type { ProgramSetData, SessionHistory } from "@/lib/utils/progression";
+import { learnWeightStacks } from "@/lib/weight-stack-learning";
 import type {
     ActionResult,
     ActiveCycleInfo,
@@ -670,6 +671,8 @@ export async function updateLoggedSet(data: unknown): Promise<ActionResult<Worko
       await rebuildPRsFrom(tx, auth.user.id, existing.exerciseId, earliest(times.startTime, times.createdAt));
       return row;
     });
+
+    await learnWeightStacks(existing.sessionId, auth.user.id);
 
     revalidatePath("/history");
     revalidatePath(`/history/${existing.sessionId}`);
@@ -1735,6 +1738,7 @@ export async function getProgressiveSuggestions(
         // The smallest step this equipment can load — an increment it cannot
         // make is a number the lifter has to round themselves (A3).
         equipment: exercises.equipment,
+        weightStack: programExercises.weightStack,
         // Resolve override ?? default in JS below (Drizzle returns both columns).
         exerciseTypeOverride: programExercises.exerciseType,
         exerciseTypeDefault: exercises.exerciseType,
@@ -1979,6 +1983,7 @@ export async function getProgressiveSuggestions(
         movementPattern: ps.movementPattern,
         exerciseType: ps.exerciseTypeOverride ?? ps.exerciseTypeDefault,
         equipment: ps.equipment,
+        weightStack: ps.weightStack,
         exerciseName: ps.exerciseName,
       };
       const suggestion = buildSuggestion(sessions, psData, profile, readiness, today);

@@ -72,6 +72,7 @@ export default async function NewSetPage({ params }: Props) {
         isRunning={pe.exercise.name === "Running" || pe.exercise.discipline != null}
         discipline={pe.exercise.discipline}
         equipment={pe.exercise.equipment}
+        weightStack={pe.weightStack}
       />
     </div>
   );

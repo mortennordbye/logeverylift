@@ -62,6 +62,7 @@ export default async function WorkoutExerciseSetsPage({ params }: Props) {
       notes={pe.notes}
       exerciseTypeOverride={pe.exerciseType}
       equipment={pe.exercise.equipment}
+      weightStack={pe.weightStack}
     />
   );
 }
