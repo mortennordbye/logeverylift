@@ -2763,6 +2763,20 @@ describe("a learned weight stack", () => {
     expect(suggestion?.suggestedWeightKg).toBe(13.5);
   });
 
+  it("never backs off upward, or below the lowest weight", () => {
+    const stuck = (weightKg: string) =>
+      makeSessions(DELOAD_THRESHOLD, { weightKg, actualReps: 4, targetReps: 8 });
+    expect(buildSuggestion(stuck("2.2"), cable({ weightStack: "kg5" }), null)?.suggestedWeightKg).toBe(2.2);
+    expect(buildSuggestion(stuck("4.5"), cable({ weightStack: "kg4_5" }), null)?.suggestedWeightKg).toBe(4.5);
+  });
+
+  it("ignores a stack once the exercise is on equipment with its own steps", () => {
+    const barbell = makePs({ equipment: "barbell" });
+    expect(buildSuggestion(cleared("60"), { ...barbell, weightStack: "kg4_5" }, null)).toEqual(
+      buildSuggestion(cleared("60"), barbell, null),
+    );
+  });
+
   it("gives identical output with a retired pattern and with none", () => {
     expect(buildSuggestion(cleared("18"), cable({ weightStack: "retired" }), null)).toEqual(
       buildSuggestion(cleared("18"), cable(), null),

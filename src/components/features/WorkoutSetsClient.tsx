@@ -28,7 +28,7 @@ import { sanitizeDecimalInput } from "@/lib/utils/format";
 import type { Equipment } from "@/lib/utils/picker-options";
 import { warmupRamp } from "@/lib/utils/plates";
 import { sharedSuggestionSets } from "@/lib/utils/suggestion-chip";
-import { stackLabel } from "@/lib/utils/weight-stacks";
+import { stackLabel, usableStack } from "@/lib/utils/weight-stacks";
 import {
   DELOAD_PCT,
   DELOAD_THRESHOLD,
@@ -232,6 +232,7 @@ export function WorkoutSetsClient({
   const [sets, setSets] = useState(initial);
   const [increment, setIncrement] = useState(initialIncrement);
   const [weightStack, setWeightStack] = useState(initialWeightStack);
+  const learnedStackLabel = stackLabel(usableStack(weightStack, equipment));
   const [incrementReps, setIncrementReps] = useState(initialIncrementReps);
   const [typeOverride, setTypeOverride] = useState<string | null>(initialTypeOverride);
   const [savedNotes, setSavedNotes] = useState(initialNotes ?? "");
@@ -1316,10 +1317,10 @@ export function WorkoutSetsClient({
                         </button>
                       </div>
                     )}
-                    {stackLabel(weightStack) && (
+                    {learnedStackLabel && (
                       <div className="flex items-center justify-between gap-3 px-4 py-1 border-t border-border">
                         <p className="text-sm text-muted-foreground">
-                          Learned stack: {stackLabel(weightStack)}
+                          Learned stack: {learnedStackLabel}
                         </p>
                         <button
                           onClick={handleForgetStack}

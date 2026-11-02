@@ -8,7 +8,7 @@
  */
 
 import { rirFromRpe } from "@/lib/utils/rir";
-import { gapAbove, nearestRung, rungBelow, stackRungs } from "@/lib/utils/weight-stacks";
+import { gapAbove, nearestRung, rungBelow, usableStack } from "@/lib/utils/weight-stacks";
 import type { SetSuggestion } from "@/types/workout";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -1379,7 +1379,7 @@ export function buildSuggestion(
   );
   // A learned stack is the real hardware: never less than its next step, and
   // every weight lands on it. A manual zero still means "don't add weight".
-  const stack = stackRungs(ps.weightStack) ? ps.weightStack! : null;
+  const stack = usableStack(ps.weightStack, ps.equipment);
   const incrementKg =
     stack && sizedIncrementKg > 0
       ? Math.max(sizedIncrementKg, gapAbove(currentLoad, stack))

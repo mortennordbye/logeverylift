@@ -35,6 +35,10 @@ describe("weightOptionsFor", () => {
     expect(weightOptionsFor("cable", "kg4_5").slice(0, 4)).toEqual([0, 4.5, 9, 13.5]);
   });
 
+  it("ignores a learned pattern on equipment with its own steps", () => {
+    expect(weightOptionsFor("barbell", "kg4_5")).toEqual(weightOptionsFor("barbell"));
+  });
+
   it("keeps a learned pattern's picker to a scrollable length", () => {
     expect(weightOptionsFor("machine", "kg1").at(-1)).toBe(200);
   });

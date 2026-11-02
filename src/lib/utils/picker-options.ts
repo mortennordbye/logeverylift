@@ -1,5 +1,5 @@
 import type { equipmentEnum } from "@/db/schema/exercises";
-import { isOnStack, stackRungs } from "@/lib/utils/weight-stacks";
+import { isOnStack, stackRungs, usableStack } from "@/lib/utils/weight-stacks";
 
 /**
  * Insert a manually typed value into a preset list as its own option.
@@ -57,7 +57,7 @@ export function weightOptionsFor(
   equipment: Equipment | null | undefined,
   weightStack?: string | null,
 ): number[] {
-  const rungs = stackRungs(weightStack);
+  const rungs = stackRungs(usableStack(weightStack, equipment));
   if (rungs) return [0, ...rungs.filter((rung) => rung <= PICKER_TOP_KG)];
   return (equipment && LADDERS[equipment]) || DEFAULT_LADDER;
 }
@@ -74,7 +74,7 @@ export function isCustomWeight(
   weightStack: string | null | undefined,
   equipment: Equipment | null | undefined,
 ): boolean {
-  const rungs = stackRungs(weightStack);
+  const rungs = stackRungs(usableStack(weightStack, equipment));
   if (rungs) return !isOnStack(kg, rungs);
   return !weightOptionsFor(equipment).includes(kg) && !Number.isInteger(kg / 1.25);
 }

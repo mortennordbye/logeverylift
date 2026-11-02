@@ -169,6 +169,55 @@ describe("finishing a workout", () => {
     expect(await storedStack()).toBe("kg5");
   });
 
+  it("still learns a step after an older, heavier session", async () => {
+    await finishedSession([50, 50], 4);
+    await finishedSession([20, 20], 2);
+    await finishedSession([25, 25]);
+    expect(await storedStack()).toBe("kg5");
+  });
+
+  it("does not learn a step from a weight that is on no shared pattern", async () => {
+    await finishedSession([18.75, 18.75], 2);
+    await finishedSession([22.5, 22.5]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("judges a custom weight by its own session, not the machine before it", async () => {
+    await finishedSession([17.5, 17.5], 2);
+    await finishedSession([18, 18]);
+    expect(await storedStack()).toBe("kg4_5");
+  });
+
+  it("learns from the first session on an endurance goal, before the app has suggested anything", async () => {
+    await db.update(users).set({ goals: JSON.stringify(["endurance"]) }).where(eq(users.id, userId));
+    await finishedSession([18, 18]);
+    expect(await storedStack()).toBe("kg4_5");
+  });
+
+  it("respects a manual increment that fits the weight, even on the first session", async () => {
+    await db
+      .update(programExercises)
+      .set({ overloadIncrementKg: "1" })
+      .where(eq(programExercises.id, slot.programExerciseId));
+    await finishedSession([18, 18]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("learns on no equipment from a weight off the current zone's grid", async () => {
+    const exercise = await createExercise({ equipment: null });
+    const { program, slots } = await createProgram(userId, [
+      { exerciseId: exercise.id, sets: [{ weightKg: "28" }] },
+    ]);
+    for (const [hoursAgo, kg] of [[2, 28], [0, 31]]) {
+      const session = await createSession(userId, program.id, {
+        startTime: new Date(Date.now() - hoursAgo * 3_600_000),
+      });
+      await logSets(session.id, [kg], slots[0]);
+      await completeWorkoutSession({ sessionId: session.id });
+    }
+    expect(await storedStack(slots[0].programExerciseId)).toBe("kg1");
+  });
+
   it("learns nothing from a jump bigger than one step of any pattern", async () => {
     await finishedSession([10, 10], 2);
     await finishedSession([30, 30]);

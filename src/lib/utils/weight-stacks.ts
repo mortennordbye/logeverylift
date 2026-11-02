@@ -46,6 +46,19 @@ export function stackRungs(id: string | null | undefined): number[] | null {
   return find(id)?.rungs ?? null;
 }
 
+/**
+ * The pattern to use for an exercise. Equipment with its own known steps never
+ * learns one, so a pattern left from before its equipment was edited would apply
+ * forever with nothing able to correct it.
+ */
+export function usableStack(
+  id: string | null | undefined,
+  equipment: string | null | undefined,
+): string | null {
+  if (!find(id)) return null;
+  return equipment == null || equipment === "cable" || equipment === "machine" ? id! : null;
+}
+
 export function stackLabel(id: string | null | undefined): string | null {
   return find(id)?.label ?? null;
 }
@@ -89,10 +102,10 @@ export function nearestRung(kg: number, id: string): number {
   );
 }
 
-/** The next weight down on a known pattern, or the lowest if there is none. */
+/** The next weight down on a known pattern, or `kg` itself if there is none. */
 export function rungBelow(kg: number, id: string): number {
   const rungs = stackRungs(id) ?? [];
-  return rungs.filter((rung) => rung < kg - 0.001).at(-1) ?? rungs[0] ?? kg;
+  return rungs.filter((rung) => rung < kg - 0.001).at(-1) ?? kg;
 }
 
 /** Distance from `kg` to the next weight up on a known pattern. */

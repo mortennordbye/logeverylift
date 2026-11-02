@@ -13,11 +13,11 @@ import { and, desc, eq, gt, inArray, isNull, max, or } from "drizzle-orm";
  * Two things in a slot's newest session teach a pattern:
  *  - a custom weight, which picks the most common pattern containing all of
  *    that session's working weights;
- *  - with no pattern yet, a new heaviest weight exactly one step of a pattern
- *    above the old one, which the app did not suggest. A 5 kg stack never
- *    produces a custom weight, because 20 and 25 are both on the default ladder,
- *    so the step is the only evidence of it. Returning to a weight already
- *    lifted proves nothing, and neither does a jump of several steps.
+ *  - with no pattern yet, a weight not lifted before, exactly one step of a
+ *    pattern above the closest weight below it, which the app did not suggest. A
+ *    5 kg stack never produces a custom weight, because 20 and 25 are both on the
+ *    default ladder, so the step is the only evidence of it. Returning to a weight
+ *    already lifted proves nothing, and neither does a jump of several steps.
  *
  * Sets don't store what the app suggested, so the checks for "that was the app's
  * own number" work from the increment it would have used.
@@ -120,23 +120,30 @@ export async function learnWeightStacks(sessionId: number, userId: string): Prom
             first.exerciseTypeOverride ?? first.exerciseTypeDefault,
             equipment,
           );
-        const heaviestBefore = Math.max(0, ...earlier.map((row) => Number(row.heaviest ?? 0)));
+        const lifted = earlier.map((row) => Number(row.heaviest ?? 0));
         // The app only ever suggests multiples of its increment, whether as a
-        // step up, a hold or a lighter set. A weight on that grid may simply be
-        // the app's own number, so it says nothing about the machine.
-        const onAppGrid = (kg: number) =>
-          [kg, heaviestBefore].some((loadKg) => {
-            const increment = incrementAt(loadKg);
-            return increment > 0 && Math.abs(roundToNearest(kg, increment) - kg) < 0.001;
-          });
+        // step up, a hold or a lighter set. Once it has had a session to suggest
+        // from, or the lifter set the increment themselves, a weight on that grid
+        // says nothing about the machine.
+        const trustGrid = lifted.length > 0 || first.overloadIncrementKg != null;
+        const onAppGrid = (kg: number) => {
+          const increment = incrementAt(kg);
+          return trustGrid && increment > 0 && Math.abs(roundToNearest(kg, increment) - kg) < 0.001;
+        };
 
         if (weights.some((kg) => isCustomWeight(kg, null, equipment) && !onAppGrid(kg))) {
+          // Only this session: earlier weights may be from another machine.
           next = pickStack(weights);
-        } else if (heaviestBefore > 0 && heaviest > heaviestBefore) {
-          const increment = incrementAt(heaviestBefore);
-          const tookSuggestion =
-            Math.abs(roundToNearest(heaviestBefore + increment, increment) - heaviest) < 0.001;
-          if (!tookSuggestion) next = pickStackForStep(heaviestBefore, heaviest, weights);
+        } else if (!lifted.includes(heaviest)) {
+          // Measured from the closest weight below, so neither a dip nor one
+          // older heavy session hides the step.
+          const below = Math.max(0, ...lifted.filter((kg) => kg < heaviest));
+          if (below > 0) {
+            const increment = incrementAt(below);
+            const tookSuggestion =
+              Math.abs(roundToNearest(below + increment, increment) - heaviest) < 0.001;
+            if (!tookSuggestion) next = pickStackForStep(below, heaviest, weights);
+          }
         }
       }
       if (next == null || next === first.weightStack) continue;
