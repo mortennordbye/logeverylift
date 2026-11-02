@@ -35,3 +35,26 @@ test("Save can be tapped the moment a picker closes", async ({ page }) => {
   await page.mouse.click(x, y);
   await expect(page).toHaveURL(/\/exercises\/\d+$/);
 });
+
+test("a sheet reopened while it is still closing takes taps", async ({ page }) => {
+  await openWorkout(page);
+  await openFirstExercise(page);
+  await waitForLiveSession(page);
+  await openFirstSetEditor(page);
+
+  const row = page.getByRole("button", { name: /^Weight \(kg\)/ });
+  await row.click();
+  const done = page.getByRole("dialog").getByRole("button", { name: "Done" });
+  await expect(done).toBeVisible();
+
+  await done.evaluate(async (el) => {
+    (el as HTMLElement).click();
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    [...document.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Weight (kg)"))?.click();
+  });
+
+  await expect(done).toBeVisible();
+  await expect(done).toHaveCSS("pointer-events", "auto");
+  await done.click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+});

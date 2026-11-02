@@ -44,6 +44,13 @@ const storedStack = async (id = slot.programExerciseId) =>
       .where(eq(programExercises.id, id))
   )[0].weightStack;
 
+/** The column defaults to manual, where the app suggests no weight at all. */
+const suggestsLoad = () =>
+  db
+    .update(programExercises)
+    .set({ progressionAdvance: "load" })
+    .where(eq(programExercises.id, slot.programExerciseId));
+
 const setStack = (weightStack: string) =>
   db
     .update(programExercises)
@@ -137,6 +144,7 @@ describe("finishing a workout", () => {
   });
 
   it("learns nothing from accepting the app's own suggestion", async () => {
+    await suggestsLoad();
     await finishedSession([20, 20], 2);
     await finishedSession([21.25, 21.25]);
     expect(await storedStack()).toBeNull();
@@ -218,6 +226,38 @@ describe("finishing a workout", () => {
     expect(await storedStack(slots[0].programExerciseId)).toBe("kg1");
   });
 
+  it("learns nothing from taking the app's back-off", async () => {
+    await suggestsLoad();
+    await finishedSession([40, 40], 8);
+    await finishedSession([50, 50], 6);
+    await finishedSession([50, 50], 4);
+    await finishedSession([50, 50], 2);
+    await finishedSession([45, 45]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("learns nothing from coming back to a weight that wasn't a session's heaviest", async () => {
+    await finishedSession([30, 30], 4);
+    await finishedSession([40, 35], 2);
+    await finishedSession([35, 35]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("learns from a weight off the 1.25 grid on a slot where the app suggests nothing", async () => {
+    const exercise = await createExercise({ equipment: null });
+    const { program, slots } = await createProgram(userId, [
+      { exerciseId: exercise.id, sets: [{ weightKg: "20" }] },
+    ]);
+    for (const [hoursAgo, kg] of [[2, 20], [0, 21]]) {
+      const session = await createSession(userId, program.id, {
+        startTime: new Date(Date.now() - hoursAgo * 3_600_000),
+      });
+      await logSets(session.id, [kg], slots[0]);
+      await completeWorkoutSession({ sessionId: session.id });
+    }
+    expect(await storedStack(slots[0].programExerciseId)).toBe("kg1");
+  });
+
   it("learns nothing from a jump bigger than one step of any pattern", async () => {
     await finishedSession([10, 10], 2);
     await finishedSession([30, 30]);
@@ -250,6 +290,7 @@ describe("finishing a workout", () => {
   });
 
   it("learns nothing on an endurance goal's whole-kg steps, lighter sets included", async () => {
+    await suggestsLoad();
     await db.update(users).set({ goals: JSON.stringify(["endurance"]) }).where(eq(users.id, userId));
     await finishedSession([25, 20], 2);
     await finishedSession([26, 21]);

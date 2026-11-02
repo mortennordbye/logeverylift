@@ -60,6 +60,24 @@ describe("ViewportFix on focusout", () => {
     expect(scrollTo).toHaveBeenCalled();
   });
 
+  it("waits for a press to finish before moving the page", () => {
+    document.dispatchEvent(new Event("pointerdown"));
+    blur(document.createElement("textarea"));
+    vi.advanceTimersByTime(400);
+    expect(scrollTo).not.toHaveBeenCalled();
+    document.dispatchEvent(new Event("pointerup"));
+    vi.advanceTimersByTime(1);
+    expect(scrollTo).toHaveBeenCalled();
+  });
+
+  it("does not keep waiting when the press turned into a scroll", () => {
+    document.dispatchEvent(new Event("pointerdown"));
+    blur(document.createElement("textarea"));
+    document.dispatchEvent(new Event("pointercancel"));
+    vi.advanceTimersByTime(1);
+    expect(scrollTo).toHaveBeenCalled();
+  });
+
   it("resets the page when a contenteditable loses focus", () => {
     const el = document.createElement("div");
     el.setAttribute("contenteditable", "true");

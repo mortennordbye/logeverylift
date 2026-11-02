@@ -114,6 +114,15 @@ describe("isCustomWeight", () => {
     expect(isCustomWeight(41.25, null, null)).toBe(false);
     expect(isCustomWeight(41.25, null, "dumbbell")).toBe(true);
     expect(isCustomWeight(41.25, null, "barbell")).toBe(true);
+    expect(isCustomWeight(41.25, null, "kettlebell")).toBe(true);
+    expect(isCustomWeight(41.25, null, "bodyweight")).toBe(false);
+    expect(isCustomWeight(41.25, null, "bands")).toBe(false);
+    expect(isCustomWeight(41.25, null, "other")).toBe(false);
+  });
+
+  it("never counts 0 as custom", () => {
+    expect(isCustomWeight(0, "kg5", "cable")).toBe(false);
+    expect(isCustomWeight(0, null, "cable")).toBe(false);
   });
 
   it("treats a retired pattern as none", () => {

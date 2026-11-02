@@ -44,7 +44,16 @@ export function ViewportFix() {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    let pressing = false;
+    let resetAfterPress = false;
+
     function resetScroll() {
+      // Moving the page mid-press puts the button somewhere else before the
+      // release, and no click fires. Wait for the press to end.
+      if (pressing) {
+        resetAfterPress = true;
+        return;
+      }
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
       document.documentElement.scrollLeft = 0;
@@ -146,17 +155,35 @@ export function ViewportFix() {
       }, 150);
     }
 
+    function onPressStart() {
+      pressing = true;
+    }
+
+    /** After this event's click has been delivered, then catch up. */
+    function onPressEnd() {
+      pressing = false;
+      if (!resetAfterPress) return;
+      resetAfterPress = false;
+      setTimeout(resetScroll, 0);
+    }
+
     let scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
     vv.addEventListener("scroll", onVVScroll);
     vv.addEventListener("resize", onViewportResize);
     document.addEventListener("focusout", onFocusOut);
+    document.addEventListener("pointerdown", onPressStart, true);
+    document.addEventListener("pointerup", onPressEnd, true);
+    document.addEventListener("pointercancel", onPressEnd, true);
 
     return () => {
       if (scrollTimer) clearTimeout(scrollTimer);
       vv.removeEventListener("scroll", onVVScroll);
       vv.removeEventListener("resize", onViewportResize);
       document.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("pointerdown", onPressStart, true);
+      document.removeEventListener("pointerup", onPressEnd, true);
+      document.removeEventListener("pointercancel", onPressEnd, true);
     };
   }, []);
 
