@@ -51,7 +51,6 @@ import {
     toScope,
 } from "@/lib/utils/progression";
 import type { ProgramSetData, SessionHistory } from "@/lib/utils/progression";
-import { learnWeightStacks } from "@/lib/weight-stack-learning";
 import type {
     ActionResult,
     ActiveCycleInfo,
@@ -671,8 +670,6 @@ export async function updateLoggedSet(data: unknown): Promise<ActionResult<Worko
       await rebuildPRsFrom(tx, auth.user.id, existing.exerciseId, earliest(times.startTime, times.createdAt));
       return row;
     });
-
-    await learnWeightStacks(existing.sessionId, auth.user.id);
 
     revalidatePath("/history");
     revalidatePath(`/history/${existing.sessionId}`);

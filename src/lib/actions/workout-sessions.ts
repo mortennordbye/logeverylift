@@ -136,7 +136,7 @@ export async function completeWorkoutSession(
     const { sessionId, endTime, notes, feeling } = validation.data;
 
     const [existing] = await db
-      .select({ userId: workoutSessions.userId })
+      .select({ userId: workoutSessions.userId, isCompleted: workoutSessions.isCompleted })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, sessionId));
     assertOwner(existing, auth.user.id);
@@ -167,7 +167,8 @@ export async function completeWorkoutSession(
         );
     }
 
-    await learnWeightStacks(sessionId, auth.user.id);
+    // Once per session: finishing it again must not undo a forget.
+    if (!existing.isCompleted) await learnWeightStacks(sessionId, auth.user.id);
 
     // Session detail lives at /history/[sessionId]; `/workout` does not exist.
     revalidatePath(`/history/${sessionId}`);

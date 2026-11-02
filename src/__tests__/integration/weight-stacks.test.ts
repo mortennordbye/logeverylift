@@ -171,6 +171,13 @@ describe("finishing a workout", () => {
     expect(await storedStack()).toBeNull();
   });
 
+  it("learns nothing when a dip makes the gap from last session more than one step", async () => {
+    await finishedSession([40, 40], 4);
+    await finishedSession([35, 35], 2);
+    await finishedSession([45, 45]);
+    expect(await storedStack()).toBeNull();
+  });
+
   it("still learns a step after an older, heavier session", async () => {
     await finishedSession([50, 50], 4);
     await finishedSession([20, 20], 2);
@@ -241,7 +248,7 @@ describe("finishing a workout", () => {
     expect(await storedStack()).toBe("kg5");
   });
 
-  it("learns nothing from climbing back up on the app's suggestions after a deload", async () => {
+  it("learns nothing from a step the app would suggest from the last session", async () => {
     await suggestsLoad();
     await db
       .update(programExercises)
@@ -431,29 +438,38 @@ describe("other ways a session closes or changes", () => {
     expect(await storedStack()).toBe("kg4_5");
   });
 
-  it("re-learns when the latest session's weight is corrected from history", async () => {
-    const session = await finishedSession([18, 18]);
-    const rows = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id));
-    for (const row of rows) {
-      await updateLoggedSet({ setId: row.id, weightKg: 19, actualReps: 8, isFailed: false, notes: null });
-    }
+  it("does not let closing an old session overwrite what a newer one taught", async () => {
+    const older = await createSession(userId, programId, {
+      startTime: new Date(Date.now() - 11 * 60 * 60 * 1000),
+    });
+    await logSets(older.id, [18, 18]);
+    await finishedSession([20, 21]);
+    expect(await storedStack()).toBe("kg1");
+    await closeStaleOpenSessions();
     expect(await storedStack()).toBe("kg1");
   });
 
-  it("does not let an edit to an older session overwrite what a newer one taught", async () => {
-    const older = await finishedSession([18, 18], 48);
-    await finishedSession([20, 21]);
-    expect(await storedStack()).toBe("kg1");
-    await db
-      .update(programExercises)
-      .set({ weightStack: "kg5" })
-      .where(eq(programExercises.id, slot.programExerciseId));
-    const [row] = await db
-      .select()
-      .from(workoutSets)
-      .where(and(eq(workoutSets.sessionId, older.id), eq(workoutSets.setNumber, 1)));
-    await updateLoggedSet({ setId: row.id, weightKg: 19, actualReps: 8, isFailed: false, notes: null });
-    expect(await storedStack()).toBe("kg5");
+  it("learns nothing from a correction in history, which the next session settles", async () => {
+    const session = await finishedSession([17.5, 17.5]);
+    const rows = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id));
+    await updateLoggedSet({ setId: rows[0].id, weightKg: 18, actualReps: 8, isFailed: false, notes: null });
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("keeps a forget through an edit of the session that taught the stack", async () => {
+    const session = await finishedSession([18, 18]);
+    await clearWeightStack({ programExerciseId: slot.programExerciseId });
+    const rows = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id));
+    await updateLoggedSet({ setId: rows[0].id, weightKg: 18, actualReps: 9, isFailed: false, notes: null });
+    expect(await storedStack()).toBe(FORGOTTEN_STACK);
+  });
+
+  it("keeps a forget when the same session is finished again", async () => {
+    const session = await finishedSession([18, 18]);
+    await clearWeightStack({ programExerciseId: slot.programExerciseId });
+    const again = await completeWorkoutSession({ sessionId: session.id });
+    expect(again.success).toBe(true);
+    expect(await storedStack()).toBe(FORGOTTEN_STACK);
   });
 });
 

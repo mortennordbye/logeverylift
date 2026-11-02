@@ -50,6 +50,7 @@ export function ViewportFix() {
     let pressing = false;
     let resetAfterPress = false;
     let pressExpiry: ReturnType<typeof setTimeout> | null = null;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
     function resetScroll() {
       // Moving the page mid-press puts the button somewhere else before the
@@ -161,19 +162,26 @@ export function ViewportFix() {
 
     function onPressStart() {
       pressing = true;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = null;
       // Some gestures never send a release. Don't hold the resets back forever.
       if (pressExpiry) clearTimeout(pressExpiry);
       pressExpiry = setTimeout(onPressEnd, PRESS_EXPIRY_MS);
     }
 
     function onPressEnd() {
-      pressing = false;
       if (pressExpiry) clearTimeout(pressExpiry);
       pressExpiry = null;
-      if (!resetAfterPress) return;
-      resetAfterPress = false;
-      // Late enough for the click, which iOS can deliver just after the release.
-      setTimeout(resetScroll, CLICK_SETTLE_MS);
+      // Still pressing until the click has landed, which iOS can deliver just
+      // after the release.
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        pressing = false;
+        if (!resetAfterPress) return;
+        resetAfterPress = false;
+        resetScroll();
+      }, CLICK_SETTLE_MS);
     }
 
     let scrollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -188,6 +196,7 @@ export function ViewportFix() {
     return () => {
       if (scrollTimer) clearTimeout(scrollTimer);
       if (pressExpiry) clearTimeout(pressExpiry);
+      if (settleTimer) clearTimeout(settleTimer);
       vv.removeEventListener("scroll", onVVScroll);
       vv.removeEventListener("resize", onViewportResize);
       document.removeEventListener("focusout", onFocusOut);

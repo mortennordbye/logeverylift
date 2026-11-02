@@ -73,6 +73,33 @@ describe("ViewportFix on focusout", () => {
     expect(scrollTo).toHaveBeenCalled();
   });
 
+  it("holds every reset until the click has had time to land", () => {
+    document.dispatchEvent(new Event("pointerdown"));
+    blur(document.createElement("textarea"));
+    vi.advanceTimersByTime(290);
+    document.dispatchEvent(new Event("pointerup"));
+    // The focusout's own 300 ms follow-up falls inside this window.
+    vi.advanceTimersByTime(50);
+    expect(scrollTo).not.toHaveBeenCalled();
+    window.visualViewport!.dispatchEvent(new Event("scroll"));
+    expect(scrollTo).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(scrollTo).toHaveBeenCalled();
+  });
+
+  it("a second press keeps holding resets back", () => {
+    document.dispatchEvent(new Event("pointerdown"));
+    blur(document.createElement("textarea"));
+    document.dispatchEvent(new Event("pointerup"));
+    vi.advanceTimersByTime(50);
+    document.dispatchEvent(new Event("pointerdown"));
+    vi.advanceTimersByTime(200);
+    expect(scrollTo).not.toHaveBeenCalled();
+    document.dispatchEvent(new Event("pointerup"));
+    vi.advanceTimersByTime(150);
+    expect(scrollTo).toHaveBeenCalled();
+  });
+
   it("gives up waiting when the release never arrives", () => {
     document.dispatchEvent(new Event("pointerdown"));
     blur(document.createElement("textarea"));

@@ -22,8 +22,9 @@ import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
  * Sets don't store what the app suggested, so the checks for "that was the app's
  * own number" work from the increment it would have used.
  *
- * Editing an older session changes nothing, so a correction months later can't
- * undo newer learning.
+ * Runs when a session closes. A correction in history teaches nothing: a half
+ * corrected session reads as a false pattern, and the next weight logged settles
+ * it anyway. Closing an old session after a newer one changes nothing either.
  *
  * Not a Server Action: it takes a userId, so it must never be callable from a
  * client. Callers pass the session's user. It runs inside saves that matter more
