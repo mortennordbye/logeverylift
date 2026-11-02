@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { programExercises, workoutSets } from "@/db/schema";
+import { programExercises, users, workoutSessions, workoutSets } from "@/db/schema";
 import { clearWeightStack } from "@/lib/actions/programs";
 import {
   closeStaleOpenSessions,
@@ -7,11 +7,15 @@ import {
   createWorkoutSession,
 } from "@/lib/actions/workout-sessions";
 import { getProgressiveSuggestions, logWorkoutSet, updateLoggedSet } from "@/lib/actions/workout-sets";
+import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { learnWeightStacks } from "@/lib/weight-stack-learning";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
+
+const SLOT_TOOL = "edit_program_exercise";
 
 let userId: string;
 let programId: number;
@@ -39,6 +43,12 @@ const storedStack = async (id = slot.programExerciseId) =>
       .from(programExercises)
       .where(eq(programExercises.id, id))
   )[0].weightStack;
+
+const setStack = (weightStack: string) =>
+  db
+    .update(programExercises)
+    .set({ weightStack })
+    .where(eq(programExercises.id, slot.programExerciseId));
 
 async function logSets(sessionId: number, weights: number[], s = slot) {
   for (const [i, weightKg] of weights.entries()) {
@@ -139,18 +149,88 @@ describe("finishing a workout", () => {
   });
 
   it("does not treat a jump on a learned stack as news", async () => {
-    await finishedSession([18, 18], 4);
-    await finishedSession([27, 27], 2);
-    expect(await storedStack()).toBe("kg4_5");
+    await setStack("kg2_5");
+    await finishedSession([20, 20], 2);
+    await finishedSession([30, 30]);
+    expect(await storedStack()).toBe("kg2_5");
+  });
+
+  it("learns nothing from coming back to a weight already lifted", async () => {
+    await finishedSession([40, 40], 4);
+    await finishedSession([35, 35], 2);
+    await finishedSession([40, 40]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("measures a jump from the heaviest weight so far, not the last session", async () => {
+    await finishedSession([40, 40], 4);
+    await finishedSession([35, 35], 2);
+    await finishedSession([45, 45]);
+    expect(await storedStack()).toBe("kg5");
+  });
+
+  it("learns nothing from a jump bigger than one step of any pattern", async () => {
+    await finishedSession([10, 10], 2);
+    await finishedSession([30, 30]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("corrects a wrong stack with the weights the app used to suggest", async () => {
+    await setStack("kg5");
+    await finishedSession([40, 40], 2);
+    await finishedSession([41.25, 41.25]);
+    expect(await storedStack()).toBe("kg1_25");
+  });
+
+  it("corrects a wrong stack even when the weight is the old next step", async () => {
+    await setStack("kg4_5");
+    await finishedSession([18, 18], 2);
+    await finishedSession([18.75, 18.75]);
+    expect(await storedStack()).toBe("kg1_25");
+  });
+
+  it("learns nothing from holding at a weight on the app's own grid", async () => {
+    await db
+      .update(programExercises)
+      .set({ overloadIncrementKg: "1" })
+      .where(eq(programExercises.id, slot.programExerciseId));
+    await finishedSession([20, 20], 4);
+    await finishedSession([21, 21], 2);
+    await finishedSession([21, 21]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("learns nothing on an endurance goal's whole-kg steps, lighter sets included", async () => {
+    await db.update(users).set({ goals: JSON.stringify(["endurance"]) }).where(eq(users.id, userId));
+    await finishedSession([25, 20], 2);
+    await finishedSession([26, 21]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("does not count another exercise's weights toward a jump after a swap", async () => {
+    const dumbbell = await createExercise({ equipment: "dumbbell" });
+    await db
+      .update(programExercises)
+      .set({ exerciseId: dumbbell.id })
+      .where(eq(programExercises.id, slot.programExerciseId));
+    const old = await createSession(userId, programId, { startTime: new Date(Date.now() - 7_200_000) });
+    await logSets(old.id, [20, 20], { ...slot, exerciseId: dumbbell.id });
+    await completeWorkoutSession({ sessionId: old.id });
+    await db
+      .update(programExercises)
+      .set({ exerciseId: slot.exerciseId })
+      .where(eq(programExercises.id, slot.programExerciseId));
+    await finishedSession([25, 25]);
+    expect(await storedStack()).toBeNull();
   });
 
   it("learns on an exercise with no equipment recorded", async () => {
     const exercise = await createExercise({ equipment: null });
     const { program, slots } = await createProgram(userId, [
-      { exerciseId: exercise.id, sets: [{ weightKg: "18" }] },
+      { exerciseId: exercise.id, sets: [{ weightKg: "13.5" }] },
     ]);
     const session = await createSession(userId, program.id);
-    await logSets(session.id, [18], slots[0]);
+    await logSets(session.id, [13.5], slots[0]);
     await completeWorkoutSession({ sessionId: session.id });
     expect(await storedStack(slots[0].programExerciseId)).toBe("kg4_5");
   });
@@ -181,10 +261,18 @@ describe("finishing a workout", () => {
     const session = await createSession(userId, programId);
     await logSets(session.id, [18, 18]);
     vi.spyOn(console, "error").mockImplementation(() => {});
-    vi.spyOn(db, "select").mockImplementationOnce(() => {
-      throw new Error("boom");
-    });
-    await expect(learnWeightStacks(session.id, userId)).resolves.toBeUndefined();
+    // The action's own ownership read goes through; the learner's first read throws.
+    const realSelect = db.select.bind(db);
+    vi.spyOn(db, "select")
+      .mockImplementationOnce(realSelect as never)
+      .mockImplementationOnce(() => {
+        throw new Error("boom");
+      });
+    const done = await completeWorkoutSession({ sessionId: session.id });
+    expect(done.success).toBe(true);
+    vi.restoreAllMocks();
+    const [row] = await db.select().from(workoutSessions).where(eq(workoutSessions.id, session.id));
+    expect(row.isCompleted).toBe(true);
     expect(await storedStack()).toBeNull();
   });
 
@@ -253,6 +341,33 @@ describe("ownership", () => {
     const stranger = await createUser();
     await learnWeightStacks(session.id, stranger.id);
     expect(await storedStack()).toBeNull();
+  });
+});
+
+describe("swapping a slot's exercise through MCP", () => {
+  /** The slot tool's handler, as the MCP server would call it for this user. */
+  function slotTool() {
+    let handler: ((args: Record<string, unknown>) => Promise<unknown>) | undefined;
+    const server = {
+      registerTool(name: string, _config: unknown, fn: typeof handler) {
+        if (name === SLOT_TOOL) handler = fn;
+      },
+    } as unknown as McpServer;
+    registerProgramTools(server, userId);
+    return handler!;
+  }
+
+  it("forgets the stack, which described the old exercise's machine", async () => {
+    await setStack("kg4_5");
+    const barbell = await createExercise({ equipment: "barbell" });
+    await slotTool()({ operation: "update", programExerciseId: slot.programExerciseId, exerciseId: barbell.id });
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("keeps the stack when the exercise does not change", async () => {
+    await setStack("kg4_5");
+    await slotTool()({ operation: "update", programExerciseId: slot.programExerciseId, exerciseId: slot.exerciseId });
+    expect(await storedStack()).toBe("kg4_5");
   });
 });
 

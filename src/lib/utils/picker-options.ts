@@ -46,6 +46,9 @@ const LADDERS: Partial<Record<Equipment, number[]>> = {
   cable: [0, ...steps(1.25, 1.25, 16), ...steps(22.5, 2.5, 52)],
 };
 
+/** Patterns go higher than this, but a heavier weight can be typed. */
+const PICKER_TOP_KG = 200;
+
 /**
  * A learned stack pattern, when the exercise has one, replaces the equipment's
  * ladder: those are the weights this machine actually has.
@@ -55,7 +58,7 @@ export function weightOptionsFor(
   weightStack?: string | null,
 ): number[] {
   const rungs = stackRungs(weightStack);
-  if (rungs) return [0, ...rungs];
+  if (rungs) return [0, ...rungs.filter((rung) => rung <= PICKER_TOP_KG)];
   return (equipment && LADDERS[equipment]) || DEFAULT_LADDER;
 }
 

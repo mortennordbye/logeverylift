@@ -35,6 +35,10 @@ describe("weightOptionsFor", () => {
     expect(weightOptionsFor("cable", "kg4_5").slice(0, 4)).toEqual([0, 4.5, 9, 13.5]);
   });
 
+  it("keeps a learned pattern's picker to a scrollable length", () => {
+    expect(weightOptionsFor("machine", "kg1").at(-1)).toBe(200);
+  });
+
   it("falls back to the equipment ladder for no pattern or a retired one", () => {
     expect(weightOptionsFor("cable", null)).toEqual(weightOptionsFor("cable"));
     expect(weightOptionsFor("cable", "retired")).toEqual(weightOptionsFor("cable"));

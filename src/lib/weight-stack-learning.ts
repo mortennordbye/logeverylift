@@ -3,7 +3,7 @@ import { exercises, programExercises, programs, users, workoutSessions, workoutS
 import { parseUserGoals } from "@/lib/utils/goals";
 import { type Equipment, isCustomWeight } from "@/lib/utils/picker-options";
 import { adaptiveIncrementKg, roundToNearest } from "@/lib/utils/progression";
-import { pickStack } from "@/lib/utils/weight-stacks";
+import { pickStack, pickStackForStep, stackRungs } from "@/lib/utils/weight-stacks";
 import { and, desc, eq, gt, inArray, isNull, max, or } from "drizzle-orm";
 
 /**
@@ -13,13 +13,14 @@ import { and, desc, eq, gt, inArray, isNull, max, or } from "drizzle-orm";
  * Two things in a slot's newest session teach a pattern:
  *  - a custom weight, which picks the most common pattern containing all of
  *    that session's working weights;
- *  - with no pattern yet, a jump up from the previous session that the app did
- *    not suggest. A 5 kg stack never produces a custom weight, because 20 and 25
- *    are both on the default ladder, so the gap is the only evidence of it.
+ *  - with no pattern yet, a new heaviest weight exactly one step of a pattern
+ *    above the old one, which the app did not suggest. A 5 kg stack never
+ *    produces a custom weight, because 20 and 25 are both on the default ladder,
+ *    so the step is the only evidence of it. Returning to a weight already
+ *    lifted proves nothing, and neither does a jump of several steps.
  *
- * Accepting the app's own suggestion teaches nothing: that number came from the
- * app. Sets don't store what was suggested, so it is recomputed from the
- * previous session.
+ * Sets don't store what the app suggested, so the checks for "that was the app's
+ * own number" work from the increment it would have used.
  *
  * Editing an older session changes nothing, so a correction months later can't
  * undo newer learning.
@@ -33,6 +34,7 @@ export async function learnWeightStacks(sessionId: number, userId: string): Prom
     const rows = await db
       .select({
         slotId: programExercises.id,
+        exerciseId: workoutSets.exerciseId,
         weightStack: programExercises.weightStack,
         overloadIncrementKg: programExercises.overloadIncrementKg,
         exerciseTypeOverride: programExercises.exerciseType,
@@ -84,46 +86,59 @@ export async function learnWeightStacks(sessionId: number, userId: string): Prom
       const weights = sets.map((set) => Number(set.weightKg));
       const heaviest = Math.max(...weights);
 
-      const [newest, previous] = await db
+      const [newest, ...earlier] = await db
         .select({ sessionId: workoutSessions.id, heaviest: max(workoutSets.weightKg) })
         .from(workoutSets)
         .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
         .where(
           and(
             eq(workoutSets.programExerciseId, slotId),
+            eq(workoutSets.exerciseId, first.exerciseId),
             eq(workoutSets.setType, "working"),
             eq(workoutSessions.userId, userId),
           ),
         )
         .groupBy(workoutSessions.id, workoutSessions.startTime)
-        .orderBy(desc(workoutSessions.startTime), desc(workoutSessions.id))
-        .limit(2);
+        .orderBy(desc(workoutSessions.startTime), desc(workoutSessions.id));
       if (newest?.sessionId !== sessionId) continue;
 
-      const previousKg = previous?.heaviest != null ? Number(previous.heaviest) : null;
-      const movedUp = previousKg != null && previousKg > 0 && heaviest > previousKg;
-      const increment = movedUp
-        ? adaptiveIncrementKg(
+      let next: string | null = null;
+      if (stackRungs(first.weightStack)) {
+        // A learned stack is a claim about the machine, and any weight off it
+        // disproves that, including one the app would have suggested without it.
+        if (weights.some((kg) => isCustomWeight(kg, first.weightStack, equipment))) {
+          next = pickStack(weights);
+        }
+      } else {
+        const incrementAt = (loadKg: number) =>
+          adaptiveIncrementKg(
             first.overloadIncrementKg != null ? Number(first.overloadIncrementKg) : null,
-            previousKg,
+            loadKg,
             first.movementPattern,
             goal,
             profile?.experienceLevel,
             first.exerciseTypeOverride ?? first.exerciseTypeDefault,
             equipment,
-          )
-        : 0;
-      const tookSuggestion =
-        movedUp && Math.abs(heaviest - roundToNearest(previousKg + increment, increment)) < 0.001;
+          );
+        const heaviestBefore = Math.max(0, ...earlier.map((row) => Number(row.heaviest ?? 0)));
+        // The app only ever suggests multiples of its increment, whether as a
+        // step up, a hold or a lighter set. A weight on that grid may simply be
+        // the app's own number, so it says nothing about the machine.
+        const onAppGrid = (kg: number) =>
+          [kg, heaviestBefore].some((loadKg) => {
+            const increment = incrementAt(loadKg);
+            return increment > 0 && Math.abs(roundToNearest(kg, increment) - kg) < 0.001;
+          });
 
-      const custom = weights.some(
-        (kg) => isCustomWeight(kg, first.weightStack, equipment) && !(tookSuggestion && kg === heaviest),
-      );
-      const jumped = movedUp && !tookSuggestion && first.weightStack == null;
-
-      // A custom weight may mean a different machine, so the old weights are no
-      // evidence. A jump is only a gap because of them.
-      const next = custom ? pickStack(weights) : jumped ? pickStack([previousKg, ...weights]) : null;
+        if (weights.some((kg) => isCustomWeight(kg, null, equipment) && !onAppGrid(kg))) {
+          next = pickStack(weights);
+        } else if (heaviestBefore > 0 && heaviest > heaviestBefore) {
+          const increment = incrementAt(heaviestBefore);
+          const tookSuggestion =
+            Math.abs(roundToNearest(heaviestBefore + increment, increment) - heaviest) < 0.001;
+          if (!tookSuggestion) next = pickStackForStep(heaviestBefore, heaviest, weights);
+        }
+      }
       if (next == null || next === first.weightStack) continue;
 
       await db

@@ -375,6 +375,7 @@ export function registerProgramTools(server: McpServer, userId: string) {
           if (!owner || owner.userId !== userId) return fail("Exercise slot not found");
           const [current] = await db
             .select({
+              exerciseId: programExercises.exerciseId,
               progressionAdvance: programExercises.progressionAdvance,
               progressionScope: programExercises.progressionScope,
               progressionRequiredHits: programExercises.progressionRequiredHits,
@@ -383,7 +384,11 @@ export function registerProgramTools(server: McpServer, userId: string) {
             .where(eq(programExercises.id, programExerciseId));
 
           const peUpdates: Record<string, unknown> = {};
-          if (args.exerciseId !== undefined) peUpdates.exerciseId = args.exerciseId;
+          if (args.exerciseId !== undefined) {
+            peUpdates.exerciseId = args.exerciseId;
+            // A learned stack describes the old exercise's machine.
+            if (args.exerciseId !== current.exerciseId) peUpdates.weightStack = null;
+          }
           if (args.orderIndex !== undefined) peUpdates.orderIndex = args.orderIndex;
           if (args.notes !== undefined) peUpdates.notes = args.notes;
           if (args.progressionMode !== undefined) {

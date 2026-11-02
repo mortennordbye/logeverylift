@@ -55,6 +55,19 @@ describe("the pattern list", () => {
   });
 });
 
+describe("heavy machines", () => {
+  it("knows weights well above 200 kg", () => {
+    expect(pickStack([225])).toBe("kg5");
+    expect(gapAbove(200, "kg5")).toBe(5);
+    expect(nearestRung(205, "kg5")).toBe(205);
+  });
+
+  it("does not pull a load above the top of the list back down", () => {
+    const top = stackRungs("kg5")!.at(-1)!;
+    expect(nearestRung(top + 7, "kg5")).toBe(top + 7);
+  });
+});
+
 describe("nearestRung", () => {
   it("snaps to the closest weight on the stack", () => {
     expect(nearestRung(23, "kg4_5")).toBe(22.5);

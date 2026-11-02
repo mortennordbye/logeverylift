@@ -47,8 +47,12 @@ test("a custom cable weight changes the next suggestion and the picker, and can 
     .where(eq(programSets.programExerciseId, slotId));
 
   const workout = `/programs/${programId}/workout`;
-  await page.goto(workout);
-  // Started after the navigation: a request that goto cut off never settles.
+  // Reloaded, then Back as a lifter would: a goto here can be cut off by the
+  // exercise page's own navigation settling.
+  await page.reload();
+  await page.getByRole("link", { name: "Back" }).click();
+  await page.waitForURL(`**${workout}`);
+  // Started after the reload: a request it cut off would never settle.
   const settle = trackActions(page);
   await page.getByRole("button", { name: `Mark ${NAME} as done`, exact: true }).click();
   await expect(page.getByRole("button", { name: `Mark ${NAME} as not done`, exact: true })).toBeVisible();

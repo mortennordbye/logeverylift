@@ -12,7 +12,7 @@
  */
 
 const KG_PER_LB = 0.45359237;
-const TOP_KG = 200;
+const TOP_KG = 500;
 
 /** Stacks are labelled to one decimal in kg; the plates are whole pounds. */
 const lb = (pounds: number) => Math.round(pounds * KG_PER_LB * 10) / 10;
@@ -61,9 +61,28 @@ export function isOnStack(kg: number, rungs: number[]): boolean {
   return onRung(rungs, kg);
 }
 
-/** The closest weight on a known pattern; a tie goes up. */
+/**
+ * The most common pattern containing every weight, in which `toKg` is the very
+ * next weight after `fromKg`. A lifter moves up a stack one pin at a time; a
+ * bigger gap could be any stack.
+ */
+export function pickStackForStep(fromKg: number, toKg: number, weights: number[]): string | null {
+  return (
+    WEIGHT_STACKS.find(
+      ({ id, rungs }) =>
+        [fromKg, ...weights].every((kg) => onRung(rungs, kg)) &&
+        Math.abs(gapAbove(fromKg, id) - (toKg - fromKg)) < 0.001,
+    )?.id ?? null
+  );
+}
+
+/**
+ * The closest weight on a known pattern; a tie goes up. A load above the top of
+ * the list stays as it is, because snapping would cut it.
+ */
 export function nearestRung(kg: number, id: string): number {
   const rungs = stackRungs(id) ?? [];
+  if (rungs.length > 0 && kg > rungs[rungs.length - 1]) return kg;
   return rungs.reduce(
     (best, rung) => (Math.abs(rung - kg) <= Math.abs(best - kg) ? rung : best),
     rungs[0] ?? kg,
