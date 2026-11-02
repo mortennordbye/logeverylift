@@ -14,6 +14,13 @@ const SHEET_TRANSITION = {
   ease: [0.16, 1, 0.3, 1] as [number, number, number, number],
 };
 
+/**
+ * A closed sheet stays mounted while it animates out, and looks gone well before
+ * that ends, so it lets go of the screen early or a tap on what is behind it does
+ * nothing. Not at once: the second tap of a double tap on Done would land there.
+ */
+const RELEASE_TAPS = { delay: 0.15, duration: 0 };
+
 export function BottomSheet({ open, onClose, children, blur = false }: Props) {
   const [kbHeight, setKbHeight] = useState(0);
 
@@ -67,10 +74,8 @@ export function BottomSheet({ open, onClose, children, blur = false }: Props) {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            // A closed sheet stays mounted while it animates out, and looks gone
-            // well before that ends. It must not take taps meant for the screen.
             exit={{ opacity: 0, pointerEvents: "none" }}
-            transition={{ duration: 0.2 }}
+            transition={{ duration: 0.2, pointerEvents: RELEASE_TAPS }}
             className={`fixed inset-0 z-50 ${
               blur ? "bg-background/80 backdrop-blur-sm" : "bg-black/50"
             }`}
@@ -80,7 +85,7 @@ export function BottomSheet({ open, onClose, children, blur = false }: Props) {
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
             exit={{ y: "100%", pointerEvents: "none" }}
-            transition={SHEET_TRANSITION}
+            transition={{ ...SHEET_TRANSITION, pointerEvents: RELEASE_TAPS }}
             className="fixed inset-x-0 bottom-0 z-50"
             style={{ marginBottom: kbHeight }}
             role="dialog"

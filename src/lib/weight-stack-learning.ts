@@ -150,8 +150,9 @@ export async function learnWeightStacks(sessionId: number, userId: string): Prom
           const below = Math.max(0, ...lifted.filter((kg) => kg < heaviest));
           if (below > 0) {
             const increment = incrementAt(below);
+            // Or the step the lifter chose, which they already told us.
             const tookSuggestion =
-              appSuggests && Math.abs(roundToNearest(below + increment, increment) - heaviest) < 0.001;
+              (appSuggests || first.overloadIncrementKg != null) && Math.abs(roundToNearest(below + increment, increment) - heaviest) < 0.001;
             if (!tookSuggestion) next = pickStackForStep(below, heaviest, weights);
           }
         }

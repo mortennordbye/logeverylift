@@ -2,11 +2,10 @@ import { expect, test } from "./fixtures/test";
 import { openFirstExercise, openFirstSetEditor, openWorkout, waitForLiveSession } from "./helpers";
 
 /**
- * A sheet that has been closed must not block the screen behind it.
- *
- * Its backdrop stays mounted while it fades out, looking gone well before the
- * fade ends, and it used to swallow every tap until then. Pick a weight, tap Save
- * straight away, and nothing happened. Tap a moment later, and it worked.
+ * A closing sheet stays mounted while it animates out, looking gone well before
+ * that ends. It must let go of the screen quickly, or tapping Save straight after
+ * picking a weight does nothing. It must not let go at once, or the second tap of
+ * a double tap on Done lands on whatever is behind the sheet.
  */
 test("Save can be tapped the moment a picker closes", async ({ page }) => {
   await openWorkout(page);
@@ -25,12 +24,16 @@ test("Save can be tapped the moment a picker closes", async ({ page }) => {
   await expect(done).toBeVisible();
 
   // In the page, so nothing between the close and the look can outlast the fade.
-  const under = await done.evaluate(async (el, [px, py]) => {
+  const blockedMs = await done.evaluate(async (el, [px, py]) => {
+    const start = performance.now();
     (el as HTMLElement).click();
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
-    return document.elementFromPoint(px, py)?.textContent ?? "";
+    while (document.elementFromPoint(px, py)?.textContent !== "Save") {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
+    return performance.now() - start;
   }, [x, y]);
-  expect(under).toBe("Save");
+  expect(blockedMs).toBeGreaterThanOrEqual(100); // Long enough for a double tap.
+  expect(blockedMs).toBeLessThan(260); // The whole animation is 280 ms.
 
   await page.mouse.click(x, y);
   await expect(page).toHaveURL(/\/exercises\/\d+$/);

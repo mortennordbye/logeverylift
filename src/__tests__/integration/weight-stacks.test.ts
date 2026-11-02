@@ -255,7 +255,7 @@ describe("finishing a workout", () => {
       await logSets(session.id, [kg], slots[0]);
       await completeWorkoutSession({ sessionId: session.id });
     }
-    expect(await storedStack(slots[0].programExerciseId)).toBe("kg1");
+    expect(await storedStack(slots[0].programExerciseId)).toBe("kg3");
   });
 
   it("learns nothing from a jump bigger than one step of any pattern", async () => {
