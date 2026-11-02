@@ -67,7 +67,9 @@ export function BottomSheet({ open, onClose, children, blur = false }: Props) {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            // A closed sheet stays mounted while it animates out, and looks gone
+            // well before that ends. It must not take taps meant for the screen.
+            exit={{ opacity: 0, pointerEvents: "none" }}
             transition={{ duration: 0.2 }}
             className={`fixed inset-0 z-50 ${
               blur ? "bg-background/80 backdrop-blur-sm" : "bg-black/50"
@@ -77,7 +79,7 @@ export function BottomSheet({ open, onClose, children, blur = false }: Props) {
           <motion.div
             initial={{ y: "100%" }}
             animate={{ y: 0 }}
-            exit={{ y: "100%" }}
+            exit={{ y: "100%", pointerEvents: "none" }}
             transition={SHEET_TRANSITION}
             className="fixed inset-x-0 bottom-0 z-50"
             style={{ marginBottom: kbHeight }}
