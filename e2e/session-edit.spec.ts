@@ -14,11 +14,16 @@ test("a set's weight edited in history is saved and becomes the record", async (
     .select({ id: users.id })
     .from(users)
     .where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
+  // Its own exercise: an unordered pick from the library can land on one with
+  // seeded history, whose heavier record then outranks the edit.
   const [exercise] = await db
-    .select({ id: exercises.id, name: exercises.name })
-    .from(exercises)
-    .where(and(isNull(exercises.userId), eq(exercises.category, "strength")))
-    .limit(1);
+    .insert(exercises)
+    .values({
+      name: `Session Edit Spec ${Date.now()}-${testInfo.workerIndex}`,
+      category: "strength",
+      userId: user.id,
+    })
+    .returning({ id: exercises.id, name: exercises.name });
   const startTime = new Date(Date.now() - 3 * 24 * 60 * 60_000);
   const [session] = await db
     .insert(workoutSessions)
