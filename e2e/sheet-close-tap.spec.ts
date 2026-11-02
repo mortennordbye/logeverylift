@@ -23,17 +23,20 @@ test("Save can be tapped the moment a picker closes", async ({ page }) => {
   const done = page.getByRole("dialog").getByRole("button", { name: "Done" });
   await expect(done).toBeVisible();
 
-  // In the page, so nothing between the close and the look can outlast the fade.
-  const blockedMs = await done.evaluate(async (el, [px, py]) => {
+  // In the page, so nothing between the close and the look can outlast the hold.
+  const release = await done.evaluate(async (el, [px, py]) => {
     const start = performance.now();
     (el as HTMLElement).click();
     while (document.elementFromPoint(px, py)?.textContent !== "Save") {
       await new Promise((r) => requestAnimationFrame(r));
     }
-    return performance.now() - start;
+    return {
+      afterMs: performance.now() - start,
+      stillAnimating: document.querySelector('[role="dialog"]') !== null,
+    };
   }, [x, y]);
-  expect(blockedMs).toBeGreaterThanOrEqual(100); // Long enough for a double tap.
-  expect(blockedMs).toBeLessThan(260); // The whole animation is 280 ms.
+  expect(release.afterMs).toBeGreaterThanOrEqual(100); // Long enough for a double tap.
+  expect(release.stillAnimating).toBe(true); // Let go early, not by unmounting.
 
   await page.mouse.click(x, y);
   await expect(page).toHaveURL(/\/exercises\/\d+$/);
@@ -50,9 +53,13 @@ test("a sheet reopened while it is still closing takes taps", async ({ page }) =
   const done = page.getByRole("dialog").getByRole("button", { name: "Done" });
   await expect(done).toBeVisible();
 
+  // Reopened once the closing sheet has let go, which is the state to recover from.
   await done.evaluate(async (el) => {
     (el as HTMLElement).click();
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    while (getComputedStyle(dialog).pointerEvents !== "none") {
+      await new Promise((r) => requestAnimationFrame(r));
+    }
     [...document.querySelectorAll("button")].find((b) => b.textContent?.startsWith("Weight (kg)"))?.click();
   });
 
