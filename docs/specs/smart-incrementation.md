@@ -121,6 +121,14 @@ Applied **after** SI-4, to the number SI-4 produced. `beginner` doubles it, `adv
 *Why:* 1.25 kg on a barbell is 0.625 kg a side, which almost nobody owns. The number reads precise, cannot be loaded, and the lifter rounds it themselves until the plan and the bar disagree about what the session was. The unclassified exemption matters as much as the rule: most of the library carries no equipment, and defaulting them to a step would coarsen every one of them on no evidence — the opposite of the problem this solves. Closes `A3`'s second half.
 *Covered by:* `progressive-suggestions.test.ts` — the "loadable granularity" block.
 
+### SI-4b — A learned stack replaces the equipment's fixed step
+A slot can hold a `weightStack`, a pattern id from `WEIGHT_STACKS`. With one set, the increment is never less than the gap to the next weight on that stack, unless the increment was manually set to zero, and every suggested or backed-off weight snaps to the stack with `nearestRung`. A back-off always comes down at least one weight (`rungBelow`). An id no longer in the list is treated as no pattern.
+
+`learnWeightStacks` writes the column when a session finishes, is swept closed, or is corrected from history. It covers `cable`, `machine` and exercises with no equipment recorded, and acts only on the slot's newest session. A working weight that counts as custom under `isCustomWeight` stores `pickStack` of that session's working weights, the first pattern in list order containing them. With no pattern yet, a jump up from the previous session stores `pickStack` of the previous heaviest plus this session's weights, because a 5 kg stack never produces a custom weight. Taking the app's own suggestion, recomputed from the previous session with `adaptiveIncrementKg`, teaches nothing. If no pattern fits, the column is left alone. Learning never fails the save it runs inside, and does not stamp `progression_config_at`. The lifter can clear the pattern from the progression sheet.
+
+*Why:* stacks differ by gym, and one fixed step suggests weights the machine cannot load: 18 kg on a 4.5 kg stack suggested 18.75 kg. List order is a judgement about which stacks are most common, so a first guess can be wrong; the next off-pattern weight corrects it.
+*Covered by:* `progressive-suggestions.test.ts` — "a learned weight stack"; `integration/weight-stacks.test.ts`.
+
 ### SI-5 — "Compound" is resolved from exercise type, with a movement-pattern fallback
 When a resolved `exerciseType` exists, compound means exactly `exerciseType === "compound"`. When it is null, fall back to the movement pattern being one of `squat`, `hinge`, `push`, `pull`.
 
@@ -128,7 +136,7 @@ When a resolved `exerciseType` exists, compound means exactly `exerciseType === 
 *Covered by:* `exercise-type.test.ts`.
 
 ### SI-6 — Suggested weights snap to a multiple of the increment
-The new weight is `roundToNearest(base + increment, increment)`, so it lands on the increment's own grid. A zero or negative increment leaves the value untouched.
+The new weight is `roundToNearest(base + increment, increment)`, so it lands on the increment's own grid. A zero or negative increment leaves the value untouched. A learned stack replaces this grid (SI-4b).
 
 *Why:* keeps suggestions on loadable numbers instead of accumulating drift from a base weight that was itself off-grid.
 *Covered by:* `progressive-suggestions.test.ts` — "rounds to nearest multiple", "returns value unchanged when increment is 0" / "…is negative".

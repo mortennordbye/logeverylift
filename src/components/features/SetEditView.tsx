@@ -42,6 +42,8 @@ type Props = {
   exerciseTypeOverride?: string | null;
   /** Exercise's equipment — picks the weight presets (see weightOptionsFor). */
   equipment?: Equipment | null;
+  /** Learned stack pattern, when there is one; replaces the equipment presets. */
+  weightStack?: string | null;
 };
 
 const DURATION_OPTIONS = [15, 30, 45, 60, 90, 120, 180, 300, 600];
@@ -104,6 +106,7 @@ function SetEditForm({
   exerciseTypeDefault = null,
   exerciseTypeOverride = null,
   equipment = null,
+  weightStack = null,
 }: Props) {
   const router = useRouter();
   const { logWithRetry } = useWorkoutSetWriter();
@@ -218,7 +221,7 @@ function SetEditForm({
   const weightScrollRef = useRef<HTMLDivElement>(null);
   const repsScrollRef = useRef<HTMLDivElement>(null);
 
-  const WEIGHT_OPTIONS = weightOptionsFor(equipment);
+  const WEIGHT_OPTIONS = weightOptionsFor(equipment, weightStack);
   // A typed-in weight gets its own circle rather than lighting up the nearest
   // preset — see withCustomOption.
   const weightOptions = withCustomOption(WEIGHT_OPTIONS, weight);

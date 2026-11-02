@@ -31,6 +31,15 @@ describe("withCustomOption", () => {
 describe("weightOptionsFor", () => {
   const ascending = (xs: number[]) => xs.every((x, i) => i === 0 || x > xs[i - 1]);
 
+  it("offers the machine's learned pattern instead of the equipment ladder", () => {
+    expect(weightOptionsFor("cable", "kg4_5").slice(0, 4)).toEqual([0, 4.5, 9, 13.5]);
+  });
+
+  it("falls back to the equipment ladder for no pattern or a retired one", () => {
+    expect(weightOptionsFor("cable", null)).toEqual(weightOptionsFor("cable"));
+    expect(weightOptionsFor("cable", "retired")).toEqual(weightOptionsFor("cable"));
+  });
+
   it("starts every ladder at 0 and keeps it ascending", () => {
     for (const eq of ["barbell", "dumbbell", "machine", "cable", "bodyweight", "kettlebell", "bands", "other", null] as const) {
       const ladder = weightOptionsFor(eq);

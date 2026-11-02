@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { exercises, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
+import { learnWeightStacks } from "@/lib/weight-stack-learning";
 import {
   completeWorkoutSessionSchema,
   createWorkoutSessionSchema,
@@ -34,7 +35,7 @@ export async function createWorkoutSession(
     // lingers forever; subsequent `createWorkoutSession` calls compound the
     // mess. Bound to >1h to avoid clobbering a legitimate concurrent start.
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    await db
+    const swept = await db
       .update(workoutSessions)
       .set({ isCompleted: true, endTime: new Date() })
       .where(
@@ -43,7 +44,9 @@ export async function createWorkoutSession(
           eq(workoutSessions.isCompleted, false),
           lt(workoutSessions.startTime, oneHourAgo),
         ),
-      );
+      )
+      .returning({ id: workoutSessions.id });
+    for (const { id } of swept) await learnWeightStacks(id, auth.user.id);
 
     const [session] = await db
       .insert(workoutSessions)
@@ -164,6 +167,8 @@ export async function completeWorkoutSession(
         );
     }
 
+    await learnWeightStacks(sessionId, auth.user.id);
+
     // Session detail lives at /history/[sessionId]; `/workout` does not exist.
     revalidatePath(`/history/${sessionId}`);
     revalidatePath("/history");
@@ -188,7 +193,7 @@ export async function closeStaleOpenSessions(): Promise<void> {
   const auth = await requireSession();
   try {
     const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000);
-    await db
+    const closed = await db
       .update(workoutSessions)
       .set({ isCompleted: true, endTime: new Date() })
       .where(
@@ -197,7 +202,9 @@ export async function closeStaleOpenSessions(): Promise<void> {
           eq(workoutSessions.isCompleted, false),
           lt(workoutSessions.startTime, tenHoursAgo),
         ),
-      );
+      )
+      .returning({ id: workoutSessions.id });
+    for (const { id } of closed) await learnWeightStacks(id, auth.user.id);
   } catch (e) {
     console.error("[closeStaleOpenSessions] failed", e);
   }

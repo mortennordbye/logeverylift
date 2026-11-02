@@ -82,5 +82,5 @@ test("program exercise notes save on the program and show in the workout", async
     .toBe("Seat 4, feet high");
 
   await page.goto(`/programs/${slot.programId}/workout/exercises/${slot.id}`);
-  await expect(page.getByText("Seat 4, feet high")).toBeVisible();
+  await expect(page.getByText("Seat 4, feet high").filter({ visible: true })).toBeVisible();
 });

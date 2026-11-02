@@ -8,6 +8,7 @@
  */
 
 import { rirFromRpe } from "@/lib/utils/rir";
+import { gapAbove, nearestRung, rungBelow, stackRungs } from "@/lib/utils/weight-stacks";
 import type { SetSuggestion } from "@/types/workout";
 
 // ─── Constants ─────────────────────────────────────────────────────────────
@@ -388,6 +389,8 @@ export type ProgramSetData = {
    * actually be loaded. Optional: unclassified takes the finest realistic step.
    */
   equipment?: string | null;
+  /** The learned cable or machine stack pattern, an id from WEIGHT_STACKS. */
+  weightStack?: string | null;
   /** Exercise name — optional, passed through to the suggestion for insight bucketing. */
   exerciseName?: string;
   /** Per-exercise override of REQUIRED_HITS. Null/undefined = use the constant. */
@@ -1365,7 +1368,7 @@ export function buildSuggestion(
       ? latest.sets.reduce((m, s) => Math.max(m, Number(s.weightKg)), 0)
       : baseWeight;
 
-  const incrementKg = adaptiveIncrementKg(
+  const sizedIncrementKg = adaptiveIncrementKg(
     ps.overloadIncrementKg != null ? Number(ps.overloadIncrementKg) : null,
     currentLoad,
     ps.movementPattern,
@@ -1374,6 +1377,13 @@ export function buildSuggestion(
     ps.exerciseType,
     ps.equipment,
   );
+  // A learned stack is the real hardware: never less than its next step, and
+  // every weight lands on it. A manual zero still means "don't add weight".
+  const stack = stackRungs(ps.weightStack) ? ps.weightStack! : null;
+  const incrementKg =
+    stack && sizedIncrementKg > 0
+      ? Math.max(sizedIncrementKg, gapAbove(currentLoad, stack))
+      : sizedIncrementKg;
   // overloadIncrementReps is triple-duty: reps here, seconds under `duration`,
   // metres under `distance` (SI-32). The duration and distance branches supply
   // their own fallbacks; this is the rep one.
@@ -1385,7 +1395,16 @@ export function buildSuggestion(
   // default: it is the smallest move the dimension has.
   const repStep = incrementReps > 0 ? incrementReps : 1;
 
-  const roundToInc = (kg: number) => roundToNearest(kg, incrementKg);
+  const roundToInc = (kg: number) =>
+    stack ? nearestRung(kg, stack) : roundToNearest(kg, incrementKg);
+  const backoffTo = (kg: number) => {
+    const cut = backoffWeight(kg, backoffPct, incrementKg);
+    if (!stack) return cut;
+    // Rounding a small cut on a coarse stack can land back on the same weight,
+    // and a back-off has to come off.
+    const rung = nearestRung(cut, stack);
+    return rung < kg ? rung : rungBelow(kg, stack);
+  };
 
   // The plan the logged weights are measured against. Under scope "all" the
   // exercise works at its heaviest set, so that is the plan a session's load
@@ -1577,7 +1596,7 @@ export function buildSuggestion(
       // D-5: the last logged load, less one back-off. Deliberately the same
       // size as a deload rather than a second number to keep in step — if one
       // changes later, both should be reconsidered together.
-      suggestedWeightKg: backoffWeight(baseWeight, backoffPct, incrementKg),
+      suggestedWeightKg: backoffTo(baseWeight),
       ...basedOn,
       reason: "re-approach",
     };
@@ -1589,7 +1608,7 @@ export function buildSuggestion(
   // suggestion to lift 0 kg.
   if (isStuck && baseWeight > 0) {
     return {
-      suggestedWeightKg: backoffWeight(baseWeight, backoffPct, incrementKg),
+      suggestedWeightKg: backoffTo(baseWeight),
       ...basedOn,
       reason: "deload",
     };
@@ -1928,7 +1947,7 @@ export function buildSuggestion(
       readinessRule === "reduce" && baseWeight > 0
         ? {
             ...cleared,
-            suggestedWeightKg: backoffWeight(baseWeight, backoffPct, incrementKg),
+            suggestedWeightKg: backoffTo(baseWeight),
             reason: "deload",
           }
         : { ...cleared, reason: "held-readiness" };
