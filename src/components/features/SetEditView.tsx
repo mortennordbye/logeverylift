@@ -14,7 +14,7 @@ import {
   type ExerciseType,
 } from "@/lib/utils/exercise-type";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
-import { type Equipment, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
+import { type Equipment, isCustomWeight, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
 import { formatPlates } from "@/lib/utils/plates";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
@@ -303,7 +303,7 @@ function SetEditForm({
 
     // Telemetry for tuning the weight presets: record the weights people have
     // to type in because no circle offers them. Fire-and-forget.
-    if (!isRunning && !isTimed && exerciseId != null && !WEIGHT_OPTIONS.includes(weight) && weight > 0) {
+    if (!isRunning && !isTimed && exerciseId != null && isCustomWeight(weight, weightStack, equipment) && weight > 0) {
       writes.push(callAction(logCustomWeight({ exerciseId, weightKg: weight })));
     }
 
@@ -1109,7 +1109,7 @@ function SetEditForm({
                 // The typed-in value sits in the ladder at its sorted position
                 // (withCustomOption). A dashed ring and a "custom" caption keep
                 // it distinguishable from the presets around it.
-                const isCustom = !WEIGHT_OPTIONS.includes(num);
+                const isCustom = isCustomWeight(num, weightStack, equipment);
                 return (
                   <button
                     key={num}

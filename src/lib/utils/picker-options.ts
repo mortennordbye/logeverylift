@@ -62,19 +62,25 @@ export function weightOptionsFor(
   return (equipment && LADDERS[equipment]) || DEFAULT_LADDER;
 }
 
+/** Equipment with fixed sizes, whose engine step is not 1.25 kg. */
+const FIXED_SIZES: readonly (Equipment | null | undefined)[] = ["barbell", "dumbbell", "kettlebell"];
+
 /**
- * Whether a logged weight tells us something about the stack.
+ * Whether a weight is one the lifter had to bring themselves.
  *
- * With no pattern, multiples of 1.25 never count: the engine suggests them on
- * every cable and machine, including ones the ladder lacks above 20 kg (41.25),
- * so accepting its own suggestion must not read as the lifter's stack.
+ * With no pattern, multiples of 1.25 don't count outside fixed-size equipment:
+ * above 20 kg a cable's ladder moves in 2.5 steps but the engine still suggests
+ * 1.25 ones (41.25), and its own suggestion is neither custom in the picker nor
+ * evidence about the lifter's stack.
  */
 export function isCustomWeight(
   kg: number,
   weightStack: string | null | undefined,
   equipment: Equipment | null | undefined,
 ): boolean {
+  if (kg === 0) return false;
   const rungs = stackRungs(usableStack(weightStack, equipment));
   if (rungs) return !isOnStack(kg, rungs);
-  return !weightOptionsFor(equipment).includes(kg) && !Number.isInteger(kg / 1.25);
+  if (weightOptionsFor(equipment).includes(kg)) return false;
+  return FIXED_SIZES.includes(equipment) || !Number.isInteger(kg / 1.25);
 }

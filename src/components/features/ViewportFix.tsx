@@ -10,7 +10,7 @@ import { useEffect } from "react";
  *    iOS auto-zooms inputs with font-size < 16px, which shifts visualViewport.
  *    Keeping font-size at 16px prevents the auto-zoom entirely.
  *
- * 2. Viewport-meta zoom reset on focusout — secondary fix.
+ * 2. Viewport-meta zoom reset when an editable field loses focus — secondary fix.
  *    If a zoom still occurs (e.g. user pinch-zoomed), temporarily adding
  *    maximum-scale=1 forces the browser to snap zoom back to 1× before we
  *    remove the constraint, restoring the correct viewport position.
@@ -26,6 +26,17 @@ import { useEffect } from "react";
  *    of the full-screen layout viewport (behind the keyboard). This corrects
  *    that scroll so the input sits 16 px above the keyboard.
  */
+const NON_TYPING_INPUTS = new Set([
+  "button", "checkbox", "color", "file", "image", "radio", "range", "reset", "submit",
+]);
+
+function opensKeyboard(target: EventTarget | null): boolean {
+  if (target instanceof HTMLInputElement) return !NON_TYPING_INPUTS.has(target.type);
+  if (target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement) return true;
+  return target instanceof HTMLElement && target.getAttribute("contenteditable") !== null
+    && target.getAttribute("contenteditable") !== "false";
+}
+
 export function ViewportFix() {
   useEffect(() => {
     const vv = window.visualViewport;
@@ -33,7 +44,16 @@ export function ViewportFix() {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    let pressing = false;
+    let resetAfterPress = false;
+
     function resetScroll() {
+      // Moving the page mid-press puts the button somewhere else before the
+      // release, and no click fires. Wait for the press to end.
+      if (pressing) {
+        resetAfterPress = true;
+        return;
+      }
       window.scrollTo(0, 0);
       document.documentElement.scrollTop = 0;
       document.documentElement.scrollLeft = 0;
@@ -66,8 +86,13 @@ export function ViewportFix() {
 
     // ── Event handlers ────────────────────────────────────────────────────────
 
-    /** Full reset fired on focusout and on keyboard-close resize. */
-    function onFocusOut() {
+    /**
+     * Full reset when a field that can open the keyboard loses focus. Only those:
+     * pressing any button moves focus off the last one, and moving the page right
+     * then puts the button somewhere else before the release, so no click fires.
+     */
+    function onFocusOut(e: FocusEvent) {
+      if (!opensKeyboard(e.target)) return;
       resetZoom();
       requestAnimationFrame(resetScroll);
       setTimeout(resetScroll, 300);
@@ -130,17 +155,35 @@ export function ViewportFix() {
       }, 150);
     }
 
+    function onPressStart() {
+      pressing = true;
+    }
+
+    /** After this event's click has been delivered, then catch up. */
+    function onPressEnd() {
+      pressing = false;
+      if (!resetAfterPress) return;
+      resetAfterPress = false;
+      setTimeout(resetScroll, 0);
+    }
+
     let scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
     vv.addEventListener("scroll", onVVScroll);
     vv.addEventListener("resize", onViewportResize);
     document.addEventListener("focusout", onFocusOut);
+    document.addEventListener("pointerdown", onPressStart, true);
+    document.addEventListener("pointerup", onPressEnd, true);
+    document.addEventListener("pointercancel", onPressEnd, true);
 
     return () => {
       if (scrollTimer) clearTimeout(scrollTimer);
       vv.removeEventListener("scroll", onVVScroll);
       vv.removeEventListener("resize", onViewportResize);
       document.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("pointerdown", onPressStart, true);
+      document.removeEventListener("pointerup", onPressEnd, true);
+      document.removeEventListener("pointercancel", onPressEnd, true);
     };
   }, []);
 

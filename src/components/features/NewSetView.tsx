@@ -5,7 +5,7 @@ import { useToast } from "@/contexts/toast-context";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { addProgramSet } from "@/lib/actions/programs";
 import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
-import { type Equipment, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
+import { type Equipment, isCustomWeight, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import type { SetType } from "@/lib/validators/workout";
@@ -147,7 +147,7 @@ export function NewSetView({
     setSaving(true);
     // Telemetry for tuning the weight presets: record the weights people have
     // to type in because no circle offers them. Fire-and-forget.
-    if (!isRunning && !isTimed && !WEIGHT_OPTIONS.includes(weight) && weight > 0) {
+    if (!isRunning && !isTimed && isCustomWeight(weight, weightStack, equipment) && weight > 0) {
       void callAction(logCustomWeight({ exerciseId, weightKg: weight }));
     }
     const base = { programExerciseId, setNumber: nextSetNumber, restTimeSeconds: 0, setType };
@@ -618,7 +618,7 @@ export function NewSetView({
                   const color = gradientColor(idx, weightOptions.length);
                   const selected = num === weight;
                   // Typed-in value: dashed ring marks it as off-ladder.
-                  const isCustom = !WEIGHT_OPTIONS.includes(num);
+                  const isCustom = isCustomWeight(num, weightStack, equipment);
                   return (
                     <button
                       key={num}
