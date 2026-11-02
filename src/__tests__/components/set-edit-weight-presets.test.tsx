@@ -75,6 +75,12 @@ describe("SetEditView — weight presets follow the equipment", () => {
     expect(circle(24).custom).toBe(false);
   });
 
+  it("does not call the app's own cable suggestion custom", () => {
+    render(<SetEditView set={setWith("41.25")} isWorkout exerciseId={2} setNumber={1} equipment="cable" />);
+    openWeightSheet();
+    expect(circle(41.25).custom).toBe(false);
+  });
+
   it("still marks a weight off the equipment's ladder as custom", () => {
     render(<SetEditView set={setWith("17.5")} isWorkout exerciseId={2} setNumber={1} equipment="kettlebell" />);
     openWeightSheet();

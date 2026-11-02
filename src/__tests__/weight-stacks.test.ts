@@ -110,6 +110,12 @@ describe("isCustomWeight", () => {
     expect(isCustomWeight(20, "kg4_5", "cable")).toBe(true);
   });
 
+  it("keeps the 1.25 kg exemption to equipment the engine moves in 1.25 steps", () => {
+    expect(isCustomWeight(41.25, null, null)).toBe(false);
+    expect(isCustomWeight(41.25, null, "dumbbell")).toBe(true);
+    expect(isCustomWeight(41.25, null, "barbell")).toBe(true);
+  });
+
   it("treats a retired pattern as none", () => {
     expect(isCustomWeight(17.5, "retired", "cable")).toBe(false);
   });
