@@ -59,8 +59,9 @@ export const programExercises = pgTable("program_exercises", {
   notes: text("notes"),
   overloadIncrementKg: decimal("overload_increment_kg", { precision: 4, scale: 2 }),
   overloadIncrementReps: integer("overload_increment_reps").default(0),
-  // The cable or machine stack pattern learned from logged custom weights, an id
-  // from WEIGHT_STACKS. Null means none learned yet.
+  // The cable or machine stack pattern learned from logged weights, an id from
+  // WEIGHT_STACKS. Null means none learned yet, FORGOTTEN_STACK that the lifter
+  // cleared one.
   weightStack: text("weight_stack"),
   // "none" | "manual" | "weight" | "smart" | "reps" | "time" | "distance"
   progressionMode: text("progression_mode").default("manual"),

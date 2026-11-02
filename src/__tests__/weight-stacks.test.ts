@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isCustomWeight } from "@/lib/utils/picker-options";
 import {
+  FORGOTTEN_STACK,
   WEIGHT_STACKS,
   gapAbove,
   nearestRung,
@@ -41,6 +42,11 @@ describe("the pattern list", () => {
     expect(stackRungs("lb10")!.slice(0, 5)).toEqual([4.5, 9.1, 13.6, 18.1, 22.7]);
     expect(stackRungs("lb15_top10")!.slice(0, 4)).toEqual([4.5, 11.3, 18.1, 24.9]);
     expect(stackRungs("lb5")!.slice(0, 4)).toEqual([2.3, 4.5, 6.8, 9.1]);
+  });
+
+  it("treats a forgotten stack as no pattern", () => {
+    expect(stackRungs(FORGOTTEN_STACK)).toBeNull();
+    expect(stackLabel(FORGOTTEN_STACK)).toBeNull();
   });
 
   it("treats an id no longer in the list as no pattern", () => {

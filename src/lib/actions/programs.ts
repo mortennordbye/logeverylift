@@ -14,6 +14,7 @@ import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { warmupRamp } from "@/lib/utils/plates";
 import { judgingRuleChanged, type ProgressionAdvance } from "@/lib/utils/progression";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
+import { FORGOTTEN_STACK } from "@/lib/utils/weight-stacks";
 import {
   addExerciseToProgramSchema,
   addProgramSetSchema,
@@ -332,7 +333,7 @@ export async function clearWeightStack(data: unknown): Promise<ActionResult<void
 
     await db
       .update(programExercises)
-      .set({ weightStack: null })
+      .set({ weightStack: FORGOTTEN_STACK })
       .where(eq(programExercises.id, programExerciseId));
     revalidatePath(`/programs/${existing.programId}/workout/exercises/${programExerciseId}`);
     revalidatePath(`/programs/${existing.programId}/exercises/${programExerciseId}`);

@@ -26,6 +26,9 @@ import { useEffect } from "react";
  *    of the full-screen layout viewport (behind the keyboard). This corrects
  *    that scroll so the input sits 16 px above the keyboard.
  */
+const PRESS_EXPIRY_MS = 1000;
+const CLICK_SETTLE_MS = 100;
+
 const NON_TYPING_INPUTS = new Set([
   "button", "checkbox", "color", "file", "image", "radio", "range", "reset", "submit",
 ]);
@@ -46,6 +49,8 @@ export function ViewportFix() {
 
     let pressing = false;
     let resetAfterPress = false;
+    let pressExpiry: ReturnType<typeof setTimeout> | null = null;
+    let settleTimer: ReturnType<typeof setTimeout> | null = null;
 
     function resetScroll() {
       // Moving the page mid-press puts the button somewhere else before the
@@ -157,14 +162,26 @@ export function ViewportFix() {
 
     function onPressStart() {
       pressing = true;
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = null;
+      // Some gestures never send a release. Don't hold the resets back forever.
+      if (pressExpiry) clearTimeout(pressExpiry);
+      pressExpiry = setTimeout(onPressEnd, PRESS_EXPIRY_MS);
     }
 
-    /** After this event's click has been delivered, then catch up. */
     function onPressEnd() {
-      pressing = false;
-      if (!resetAfterPress) return;
-      resetAfterPress = false;
-      setTimeout(resetScroll, 0);
+      if (pressExpiry) clearTimeout(pressExpiry);
+      pressExpiry = null;
+      // Still pressing until the click has landed, which iOS can deliver just
+      // after the release.
+      if (settleTimer) clearTimeout(settleTimer);
+      settleTimer = setTimeout(() => {
+        settleTimer = null;
+        pressing = false;
+        if (!resetAfterPress) return;
+        resetAfterPress = false;
+        resetScroll();
+      }, CLICK_SETTLE_MS);
     }
 
     let scrollTimer: ReturnType<typeof setTimeout> | null = null;
@@ -178,6 +195,8 @@ export function ViewportFix() {
 
     return () => {
       if (scrollTimer) clearTimeout(scrollTimer);
+      if (pressExpiry) clearTimeout(pressExpiry);
+      if (settleTimer) clearTimeout(settleTimer);
       vv.removeEventListener("scroll", onVVScroll);
       vv.removeEventListener("resize", onViewportResize);
       document.removeEventListener("focusout", onFocusOut);

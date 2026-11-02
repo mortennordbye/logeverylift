@@ -3,7 +3,7 @@ import { exercises, programExercises, programs, users, workoutSessions, workoutS
 import { parseUserGoals } from "@/lib/utils/goals";
 import { type Equipment, isCustomWeight } from "@/lib/utils/picker-options";
 import { adaptiveIncrementKg, roundToNearest } from "@/lib/utils/progression";
-import { pickStack, pickStackForStep, stackRungs } from "@/lib/utils/weight-stacks";
+import { FORGOTTEN_STACK, pickStack, pickStackForStep, stackRungs } from "@/lib/utils/weight-stacks";
 import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
 
 /**
@@ -14,7 +14,7 @@ import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
  *  - a custom weight, which picks the most common pattern containing all of
  *    that session's working weights;
  *  - with no pattern yet, a weight not lifted before, exactly one step of a
- *    pattern above the closest weight below it, which the app did not suggest. A
+ *    pattern above the last session's heaviest, which the app did not suggest. A
  *    5 kg stack never produces a custom weight, because 20 and 25 are both on the
  *    default ladder, so the step is the only evidence of it. Returning to a weight
  *    already lifted proves nothing, and neither does a jump of several steps.
@@ -22,8 +22,9 @@ import { and, desc, eq, gt, inArray, isNull, or } from "drizzle-orm";
  * Sets don't store what the app suggested, so the checks for "that was the app's
  * own number" work from the increment it would have used.
  *
- * Editing an older session changes nothing, so a correction months later can't
- * undo newer learning.
+ * Runs when a session closes. A correction in history teaches nothing: a half
+ * corrected session reads as a false pattern, and the next weight logged settles
+ * it anyway. Closing an old session after a newer one changes nothing either.
  *
  * Not a Server Action: it takes a userId, so it must never be callable from a
  * client. Callers pass the session's user. It runs inside saves that matter more
@@ -140,21 +141,25 @@ export async function learnWeightStacks(sessionId: number, userId: string): Prom
           return trustGrid && increment > 0 && Math.abs(roundToNearest(kg, increment) - kg) < 0.001;
         };
 
-        if (weights.some((kg) => isCustomWeight(kg, null, equipment) && !onAppGrid(kg))) {
+        // After a forget, only a weight not lifted before is new evidence.
+        const fresh =
+          first.weightStack === FORGOTTEN_STACK
+            ? weights.filter((kg) => !lifted.includes(kg))
+            : weights;
+
+        if (fresh.some((kg) => isCustomWeight(kg, null, equipment) && !onAppGrid(kg))) {
           // Only this session: earlier weights may be from another machine.
           next = pickStack(weights);
-        } else if (heaviest > lastHeaviest && !lifted.includes(heaviest)) {
-          // Up from last time, which rules out the app's back-offs, and measured
-          // from the closest weight below, so neither a dip nor one older heavy
-          // session hides the step.
-          const below = Math.max(0, ...lifted.filter((kg) => kg < heaviest));
-          if (below > 0) {
-            const increment = incrementAt(below);
-            // Or the step the lifter chose, which they already told us.
-            const tookSuggestion =
-              (appSuggests || first.overloadIncrementKg != null) && Math.abs(roundToNearest(below + increment, increment) - heaviest) < 0.001;
-            if (!tookSuggestion) next = pickStackForStep(below, heaviest, weights);
-          }
+        } else if (lastHeaviest > 0 && heaviest > lastHeaviest && !lifted.includes(heaviest)) {
+          // Measured from the last session, as the engine steps. An older weight
+          // in between would make a real step look smaller than it is. Going up
+          // also rules out the app's back-offs.
+          const increment = incrementAt(lastHeaviest);
+          // Or the step the lifter chose, which they already told us.
+          const tookSuggestion =
+            (appSuggests || first.overloadIncrementKg != null) &&
+            Math.abs(roundToNearest(lastHeaviest + increment, increment) - heaviest) < 0.001;
+          if (!tookSuggestion) next = pickStackForStep(lastHeaviest, heaviest, weights);
         }
       }
       if (next == null || next === first.weightStack) continue;
