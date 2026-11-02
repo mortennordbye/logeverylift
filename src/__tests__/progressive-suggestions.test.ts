@@ -2755,6 +2755,16 @@ describe("a learned weight stack", () => {
     expect(suggestion?.suggestedWeightKg).toBe(40.5);
   });
 
+  it("lands a retry on the stack", () => {
+    const sessions = [
+      makeSession({ weightKg: "36", date: "2024-01-02" }),
+      makeSession({ weightKg: "41.25", date: "2024-01-01" }),
+    ];
+    const suggestion = buildSuggestion(sessions, cable({ weightStack: "kg4_5" }), null);
+    expect(suggestion?.reason).toBe("retry");
+    expect(suggestion?.suggestedWeightKg).toBe(40.5);
+  });
+
   it("always drops at least one weight on a back-off", () => {
     // 10% off 18 is 16.2, whose nearest weight on this stack is 18 again.
     const stuck = makeSessions(DELOAD_THRESHOLD, { weightKg: "18", actualReps: 4, targetReps: 8 });

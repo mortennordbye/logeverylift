@@ -8,6 +8,7 @@ import {
 } from "@/lib/actions/workout-sessions";
 import { getProgressiveSuggestions, logWorkoutSet, updateLoggedSet } from "@/lib/actions/workout-sets";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { FORGOTTEN_STACK } from "@/lib/utils/weight-stacks";
 import { learnWeightStacks } from "@/lib/weight-stack-learning";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, eq } from "drizzle-orm";
@@ -57,14 +58,14 @@ const setStack = (weightStack: string) =>
     .set({ weightStack })
     .where(eq(programExercises.id, slot.programExerciseId));
 
-async function logSets(sessionId: number, weights: number[], s = slot) {
+async function logSets(sessionId: number, weights: number[], s = slot, actualReps = 8) {
   for (const [i, weightKg] of weights.entries()) {
     const result = await logWorkoutSet({
       sessionId,
       exerciseId: s.exerciseId,
       setNumber: i + 1,
       programSetId: s.setIds[i],
-      actualReps: 8,
+      actualReps,
       weightKg,
       restTimeSeconds: 90,
     });
@@ -73,11 +74,11 @@ async function logSets(sessionId: number, weights: number[], s = slot) {
 }
 
 /** One finished session at these weights, started `hoursAgo` hours back. */
-async function finishedSession(weights: number[], hoursAgo = 0) {
+async function finishedSession(weights: number[], hoursAgo = 0, actualReps = 8) {
   const session = await createSession(userId, programId, {
     startTime: new Date(Date.now() - hoursAgo * 60 * 60 * 1000),
   });
-  await logSets(session.id, weights);
+  await logSets(session.id, weights, slot, actualReps);
   const done = await completeWorkoutSession({ sessionId: session.id });
   expect(done.success).toBe(true);
   return session;
@@ -170,13 +171,6 @@ describe("finishing a workout", () => {
     expect(await storedStack()).toBeNull();
   });
 
-  it("measures a jump from the heaviest weight so far, not the last session", async () => {
-    await finishedSession([40, 40], 4);
-    await finishedSession([35, 35], 2);
-    await finishedSession([45, 45]);
-    expect(await storedStack()).toBe("kg5");
-  });
-
   it("still learns a step after an older, heavier session", async () => {
     await finishedSession([50, 50], 4);
     await finishedSession([20, 20], 2);
@@ -229,11 +223,50 @@ describe("finishing a workout", () => {
   it("learns nothing from taking the app's back-off", async () => {
     await suggestsLoad();
     await finishedSession([40, 40], 8);
-    await finishedSession([50, 50], 6);
-    await finishedSession([50, 50], 4);
-    await finishedSession([50, 50], 2);
-    await finishedSession([45, 45]);
+    for (const hoursAgo of [6, 4, 2]) await finishedSession([50, 50], hoursAgo, 4);
+
+    const suggestions = await getProgressiveSuggestions(programId);
+    if (!suggestions.success) throw new Error(suggestions.error);
+    const { reason, suggestedWeightKg } = suggestions.data[slot.setIds[0]];
+    expect(reason).toBe("deload");
+
+    await finishedSession([suggestedWeightKg, suggestedWeightKg]);
     expect(await storedStack()).toBeNull();
+  });
+
+  it("measures a step from the last session, so an old weight can't make it look smaller", async () => {
+    await finishedSession([22.5, 22.5], 4);
+    await finishedSession([20, 20], 2);
+    await finishedSession([25, 25]);
+    expect(await storedStack()).toBe("kg5");
+  });
+
+  it("learns nothing from climbing back up on the app's suggestions after a deload", async () => {
+    await suggestsLoad();
+    await db
+      .update(programExercises)
+      .set({ exerciseType: "compound" })
+      .where(eq(programExercises.id, slot.programExerciseId));
+    await finishedSession([41.25, 41.25], 6);
+    await finishedSession([37.5, 37.5], 4);
+    await finishedSession([40, 40], 2);
+    await finishedSession([42.5, 42.5]);
+    expect(await storedStack()).toBeNull();
+  });
+
+  it("does not relearn a forgotten stack from a weight already lifted", async () => {
+    await finishedSession([18, 18], 2);
+    expect(await storedStack()).toBe("kg4_5");
+    await clearWeightStack({ programExerciseId: slot.programExerciseId });
+    await finishedSession([18, 18]);
+    expect(await storedStack()).toBe(FORGOTTEN_STACK);
+  });
+
+  it("learns again after a forget from a weight not lifted before", async () => {
+    await finishedSession([18, 18], 2);
+    await clearWeightStack({ programExerciseId: slot.programExerciseId });
+    await finishedSession([19, 19]);
+    expect(await storedStack()).toBe("kg1");
   });
 
   it("learns nothing from coming back to a weight that wasn't a session's heaviest", async () => {
@@ -472,7 +505,7 @@ describe("clearWeightStack", () => {
   it("forgets the pattern for its owner", async () => {
     const result = await clearWeightStack({ programExerciseId: slot.programExerciseId });
     expect(result.success).toBe(true);
-    expect(await storedStack()).toBeNull();
+    expect(await storedStack()).toBe(FORGOTTEN_STACK);
   });
 
   it("refuses another user's exercise", async () => {

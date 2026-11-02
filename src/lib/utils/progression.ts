@@ -1654,7 +1654,7 @@ export function buildSuggestion(
       const wasIntentionalDeload = prevFailStreak >= backoffAfter - 1;
       if (!wasIntentionalDeload) {
         return {
-          suggestedWeightKg: prev.loadKg,
+          suggestedWeightKg: stack ? nearestRung(prev.loadKg, stack) : prev.loadKg,
           ...basedOn,
           reason: "retry",
         };

@@ -66,7 +66,17 @@ describe("ViewportFix on focusout", () => {
     vi.advanceTimersByTime(400);
     expect(scrollTo).not.toHaveBeenCalled();
     document.dispatchEvent(new Event("pointerup"));
-    vi.advanceTimersByTime(1);
+    // Not straight away: iOS can deliver the click just after the release.
+    vi.advanceTimersByTime(50);
+    expect(scrollTo).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(100);
+    expect(scrollTo).toHaveBeenCalled();
+  });
+
+  it("gives up waiting when the release never arrives", () => {
+    document.dispatchEvent(new Event("pointerdown"));
+    blur(document.createElement("textarea"));
+    vi.advanceTimersByTime(1200);
     expect(scrollTo).toHaveBeenCalled();
   });
 
@@ -74,7 +84,7 @@ describe("ViewportFix on focusout", () => {
     document.dispatchEvent(new Event("pointerdown"));
     blur(document.createElement("textarea"));
     document.dispatchEvent(new Event("pointercancel"));
-    vi.advanceTimersByTime(1);
+    vi.advanceTimersByTime(150);
     expect(scrollTo).toHaveBeenCalled();
   });
 

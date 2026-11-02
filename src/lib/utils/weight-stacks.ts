@@ -37,6 +37,13 @@ export const WEIGHT_STACKS: readonly { id: string; label: string; rungs: number[
   { id: "kg1", label: "1 kg steps", rungs: ladder(1) },
 ];
 
+/**
+ * Stored when the lifter forgets a stack. It is no pattern to everything that
+ * reads one, and tells the learner not to relearn from weights already lifted,
+ * or the next session at the same weight would bring the stack straight back.
+ */
+export const FORGOTTEN_STACK = "forgotten";
+
 const find = (id: string | null | undefined) => WEIGHT_STACKS.find((stack) => stack.id === id);
 
 const onRung = (rungs: number[], kg: number) => rungs.some((rung) => Math.abs(rung - kg) < 0.001);

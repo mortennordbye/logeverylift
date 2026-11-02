@@ -97,5 +97,5 @@ test("a custom cable weight changes the next suggestion and the picker, and can 
     bodyIncludes: `"programExerciseId":${slotId}`,
   });
   await expect(page.getByText("Learned stack: 4.5 kg steps")).toHaveCount(0);
-  await expect.poll(stored).toBeNull();
+  await expect.poll(stored).toBe("forgotten");
 });
