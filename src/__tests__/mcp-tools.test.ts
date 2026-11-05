@@ -10,12 +10,15 @@
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { describe, expect, it, vi } from "vitest";
 
 // The tool modules import `@/db`, which validates DB env vars at import time.
 // Registration never touches the database, so stub the client out.
 vi.mock("@/db", () => ({ db: {} }));
+
+const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
 
 function collect(register: (s: McpServer, userId: string) => void) {
   const names: string[] = [];
@@ -57,5 +60,27 @@ describe("MCP tool registration", () => {
         "edit_cycle_slot",
       ].sort(),
     );
+  });
+
+  it("registers the workout history tools, every one of them read-only", () => {
+    const tools: { name: string; annotations: unknown }[] = [];
+    const stub = {
+      registerTool(name: string, config: { annotations: unknown }) {
+        tools.push({ name, annotations: config.annotations });
+      },
+    } as unknown as McpServer;
+
+    registerWorkoutTools(stub, "test-user");
+
+    expect(tools.map((t) => t.name).sort()).toEqual(
+      [
+        "exercise_history",
+        "personal_records",
+        "recent_workouts",
+        "summary_stats",
+        "weekly_volume",
+      ].sort(),
+    );
+    for (const tool of tools) expect(tool.annotations).toEqual(READ_ONLY);
   });
 });

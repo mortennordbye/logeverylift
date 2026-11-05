@@ -207,7 +207,7 @@ The app exposes a **Model Context Protocol** endpoint so MCP clients (Claude Des
 claude mcp add --transport http logeverylift http://localhost:3000/api/mcp
 ```
 
-**Tools** (~13): `list_programs`, `get_program`, `create_program`, `update_program`, `delete_program`, `edit_program_exercise`; `list_training_cycles`, `get_training_cycle`, `manage_training_cycle`, `edit_cycle_slot`; `get_profile`, `update_profile`, `manage_weight`. Tool code lives in `src/lib/mcp/tools/`; the route is `src/app/api/[transport]/route.ts`.
+**Tools** (~18): `list_programs`, `get_program`, `create_program`, `update_program`, `delete_program`, `edit_program_exercise`; `list_training_cycles`, `get_training_cycle`, `manage_training_cycle`, `edit_cycle_slot`; `get_profile`, `update_profile`, `manage_weight`; read-only: `recent_workouts`, `exercise_history`, `personal_records`, `weekly_volume`, `summary_stats`. Tool code lives in `src/lib/mcp/tools/`; the route is `src/app/api/[transport]/route.ts`.
 
 > **Adding npm deps for the dev container:** `node_modules` is an anonymous Docker volume baked from the image, so a host-only `pnpm add` won't reach the running container. After changing dependencies, rebuild: `docker-compose build app && docker-compose up -d --force-recreate --renew-anon-volumes app` (or `make dev CLEAN=1`).
 

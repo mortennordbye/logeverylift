@@ -158,7 +158,8 @@ export default function PrivacyPage() {
       </p>
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) can read and change your profile, body weight,
-        programs and cycles. That provider&apos;s own privacy policy applies to what it does with the data. You can
+        programs and cycles. They can also read your workout history: sets, weights, heart rate zones, effort,
+        how you felt and your readiness, but not your notes. That provider&apos;s own privacy policy applies to what it does with the data. You can
         disconnect at any time.
       </p>
       <p>The &quot;Copy prompt&quot; button in AI Setup only copies text to your clipboard; nothing is sent from our server.</p>
