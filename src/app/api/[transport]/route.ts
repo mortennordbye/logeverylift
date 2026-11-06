@@ -2,7 +2,7 @@
  * MCP server endpoint (Streamable HTTP).
  *
  * Exposes read-write tools over the user's programs, training cycles, and
- * profile/weight to any MCP client (Claude Desktop/Code, etc.). The endpoint
+ * profile/weight, and read-only tools over their workout history, to any MCP client (Claude Desktop/Code, etc.). The endpoint
  * resolves to /api/mcp.
  *
  * Auth: `requireMcpAuth` (@better-auth/mcp) verifies the OAuth bearer token on
@@ -19,6 +19,7 @@ import { checkRateLimit } from "@/lib/mcp/rate-limit";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { requireMcpAuth } from "@better-auth/mcp";
 import { createMcpHandler } from "mcp-handler";
 
@@ -56,6 +57,7 @@ function serve(req: Request, claims: { sub?: string }) {
       registerProfileTools(server, userId);
       registerProgramTools(server, userId);
       registerCycleTools(server, userId);
+      registerWorkoutTools(server, userId);
     },
     {},
     { basePath: "/api" },
