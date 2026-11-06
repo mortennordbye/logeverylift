@@ -5,3 +5,6 @@ allowBuilds:
   msw: false
   sharp: false
   unrs-resolver: false
+overrides:
+  # GHSA-mrhx-c7xc-m3w5. @serwist/build pins an older zod 4.
+  'zod@>=4.0.0 <4.6.6': ^4.6.6
