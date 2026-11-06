@@ -223,8 +223,14 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** whole MCP + auth surface — `src/lib/mcp/`, `src/app/api/[transport]/`, `src/lib/actions/`, `src/lib/auth.ts`, `src/middleware.ts`, `src/lib/env.ts`.
 
 
-### `eslint-config-next` held at 16.1.6 while `next` is on 16.4.2
-- **What:** `eslint-config-next` 16.4.2 pulls `eslint-plugin-react-hooks` 7.1.1, whose stricter rules report 17 errors in existing code, mostly `react-hooks/set-state-in-effect` (14), plus `react-hooks/purity` and `react-hooks/immutability`.
-- **Why deferred:** `next` was bumped to 16.4.2 to fix a router action-queue race that dropped taps and pulled users back a screen (`e2e/session-start-race.spec.ts`). Rewriting effects across the app to satisfy new lint rules is separate work and would have buried that fix.
-- **Unblocked by:** Bumping `eslint-config-next` to match `next`, running `pnpm lint`, and fixing or deliberately suppressing each finding with a reason.
-- **Touchpoints:** `package.json`, `eslint.config.mjs`, the files `pnpm lint` reports after the bump.
+### `eslint-config-next` held at 16.1.6 while `next` moves on
+- **What:** `eslint-config-next` 16.4.x pulls `eslint-plugin-react-hooks` 7.1.1, whose stricter rules report 18 errors in existing code (checked with 16.4.3): `react-hooks/set-state-in-effect` (14), `react-hooks/immutability` (2) and `react-hooks/purity` (2). `.github/dependabot.yml` ignores `eslint-config-next`, so the weekly npm group does not fail lint on it.
+- **Why deferred:** `next` was bumped to 16.4.2 to fix a router action-queue race that dropped taps and pulled users back a screen (`e2e/session-start-race.spec.ts`). Rewriting effects across the app to satisfy new lint rules is separate work and would have buried that fix. Most findings are in the workout screens, which are critical flows.
+- **Unblocked by:** Bumping `eslint-config-next` to match `next`, running `pnpm lint`, and fixing or deliberately suppressing each finding with a reason. Then remove the `eslint-config-next` ignore from `.github/dependabot.yml`.
+- **Touchpoints:** `package.json`, `eslint.config.mjs`, `.github/dependabot.yml`, the files `pnpm lint` reports after the bump.
+
+### `@types/node` held at the Node 24 major
+- **What:** `.github/dependabot.yml` ignores `@types/node` 25 and later. Dependabot PR #174 (24 to 26) was closed.
+- **Why deferred:** The app runs on Node 24 (`Dockerfile`, CI `node-version: 24`). Types for a newer major allow APIs that the runtime does not have.
+- **Unblocked by:** Moving the runtime to a newer Node LTS major. Then bump `@types/node` to that major and widen or remove both Node ignores in `.github/dependabot.yml`.
+- **Touchpoints:** `package.json`, `Dockerfile`, `.github/workflows/ci.yml`, `.github/dependabot.yml`.
