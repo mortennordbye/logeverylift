@@ -38,7 +38,8 @@ export const test = base.extend<{ resetData: void; failOnPageError: void }, { re
     async ({ page }, use) => {
       const errors: string[] = [];
       // WebKit reports every request a navigation cancels as an uncaught
-      // "Fetch API cannot load <url> due to access control checks", whether or
+      // "Fetch API cannot load <url> due to access control checks" (or "Cannot
+      // load blob:<url> ..." for a blob read, as MapLibre does), whether or
       // not the code that made it handles the failure (a genuinely unhandled
       // rejection shows up separately, as "Unhandled Promise Rejection"). When
       // the spec itself loaded a page just before, the cancellation is the
@@ -51,7 +52,7 @@ export const test = base.extend<{ resetData: void; failOnPageError: void }, { re
       });
       page.on("pageerror", (err) => {
         // WebKit can leave this text out of `message` and put it in `stack`.
-        const cancelled = /Fetch API cannot load (\S+) due to access control checks/.exec(`${err.message}\n${err.stack ?? ""}`);
+        const cancelled = /(?:Fetch API cannot|Cannot) load (\S+) due to access control checks/.exec(`${err.message}\n${err.stack ?? ""}`);
         // `?_rsc=` is the router fetching a page payload: a read, nothing lost.
         if (cancelled && (cancelled[1].includes("?_rsc=") || Date.now() - lastPageLoad < 3_000)) return;
         errors.push(err.stack ?? err.message);

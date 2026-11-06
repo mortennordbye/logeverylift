@@ -1,3 +1,4 @@
+import type { Request } from "@playwright/test";
 import { expect, test } from "./fixtures/test";
 import { openFirstExercise, openWorkout, tapAndSave } from "./helpers";
 
@@ -93,8 +94,10 @@ test("a rest edit made before the refresh lands still persists", async ({ page }
   const originalButton = preserveLabelToButton(parseRestLabel(originalLabel));
 
   let holdRefresh = true;
+  const held: Request[] = [];
   await page.route("**/*", async (route) => {
     if (holdRefresh && route.request().headers()["rsc"] === "1") {
+      held.push(route.request());
       await new Promise((resolve) => setTimeout(resolve, 4_000));
     }
     await route.continue().catch(() => {});
@@ -114,6 +117,9 @@ test("a rest edit made before the refresh lands still persists", async ({ page }
     holdRefresh = false;
   }
 
+  // A reload that cancels a held refresh makes Next start its own navigation,
+  // which interrupts the reload ("Frame load interrupted").
+  await Promise.all(held.map(async (r) => (await r.response())?.finished()));
   await page.reload();
   await expect(restRow).toBeVisible();
   const persisted = (await restRow.textContent())?.trim();

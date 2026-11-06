@@ -51,7 +51,9 @@ test("an invite link opens the front page and keeps the token through sign-up", 
     await page.getByRole("checkbox", { name: /I accept the terms of use/ }).check();
     await page.getByRole("checkbox", { name: /I consent to LogEveryLift storing/ }).check();
     await page.getByRole("button", { name: "Create Account" }).click();
-    await page.waitForURL((url) => url.pathname === "/");
+    // Not waitForURL: Next can restart the navigation to / when the redirect
+    // cancels its own RSC fetch, and waitForURL fails on "Frame load interrupted".
+    await expect(page).toHaveURL((url) => url.pathname === "/");
 
     const [created] = await testDb().select().from(users).where(eq(users.email, email));
     expect(created.invitedById).toBe(inviter.id);
@@ -87,7 +89,9 @@ test("signing up through a friend's share link sends them a friend request", asy
     await page.getByRole("checkbox", { name: /I accept the terms of use/ }).check();
     await page.getByRole("checkbox", { name: /I consent to LogEveryLift storing/ }).check();
     await page.getByRole("button", { name: "Create Account" }).click();
-    await page.waitForURL((url) => url.pathname === "/");
+    // Not waitForURL: Next can restart the navigation to / when the redirect
+    // cancels its own RSC fetch, and waitForURL fails on "Frame load interrupted".
+    await expect(page).toHaveURL((url) => url.pathname === "/");
 
     const [created] = await testDb().select({ id: users.id }).from(users).where(eq(users.email, email));
     const rows = await testDb().select().from(friendships).where(eq(friendships.requesterId, created.id));
