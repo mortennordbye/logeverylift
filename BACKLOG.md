@@ -229,6 +229,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Bumping `eslint-config-next` to match `next`, running `pnpm lint`, and fixing or deliberately suppressing each finding with a reason. Then remove the `eslint-config-next` ignore from `.github/dependabot.yml`.
 - **Touchpoints:** `package.json`, `eslint.config.mjs`, `.github/dependabot.yml`, the files `pnpm lint` reports after the bump.
 
+### Two Dependabot alerts with no fix inside current ranges
+- **What:** minimatch 9.0.9 and 10.2.4 are in the GHSA-g3hv-75wg-m249 range (fixed in minimatch 11.0.1). They come in through `glob` (from `@serwist/build` and `@sentry/bundler-plugins`), `@ts-morph/common` (from `shadcn`) and `@typescript-eslint/typescript-estree`. deepmerge 4.3.1 (from `shadcn`) has a low advisory with no patched release. All of these run at build or lint time only, not in the server.
+- **Why deferred:** Each fix is a major bump of a transitive package that its dependents do not allow. A pnpm override to minimatch 11 could break them, and dependency review rejects minimatch 10.2.6 as still vulnerable.
+- **Unblocked by:** Releases of `glob`, `@ts-morph/common` or `@typescript-eslint/typescript-estree` that accept minimatch 11, or a `shadcn` release without deepmerge. Then run `pnpm update --depth Infinity minimatch deepmerge`.
+- **Touchpoints:** `pnpm-lock.yaml`, `pnpm-workspace.yaml` (`overrides`), `package.json` (`shadcn`, `@serwist/next`, `@sentry/nextjs`).
+
 ### `@types/node` held at the Node 24 major
 - **What:** `.github/dependabot.yml` ignores `@types/node` 25 and later. Dependabot PR #174 (24 to 26) was closed.
 - **Why deferred:** The app runs on Node 24 (`Dockerfile`, CI `node-version: 24`). Types for a newer major allow APIs that the runtime does not have.
