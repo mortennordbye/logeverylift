@@ -1,19 +1,18 @@
 <div align="center">
 
+<img src="public/icon-512x512.png" alt="" width="112" height="112">
+
 # LogEveryLift
 
 ### A mobile-first workout tracking PWA that feels like a native iOS app.
 
 **Try it at [logeverylift.com](https://logeverylift.com)**
 
-[![Next.js](https://img.shields.io/badge/Next.js-000000?logo=nextdotjs&logoColor=white)](https://nextjs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org) [![Drizzle](https://img.shields.io/badge/Drizzle-C5F74F?logo=drizzle&logoColor=black)](https://orm.drizzle.team) [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
-
-[![CI](https://github.com/mortennordbye/logeverylift/actions/workflows/ci.yml/badge.svg)](https://github.com/mortennordbye/logeverylift/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/mortennordbye/logeverylift/badge)](https://securityscorecards.dev/viewer/?uri=github.com/mortennordbye/logeverylift)
-
-[![License](https://img.shields.io/github/license/mortennordbye/logeverylift?style=flat-square)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/logeverylift?style=flat-square)](https://github.com/mortennordbye/logeverylift/commits/main) [![Stars](https://img.shields.io/github/stars/mortennordbye/logeverylift?style=flat-square)](https://github.com/mortennordbye/logeverylift/stargazers)
+[![Next.js](https://img.shields.io/badge/Next.js-122456?style=flat-square&logo=nextdotjs&logoColor=white)](https://nextjs.org) [![TypeScript](https://img.shields.io/badge/TypeScript-122456?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org) [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-122456?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org) [![Drizzle](https://img.shields.io/badge/Drizzle-122456?style=flat-square&logo=drizzle&logoColor=white)](https://orm.drizzle.team) [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-122456?style=flat-square&logo=tailwindcss&logoColor=white)](https://tailwindcss.com)<br>
+[![CI](https://img.shields.io/github/actions/workflow/status/mortennordbye/logeverylift/ci.yml?branch=main&style=flat-square&labelColor=122456&label=ci)](https://github.com/mortennordbye/logeverylift/actions/workflows/ci.yml) [![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/mortennordbye/logeverylift?style=flat-square&labelColor=122456&label=openssf%20scorecard)](https://securityscorecards.dev/viewer/?uri=github.com/mortennordbye/logeverylift)<br>
+[![License](https://img.shields.io/github/license/mortennordbye/logeverylift?style=flat-square&labelColor=122456&color=2d5bd8)](LICENSE) [![Last Commit](https://img.shields.io/github/last-commit/mortennordbye/logeverylift?style=flat-square&labelColor=122456&color=2d5bd8)](https://github.com/mortennordbye/logeverylift/commits/main) [![Stars](https://img.shields.io/github/stars/mortennordbye/logeverylift?style=flat-square&labelColor=122456&color=2d5bd8)](https://github.com/mortennordbye/logeverylift/stargazers)
 
 Built with Next.js 16 (App Router) and React Server Components. Runs in Docker containers for environment consistency.
-
 </div>
 
 ---
