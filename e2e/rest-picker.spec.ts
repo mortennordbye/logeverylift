@@ -96,14 +96,6 @@ test("a rest edit made before the refresh lands still persists", async ({ page }
   await page.route("**/*", async (route) => {
     if (holdRefresh && route.request().headers()["rsc"] === "1") {
       await new Promise((resolve) => setTimeout(resolve, 4_000));
-      // fetch + fulfill, not continue: the handler ends only once the browser
-      // has the whole response, so unrouteAll below can wait for it.
-      try {
-        await route.fulfill({ response: await route.fetch() });
-      } catch {
-        // The page cancelled the request while it was held.
-      }
-      return;
     }
     await route.continue().catch(() => {});
   });
@@ -122,19 +114,20 @@ test("a rest edit made before the refresh lands still persists", async ({ page }
     holdRefresh = false;
   }
 
-  // A reload that cancels a held refresh makes Next start its own navigation,
-  // which interrupts the reload ("Frame load interrupted").
-  await page.unrouteAll({ behavior: "wait" });
-  await page.reload();
-  await expect(restRow).toBeVisible();
-  const persisted = (await restRow.textContent())?.trim();
+  // A fresh page, not page.reload(): the reload cancels a held refresh, and
+  // Next's fallback navigation then interrupts it ("Frame load interrupted").
+  const fresh = await page.context().newPage();
+  await fresh.goto(page.url());
+  const freshRow = fresh.getByText(/^REST \d{2}:\d{2}$/).first();
+  await expect(freshRow).toBeVisible();
+  const persisted = (await freshRow.textContent())?.trim();
   if (persisted !== originalLabel) {
     // Put the shared program back before failing, or every later run starts
-    // from 05:00. A reload first means this edit diffs against fresh values.
-    await restRow.click();
-    await page.getByRole("button", { name: originalButton }).click();
-    await tapAndSave(page, page.getByRole("button", { name: "Done" }));
-    await page.reload();
+    // from 05:00. A fresh load first means this edit diffs against fresh values.
+    await freshRow.click();
+    await fresh.getByRole("button", { name: originalButton }).click();
+    await tapAndSave(fresh, fresh.getByRole("button", { name: "Done" }));
+    await fresh.reload();
   }
   expect(persisted, "the second edit must reach the database").toBe(originalLabel);
 });
