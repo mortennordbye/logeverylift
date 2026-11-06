@@ -114,16 +114,20 @@ test("a rest edit made before the refresh lands still persists", async ({ page }
     holdRefresh = false;
   }
 
-  await page.reload();
-  await expect(restRow).toBeVisible();
-  const persisted = (await restRow.textContent())?.trim();
+  // A fresh page, not page.reload(): the reload cancels a held refresh, and
+  // Next's fallback navigation then interrupts it ("Frame load interrupted").
+  const fresh = await page.context().newPage();
+  await fresh.goto(page.url());
+  const freshRow = fresh.getByText(/^REST \d{2}:\d{2}$/).first();
+  await expect(freshRow).toBeVisible();
+  const persisted = (await freshRow.textContent())?.trim();
   if (persisted !== originalLabel) {
     // Put the shared program back before failing, or every later run starts
-    // from 05:00. A reload first means this edit diffs against fresh values.
-    await restRow.click();
-    await page.getByRole("button", { name: originalButton }).click();
-    await tapAndSave(page, page.getByRole("button", { name: "Done" }));
-    await page.reload();
+    // from 05:00. A fresh load first means this edit diffs against fresh values.
+    await freshRow.click();
+    await fresh.getByRole("button", { name: originalButton }).click();
+    await tapAndSave(fresh, fresh.getByRole("button", { name: "Done" }));
+    await fresh.reload();
   }
   expect(persisted, "the second edit must reach the database").toBe(originalLabel);
 });
