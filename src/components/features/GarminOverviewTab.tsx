@@ -6,10 +6,12 @@ import { READINESS_BAND_LABEL } from "@/lib/garmin/analytics/readiness";
 import { durationLabel } from "@/lib/garmin/charts/activity";
 import { formBandLabel } from "@/lib/garmin/charts/load";
 import { SPORT_LABEL, SPORT_MARK } from "@/lib/garmin/charts/theme";
-import type { BodyKey, OverviewData } from "@/lib/garmin/queries";
+import type { BodyKey, OverviewData, VolumeData } from "@/lib/garmin/queries";
+import { byGap } from "@/lib/garmin/analytics/demands";
+import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
 import { phaseLabel } from "@/lib/utils/periodization";
 import { formatDateShort } from "@/lib/utils/format";
-import { Activity, ChevronRight, Flag, Gauge, TrendingUp } from "lucide-react";
+import { Activity, CalendarRange, ChevronRight, Flag, Gauge, Mountain, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -286,7 +288,27 @@ function LastSession({ data }: { data: OverviewData }) {
   );
 }
 
-export function GarminOverviewTab({ data }: { data: OverviewData }) {
+function WeekBlock({ volume }: { volume: VolumeData }) {
+  const week = volume.weeks.at(-1);
+  if (!week) return null;
+  return (
+    <Block href={tab("training")} label="This week against the plan">
+      <Heading icon={CalendarRange} title="This week" aside={volume.planned ? "done / plan" : "no plan on the cycle"} />
+      <WeekAgainstPlan week={week} planned={volume.planned} />
+    </Block>
+  );
+}
+
+function DemandsBlock({ volume }: { volume: VolumeData }) {
+  return (
+    <Block href={tab("training")} label="Race demands">
+      <Heading icon={Mountain} title={demandsTitle(volume)} aside="largest gap first" />
+      <DemandsList rows={byGap(volume.checklist).slice(0, 3)} compact />
+    </Block>
+  );
+}
+
+export function GarminOverviewTab({ data, volume }: { data: OverviewData; volume: VolumeData }) {
   return (
     <div className="space-y-4">
       <RaceStrip data={data} />
@@ -303,6 +325,8 @@ export function GarminOverviewTab({ data }: { data: OverviewData }) {
         </p>
       </section>
       <FitnessBlock data={data} />
+      <WeekBlock volume={volume} />
+      <DemandsBlock volume={volume} />
       <LastSession data={data} />
     </div>
   );

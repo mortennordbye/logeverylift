@@ -1,16 +1,30 @@
 import { db } from "@/db";
-import { garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, trainingCycles } from "@/db/schema";
+import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, programExercises, programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
 import { lttbIndices, takeIndices } from "./charts/downsample";
 import type { DailyMetrics } from "./analytics/daily";
 import { insightsFor, type Insight } from "./analytics/insights";
-import { addDays, isoDate } from "./dates";
+import { addDays, isoDate, mondayOf } from "./dates";
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
-import { SPORTS, sportOf, type Sport } from "./analytics/sport";
+import { SPORTS, isIndoor, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
-import { bodySignal, raceStatus, type BodySignal, type CycleForRace, type RaceStatus } from "./analytics/overview";
+import { bodySignal, raceStatus, type BodySignal, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
+import {
+  RAMP_WINDOW_DAYS,
+  demandsChecklist,
+  findBricks,
+  meanSpeeds,
+  plannedHours,
+  weeklyVolume,
+  type Brick,
+  type DemandRow,
+  type Endurance,
+  type PlannedSet,
+  type VolumeActivity,
+  type VolumeWeek,
+} from "./analytics/demands";
 
 /**
  * Reads for the Garmin page's Server Components. Each takes a userId the
@@ -633,5 +647,86 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
       calibrating: recent.at(-1)?.calibrating ?? true,
     },
     last,
+  };
+}
+
+// ── Volume, race demands and the plan ───────────────────────────────────────
+
+export type VolumeData = {
+  today: string;
+  /** 52 Monday-start weeks to this week. */
+  weeks: VolumeWeek[];
+  bricks: Brick[];
+  distance: RaceDistance;
+  /** True when no race distance is set and the checklist assumes a full Ironman. */
+  distanceAssumed: boolean;
+  checklist: DemandRow[];
+  /** Planned hours per sport this week from the active cycle, or null without one. */
+  planned: Record<Endurance, number> | null;
+};
+
+/** Planned endurance sets for one week of a day-of-week cycle (rotation cycles have no fixed week). */
+async function plannedSets(cycleId: number): Promise<PlannedSet[] | null> {
+  const [c] = await db.select({ scheduleType: trainingCycles.scheduleType }).from(trainingCycles).where(eq(trainingCycles.id, cycleId));
+  if (c?.scheduleType !== "day_of_week") return null;
+  const rows = await db
+    .select({ discipline: exercises.discipline, durationS: programSets.durationSeconds, distanceM: programSets.distanceMeters })
+    .from(trainingCycleSlots)
+    .innerJoin(programExercises, eq(programExercises.programId, trainingCycleSlots.programId))
+    .innerJoin(programSets, eq(programSets.programExerciseId, programExercises.id))
+    .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+    .where(and(eq(trainingCycleSlots.trainingCycleId, cycleId), sql`${trainingCycleSlots.dayOfWeek} is not null`, sql`${exercises.discipline} is not null`));
+  return rows.map((r) => ({ discipline: r.discipline as Endurance, durationS: r.durationS, distanceM: r.distanceM }));
+}
+
+export async function getVolumeData(userId: string, today = isoDate(new Date())): Promise<VolumeData> {
+  const from = addDays(mondayOf(today), -51 * 7);
+  const rows = await db
+    .select({
+      id: garminActivities.garminActivityId,
+      typeKey: garminActivities.activityType,
+      start: garminActivities.startTimeLocal,
+      data: garminActivities.data,
+      sport: garminActivityMetrics.sport,
+      startMs: sql<number | null>`(${garminActivityMetrics.metrics}->>'startMs')::float8`,
+      endMs: sql<number | null>`(${garminActivityMetrics.metrics}->>'endMs')::float8`,
+    })
+    .from(garminActivities)
+    .leftJoin(
+      garminActivityMetrics,
+      and(eq(garminActivityMetrics.userId, garminActivities.userId), eq(garminActivityMetrics.garminActivityId, garminActivities.garminActivityId)),
+    )
+    .where(and(eq(garminActivities.userId, userId), gte(garminActivities.startTimeLocal, new Date(`${from}T00:00:00Z`))));
+  const activities: VolumeActivity[] = rows.map((r) => {
+    const j = (r.data ?? {}) as Json;
+    return {
+      id: r.id,
+      sport: (r.sport ?? sportOf(r.typeKey)) as Sport,
+      day: isoDate(r.start),
+      startMs: r.startMs,
+      endMs: r.endMs,
+      durationS: num(j.duration) ?? 0,
+      distanceM: num(j.distance),
+      indoor: isIndoor(r.typeKey),
+    };
+  });
+
+  const rampRows = await db
+    .select({ ramp: sql<number | null>`(${garminDailyMetrics.metrics}->>'ramp')::float8` })
+    .from(garminDailyMetrics)
+    .where(and(eq(garminDailyMetrics.userId, userId), gte(garminDailyMetrics.day, addDays(today, -(RAMP_WINDOW_DAYS - 1)))));
+
+  const cycle = await getActiveCycle(userId);
+  const distance: RaceDistance = cycle?.raceDistance ?? "full";
+  const sets = cycle ? await plannedSets(cycle.id) : null;
+  const recent = activities.filter((a) => a.day >= addDays(today, -55));
+  return {
+    today,
+    weeks: weeklyVolume(activities, from, today),
+    bricks: findBricks(activities),
+    distance,
+    distanceAssumed: !cycle?.raceDistance,
+    checklist: demandsChecklist({ activities, distance, today, ramps: rampRows.map((r) => r.ramp) }),
+    planned: sets ? plannedHours(sets, meanSpeeds(recent)) : null,
   };
 }

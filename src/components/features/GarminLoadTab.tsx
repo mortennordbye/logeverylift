@@ -22,7 +22,10 @@ import {
 } from "@/lib/garmin/charts/load";
 import { SPORT_LABEL, SPORT_MARK } from "@/lib/garmin/charts/theme";
 import { formatDateShort } from "@/lib/utils/format";
-import { ChartColumn, Flame, Gauge, HeartPulse, Rocket, TrendingUp } from "lucide-react";
+import { CalendarRange, ChartColumn, Flame, Gauge, HeartPulse, Mountain, Rocket, TrendingUp } from "lucide-react";
+import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
+import { ladderOption, ladderValue, weeklyHoursOption } from "@/lib/garmin/charts/volume";
+import type { VolumeData } from "@/lib/garmin/queries";
 import { useMemo, useState } from "react";
 
 const RANGES: RangeKey[] = ["6w", "3m", "1y", "all"];
@@ -60,13 +63,21 @@ function SportDot({ sport }: { sport: Sport }) {
 
 const signed = (n: number) => `${n >= 0 ? "+" : ""}${Math.round(n)}`;
 
-export function GarminLoadTab({ series, computedAt }: { series: LoadSeries; computedAt: string | null }) {
+const hm = (hours: number) => {
+  const m = Math.round(hours * 60);
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+};
+
+export function GarminLoadTab({ series, computedAt, volume }: { series: LoadSeries; computedAt: string | null; volume: VolumeData }) {
   const theme = useVizTheme();
   const [range, setRange] = useState<RangeKey>("3m");
   const [track, setTrack] = useState<Track>("total");
   const [pmcIdx, setPmcIdx] = useState<number | null>(null);
   const [weekIdx, setWeekIdx] = useState<number | null>(null);
   const [distIdx, setDistIdx] = useState<number | null>(null);
+  const [unit, setUnit] = useState<"load" | "hours">("load");
+  const [hourIdx, setHourIdx] = useState<number | null>(null);
+  const [ladderIdx, setLadderIdx] = useState<number | null>(null);
 
   const from = rangeStart(series, range);
   const weeks = useMemo(() => weeksInRange(series, range), [series, range]);
@@ -74,6 +85,13 @@ export function GarminLoadTab({ series, computedAt }: { series: LoadSeries; comp
   const pmc = useMemo(() => (theme ? pmcOption(series, track, range, theme) : null), [series, track, range, theme]);
   const weekly = useMemo(() => (theme ? weeklyLoadOption(weeks, theme) : null), [weeks, theme]);
   const dist = useMemo(() => (theme ? distributionOption(weeks, theme) : null), [weeks, theme]);
+  const volWeeks = useMemo(() => {
+    const first = weeks[0]?.weekStart ?? volume.weeks[0]?.weekStart;
+    return volume.weeks.filter((w) => !first || w.weekStart >= first);
+  }, [weeks, volume.weeks]);
+  const hours = useMemo(() => (theme ? weeklyHoursOption(volWeeks, theme) : null), [volWeeks, theme]);
+  const ladderWeeks = useMemo(() => volume.weeks.slice(-16), [volume.weeks]);
+  const ladder = useMemo(() => (theme ? ladderOption(ladderWeeks, volume.distance, theme) : null), [ladderWeeks, volume.distance, theme]);
 
   const n = series.dates.length;
   if (n === 0) {
@@ -150,24 +168,83 @@ export function GarminLoadTab({ series, computedAt }: { series: LoadSeries; comp
         )}
       </Card>
 
-      <Card icon={ChartColumn} title="Weekly load by sport" note="ACWR: this week against the three before. Above 1.3 the jump in load raises injury risk.">
-        <Legend
-          items={[
-            ...SPORTS.filter((s) => weeks.some((w) => w.loads[s] > 0)).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, mark: SPORT_MARK[s] })),
-            { name: "ACWR", color: "var(--muted-foreground)", kind: "dot" },
-          ]}
-        />
-        {wk && (
-          <Readout
-            title={`Week of ${formatDateShort(wk.weekStart)}`}
-            values={[
-              { label: "total", value: String(Math.round(wk.total)) },
-              ...SPORTS.filter((s) => wk.loads[s] > 0).map((s) => ({ label: SPORT_LABEL[s].toLowerCase(), value: String(Math.round(wk.loads[s])) })),
-              { label: "ACWR", value: wk.acwr.toFixed(2) },
-            ]}
-          />
+      <Card
+        icon={ChartColumn}
+        title={unit === "load" ? "Weekly load by sport" : "Weekly hours by sport"}
+        aside={
+          <span data-no-swipe className="inline-flex rounded-full bg-background p-0.5" role="group" aria-label="Unit">
+            {(["load", "hours"] as const).map((u) => (
+              <button key={u} onClick={() => setUnit(u)} aria-pressed={unit === u} className={`h-8 px-3 rounded-full text-xs font-medium active:opacity-70 ${unit === u ? "bg-foreground text-background" : "text-muted-foreground"}`}>
+                {u === "load" ? "Load" : "Hours"}
+              </button>
+            ))}
+          </span>
+        }
+        note={unit === "load" ? "ACWR: this week against the three before. Above 1.3 the jump in load raises injury risk." : "Time in Garmin activities. Ironman plans are written in hours, so a week with no swim shows as a gap."}
+      >
+        {unit === "load" ? (
+          <>
+            <Legend
+              items={[
+                ...SPORTS.filter((s) => weeks.some((w) => w.loads[s] > 0)).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, mark: SPORT_MARK[s] })),
+                { name: "ACWR", color: "var(--muted-foreground)", kind: "dot" },
+              ]}
+            />
+            {wk && (
+              <Readout
+                title={`Week of ${formatDateShort(wk.weekStart)}`}
+                values={[
+                  { label: "total", value: String(Math.round(wk.total)) },
+                  ...SPORTS.filter((s) => wk.loads[s] > 0).map((s) => ({ label: SPORT_LABEL[s].toLowerCase(), value: String(Math.round(wk.loads[s])) })),
+                  { label: "ACWR", value: wk.acwr.toFixed(2) },
+                ]}
+              />
+            )}
+            {weekly && <EChart option={weekly} height={226} onIndex={setWeekIdx} ariaLabel={`Weekly load for ${weeks.length} weeks.`} />}
+          </>
+        ) : (
+          <>
+            <Legend items={SPORTS.filter((s) => volWeeks.some((w) => w.hours[s] > 0)).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, mark: SPORT_MARK[s] }))} />
+            {(() => {
+              const w = volWeeks[hourIdx ?? volWeeks.length - 1];
+              return w ? (
+                <Readout
+                  title={`Week of ${formatDateShort(w.weekStart)}`}
+                  values={[{ label: "total", value: hm(w.totalHours) }, ...SPORTS.filter((s) => w.hours[s] > 0).map((s) => ({ label: SPORT_LABEL[s].toLowerCase(), value: hm(w.hours[s]) }))]}
+                />
+              ) : null;
+            })()}
+            {hours && <EChart option={hours} height={200} onIndex={setHourIdx} ariaLabel={`Weekly hours by sport for ${volWeeks.length} weeks.`} />}
+          </>
         )}
-        {weekly && <EChart option={weekly} height={226} onIndex={setWeekIdx} ariaLabel={`Weekly load for ${weeks.length} weeks.`} />}
+      </Card>
+
+      <Card icon={CalendarRange} title="This week" aside={volume.planned ? "done / plan" : undefined} note={volume.planned ? "The tick is the plan: the active cycle's swim, bike and run sets for this week. Sets planned by distance are turned into time with your own mean speed." : "No day-of-week cycle with swim, bike or run sets is active, so there is no plan to compare."}>
+        {volume.weeks.at(-1) && <WeekAgainstPlan week={volume.weeks.at(-1)!} planned={volume.planned} />}
+      </Card>
+
+      <Card icon={Mountain} title="Long-session ladder" note="The longest swim, ride and run of each week, 16 weeks. The dashed line is the race target. Close the gap one step a week: ride +30 min, run +15 min, swim +400 m.">
+        <Legend items={(["swim", "bike", "run"] as const).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, mark: SPORT_MARK[s] }))} />
+        {(() => {
+          const w = ladderWeeks[ladderIdx ?? ladderWeeks.length - 1];
+          if (!w) return null;
+          const v = (s: "swim" | "bike" | "run") => ladderValue(s, w);
+          return (
+            <Readout
+              title={`Week of ${formatDateShort(w.weekStart)}`}
+              values={[
+                { label: "km swim", value: v("swim") !== null ? String(v("swim")) : "–" },
+                { label: "ride", value: v("bike") !== null ? hm(v("bike")!) : "–" },
+                { label: "run", value: v("run") !== null ? hm(v("run")!) : "–" },
+              ]}
+            />
+          );
+        })()}
+        {ladder && <EChart option={ladder} height={276} onIndex={setLadderIdx} ariaLabel={`Longest swim, ride and run per week for ${ladderWeeks.length} weeks.`} />}
+      </Card>
+
+      <Card icon={Mountain} title={demandsTitle(volume)} note="Each row looks back 8 weeks for long sessions, 4 weeks for a brick and 6 weeks for the ramp rate. Tap a row for the session that set it.">
+        <DemandsList rows={volume.checklist} />
       </Card>
 
       <Card icon={Flame} title="Intensity distribution" note="Time by heart rate: low under 85 % of LTHR, mid 85 to 100 %, high above. The outlined band is the Ironman build target: 75 to 85 % low.">

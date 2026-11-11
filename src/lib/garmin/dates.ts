@@ -19,3 +19,9 @@ export function chunkRange(start: string, end: string, maxDays: number): [string
   }
   return out;
 }
+
+/** The Monday on or before a date. */
+export function mondayOf(date: string): string {
+  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
+  return addDays(date, -((day + 6) % 7));
+}

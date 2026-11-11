@@ -7,7 +7,7 @@
  */
 
 import { uncoupledAcwr } from "@/lib/utils/periodization";
-import { addDays } from "../dates";
+import { mondayOf } from "../dates";
 import type { Track } from "../analytics/pmc";
 import { SPORTS, type Sport } from "../analytics/sport";
 import { distributionLabel, type DistributionLabel } from "../analytics/zones";
@@ -31,9 +31,9 @@ export function rangeStart(series: LoadSeries, range: RangeKey): number {
   return days === null ? 0 : Math.max(0, series.dates.length - days);
 }
 
-const r1 = (n: number) => Math.round(n * 10) / 10;
+export const r1 = (n: number) => Math.round(n * 10) / 10;
 
-function shortDate(date: string) {
+export function shortDate(date: string) {
   return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
 }
 
@@ -66,11 +66,6 @@ export type WeekRow = {
   bands: { low: number; mid: number; high: number };
   label: DistributionLabel;
 };
-
-function mondayOf(date: string) {
-  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-  return addDays(date, -((day + 6) % 7));
-}
 
 /** Weekly totals (Monday start) over the whole series, with ACWR from the existing uncoupledAcwr. */
 export function weeklyRows(series: LoadSeries): WeekRow[] {
@@ -131,10 +126,10 @@ export function loadHeadline(series: LoadSeries, track: Track): string {
 
 // ── Chart options ───────────────────────────────────────────────────────────
 
-const AXIS_FONT = 10;
-const GRID_SIDES = { left: 34, right: 10 };
+export const AXIS_FONT = 10;
+export const GRID_SIDES = { left: 34, right: 10 };
 
-function axisCommon(theme: VizTheme) {
+export function axisCommon(theme: VizTheme) {
   return {
     axisLine: { lineStyle: { color: theme.grid } },
     axisTick: { show: false },
@@ -143,7 +138,7 @@ function axisCommon(theme: VizTheme) {
   };
 }
 
-function pointer(theme: VizTheme) {
+export function pointer(theme: VizTheme) {
   return {
     tooltip: { trigger: "axis", showContent: false, triggerOn: "mousemove|click", axisPointer: { type: "line", lineStyle: { color: theme.textMuted, width: 1 } } },
     axisPointer: { link: [{ xAxisIndex: "all" }], snap: true },

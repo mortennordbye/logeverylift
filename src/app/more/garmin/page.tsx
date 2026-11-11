@@ -15,7 +15,7 @@ import { GarminOverviewTab } from "@/components/features/GarminOverviewTab";
 import { GarminSleepTab } from "@/components/features/GarminSleepTab";
 import { GarminTodayTab } from "@/components/features/GarminTodayTab";
 import { env } from "@/lib/env";
-import { getActivitiesData, getLoadSeries, getOverviewData, getSleepData, getTodayData, latestGarminDate } from "@/lib/garmin/queries";
+import { getActivitiesData, getLoadSeries, getOverviewData, getSleepData, getTodayData, getVolumeData, latestGarminDate } from "@/lib/garmin/queries";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
@@ -27,7 +27,8 @@ export default async function GarminPage({ searchParams }: { searchParams: Promi
 
   let content: React.ReactNode;
   if (tab === "overview") {
-    content = <GarminOverviewTab data={await getOverviewData(auth.user.id)} />;
+    const [data, volume] = await Promise.all([getOverviewData(auth.user.id), getVolumeData(auth.user.id)]);
+    content = <GarminOverviewTab data={data} volume={volume} />;
   } else if (tab === "day") {
     const latest = await latestGarminDate(auth.user.id);
     const date = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : latest;
@@ -37,8 +38,8 @@ export default async function GarminPage({ searchParams }: { searchParams: Promi
   } else if (tab === "recovery") {
     content = <GarminSleepTab data={await getSleepData(auth.user.id)} />;
   } else if (tab === "training") {
-    const { series, computedAt } = await getLoadSeries(auth.user.id);
-    content = <GarminLoadTab series={series} computedAt={computedAt} />;
+    const [{ series, computedAt }, volume] = await Promise.all([getLoadSeries(auth.user.id), getVolumeData(auth.user.id)]);
+    content = <GarminLoadTab series={series} computedAt={computedAt} volume={volume} />;
   } else {
     content = <GarminDataExplorer />;
   }

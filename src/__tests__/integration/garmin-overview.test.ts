@@ -1,10 +1,10 @@
 import { db } from "@/db";
-import { garminActivities, garminActivityMetrics, garminActivityStreams, garminDays, trainingCycles } from "@/db/schema";
+import { garminActivities, garminActivityMetrics, garminActivityStreams, garminDays, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
-import { getOverviewData } from "@/lib/garmin/queries";
+import { getOverviewData, getVolumeData } from "@/lib/garmin/queries";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { createUser } from "./factories";
+import { createExercise, createProgram, createUser } from "./factories";
 import { asUser } from "./setup";
 
 /** Overview reads (race date on the cycle, Garmin VO2 max from stored FIT sessions) against a real database. */
@@ -64,5 +64,49 @@ describe("getOverviewData", () => {
     expect(d.body.vo2max.points).toEqual([{ date: "2026-11-01", value: 51.2 }]);
     expect(d.race).toMatchObject({ raceSet: true, raceDay: "2027-02-14", distance: "half" });
     expect(d.last?.id).toBe(1);
+  });
+});
+
+describe("getVolumeData", () => {
+  const today = "2026-11-11";
+  async function activity(userId: string, id: number, typeKey: string, sport: string, startIso: string, durationS: number, distanceM: number | null = null) {
+    const start = new Date(startIso);
+    await db.insert(garminActivities).values({ userId, garminActivityId: id, startTimeLocal: start, activityType: typeKey, data: { duration: durationS, distance: distanceM } });
+    await db.insert(garminActivityMetrics).values({
+      userId,
+      garminActivityId: id,
+      modelVersion: 1,
+      sport,
+      day: startIso.slice(0, 10),
+      load: 10,
+      loadMethod: "trimp",
+      metrics: { startMs: start.getTime(), endMs: start.getTime() + durationS * 1000 },
+    });
+  }
+
+  it("sums this week's hours, finds a brick, and reads the plan from the active day-of-week cycle", async () => {
+    const me = await createUser();
+    await activity(me.id, 11, "cycling", "bike", "2026-11-10T08:00:00Z", 7200, 60000);
+    await activity(me.id, 12, "running", "run", "2026-11-10T10:05:00Z", 1800, 6000);
+    const other = await createUser();
+    await activity(other.id, 13, "cycling", "bike", "2026-11-10T08:00:00Z", 20000, 150000);
+
+    const bike = await createExercise({ name: "Bike", category: "cardio", discipline: "bike" });
+    const { program } = await createProgram(me.id, [{ exerciseId: bike.id, sets: [{ targetReps: null, weightKg: "0", durationSeconds: 5400 }] }]);
+    const [c] = await db
+      .insert(trainingCycles)
+      .values({ userId: me.id, name: "IM", durationWeeks: 24, status: "active", startDate: "2026-09-01", raceDistance: "half" })
+      .returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: c.id, programId: program.id, dayOfWeek: 6 });
+
+    const v = await getVolumeData(me.id, today);
+    const week = v.weeks.at(-1)!;
+    expect(week.weekStart).toBe("2026-11-09");
+    expect(week.hours.bike).toBe(2);
+    expect(week.hours.run).toBe(0.5);
+    expect(v.bricks).toEqual([expect.objectContaining({ rideId: 11, runId: 12, gapMin: 5 })]);
+    expect(v.planned).toEqual({ swim: 0, bike: 1.5, run: 0 });
+    expect(v.distance).toBe("half");
+    expect(v.checklist.find((r) => r.key === "bike")?.best).toBe("2:00 h");
   });
 });
