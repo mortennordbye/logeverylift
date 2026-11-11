@@ -28,6 +28,7 @@ let garmin: {
   keyOk: boolean;
   restingHr: number;
   failSleep: boolean;
+  noHrv: boolean;
   activities: object[];
 };
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -41,6 +42,7 @@ beforeEach(() => {
     keyOk: true,
     restingHr: 45,
     failSleep: false,
+    noHrv: false,
     activities: [
       {
         activityId: 9001,
@@ -64,6 +66,8 @@ beforeEach(() => {
     }
     if (!auth.startsWith("Bearer ")) return new Response("", { status: 401 });
     if (url.pathname.startsWith("/hrv-service/")) {
+      // Garmin answers a range with no HRV data with 204 and no body.
+      if (garmin.noHrv) return new Response(null, { status: 204 });
       return Response.json({ hrvSummaries: [{ calendarDate: today(), lastNightAvg: 80, weeklyAvg: 82, status: "BALANCED" }] });
     }
     if (url.pathname.startsWith("/sleep-service/")) {
@@ -147,6 +151,18 @@ describe("getGarminMetrics", () => {
     const result = await getGarminMetrics({});
     expect(result.success).toBe(true);
     expect(fetchMock.mock.calls.length).toBe(calls);
+  });
+
+  it("treats Garmin's empty 204 answer as no data, not a failure", async () => {
+    const me = await createUser();
+    await connect(me.id);
+    garmin.noHrv = true;
+    const result = await getGarminMetrics({ refresh: true });
+    if (!result.success) throw new Error(result.error);
+    expect(result.data.syncError).toBeNull();
+    expect(result.data.runs[0]).toMatchObject({ status: "ok", counts: { hrv: 0, sleep: 1, daily: 1, activities: 1 } });
+    // HRV saved by the first sync is still there.
+    expect(result.data.metrics.days.find((d) => d.date === today())?.hrvLastNight).toBe(80);
   });
 
   it("records a failed sync and still returns stored data", async () => {

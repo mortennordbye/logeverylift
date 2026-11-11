@@ -61,8 +61,10 @@ export async function exchangeKey(apiKey: string): Promise<GarminToken> {
   return { token, expiresAt: jwtExpiry(token) ?? Date.now() + 23 * 3600_000 };
 }
 
-async function getJson<T>(token: string, path: string, schema: z.ZodType<T>, tag: string): Promise<T> {
+/** `empty` is what a 204 means: the HRV endpoint answers a range with no data that way. */
+async function getJson<T>(token: string, path: string, schema: z.ZodType<T>, tag: string, empty: T): Promise<T> {
   const res = await call(`${BASE}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }, tag);
+  if (res.status === 204) return empty;
   const parsed = schema.safeParse(await res.json().catch(() => undefined));
   if (!parsed.success) throw new GarminError(`bad_shape:${tag}`);
   return parsed.data;
@@ -93,14 +95,15 @@ const ACTIVITY_PAGE = 100;
 /** Everything the Garmin tab uses for start..end (YYYY-MM-DD, inclusive). */
 export async function fetchGarminRange(token: string, start: string, end: string): Promise<GarminRange> {
   const [hrv, sleep, daily] = await Promise.all([
-    getJson(token, `/hrv-service/hrv/daily/${start}/${end}`, z.object({ hrvSummaries: z.array(dayRecord) }), "hrv"),
+    getJson(token, `/hrv-service/hrv/daily/${start}/${end}`, z.object({ hrvSummaries: z.array(dayRecord) }), "hrv", { hrvSummaries: [] }),
     getJson(
       token,
       `/sleep-service/sleep/dailySleepSummariesByDate?startDate=${start}&endDate=${end}`,
       z.array(dayRecord),
       "sleep",
+      [],
     ),
-    getJson(token, `/usersummary-service/v2/dailysummaries?startDate=${start}&endDate=${end}`, z.object({ data: z.array(dayRecord) }), "daily"),
+    getJson(token, `/usersummary-service/v2/dailysummaries?startDate=${start}&endDate=${end}`, z.object({ data: z.array(dayRecord) }), "daily", { data: [] }),
   ]);
 
   const activities: GarminActivityRecord[] = [];
@@ -110,6 +113,7 @@ export async function fetchGarminRange(token: string, start: string, end: string
       `/activitylist-service/activities/search/activities?start=${offset}&limit=${ACTIVITY_PAGE}&startDate=${start}&endDate=${end}`,
       z.array(activityRecord),
       "activities",
+      [],
     );
     activities.push(...page);
     if (page.length < ACTIVITY_PAGE) break;
