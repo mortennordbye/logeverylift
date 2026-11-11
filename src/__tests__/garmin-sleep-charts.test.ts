@@ -8,6 +8,7 @@ const theme = {
   sport: { swim: "#1", bike: "#2", run: "#3", strength: "#4", other: "#5" },
   band: { low: "#l", mid: "#m", high: "#h" }, positive: "#p", negative: "#n",
   status: { good: "#g", warning: "#w", serious: "#s", critical: "#c" },
+  zones: ["#z1", "#z2", "#z3", "#z4", "#z5"],
 } as VizTheme;
 
 const at = (iso: string) => Date.parse(`${iso}Z`);

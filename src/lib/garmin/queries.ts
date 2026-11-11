@@ -1,11 +1,14 @@
 import { db } from "@/db";
-import { garminActivities, garminActivityMetrics, garminConnections, garminDailyMetrics, garminDays } from "@/db/schema";
-import { and, asc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import { garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays } from "@/db/schema";
+import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
+import type { ActivityMetrics } from "./analytics/activity";
+import { sessionZoneMessage } from "./analytics/thresholds";
+import { lttbIndices, takeIndices } from "./charts/downsample";
 import type { DailyMetrics } from "./analytics/daily";
 import { insightsFor, type Insight } from "./analytics/insights";
 import { addDays } from "./dates";
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
-import { SPORTS, type Sport } from "./analytics/sport";
+import { SPORTS, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
 
 /**
@@ -326,5 +329,150 @@ export async function getSleepData(userId: string, days = 90): Promise<SleepTabD
       return { date: m.date, hrv: m.hrv, restingHr: m.restingHr, sleepDebtS: m.sleepDebtS, regularity: m.regularity, timing: m.timing };
     }),
     stress,
+  };
+}
+
+// ── Activities ──────────────────────────────────────────────────────────────
+
+export type ActivityListRow = {
+  id: number;
+  name: string;
+  typeKey: string;
+  sport: Sport;
+  start: number;
+  durationS: number | null;
+  distanceM: number | null;
+  avgHr: number | null;
+  load: number | null;
+  loadMethod: string | null;
+  hrPreview: (number | null)[];
+};
+
+export type ActivitiesData = {
+  calendar: { date: string; load: number; sport: Sport | null }[];
+  list: ActivityListRow[];
+};
+
+export async function getActivitiesData(userId: string, limit = 120): Promise<ActivitiesData> {
+  const days = await db
+    .select({ day: garminDailyMetrics.day, pmc: sql<Record<string, PmcPoint>>`${garminDailyMetrics.metrics}->'pmc'` })
+    .from(garminDailyMetrics)
+    .where(eq(garminDailyMetrics.userId, userId))
+    .orderBy(asc(garminDailyMetrics.day));
+  const calendar = days.map((d) => {
+    let main: Sport | null = null;
+    let best = 0;
+    for (const s of SPORTS) {
+      const l = d.pmc?.[s]?.load ?? 0;
+      if (l > best) {
+        best = l;
+        main = s;
+      }
+    }
+    return { date: d.day, load: Math.round(d.pmc?.total?.load ?? 0), sport: main };
+  });
+
+  const rows = await db
+    .select({
+      id: garminActivities.garminActivityId,
+      typeKey: garminActivities.activityType,
+      start: garminActivities.startTimeLocal,
+      data: garminActivities.data,
+      sport: garminActivityMetrics.sport,
+      load: garminActivityMetrics.load,
+      loadMethod: garminActivityMetrics.loadMethod,
+      hrPreview: sql<(number | null)[] | null>`${garminActivityMetrics.metrics}->'hrPreview'`,
+    })
+    .from(garminActivities)
+    .leftJoin(
+      garminActivityMetrics,
+      and(eq(garminActivityMetrics.userId, garminActivities.userId), eq(garminActivityMetrics.garminActivityId, garminActivities.garminActivityId)),
+    )
+    .where(eq(garminActivities.userId, userId))
+    .orderBy(desc(garminActivities.startTimeLocal))
+    .limit(limit);
+  return {
+    calendar,
+    list: rows.map((r) => {
+      const j = (r.data ?? {}) as Json;
+      return {
+        id: r.id,
+        name: typeof j.activityName === "string" ? j.activityName : r.typeKey.replaceAll("_", " "),
+        typeKey: r.typeKey,
+        sport: (r.sport ?? sportOf(r.typeKey)) as Sport,
+        start: r.start.getTime(),
+        durationS: num(j.duration),
+        distanceM: num(j.distance),
+        avgHr: num(j.averageHR),
+        load: r.load,
+        loadMethod: r.loadMethod,
+        hrPreview: r.hrPreview ?? [],
+      };
+    }),
+  };
+}
+
+export type ActivityDetail = {
+  id: number;
+  name: string;
+  typeKey: string;
+  sport: Sport;
+  start: number;
+  summary: Json;
+  metrics: ActivityMetrics | null;
+  /** Columnar, cut to at most MAX_POINTS at the same indices. t in seconds from start. */
+  streams: Partial<Record<string, (number | null)[]>>;
+  laps: Json[];
+  sets: Json[];
+  hrZoneFloors: number[] | null;
+  matchedSessionId: number | null;
+};
+
+const MAX_POINTS = 3000;
+
+export async function getActivityDetail(userId: string, id: number): Promise<ActivityDetail | null> {
+  const [a] = await db
+    .select({ id: garminActivities.garminActivityId, typeKey: garminActivities.activityType, start: garminActivities.startTimeLocal, data: garminActivities.data })
+    .from(garminActivities)
+    .where(and(eq(garminActivities.userId, userId), eq(garminActivities.garminActivityId, id)));
+  if (!a) return null;
+  const [m] = await db
+    .select({ metrics: garminActivityMetrics.metrics, day: garminActivityMetrics.day })
+    .from(garminActivityMetrics)
+    .where(and(eq(garminActivityMetrics.userId, userId), eq(garminActivityMetrics.garminActivityId, id)));
+  const [s] = await db
+    .select({ streams: garminActivityStreams.streams, laps: garminActivityStreams.laps, sets: garminActivityStreams.sets, timeInZone: garminActivityStreams.timeInZone })
+    .from(garminActivityStreams)
+    .where(and(eq(garminActivityStreams.userId, userId), eq(garminActivityStreams.garminActivityId, id)));
+
+  let streams = (s?.streams ?? {}) as Record<string, (number | null)[]>;
+  if (streams.t && streams.t.length > MAX_POINTS) streams = takeIndices(streams, lttbIndices(streams.t, streams.hr ?? streams.power ?? streams.speed ?? streams.t, MAX_POINTS));
+
+  // A strength activity matched to a LogEveryLift session (daily metrics entries).
+  let matchedSessionId: number | null = null;
+  if (m?.day) {
+    const [d] = await db
+      .select({ entries: sql<{ id: number; matchedSessionId?: number }[]>`${garminDailyMetrics.metrics}->'entries'` })
+      .from(garminDailyMetrics)
+      .where(and(eq(garminDailyMetrics.userId, userId), eq(garminDailyMetrics.day, m.day)));
+    matchedSessionId = d?.entries?.find((e) => e.id === id)?.matchedSessionId ?? null;
+  }
+
+  const zone = sessionZoneMessage(s?.timeInZone);
+  const highs = Array.isArray(zone?.hrZoneHighBoundary) ? (zone!.hrZoneHighBoundary as number[]) : null;
+  const j = (a.data ?? {}) as Json;
+  return {
+    id: a.id,
+    name: typeof j.activityName === "string" ? j.activityName : a.typeKey.replaceAll("_", " "),
+    typeKey: a.typeKey,
+    sport: sportOf(a.typeKey),
+    start: a.start.getTime(),
+    summary: j,
+    metrics: (m?.metrics ?? null) as ActivityMetrics | null,
+    streams,
+    laps: (s?.laps ?? []) as Json[],
+    sets: (s?.sets ?? []) as Json[],
+    hrZoneFloors: highs && highs.length >= 6 ? highs.slice(0, 5) : null,
+    matchedSessionId,
   };
 }

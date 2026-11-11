@@ -5,11 +5,13 @@
 
 import { bandsFromStream, bandsFromZones, type Bands } from "./zones";
 import { defaultZoneFloors, powerLoad, trimpLoad, zoneLoad, type LoadMethod } from "./load";
+import { lttbIndices } from "../charts/downsample";
+import { decoupling, type Decoupling } from "./decoupling";
 import { sportOf, type Sport } from "./sport";
 import { sessionZoneMessage, snapshotZones, thresholdsFor, type Thresholds } from "./thresholds";
 
 /** Bump when a formula here or in the models it uses changes; the worker recomputes every row. */
-export const ACTIVITY_MODEL_VERSION = 1;
+export const ACTIVITY_MODEL_VERSION = 4;
 
 type Json = Record<string, unknown>;
 type Streams = Partial<Record<string, (number | null)[]>>;
@@ -28,6 +30,9 @@ export type ActivityMetrics = {
   /** UTC start and end in ms, for matching LogEveryLift sessions. */
   startMs: number | null;
   endMs: number | null;
+  /** Since v2: 40 HR points for list sparklines, and decoupling for rides and runs. */
+  hrPreview: (number | null)[];
+  decoupling: Decoupling | null;
 };
 
 function num(v: unknown): number | null {
@@ -101,6 +106,23 @@ export function computeActivityMetrics(input: {
     loadMethod = "garmin_tss";
   }
   const bands = t && hr && thresholds.lthr ? bandsFromStream(t, hr, thresholds.lthr) : bandsFromZones(hrZoneSeconds(s));
+  const hrPreview = t && hr ? lttbIndices(t, hr, 40).map((i) => hr[i] ?? null) : [];
+  const dec =
+    t && (sport === "bike" || sport === "run")
+      ? decoupling({
+          sport,
+          t,
+          hr: hr ?? undefined,
+          power: input.streams?.power ?? undefined,
+          speed: input.streams?.speed ?? undefined,
+          altitude: input.streams?.altitude ?? undefined,
+          distance: input.streams?.distance ?? undefined,
+          temperature: input.streams?.temperature ?? undefined,
+          elevationGainM: num(s.elevationGain),
+          treadmill: input.typeKey.toLowerCase().includes("treadmill"),
+          distanceM: num(s.distance),
+        })
+      : null;
 
   return {
     sport,
@@ -115,5 +137,7 @@ export function computeActivityMetrics(input: {
     intensityFactor,
     startMs: Number.isFinite(startGmt) ? startGmt : null,
     endMs: Number.isFinite(startGmt) && durationS ? startGmt + durationS * 1000 : null,
+    hrPreview,
+    decoupling: dec,
   };
 }

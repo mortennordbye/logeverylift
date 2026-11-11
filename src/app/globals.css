@@ -119,6 +119,12 @@ select {
   --viz-warning: #fab219;
   --viz-serious: #ec835a;
   --viz-critical: #d03b3b;
+  /* HR zones 1 to 5, an ordinal ramp (validated, --ordinal). */
+  --viz-zone-1: #6da7ec;
+  --viz-zone-2: #3987e5;
+  --viz-zone-3: #256abf;
+  --viz-zone-4: #184f95;
+  --viz-zone-5: #0d366b;
   --sidebar: oklch(0.985 0 0);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
@@ -167,6 +173,11 @@ select {
   --viz-warning: #fab219;
   --viz-serious: #ec835a;
   --viz-critical: #d03b3b;
+  --viz-zone-1: #1c5cab;
+  --viz-zone-2: #2a78d6;
+  --viz-zone-3: #5598e7;
+  --viz-zone-4: #86b6ef;
+  --viz-zone-5: #b7d3f6;
   --sidebar: oklch(0.205 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);

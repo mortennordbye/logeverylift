@@ -35,6 +35,7 @@ export function readVizTheme(): VizTheme {
     positive: v("--viz-positive"),
     negative: v("--viz-negative"),
     status: { good: v("--viz-good"), warning: v("--viz-warning"), serious: v("--viz-serious"), critical: v("--viz-critical") },
+    zones: [1, 2, 3, 4, 5].map((z) => v(`--viz-zone-${z}`)),
   };
 }
 

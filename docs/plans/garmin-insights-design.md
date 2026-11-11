@@ -628,6 +628,8 @@ Each phase is shippable alone, on the local branch (decision G-5 of the ingestio
 
 ### Phase C: Activities and the deep view
 
+> **Built 2026-11-11 (local branch):** Activities tab (load calendar heatmap, sport chips, list with 40-point HR sparklines stored in activity metrics v4) and `/more/garmin/activity/[id]` (verdict line, stat tiles, route map coloured by HR zone with a crosshair dot, linked uPlot stream stack with pace inverted and 2nd to 98th percentile y ranges, HR and power zones, decoupling, laps, strength sets from the FIT file with a link to the matched LogEveryLift session). Decoupling (`src/lib/garmin/analytics/decoupling.ts`) refuses treadmill runs (speed not measured), progressive sessions (output changes over 10 % between halves) and hilly runs (Garmin's filtered elevation gain, else the altitude stream with a 3 m deadband: raw altitude noise first made a 13 m/km run read as hilly). HR zones and the calendar use a validated 5-step ordinal ramp (`--viz-zone-1` to `5`); a grey to red heat scale failed the validator. Not yet: range select, lap tap to select, best-effort curve (needs phase D), run dynamics and swim blocks.
+
 - Calendar heatmap and list.
 - Deep view: linked stream charts, range select, laps, zones, decoupling (2.7), map coloured by stream, strength join.
 - Link from a History session to its Garmin activity.

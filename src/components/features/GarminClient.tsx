@@ -6,10 +6,10 @@ import Link from "next/link";
  * (?tab=), so each tab is rendered on the server and the back gesture works.
  */
 
-export const GARMIN_TABS = ["today", "load", "sleep", "overview", "data"] as const;
+export const GARMIN_TABS = ["today", "load", "sleep", "activities", "overview", "data"] as const;
 export type GarminTab = (typeof GARMIN_TABS)[number];
 
-const TAB_LABEL: Record<GarminTab, string> = { today: "Today", load: "Load", sleep: "Sleep", overview: "Overview", data: "Data" };
+const TAB_LABEL: Record<GarminTab, string> = { today: "Today", load: "Load", sleep: "Sleep", activities: "Activities", overview: "Overview", data: "Data" };
 
 export function GarminClient({ tab, children }: { tab: GarminTab; children: React.ReactNode }) {
   return (

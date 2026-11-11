@@ -33,9 +33,38 @@ type Props = {
   axisColor: string;
   gridColor: string;
   onIndex?: (index: number | null) => void;
+  /** Charts with the same key share one crosshair (the stream stack of an activity). */
+  syncKey?: string;
+  /** "clock": x is wall-clock ms, labelled 06:00. "elapsed": x is seconds from start × 1000, labelled 1:30. */
+  xFormat?: "clock" | "elapsed";
+  /** Draw the x axis labels (off for all but the bottom chart of a stack). */
+  showXAxis?: boolean;
+  /** Smaller values up (pace: faster is up). */
+  invertY?: boolean;
 };
 
 const LANE_H = 10;
+
+/** The data range plus 8 % each side (at least 0.5), so lines don't touch the edges at any scale. */
+export function paddedRange(min: number, max: number): [number, number] {
+  const pad = Math.max((max - min) * 0.08, 0.5);
+  return [min - pad, max + pad];
+}
+
+/** Elapsed-time ticks: every 5, 10, 15, 30 or 60 minutes, about five across. Values in seconds. */
+export function elapsedSplits(minS: number, maxS: number): number[] {
+  const span = maxS - minS;
+  const step = [300, 600, 900, 1800, 3600, 7200].find((s) => span / s <= 6) ?? 7200;
+  const out: number[] = [];
+  for (let t = Math.ceil(minS / step) * step; t <= maxS; t += step) out.push(t);
+  return out;
+}
+
+export function elapsedLabel(seconds: number) {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return h ? `${h}:${String(m).padStart(2, "0")}` : `${m}m`;
+}
 
 /** Ticks on whole hours: every 6 h over long spans, 3 h over a day, 2 h over a night. Values in seconds. */
 export function hourSplits(minS: number, maxS: number): number[] {
@@ -109,10 +138,10 @@ export function TimeSeriesChart(props: Props) {
         width,
         height: p.height,
         legend: { show: false },
-        cursor: { y: false, points: { size: 8, width: 2 }, drag: { x: false, y: false } },
+        cursor: { y: false, points: { size: 8, width: 2 }, drag: { x: false, y: false }, ...(p.syncKey ? { sync: { key: p.syncKey } } : {}) },
         scales: {
           x: { time: false, range: p.xRange ? [p.xRange[0] / 1000, p.xRange[1] / 1000] : undefined },
-          y: { range: p.yRange ? () => p.yRange! : (_u, min, max) => [Math.floor(min - 3), Math.ceil(max + 3)] },
+          y: { dir: p.invertY ? -1 : 1, range: p.yRange ? () => p.yRange! : (_u, min, max) => paddedRange(min, max) },
         },
         axes: [
           {
@@ -121,9 +150,10 @@ export function TimeSeriesChart(props: Props) {
             ticks: { show: false },
             font: "10px system-ui",
             // Room for one row of 10 px labels; uPlot's default band is 50 px.
-            size: 22,
-            splits: (_u, _i, min, max) => hourSplits(min, max),
-            values: (_u, splits) => splits.map((s) => timeLabel(s * 1000)),
+            size: p.showXAxis === false ? 4 : 22,
+            show: true,
+            splits: (_u, _i, min, max) => (p.xFormat === "elapsed" ? elapsedSplits(min, max) : hourSplits(min, max)),
+            values: (_u, splits) => (p.showXAxis === false ? splits.map(() => "") : splits.map((s) => (p.xFormat === "elapsed" ? elapsedLabel(s) : timeLabel(s * 1000)))),
           },
           { stroke: p.axisColor, grid: { stroke: p.gridColor, width: 1 }, ticks: { show: false }, font: "10px system-ui", size: 34, space: 28 },
         ],

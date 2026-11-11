@@ -25,6 +25,7 @@ const theme: VizTheme = {
   positive: "#p",
   negative: "#n",
   status: { good: "#g", warning: "#w", serious: "#s", critical: "#c" },
+  zones: ["#z1", "#z2", "#z3", "#z4", "#z5"],
 };
 
 /** A series of n days from 2026-01-05 (a Monday): run 60 on weekdays, strength 40 on Saturdays. */

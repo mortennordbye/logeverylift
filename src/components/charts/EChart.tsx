@@ -27,20 +27,25 @@ export function EChart({
   height,
   ariaLabel,
   onIndex,
+  onItemClick,
 }: {
   option: Option;
   height: number;
   ariaLabel: string;
   onIndex?: (index: number | null) => void;
+  /** A tap on a data item: the item's data value. */
+  onItemClick?: (value: unknown) => void;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const chart = useRef<EChartsInstance | null>(null);
   const onIndexRef = useRef(onIndex);
+  const onClickRef = useRef(onItemClick);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
     onIndexRef.current = onIndex;
-  }, [onIndex]);
+    onClickRef.current = onItemClick;
+  }, [onIndex, onItemClick]);
 
   useEffect(() => {
     let disposed = false;
@@ -54,6 +59,7 @@ export function EChart({
         onIndexRef.current?.(typeof info?.value === "number" ? info.value : null);
       });
       instance.getZr().on("globalout", () => onIndexRef.current?.(null));
+      instance.on("click", (e) => onClickRef.current?.((e as { value?: unknown }).value));
       observer = new ResizeObserver(() => instance.resize());
       observer.observe(box.current);
       setReady(true);

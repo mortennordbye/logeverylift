@@ -1,0 +1,83 @@
+import { lapRows, paceLabel, pointZones, setRows, streamPanels, verdict } from "@/lib/garmin/charts/activity";
+import type { ActivityMetrics } from "@/lib/garmin/analytics/activity";
+import type { ActivityDetail } from "@/lib/garmin/queries";
+import { describe, expect, it } from "vitest";
+
+function detail(over: Partial<ActivityDetail> = {}, metrics: Partial<ActivityMetrics> = {}): ActivityDetail {
+  return {
+    id: 1,
+    name: "Run",
+    typeKey: "running",
+    sport: "run",
+    start: 0,
+    summary: { duration: 3600 },
+    metrics: {
+      sport: "run",
+      load: 60,
+      loadMethod: "trimp",
+      thresholds: { maxHr: 200, restHr: 50, lthr: 170, ftp: null, source: "fit" },
+      bands: { low: 3000, mid: 600, high: 0 },
+      durationS: 3600,
+      distanceM: 10000,
+      avgHr: 150,
+      np: null,
+      intensityFactor: null,
+      startMs: 0,
+      endMs: 3600_000,
+      hrPreview: [],
+      decoupling: null,
+      ...metrics,
+    },
+    streams: {},
+    laps: [],
+    sets: [],
+    hrZoneFloors: [100, 120, 140, 160, 180],
+    matchedSessionId: null,
+    ...over,
+  };
+}
+
+describe("activity view", () => {
+  it("judges a steady session by its decoupling, and says when heat may explain it", () => {
+    expect(verdict(detail({}, { decoupling: { valid: true, efFirst: 1, efSecond: 0.97, pct: 3, ef: 1, minutes: 60, temperature: 12 } }))).toBe(
+      "Steady aerobic run. Decoupling 3 %: your base holds for 1.0 h.",
+    );
+    expect(verdict(detail({}, { decoupling: { valid: true, efFirst: 1, efSecond: 0.9, pct: 10, ef: 1, minutes: 60, temperature: 28 } }))).toBe(
+      "HR drifted 10 % against output in the second half at 28 °C. Check fuel, heat or pace.",
+    );
+  });
+
+  it("falls back to the intensity mix without a decoupling number", () => {
+    expect(verdict(detail({}, { bands: { low: 3200, mid: 300, high: 100 } }))).toBe("Easy run: 89 % of the time in the low band.");
+    expect(verdict(detail({}, { bands: { low: 1000, mid: 1000, high: 1600 } }))).toBe("Hard run: 44 % of the time above threshold.");
+  });
+
+  it("pairs each working set with the rest that follows it", () => {
+    const sets = setRows(
+      detail({
+        sets: [
+          { setType: "active", repetitions: 8, weight: 80, duration: 35, startTime: "2026-11-05T06:30:00.000Z" },
+          { setType: "rest", duration: 120 },
+          { setType: "active", repetitions: 6, weight: 85, duration: 30, startTime: "2026-11-05T06:33:00.000Z" },
+        ],
+      }),
+      Date.parse("2026-11-05T06:25:00Z"),
+    );
+    expect(sets).toEqual([
+      { n: 1, reps: 8, weightKg: 80, durationS: 35, restAfterS: 120, startS: 300 },
+      { n: 2, reps: 6, weightKg: 85, durationS: 30, restAfterS: null, startS: 480 },
+    ]);
+  });
+
+  it("reads laps, paces and HR zones per point", () => {
+    expect(lapRows(detail({ laps: [{ totalTimerTime: 360, totalDistance: 1000, avgHeartRate: 150, enhancedAvgSpeed: 2.78 }] }))[0]).toMatchObject({ n: 1, durationS: 360, avgHr: 150 });
+    expect(paceLabel(1000 / 360)).toBe("6:00");
+    expect(pointZones(detail({ streams: { hr: [110, 150, 185, null] } }))).toEqual([0, 2, 4, null]);
+  });
+
+  it("shows pace inverted for runs and leaves out streams the file lacks", () => {
+    const panels = streamPanels(detail({ streams: { t: [0, 1], hr: [140, 141], speed: [2.78, 2.8], cadence: [0, 0] } }));
+    expect(panels.map((p) => p.key)).toEqual(["hr", "pace"]);
+    expect(panels[1]).toMatchObject({ invert: true, unit: "min/km" });
+  });
+});

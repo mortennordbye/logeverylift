@@ -11,6 +11,8 @@ export type VizTheme = {
   positive: string;
   negative: string;
   status: { good: string; warning: string; serious: string; critical: string };
+  /** HR zones 1 to 5, an ordinal ramp. */
+  zones: string[];
 };
 
 /** One-letter marks so a sport is never told by colour alone (3.1). */

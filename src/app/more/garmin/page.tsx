@@ -4,13 +4,14 @@
  */
 
 import { GARMIN_TABS, GarminClient, type GarminTab } from "@/components/features/GarminClient";
+import { GarminActivitiesTab } from "@/components/features/GarminActivitiesTab";
 import { GarminDataExplorer } from "@/components/features/GarminDataExplorer";
 import { GarminLoadTab } from "@/components/features/GarminLoadTab";
 import { GarminMetricsTab } from "@/components/features/GarminMetricsTab";
 import { GarminSleepTab } from "@/components/features/GarminSleepTab";
 import { GarminTodayTab } from "@/components/features/GarminTodayTab";
 import { env } from "@/lib/env";
-import { getLoadSeries, getSleepData, getTodayData, latestGarminDate } from "@/lib/garmin/queries";
+import { getActivitiesData, getLoadSeries, getSleepData, getTodayData, latestGarminDate } from "@/lib/garmin/queries";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
@@ -24,6 +25,8 @@ export default async function GarminPage({ searchParams }: { searchParams: Promi
   if (tab === "today") {
     const date = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : await latestGarminDate(auth.user.id);
     content = <GarminTodayTab data={await getTodayData(auth.user.id, date)} />;
+  } else if (tab === "activities") {
+    content = <GarminActivitiesTab data={await getActivitiesData(auth.user.id)} />;
   } else if (tab === "sleep") {
     content = <GarminSleepTab data={await getSleepData(auth.user.id)} />;
   } else if (tab === "load") {

@@ -336,3 +336,74 @@ describe("buildDailyMetrics", () => {
     expect(day.pmc.total.load).toBeCloseTo(50 + 57 * 8 * 0.22, 1);
   });
 });
+
+import { decoupling, runClimbPerKm } from "@/lib/garmin/analytics/decoupling";
+import { lttbIndices, takeIndices } from "@/lib/garmin/charts/downsample";
+
+describe("decoupling", () => {
+  const t = seconds(5400);
+
+  it("is about 0 % for a steady ride and about 9 % when HR drifts 10 % at fixed power", () => {
+    const steady = decoupling({ sport: "bike", t, hr: t.map(() => 140), power: t.map(() => 200) });
+    expect(steady.valid && steady.pct).toBeCloseTo(0, 1);
+    const drift = decoupling({ sport: "bike", t, hr: t.map((s) => (s < 3000 ? 140 : 154)), power: t.map(() => 200) });
+    expect(drift.valid && drift.pct).toBeGreaterThan(8);
+    expect(drift.valid && drift.pct).toBeLessThan(10);
+  });
+
+  it("refuses short, interval or hilly sessions with the reason", () => {
+    expect(decoupling({ sport: "bike", t: seconds(1800), hr: seconds(1800).map(() => 140), power: seconds(1800).map(() => 200) })).toMatchObject({ valid: false, reason: "Under 60 min" });
+    const intervals = t.map((s) => (Math.floor(s / 60) % 2 ? 350 : 80));
+    expect(decoupling({ sport: "bike", t, hr: t.map(() => 150), power: intervals })).toMatchObject({ valid: false, reason: "Not a steady session (intervals)" });
+    const hilly = decoupling({ sport: "run", t, hr: t.map(() => 150), speed: t.map(() => 3), altitude: t.map((s) => (s % 600) / 10), distance: t.map((s) => s * 3) });
+    expect(hilly).toMatchObject({ valid: false, reason: "Too hilly for a flat-speed comparison" });
+    expect(decoupling({ sport: "run", t, hr: undefined, speed: t.map(() => 3) })).toMatchObject({ valid: false, reason: "No heart rate" });
+    expect(decoupling({ sport: "run", t, hr: t.map(() => 150), speed: t.map(() => 3), treadmill: true })).toMatchObject({ valid: false, reason: "Treadmill pace is not measured" });
+    const progressive = decoupling({ sport: "bike", t, hr: t.map(() => 140), power: t.map((s) => 150 + s / 50) });
+    expect(progressive).toMatchObject({ valid: false, reason: "Output changed between halves (progressive session)" });
+  });
+});
+
+describe("lttbIndices", () => {
+  it("keeps the ends and the peak, and cuts every stream at the same indices", () => {
+    const x = seconds(1000);
+    const y = x.map((s) => (s === 500 ? 200 : 100));
+    const idx = lttbIndices(x, y, 50);
+    expect(idx).toHaveLength(50);
+    expect(idx[0]).toBe(0);
+    expect(idx.at(-1)).toBe(999);
+    expect(idx).toContain(500);
+    const cut = takeIndices({ t: x, hr: y }, idx);
+    expect(cut.t).toHaveLength(50);
+    expect(cut.hr![idx.indexOf(500)]).toBe(200);
+    expect(lttbIndices(seconds(10), seconds(10), 50)).toHaveLength(10);
+  });
+});
+
+describe("runClimbPerKm", () => {
+  it("does not count altitude jitter as climbing", () => {
+    // A flat 10 km with ±1 m sensor noise every sample.
+    const t = seconds(3000);
+    const flat = runClimbPerKm({ altitude: t.map((s) => 50 + (s % 2 ? 1 : -1)), distance: t.map((s) => s * 3.34) });
+    expect(flat).toBe(0);
+    // A real 100 m hill over 10 km.
+    const hill = runClimbPerKm({ altitude: t.map((s) => 50 + (s < 1500 ? s / 15 : 100 - (s - 1500) / 15)), distance: t.map((s) => s * 3.34) });
+    expect(hill!).toBeCloseTo(10, 0);
+  });
+
+  it("prefers Garmin's filtered gain", () => {
+    expect(runClimbPerKm({ elevationGainM: 129, distanceM: 10045, altitude: [0, 500], distance: [0, 1000] })).toBeCloseTo(12.8, 1);
+  });
+});
+
+import { robustRange } from "@/lib/garmin/charts/activity";
+
+describe("robustRange", () => {
+  it("ignores zeros and the odd spike when scaling a stream", () => {
+    const values = [0, 0, ...Array.from({ length: 200 }, (_, i) => 160 + (i % 10)), 400, null];
+    const [lo, hi] = robustRange(values)!;
+    expect(lo).toBeGreaterThan(150);
+    expect(hi).toBeLessThan(180);
+    expect(robustRange([1, 2, 3])).toBeNull();
+  });
+});
