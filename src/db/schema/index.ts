@@ -22,6 +22,7 @@ export * from "./exercise-notes";
 export * from "./exercise-prs";
 export * from "./feedback";
 export * from "./friendships";
+export * from "./garmin";
 export * from "./gyms";
 export * from "./nudges";
 export * from "./program-shares";

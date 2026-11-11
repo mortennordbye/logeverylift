@@ -1,5 +1,6 @@
 "use client";
 
+import { GarminSettingsRow } from "@/components/features/GarminSettingsRow";
 import { useTheme } from "@/components/ui/theme-provider";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { setMissedWorkoutsEnabled } from "@/lib/actions/training-cycles";
@@ -187,8 +188,11 @@ function ExportHistoryButton() {
 
 export function SettingsClient({
   missedWorkoutsEnabled,
+  garmin,
 }: {
   missedWorkoutsEnabled: boolean;
+  /** Null when Garmin is not enabled on this server. */
+  garmin: { connected: boolean; lastSyncedAt: string | null } | null;
 }) {
   const {
     accentColor, setAccentColor,
@@ -314,6 +318,18 @@ export function SettingsClient({
             </Row>
           </div>
         </div>
+
+        {/* ── Connections ────────────────────────────── */}
+        {garmin && (
+          <div>
+            <SectionLabel>Connections</SectionLabel>
+            <div className="rounded-2xl bg-card overflow-hidden">
+              <Row last>
+                <GarminSettingsRow connected={garmin.connected} lastSyncedAt={garmin.lastSyncedAt} />
+              </Row>
+            </div>
+          </div>
+        )}
 
         {/* ── Data ───────────────────────────────────── */}
         <div>
