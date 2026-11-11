@@ -11,6 +11,9 @@ import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
 import { SPORTS, isIndoor, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
 import { projectPmc, type Projection } from "./analytics/projection";
+import type { TrendActivity } from "./analytics/trends";
+import type { Efforts } from "./analytics/efforts";
+import type { Decoupling } from "./analytics/decoupling";
 import { bodySignal, raceStatus, type BodySignal, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
 import {
   RAMP_WINDOW_DAYS,
@@ -527,6 +530,8 @@ export type OverviewData = {
   strip: { date: string; readiness: number | null }[];
   insights: Insight[];
   body: Record<BodyKey, BodySignal>;
+  /** Which of Garmin's two VO2 max values the tile shows. */
+  vo2Sport: "run" | "bike";
   /** Fitness, fatigue and form for the last 42 days, all sports. */
   pmc: { dates: string[]; ctl: number[]; atl: number[]; tsb: number[]; calibrating: boolean };
   last: (ActivityListRow & { decoupling: ActivityMetrics["decoupling"] }) | null;
@@ -559,7 +564,7 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
 
   // Garmin's VO2 max from the watch files (fit.ts, vo2MaxFromMessage), one point per activity day.
   const vo2Rows = await db
-    .select({ day: garminActivityMetrics.day, vo2: sql<number | null>`(${garminActivityStreams.session}->>'garminVo2Max')::float` })
+    .select({ day: garminActivityMetrics.day, sport: garminActivityMetrics.sport, vo2: sql<number | null>`(${garminActivityStreams.session}->>'garminVo2Max')::float` })
     .from(garminActivityStreams)
     .innerJoin(
       garminActivityMetrics,
@@ -567,7 +572,9 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     )
     .where(and(eq(garminActivityStreams.userId, userId), gte(garminActivityMetrics.day, daysAgo(date, 180)), sql`${garminActivityStreams.session}->>'garminVo2Max' is not null`))
     .orderBy(asc(garminActivityMetrics.day));
-  const vo2ByDay = new Map(vo2Rows.flatMap((r) => (r.vo2 !== null ? [[r.day, r.vo2] as const] : [])));
+  // Running VO2 max when the user runs with a watch that has one; else the cycling one.
+  const vo2Sport: "run" | "bike" = vo2Rows.some((r) => r.sport === "run") ? "run" : "bike";
+  const vo2ByDay = new Map(vo2Rows.flatMap((r) => (r.vo2 !== null && r.sport === vo2Sport ? [[r.day, r.vo2] as const] : [])));
 
   const from = (pick: (m: DailyMetrics) => number | null) =>
     series.flatMap((m) => {
@@ -640,6 +647,7 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     strip: Array.from({ length: 7 }, (_, i) => addDays(date, i - 6)).map((d) => ({ date: d, readiness: series.find((x) => x.date === d)?.readiness?.score ?? null })),
     insights: today ? insightsFor(series) : [],
     body,
+    vo2Sport,
     pmc: {
       dates: recent.map((m) => m.date),
       ctl: recent.map((m) => r1(m.pmc.total.ctl)),
@@ -752,4 +760,71 @@ export async function getRaceProjection(userId: string, series: LoadSeries, toda
     peakCtl: Math.max(0, ...t.ctl.slice(-90)),
   });
   return { race, projection };
+}
+
+// ── Trends ──────────────────────────────────────────────────────────────────
+
+export type TrendsData = {
+  today: string;
+  acts: TrendActivity[];
+  /**
+   * Garmin's VO2 max from the watch files, one point per day and sport. Garmin
+   * keeps a running and a cycling VO2 max; a ride file carries the cycling one
+   * once the watch has one from power.
+   */
+  garminVo2: { day: string; value: number; sport: "run" | "bike" }[];
+  weight: { day: string; kg: number }[];
+};
+
+export async function getTrendsData(userId: string, today = isoDate(new Date())): Promise<TrendsData> {
+  const rows = await db
+    .select({
+      id: garminActivityMetrics.garminActivityId,
+      day: garminActivityMetrics.day,
+      sport: garminActivityMetrics.sport,
+      efforts: sql<Efforts | null>`${garminActivityMetrics.metrics}->'efforts'`,
+      decoupling: sql<Decoupling | null>`${garminActivityMetrics.metrics}->'decoupling'`,
+      indoor: sql<boolean | null>`(${garminActivityMetrics.metrics}->>'indoor')::boolean`,
+      durationS: sql<number | null>`(${garminActivityMetrics.metrics}->>'durationS')::float8`,
+      lthr: sql<number | null>`(${garminActivityMetrics.metrics}->'thresholds'->>'lthr')::float8`,
+      maxHr: sql<number | null>`(${garminActivityMetrics.metrics}->'thresholds'->>'maxHr')::float8`,
+    })
+    .from(garminActivityMetrics)
+    .where(and(eq(garminActivityMetrics.userId, userId), sql`${garminActivityMetrics.metrics} ? 'efforts'`))
+    .orderBy(asc(garminActivityMetrics.day));
+  const acts: TrendActivity[] = rows.map((r) => ({
+    id: r.id,
+    day: r.day,
+    sport: r.sport as Sport,
+    indoor: Boolean(r.indoor),
+    durationS: r.durationS,
+    efforts: r.efforts!,
+    decoupling: r.decoupling,
+    watchLthr: r.lthr,
+    watchMaxHr: r.maxHr,
+  }));
+
+  const vo2Rows = await db
+    .select({ day: garminActivityMetrics.day, sport: garminActivityMetrics.sport, vo2: sql<number>`max((${garminActivityStreams.session}->>'garminVo2Max')::float8)` })
+    .from(garminActivityStreams)
+    .innerJoin(
+      garminActivityMetrics,
+      and(eq(garminActivityMetrics.userId, garminActivityStreams.userId), eq(garminActivityMetrics.garminActivityId, garminActivityStreams.garminActivityId)),
+    )
+    .where(and(eq(garminActivityStreams.userId, userId), inArray(garminActivityMetrics.sport, ["run", "bike"]), sql`${garminActivityStreams.session}->>'garminVo2Max' is not null`))
+    .groupBy(garminActivityMetrics.day, garminActivityMetrics.sport)
+    .orderBy(asc(garminActivityMetrics.day));
+
+  const weightRows = await db
+    .select({ day: garminDays.calendarDate, kg: sql<number | null>`(${garminDays.data}->'latestWeight'->>'weight')::float8 / 1000` })
+    .from(garminDays)
+    .where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "weight")))
+    .orderBy(asc(garminDays.calendarDate));
+
+  return {
+    today,
+    acts,
+    garminVo2: vo2Rows.map((r) => ({ day: r.day, value: r.vo2, sport: r.sport as "run" | "bike" })),
+    weight: weightRows.flatMap((r) => (r.kg ? [{ day: r.day, kg: Math.round(r.kg * 10) / 10 }] : [])),
+  };
 }

@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { garminActivities, garminActivityMetrics, garminActivityStreams, garminDays, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
-import { getOverviewData, getVolumeData } from "@/lib/garmin/queries";
+import { getOverviewData, getTrendsData, getVolumeData } from "@/lib/garmin/queries";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createExercise, createProgram, createUser } from "./factories";
@@ -108,5 +108,24 @@ describe("getVolumeData", () => {
     expect(v.planned).toEqual({ swim: 0, bike: 1.5, run: 0 });
     expect(v.distance).toBe("half");
     expect(v.checklist.find((r) => r.key === "bike")?.best).toBe("2:00 h");
+  });
+});
+
+describe("getTrendsData", () => {
+  it("reads only the user's own activities with efforts, and their Garmin VO2 max and weight", async () => {
+    const me = await createUser();
+    const other = await createUser();
+    const efforts = { power: { 1200: 250 }, speed: {}, distance: {}, vo2: null, hr30: 160, dynamics: [] };
+    for (const [userId, id] of [[me.id, 21], [other.id, 22]] as const) {
+      await db.insert(garminActivities).values({ userId, garminActivityId: id, startTimeLocal: new Date("2026-11-01T07:00:00Z"), activityType: "cycling", data: {} });
+      await db.insert(garminActivityMetrics).values({ userId, garminActivityId: id, modelVersion: 6, sport: "bike", day: "2026-11-01", load: 50, loadMethod: "trimp", metrics: { efforts, indoor: false, durationS: 3600, decoupling: null, thresholds: { lthr: 168 } } });
+      await db.insert(garminActivityStreams).values({ userId, garminActivityId: id, parserVersion: 3, streams: {}, laps: [], sets: [], timeInZone: [], session: { garminVo2Max: userId === me.id ? 51 : 60 } });
+    }
+    await db.insert(garminDays).values({ userId: me.id, calendarDate: "2026-11-02", kind: "weight", data: { latestWeight: { weight: 80500 } } });
+
+    const t = await getTrendsData(me.id, "2026-11-11");
+    expect(t.acts).toEqual([expect.objectContaining({ id: 21, sport: "bike", watchLthr: 168, efforts })]);
+    expect(t.garminVo2).toEqual([{ day: "2026-11-01", value: 51, sport: "bike" }]);
+    expect(t.weight).toEqual([{ day: "2026-11-02", kg: 80.5 }]);
   });
 });

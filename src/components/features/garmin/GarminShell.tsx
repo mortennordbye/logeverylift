@@ -2,7 +2,7 @@
 
 import { refreshGarmin } from "@/lib/actions/garmin";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { Activity, ChevronLeft, Database, LayoutDashboard, Moon, RefreshCw, Sun, TrendingUp, type LucideIcon } from "lucide-react";
+import { Activity, ChartLine, ChevronLeft, Database, LayoutDashboard, Moon, RefreshCw, Sun, TrendingUp, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -16,6 +16,7 @@ const TABS: Record<GarminTab, { label: string; icon: LucideIcon }> = {
   training: { label: "Training", icon: TrendingUp },
   recovery: { label: "Recovery", icon: Moon },
   activities: { label: "Activities", icon: Activity },
+  trends: { label: "Trends", icon: ChartLine },
 };
 
 function ago(iso: string | null, now: number) {

@@ -1,8 +1,9 @@
 import { db } from "@/db";
-import { garminActivities, garminActivityFiles, garminActivityStreams, garminConnections, garminDays, garminSyncRuns } from "@/db/schema";
+import { garminActivities, garminActivityFiles, garminActivityMetrics, garminActivityStreams, garminConnections, garminDays, garminSyncRuns } from "@/db/schema";
 import { garminPacing } from "@/lib/garmin/client";
 import { addDays } from "@/lib/garmin/dates";
 import { FIT_PARSER_VERSION } from "@/lib/garmin/fit";
+import { ACTIVITY_MODEL_VERSION } from "@/lib/garmin/analytics/activity";
 import { forgetToken } from "@/lib/garmin/sync";
 import { HISTORY_DAYS_USER, runGarminWorkerTick } from "@/lib/garmin/worker";
 import { encryptSecret } from "@/lib/utils/crypto";
@@ -171,6 +172,16 @@ describe("runGarminWorkerTick", () => {
     expect((await runGarminWorkerTick()).status).toBe("ran");
     const [s] = await db.select({ v: garminActivityStreams.parserVersion }).from(garminActivityStreams).where(eq(garminActivityStreams.userId, userId));
     expect(s.v).toBe(FIT_PARSER_VERSION);
+    expect(await runGarminWorkerTick()).toEqual({ status: "idle" });
+  });
+
+  it("wakes up for activity metrics from an older model and recomputes them", async () => {
+    const userId = await connect();
+    await runUntilIdle();
+    await db.update(garminActivityMetrics).set({ modelVersion: 1 }).where(eq(garminActivityMetrics.userId, userId));
+    expect((await runGarminWorkerTick()).status).toBe("ran");
+    const [m] = await db.select({ v: garminActivityMetrics.modelVersion }).from(garminActivityMetrics).where(eq(garminActivityMetrics.userId, userId));
+    expect(m.v).toBe(ACTIVITY_MODEL_VERSION);
     expect(await runGarminWorkerTick()).toEqual({ status: "idle" });
   });
 

@@ -58,8 +58,9 @@ type Mesg = Record<string, unknown>;
 /**
  * Garmin's VO2 max, which the Personal API does not return. Garmin watches
  * write it into an undocumented FIT message (number 140): field 7 is the
- * watch's VO2 max after the activity, field 29 is non-zero when this activity
- * updated it. Both are stored as ml/kg/min x 65536 / 3.5 (measured on the
+ * watch's VO2 max after the activity (on a ride file, the cycling VO2 max once
+ * the watch has one from power, else the running one), field 29 is non-zero
+ * when this activity updated it. Both are stored as ml/kg/min x 65536 / 3.5 (measured on the
  * owner's files on 2026-11-11: 50.6 to 51.7 over 60 rides and runs, 0 on
  * treadmill and strength files). Values outside 15 to 95 are treated as absent.
  */

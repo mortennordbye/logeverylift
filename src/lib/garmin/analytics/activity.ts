@@ -7,11 +7,12 @@ import { bandsFromStream, bandsFromZones, type Bands } from "./zones";
 import { defaultZoneFloors, powerLoad, trimpLoad, zoneLoad, type LoadMethod } from "./load";
 import { lttbIndices } from "../charts/downsample";
 import { decoupling, type Decoupling } from "./decoupling";
-import { sportOf, type Sport } from "./sport";
+import { isIndoor, sportOf, type Sport } from "./sport";
+import { computeEfforts, type Efforts } from "./efforts";
 import { sessionZoneMessage, snapshotZones, thresholdsFor, type Thresholds } from "./thresholds";
 
 /** Bump when a formula here or in the models it uses changes; the worker recomputes every row. */
-export const ACTIVITY_MODEL_VERSION = 4;
+export const ACTIVITY_MODEL_VERSION = 6;
 
 type Json = Record<string, unknown>;
 type Streams = Partial<Record<string, (number | null)[]>>;
@@ -33,6 +34,10 @@ export type ActivityMetrics = {
   /** Since v2: 40 HR points for list sparklines, and decoupling for rides and runs. */
   hrPreview: (number | null)[];
   decoupling: Decoupling | null;
+  /** Since v5: best efforts and estimates for the Trends tab. */
+  efforts?: Efforts;
+  /** Since v5: treadmill, trainer or virtual. */
+  indoor?: boolean;
 };
 
 function num(v: unknown): number | null {
@@ -124,8 +129,13 @@ export function computeActivityMetrics(input: {
         })
       : null;
 
+  const indoor = isIndoor(input.typeKey);
+  const efforts = computeEfforts({ sport, indoor, summary: s, streams: input.streams, restHr: thresholds.restHr, maxHr: thresholds.maxHr });
+
   return {
     sport,
+    indoor,
+    efforts,
     load: load !== null ? Math.round(load * 10) / 10 : null,
     loadMethod,
     thresholds,

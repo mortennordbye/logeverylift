@@ -154,9 +154,9 @@ const BODY: Record<BodyKey, { label: string; unit: string; format: (v: number) =
   sleep: { label: "Sleep", unit: "h", format: (v) => v.toFixed(1), href: tab("recovery"), higherIsGood: true },
   hrv: { label: "HRV", unit: "ms", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: true },
   restingHr: { label: "Resting HR", unit: "bpm", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: false },
-  vo2max: { label: "VO2 max", unit: "", format: (v) => v.toFixed(1), href: tab("training"), higherIsGood: true },
+  vo2max: { label: "VO2 max", unit: "", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: true },
   bodyBattery: { label: "Body battery", unit: "", format: (v) => String(Math.round(v)), href: tab("day"), higherIsGood: true },
-  weight: { label: "Weight", unit: "kg", format: (v) => v.toFixed(1), href: tab("training"), higherIsGood: null },
+  weight: { label: "Weight", unit: "kg", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: null },
 };
 
 function stateText(s: BodySignal, good: boolean | null) {
@@ -195,13 +195,13 @@ function Spark({ s }: { s: BodySignal }) {
   );
 }
 
-function BodyTile({ k, s }: { k: BodyKey; s: BodySignal }) {
+function BodyTile({ k, s, vo2Sport }: { k: BodyKey; s: BodySignal; vo2Sport: "run" | "bike" }) {
   const c = BODY[k];
   return (
     <Link href={c.href} replace scroll={false} className="rounded-xl bg-background p-2.5 active:opacity-70 flex flex-col gap-1 min-h-[104px]">
       <p className="text-[11px] text-muted-foreground leading-tight">
         {c.label}
-        {k === "vo2max" && <span className="block text-[9px]">Garmin, from watch files</span>}
+        {k === "vo2max" && <span className="block text-[9px]">Garmin, {vo2Sport === "run" ? "running" : "cycling"}</span>}
       </p>
       <p className="text-lg font-semibold leading-tight tabular-nums">
         {s.value !== null ? c.format(s.value) : "–"}
@@ -317,11 +317,11 @@ export function GarminOverviewTab({ data, volume }: { data: OverviewData; volume
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Body · against your normal</p>
         <div className="grid grid-cols-3 gap-2">
           {(Object.keys(BODY) as BodyKey[]).map((k) => (
-            <BodyTile key={k} k={k} s={data.body[k]} />
+            <BodyTile key={k} k={k} s={data.body[k]} vo2Sport={data.vo2Sport} />
           ))}
         </div>
         <p className="text-[11px] text-muted-foreground px-1">
-          The band is your normal: mean ± 1 SD of the 28 days before (HRV: its own baseline band). VO2 max is Garmin&apos;s value from your watch files; the app&apos;s own estimate comes with the Trends tab.
+          The band is your normal: mean ± 1 SD of the 28 days before (HRV: its own baseline band). VO2 max is Garmin&apos;s value from your watch files; Trends shows the app&apos;s own estimate next to it.
         </p>
       </section>
       <FitnessBlock data={data} />
