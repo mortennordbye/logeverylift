@@ -607,6 +607,8 @@ Each phase is shippable alone, on the local branch (decision G-5 of the ingestio
 
 ### Phase A: engine and chart tooling
 
+> **Built 2026-11-11 (local branch):** models 2.1, 2.2, 2.3, 2.4, 2.5, 2.9, 2.11 in `src/lib/garmin/analytics/`; the two metric tables and worker steps (`runGarminMetricsStep` in `src/lib/garmin/metrics-job.ts`); FIT parser v2 with re-parse; `echarts` with the theme and readout pattern (`src/components/charts/EChart.tsx`); the Load tab. Colour roles validated with the dataviz validator and added to `src/app/globals.css`. Not yet: `uplot`, its touch plugin and the crosshair store, which phase B needs for the 24 h timeline (added there, so no unused component ships). Daily load moved to its own strip under form: single days reach 3 to 5 times fitness and flattened the lines. Bundle sizes still to measure.
+
 - Migration: the two tables, the two connection columns, the two stream columns.
 - FIT parser v2 and the re-parse.
 - Models 2.1, 2.2, 2.3, 2.4, 2.5, 2.9, 2.11. Worker steps 4 and 5.

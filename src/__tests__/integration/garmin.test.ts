@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { garminActivities, garminConnections, garminDays, garminSyncRuns } from "@/db/schema";
+import { garminActivities, garminConnections, garminDailyMetrics, garminDays, garminSyncRuns } from "@/db/schema";
 import { connectGarmin, disconnectGarmin, getGarminMetrics } from "@/lib/actions/garmin";
 import { collectUserData } from "@/lib/account-data";
 import { garminPacing } from "@/lib/garmin/client";
@@ -218,6 +218,7 @@ describe("disconnectGarmin", () => {
     expect(await db.select().from(garminDays)).toEqual([]);
     expect(await db.select().from(garminActivities)).toEqual([]);
     expect(await db.select().from(garminSyncRuns)).toEqual([]);
+    expect(await db.select().from(garminDailyMetrics)).toEqual([]);
   });
 
   it("leaves another user's connection alone", async () => {

@@ -4,8 +4,10 @@ import { db } from "@/db";
 import {
   garminActivities,
   garminActivityFiles,
+  garminActivityMetrics,
   garminActivityStreams,
   garminConnections,
+  garminDailyMetrics,
   garminDays,
   garminSyncRuns,
   users,
@@ -79,6 +81,8 @@ export async function disconnectGarmin(data: unknown): Promise<ActionResult> {
       await tx.delete(garminConnections).where(eq(garminConnections.userId, userId));
       if (parsed.data.deleteData) {
         await tx.delete(garminDays).where(eq(garminDays.userId, userId));
+        await tx.delete(garminDailyMetrics).where(eq(garminDailyMetrics.userId, userId));
+        await tx.delete(garminActivityMetrics).where(eq(garminActivityMetrics.userId, userId));
         await tx.delete(garminActivityStreams).where(eq(garminActivityStreams.userId, userId));
         await tx.delete(garminActivityFiles).where(eq(garminActivityFiles.userId, userId));
         await tx.delete(garminActivities).where(eq(garminActivities.userId, userId));

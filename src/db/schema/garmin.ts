@@ -17,11 +17,13 @@
  * - garmin_activity_files: the activity's original FIT file, as Garmin's ZIP.
  * - garmin_activity_streams: that FIT file parsed (src/lib/garmin/fit.ts):
  *   per-second streams including GPS, laps, strength sets, time in zones.
+ * - garmin_activity_metrics, garmin_daily_metrics: what src/lib/garmin/analytics
+ *   derives from the rows above, filled by the worker. Safe to drop and rebuild.
  * - garmin_sync_runs: one row per sync or worker run, for observability.
  *   Only the latest 200 per user are kept.
  */
 
-import { bigint, boolean, customType, date, index, integer, jsonb, pgTable, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
+import { bigint, boolean, customType, date, index, integer, jsonb, pgTable, real, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 import { GARMIN_DAY_KINDS } from "../../lib/garmin/endpoints";
 import { users } from "./users";
 
@@ -48,6 +50,10 @@ export const garminConnections = pgTable("garmin_connections", {
   leaseUntil: timestamp("lease_until"),
   // Garmin said "slow down" (429): no calls for this user before this time.
   pausedUntil: timestamp("paused_until"),
+  // Derived metrics (src/lib/garmin/analytics): when the daily series was last
+  // built, and its model version. Cleared to null to force a rebuild.
+  metricsComputedAt: timestamp("metrics_computed_at"),
+  metricsVersion: integer("metrics_version"),
 });
 
 export const garminDays = pgTable(
@@ -147,7 +153,51 @@ export const garminActivityStreams = pgTable(
     sets: jsonb("sets").notNull(),
     timeInZone: jsonb("time_in_zone").notNull(),
     session: jsonb("session"),
+    // Parser v2: pool lengths (swim) and timer events (pauses). Null for rows parsed by v1.
+    lengths: jsonb("lengths"),
+    events: jsonb("events"),
     parsedAt: timestamp("parsed_at").defaultNow().notNull(),
   },
   (t) => [unique("uniq_garmin_activity_stream").on(t.userId, t.garminActivityId)],
+);
+
+/** Derived metrics per activity (src/lib/garmin/analytics/activity.ts), recomputed when the model version changes. */
+export const garminActivityMetrics = pgTable(
+  "garmin_activity_metrics",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    garminActivityId: bigint("garmin_activity_id", { mode: "number" }).notNull(),
+    modelVersion: integer("model_version").notNull(),
+    // Also kept as columns so the daily build reads them without parsing JSON.
+    sport: text("sport").notNull(),
+    day: date("day").notNull(),
+    load: real("load"),
+    loadMethod: text("load_method").notNull(),
+    // ActivityMetrics: thresholds, bands, NP, IF, start and end.
+    metrics: jsonb("metrics").notNull(),
+    computedAt: timestamp("computed_at").defaultNow().notNull(),
+  },
+  (t) => [
+    unique("uniq_garmin_activity_metrics").on(t.userId, t.garminActivityId),
+    index("idx_garmin_activity_metrics_user_day").on(t.userId, t.day),
+  ],
+);
+
+/** The daily series (src/lib/garmin/analytics/daily.ts): load, fitness and form, HRV, resting HR, sleep. */
+export const garminDailyMetrics = pgTable(
+  "garmin_daily_metrics",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    day: date("day").notNull(),
+    modelVersion: integer("model_version").notNull(),
+    metrics: jsonb("metrics").notNull(),
+    computedAt: timestamp("computed_at").defaultNow().notNull(),
+  },
+  (t) => [unique("uniq_garmin_daily_metrics").on(t.userId, t.day)],
 );

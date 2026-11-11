@@ -8,7 +8,7 @@ import { Decoder, Stream } from "@garmin/fitsdk";
  * Bump FIT_PARSER_VERSION when the output changes, so stored activities can
  * be parsed again from their saved file.
  */
-export const FIT_PARSER_VERSION = 1;
+export const FIT_PARSER_VERSION = 2;
 
 /** Record fields kept as streams, FIT name -> stored name. */
 const STREAM_FIELDS = {
@@ -40,6 +40,10 @@ export type ParsedFit = {
   sets: Record<string, unknown>[];
   timeInZone: Record<string, unknown>[];
   session: Record<string, unknown> | null;
+  /** Pool lengths: time, strokes, stroke type (swims only). Since v2. */
+  lengths: Record<string, unknown>[];
+  /** Timer start and stop events, for pauses. Since v2. */
+  events: Record<string, unknown>[];
 };
 
 /** FIT stores positions in semicircles. */
@@ -99,5 +103,7 @@ export function parseFit(file: Buffer): ParsedFit {
     sets: ((messages.setMesgs ?? []) as Mesg[]).map(plain),
     timeInZone: ((messages.timeInZoneMesgs ?? []) as Mesg[]).map(plain),
     session: session ? plain(session) : null,
+    lengths: ((messages.lengthMesgs ?? []) as Mesg[]).map(plain),
+    events: ((messages.eventMesgs ?? []) as Mesg[]).filter((e) => e.event === "timer").map(plain),
   };
 }

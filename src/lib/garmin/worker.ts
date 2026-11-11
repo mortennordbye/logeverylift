@@ -3,6 +3,7 @@ import { garminActivities, garminConnections, garminSyncRuns, users } from "@/db
 import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { GarminError } from "./client";
 import { addDays, isoDate } from "./dates";
+import { metricsDue, runGarminMetricsStep } from "./metrics-job";
 import {
   RunLog,
   fatalTag,
@@ -58,7 +59,7 @@ async function claim(now: Date) {
   const [candidate] = await db
     .select({ id: garminConnections.id })
     .from(garminConnections)
-    .where(and(free, or(eq(garminConnections.historyDone, false), hasPendingFiles, recentDue)))
+    .where(and(free, or(eq(garminConnections.historyDone, false), hasPendingFiles, recentDue, metricsDue)))
     .orderBy(garminConnections.leaseUntil)
     .limit(1);
   if (!candidate) return null;
@@ -137,8 +138,14 @@ export async function runGarminWorkerTick(now = new Date()): Promise<TickResult>
     const pause = fatal.startsWith("rate_limited") ? retry : fatal === "key_rejected" ? KEY_REJECTED_PAUSE_MS : 0;
     if (pause) await db.update(garminConnections).set({ pausedUntil: new Date(Date.now() + pause) }).where(eq(garminConnections.id, conn.id));
   } finally {
-    await db.update(garminConnections).set({ leaseUntil: null }).where(eq(garminConnections.id, conn.id));
     await finishRun(runId, userId, now, log, fatal);
+    // Derived metrics read only stored rows, so they run even after a Garmin error.
+    try {
+      await runGarminMetricsStep(userId, now);
+    } catch (e) {
+      console.error("[runGarminWorkerTick] metrics failed", { userId }, e instanceof Error ? e.message : "unknown");
+    }
+    await db.update(garminConnections).set({ leaseUntil: null }).where(eq(garminConnections.id, conn.id));
   }
   return { status: "ran", userId, error: fatal };
 }

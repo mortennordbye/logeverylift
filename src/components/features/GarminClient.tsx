@@ -1,17 +1,17 @@
-"use client";
-
-import { GarminDataExplorer } from "@/components/features/GarminDataExplorer";
-import { GarminMetricsTab } from "@/components/features/GarminMetricsTab";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
 
-export type GarminTab = "overview" | "data";
+/**
+ * The Garmin page shell: back link, title and tab pills. Tabs live in the URL
+ * (?tab=), so each tab is rendered on the server and the back gesture works.
+ */
 
-const TAB_LABEL: Record<GarminTab, string> = { overview: "Overview", data: "Data" };
+export const GARMIN_TABS = ["load", "overview", "data"] as const;
+export type GarminTab = (typeof GARMIN_TABS)[number];
 
-export function GarminClient({ initialTab }: { initialTab: GarminTab }) {
-  const [tab, setTab] = useState<GarminTab>(initialTab);
+const TAB_LABEL: Record<GarminTab, string> = { load: "Load", overview: "Overview", data: "Data" };
+
+export function GarminClient({ tab, children }: { tab: GarminTab; children: React.ReactNode }) {
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
@@ -22,25 +22,24 @@ export function GarminClient({ initialTab }: { initialTab: GarminTab }) {
       </div>
       <div className="px-4 pt-2 pb-3 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight mb-3">Garmin</h1>
-        <div className="flex bg-muted rounded-xl p-1 gap-1" role="tablist">
-          {(Object.keys(TAB_LABEL) as GarminTab[]).map((t) => (
-            <button
+        <nav className="flex gap-2 overflow-x-auto -mx-4 px-4 no-scrollbar" aria-label="Garmin views">
+          {GARMIN_TABS.map((t) => (
+            <Link
               key={t}
-              role="tab"
-              aria-selected={tab === t}
-              onClick={() => setTab(t)}
-              className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors min-h-[36px] ${
-                tab === t ? "bg-background text-foreground shadow-sm" : "text-muted-foreground"
+              href={`/more/garmin?tab=${t}`}
+              replace
+              scroll={false}
+              aria-current={tab === t ? "page" : undefined}
+              className={`h-11 px-5 rounded-full text-sm font-medium flex items-center flex-none active:opacity-70 ${
+                tab === t ? "bg-foreground text-background" : "bg-muted text-muted-foreground"
               }`}
             >
               {TAB_LABEL[t]}
-            </button>
+            </Link>
           ))}
-        </div>
+        </nav>
       </div>
-      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-nav-safe-lg">
-        {tab === "overview" ? <GarminMetricsTab /> : <GarminDataExplorer />}
-      </main>
+      <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-nav-safe-lg">{children}</main>
     </div>
   );
 }

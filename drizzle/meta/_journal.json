@@ -512,6 +512,13 @@
       "when": 1794416659859,
       "tag": "0072_complete_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1794418738048,
+      "tag": "0073_lame_franklin_richards",
+      "breakpoints": true
     }
   ]
 }

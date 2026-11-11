@@ -193,6 +193,8 @@ export async function fetchActivityFiles(token: string, userId: string, activity
           sets: parsed.sets,
           timeInZone: parsed.timeInZone,
           session: parsed.session,
+          lengths: parsed.lengths,
+          events: parsed.events,
           parsedAt: new Date(),
         };
         await tx
@@ -235,6 +237,10 @@ export async function finishRun(runId: number, userId: string, startedAt: Date, 
       durationMs: Date.now() - startedAt.getTime(),
     })
     .where(eq(garminSyncRuns.id, runId));
+  // New rows mean the derived metrics are out of date (metrics-job.ts rebuilds them).
+  if (Object.values(log.counts).some((n) => n > 0)) {
+    await db.update(garminConnections).set({ metricsComputedAt: null }).where(eq(garminConnections.userId, userId));
+  }
   const keep = db
     .select({ id: garminSyncRuns.id })
     .from(garminSyncRuns)
