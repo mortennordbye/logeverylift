@@ -29,7 +29,7 @@ const FRESH_READINESS = 75;
 const FRESH_TSB = 5;
 
 export type Severity = "warning" | "caution" | "good" | "info";
-export type InsightTarget = "today" | "load" | "sleep";
+export type InsightTarget = "day" | "training" | "recovery";
 
 export type Insight = {
   id: string;
@@ -75,7 +75,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
       severity: "warning",
       text: `HRV has been under your normal range for ${n} day${n === 1 ? "" : "s"}. Keep today easy.`,
       numbers: { days: n, mean7: round(today.hrv.mean7 ?? 0), bandLow: round(today.hrv.bandLow ?? 0) },
-      target: "sleep",
+      target: "recovery",
     });
   }
 
@@ -88,7 +88,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
       severity: "caution",
       text: `Resting HR is ${round(over)} bpm over your 60-day normal for the second day. Hold back on intensity.`,
       numbers: { over: round(over, 1), baseline: round(today.restingHr.baseline) },
-      target: "sleep",
+      target: "recovery",
     });
   }
 
@@ -99,7 +99,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
       severity: "warning",
       text: `Fitness rose ${round(today.ramp, 1)} points this week. Over ${RAMP_WARNING} raises injury risk. Hold volume next week.`,
       numbers: { ramp: round(today.ramp, 1) },
-      target: "load",
+      target: "training",
     });
   }
 
@@ -115,7 +115,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
         severity: "warning",
         text: `This week's load is ${round(acwr, 1)} x your last three weeks. Keep the next days easy.`,
         numbers: { acwr: round(acwr, 2) },
-        target: "load",
+        target: "training",
       });
     }
     // Same medium day, every day.
@@ -126,7 +126,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
         severity: "caution",
         text: "Every day this week was a similar medium day. Make easy days easier and hard days harder.",
         numbers: { monotony: round(today.monotony, 1) },
-        target: "load",
+        target: "training",
       });
     }
   }
@@ -143,7 +143,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
       severity: "caution",
       text: `${round(last2[1]! * 100)} % of your time was between easy and threshold. Aim for under 20 %.`,
       numbers: { midShare: round(last2[1]! * 100) },
-      target: "load",
+      target: "training",
     });
   }
 
@@ -155,7 +155,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
       severity: "info",
       text: `No time above threshold in ${NO_HIGH_WEEKS} weeks. Add one short interval session a week if your plan is in build.`,
       numbers: { weeks: NO_HIGH_WEEKS },
-      target: "load",
+      target: "training",
     });
   }
 
@@ -166,7 +166,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
       severity: "caution",
       text: `You are ${round(today.sleepDebtS / 3600, 1)} h short on sleep over two weeks. Go to bed earlier for a few nights.`,
       numbers: { debtH: round(today.sleepDebtS / 3600, 1) },
-      target: "sleep",
+      target: "recovery",
     });
   }
 
@@ -178,7 +178,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
       severity: "info",
       text: spread !== null ? `Your bedtime moves by ${round(spread)} min night to night. A steady bedtime helps recovery.` : `Your sleep regularity is ${round(today.regularity ?? 0)} of 100. A steady bedtime helps recovery.`,
       numbers: { regularity: round(today.regularity ?? 0), onsetSpread: round(spread ?? 0) },
-      target: "sleep",
+      target: "recovery",
     });
   }
 
@@ -190,7 +190,7 @@ export function insightsFor(days: DailyMetrics[]): Insight[] {
       severity: "good",
       text: `Readiness ${today.readiness.score} and form +${round(tsb)}. Good day for the hard session.`,
       numbers: { readiness: today.readiness.score, tsb: round(tsb) },
-      target: "today",
+      target: "day",
     });
   }
 

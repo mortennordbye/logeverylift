@@ -654,6 +654,12 @@ Each phase is shippable alone, on the local branch (decision G-5 of the ingestio
 - MCP tools (path 1). Privacy skill for the consent text.
 - In-app weekly summary (path 2) only if the owner says yes to O-4.
 
+### Review build (2026-11-11)
+
+A review of phases A to C (the "Garmin section review" doc) set a new build order of seven steps. The owner asked for all seven. Status per step:
+
+- **Step 1, Overview and race date (built).** `training_cycles.race_date` and `race_distance` (O-1), set on the cycle edit form (`src/components/features/EditCycleForm.tsx`). Tabs are now Overview, Day, Training, Recovery, Activities; the old names still open the right tab (`garminView` in `src/components/features/garmin/tabs.ts`), and Data sits behind a header icon. Overview (`src/components/features/GarminOverviewTab.tsx`, `getOverviewData` in `src/lib/garmin/queries.ts`): race strip, readiness with the 7-day trend and the top insight, six body tiles against your own normal (`bodySignal` in `src/lib/garmin/analytics/overview.ts`), fitness, last session. On the newest day, Day links to Overview for readiness and keeps the card for past days. **VO2 max:** the Personal API has none, but the watch writes it into the FIT file (undocumented message 140, field 7, see `vo2MaxFromMessage` in `src/lib/garmin/fit.ts`); parser v3 stores it in the session. The worker now wakes for files from an older parser (`metricsDue`).
+
 Order rationale: A gives the numbers and the tools every later phase uses. B is what the owner opens each morning. C is the largest visual gain over Garmin. D needs more history, which the import will have brought in by then. E and F need D's thresholds. G reads everything.
 
 ## 8. Open decisions for the owner

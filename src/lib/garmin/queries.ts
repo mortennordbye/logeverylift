@@ -1,15 +1,16 @@
 import { db } from "@/db";
-import { garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays } from "@/db/schema";
+import { garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, trainingCycles } from "@/db/schema";
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
 import { lttbIndices, takeIndices } from "./charts/downsample";
 import type { DailyMetrics } from "./analytics/daily";
 import { insightsFor, type Insight } from "./analytics/insights";
-import { addDays } from "./dates";
+import { addDays, isoDate } from "./dates";
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
 import { SPORTS, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
+import { bodySignal, raceStatus, type BodySignal, type CycleForRace, type RaceStatus } from "./analytics/overview";
 
 /**
  * Reads for the Garmin page's Server Components. Each takes a userId the
@@ -474,5 +475,163 @@ export async function getActivityDetail(userId: string, id: number): Promise<Act
     sets: (s?.sets ?? []) as Json[],
     hrZoneFloors: highs && highs.length >= 6 ? highs.slice(0, 5) : null,
     matchedSessionId,
+  };
+}
+
+// ── Overview ────────────────────────────────────────────────────────────────
+
+export type ActiveCycle = CycleForRace & { id: number };
+
+/** The user's active training cycle, with its race fields. */
+export async function getActiveCycle(userId: string): Promise<ActiveCycle | null> {
+  const [c] = await db
+    .select({
+      id: trainingCycles.id,
+      name: trainingCycles.name,
+      startDate: trainingCycles.startDate,
+      durationWeeks: trainingCycles.durationWeeks,
+      goal: trainingCycles.goal,
+      athleteLevel: trainingCycles.athleteLevel,
+      raceDate: trainingCycles.raceDate,
+      raceDistance: trainingCycles.raceDistance,
+    })
+    .from(trainingCycles)
+    .where(and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active")))
+    .orderBy(desc(trainingCycles.createdAt))
+    .limit(1);
+  return c ?? null;
+}
+
+export type BodyKey = "sleep" | "hrv" | "restingHr" | "vo2max" | "bodyBattery" | "weight";
+
+export type OverviewData = {
+  date: string;
+  cycleId: number | null;
+  race: RaceStatus | null;
+  readiness: DailyMetrics["readiness"];
+  strip: { date: string; readiness: number | null }[];
+  insights: Insight[];
+  body: Record<BodyKey, BodySignal>;
+  /** Fitness, fatigue and form for the last 42 days, all sports. */
+  pmc: { dates: string[]; ctl: number[]; atl: number[]; tsb: number[]; calibrating: boolean };
+  last: (ActivityListRow & { decoupling: ActivityMetrics["decoupling"] }) | null;
+};
+
+const daysAgo = (date: string, n: number) => addDays(date, -n);
+
+export async function getOverviewData(userId: string, now = isoDate(new Date())): Promise<OverviewData> {
+  // Body data is shown for the newest Garmin day; the race counts from today.
+  const date = await latestGarminDate(userId);
+  const metricRows = await db
+    .select({ metrics: garminDailyMetrics.metrics })
+    .from(garminDailyMetrics)
+    .where(and(eq(garminDailyMetrics.userId, userId), gte(garminDailyMetrics.day, daysAgo(date, 89)), lte(garminDailyMetrics.day, date)))
+    .orderBy(asc(garminDailyMetrics.day));
+  const series = metricRows.map((r) => r.metrics as DailyMetrics);
+  const today = series.at(-1)?.date === date ? series.at(-1)! : null;
+
+  const dayRows = await db
+    .select({ date: garminDays.calendarDate, kind: garminDays.kind, data: garminDays.data })
+    .from(garminDays)
+    .where(and(eq(garminDays.userId, userId), gte(garminDays.calendarDate, daysAgo(date, 120)), lte(garminDays.calendarDate, date), inArray(garminDays.kind, ["user_summary", "weight"])))
+    .orderBy(asc(garminDays.calendarDate));
+  const points = (kind: string, pick: (j: Json) => number | null) =>
+    dayRows.flatMap((r) => {
+      if (r.kind !== kind) return [];
+      const v = pick((r.data ?? {}) as Json);
+      return v === null ? [] : [{ date: r.date, value: v }];
+    });
+
+  // Garmin's VO2 max from the watch files (fit.ts, vo2MaxFromMessage), one point per activity day.
+  const vo2Rows = await db
+    .select({ day: garminActivityMetrics.day, vo2: sql<number | null>`(${garminActivityStreams.session}->>'garminVo2Max')::float` })
+    .from(garminActivityStreams)
+    .innerJoin(
+      garminActivityMetrics,
+      and(eq(garminActivityMetrics.userId, garminActivityStreams.userId), eq(garminActivityMetrics.garminActivityId, garminActivityStreams.garminActivityId)),
+    )
+    .where(and(eq(garminActivityStreams.userId, userId), gte(garminActivityMetrics.day, daysAgo(date, 180)), sql`${garminActivityStreams.session}->>'garminVo2Max' is not null`))
+    .orderBy(asc(garminActivityMetrics.day));
+  const vo2ByDay = new Map(vo2Rows.flatMap((r) => (r.vo2 !== null ? [[r.day, r.vo2] as const] : [])));
+
+  const from = (pick: (m: DailyMetrics) => number | null) =>
+    series.flatMap((m) => {
+      const v = pick(m);
+      return v === null || v === undefined ? [] : [{ date: m.date, value: v }];
+    });
+  const hrvBand: [number, number] | null = today?.hrv.bandLow != null && today.hrv.bandHigh != null ? [today.hrv.bandLow, today.hrv.bandHigh] : null;
+  const body: Record<BodyKey, BodySignal> = {
+    sleep: bodySignal(from((m) => (m.sleepSeconds !== null ? m.sleepSeconds / 3600 : null)), date),
+    hrv: bodySignal(from((m) => m.hrv.ms), date, { band: hrvBand }),
+    restingHr: bodySignal(from((m) => m.restingHr.bpm), date),
+    vo2max: bodySignal([...vo2ByDay].map(([d, v]) => ({ date: d, value: v })), date, { days: 90 }),
+    bodyBattery: bodySignal(points("user_summary", (j) => num(j.bodyBatteryAtWakeTime) ?? num(j.bodyBatteryHighestValue)), date),
+    weight: bodySignal(
+      points("weight", (j) => {
+        const w = num((j.latestWeight as Json | undefined)?.weight);
+        return w !== null ? Math.round(w / 100) / 10 : null;
+      }),
+      date,
+      { days: 90 },
+    ),
+  };
+
+  const recent = series.slice(-42);
+  const cycle = await getActiveCycle(userId);
+  const [lastRow] = await db
+    .select({
+      id: garminActivities.garminActivityId,
+      typeKey: garminActivities.activityType,
+      start: garminActivities.startTimeLocal,
+      data: garminActivities.data,
+      sport: garminActivityMetrics.sport,
+      load: garminActivityMetrics.load,
+      loadMethod: garminActivityMetrics.loadMethod,
+      metrics: garminActivityMetrics.metrics,
+    })
+    .from(garminActivities)
+    .innerJoin(
+      garminActivityMetrics,
+      and(eq(garminActivityMetrics.userId, garminActivities.userId), eq(garminActivityMetrics.garminActivityId, garminActivities.garminActivityId)),
+    )
+    .where(eq(garminActivities.userId, userId))
+    .orderBy(desc(garminActivities.startTimeLocal))
+    .limit(1);
+  let last: OverviewData["last"] = null;
+  if (lastRow) {
+    const j = (lastRow.data ?? {}) as Json;
+    const m = lastRow.metrics as ActivityMetrics;
+    last = {
+      id: lastRow.id,
+      name: typeof j.activityName === "string" ? j.activityName : lastRow.typeKey.replaceAll("_", " "),
+      typeKey: lastRow.typeKey,
+      sport: lastRow.sport as Sport,
+      start: lastRow.start.getTime(),
+      durationS: num(j.duration),
+      distanceM: num(j.distance),
+      avgHr: num(j.averageHR),
+      load: lastRow.load,
+      loadMethod: lastRow.loadMethod,
+      hrPreview: m.hrPreview ?? [],
+      decoupling: m.decoupling ?? null,
+    };
+  }
+
+  return {
+    date,
+    cycleId: cycle?.id ?? null,
+    race: raceStatus(cycle, now),
+    readiness: today?.readiness ?? null,
+    strip: Array.from({ length: 7 }, (_, i) => addDays(date, i - 6)).map((d) => ({ date: d, readiness: series.find((x) => x.date === d)?.readiness?.score ?? null })),
+    insights: today ? insightsFor(series) : [],
+    body,
+    pmc: {
+      dates: recent.map((m) => m.date),
+      ctl: recent.map((m) => r1(m.pmc.total.ctl)),
+      atl: recent.map((m) => r1(m.pmc.total.atl)),
+      tsb: recent.map((m) => r1(m.pmc.total.tsb)),
+      calibrating: recent.at(-1)?.calibrating ?? true,
+    },
+    last,
   };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { EChart } from "@/components/charts/EChart";
-import { Card, Readout } from "@/components/features/garmin/GarminUi";
+import { Card, Contributors, Readout, SEVERITY_COLOR, SEVERITY_ICON } from "@/components/features/garmin/GarminUi";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
 import { useVizTheme } from "@/components/charts/viz-theme";
 import type { Severity } from "@/lib/garmin/analytics/insights";
@@ -14,8 +14,6 @@ import { AlertTriangle, BatteryCharging, CalendarDays, CheckCircle2, ChevronLeft
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-const SEVERITY_ICON: Record<Severity, typeof Info> = { warning: ShieldAlert, caution: AlertTriangle, good: CheckCircle2, info: Info };
-const SEVERITY_COLOR: Record<Severity, string> = { warning: "var(--viz-critical)", caution: "var(--viz-warning)", good: "var(--viz-good)", info: "var(--muted-foreground)" };
 
 function alpha(rgba: string, a: number) {
   const m = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
@@ -67,7 +65,7 @@ function DayPicker({ data }: { data: TodayData }) {
   return (
     <div className="flex items-center justify-between gap-2">
       {canPrev ? (
-        <Link href={`/more/garmin?tab=today&date=${prev}`} replace scroll={false} aria-label="Previous day" className={btn}>
+        <Link href={`/more/garmin?tab=day&date=${prev}`} replace scroll={false} aria-label="Previous day" className={btn}>
           <ChevronLeft className="w-5 h-5" />
         </Link>
       ) : (
@@ -76,13 +74,13 @@ function DayPicker({ data }: { data: TodayData }) {
       <div className="text-center">
         <p className="text-sm font-semibold">{new Date(`${data.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}</p>
         {data.lastDate && data.date !== data.lastDate && (
-          <Link href="/more/garmin?tab=today" replace scroll={false} className="text-[11px] text-primary">
+          <Link href="/more/garmin?tab=day" replace scroll={false} className="text-[11px] text-primary">
             Latest day
           </Link>
         )}
       </div>
       {canNext ? (
-        <Link href={`/more/garmin?tab=today&date=${next}`} replace scroll={false} aria-label="Next day" className={btn}>
+        <Link href={`/more/garmin?tab=day&date=${next}`} replace scroll={false} aria-label="Next day" className={btn}>
           <ChevronRight className="w-5 h-5" />
         </Link>
       ) : (
@@ -92,7 +90,7 @@ function DayPicker({ data }: { data: TodayData }) {
   );
 }
 
-function ReadinessCard({ data }: { data: TodayData }) {
+export function ReadinessCard({ data }: { data: Pick<TodayData, "metrics"> }) {
   const r = data.metrics?.readiness;
   if (!r) {
     return (
@@ -107,31 +105,7 @@ function ReadinessCard({ data }: { data: TodayData }) {
         <span className="text-6xl font-semibold leading-none">{r.score}</span>
         <span className="pb-1.5 text-base font-semibold">{READINESS_BAND_LABEL[r.band]}</span>
       </div>
-      <ul className="space-y-2.5 pt-2">
-        {r.contributors.map((c) => {
-          const delta = c.score - 50;
-          return (
-            <li key={c.key} className="space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="font-medium">{CONTRIBUTOR_LABEL[c.key]}</span>
-                <span className="text-muted-foreground">{c.detail}</span>
-              </div>
-              {/* Bar from the centre: right is helping, left is holding the score down. */}
-              <div className="relative h-2 rounded-full bg-background" role="img" aria-label={`${CONTRIBUTOR_LABEL[c.key]} ${c.score} of 100`}>
-                <span className="absolute left-1/2 top-[-2px] h-3 w-px bg-muted-foreground/60" />
-                <span
-                  className="absolute top-0 h-2 rounded-full"
-                  style={{
-                    left: delta >= 0 ? "50%" : `${50 + delta}%`,
-                    width: `${Math.abs(delta)}%`,
-                    background: delta >= 0 ? "var(--viz-positive)" : "var(--viz-negative)",
-                  }}
-                />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      <Contributors readiness={r} />
     </Card>
   );
 }
@@ -369,12 +343,34 @@ function DayNumbers({ data, theme }: { data: TodayData; theme: VizTheme }) {
   );
 }
 
-export function GarminTodayTab({ data }: { data: TodayData }) {
+/** On the newest day the full readiness card lives on Overview; this links to it. */
+function ReadinessLink({ data }: { data: TodayData }) {
+  const r = data.metrics?.readiness;
+  return (
+    <Link href="/more/garmin?tab=overview" replace scroll={false} className="flex items-center justify-between gap-3 rounded-2xl bg-muted p-3.5 active:opacity-70">
+      <span className="flex items-center gap-2 text-sm">
+        <Gauge className="h-4 w-4 text-muted-foreground" aria-hidden />
+        {r ? (
+          <>
+            Readiness <b className="tabular-nums">{r.score}</b> · {READINESS_BAND_LABEL[r.band]}
+          </>
+        ) : (
+          "Readiness: not enough signals yet"
+        )}
+      </span>
+      <span className="flex items-center text-xs text-primary">
+        Overview <ChevronRight className="h-4 w-4" aria-hidden />
+      </span>
+    </Link>
+  );
+}
+
+export function GarminTodayTab({ data, isLatest }: { data: TodayData; isLatest: boolean }) {
   const theme = useVizTheme();
   return (
     <div className="space-y-4">
       <DayPicker data={data} />
-      <ReadinessCard data={data} />
+      {isLatest ? <ReadinessLink data={data} /> : <ReadinessCard data={data} />}
       <Insights data={data} />
       {theme && <Timeline data={data} theme={theme} />}
       {theme && <OvernightHrv data={data} theme={theme} />}

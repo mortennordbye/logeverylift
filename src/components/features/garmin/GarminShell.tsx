@@ -2,20 +2,20 @@
 
 import { refreshGarmin } from "@/lib/actions/garmin";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { Activity, ChevronLeft, Database, Moon, RefreshCw, Sun, TrendingUp, type LucideIcon } from "lucide-react";
+import { Activity, ChevronLeft, Database, LayoutDashboard, Moon, RefreshCw, Sun, TrendingUp, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { GARMIN_TABS, type GarminTab } from "./tabs";
+import { GARMIN_TABS, type GarminTab, type GarminView } from "./tabs";
 import { useSwipe } from "./use-swipe";
 
 
 const TABS: Record<GarminTab, { label: string; icon: LucideIcon }> = {
-  today: { label: "Today", icon: Sun },
-  load: { label: "Load", icon: TrendingUp },
-  sleep: { label: "Sleep", icon: Moon },
+  overview: { label: "Overview", icon: LayoutDashboard },
+  day: { label: "Day", icon: Sun },
+  training: { label: "Training", icon: TrendingUp },
+  recovery: { label: "Recovery", icon: Moon },
   activities: { label: "Activities", icon: Activity },
-  data: { label: "Data", icon: Database },
 };
 
 function ago(iso: string | null, now: number) {
@@ -61,17 +61,19 @@ function RefreshButton({ lastSyncedAt }: { lastSyncedAt: string | null }) {
 }
 
 /**
- * The Garmin page: back link, title with refresh, tab pills with icons, and
- * the tab content. Swiping the content left or right moves to the next or
- * previous tab; swipes that start on a chart or a scroll row are left to them.
+ * The Garmin page: back link, refresh and the raw data icon, title, tab pills
+ * with icons, and the tab content. Swiping the content left or right moves to
+ * the next or previous tab; swipes that start on a chart or a scroll row are
+ * left to them. The data explorer is a debug view, so it sits behind the
+ * header icon, not in the tab row.
  */
-export function GarminShell({ tab, lastSyncedAt, children }: { tab: GarminTab; lastSyncedAt: string | null; children: React.ReactNode }) {
+export function GarminShell({ tab, lastSyncedAt, children }: { tab: GarminView; lastSyncedAt: string | null; children: React.ReactNode }) {
   const router = useRouter();
   const pills = useRef<HTMLElement>(null);
-  const i = GARMIN_TABS.indexOf(tab);
+  const i = tab === "data" ? -1 : GARMIN_TABS.indexOf(tab);
   const go = (t: GarminTab) => router.replace(`/more/garmin?tab=${t}`, { scroll: false });
-  const next = GARMIN_TABS[i + 1];
-  const prev = GARMIN_TABS[i - 1];
+  const next = i >= 0 ? GARMIN_TABS[i + 1] : undefined;
+  const prev = i >= 0 ? GARMIN_TABS[i - 1] : undefined;
   const swipe = useSwipe({ onLeft: next ? () => go(next) : undefined, onRight: prev ? () => go(prev) : undefined });
 
   // Keep the active pill in view, so tabs off to the side are visible as you move.
@@ -86,7 +88,21 @@ export function GarminShell({ tab, lastSyncedAt, children }: { tab: GarminTab; l
           <ChevronLeft className="w-5 h-5" />
           <span className="text-sm font-medium">More</span>
         </Link>
-        <RefreshButton lastSyncedAt={lastSyncedAt} />
+        <div className="flex items-center gap-1">
+          <RefreshButton lastSyncedAt={lastSyncedAt} />
+          <Link
+            href="/more/garmin?tab=data"
+            replace
+            scroll={false}
+            aria-label="Stored data"
+            aria-current={tab === "data" ? "page" : undefined}
+            className={`flex h-11 w-11 items-center justify-center rounded-full active:opacity-60 ${tab === "data" ? "text-foreground" : "text-muted-foreground"}`}
+          >
+            <span className={`flex h-9 w-9 items-center justify-center rounded-full ${tab === "data" ? "bg-foreground text-background" : "bg-muted"}`}>
+              <Database className="h-4 w-4" />
+            </span>
+          </Link>
+        </div>
       </div>
       <div className="px-4 pt-1 pb-3 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight mb-3">Garmin</h1>

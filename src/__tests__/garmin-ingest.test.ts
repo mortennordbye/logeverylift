@@ -1,5 +1,5 @@
 import { DAY_ENDPOINTS, GARMIN_ENDPOINTS, RANGE_ENDPOINTS, dateOf, isEmptyAnswer } from "@/lib/garmin/endpoints";
-import { parseFit } from "@/lib/garmin/fit";
+import { parseFit, vo2MaxFromMessage } from "@/lib/garmin/fit";
 import { readZipEntry } from "@/lib/garmin/zip";
 import { chunkRange } from "@/lib/garmin/dates";
 import { describe, expect, it } from "vitest";
@@ -44,8 +44,26 @@ describe("parseFit", () => {
     expect(JSON.parse(JSON.stringify(parsed))).toEqual(parsed);
   });
 
+  it("keeps no undocumented numeric fields, and no VO2 max when the file has none", () => {
+    expect(Object.keys(parsed.session ?? {}).some((k) => /^\d+$/.test(k))).toBe(false);
+    expect(parsed.session?.garminVo2Max).toBeNull();
+  });
+
   it("refuses a file that isn't FIT", () => {
     expect(() => parseFit(Buffer.from("definitely not a fit file"))).toThrow();
+  });
+});
+
+describe("vo2MaxFromMessage", () => {
+  it("decodes field 7 as ml/kg/min x 65536 / 3.5, with field 29 as the updated flag", () => {
+    expect(vo2MaxFromMessage({ "7": Math.round((51.2 * 65536) / 3.5), "29": 0 })).toEqual({ value: 51.2, updated: false });
+    expect(vo2MaxFromMessage({ "7": Math.round((48 * 65536) / 3.5), "29": 12345 })).toEqual({ value: 48, updated: true });
+  });
+
+  it("returns null for a missing message, a zero, or an implausible value", () => {
+    expect(vo2MaxFromMessage(undefined)).toBeNull();
+    expect(vo2MaxFromMessage({ "7": 0 })).toBeNull();
+    expect(vo2MaxFromMessage({ "7": Math.round((120 * 65536) / 3.5) })).toBeNull();
   });
 });
 

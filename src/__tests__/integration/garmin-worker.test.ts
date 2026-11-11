@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { garminActivities, garminActivityFiles, garminActivityStreams, garminConnections, garminDays, garminSyncRuns } from "@/db/schema";
 import { garminPacing } from "@/lib/garmin/client";
 import { addDays } from "@/lib/garmin/dates";
+import { FIT_PARSER_VERSION } from "@/lib/garmin/fit";
 import { forgetToken } from "@/lib/garmin/sync";
 import { HISTORY_DAYS_USER, runGarminWorkerTick } from "@/lib/garmin/worker";
 import { encryptSecret } from "@/lib/utils/crypto";
@@ -161,6 +162,16 @@ describe("runGarminWorkerTick", () => {
     const before = calls.length;
     expect(await runGarminWorkerTick()).toEqual({ status: "idle" });
     expect(calls.length).toBe(before);
+  });
+
+  it("wakes up for stored FIT files parsed by an older parser, re-parses them, then goes idle", async () => {
+    const userId = await connect();
+    await runUntilIdle();
+    await db.update(garminActivityStreams).set({ parserVersion: 1 }).where(eq(garminActivityStreams.userId, userId));
+    expect((await runGarminWorkerTick()).status).toBe("ran");
+    const [s] = await db.select({ v: garminActivityStreams.parserVersion }).from(garminActivityStreams).where(eq(garminActivityStreams.userId, userId));
+    expect(s.v).toBe(FIT_PARSER_VERSION);
+    expect(await runGarminWorkerTick()).toEqual({ status: "idle" });
   });
 
   it("marks a run cut off by a restart as interrupted once its lease has run out", async () => {

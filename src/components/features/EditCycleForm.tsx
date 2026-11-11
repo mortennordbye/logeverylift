@@ -30,6 +30,8 @@ export function EditCycleForm({ cycle }: Props) {
     (cycle.endAction as EndAction) ?? "none",
   );
   const [endMessage, setEndMessage] = useState(cycle.endMessage ?? "");
+  const [raceDate, setRaceDate] = useState(cycle.raceDate ?? "");
+  const [raceDistance, setRaceDistance] = useState<"full" | "half" | null>(cycle.raceDistance ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -61,6 +63,8 @@ export function EditCycleForm({ cycle }: Props) {
       durationWeeks,
       endAction,
       endMessage: endMessage.trim() || null,
+      raceDate: raceDate || null,
+      raceDistance: raceDate ? raceDistance : null,
     }));
 
     setLoading(false);
@@ -111,6 +115,45 @@ export function EditCycleForm({ cycle }: Props) {
         {durationWarning && (
           <p className="text-sm text-destructive">{durationWarning}</p>
         )}
+      </div>
+
+      {/* Race: what the Garmin race views count down to */}
+      <div id="race" className="flex flex-col gap-2 scroll-mt-4">
+        <label htmlFor="race-date" className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
+          Race <span className="normal-case font-normal">(optional)</span>
+        </label>
+        <input
+          id="race-date"
+          type="date"
+          value={raceDate}
+          onChange={(e) => setRaceDate(e.target.value)}
+          className="rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2 ring-primary min-h-[44px]"
+        />
+        <div className="flex gap-2" role="group" aria-label="Race distance">
+          {([["full", "Ironman"], ["half", "70.3"]] as const).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={raceDistance === value}
+              disabled={!raceDate}
+              onClick={() => setRaceDistance(raceDistance === value ? null : value)}
+              className={`
+                px-4 min-h-[44px] rounded-full text-sm font-semibold border-2 transition-colors disabled:opacity-40
+                ${raceDistance === value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}
+              `}
+            >
+              {label}
+            </button>
+          ))}
+          {raceDate && (
+            <button type="button" onClick={() => { setRaceDate(""); setRaceDistance(null); }} className="ml-auto px-3 min-h-[44px] text-sm text-muted-foreground active:opacity-60">
+              Clear
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          The Garmin page counts down to this date and checks your training against the race distance.
+        </p>
       </div>
 
       {/* Schedule type — read-only after creation */}

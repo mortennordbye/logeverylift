@@ -294,8 +294,13 @@ export async function runGarminMetricsStep(userId: string, now = new Date()): Pr
   return { reparsed, activities, days };
 }
 
-/** SQL condition: this connection has metric work to do. Used by the worker's claim. */
+/**
+ * SQL condition: this connection has metric work to do. Used by the worker's
+ * claim. Stored FIT files from an older parser count, so a parser bump is
+ * picked up within a minute instead of waiting for the next sync.
+ */
 export const metricsDue = or(
   isNull(garminConnections.metricsComputedAt),
   sql`${garminConnections.metricsVersion} is distinct from ${DAILY_MODEL_VERSION}`,
+  sql`exists (select 1 from ${garminActivityStreams} s where s.user_id = ${garminConnections.userId} and s.parser_version < ${FIT_PARSER_VERSION})`,
 );

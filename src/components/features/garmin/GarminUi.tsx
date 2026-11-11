@@ -1,4 +1,9 @@
-import type { LucideIcon } from "lucide-react";
+import type { Severity } from "@/lib/garmin/analytics/insights";
+import { CONTRIBUTOR_LABEL, type Readiness } from "@/lib/garmin/analytics/readiness";
+import { AlertTriangle, CheckCircle2, Info, ShieldAlert, type LucideIcon } from "lucide-react";
+
+export const SEVERITY_ICON: Record<Severity, LucideIcon> = { warning: ShieldAlert, caution: AlertTriangle, good: CheckCircle2, info: Info };
+export const SEVERITY_COLOR: Record<Severity, string> = { warning: "var(--viz-critical)", caution: "var(--viz-warning)", good: "var(--viz-good)", info: "var(--muted-foreground)" };
 
 /**
  * Shared pieces of the Garmin views: a card with an icon, the readout row a
@@ -79,5 +84,36 @@ export function Stat({ label, value, sub, icon: Icon, tone = "muted" }: { label:
       <p className="text-xl font-semibold leading-tight mt-0.5">{value}</p>
       {sub && <p className="text-[11px] text-muted-foreground">{sub}</p>}
     </div>
+  );
+}
+
+/** Readiness contributors as bars from the centre: right helps the score, left holds it down. */
+export function Contributors({ readiness: r }: { readiness: Readiness }) {
+  return (
+    <ul className="space-y-2.5 pt-2">
+      {r.contributors.map((c) => {
+        const delta = c.score - 50;
+        return (
+          <li key={c.key} className="space-y-1">
+            <div className="flex justify-between text-xs">
+              <span className="font-medium">{CONTRIBUTOR_LABEL[c.key]}</span>
+              <span className="text-muted-foreground">{c.detail}</span>
+            </div>
+            {/* Bar from the centre: right is helping, left is holding the score down. */}
+            <div className="relative h-2 rounded-full bg-background" role="img" aria-label={`${CONTRIBUTOR_LABEL[c.key]} ${c.score} of 100`}>
+              <span className="absolute left-1/2 top-[-2px] h-3 w-px bg-muted-foreground/60" />
+              <span
+                className="absolute top-0 h-2 rounded-full"
+                style={{
+                  left: delta >= 0 ? "50%" : `${50 + delta}%`,
+                  width: `${Math.abs(delta)}%`,
+                  background: delta >= 0 ? "var(--viz-positive)" : "var(--viz-negative)",
+                }}
+              />
+            </div>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
