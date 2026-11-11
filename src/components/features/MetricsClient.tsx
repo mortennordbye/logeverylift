@@ -31,7 +31,6 @@ import { ExerciseIllustration, useArtSpec } from "@/components/features/Exercise
 import { ExerciseThumb } from "@/components/features/ExerciseThumb";
 import { MuscleMap } from "@/components/features/MuscleMap";
 import { ExerciseProgressChart } from "@/components/features/ExerciseProgressChart";
-import { GarminMetricsTab } from "@/components/features/GarminMetricsTab";
 import { PrFeedList } from "@/components/features/PrFeedList";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import type { ArtThumb } from "@/lib/exercise-art/load";
@@ -1421,9 +1420,9 @@ function CycleView({
 
 // ── Main component ─────────────────────────────────────────────────────────
 
-export type Tab = "alltime" | "cycle" | "records" | "garmin";
+type Tab = "alltime" | "cycle" | "records";
 
-const TAB_LABEL: Record<Tab, string> = { alltime: "All Time", cycle: "Cycle", records: "Records", garmin: "Garmin" };
+const TAB_LABEL: Record<Tab, string> = { alltime: "All Time", cycle: "Cycle", records: "Records" };
 
 type Props = {
   weekly: WeeklyMetric[];
@@ -1446,8 +1445,6 @@ type Props = {
   prFeed: PrFeedEntry[];
   artThumbs: Record<number, ArtThumb>;
   initialTab: Tab;
-  /** Show the Garmin tab: Garmin is enabled on this server. */
-  garminEnabled: boolean;
 };
 
 export function MetricsClient({
@@ -1471,7 +1468,6 @@ export function MetricsClient({
   prFeed,
   artThumbs,
   initialTab,
-  garminEnabled,
 }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab);
   const [selectedId, setSelectedId] = useState<number | null>(initialExerciseId);
@@ -1527,7 +1523,7 @@ export function MetricsClient({
         <h1 className="text-3xl font-bold tracking-tight mb-3">Progress</h1>
         {/* Tab toggle */}
         <div className="flex bg-muted rounded-xl p-1 gap-1">
-          {(["alltime", "cycle", "records", ...(garminEnabled ? ["garmin"] : [])] as Tab[]).map((tab) => (
+          {(["alltime", "cycle", "records"] as Tab[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -1545,9 +1541,7 @@ export function MetricsClient({
 
       <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4 pb-nav-safe-lg">
 
-        {activeTab === "garmin" ? (
-          <GarminMetricsTab />
-        ) : activeTab === "alltime" ? (
+        {activeTab === "alltime" ? (
           <>
             {/* ── Summary Stats ──────────────────────────────────────── */}
             {summaryStats && <SummaryStatsRow stats={summaryStats} />}

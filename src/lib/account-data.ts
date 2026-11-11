@@ -11,6 +11,8 @@ import {
   feedback,
   friendships,
   garminActivities,
+  garminActivityFiles,
+  garminActivityStreams,
   garminConnections,
   garminDays,
   garminSyncRuns,
@@ -104,6 +106,12 @@ export async function collectUserData(userId: string) {
       .where(eq(garminConnections.userId, userId)),
     garmin_days: await db.select().from(garminDays).where(eq(garminDays.userId, userId)),
     garmin_activities: await db.select().from(garminActivities).where(eq(garminActivities.userId, userId)),
+    // The original file's content is in garmin_activity_streams; the ZIP itself isn't JSON.
+    garmin_activity_files: await db
+      .select(columnsWithout(garminActivityFiles, ["zip"]))
+      .from(garminActivityFiles)
+      .where(eq(garminActivityFiles.userId, userId)),
+    garmin_activity_streams: await db.select().from(garminActivityStreams).where(eq(garminActivityStreams.userId, userId)),
     garmin_sync_runs: await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, userId)),
     programs: programRows,
     program_exercises: programExerciseRows,

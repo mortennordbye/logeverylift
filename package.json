@@ -40,6 +40,7 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@garmin/fitsdk": "21.218.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/api-logs": "0.223.0",

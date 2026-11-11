@@ -505,6 +505,13 @@
       "when": 1794414847055,
       "tag": "0071_giant_red_shift",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1794416659859,
+      "tag": "0072_complete_black_bird",
+      "breakpoints": true
     }
   ]
 }

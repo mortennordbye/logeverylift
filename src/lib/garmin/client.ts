@@ -16,7 +16,11 @@ const TIMEOUT_MS = 20_000;
 
 /** A failed Garmin call, with a short tag that is safe to store and log. */
 export class GarminError extends Error {
-  constructor(readonly tag: string) {
+  /** For a 429: seconds Garmin says to wait (its "retryInSeconds"). */
+  constructor(
+    readonly tag: string,
+    readonly retryInSeconds: number | null = null,
+  ) {
     super(tag);
   }
 }
@@ -41,7 +45,12 @@ async function call(url: string, init: RequestInit, tag: string): Promise<Respon
     throw new GarminError(`network:${tag}`);
   }
   if (res.status === 401 || res.status === 403) throw new GarminError(tag === "token" ? "key_rejected" : `unauthorized:${tag}`);
-  if (res.status === 429) throw new GarminError(`rate_limited:${tag}`);
+  if (res.status === 429) {
+    // Body seen: {"count":103,"limit":100,"retryInSeconds":27,...}
+    const body = await res.json().catch(() => null);
+    const retry = typeof body?.retryInSeconds === "number" ? body.retryInSeconds : null;
+    throw new GarminError(`rate_limited:${tag}`, retry);
+  }
   if (!res.ok) throw new GarminError(`http_${res.status}:${tag}`);
   return res;
 }
@@ -62,62 +71,65 @@ export async function exchangeKey(apiKey: string): Promise<GarminToken> {
 }
 
 /** `empty` is what a 204 means: the HRV endpoint answers a range with no data that way. */
-async function getJson<T>(token: string, path: string, schema: z.ZodType<T>, tag: string, empty: T): Promise<T> {
-  const res = await call(`${BASE}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }, tag);
-  if (res.status === 204) return empty;
-  const parsed = schema.safeParse(await res.json().catch(() => undefined));
-  if (!parsed.success) throw new GarminError(`bad_shape:${tag}`);
-  return parsed.data;
+// Garmin allows 100 requests per key in a rolling window of about a minute
+// (measured 2026-11-11: a 429 with {"count":103,"limit":100,"retryInSeconds":27}).
+// Calls from this process are spaced at least garminPacing.gapMs apart, about
+// 90 a minute, and a 429 pauses the user for Garmin's retryInSeconds.
+// Tests set gapMs to 0.
+export const garminPacing = { gapMs: 650 };
+let nextSlot = 0;
+
+async function pace() {
+  const now = Date.now();
+  const wait = Math.max(0, nextSlot - now);
+  nextSlot = Math.max(now, nextSlot) + garminPacing.gapMs;
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
 }
 
-const record = z.record(z.string(), z.unknown());
-const dayRecord = record.and(z.object({ calendarDate: z.string().nullable().optional() }));
-const activityRecord = record.and(
-  z.object({
+/** GET a JSON endpoint. Null for Garmin's empty 204 answer. */
+export async function garminGet(token: string, path: string, tag: string): Promise<unknown> {
+  await pace();
+  const res = await call(`${BASE}${path}`, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }, tag);
+  if (res.status === 204) return null;
+  try {
+    return await res.json();
+  } catch {
+    throw new GarminError(`bad_json:${tag}`);
+  }
+}
+
+/** GET a file (the activity ZIP). */
+export async function garminGetBytes(token: string, path: string, tag: string): Promise<Buffer> {
+  await pace();
+  const res = await call(`${BASE}${path}`, { headers: { Authorization: `Bearer ${token}` } }, tag);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+const activityRecord = z
+  .object({
     activityId: z.number(),
     startTimeLocal: z.string(),
     activityType: z.object({ typeKey: z.string() }).passthrough(),
-  }),
-);
+  })
+  .passthrough();
 
-export type GarminDayRecord = z.infer<typeof dayRecord>;
 export type GarminActivityRecord = z.infer<typeof activityRecord>;
-
-export type GarminRange = {
-  hrv: GarminDayRecord[];
-  sleep: GarminDayRecord[];
-  daily: GarminDayRecord[];
-  activities: GarminActivityRecord[];
-};
 
 const ACTIVITY_PAGE = 100;
 
-/** Everything the Garmin tab uses for start..end (YYYY-MM-DD, inclusive). */
-export async function fetchGarminRange(token: string, start: string, end: string): Promise<GarminRange> {
-  const [hrv, sleep, daily] = await Promise.all([
-    getJson(token, `/hrv-service/hrv/daily/${start}/${end}`, z.object({ hrvSummaries: z.array(dayRecord) }), "hrv", { hrvSummaries: [] }),
-    getJson(
-      token,
-      `/sleep-service/sleep/dailySleepSummariesByDate?startDate=${start}&endDate=${end}`,
-      z.array(dayRecord),
-      "sleep",
-      [],
-    ),
-    getJson(token, `/usersummary-service/v2/dailysummaries?startDate=${start}&endDate=${end}`, z.object({ data: z.array(dayRecord) }), "daily", { data: [] }),
-  ]);
-
+/** Every activity that started between start and end (YYYY-MM-DD, inclusive). */
+export async function fetchActivityList(token: string, start: string, end: string): Promise<GarminActivityRecord[]> {
   const activities: GarminActivityRecord[] = [];
   for (let offset = 0; ; offset += ACTIVITY_PAGE) {
-    const page = await getJson(
+    const json = await garminGet(
       token,
       `/activitylist-service/activities/search/activities?start=${offset}&limit=${ACTIVITY_PAGE}&startDate=${start}&endDate=${end}`,
-      z.array(activityRecord),
       "activities",
-      [],
     );
-    activities.push(...page);
-    if (page.length < ACTIVITY_PAGE) break;
+    const page = z.array(activityRecord).safeParse(json ?? []);
+    if (!page.success) throw new GarminError("bad_shape:activities");
+    activities.push(...page.data);
+    if (page.data.length < ACTIVITY_PAGE) break;
   }
-
-  return { hrv: hrv.hrvSummaries, sleep, daily: daily.data, activities };
+  return activities;
 }

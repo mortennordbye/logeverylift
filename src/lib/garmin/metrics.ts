@@ -1,6 +1,6 @@
 /**
  * Turns stored Garmin JSON (garmin_days, garmin_activities) into what the
- * Progress page's Garmin tab shows. Pure, so it is unit tested without the
+ * Insights Overview tab shows. Pure, so it is unit tested without the
  * database. Every field is read defensively: Garmin's JSON is not ours, and a
  * missing field shows as a gap, not a crash.
  */

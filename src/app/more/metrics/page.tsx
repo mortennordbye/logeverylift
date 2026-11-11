@@ -1,4 +1,4 @@
-import { MetricsClient, type Tab } from "@/components/features/MetricsClient";
+import { MetricsClient } from "@/components/features/MetricsClient";
 import {
   getExerciseProgress,
   getMetricsData,
@@ -17,7 +17,6 @@ import { getWeightHistory } from "@/lib/actions/profile";
 import { db } from "@/db";
 import { exercises } from "@/db/schema/exercises";
 import { users } from "@/db/schema/users";
-import { env } from "@/lib/env";
 import { loadArtThumbs } from "@/lib/exercise-art/load";
 import { requireSession } from "@/lib/utils/session";
 import { and, eq, inArray } from "drizzle-orm";
@@ -68,9 +67,7 @@ export default async function MetricsPage({ searchParams }: Props) {
     getWeeklyMuscleVolume(),
     getRecentPRs(150),
   ]);
-  const garminEnabled = Boolean(env.GARMIN_KEY_ENCRYPTION_KEY);
-  const tabParam = (await searchParams).tab;
-  const initialTab: Tab = tabParam === "records" ? "records" : tabParam === "garmin" && garminEnabled ? "garmin" : "alltime";
+  const initialTab = (await searchParams).tab === "records" ? "records" : "alltime";
 
   // Stills for every exercise the lists show. Built-ins only: a custom
   // exercise that shares a name is not the movement that was drawn.
@@ -109,7 +106,6 @@ export default async function MetricsPage({ searchParams }: Props) {
       prFeed={prFeedResult.success ? prFeedResult.data : []}
       artThumbs={artThumbs}
       initialTab={initialTab}
-      garminEnabled={garminEnabled}
     />
   );
 }

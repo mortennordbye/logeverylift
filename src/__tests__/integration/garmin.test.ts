@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { garminActivities, garminConnections, garminDays, garminSyncRuns } from "@/db/schema";
 import { connectGarmin, disconnectGarmin, getGarminMetrics } from "@/lib/actions/garmin";
 import { collectUserData } from "@/lib/account-data";
+import { garminPacing } from "@/lib/garmin/client";
 import { forgetToken } from "@/lib/garmin/sync";
 import { decryptSecret } from "@/lib/utils/crypto";
 import { eq } from "drizzle-orm";
@@ -10,6 +11,12 @@ import { createUser } from "./factories";
 import { asUser } from "./setup";
 
 const ENC_KEY = vi.hoisted(() => Buffer.alloc(32, 7).toString("base64"));
+
+// The background worker connect starts has its own tests (garmin-worker.test.ts).
+vi.mock("@/lib/garmin/worker", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/garmin/worker")>()),
+  garminWorkerLoop: vi.fn(),
+}));
 
 vi.mock("@/lib/env", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/env")>();
@@ -36,6 +43,8 @@ let fetchMock: ReturnType<typeof vi.fn>;
 function today() {
   return new Date().toISOString().slice(0, 10);
 }
+
+garminPacing.gapMs = 0;
 
 beforeEach(() => {
   garmin = {
@@ -79,7 +88,8 @@ beforeEach(() => {
       return Response.json({ data: [{ calendarDate: today(), heartRate: { restingValue: garmin.restingHr } }] });
     }
     if (url.pathname.startsWith("/activitylist-service/")) return Response.json(garmin.activities);
-    return new Response("", { status: 404 });
+    // Every other endpoint: nothing recorded, as Garmin answers it.
+    return new Response(null, { status: 204 });
   });
   vi.stubGlobal("fetch", fetchMock);
 });
@@ -173,7 +183,8 @@ describe("getGarminMetrics", () => {
     if (!result.success) throw new Error(result.error);
     expect(result.data.syncError).toBe("http_500:sleep");
     expect(result.data.metrics.days.find((d) => d.date === today())?.restingHr).toBe(45);
-    expect(result.data.runs[0]).toMatchObject({ status: "error", error: "http_500:sleep" });
+    // A failed call doesn't stop the rest of the sync; the run lists it.
+    expect(result.data.runs[0]).toMatchObject({ status: "ok", error: "http_500:sleep" });
   });
 
   it("shows a user only their own data", async () => {
