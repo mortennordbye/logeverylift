@@ -6,6 +6,8 @@ import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createUser } from "./factories";
 import { asUser } from "./setup";
+import { registerGarminTools } from "@/lib/mcp/tools/garmin";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 /** The fuel and fluid log and the race page reads, against a real database. */
 
@@ -61,5 +63,33 @@ describe("getRaceData", () => {
     expect(r.race).toMatchObject({ raceSet: true, distance: "full" });
     expect(r.taperStart).toBe("2027-02-01");
     expect(r.fuel).toEqual([expect.objectContaining({ id: 33, sweatMl: 2400, carbsG: 210, fluidMl: 1800, durationS: 10800 })]);
+  });
+});
+
+describe("Garmin MCP tools", () => {
+  type Handler = (args: Record<string, unknown>) => Promise<{ content: { text: string }[]; isError?: boolean }>;
+  function tool(userId: string, name: string): Handler {
+    let handler: Handler | undefined;
+    const server = {
+      registerTool(n: string, _config: unknown, fn: Handler) {
+        if (n === name) handler = fn;
+      },
+    } as unknown as McpServer;
+    registerGarminTools(server, userId);
+    return handler!;
+  }
+
+  it("returns the user's own activity without GPS or streams, and nothing of another user's", async () => {
+    const me = await createUser();
+    await longRide(me.id, 41);
+    const r = await tool(me.id, "get_garmin_activity")({ id: 41 });
+    const data = JSON.parse(r.content[0].text);
+    expect(data).toMatchObject({ id: 41, sport: "bike", durationMin: 180 });
+    expect(r.content[0].text).not.toMatch(/"lat"|"lng"|streams/);
+
+    const other = await createUser();
+    const denied = await tool(other.id, "get_garmin_activity")({ id: 41 });
+    expect(denied.isError).toBe(true);
+    expect(denied.content[0].text).toBe("Error: Activity not found");
   });
 });

@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/db";
-import { programExercises, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
+import { garminDailyMetrics, programExercises, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import {
   computeAdaptationFactor,
@@ -16,10 +16,14 @@ import {
   periodizedLoad,
   scaledDistance,
   scaledDuration,
+  uncoupledAcwr,
+  type Adaptation,
+  type AdaptationSignals,
   type AthleteLevel,
   type TrainingGoal,
+  type WearableSignals,
 } from "@/lib/utils/periodization";
-import { and, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 /**
  * A set is periodized when it carries either peak anchor. Shared by the sync and
@@ -105,7 +109,17 @@ async function computeCycleAdaptation(
   programIds: number[],
   currentWeek: number,
 ): Promise<{ pct: number; note: string }> {
-  if (currentWeek < 2 || programIds.length === 0) return { pct: 100, note: "" };
+  const signals = await cycleAdaptationSignals(userId, programIds, currentWeek);
+  return signals ? computeAdaptationFactor(signals) : { pct: 100, note: "" };
+}
+
+/** The logged signals the nudge reads; null on week 1 or with no programs (the neutral case). */
+async function cycleAdaptationSignals(
+  userId: string,
+  programIds: number[],
+  currentWeek: number,
+): Promise<AdaptationSignals | null> {
+  if (currentWeek < 2 || programIds.length === 0) return null;
 
   const since = new Date();
   since.setDate(since.getDate() - 7);
@@ -149,7 +163,7 @@ async function computeCycleAdaptation(
     avgRpe = meanLoggedRpe(rpeRows.map((r) => r.rpe));
   }
 
-  return computeAdaptationFactor({ adherence, avgReadiness, avgRpe });
+  return { adherence, avgReadiness, avgRpe };
 }
 
 /**
@@ -167,6 +181,8 @@ export async function syncPeriodizedTargets(
   durationWeeks: number,
   goal: TrainingGoal,
   athleteLevel: AthleteLevel | null,
+  /** Use this nudge instead of computing it (an applied wearable suggestion). */
+  adaptationOverride?: Adaptation,
 ): Promise<{ pct: number; note: string }> {
   const programIds = slots
     .map((s) => s.programId)
@@ -182,7 +198,7 @@ export async function syncPeriodizedTargets(
 
   // No-wearable performance nudge from the last 7 days. Skipped on week 1 (no
   // history yet) so a fresh cycle is never eased for "missing" sessions.
-  const adaptation = await computeCycleAdaptation(userId, programIds, currentWeek);
+  const adaptation = adaptationOverride ?? (await computeCycleAdaptation(userId, programIds, currentWeek));
   const effective = multiplier * (adaptation.pct / 100);
 
   if (programIds.length > 0) {
@@ -233,4 +249,85 @@ export async function syncPeriodizedTargets(
     })
     .where(eq(trainingCycles.id, cycleId));
   return adaptation;
+}
+
+// ── Wearable suggestion (docs/plans/garmin-insights-design.md, 2.14) ─────────
+
+/** Garmin days older than this are too stale to steer the plan. */
+const WEARABLE_FRESH_DAYS = 3;
+
+/** Wearable signals from the user's newest Garmin daily metrics, or null when there are none or they are stale. */
+export async function wearableSignals(userId: string, today = new Date()): Promise<WearableSignals | null> {
+  const since = new Date(today);
+  since.setDate(since.getDate() - 27);
+  const rows = await db
+    .select({
+      day: garminDailyMetrics.day,
+      hrvState: sql<WearableSignals["hrvState"]>`${garminDailyMetrics.metrics}->'hrv'->>'state'`,
+      rhrFlag: sql<boolean | null>`(${garminDailyMetrics.metrics}->'restingHr'->>'flag')::boolean`,
+      debtS: sql<number | null>`(${garminDailyMetrics.metrics}->>'sleepDebtS')::float8`,
+      ramp: sql<number | null>`(${garminDailyMetrics.metrics}->>'ramp')::float8`,
+      load: sql<number | null>`(${garminDailyMetrics.metrics}->'pmc'->'total'->>'load')::float8`,
+    })
+    .from(garminDailyMetrics)
+    .where(and(eq(garminDailyMetrics.userId, userId), gte(garminDailyMetrics.day, since.toISOString().slice(0, 10))))
+    .orderBy(asc(garminDailyMetrics.day));
+  const last = rows.at(-1);
+  if (!last) return null;
+  const ageDays = (Date.parse(today.toISOString().slice(0, 10)) - Date.parse(last.day)) / 86_400_000;
+  if (ageDays > WEARABLE_FRESH_DAYS) return null;
+  // Four 7-day blocks ending on the newest day, for ACWR.
+  const loads = rows.map((r) => r.load ?? 0);
+  const weeks: number[] = [];
+  for (let end = loads.length; end - 7 >= 0 && weeks.length < 4; end -= 7) weeks.unshift(loads.slice(end - 7, end).reduce((a, b) => a + b, 0));
+  return {
+    hrvState: last.hrvState,
+    restingHrFlag: Boolean(last.rhrFlag),
+    sleepDebtH: last.debtS !== null ? last.debtS / 3600 : null,
+    acwr: weeks.length === 4 ? uncoupledAcwr(weeks).at(-1)! : null,
+    ramp: last.ramp,
+  };
+}
+
+export type WearableSuggestion = Adaptation & { current: number; cycleId: number; week: number };
+
+/**
+ * What the week's nudge would be with the wearable signals, when that differs
+ * from what the weekly sync set. Read-only: the sync itself never uses the
+ * wearable (decision O-3, suggest first). Null when there is nothing to suggest.
+ */
+export async function wearableSuggestion(userId: string, now = new Date()): Promise<WearableSuggestion | null> {
+  await syncDueCycle(userId);
+  const cycle = await db.query.trainingCycles.findFirst({
+    where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active")),
+    with: { slots: true },
+  });
+  if (!cycle?.startDate || cycle.athleteLevel === null) return null;
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);
+  if (isOver) return null;
+  const programIds = cycle.slots.map((s) => s.programId).filter((id): id is number => id != null);
+  const signals = await cycleAdaptationSignals(userId, programIds, currentWeek);
+  const wearable = await wearableSignals(userId, now);
+  if (!signals || !wearable) return null;
+  const suggested = computeAdaptationFactor({ ...signals, wearable });
+  if (suggested.pct === cycle.adaptationPct) return null;
+  return { ...suggested, current: cycle.adaptationPct, cycleId: cycle.id, week: currentWeek };
+}
+
+/** Apply the current suggestion to this week's targets. Recomputed here: a client never sends the percent. */
+export async function applyWearableSuggestion(userId: string, now = new Date()): Promise<WearableSuggestion | null> {
+  const suggestion = await wearableSuggestion(userId, now);
+  if (!suggestion) return null;
+  const cycle = await db.query.trainingCycles.findFirst({
+    where: and(eq(trainingCycles.id, suggestion.cycleId), eq(trainingCycles.userId, userId)),
+    with: { slots: true },
+  });
+  if (!cycle) return null;
+  await syncPeriodizedTargets(cycle.id, userId, cycle.slots, suggestion.week, cycle.durationWeeks, cycle.goal, cycle.athleteLevel, {
+    pct: suggestion.pct,
+    note: suggestion.note,
+  });
+  return suggestion;
 }

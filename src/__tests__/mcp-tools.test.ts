@@ -8,6 +8,7 @@
  */
 
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
+import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
@@ -32,6 +33,18 @@ function collect(register: (s: McpServer, userId: string) => void) {
 }
 
 describe("MCP tool registration", () => {
+  it("registers the Garmin tools, all read-only", () => {
+    const tools: { name: string; annotations: unknown }[] = [];
+    const stub = {
+      registerTool(name: string, config: { annotations?: unknown }) {
+        tools.push({ name, annotations: config.annotations });
+      },
+    } as unknown as McpServer;
+    registerGarminTools(stub, "test-user");
+    expect(tools.map((t) => t.name).sort()).toEqual(["get_garmin_activity", "get_garmin_status", "get_garmin_trends", "list_garmin_activities"]);
+    for (const t of tools) expect(t.annotations).toEqual(READ_ONLY);
+  });
+
   it("registers the profile & weight tools", () => {
     expect(collect(registerProfileTools).sort()).toEqual(
       ["get_profile", "manage_weight", "update_profile"].sort(),

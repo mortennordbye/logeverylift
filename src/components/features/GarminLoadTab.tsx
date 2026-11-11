@@ -28,6 +28,10 @@ import { CalendarRange, ChartColumn, Flame, Gauge, HeartPulse, Mountain, Rocket,
 import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
 import { ladderOption, ladderValue, weeklyHoursOption } from "@/lib/garmin/charts/volume";
 import type { VolumeData } from "@/lib/garmin/queries";
+import type { WearableSuggestion } from "@/lib/periodization-sync";
+import { applyWearablePlanSuggestion } from "@/lib/actions/training-cycles";
+import { callAction } from "@/lib/utils/stale-bundle";
+import { useRouter } from "next/navigation";
 import { projectionSentence, type Projection } from "@/lib/garmin/analytics/projection";
 import type { RaceStatus } from "@/lib/garmin/analytics/overview";
 import { Layers } from "lucide-react";
@@ -69,6 +73,30 @@ function SportDot({ sport }: { sport: Sport }) {
 
 const signed = (n: number) => `${n >= 0 ? "+" : ""}${Math.round(n)}`;
 
+/** This week's plan nudge from the wearable signals, with Apply (decision O-3: suggest first). */
+function PlanSuggestion({ s }: { s: WearableSuggestion }) {
+  const router = useRouter();
+  const [state, setState] = useState<"idle" | "busy" | "done" | string>("idle");
+  async function apply() {
+    setState("busy");
+    const r = await callAction(applyWearablePlanSuggestion());
+    if (!r.success) return setState(r.error);
+    setState("done");
+    router.refresh();
+  }
+  return (
+    <Card icon={Gauge} title="Plan suggestion" note="From your Garmin recovery and load signals. The weekly sync never applies it on its own: you decide. It scales this week's swim, bike and run targets; next week's sync starts fresh.">
+      <p className="text-sm">
+        {s.note} This week&apos;s volume: {s.current} % now, {s.pct} % suggested.
+      </p>
+      <button onClick={apply} disabled={state === "busy" || state === "done"} className="h-11 w-full rounded-xl bg-foreground text-background text-sm font-semibold disabled:opacity-40 active:opacity-70">
+        {state === "busy" ? "Applying…" : state === "done" ? "Applied" : `Apply ${s.pct} % to this week`}
+      </button>
+      {state !== "idle" && state !== "busy" && state !== "done" && <p className="text-xs text-destructive">{state}</p>}
+    </Card>
+  );
+}
+
 const hm = (hours: number) => {
   const m = Math.round(hours * 60);
   return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
@@ -79,11 +107,13 @@ export function GarminLoadTab({
   computedAt,
   volume,
   race,
+  suggestion,
 }: {
   series: LoadSeries;
   computedAt: string | null;
   volume: VolumeData;
   race: { race: RaceStatus; projection: Projection | null } | null;
+  suggestion: WearableSuggestion | null;
 }) {
   const theme = useVizTheme();
   const [range, setRange] = useState<RangeKey>("3m");
@@ -154,6 +184,8 @@ export function GarminLoadTab({
       </div>
 
       <p className="text-lg font-semibold leading-snug">{loadHeadline(series, track)}</p>
+
+      {suggestion && <PlanSuggestion s={suggestion} />}
 
       <div className="grid grid-cols-2 gap-2">
         <Stat icon={TrendingUp} label="Fitness (CTL)" value={String(Math.round(t.ctl[last]))} sub={`${signed(ramp)} in 7 days`} />

@@ -20,6 +20,7 @@ import { getActivitiesData, getCorrelationDays, getSessionInsights, getLoadSerie
 import { requireSession } from "@/lib/utils/session";
 import { rankInsights } from "@/lib/garmin/analytics/insights";
 import { findings } from "@/lib/garmin/analytics/correlations";
+import { wearableSuggestion } from "@/lib/periodization-sync";
 import { notFound } from "next/navigation";
 
 export default async function GarminPage({ searchParams }: { searchParams: Promise<{ tab?: string; date?: string }> }) {
@@ -49,8 +50,8 @@ export default async function GarminPage({ searchParams }: { searchParams: Promi
     content = <GarminSleepTab data={sleep} findings={findings(days)} />;
   } else if (tab === "training") {
     const [{ series, computedAt }, volume] = await Promise.all([getLoadSeries(auth.user.id), getVolumeData(auth.user.id)]);
-    const race = await getRaceProjection(auth.user.id, series);
-    content = <GarminLoadTab series={series} computedAt={computedAt} volume={volume} race={race} />;
+    const [race, suggestion] = await Promise.all([getRaceProjection(auth.user.id, series), wearableSuggestion(auth.user.id)]);
+    content = <GarminLoadTab series={series} computedAt={computedAt} volume={volume} race={race} suggestion={suggestion} />;
   } else {
     content = <GarminDataExplorer />;
   }

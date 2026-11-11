@@ -17,6 +17,8 @@
 import { MCP_RESOURCE, auth } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/mcp/rate-limit";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
+import { env } from "@/lib/env";
+import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
@@ -58,6 +60,8 @@ function serve(req: Request, claims: { sub?: string }) {
       registerProgramTools(server, userId);
       registerCycleTools(server, userId);
       registerWorkoutTools(server, userId);
+      // Garmin metrics only where the Garmin feature is enabled.
+      if (env.GARMIN_KEY_ENCRYPTION_KEY) registerGarminTools(server, userId);
     },
     {},
     { basePath: "/api" },

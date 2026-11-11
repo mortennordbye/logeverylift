@@ -16,7 +16,7 @@ import {
   type TrainingGoal,
   type TrainingPhase,
 } from "@/lib/utils/periodization";
-import { hasPeakAnchor, syncDueCycle, syncPeriodizedTargets } from "@/lib/periodization-sync";
+import { applyWearableSuggestion, hasPeakAnchor, syncDueCycle, syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
   createTrainingCycleSchema,
@@ -1044,5 +1044,23 @@ export async function importCycle(
     return { success: true, data: { cycleId, cycleName: cycleFields.name, unresolvedPrograms } };
   } catch (err) {
     return { success: false, error: String(err) };
+  }
+}
+
+/**
+ * Apply the wearable suggestion for this week (docs/plans/garmin-insights-design.md,
+ * 2.14, decision O-3: suggest first). The percent is recomputed on the server
+ * from the user's own data; the client only asks.
+ */
+export async function applyWearablePlanSuggestion(): Promise<ActionResult<{ pct: number; note: string } | null>> {
+  const auth = await requireSession();
+  try {
+    const applied = await applyWearableSuggestion(auth.user.id);
+    revalidatePath("/cycles");
+    revalidatePath("/more/garmin");
+    return { success: true, data: applied ? { pct: applied.pct, note: applied.note } : null };
+  } catch (e) {
+    console.error("[applyWearablePlanSuggestion] failed", e instanceof Error ? e.message : "unknown");
+    return { success: false, error: "Failed to apply the suggestion" };
   }
 }
