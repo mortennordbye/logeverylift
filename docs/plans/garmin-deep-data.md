@@ -15,12 +15,12 @@ Pull everything the Garmin Connect Personal API gives a user, keep it, and show 
 
 - Settings → Connections → Garmin Connect: paste a Personal API key, stored encrypted (`src/lib/utils/crypto.ts`).
 - `syncGarmin` (`src/lib/garmin/sync.ts`): HRV, sleep and daily summaries plus the activity list, saved as raw JSON in `garmin_days` and `garmin_activities`, one `garmin_sync_runs` row per sync.
-- A Garmin tab inside Progress (`src/components/features/GarminMetricsTab.tsx`); phase 1 moved it to the Insights section as its Overview tab.
+- A Garmin tab inside Progress (`src/components/features/GarminMetricsTab.tsx`); phase 1 moved it to its own page, More → Garmin, as the Overview tab.
 - Feature flag: `GARMIN_KEY_ENCRYPTION_KEY` set or not.
 
 ### Decisions (2026-11-11, from the owner)
 
-- **G-1 Own section.** Garmin data moves out of Progress into its own top-level section with its own sub-navigation, so it has room for rich views.
+- **G-1 Own page.** Garmin data moves out of Progress into its own page, More → Garmin (`/more/garmin`), with its own tabs, so it has room for rich views. Not a bottom-nav item (the owner, 2026-11-11).
 - **G-2 GPS kept.** FIT streams keep latitude and longitude, for route maps. Revisit before any public launch. (The activity summary JSON keeps having GPS fields stripped; the stream is the one place it lives.)
 - **G-3 History.** A new connection syncs 30 days at once, then imports older days in the background. Normal users stop at 90 days back. Admins import everything Garmin has.
 - **G-4 Scope.** All 26 endpoints, including nutrition, menstrual cycle and body composition (empty answers store nothing).
@@ -78,7 +78,7 @@ Build in order, each a commit series on the branch.
 - **Storage.** `garmin_days.kind` grows to one kind per day or range endpoint (text column; the TypeScript enum changes, no SQL change). Snapshots (profile, HR zones) are stored as kinds keyed by fetch date, so changes over time are visible. `garmin_activities` gets `detail` and `workouts` JSON columns. New `garmin_activity_files` (the ZIP as `bytea`) and `garmin_activity_streams` (FIT parsed with `@garmin/fitsdk` into columnar arrays per field, plus laps, sets and the FIT session, with a parser version so a better parser can re-run).
 - **Endpoint registry.** One table of endpoints in code: path builder, kind, how a response splits into per-day rows, max range, empty value. The sync and the backfill both walk this registry, so adding an endpoint is one entry.
 - **Backfill.** `garmin_connections` gets a cursor (oldest date imported) and a done flag. A worker started in `src/instrumentation.ts` (same pattern as the gym import) wakes every minute, claims one connection with a lease column so two replicas never run the same user, imports a chunk of older days, and moves the cursor. Throttled to about two requests a second, backing off on 429. Limit by role (G-3).
-- **Section shell.** New route group with sub-tabs: Today, Activities, Sleep, Trends, Data. The current Progress tab content moves to Today and Trends. A bottom-nav item shows only when Garmin is enabled and the user is connected.
+- **Page shell.** `/more/garmin`, listed in More under Training after Progress, with tabs Overview and Data; later phases add Today, Activities, Sleep and Trends.
 - **Data explorer** (Data tab): every stored kind per date, with the raw JSON, field counts, and sync history with backfill progress. This is what "expose all data" means on day one.
 - **Tests:** registry splitting per endpoint (unit), backfill cursor, lease and limits (integration), FIT parsing on a synthetic file (unit).
 
@@ -100,4 +100,4 @@ Correlations (sleep and HRV against load and performance), weekly summaries, and
 
 ## 3. Before any public launch
 
-Everything in BACKLOG "Garmin Insights: go live in prod", plus: GPS (G-2) needs its own policy text and probably an opt-in; the menstrual cycle and nutrition data are new health categories.
+Everything in BACKLOG "Garmin: go live in prod", plus: GPS (G-2) needs its own policy text and probably an opt-in; the menstrual cycle and nutrition data are new health categories.

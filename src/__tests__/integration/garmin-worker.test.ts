@@ -163,6 +163,18 @@ describe("runGarminWorkerTick", () => {
     expect(calls.length).toBe(before);
   });
 
+  it("marks a run cut off by a restart as interrupted once its lease has run out", async () => {
+    const userId = await connect();
+    const old = new Date(Date.now() - 10 * 60_000);
+    await db.insert(garminSyncRuns).values({ userId, trigger: "worker", status: "running", rangeStart: today, rangeEnd: today, startedAt: old });
+    const fresh = new Date(Date.now() - 60_000);
+    await db.insert(garminSyncRuns).values({ userId, trigger: "sync", status: "running", rangeStart: today, rangeEnd: today, startedAt: fresh });
+    await runGarminWorkerTick();
+    const runs = await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, userId));
+    expect(runs.find((r) => r.startedAt.getTime() === old.getTime())).toMatchObject({ status: "error", error: "interrupted" });
+    expect(runs.find((r) => r.startedAt.getTime() === fresh.getTime())).toMatchObject({ status: "running" });
+  });
+
   it("lets only one of two simultaneous ticks work on a user", async () => {
     await connect();
     const results = await Promise.all([runGarminWorkerTick(), runGarminWorkerTick()]);

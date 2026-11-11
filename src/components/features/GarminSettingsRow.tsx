@@ -35,7 +35,7 @@ export function GarminSettingsRow({
     setMessage(
       result.data.syncError
         ? { tone: "error", text: `Connected, but the first sync failed (${result.data.syncError}).` }
-        : { tone: "info", text: "Connected. Your Garmin data is in Insights. Older days import in the background." },
+        : { tone: "info", text: "Connected. Your data is in More → Garmin. Older days import in the background." },
     );
   }
 
@@ -71,10 +71,10 @@ export function GarminSettingsRow({
       {connected ? (
         <div className="flex flex-col gap-2">
           <Link
-            href="/insights"
+            href="/more/garmin"
             className="h-11 rounded-xl bg-background text-sm font-semibold flex items-center justify-center active:opacity-70"
           >
-            Open Insights
+            Open Garmin
           </Link>
           <button
             onClick={() => disconnect(false)}

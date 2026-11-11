@@ -27,7 +27,7 @@ import { readZipEntry } from "./zip";
 /**
  * Reading Garmin and saving what comes back.
  *
- * syncGarmin runs when the Insights section opens (and on connect): the range
+ * syncGarmin runs when the Garmin page opens (and on connect): the range
  * endpoints, snapshots and the activity list for recent days. It is quick, so
  * the page can wait for it. Per-day endpoints, activity files and history are
  * slower and run in the background worker (worker.ts), with the helpers below.
@@ -255,7 +255,7 @@ export function fatalTag(e: unknown, userId: string, where: string): string {
 
 export type SyncResult = { status: "ok" | "skipped" | "not_connected" } | { status: "error"; error: string };
 
-/** Recent data the Insights pages need now: range endpoints, snapshots and the activity list. */
+/** Recent data the Garmin page needs now: range endpoints, snapshots and the activity list. */
 export async function syncGarmin(userId: string, { force = false } = {}): Promise<SyncResult> {
   const [conn] = await db.select().from(garminConnections).where(eq(garminConnections.userId, userId));
   if (!conn) return { status: "not_connected" };

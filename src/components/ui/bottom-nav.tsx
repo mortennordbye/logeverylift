@@ -2,9 +2,8 @@
 
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import { getFriendsBadgeCount } from "@/lib/actions/friends";
-import { getInsightsNavVisible } from "@/lib/actions/garmin";
 import { isAiGenerating, subscribeAiGenerating } from "@/lib/utils/ai-generating";
-import { Activity, Dumbbell, MoreHorizontal, RefreshCw, LayoutList } from "lucide-react";
+import { Dumbbell, MoreHorizontal, RefreshCw, LayoutList } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -33,9 +32,6 @@ const staticNavItems = [
   },
 ];
 
-// Shown before More only for a user with a Garmin connection (getInsightsNavVisible).
-const insightsNavItem = { label: "Insights", href: "/insights", icon: Activity };
-
 export function BottomNav() {
   const pathname = usePathname();
   const workoutSession = useWorkoutSession();
@@ -43,7 +39,6 @@ export function BottomNav() {
   const lastWorkoutPath = workoutSession?.lastWorkoutPath ?? null;
   const [isGenerating, setIsGenerating] = useState(false);
   const [friendsBadge, setFriendsBadge] = useState(0);
-  const [showInsights, setShowInsights] = useState(false);
 
   // Only match real workout routes like /programs/[id]/workout/..., not /new-workout
   const isWorkoutRoute = pathname.startsWith("/programs") && pathname.includes("/workout");
@@ -90,20 +85,7 @@ export function BottomNav() {
     return () => document.removeEventListener("visibilitychange", onVisible);
   }, [hideNav, badgeScope]);
 
-  // Checked on open and when leaving Settings, where Garmin is connected or disconnected.
-  const insightsScope = pathname.startsWith("/settings") ? "settings" : "other";
-  useEffect(() => {
-    if (hideNav) return;
-    getInsightsNavVisible()
-      .then((r) => {
-        if (r.success) setShowInsights(r.data);
-      })
-      .catch(() => {});
-  }, [hideNav, insightsScope]);
-
   if (hideNav) return null;
-
-  const navItems = showInsights ? [...staticNavItems.slice(0, 3), insightsNavItem, staticNavItems[3]] : staticNavItems;
 
   const isActive = (label: string, href: string) => {
     if (label === "Workout") {
@@ -126,7 +108,7 @@ export function BottomNav() {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border" style={{ paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}>
       <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
-        {navItems.map((item) => {
+        {staticNavItems.map((item) => {
           const Icon = item.icon;
           // Only use saved workout paths while there's actually an active workout.
           // After discard/finish, workoutPath is null and the tab should go home.

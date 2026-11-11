@@ -10,8 +10,8 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
-### Garmin Insights: go live in prod
-- **What:** The Garmin connection (Settings), the Insights section and the background import work locally, behind `GARMIN_KEY_ENCRYPTION_KEY`. Prod doesn't set it, so the feature is off there.
+### Garmin: go live in prod
+- **What:** The Garmin connection (Settings), the More → Garmin page and the background import work locally, behind `GARMIN_KEY_ENCRYPTION_KEY`. Prod doesn't set it, so the feature is off there.
 - **Why deferred:** Built to try out locally first. Turning it on stores new kinds of health data (HRV, sleep, SpO2, stress, body battery) and talks to a new party (Garmin), which the privacy policy doesn't describe yet. Garmin's Personal API FAQ also says it "is not intended for commercial applications serving multiple end users".
 - **Unblocked by:** Deciding to ship it. Then: read the Personal API terms accepted at key creation for whether a multi-user app with per-user keys is allowed; decide whether GPS tracks in `garmin_activity_streams` need their own opt-in (decision G-2 in `docs/plans/garmin-deep-data.md` keeps them, for the owner); follow the `privacy-compliance` checklist (policy text from `docs/privacy/data-inventory.md`, bump `LEGAL_VERSION`, raise `CONSENT_VERSION` because these are new health-data categories); add the existing Secrets Manager item `logeverylift-garmin-key-encryption-key` to the app's ExternalSecret; never rotate it without re-encrypting `garmin_connections`.
 - **Touchpoints:** `src/lib/env.ts`, `src/lib/actions/garmin.ts`, `src/lib/garmin/`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`.
@@ -43,7 +43,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### Wearable-based autoregulation (Tier B) for triathlon plans
 - **What:** True closed-loop autoregulation from objective recovery signals — suppressed HRV, elevated resting HR, aerobic decoupling >5% — to auto-deload without the athlete typing anything. This is the only remaining piece of the original "autoregulation + intensity" gap; the rest now ships: polarized **zone prescription** (Z2 easy / Z4 hard), **phase-varying sessions** (`intervalPhaseRecipe`: base→tempo, build→threshold, peak→VO₂), and a **no-wearable nudge** (`computeAdaptationFactor`: adherence + readiness + RPE → ±band on the curve, surfaced in the cycle summary).
 - **Why deferred:** Needs a wearable-data pipeline (HRV/RHR/pace-HR) the app doesn't have. The no-wearable Tier A loop is in place but is only as strong as the readiness/RPE the user enters; HRV-grade signals require ingesting device data.
-- **Unblocked by:** Garmin data is now stored per day (`garmin_days`: HRV status and baseline, resting HR; `garmin_activities`: HR and training load; see `syncGarmin`), behind the flag in "Garmin Insights: go live in prod". What is left: match activities to logged sessions, then feed the signals into `computeAdaptationFactor` as additional signals (or a stronger override) and the `uncoupledAcwr` guardrail.
+- **Unblocked by:** Garmin data is now stored per day (`garmin_days`: HRV status and baseline, resting HR; `garmin_activities`: HR and training load; see `syncGarmin`), behind the flag in "Garmin: go live in prod". What is left: match activities to logged sessions, then feed the signals into `computeAdaptationFactor` as additional signals (or a stronger override) and the `uncoupledAcwr` guardrail.
 - **Touchpoints:** `src/lib/utils/periodization.ts` (`computeAdaptationFactor`, `uncoupledAcwr`), `src/lib/actions/training-cycles.ts` (`computeCycleAdaptation`/`syncPeriodizedTargets` — where richer signals plug in), `src/db/schema/workout-sets.ts`.
 
 ### iOS backgrounding — residual gaps after the resume-hardening pass

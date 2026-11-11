@@ -25,7 +25,7 @@ import { z } from "zod";
 
 const DISABLED = "Garmin is not enabled on this server";
 
-/** Days of stored data the Insights Overview shows: four weeks of dailies, eight weeks of load. */
+/** Days of stored data the Garmin Overview shows: four weeks of dailies, eight weeks of load. */
 const VIEW_DAYS = 56;
 
 const connectSchema = z.object({ apiKey: z.string().trim().min(20).max(1000) });
@@ -51,7 +51,7 @@ export async function connectGarmin(data: unknown): Promise<ActionResult<{ syncE
     // Start the background import now instead of at the next timer tick.
     void garminWorkerLoop();
     revalidatePath("/settings");
-    revalidatePath("/more/metrics");
+    revalidatePath("/more/garmin");
     return { success: true, data: { syncError: sync.status === "error" ? sync.error : null } };
   } catch (e) {
     if (e instanceof GarminError) {
@@ -87,7 +87,7 @@ export async function disconnectGarmin(data: unknown): Promise<ActionResult> {
     });
     forgetToken(userId);
     revalidatePath("/settings");
-    revalidatePath("/more/metrics");
+    revalidatePath("/more/garmin");
     return { success: true, data: undefined };
   } catch (e) {
     console.error("[disconnectGarmin] failed", { userId }, e);
@@ -184,23 +184,6 @@ function trimFuture(m: GarminMetrics): GarminMetrics {
   const last = m.days.at(-1);
   const empty = last && Object.entries(last).every(([k, v]) => k === "date" || v === null);
   return empty ? { ...m, days: m.days.slice(0, -1) } : m;
-}
-
-/** Whether the bottom nav shows Insights: Garmin is enabled and this user has a connection or stored data. */
-export async function getInsightsNavVisible(): Promise<ActionResult<boolean>> {
-  const auth = await requireSession();
-  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: true, data: false };
-  try {
-    const [row] = await db
-      .select({ one: sql<number>`1` })
-      .from(garminConnections)
-      .where(eq(garminConnections.userId, auth.user.id))
-      .limit(1);
-    return { success: true, data: Boolean(row) };
-  } catch (e) {
-    console.error("[getInsightsNavVisible] failed", { userId: auth.user.id }, e);
-    return { success: false, error: "Failed" };
-  }
 }
 
 export type GarminImportStatus = {

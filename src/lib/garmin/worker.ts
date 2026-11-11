@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { garminActivities, garminConnections, users } from "@/db/schema";
+import { garminActivities, garminConnections, garminSyncRuns, users } from "@/db/schema";
 import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { GarminError } from "./client";
 import { addDays, isoDate } from "./dates";
@@ -74,6 +74,12 @@ async function claim(now: Date) {
 export type TickResult = { status: "idle" } | { status: "ran"; userId: string; error: string | null };
 
 export async function runGarminWorkerTick(now = new Date()): Promise<TickResult> {
+  // A run still "running" after its lease ran out was cut off by a restart or deploy.
+  await db
+    .update(garminSyncRuns)
+    .set({ status: "error", error: "interrupted", finishedAt: now })
+    .where(and(eq(garminSyncRuns.status, "running"), lt(garminSyncRuns.startedAt, new Date(now.getTime() - LEASE_MS))));
+
   const conn = await claim(now);
   if (!conn) return { status: "idle" };
   const userId = conn.userId;

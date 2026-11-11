@@ -2,7 +2,7 @@
  * Garmin Schema
  *
  * A user's own Garmin Connect data, read with the Garmin Personal API key the
- * user pastes in Settings. Opening the Insights section reads recent data
+ * user pastes in Settings. Opening the Garmin page reads recent data
  * live, and a background worker imports history and activity files; every
  * response is saved here, so older days stay visible and each sync can be
  * looked at afterwards.

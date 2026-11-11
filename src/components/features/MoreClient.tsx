@@ -4,7 +4,7 @@ import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { shareApp } from "@/lib/utils/share";
-import { BarChart2, CalendarDays, ChevronRight, Clock, FileText, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
+import { Activity, BarChart2, CalendarDays, ChevronRight, Clock, FileText, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -105,6 +105,14 @@ const groups: { title: string; items: MoreItem[] }[] = [
   },
 ];
 
+// Under Training after Progress, where the Garmin feature is enabled.
+const garminItem: MoreItem = {
+  label: "Garmin",
+  href: "/more/garmin",
+  icon: Activity,
+  description: "HRV, sleep, activities and more",
+};
+
 const adminItem: MoreItem = {
   label: "Admin Tools",
   href: "/more/admin",
@@ -116,8 +124,10 @@ export function MoreClient({
   role,
   friendsBadge,
   friendCode,
+  showGarmin,
 }: {
   role: string;
+  showGarmin: boolean;
   friendsBadge: number;
   friendCode: string | null;
 }) {
@@ -185,8 +195,11 @@ export function MoreClient({
         )}
         {groups.map((group) => {
           // Admin Tools sits at the end of the App group, for admins only.
-          const items =
-            isAdmin && group.title === "App" ? [...group.items, adminItem] : group.items;
+          let items = isAdmin && group.title === "App" ? [...group.items, adminItem] : group.items;
+          if (showGarmin && group.title === "Training") {
+            const at = items.findIndex((i) => i.label === "Progress") + 1;
+            items = [...items.slice(0, at), garminItem, ...items.slice(at)];
+          }
           return (
             <section key={group.title} className="pt-6">
               <h2 className="px-4 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
