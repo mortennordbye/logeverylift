@@ -618,6 +618,10 @@ Each phase is shippable alone, on the local branch (decision G-5 of the ingestio
 
 ### Phase B: Today and Sleep
 
+> **Built 2026-11-11 (local branch):** readiness (`src/lib/garmin/analytics/readiness.ts`) in the daily series (model v2); rules in `src/lib/garmin/analytics/insights.ts`: the nine of the first ten that need no correlations, plus `no_high` (no time above LTHR in 4 weeks), added because the owner's data showed it; `uplot` with whole-hour ticks and a touch crosshair (`src/components/charts/TimeSeriesChart.tsx`); Today (day picker, readiness with contributor bars, insights, 30 h heart rate with sleep and activity lanes, SpO2, overnight HRV against the band, 7-day strip, day numbers) and Sleep (timing, duration against need with debt, stage shares, HRV with band and CV, resting HR, stress). Overview stays until O-8 is settled.
+>
+> **Measured:** Garmin keeps all-day heart rate (`heart_rate.heartRateValues`) for about four months; older days return empty arrays, while HRV, sleep and summaries go back further. Today shows "No all-day heart rate" for those days.
+
 - Readiness (2.6), the first ten insight rules, the 24 h timeline, overnight HRV, the 7-day strip.
 - Sleep tab: timing, need and debt, stages, HRV and resting HR baselines.
 - Day route. Overview tab and `GarminMetricsTab` removed (ask first if any part should stay, per the owner's rule on removing features).

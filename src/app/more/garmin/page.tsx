@@ -7,19 +7,26 @@ import { GARMIN_TABS, GarminClient, type GarminTab } from "@/components/features
 import { GarminDataExplorer } from "@/components/features/GarminDataExplorer";
 import { GarminLoadTab } from "@/components/features/GarminLoadTab";
 import { GarminMetricsTab } from "@/components/features/GarminMetricsTab";
+import { GarminSleepTab } from "@/components/features/GarminSleepTab";
+import { GarminTodayTab } from "@/components/features/GarminTodayTab";
 import { env } from "@/lib/env";
-import { getLoadSeries } from "@/lib/garmin/queries";
+import { getLoadSeries, getSleepData, getTodayData, latestGarminDate } from "@/lib/garmin/queries";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
-export default async function GarminPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default async function GarminPage({ searchParams }: { searchParams: Promise<{ tab?: string; date?: string }> }) {
   const auth = await requireSession();
   if (!env.GARMIN_KEY_ENCRYPTION_KEY) notFound();
-  const asked = (await searchParams).tab;
-  const tab: GarminTab = GARMIN_TABS.includes(asked as GarminTab) ? (asked as GarminTab) : "load";
+  const params = await searchParams;
+  const tab: GarminTab = GARMIN_TABS.includes(params.tab as GarminTab) ? (params.tab as GarminTab) : "today";
 
   let content: React.ReactNode;
-  if (tab === "load") {
+  if (tab === "today") {
+    const date = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : await latestGarminDate(auth.user.id);
+    content = <GarminTodayTab data={await getTodayData(auth.user.id, date)} />;
+  } else if (tab === "sleep") {
+    content = <GarminSleepTab data={await getSleepData(auth.user.id)} />;
+  } else if (tab === "load") {
     const { series, computedAt } = await getLoadSeries(auth.user.id);
     content = <GarminLoadTab series={series} computedAt={computedAt} />;
   } else if (tab === "overview") {

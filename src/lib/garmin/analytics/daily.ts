@@ -10,9 +10,10 @@ import { computePmc, type PmcDay } from "./pmc";
 import { hrvSeries, restingHrSeries, type HrvDay, type RestingHrDay } from "./recovery";
 import { regularityIndex, sleepDebt, sleepTiming, type SleepNight, type SleepTiming } from "./sleep";
 import type { Sport } from "./sport";
+import { readiness, type Readiness } from "./readiness";
 import { EMPTY_BANDS, addBands, type Bands } from "./zones";
 
-export const DAILY_MODEL_VERSION = 1;
+export const DAILY_MODEL_VERSION = 2;
 
 /** Overlap needed for a Garmin strength activity and a LogEveryLift session to be one session. */
 const SAME_SESSION_SHARE = 0.5;
@@ -44,6 +45,8 @@ export type DayInputs = {
   garminHrvHigh: number | null;
   restingHr: number | null;
   sleep: SleepNight | null;
+  /** Mean LogEveryLift readiness (1 to 5) logged that day. */
+  feel?: number | null;
 };
 
 export type DayEntry = {
@@ -69,6 +72,10 @@ export type DailyMetrics = {
   sleepDebtS: number | null;
   regularity: number | null;
   timing: SleepTiming;
+  /** Since model v2. */
+  sleepSeconds: number | null;
+  sleepNeedS: number | null;
+  readiness: Readiness | null;
 };
 
 /** Each LogEveryLift strength session is matched to at most one Garmin activity, and the other way round. */
@@ -155,6 +162,9 @@ export function buildDailyMetrics(input: {
     };
     const hrvDay = withoutDate(hrv[i]);
     const rhrDay = withoutDate(rhr[i]);
+    const debt = sleepDebt(upTo);
+    const night = nights[i];
+    const feel = [dates[i - 1], dates[i]].map((d) => (d ? byDate.get(d)?.feel : null)).filter((f): f is number => typeof f === "number");
     return {
       date: p.date,
       entries: entries.get(p.date) ?? [],
@@ -165,9 +175,20 @@ export function buildDailyMetrics(input: {
       bands: bands.get(p.date) ?? EMPTY_BANDS,
       hrv: hrvDay,
       restingHr: rhrDay,
-      sleepDebtS: sleepDebt(upTo),
+      sleepDebtS: debt,
       regularity: regularityIndex(upTo),
       timing: sleepTiming(upTo),
+      sleepSeconds: night.sleepSeconds,
+      sleepNeedS: night.needSeconds,
+      readiness: readiness({
+        hrv: { lastNight: hrv[i].ms, mean7: hrv[i].mean7, bandLow: hrv[i].bandLow, bandHigh: hrv[i].bandHigh, state: hrv[i].state },
+        restingHr: { today: rhr[i].bpm, baseline: rhr[i].baseline, sd: rhr[i].sd, flag: rhr[i].flag },
+        sleep: { seconds: night.sleepSeconds, needSeconds: night.needSeconds },
+        sleepDebtS: debt,
+        // Form on the morning of the day, and only once fitness has calibrated.
+        tsb: p.calibrating ? null : p.tracks.total.tsb,
+        feel,
+      }),
     };
   });
 }

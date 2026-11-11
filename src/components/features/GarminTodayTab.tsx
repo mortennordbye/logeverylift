@@ -1,0 +1,407 @@
+"use client";
+
+import { EChart } from "@/components/charts/EChart";
+import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
+import { useVizTheme } from "@/components/charts/viz-theme";
+import type { Severity } from "@/lib/garmin/analytics/insights";
+import { CONTRIBUTOR_LABEL, READINESS_BAND_LABEL } from "@/lib/garmin/analytics/readiness";
+import { SPORT_LABEL, SPORT_MARK, type VizTheme } from "@/lib/garmin/charts/theme";
+import { addDays } from "@/lib/garmin/dates";
+import type { TodayData } from "@/lib/garmin/queries";
+import { formatDateShort } from "@/lib/utils/format";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Info, ShieldAlert } from "lucide-react";
+import Link from "next/link";
+import { useMemo, useState } from "react";
+
+const SEVERITY_ICON: Record<Severity, typeof Info> = { warning: ShieldAlert, caution: AlertTriangle, good: CheckCircle2, info: Info };
+const SEVERITY_COLOR: Record<Severity, string> = { warning: "var(--viz-critical)", caution: "var(--viz-warning)", good: "var(--viz-good)", info: "var(--muted-foreground)" };
+
+function alpha(rgba: string, a: number) {
+  const m = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+  return m ? `rgba(${m[1]},${m[2]},${m[3]},${a})` : rgba;
+}
+
+function clock(ms: number) {
+  const d = new Date(ms);
+  return `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
+}
+
+function hm(seconds: number | null) {
+  if (seconds === null) return "–";
+  const m = Math.round(seconds / 60);
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
+}
+
+function Card({ title, aside, children, note }: { title: string; aside?: React.ReactNode; children: React.ReactNode; note?: string }) {
+  return (
+    <section className="rounded-2xl bg-muted p-4 space-y-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
+        {aside && <span className="text-[11px] text-muted-foreground">{aside}</span>}
+      </div>
+      {children}
+      {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
+    </section>
+  );
+}
+
+function Readout({ title, values }: { title: string; values: { label: string; value: string }[] }) {
+  return (
+    <div className="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap min-h-[34px] tabular-nums" aria-live="polite">
+      <span className="text-[11px] text-muted-foreground w-full">{title}</span>
+      {values.map((v) => (
+        <span key={v.label} className="text-xs text-muted-foreground">
+          <span className="text-base font-semibold text-foreground">{v.value}</span> {v.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** A thin segmented bar: one whole split into parts, with a legend that names them. */
+function Segmented({ parts }: { parts: { label: string; value: number; color: string }[] }) {
+  const total = parts.reduce((s, p) => s + p.value, 0);
+  if (total <= 0) return null;
+  return (
+    <div className="space-y-1.5">
+      <div className="flex h-2 w-full gap-[2px] overflow-hidden rounded-full" role="img" aria-label={parts.map((p) => `${p.label} ${Math.round((p.value / total) * 100)} %`).join(", ")}>
+        {parts.filter((p) => p.value > 0).map((p) => (
+          <div key={p.label} style={{ width: `${(p.value / total) * 100}%`, background: p.color }} className="h-full first:rounded-l-full last:rounded-r-full" />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 text-[11px] text-muted-foreground">
+        {parts.map((p) => (
+          <span key={p.label} className="inline-flex items-center gap-1">
+            <span className="inline-block h-2 w-2 rounded-sm" style={{ background: p.color }} />
+            {p.label} <span className="text-foreground tabular-nums">{Math.round((p.value / total) * 100)}%</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function DayPicker({ data }: { data: TodayData }) {
+  const prev = addDays(data.date, -1);
+  const next = addDays(data.date, 1);
+  const canPrev = !data.firstDate || prev >= data.firstDate;
+  const canNext = !!data.lastDate && next <= data.lastDate;
+  const btn = "h-11 w-11 flex items-center justify-center rounded-xl bg-muted active:opacity-60";
+  return (
+    <div className="flex items-center justify-between gap-2">
+      {canPrev ? (
+        <Link href={`/more/garmin?tab=today&date=${prev}`} replace scroll={false} aria-label="Previous day" className={btn}>
+          <ChevronLeft className="w-5 h-5" />
+        </Link>
+      ) : (
+        <span className={`${btn} opacity-30`} />
+      )}
+      <div className="text-center">
+        <p className="text-sm font-semibold">{new Date(`${data.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}</p>
+        {data.lastDate && data.date !== data.lastDate && (
+          <Link href="/more/garmin?tab=today" replace scroll={false} className="text-[11px] text-primary">
+            Latest day
+          </Link>
+        )}
+      </div>
+      {canNext ? (
+        <Link href={`/more/garmin?tab=today&date=${next}`} replace scroll={false} aria-label="Next day" className={btn}>
+          <ChevronRight className="w-5 h-5" />
+        </Link>
+      ) : (
+        <span className={`${btn} opacity-30`} />
+      )}
+    </div>
+  );
+}
+
+function ReadinessCard({ data }: { data: TodayData }) {
+  const r = data.metrics?.readiness;
+  if (!r) {
+    return (
+      <Card title="Readiness">
+        <p className="text-sm text-muted-foreground">Not enough signals for this day yet. Readiness needs at least 3 of HRV, resting HR, sleep, sleep debt, form and how you feel.</p>
+      </Card>
+    );
+  }
+  return (
+    <Card title="Readiness" aside={`${r.signals} of 6 signals${r.capped ? " · capped" : ""}`}>
+      <div className="flex items-end gap-3">
+        <span className="text-6xl font-semibold leading-none">{r.score}</span>
+        <span className="pb-1.5 text-base font-semibold">{READINESS_BAND_LABEL[r.band]}</span>
+      </div>
+      <ul className="space-y-2.5 pt-2">
+        {r.contributors.map((c) => {
+          const delta = c.score - 50;
+          return (
+            <li key={c.key} className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="font-medium">{CONTRIBUTOR_LABEL[c.key]}</span>
+                <span className="text-muted-foreground">{c.detail}</span>
+              </div>
+              {/* Bar from the centre: right is helping, left is holding the score down. */}
+              <div className="relative h-2 rounded-full bg-background" role="img" aria-label={`${CONTRIBUTOR_LABEL[c.key]} ${c.score} of 100`}>
+                <span className="absolute left-1/2 top-[-2px] h-3 w-px bg-muted-foreground/60" />
+                <span
+                  className="absolute top-0 h-2 rounded-full"
+                  style={{
+                    left: delta >= 0 ? "50%" : `${50 + delta}%`,
+                    width: `${Math.abs(delta)}%`,
+                    background: delta >= 0 ? "var(--viz-positive)" : "var(--viz-negative)",
+                  }}
+                />
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Card>
+  );
+}
+
+function Insights({ data }: { data: TodayData }) {
+  const [all, setAll] = useState(false);
+  if (!data.insights.length) return null;
+  const shown = all ? data.insights : data.insights.slice(0, 3);
+  return (
+    <div className="space-y-2">
+      {shown.map((i) => {
+        const Icon = SEVERITY_ICON[i.severity];
+        return (
+          <Link key={i.id} href={`/more/garmin?tab=${i.target}`} className="flex gap-3 rounded-2xl bg-muted p-3.5 active:opacity-70">
+            <Icon className="w-5 h-5 flex-none mt-0.5" style={{ color: SEVERITY_COLOR[i.severity] }} aria-label={i.severity} />
+            <p className="text-sm leading-snug">{i.text}</p>
+          </Link>
+        );
+      })}
+      {data.insights.length > 3 && (
+        <button onClick={() => setAll(!all)} className="h-11 w-full text-sm text-primary active:opacity-60">
+          {all ? "Show fewer" : `${data.insights.length - 3} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function Timeline({ data, theme }: { data: TodayData; theme: VizTheme }) {
+  const [idx, setIdx] = useState<number | null>(null);
+  const ranges = useMemo(
+    () => [
+      ...(data.sleep ? [{ from: data.sleep.start, to: data.sleep.end, color: alpha(theme.positive, 0.14) }] : []),
+      ...data.activities.map((a) => ({ from: a.start, to: a.end, color: alpha(theme.sport[a.sport], 0.22) })),
+      ...data.activities.map((a) => ({ from: a.start, to: a.end, color: theme.sport[a.sport], lane: "bottom" as const })),
+    ],
+    [data, theme],
+  );
+  const series = useMemo(() => [{ label: "Heart rate", values: data.hr.bpm, color: theme.text, width: 1.25 }], [data, theme]);
+  if (data.hr.t.length < 10) return <Card title="Heart rate · day and night"><p className="text-sm text-muted-foreground">No all-day heart rate for this day.</p></Card>;
+
+  const i = idx ?? data.hr.bpm.findLastIndex((v) => v !== null);
+  const t = data.hr.t[i];
+  const during = data.activities.find((a) => t >= a.start && t <= a.end);
+  const asleep = data.sleep && t >= data.sleep.start && t <= data.sleep.end;
+  const bpms = data.hr.bpm.filter((v): v is number => v !== null);
+
+  return (
+    <Card title="Heart rate · evening before to midnight" note="Shaded: sleep. Coloured lane and wash: activities. Line: resting heart rate.">
+      <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5"><span className="inline-block h-0.5 w-3.5 bg-foreground" />Heart rate</span>
+        {data.sleep && <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: alpha(theme.positive, 0.4) }} />Sleep</span>}
+        {[...new Set(data.activities.map((a) => a.sport))].map((s) => (
+          <span key={s} className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: theme.sport[s] }} /><b className="text-foreground">{SPORT_MARK[s]}</b>{SPORT_LABEL[s]}</span>
+        ))}
+      </div>
+      <Readout
+        title={`${clock(t)}${asleep ? " · asleep" : ""}${during ? ` · ${during.name}` : ""}`}
+        values={[
+          { label: "bpm", value: data.hr.bpm[i] !== null ? String(data.hr.bpm[i]) : "–" },
+          { label: "resting", value: data.restingHr ? String(data.restingHr) : "–" },
+          { label: "day max", value: String(Math.max(...bpms)) },
+        ]}
+      />
+      <TimeSeriesChart
+        x={data.hr.t}
+        series={series}
+        ranges={ranges}
+        lines={data.restingHr ? [{ y: data.restingHr, color: alpha(theme.textMuted, 0.8) }] : []}
+        xRange={data.window}
+        height={210}
+        axisColor={theme.textMuted}
+        gridColor={theme.grid}
+        onIndex={setIdx}
+        ariaLabel={`Heart rate from ${clock(data.window[0])} the evening before to midnight. Resting ${data.restingHr ?? "unknown"} bpm, max ${Math.max(...bpms)} bpm.`}
+      />
+      {data.spo2.t.length > 2 && (
+        <>
+          <p className="text-[11px] text-muted-foreground pt-1">Blood oxygen (SpO2), hourly average, %</p>
+          <TimeSeriesChart
+            x={data.spo2.t}
+            series={[{ label: "SpO2", values: data.spo2.value, color: theme.sport.swim, width: 1.5, points: true }]}
+            ranges={data.sleep ? [{ from: data.sleep.start, to: data.sleep.end, color: alpha(theme.positive, 0.14) }] : []}
+            xRange={data.window}
+            yRange={[85, 100]}
+            height={90}
+            axisColor={theme.textMuted}
+            gridColor={theme.grid}
+            ariaLabel={`Hourly SpO2 between ${Math.min(...data.spo2.value)} and ${Math.max(...data.spo2.value)} %.`}
+          />
+        </>
+      )}
+    </Card>
+  );
+}
+
+function OvernightHrv({ data, theme }: { data: TodayData; theme: VizTheme }) {
+  const [idx, setIdx] = useState<number | null>(null);
+  const series = useMemo(() => [{ label: "HRV", values: data.hrvNight.ms, color: theme.positive, width: 1.5, points: true }], [data, theme]);
+  if (data.hrvNight.t.length < 6) return null;
+  const h = data.metrics?.hrv;
+  const half = Math.floor(data.hrvNight.ms.length / 2);
+  const mean = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const first = mean(data.hrvNight.ms.slice(0, half));
+  const second = mean(data.hrvNight.ms.slice(half));
+  const i = idx ?? data.hrvNight.t.length - 1;
+  const rising = second > first * 1.05;
+  return (
+    <Card
+      title="HRV through the night"
+      aside={h?.state && h.state !== "calibrating" ? `Week: ${h.state}` : undefined}
+      note={`Each dot is a 5-minute reading. ${rising ? "HRV rose through the night: recovery went well." : second < first * 0.95 ? "HRV fell in the second half: a late session, meal or alcohol often does this." : "HRV was flat through the night."}`}
+    >
+      <Readout
+        title={clock(data.hrvNight.t[i])}
+        values={[
+          { label: "ms now", value: String(data.hrvNight.ms[i]) },
+          { label: "first half", value: String(Math.round(first)) },
+          { label: "second half", value: String(Math.round(second)) },
+          ...(h?.bandLow && h.bandHigh ? [{ label: "normal", value: `${Math.round(h.bandLow)}–${Math.round(h.bandHigh)}` }] : []),
+        ]}
+      />
+      <TimeSeriesChart
+        x={data.hrvNight.t}
+        series={series}
+        band={h?.bandLow && h.bandHigh ? { from: h.bandLow, to: h.bandHigh, color: alpha(theme.textMuted, 0.18) } : undefined}
+        height={150}
+        axisColor={theme.textMuted}
+        gridColor={theme.grid}
+        onIndex={setIdx}
+        ariaLabel={`Overnight HRV, first half mean ${Math.round(first)} ms, second half ${Math.round(second)} ms.`}
+      />
+    </Card>
+  );
+}
+
+function WeekStrip({ data, theme }: { data: TodayData; theme: VizTheme }) {
+  const [idx, setIdx] = useState<number | null>(null);
+  const option = useMemo(() => {
+    const ax = { axisLine: { lineStyle: { color: theme.grid } }, axisTick: { show: false }, axisLabel: { color: theme.textMuted, fontSize: 10 }, splitLine: { lineStyle: { color: theme.grid } } };
+    const labels = data.strip.map((d) => new Date(`${d.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" }));
+    return {
+      animationDuration: 300,
+      tooltip: { trigger: "axis", showContent: false, axisPointer: { type: "line", lineStyle: { color: theme.textMuted } } },
+      axisPointer: { link: [{ xAxisIndex: "all" }] },
+      grid: [
+        { top: 8, height: 60, left: 30, right: 8 },
+        { top: 86, height: 44, left: 30, right: 8 },
+      ],
+      xAxis: [
+        { type: "category", data: labels, gridIndex: 0, ...ax, axisLabel: { show: false } },
+        { type: "category", data: labels, gridIndex: 1, ...ax },
+      ],
+      yAxis: [
+        { type: "value", gridIndex: 0, min: 0, max: 100, splitNumber: 2, ...ax },
+        { type: "value", gridIndex: 1, min: 0, splitNumber: 1, ...ax },
+      ],
+      series: [
+        {
+          name: "Readiness",
+          type: "line",
+          xAxisIndex: 0,
+          yAxisIndex: 0,
+          data: data.strip.map((d) => d.readiness),
+          connectNulls: false,
+          symbolSize: 9,
+          lineStyle: { width: 1.5, color: theme.positive },
+          itemStyle: { color: theme.positive, borderColor: theme.surface, borderWidth: 2 },
+        },
+        { name: "Load", type: "bar", xAxisIndex: 1, yAxisIndex: 1, barMaxWidth: 18, data: data.strip.map((d) => d.load), itemStyle: { color: theme.textMuted, borderRadius: [3, 3, 0, 0] } },
+      ],
+    };
+  }, [data, theme]);
+  const d = data.strip[idx ?? 6];
+  return (
+    <Card title="Last 7 days">
+      <Readout title={formatDateShort(d.date)} values={[{ label: "readiness", value: d.readiness !== null ? String(d.readiness) : "–" }, { label: "load", value: String(d.load) }]} />
+      <EChart option={option} height={146} onIndex={setIdx} ariaLabel={`Readiness and load for the 7 days to ${data.date}.`} />
+    </Card>
+  );
+}
+
+function DayNumbers({ data, theme }: { data: TodayData; theme: VizTheme }) {
+  const s = data.summary;
+  const tiles = [
+    { label: "Steps", value: s.steps !== null ? s.steps.toLocaleString("en-GB") : "–" },
+    { label: "Active kcal", value: s.activeKcal !== null ? String(Math.round(s.activeKcal)) : "–" },
+    { label: "Intensity min", value: s.intensityMin !== null ? String(s.intensityMin) : "–" },
+    { label: "Body battery at wake", value: s.bbAtWake !== null ? String(s.bbAtWake) : "–" },
+    { label: "Charged / drained", value: s.bbCharged !== null ? `+${s.bbCharged} / −${s.bbDrained ?? 0}` : "–" },
+    { label: "Breathing (awake)", value: s.respiration !== null ? `${Math.round(s.respiration)}/min` : "–" },
+  ];
+  return (
+    <Card title="The day">
+      <div className="grid grid-cols-3 gap-2">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-xl bg-background p-2.5">
+            <p className="text-[10px] text-muted-foreground leading-tight">{t.label}</p>
+            <p className="text-base font-semibold">{t.value}</p>
+          </div>
+        ))}
+      </div>
+      {s.stress && (
+        <div className="pt-2 space-y-1">
+          <p className="text-[11px] text-muted-foreground">Stress{s.stressAvg !== null ? ` · average ${s.stressAvg}` : ""}</p>
+          <Segmented
+            parts={[
+              { label: "Rest", value: s.stress.rest, color: theme.band.low },
+              { label: "Low", value: s.stress.low, color: theme.band.mid },
+              { label: "Medium", value: s.stress.medium, color: theme.status.warning },
+              { label: "High", value: s.stress.high, color: theme.status.critical },
+            ]}
+          />
+        </div>
+      )}
+      {data.sleep && (
+        <div className="pt-2 space-y-1">
+          <p className="text-[11px] text-muted-foreground">
+            Sleep {clock(data.sleep.start)}–{clock(data.sleep.end)} · {hm(data.sleep.seconds)}
+            {data.sleep.needS ? ` of ${hm(data.sleep.needS)} needed` : ""}
+            {data.sleep.score !== null ? ` · score ${data.sleep.score}` : ""}
+          </p>
+          <Segmented
+            parts={[
+              { label: "Deep", value: data.sleep.deep ?? 0, color: theme.band.low },
+              { label: "Light", value: data.sleep.light ?? 0, color: theme.band.mid },
+              { label: "REM", value: data.sleep.rem ?? 0, color: theme.sport.other },
+              { label: "Awake", value: data.sleep.awake ?? 0, color: theme.textMuted },
+            ]}
+          />
+        </div>
+      )}
+    </Card>
+  );
+}
+
+export function GarminTodayTab({ data }: { data: TodayData }) {
+  const theme = useVizTheme();
+  return (
+    <div className="space-y-4">
+      <DayPicker data={data} />
+      <ReadinessCard data={data} />
+      <Insights data={data} />
+      {theme && <Timeline data={data} theme={theme} />}
+      {theme && <OvernightHrv data={data} theme={theme} />}
+      {theme && <WeekStrip data={data} theme={theme} />}
+      {theme && <DayNumbers data={data} theme={theme} />}
+    </div>
+  );
+}

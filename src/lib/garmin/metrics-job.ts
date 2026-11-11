@@ -218,6 +218,17 @@ function dayInputs(rows: { date: string; kind: string; data: unknown }[]): DayIn
   return [...days.values()];
 }
 
+/** Add each day's logged readiness, including days with no Garmin row. */
+function withFeel(days: DayInputs[], feel: Map<string, number>): DayInputs[] {
+  const byDate = new Map(days.map((d) => [d.date, d]));
+  for (const [date, value] of feel) {
+    const d = byDate.get(date) ?? { date, hrvMs: null, garminHrvLow: null, garminHrvHigh: null, restingHr: null, sleep: null };
+    d.feel = value;
+    byDate.set(date, d);
+  }
+  return [...byDate.values()];
+}
+
 async function buildDaily(userId: string, today: string) {
   const activityRows = await db
     .select({ id: garminActivityMetrics.garminActivityId, day: garminActivityMetrics.day, sport: garminActivityMetrics.sport, metrics: garminActivityMetrics.metrics })
@@ -228,6 +239,12 @@ async function buildDaily(userId: string, today: string) {
     .from(garminDays)
     .where(and(eq(garminDays.userId, userId), inArray(garminDays.kind, ["hrv", "sleep", "daily", "heart_rate"])));
   const sessions = await strengthSessions(userId);
+  const feelRows = await db
+    .select({ day: workoutSessions.date, feel: sql<number>`avg(${workoutSessions.readiness})::float` })
+    .from(workoutSessions)
+    .where(and(eq(workoutSessions.userId, userId), isNotNull(workoutSessions.readiness)))
+    .groupBy(workoutSessions.date);
+  const feelByDay = new Map(feelRows.map((r) => [r.day, r.feel]));
 
   const firstDays = [...dayRows.map((r) => r.date), ...activityRows.map((a) => a.day)].sort();
   const start = firstDays[0];
@@ -241,7 +258,7 @@ async function buildDaily(userId: string, today: string) {
       return { garminActivityId: a.id, day: a.day, sport: a.sport as Sport, load: m.load, loadMethod: m.loadMethod, startMs: m.startMs, endMs: m.endMs, bands: m.bands };
     }),
     strengthSessions: sessions,
-    days: dayInputs(dayRows),
+    days: withFeel(dayInputs(dayRows), feelByDay),
   });
 
   await db.transaction(async (tx) => {

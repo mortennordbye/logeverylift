@@ -67,7 +67,7 @@ export function hrvSeries(nights: HrvNight[]): HrvDay[] {
   return out;
 }
 
-export type RestingHrDay = { date: string; bpm: number | null; mean7: number | null; baseline: number | null; flag: boolean };
+export type RestingHrDay = { date: string; bpm: number | null; mean7: number | null; baseline: number | null; sd: number | null; flag: boolean };
 
 /**
  * 7-day mean against a 60-day baseline; +5 bpm or +2 SD above it is a flag.
@@ -81,7 +81,7 @@ export function restingHrSeries(days: { date: string; bpm: number | null }[]): R
     const mean7 = last7.length >= 4 ? mean(last7) : null;
     const baseline = last60.length >= 14 ? mean(last60) : null;
     const limit = baseline !== null ? Math.min(baseline + 5, baseline + Math.max(2 * sd(last60), 2)) : null;
-    return { date: day.date, bpm: day.bpm, mean7, baseline, flag: mean7 !== null && limit !== null && mean7 >= limit };
+    return { date: day.date, bpm: day.bpm, mean7, baseline, sd: baseline !== null ? sd(last60) : null, flag: mean7 !== null && limit !== null && mean7 >= limit };
   });
 }
 
