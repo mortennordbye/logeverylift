@@ -33,6 +33,13 @@ const envSchema = z.object({
   // Set to a stable 32-byte base64 value (`openssl rand -base64 32`) and
   // never rotate. Required in production; warned-on if missing.
   NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY: z.string().optional(),
+  // 32-byte base64 key (`openssl rand -base64 32`) that encrypts users'
+  // Garmin Personal API keys at rest. Also the feature flag: unset hides the
+  // Garmin settings row and Progress tab, and the Garmin actions refuse.
+  GARMIN_KEY_ENCRYPTION_KEY: z
+    .string()
+    .refine((v) => Buffer.from(v, "base64").length === 32, "must be 32 bytes, base64")
+    .optional(),
 });
 
 type Env = z.infer<typeof envSchema>;
@@ -57,6 +64,7 @@ function loadEnv(): Env {
       GYM_IMPORT_COUNTRIES: process.env.GYM_IMPORT_COUNTRIES,
       NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY:
         process.env.NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY,
+      GARMIN_KEY_ENCRYPTION_KEY: process.env.GARMIN_KEY_ENCRYPTION_KEY,
     });
   }
 
