@@ -8,6 +8,8 @@ import { SPORT_LABEL, SPORT_MARK, type VizTheme } from "@/lib/garmin/charts/them
 import {
   durationLabel,
   lapRows,
+  lapSpans,
+  selectionStats,
   paceLabel,
   pointZones,
   setRows,
@@ -17,7 +19,7 @@ import {
   zoneSeconds,
 } from "@/lib/garmin/charts/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
-import { ChartLine, ChevronLeft, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, Route as RouteIcon, Scale, Timer, TrendingUp, Zap, type LucideIcon } from "lucide-react";
+import { ChartLine, ChevronLeft, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, Route as RouteIcon, Scale, Timer, TrendingUp, Zap, type LucideIcon } from "lucide-react";
 
 const STAT_ICON: Record<string, LucideIcon> = {
   Duration: Timer,
@@ -57,7 +59,60 @@ function ZoneBars({ seconds, colors, label }: { seconds: number[]; colors: strin
   );
 }
 
-function Streams({ d, theme, onCursor }: { d: ActivityDetail; theme: VizTheme; onCursor: (i: number | null) => void }) {
+type Span = [number, number];
+
+/** Stats for the selected span: time, distance, HR, power or pace, climb. */
+function SelectionSummary({ d, span, onClear }: { d: ActivityDetail; span: Span; onClear: () => void }) {
+  const s = selectionStats(d, span[0], span[1]);
+  const items = s
+    ? [
+        { label: "time", value: durationLabel(s.durationS) },
+        ...(s.distanceM ? [{ label: "km", value: (s.distanceM / 1000).toFixed(2) }] : []),
+        ...(s.avgHr ? [{ label: "bpm", value: String(Math.round(s.avgHr)) }] : []),
+        ...(s.avgPower ? [{ label: "W", value: String(Math.round(s.avgPower)) }] : []),
+        ...(s.avgSpeed && d.sport === "run" ? [{ label: "/km", value: paceLabel(s.avgSpeed) }] : []),
+        ...(s.avgSpeed && d.sport !== "run" ? [{ label: "km/h", value: (s.avgSpeed * 3.6).toFixed(1) }] : []),
+        ...(s.climbM ? [{ label: "m climb", value: String(Math.round(s.climbM)) }] : []),
+      ]
+    : [];
+  return (
+    <div className="flex items-start gap-2 rounded-xl bg-background p-2.5" aria-live="polite">
+      <div className="flex-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 tabular-nums">
+        <span className="w-full text-[11px] text-muted-foreground">
+          Selected {elapsedLabel(Math.round(span[0]))} to {elapsedLabel(Math.round(span[1]))}
+        </span>
+        {items.length ? (
+          items.map((i) => (
+            <span key={i.label} className="text-xs text-muted-foreground">
+              <span className="text-base font-semibold text-foreground">{i.value}</span> {i.label}
+            </span>
+          ))
+        ) : (
+          <span className="text-xs text-muted-foreground">Too short to measure</span>
+        )}
+      </div>
+      <button onClick={onClear} aria-label="Clear the selection" className="h-11 w-11 -m-1.5 flex items-center justify-center rounded-full active:opacity-60">
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+function Streams({
+  d,
+  theme,
+  onCursor,
+  span,
+  setSpan,
+}: {
+  d: ActivityDetail;
+  theme: VizTheme;
+  onCursor: (i: number | null) => void;
+  span: Span | null;
+  setSpan: (s: Span | null) => void;
+}) {
+  const [selecting, setSelecting] = useState(false);
+  const ranges = useMemo(() => (span ? [{ from: span[0] * 1000, to: span[1] * 1000, color: "rgba(128,128,128,0.22)" }] : []), [span]);
   const [idx, setIdx] = useState<number | null>(null);
   const panels = useMemo(() => streamPanels(d), [d]);
   const x = useMemo(() => (d.streams.t ?? []).map((t) => (t ?? 0) * 1000), [d]);
@@ -77,7 +132,22 @@ function Streams({ d, theme, onCursor }: { d: ActivityDetail; theme: VizTheme; o
   };
 
   return (
-    <Card icon={ChartLine} title="Streams" note="Drag across any chart: all charts and the map dot follow. Pace runs faster upwards.">
+    <Card
+      icon={ChartLine}
+      title="Streams"
+      aside={
+        <button
+          onClick={() => setSelecting(!selecting)}
+          aria-pressed={selecting}
+          className={`inline-flex h-8 items-center gap-1.5 rounded-full px-3 text-xs font-medium active:opacity-70 ${selecting ? "bg-foreground text-background" : "bg-background text-muted-foreground"}`}
+        >
+          <MousePointerSquareDashed className="h-3.5 w-3.5" aria-hidden />
+          Select range
+        </button>
+      }
+      note={selecting ? "Drag across a chart to select a span. Tap Select range again to go back to the crosshair." : "Drag across any chart: all charts and the map dot follow. Pace runs faster upwards. Tap a lap to select it."}
+    >
+      {span && <SelectionSummary d={d} span={span} onClear={() => setSpan(null)} />}
       <div className="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap min-h-[34px] tabular-nums" aria-live="polite">
         <span className="text-[11px] text-muted-foreground w-full">{i !== null ? elapsedLabel(Math.round(x[i] / 1000)) : "Drag a chart"}</span>
         {i !== null &&
@@ -105,6 +175,9 @@ function Streams({ d, theme, onCursor }: { d: ActivityDetail; theme: VizTheme; o
             invertY={p.invert}
             yRange={p.range ?? undefined}
             onIndex={setBoth}
+            ranges={ranges}
+            selecting={selecting}
+            onSelect={(from, to) => setSpan([from / 1000, to / 1000])}
             ariaLabel={`${p.label} over the session.`}
           />
         </div>
@@ -119,12 +192,14 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
   // Swipe right anywhere outside a chart or the map: back to the list.
   const swipe = useSwipe({ onRight: () => (window.history.length > 1 ? router.back() : router.replace("/more/garmin?tab=activities")) });
   const [cursor, setCursor] = useState<number | null>(null);
+  const [span, setSpan] = useState<Span | null>(null);
   const zones = useMemo(() => zoneSeconds(d), [d]);
   const pz = useMemo(() => pointZones(d), [d]);
   const routeColors = useMemo(() => (theme ? pz.map((z) => (z === null ? theme.textMuted : theme.zones[z])) : []), [pz, theme]);
   const laps = lapRows(d);
   const startGmt = typeof d.summary.startTimeGMT === "string" ? Date.parse(`${d.summary.startTimeGMT.replace(" ", "T")}Z`) : null;
   const sets = setRows(d, startGmt);
+  const spans = lapSpans(d, startGmt);
   const dec = d.metrics?.decoupling;
   const hasRoute = (d.streams.lat ?? []).some((v) => v !== null && v !== 0);
   const date = new Date(d.start);
@@ -177,7 +252,7 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
           </Card>
         )}
 
-        {theme && <Streams d={d} theme={theme} onCursor={setCursor} />}
+        {theme && <Streams d={d} theme={theme} onCursor={setCursor} span={span} setSpan={setSpan} />}
 
         {theme && zones.hr.some((s) => s > 0) && (
           <Card icon={HeartPulse} title="Heart-rate zones" note="Garmin's five zones from your watch settings.">
@@ -221,7 +296,7 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
         )}
 
         {laps.length > 1 && (
-          <Card icon={Flag} title={`Laps · ${laps.length}`}>
+          <Card icon={Flag} title={`Laps · ${laps.length}`} aside={spans.some(Boolean) ? "tap a lap to select it" : undefined}>
             <table className="w-full text-xs tabular-nums">
               <thead className="text-muted-foreground">
                 <tr className="text-left">
@@ -233,15 +308,24 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
                 </tr>
               </thead>
               <tbody>
-                {laps.map((l) => (
-                  <tr key={l.n} className="border-t border-border/50">
-                    <td className="py-1.5 text-muted-foreground">{l.n}</td>
+                {laps.map((l, i) => {
+                  const lapSpan = spans[i];
+                  const active = !!span && !!lapSpan && span[0] === lapSpan[0] && span[1] === lapSpan[1];
+                  return (
+                  <tr
+                    key={l.n}
+                    onClick={lapSpan ? () => setSpan(active ? null : lapSpan) : undefined}
+                    aria-selected={active}
+                    className={`border-t border-border/50 ${lapSpan ? "cursor-pointer active:opacity-60" : ""} ${active ? "bg-background" : ""}`}
+                  >
+                    <td className="py-2.5 text-muted-foreground">{l.n}</td>
                     <td>{durationLabel(l.durationS)}</td>
                     <td>{l.distanceM ? `${(l.distanceM / 1000).toFixed(2)}` : "–"}</td>
                     <td>{l.avgHr ?? "–"}</td>
                     <td className="text-right">{d.sport === "run" ? paceLabel(l.avgSpeed) : d.sport === "bike" ? (l.avgPower ? `${Math.round(l.avgPower)} W` : l.avgSpeed ? `${(l.avgSpeed * 3.6).toFixed(1)} km/h` : "–") : l.avgSpeed ? `${(l.avgSpeed * 3.6).toFixed(1)}` : "–"}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </Card>

@@ -7,7 +7,9 @@ import {
   clockLabel,
   durationOption,
   durationRows,
+  RECOVERY_STACK_HEIGHT,
   hrvOption,
+  recoveryStackOption,
   restingHrOption,
   stageRows,
   stagesOption,
@@ -17,7 +19,7 @@ import {
 } from "@/lib/garmin/charts/sleep";
 import type { SleepTabData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
-import { BedDouble, Brain, CalendarClock, Clock, Heart, Hourglass, Layers, Waves } from "lucide-react";
+import { Activity, BedDouble, Brain, CalendarClock, Clock, Heart, Hourglass, Layers, Waves } from "lucide-react";
 import { useMemo, useState } from "react";
 
 
@@ -33,6 +35,7 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
   const [hi, setHi] = useState<number | null>(null);
   const [ri, setRi] = useState<number | null>(null);
   const [xi, setXi] = useState<number | null>(null);
+  const [ki, setKi] = useState<number | null>(null);
 
   const timing = useMemo(() => timingRows(data), [data]);
   const durations = useMemo(() => durationRows(data), [data]);
@@ -47,6 +50,7 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
             hrv: hrvOption(data, theme),
             rhr: restingHrOption(data, theme),
             stress: stressOption(data, theme),
+            stack: recoveryStackOption(data, theme),
           }
         : null,
     [data, theme, timing, durations],
@@ -88,6 +92,34 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
           </div>
         ))}
       </div>
+
+      {opts && data.days.length > 0 && (
+        <Card icon={Activity} title="Load and recovery · 90 days" note="Cause on top, the body's answer below, on one date axis. After a hard block, watch how many days HRV and resting HR take to come back inside their normal.">
+          <Legend
+            items={[
+              { name: "Load", color: "var(--muted-foreground)", kind: "bar" },
+              { name: "HRV 7-day, band = normal", color: "var(--viz-positive)", kind: "line" },
+              { name: "Resting HR 7-day", color: "var(--viz-negative)", kind: "line" },
+              { name: "Sleep debt", color: "var(--viz-other)", kind: "bar" },
+            ]}
+          />
+          {(() => {
+            const k = data.days[ki ?? data.days.length - 1];
+            return (
+              <Readout
+                title={formatDateShort(k.date)}
+                values={[
+                  { label: "load", value: String(Math.round(k.load)) },
+                  { label: "ms HRV", value: k.hrv.mean7 !== null ? String(Math.round(k.hrv.mean7)) : "–" },
+                  { label: "bpm resting", value: k.restingHr.mean7 !== null ? String(Math.round(k.restingHr.mean7)) : "–" },
+                  { label: "h debt", value: k.sleepDebtS !== null ? (k.sleepDebtS / 3600).toFixed(1) : "–" },
+                ]}
+              />
+            );
+          })()}
+          <EChart option={opts.stack} height={RECOVERY_STACK_HEIGHT} onIndex={setKi} ariaLabel={`Daily load, HRV, resting heart rate and sleep debt for ${data.days.length} days.`} />
+        </Card>
+      )}
 
       {opts && t && (
         <Card icon={Clock} title="When you sleep · 28 nights" note="Bars run from falling asleep to waking. Lines: your median bedtime and wake time. Regular timing is one of the strongest sleep habits for recovery.">

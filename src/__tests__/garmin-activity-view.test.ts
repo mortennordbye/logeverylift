@@ -1,4 +1,4 @@
-import { lapRows, paceLabel, pointZones, setRows, streamPanels, verdict } from "@/lib/garmin/charts/activity";
+import { lapRows, lapSpans, paceLabel, pointZones, selectionStats, setRows, streamPanels, verdict } from "@/lib/garmin/charts/activity";
 import type { ActivityMetrics } from "@/lib/garmin/analytics/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
 import { describe, expect, it } from "vitest";
@@ -79,5 +79,45 @@ describe("activity view", () => {
     const panels = streamPanels(detail({ streams: { t: [0, 1], hr: [140, 141], speed: [2.78, 2.8], cadence: [0, 0] } }));
     expect(panels.map((p) => p.key)).toEqual(["hr", "pace"]);
     expect(panels[1]).toMatchObject({ invert: true, unit: "min/km" });
+  });
+});
+
+describe("selectionStats", () => {
+  const t = Array.from({ length: 11 }, (_, i) => i * 60);
+  const d = detail({
+    streams: {
+      t,
+      hr: t.map((_, i) => (i < 5 ? 120 : 160)),
+      distance: t.map((x) => x * 3),
+      altitude: [100, 101, 102, 105, 110, 108, 109, 115, 115, 115, 115],
+      power: t.map(() => null),
+    },
+  });
+
+  it("averages the samples inside the range and takes distance from the stream", () => {
+    const s = selectionStats(d, 300, 600)!;
+    expect(s.durationS).toBe(300);
+    expect(s.distanceM).toBe(900);
+    expect(s.avgHr).toBe(160);
+    expect(s.avgSpeed).toBe(3);
+    expect(s.avgPower).toBeNull();
+  });
+
+  it("counts climbing with a 3 m deadband", () => {
+    // 100 -> 105 (+5), 105 -> 110 (+5), dip to 108 (under 3 m), 110 -> 115 (+5)
+    expect(selectionStats(d, 0, 600)!.climbM).toBe(15);
+  });
+
+  it("is null for a range with under two samples", () => {
+    expect(selectionStats(d, 1000, 2000)).toBeNull();
+  });
+});
+
+describe("lapSpans", () => {
+  it("places each lap in stream seconds from the activity start", () => {
+    const start = Date.parse("2026-11-04T06:00:00Z");
+    const d = detail({ laps: [{ startTime: "2026-11-04T06:00:00.000Z", totalElapsedTime: 600 }, { startTime: "2026-11-04T06:10:00.000Z", totalElapsedTime: 300 }, {}] });
+    expect(lapSpans(d, start)).toEqual([[0, 600], [600, 900], null]);
+    expect(lapSpans(d, null)).toEqual([null, null, null]);
   });
 });

@@ -10,6 +10,7 @@ import { addDays, isoDate, mondayOf } from "./dates";
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
 import { SPORTS, isIndoor, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
+import { projectPmc, type Projection } from "./analytics/projection";
 import { bodySignal, raceStatus, type BodySignal, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
 import {
   RAMP_WINDOW_DAYS,
@@ -294,7 +295,7 @@ export type SleepNightRow = {
 export type SleepTabData = {
   nights: SleepNightRow[];
   /** Daily series for the same dates (HRV, resting HR, debt, regularity, timing). */
-  days: Pick<DailyMetrics, "date" | "hrv" | "restingHr" | "sleepDebtS" | "regularity" | "timing">[];
+  days: (Pick<DailyMetrics, "date" | "hrv" | "restingHr" | "sleepDebtS" | "regularity" | "timing"> & { load: number })[];
   stress: { date: string; rest: number; low: number; medium: number; high: number }[];
 };
 
@@ -341,7 +342,7 @@ export async function getSleepData(userId: string, days = 90): Promise<SleepTabD
     nights,
     days: metricRows.map((r) => {
       const m = r.metrics as DailyMetrics;
-      return { date: m.date, hrv: m.hrv, restingHr: m.restingHr, sleepDebtS: m.sleepDebtS, regularity: m.regularity, timing: m.timing };
+      return { date: m.date, hrv: m.hrv, restingHr: m.restingHr, sleepDebtS: m.sleepDebtS, regularity: m.regularity, timing: m.timing, load: r1(m.pmc.total.load) };
     }),
     stress,
   };
@@ -729,4 +730,26 @@ export async function getVolumeData(userId: string, today = isoDate(new Date()))
     checklist: demandsChecklist({ activities, distance, today, ramps: rampRows.map((r) => r.ramp) }),
     planned: sets ? plannedHours(sets, meanSpeeds(recent)) : null,
   };
+}
+
+/** The race and the fitness projection to it, from the Training tab's series. Null without an active cycle. */
+export async function getRaceProjection(userId: string, series: LoadSeries, today = isoDate(new Date())): Promise<{ race: RaceStatus; projection: Projection | null } | null> {
+  const cycle = await getActiveCycle(userId);
+  const race = raceStatus(cycle, today);
+  if (!cycle?.startDate || !race) return null;
+  const n = series.dates.length;
+  if (!n) return { race, projection: null };
+  const last = n - 1;
+  const t = series.tracks.total;
+  const daily = series.dates.map((_, i) => SPORTS.reduce((s, sp) => s + (series.loads[sp][i] ?? 0), 0));
+  const projection = projectPmc({
+    today: series.dates[last],
+    raceDay: race.raceDay,
+    ctl: t.ctl[last],
+    atl: t.atl[last],
+    last7: daily.slice(-7),
+    cycle: { startDate: cycle.startDate, durationWeeks: cycle.durationWeeks, goal: cycle.goal, athleteLevel: cycle.athleteLevel },
+    peakCtl: Math.max(0, ...t.ctl.slice(-90)),
+  });
+  return { race, projection };
 }

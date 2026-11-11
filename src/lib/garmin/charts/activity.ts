@@ -160,3 +160,64 @@ export function setRows(d: ActivityDetail, activityStartMs: number | null): SetR
   }
   return rows;
 }
+
+export type SelectionStats = {
+  durationS: number;
+  distanceM: number | null;
+  avgHr: number | null;
+  avgPower: number | null;
+  /** Mean moving speed, m/s: distance over time when the distance stream exists. */
+  avgSpeed: number | null;
+  climbM: number | null;
+};
+
+const mean = (xs: (number | null | undefined)[]) => {
+  const v = xs.filter((x): x is number => typeof x === "number" && Number.isFinite(x) && x > 0);
+  return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null;
+};
+
+/** Stats for the samples whose time (seconds from start) is inside [fromS, toS]. Null when fewer than 2 samples. */
+export function selectionStats(d: ActivityDetail, fromS: number, toS: number): SelectionStats | null {
+  const t = d.streams.t ?? [];
+  const idx: number[] = [];
+  for (let i = 0; i < t.length; i++) if (t[i] !== null && t[i]! >= fromS && t[i]! <= toS) idx.push(i);
+  if (idx.length < 2) return null;
+  const at = (k: string) => idx.map((i) => d.streams[k]?.[i] ?? null);
+  const first = idx[0];
+  const last = idx[idx.length - 1];
+  const durationS = (t[last] ?? 0) - (t[first] ?? 0);
+  const dist = d.streams.distance;
+  const distanceM = dist && dist[first] !== null && dist[last] !== null ? dist[last]! - dist[first]! : null;
+  let climbM: number | null = null;
+  const alt = at("altitude").filter((v): v is number => v !== null);
+  if (alt.length > 1) {
+    // A 3 m deadband, as in decoupling.ts, so sensor noise does not count as climbing.
+    climbM = 0;
+    let ref = alt[0];
+    for (const a of alt) {
+      if (a - ref >= 3) {
+        climbM += a - ref;
+        ref = a;
+      } else if (ref - a >= 3) ref = a;
+    }
+  }
+  return {
+    durationS,
+    distanceM,
+    avgHr: mean(at("hr")),
+    avgPower: mean(at("power")),
+    avgSpeed: distanceM !== null && durationS > 0 ? distanceM / durationS : mean(at("speed")),
+    climbM,
+  };
+}
+
+/** Each lap's span in stream seconds, from the lap start times and the activity start (UTC ms). */
+export function lapSpans(d: ActivityDetail, activityStartMs: number | null): ([number, number] | null)[] {
+  return d.laps.map((l: Json) => {
+    const start = typeof l.startTime === "string" ? Date.parse(l.startTime) : NaN;
+    const len = num(l.totalElapsedTime) ?? num(l.totalTimerTime);
+    if (activityStartMs === null || !Number.isFinite(start) || len === null) return null;
+    const from = (start - activityStartMs) / 1000;
+    return [from, from + len];
+  });
+}

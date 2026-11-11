@@ -15,6 +15,8 @@ import {
   loadHeadline,
   pmcOption,
   rangeStart,
+  sportFitnessOption,
+  sportsWithFitness,
   weeksInRange,
   weeklyLoadOption,
   type LoadSeries,
@@ -26,6 +28,9 @@ import { CalendarRange, ChartColumn, Flame, Gauge, HeartPulse, Mountain, Rocket,
 import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
 import { ladderOption, ladderValue, weeklyHoursOption } from "@/lib/garmin/charts/volume";
 import type { VolumeData } from "@/lib/garmin/queries";
+import { projectionSentence, type Projection } from "@/lib/garmin/analytics/projection";
+import type { RaceStatus } from "@/lib/garmin/analytics/overview";
+import { Layers } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const RANGES: RangeKey[] = ["6w", "3m", "1y", "all"];
@@ -68,7 +73,17 @@ const hm = (hours: number) => {
   return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
 };
 
-export function GarminLoadTab({ series, computedAt, volume }: { series: LoadSeries; computedAt: string | null; volume: VolumeData }) {
+export function GarminLoadTab({
+  series,
+  computedAt,
+  volume,
+  race,
+}: {
+  series: LoadSeries;
+  computedAt: string | null;
+  volume: VolumeData;
+  race: { race: RaceStatus; projection: Projection | null } | null;
+}) {
   const theme = useVizTheme();
   const [range, setRange] = useState<RangeKey>("3m");
   const [track, setTrack] = useState<Track>("total");
@@ -82,7 +97,10 @@ export function GarminLoadTab({ series, computedAt, volume }: { series: LoadSeri
   const from = rangeStart(series, range);
   const weeks = useMemo(() => weeksInRange(series, range), [series, range]);
   const sportsWithLoad = SPORTS.filter((s) => series.loads[s].some((v) => v > 0));
-  const pmc = useMemo(() => (theme ? pmcOption(series, track, range, theme) : null), [series, track, range, theme]);
+  const projection = race?.projection ?? null;
+  const pmc = useMemo(() => (theme ? pmcOption(series, track, range, theme, projection) : null), [series, track, range, theme, projection]);
+  const [sportIdx, setSportIdx] = useState<number | null>(null);
+  const perSport = useMemo(() => (theme ? sportFitnessOption(series, range, theme) : null), [series, range, theme]);
   const weekly = useMemo(() => (theme ? weeklyLoadOption(weeks, theme) : null), [weeks, theme]);
   const dist = useMemo(() => (theme ? distributionOption(weeks, theme) : null), [weeks, theme]);
   const volWeeks = useMemo(() => {
@@ -102,7 +120,10 @@ export function GarminLoadTab({ series, computedAt, volume }: { series: LoadSeri
   const last = n - 1;
   const weekAgo = Math.max(0, last - 7);
   const ramp = t.ctl[last] - t.ctl[weekAgo];
-  const pi = pmcIdx !== null ? from + pmcIdx : last;
+  const rawPi = pmcIdx !== null ? from + pmcIdx : last;
+  // An index past the last day is a day of the plan projection.
+  const planIdx = projection && track === "total" && rawPi > last ? rawPi - last - 1 : null;
+  const pi = Math.min(rawPi, last);
   const wk = weeks[weekIdx ?? latestWeekWithData(weeks)];
   const dk = weeks[distIdx ?? latestWeekWithData(weeks, true)];
   const dayLoad = track === "total" ? SPORTS.reduce((s, sp) => s + series.loads[sp][pi], 0) : series.loads[track][pi];
@@ -147,17 +168,33 @@ export function GarminLoadTab({ series, computedAt, volume }: { series: LoadSeri
             { name: "Fatigue", color: "var(--viz-bike)", kind: "line" },
             { name: "Daily load", color: "var(--muted-foreground)", kind: "bar" },
             { name: "Form", color: "var(--viz-negative)", kind: "bar" },
+            ...(projection && track === "total" ? [{ name: "Plan to race day (dashed), band ± 15 % load", color: "var(--foreground)", kind: "line" as const }, { name: "Race-morning target form", color: "var(--viz-good)", kind: "bar" as const }] : []),
           ]}
         />
-        <Readout
-          title={formatDateShort(series.dates[pi])}
-          values={[
-            { label: "fitness", value: String(Math.round(t.ctl[pi])) },
-            { label: "fatigue", value: String(Math.round(t.atl[pi])) },
-            { label: `form · ${formBandLabel(t.tsb[pi]).toLowerCase()}`, value: signed(t.tsb[pi]) },
-            { label: "load", value: String(Math.round(dayLoad)) },
-          ]}
-        />
+        {projection && track === "total" && <p className="text-sm">{projectionSentence(projection)}</p>}
+        {race && !projection && track === "total" && (
+          <p className="text-[11px] text-muted-foreground">No projection: race day is today, past, or more than a year away.</p>
+        )}
+        {planIdx !== null && projection ? (
+          <Readout
+            title={`${formatDateShort(projection.dates[planIdx])} · plan${projection.dates[planIdx] === projection.raceDay ? " · race day" : ""}`}
+            values={[
+              { label: "fitness", value: String(Math.round(projection.ctl[planIdx])) },
+              { label: "fatigue", value: String(Math.round(projection.atl[planIdx])) },
+              { label: `form · ${formBandLabel(projection.tsb[planIdx]).toLowerCase()}`, value: signed(projection.tsb[planIdx]) },
+            ]}
+          />
+        ) : (
+          <Readout
+            title={formatDateShort(series.dates[pi])}
+            values={[
+              { label: "fitness", value: String(Math.round(t.ctl[pi])) },
+              { label: "fatigue", value: String(Math.round(t.atl[pi])) },
+              { label: `form · ${formBandLabel(t.tsb[pi]).toLowerCase()}`, value: signed(t.tsb[pi]) },
+              { label: "load", value: String(Math.round(dayLoad)) },
+            ]}
+          />
+        )}
         {pmc && (
           <EChart
             option={pmc}
@@ -167,6 +204,22 @@ export function GarminLoadTab({ series, computedAt, volume }: { series: LoadSeri
           />
         )}
       </Card>
+
+      {perSport && sportsWithFitness(series, range).length > 0 && (
+        <Card icon={Layers} title="Fitness per sport" note="Each sport's own 42-day fitness. A balanced Ironman build lifts swim, bike and run together; one line carrying the rest means the others lag.">
+          <Legend items={sportsWithFitness(series, range).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "line" as const, mark: SPORT_MARK[s] }))} />
+          {(() => {
+            const i = sportIdx !== null ? from + sportIdx : last;
+            return (
+              <Readout
+                title={formatDateShort(series.dates[i])}
+                values={sportsWithFitness(series, range).map((s) => ({ label: SPORT_LABEL[s].toLowerCase(), value: String(Math.round(series.tracks[s].ctl[i])) }))}
+              />
+            );
+          })()}
+          <EChart option={perSport} height={180} onIndex={setSportIdx} ariaLabel="Fitness per sport over the selected range." />
+        </Card>
+      )}
 
       <Card
         icon={ChartColumn}

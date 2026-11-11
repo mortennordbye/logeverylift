@@ -276,3 +276,70 @@ export function stressOption(data: SleepTabData, theme: VizTheme, days = 28) {
     })),
   };
 }
+
+/**
+ * The recovery stack: daily load, the HRV 7-day mean in its band, resting HR
+ * against its baseline, and sleep debt, as four grids on one date axis with
+ * one crosshair. Cause (load) on top, the body's answer below it.
+ */
+export function recoveryStackOption(data: SleepTabData, theme: VizTheme) {
+  const a = ax(theme);
+  const d = data.days;
+  const dates = d.map((x) => x.date);
+  const r = (v: number | null, k = 0) => (v === null ? null : Math.round(v * 10 ** k) / 10 ** k);
+  const heights = [56, 84, 64, 44];
+  const gap = STACK_GAP;
+  const tops = heights.map((_, i) => 8 + heights.slice(0, i).reduce((s, h) => s + h + gap, 0));
+  const xAxis = heights.map((_, i) => ({
+    type: "category",
+    data: dates,
+    gridIndex: i,
+    ...a,
+    splitLine: { show: false },
+    axisLabel: i === heights.length - 1 ? { ...a.axisLabel, formatter: shortDate, hideOverlap: true } : { show: false },
+  }));
+  return {
+    animationDuration: 300,
+    ...pointer(theme),
+    grid: heights.map((h, i) => ({ top: tops[i], height: h, ...SIDES })),
+    xAxis,
+    yAxis: [
+      { type: "value", gridIndex: 0, min: 0, splitNumber: 1, ...a },
+      { type: "value", gridIndex: 1, scale: true, splitNumber: 2, ...a },
+      { type: "value", gridIndex: 2, scale: true, splitNumber: 2, ...a },
+      { type: "value", gridIndex: 3, min: 0, splitNumber: 1, ...a, axisLabel: { ...a.axisLabel, formatter: "{value}h" } },
+    ],
+    series: [
+      { name: "Load", type: "bar", xAxisIndex: 0, yAxisIndex: 0, barMaxWidth: 6, data: d.map((x) => Math.round(x.load)), itemStyle: { color: theme.textMuted, borderRadius: [2, 2, 0, 0] } },
+      { name: "band floor", type: "line", stack: "band", xAxisIndex: 1, yAxisIndex: 1, data: d.map((x) => r(x.hrv.bandLow)), showSymbol: false, lineStyle: { opacity: 0 }, silent: true },
+      {
+        name: "HRV normal",
+        type: "line",
+        stack: "band",
+        xAxisIndex: 1,
+        yAxisIndex: 1,
+        data: d.map((x) => (x.hrv.bandLow !== null && x.hrv.bandHigh !== null ? r(x.hrv.bandHigh - x.hrv.bandLow) : null)),
+        showSymbol: false,
+        lineStyle: { opacity: 0 },
+        areaStyle: { color: theme.textMuted, opacity: 0.18 },
+        silent: true,
+      },
+      { name: "HRV 7-day", type: "line", xAxisIndex: 1, yAxisIndex: 1, data: d.map((x) => r(x.hrv.mean7)), showSymbol: false, lineStyle: { width: 2, color: theme.positive } },
+      { name: "Resting HR baseline", type: "line", xAxisIndex: 2, yAxisIndex: 2, data: d.map((x) => r(x.restingHr.baseline, 1)), showSymbol: false, lineStyle: { width: 1, type: "dashed", color: theme.textMuted } },
+      { name: "Resting HR 7-day", type: "line", xAxisIndex: 2, yAxisIndex: 2, data: d.map((x) => r(x.restingHr.mean7, 1)), showSymbol: false, lineStyle: { width: 2, color: theme.negative } },
+      {
+        name: "Sleep debt",
+        type: "bar",
+        xAxisIndex: 3,
+        yAxisIndex: 3,
+        barMaxWidth: 6,
+        data: d.map((x) => (x.sleepDebtS === null ? null : r(x.sleepDebtS / 3600, 1))),
+        itemStyle: { color: theme.sport.other, borderRadius: [2, 2, 0, 0] },
+      },
+    ],
+  };
+}
+
+const STACK_GAP = 28;
+/** Height of the recovery stack's canvas. */
+export const RECOVERY_STACK_HEIGHT = 8 + 56 + 84 + 64 + 44 + 3 * STACK_GAP + 26;

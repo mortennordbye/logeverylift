@@ -13,6 +13,8 @@ import { useEffect, useRef, useState } from "react";
  * - band: a grey y band behind the series (an HRV baseline band).
  * - Touch: a finger drag moves the crosshair; vertical swipes still scroll.
  * - onIndex reports the sample under the crosshair for the readout row.
+ * - selecting: a horizontal drag (finger or mouse) selects a span instead of
+ *   moving the crosshair, reported to onSelect in x units (ms).
  */
 
 export type TsSeries = { label: string; values: (number | null)[]; color: string; width?: number; points?: boolean; fill?: string };
@@ -41,6 +43,9 @@ type Props = {
   showXAxis?: boolean;
   /** Smaller values up (pace: faster is up). */
   invertY?: boolean;
+  /** Drag selects a span (range select) instead of moving the crosshair. */
+  selecting?: boolean;
+  onSelect?: (from: number, to: number) => void;
 };
 
 const LANE_H = 10;
@@ -104,6 +109,8 @@ export function TimeSeriesChart(props: Props) {
       const width = box.current.clientWidth;
 
       const drawUnder = (u: uPlotType) => {
+        // Read the props at draw time: shaded spans (a selection) change after the build.
+        const p = propsRef.current;
         const { ctx } = u;
         const { left, top, width: w, height: h } = u.bbox;
         ctx.save();
@@ -172,6 +179,17 @@ export function TimeSeriesChart(props: Props) {
       let startX = 0;
       let startY = 0;
       let tracking: boolean | null = null;
+      // Range select: the x value where the drag began, in chart units (s), or null.
+      let anchor: number | null = null;
+      const valAt = (clientX: number) => {
+        const rect = over.getBoundingClientRect();
+        return u.posToVal(Math.max(0, Math.min(rect.width, clientX - rect.left)), "x");
+      };
+      const report = (clientX: number) => {
+        if (anchor === null) return;
+        const v = valAt(clientX);
+        propsRef.current.onSelect?.(Math.min(anchor, v) * 1000, Math.max(anchor, v) * 1000);
+      };
       const move = (e: TouchEvent) => {
         const t = e.touches[0];
         if (!t) return;
@@ -183,6 +201,11 @@ export function TimeSeriesChart(props: Props) {
         }
         if (!tracking) return;
         e.preventDefault();
+        if (propsRef.current.selecting) {
+          if (anchor === null) anchor = valAt(startX);
+          report(t.clientX);
+          return;
+        }
         const rect = over.getBoundingClientRect();
         u.setCursor({ left: Math.max(0, Math.min(rect.width, t.clientX - rect.left)), top: 10 });
       };
@@ -191,11 +214,27 @@ export function TimeSeriesChart(props: Props) {
         startX = t.clientX;
         startY = t.clientY;
         tracking = null;
+        anchor = null;
+        if (propsRef.current.selecting) return;
         const rect = over.getBoundingClientRect();
         u.setCursor({ left: t.clientX - rect.left, top: 10 });
       };
       over.addEventListener("touchstart", start, { passive: true });
       over.addEventListener("touchmove", move, { passive: false });
+      // Mouse range select, for a desktop browser.
+      over.addEventListener("mousedown", (e) => {
+        if (!propsRef.current.selecting) return;
+        anchor = valAt(e.clientX);
+        const onMove = (m: MouseEvent) => report(m.clientX);
+        const onUp = (m: MouseEvent) => {
+          report(m.clientX);
+          anchor = null;
+          window.removeEventListener("mousemove", onMove);
+          window.removeEventListener("mouseup", onUp);
+        };
+        window.addEventListener("mousemove", onMove);
+        window.addEventListener("mouseup", onUp);
+      });
 
       observer = new ResizeObserver(() => {
         if (box.current) u.setSize({ width: box.current.clientWidth, height: propsRef.current.height });
@@ -212,6 +251,12 @@ export function TimeSeriesChart(props: Props) {
     };
     // The chart is rebuilt when its data or size changes; colours come with the data.
   }, [x, series, height]);
+
+  // Shaded spans (a selection) change without new data: redraw, don't rebuild.
+  const { ranges } = props;
+  useEffect(() => {
+    plot.current?.redraw(false);
+  }, [ranges]);
 
   return <div ref={box} role="img" data-no-swipe aria-label={props.ariaLabel} style={{ height, touchAction: "pan-y" }} className={`w-full ${ready ? "" : "opacity-0"}`} />;
 }

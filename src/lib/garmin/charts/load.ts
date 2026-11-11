@@ -7,7 +7,8 @@
  */
 
 import { uncoupledAcwr } from "@/lib/utils/periodization";
-import { mondayOf } from "../dates";
+import { addDays, mondayOf } from "../dates";
+import { RACE_TSB, type Projection } from "../analytics/projection";
 import type { Track } from "../analytics/pmc";
 import { SPORTS, type Sport } from "../analytics/sport";
 import { distributionLabel, type DistributionLabel } from "../analytics/zones";
@@ -150,9 +151,16 @@ export function pointer(theme: VizTheme) {
  * fitness and fatigue (same unit), form, and daily load. Daily load gets its
  * own strip because single days reach 3 to 5 times fitness and would flatten the lines.
  */
-export function pmcOption(series: LoadSeries, track: Track, range: RangeKey, theme: VizTheme) {
+export function pmcOption(series: LoadSeries, track: Track, range: RangeKey, theme: VizTheme, projection: Projection | null = null) {
   const from = rangeStart(series, range);
-  const dates = series.dates.slice(from);
+  // The plan runs on to race day (total only: the projection is for all sports together).
+  const plan = track === "total" ? projection : null;
+  const future = plan?.dates ?? [];
+  const pad = (xs: (number | null)[]) => [...xs, ...future.map(() => null)];
+  const dates = [...series.dates.slice(from), ...future];
+  const histLen = series.dates.length - from;
+  // The plan lines start at today's value so they join the history.
+  const joined = (todayValue: number, values: number[]) => [...Array(histLen - 1).fill(null), r1(todayValue), ...values.map(r1)];
   const t = series.tracks[track];
   const dailyLoad = series.dates.map((_, i) => (track === "total" ? SPORTS.reduce((s, sp) => s + (series.loads[sp][i] ?? 0), 0) : (series.loads[track][i] ?? 0))).slice(from);
   const calibratingEnd = series.calibrating.lastIndexOf(true) - from;
@@ -182,7 +190,7 @@ export function pmcOption(series: LoadSeries, track: Track, range: RangeKey, the
         type: "bar",
         xAxisIndex: 2,
         yAxisIndex: 2,
-        data: dailyLoad.map(r1),
+        data: pad(dailyLoad.map(r1)),
         barMaxWidth: 6,
         itemStyle: { color: theme.textMuted, opacity: 0.35, borderRadius: [2, 2, 0, 0] },
         emphasis: { disabled: true },
@@ -197,18 +205,17 @@ export function pmcOption(series: LoadSeries, track: Track, range: RangeKey, the
             }
           : {}),
       },
-      { name: "Fitness", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: t.ctl.slice(from).map(r1), showSymbol: false, lineStyle: { width: 2.5, color: theme.positive }, itemStyle: { color: theme.positive } },
-      { name: "Fatigue", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: t.atl.slice(from).map(r1), showSymbol: false, lineStyle: { width: 1.5, color: theme.sport.bike }, itemStyle: { color: theme.sport.bike } },
+      { name: "Fitness", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pad(t.ctl.slice(from).map(r1)), showSymbol: false, lineStyle: { width: 2.5, color: theme.positive }, itemStyle: { color: theme.positive } },
+      { name: "Fatigue", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: pad(t.atl.slice(from).map(r1)), showSymbol: false, lineStyle: { width: 1.5, color: theme.sport.bike }, itemStyle: { color: theme.sport.bike } },
       {
         name: "Form",
         type: "bar",
         xAxisIndex: 1,
         yAxisIndex: 1,
         barMaxWidth: 6,
-        data: t.tsb.slice(from).map((v) => ({
-          value: r1(v),
-          itemStyle: { color: v >= 0 ? theme.positive : theme.negative, borderRadius: v >= 0 ? [2, 2, 0, 0] : [0, 0, 2, 2] },
-        })),
+        data: pad(t.tsb.slice(from)).map((v) =>
+          v === null ? null : { value: r1(v), itemStyle: { color: v >= 0 ? theme.positive : theme.negative, borderRadius: v >= 0 ? [2, 2, 0, 0] : [0, 0, 2, 2] } },
+        ),
         markArea: {
           silent: true,
           label: { show: true, position: "insideRight", color: theme.textMuted, fontSize: 9 },
@@ -219,6 +226,58 @@ export function pmcOption(series: LoadSeries, track: Track, range: RangeKey, the
           ],
         },
       },
+      ...(plan
+        ? [
+            {
+              name: "Fitness (plan)",
+              type: "line",
+              xAxisIndex: 0,
+              yAxisIndex: 0,
+              data: joined(t.ctl.at(-1) ?? 0, plan.ctl),
+              showSymbol: false,
+              lineStyle: { width: 2, type: "dashed", color: theme.positive },
+              itemStyle: { color: theme.positive },
+              markLine: {
+                silent: true,
+                symbol: "none",
+                lineStyle: { color: theme.text, width: 1 },
+                label: { show: true, position: "insideEndTop", color: theme.text, fontSize: 9, formatter: "Race" },
+                data: [{ xAxis: plan.raceDay }],
+              },
+            },
+            { name: "Fatigue (plan)", type: "line", xAxisIndex: 0, yAxisIndex: 0, data: joined(t.atl.at(-1) ?? 0, plan.atl), showSymbol: false, lineStyle: { width: 1.25, type: "dashed", color: theme.sport.bike }, itemStyle: { color: theme.sport.bike } },
+            // Form band (± 15 % load) as a stacked area: an invisible floor, then the band height.
+            { name: "form band floor", type: "line", stack: "formband", xAxisIndex: 1, yAxisIndex: 1, data: [...Array(histLen).fill(null), ...plan.tsbLow.map(r1)], showSymbol: false, lineStyle: { opacity: 0 }, silent: true },
+            {
+              name: "Form band",
+              type: "line",
+              stack: "formband",
+              xAxisIndex: 1,
+              yAxisIndex: 1,
+              data: [...Array(histLen).fill(null), ...plan.tsbHigh.map((v, i) => r1(v - plan.tsbLow[i]))],
+              showSymbol: false,
+              lineStyle: { opacity: 0 },
+              areaStyle: { color: theme.textMuted, opacity: 0.2 },
+              silent: true,
+            },
+            {
+              name: "Form (plan)",
+              type: "line",
+              xAxisIndex: 1,
+              yAxisIndex: 1,
+              data: joined(t.tsb.at(-1) ?? 0, plan.tsb),
+              showSymbol: false,
+              lineStyle: { width: 1.5, type: "dashed", color: theme.text },
+              itemStyle: { color: theme.text },
+              markArea: {
+                silent: true,
+                itemStyle: { color: theme.status.good, opacity: 0.25 },
+                label: { show: false },
+                data: [[{ xAxis: addDays(plan.raceDay, -6), yAxis: RACE_TSB[0] }, { xAxis: plan.raceDay, yAxis: RACE_TSB[1] }]],
+              },
+            },
+          ]
+        : []),
     ],
   };
 }
@@ -330,3 +389,30 @@ export const DISTRIBUTION_TEXT: Record<DistributionLabel, string> = {
   no_high: "No high intensity",
   no_data: "No HR data",
 };
+
+/** The sports the per-sport fitness chart shows: those with any fitness in the range. */
+export function sportsWithFitness(series: LoadSeries, range: RangeKey): Sport[] {
+  const from = rangeStart(series, range);
+  return SPORTS.filter((sp) => sp !== "other" && series.tracks[sp].ctl.slice(from).some((v) => v >= 0.5));
+}
+
+/** Fitness (CTL) per sport as one line each on one axis: is the build balanced, or does one sport carry it? */
+export function sportFitnessOption(series: LoadSeries, range: RangeKey, theme: VizTheme) {
+  const from = rangeStart(series, range);
+  const ax = axisCommon(theme);
+  return {
+    animationDuration: 300,
+    ...pointer(theme),
+    grid: [{ top: 8, bottom: 22, ...GRID_SIDES }],
+    xAxis: [{ type: "category", data: series.dates.slice(from), ...ax, boundaryGap: false, splitLine: { show: false }, axisLabel: { ...ax.axisLabel, formatter: shortDate, hideOverlap: true } }],
+    yAxis: [{ type: "value", ...ax, min: 0, splitNumber: 3 }],
+    series: sportsWithFitness(series, range).map((sp) => ({
+      name: SPORT_LABEL[sp],
+      type: "line",
+      data: series.tracks[sp].ctl.slice(from).map(r1),
+      showSymbol: false,
+      lineStyle: { width: 2, color: theme.sport[sp] },
+      itemStyle: { color: theme.sport[sp] },
+    })),
+  };
+}

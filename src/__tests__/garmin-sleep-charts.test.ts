@@ -1,4 +1,4 @@
-import { clockLabel, durationOption, durationRows, hrvOption, minutesAfter18, stagesOption, timingOption, timingRows } from "@/lib/garmin/charts/sleep";
+import { clockLabel, durationOption, durationRows, hrvOption, minutesAfter18, recoveryStackOption, stagesOption, timingOption, timingRows } from "@/lib/garmin/charts/sleep";
 import type { VizTheme } from "@/lib/garmin/charts/theme";
 import type { SleepTabData } from "@/lib/garmin/queries";
 import { describe, expect, it } from "vitest";
@@ -19,8 +19,8 @@ const data: SleepTabData = {
     { date: "2026-11-05", start: at("2026-11-05T00:30:00"), end: at("2026-11-05T08:00:00"), seconds: 8 * 3600, needS: 8 * 3600, deep: 0, light: 0, rem: 0, awake: 0, score: null },
   ],
   days: [
-    { date: "2026-11-04", hrv: { ms: 70, mean7: 72, bandLow: 60, bandHigh: 80, bandSource: "ours", cv7: 6, state: "balanced" }, restingHr: { bpm: 45, mean7: 45, baseline: 45, sd: 1, flag: false }, sleepDebtS: 3600, regularity: 80, timing: { onsetSpread: 30, wakeSpread: 30, socialJetlag: 20 } },
-    { date: "2026-11-05", hrv: { ms: null, mean7: null, bandLow: null, bandHigh: null, bandSource: null, cv7: null, state: "calibrating" }, restingHr: { bpm: null, mean7: null, baseline: null, sd: null, flag: false }, sleepDebtS: null, regularity: null, timing: { onsetSpread: null, wakeSpread: null, socialJetlag: null } },
+    { date: "2026-11-04", hrv: { ms: 70, mean7: 72, bandLow: 60, bandHigh: 80, bandSource: "ours", cv7: 6, state: "balanced" }, restingHr: { bpm: 45, mean7: 45, baseline: 45, sd: 1, flag: false }, sleepDebtS: 3600, regularity: 80, timing: { onsetSpread: 30, wakeSpread: 30, socialJetlag: 20 }, load: 80 },
+    { date: "2026-11-05", hrv: { ms: null, mean7: null, bandLow: null, bandHigh: null, bandSource: null, cv7: null, state: "calibrating" }, restingHr: { bpm: null, mean7: null, baseline: null, sd: null, flag: false }, sleepDebtS: null, regularity: null, timing: { onsetSpread: null, wakeSpread: null, socialJetlag: null }, load: 0 },
   ],
   stress: [],
 };
@@ -65,5 +65,16 @@ describe("sleep charts", () => {
     expect(o.yAxis).toHaveLength(o.grid.length);
     expect(o.series.find((s) => s.name === "band floor")!.data[0]).toBe(60);
     expect(o.series.find((s) => s.name === "Normal range")!.data[0]).toBe(20);
+  });
+
+  it("stacks load, HRV, resting HR and sleep debt on one date axis, one y axis per grid", () => {
+    const o = recoveryStackOption(data, theme) as unknown as Opt & { xAxis: { data: string[] }[] };
+    expect(o.grid).toHaveLength(4);
+    expect(o.yAxis).toHaveLength(4);
+    expect(new Set(o.xAxis.map((x) => x.data.join()))).toEqual(new Set(["2026-11-04,2026-11-05"]));
+    expect(o.series.find((s) => s.name === "Load")!.data).toEqual([80, 0]);
+    expect(o.series.find((s) => s.name === "Sleep debt")!.data).toEqual([1, null]);
+    // A gap stays a gap.
+    expect(o.series.find((s) => s.name === "HRV 7-day")!.data).toEqual([72, null]);
   });
 });

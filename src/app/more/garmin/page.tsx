@@ -15,7 +15,7 @@ import { GarminOverviewTab } from "@/components/features/GarminOverviewTab";
 import { GarminSleepTab } from "@/components/features/GarminSleepTab";
 import { GarminTodayTab } from "@/components/features/GarminTodayTab";
 import { env } from "@/lib/env";
-import { getActivitiesData, getLoadSeries, getOverviewData, getSleepData, getTodayData, getVolumeData, latestGarminDate } from "@/lib/garmin/queries";
+import { getActivitiesData, getLoadSeries, getOverviewData, getRaceProjection, getSleepData, getTodayData, getVolumeData, latestGarminDate } from "@/lib/garmin/queries";
 import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
@@ -39,7 +39,8 @@ export default async function GarminPage({ searchParams }: { searchParams: Promi
     content = <GarminSleepTab data={await getSleepData(auth.user.id)} />;
   } else if (tab === "training") {
     const [{ series, computedAt }, volume] = await Promise.all([getLoadSeries(auth.user.id), getVolumeData(auth.user.id)]);
-    content = <GarminLoadTab series={series} computedAt={computedAt} volume={volume} />;
+    const race = await getRaceProjection(auth.user.id, series);
+    content = <GarminLoadTab series={series} computedAt={computedAt} volume={volume} race={race} />;
   } else {
     content = <GarminDataExplorer />;
   }
