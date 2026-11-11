@@ -18,8 +18,9 @@ import {
   timingRows,
 } from "@/lib/garmin/charts/sleep";
 import type { SleepTabData } from "@/lib/garmin/queries";
+import { MIN_PAIRS, MIN_RHO, type Finding } from "@/lib/garmin/analytics/correlations";
 import { formatDateShort } from "@/lib/utils/format";
-import { Activity, BedDouble, Brain, CalendarClock, Clock, Heart, Hourglass, Layers, Waves } from "lucide-react";
+import { Activity, BedDouble, Sparkles, Brain, CalendarClock, Clock, Heart, Hourglass, Layers, Waves } from "lucide-react";
 import { useMemo, useState } from "react";
 
 
@@ -27,7 +28,26 @@ import { useMemo, useState } from "react";
 
 const hm = (h: number | null) => (h === null ? "–" : `${Math.floor(h)}h ${String(Math.round((h % 1) * 60)).padStart(2, "0")}m`);
 
-export function GarminSleepTab({ data }: { data: SleepTabData }) {
+/** A small scatter for one finding: each dot one day. */
+function FindingDots({ points }: { points: [number, number][] }) {
+  const w = 120;
+  const h = 56;
+  const xs = points.map(([x]) => x);
+  const ys = points.map(([, y]) => y);
+  const [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+  const [y0, y1] = [Math.min(...ys), Math.max(...ys)];
+  const px = (x: number) => 3 + ((x - x0) / (x1 - x0 || 1)) * (w - 6);
+  const py = (y: number) => h - 3 - ((y - y0) / (y1 - y0 || 1)) * (h - 6);
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden className="flex-none rounded-lg bg-background">
+      {points.map(([x, y], i) => (
+        <circle key={i} cx={px(x)} cy={py(y)} r={2} fill="var(--viz-positive)" opacity={0.6} />
+      ))}
+    </svg>
+  );
+}
+
+export function GarminSleepTab({ data, findings }: { data: SleepTabData; findings: Finding[] }) {
   const theme = useVizTheme();
   const [ti, setTi] = useState<number | null>(null);
   const [di, setDi] = useState<number | null>(null);
@@ -120,6 +140,30 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
           <EChart option={opts.stack} height={RECOVERY_STACK_HEIGHT} onIndex={setKi} ariaLabel={`Daily load, HRV, resting heart rate and sleep debt for ${data.days.length} days.`} />
         </Card>
       )}
+
+      <Card
+        icon={Sparkles}
+        title="What moves your HRV"
+        note={`A fixed list of pairs from your own days (sleep, load, intensity, strength, regularity against HRV and run efficiency). A pair shows with ${MIN_PAIRS} days or more and a rank correlation of ${MIN_RHO} or more. "Goes with" is not "causes".`}
+      >
+        {findings.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No pair is clear enough yet. Each needs {MIN_PAIRS} days with both values.</p>
+        ) : (
+          <ul className="space-y-3">
+            {findings.slice(0, 5).map((f) => (
+              <li key={f.id} className="flex items-center gap-3">
+                <FindingDots points={f.points} />
+                <div className="min-w-0">
+                  <p className="text-sm leading-snug">{f.sentence}</p>
+                  <p className="text-[11px] text-muted-foreground tabular-nums">
+                    ρ {f.rho.toFixed(2)} · {f.n} days
+                  </p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {opts && t && (
         <Card icon={Clock} title="When you sleep · 28 nights" note="Bars run from falling asleep to waking. Lines: your median bedtime and wake time. Regular timing is one of the strongest sleep habits for recovery.">

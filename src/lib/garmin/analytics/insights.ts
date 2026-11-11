@@ -29,7 +29,7 @@ const FRESH_READINESS = 75;
 const FRESH_TSB = 5;
 
 export type Severity = "warning" | "caution" | "good" | "info";
-export type InsightTarget = "day" | "training" | "recovery";
+export type InsightTarget = "day" | "training" | "recovery" | "trends" | "race";
 
 export type Insight = {
   id: string;
@@ -38,9 +38,22 @@ export type Insight = {
   /** The numbers the sentence uses, for the info sheet. */
   numbers: Record<string, number>;
   target: InsightTarget;
+  /** A more exact link than the tab (one activity), when there is one. */
+  href?: string;
 };
 
+/** Where tapping an insight goes. */
+export function insightHref(i: Insight): string {
+  if (i.href) return i.href;
+  return i.target === "race" ? "/more/garmin/race" : `/more/garmin?tab=${i.target}`;
+}
+
 const SEVERITY_RANK: Record<Severity, number> = { warning: 0, caution: 1, good: 2, info: 3 };
+
+/** Day and session insights together, ranked by severity (stable within one). */
+export function rankInsights(list: Insight[]): Insight[] {
+  return [...list].sort((a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity]);
+}
 
 function weekSums(days: DailyMetrics[]) {
   const total = (d: DailyMetrics) => SPORTS.reduce((s, sp) => s + (d.pmc[sp]?.load ?? 0), 0);

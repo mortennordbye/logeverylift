@@ -6,6 +6,8 @@ import { sessionZoneMessage } from "./analytics/thresholds";
 import { lttbIndices, takeIndices } from "./charts/downsample";
 import type { DailyMetrics } from "./analytics/daily";
 import { insightsFor, type Insight } from "./analytics/insights";
+import { sessionInsights } from "./analytics/session-insights";
+import type { CorrelationDay } from "./analytics/correlations";
 import { addDays, isoDate, mondayOf } from "./dates";
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
 import { SPORTS, isIndoor, sportOf, type Sport } from "./analytics/sport";
@@ -946,4 +948,65 @@ export async function getRaceData(userId: string, today = isoDate(new Date())): 
     fuel,
     heat: efPoints(trends.acts).filter((p) => p.temperature !== null),
   };
+}
+
+// ── Session insights and correlations ───────────────────────────────────────
+
+/** The session, threshold and race insights for today (session-insights.ts). */
+export async function getSessionInsights(userId: string, volume: VolumeData, today = isoDate(new Date())): Promise<Insight[]> {
+  const [trends, { series }] = await Promise.all([getTrendsData(userId, today), getLoadSeries(userId)]);
+  const rp = await getRaceProjection(userId, series, today);
+  const th = thresholdHistory(trends.acts, addDays(today, -6), today).at(-1);
+  const yesterday = series.dates.indexOf(addDays(today, -1));
+  return sessionInsights({
+    today,
+    acts: trends.acts,
+    lthrEstimate: th?.lthrRun ?? null,
+    watchLthr: [...trends.acts].reverse().find((a) => a.sport === "run" && a.watchLthr)?.watchLthr ?? null,
+    strengthYesterday: yesterday >= 0 ? series.loads.strength[yesterday] : null,
+    checklist: volume.checklist,
+    daysToRace: rp?.race.raceSet ? rp.race.daysToRace : null,
+    projection: rp?.projection ?? null,
+  });
+}
+
+/** Inputs for "what moves my HRV", one row per day of the daily series. */
+export async function getCorrelationDays(userId: string): Promise<CorrelationDay[]> {
+  const rows = await db
+    .select({
+      date: garminDailyMetrics.day,
+      hrvMs: sql<number | null>`(${garminDailyMetrics.metrics}->'hrv'->>'ms')::float8`,
+      hrvMean7: sql<number | null>`(${garminDailyMetrics.metrics}->'hrv'->>'mean7')::float8`,
+      sleepS: sql<number | null>`(${garminDailyMetrics.metrics}->>'sleepSeconds')::float8`,
+      debtS: sql<number | null>`(${garminDailyMetrics.metrics}->>'sleepDebtS')::float8`,
+      regularity: sql<number | null>`(${garminDailyMetrics.metrics}->>'regularity')::float8`,
+      load: sql<number | null>`(${garminDailyMetrics.metrics}->'pmc'->'total'->>'load')::float8`,
+      strength: sql<number | null>`(${garminDailyMetrics.metrics}->'pmc'->'strength'->>'load')::float8`,
+      highS: sql<number | null>`(${garminDailyMetrics.metrics}->'bands'->>'high')::float8`,
+    })
+    .from(garminDailyMetrics)
+    .where(eq(garminDailyMetrics.userId, userId))
+    .orderBy(asc(garminDailyMetrics.day));
+  const runs = await db
+    .select({ day: garminActivityMetrics.day, decoupling: sql<Decoupling | null>`${garminActivityMetrics.metrics}->'decoupling'` })
+    .from(garminActivityMetrics)
+    .where(and(eq(garminActivityMetrics.userId, userId), eq(garminActivityMetrics.sport, "run")));
+  const runByDay = new Map<string, Extract<Decoupling, { valid: true }>>();
+  for (const r of runs) if (r.decoupling?.valid) runByDay.set(r.day, r.decoupling);
+  return rows.map((r) => {
+    const run = runByDay.get(r.date);
+    return {
+      date: r.date,
+      hrvMs: r.hrvMs,
+      hrvMean7: r.hrvMean7,
+      sleepH: r.sleepS !== null ? r.sleepS / 3600 : null,
+      sleepDebtH: r.debtS !== null ? r.debtS / 3600 : null,
+      regularity: r.regularity,
+      load: r.load,
+      highMin: r.highS !== null ? r.highS / 60 : null,
+      strengthLoad: r.strength,
+      runEf: run?.ef ?? null,
+      decoupling: run?.pct ?? null,
+    };
+  });
 }

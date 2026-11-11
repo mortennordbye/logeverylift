@@ -16,8 +16,10 @@ import { GarminSleepTab } from "@/components/features/GarminSleepTab";
 import { GarminTodayTab } from "@/components/features/GarminTodayTab";
 import { GarminTrendsTab } from "@/components/features/GarminTrendsTab";
 import { env } from "@/lib/env";
-import { getActivitiesData, getLoadSeries, getOverviewData, getRaceProjection, getSleepData, getTodayData, getTrendsData, getVolumeData, latestGarminDate } from "@/lib/garmin/queries";
+import { getActivitiesData, getCorrelationDays, getSessionInsights, getLoadSeries, getOverviewData, getRaceProjection, getSleepData, getTodayData, getTrendsData, getVolumeData, latestGarminDate } from "@/lib/garmin/queries";
 import { requireSession } from "@/lib/utils/session";
+import { rankInsights } from "@/lib/garmin/analytics/insights";
+import { findings } from "@/lib/garmin/analytics/correlations";
 import { notFound } from "next/navigation";
 
 export default async function GarminPage({ searchParams }: { searchParams: Promise<{ tab?: string; date?: string }> }) {
@@ -29,17 +31,22 @@ export default async function GarminPage({ searchParams }: { searchParams: Promi
   let content: React.ReactNode;
   if (tab === "overview") {
     const [data, volume] = await Promise.all([getOverviewData(auth.user.id), getVolumeData(auth.user.id)]);
-    content = <GarminOverviewTab data={data} volume={volume} />;
+    const session = await getSessionInsights(auth.user.id, volume);
+    content = <GarminOverviewTab data={{ ...data, insights: rankInsights([...data.insights, ...session]) }} volume={volume} />;
   } else if (tab === "day") {
     const latest = await latestGarminDate(auth.user.id);
     const date = params.date && /^\d{4}-\d{2}-\d{2}$/.test(params.date) ? params.date : latest;
-    content = <GarminTodayTab data={await getTodayData(auth.user.id, date)} isLatest={date === latest} />;
+    const today = await getTodayData(auth.user.id, date);
+    // Session and race insights are about now, so only the newest day gets them.
+    const session = date === latest ? await getSessionInsights(auth.user.id, await getVolumeData(auth.user.id)) : [];
+    content = <GarminTodayTab data={{ ...today, insights: rankInsights([...today.insights, ...session]) }} isLatest={date === latest} />;
   } else if (tab === "trends") {
     content = <GarminTrendsTab data={await getTrendsData(auth.user.id)} />;
   } else if (tab === "activities") {
     content = <GarminActivitiesTab data={await getActivitiesData(auth.user.id)} />;
   } else if (tab === "recovery") {
-    content = <GarminSleepTab data={await getSleepData(auth.user.id)} />;
+    const [sleep, days] = await Promise.all([getSleepData(auth.user.id), getCorrelationDays(auth.user.id)]);
+    content = <GarminSleepTab data={sleep} findings={findings(days)} />;
   } else if (tab === "training") {
     const [{ series, computedAt }, volume] = await Promise.all([getLoadSeries(auth.user.id), getVolumeData(auth.user.id)]);
     const race = await getRaceProjection(auth.user.id, series);

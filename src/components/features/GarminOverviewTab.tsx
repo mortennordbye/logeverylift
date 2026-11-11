@@ -1,5 +1,7 @@
 "use client";
 
+import { insightHref } from "@/lib/garmin/analytics/insights";
+
 import { Contributors, SEVERITY_COLOR, SEVERITY_ICON } from "@/components/features/garmin/GarminUi";
 import { RACE_LABEL, type BodySignal } from "@/lib/garmin/analytics/overview";
 import { READINESS_BAND_LABEL } from "@/lib/garmin/analytics/readiness";
@@ -107,7 +109,7 @@ function ReadinessBlock({ data }: { data: OverviewData }) {
         <WeekDots strip={data.strip} />
       </div>
       {top && (
-        <Link href={tab(top.target)} replace scroll={false} className="flex gap-2.5 rounded-xl bg-background p-3 active:opacity-70">
+        <Link href={insightHref(top)} replace scroll={false} className="flex gap-2.5 rounded-xl bg-background p-3 active:opacity-70">
           {(() => {
             const Icon = SEVERITY_ICON[top.severity];
             return <Icon className="w-4 h-4 flex-none mt-0.5" style={{ color: SEVERITY_COLOR[top.severity] }} aria-label={top.severity} />;

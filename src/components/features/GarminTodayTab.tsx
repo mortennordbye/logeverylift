@@ -1,5 +1,7 @@
 "use client";
 
+import { insightHref } from "@/lib/garmin/analytics/insights";
+
 import { EChart } from "@/components/charts/EChart";
 import { Card, Contributors, Readout, SEVERITY_COLOR, SEVERITY_ICON } from "@/components/features/garmin/GarminUi";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
@@ -119,7 +121,7 @@ function Insights({ data }: { data: TodayData }) {
       {shown.map((i) => {
         const Icon = SEVERITY_ICON[i.severity];
         return (
-          <Link key={i.id} href={`/more/garmin?tab=${i.target}`} className="flex gap-3 rounded-2xl bg-muted p-3.5 active:opacity-70">
+          <Link key={i.id} href={insightHref(i)} className="flex gap-3 rounded-2xl bg-muted p-3.5 active:opacity-70">
             <Icon className="w-5 h-5 flex-none mt-0.5" style={{ color: SEVERITY_COLOR[i.severity] }} aria-label={i.severity} />
             <p className="text-sm leading-snug">{i.text}</p>
           </Link>
