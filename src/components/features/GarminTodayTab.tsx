@@ -1,6 +1,7 @@
 "use client";
 
 import { EChart } from "@/components/charts/EChart";
+import { Card, Readout } from "@/components/features/garmin/GarminUi";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
 import { useVizTheme } from "@/components/charts/viz-theme";
 import type { Severity } from "@/lib/garmin/analytics/insights";
@@ -9,7 +10,7 @@ import { SPORT_LABEL, SPORT_MARK, type VizTheme } from "@/lib/garmin/charts/them
 import { addDays } from "@/lib/garmin/dates";
 import type { TodayData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
-import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Info, ShieldAlert } from "lucide-react";
+import { AlertTriangle, BatteryCharging, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Flame, Footprints, Gauge, HeartPulse, Info, ShieldAlert, Sun, Timer, Waves, Wind, Zap } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -32,31 +33,7 @@ function hm(seconds: number | null) {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m`;
 }
 
-function Card({ title, aside, children, note }: { title: string; aside?: React.ReactNode; children: React.ReactNode; note?: string }) {
-  return (
-    <section className="rounded-2xl bg-muted p-4 space-y-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
-        {aside && <span className="text-[11px] text-muted-foreground">{aside}</span>}
-      </div>
-      {children}
-      {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
-    </section>
-  );
-}
 
-function Readout({ title, values }: { title: string; values: { label: string; value: string }[] }) {
-  return (
-    <div className="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap min-h-[34px] tabular-nums" aria-live="polite">
-      <span className="text-[11px] text-muted-foreground w-full">{title}</span>
-      {values.map((v) => (
-        <span key={v.label} className="text-xs text-muted-foreground">
-          <span className="text-base font-semibold text-foreground">{v.value}</span> {v.label}
-        </span>
-      ))}
-    </div>
-  );
-}
 
 /** A thin segmented bar: one whole split into parts, with a legend that names them. */
 function Segmented({ parts }: { parts: { label: string; value: number; color: string }[] }) {
@@ -119,13 +96,13 @@ function ReadinessCard({ data }: { data: TodayData }) {
   const r = data.metrics?.readiness;
   if (!r) {
     return (
-      <Card title="Readiness">
+      <Card icon={Gauge} title="Readiness">
         <p className="text-sm text-muted-foreground">Not enough signals for this day yet. Readiness needs at least 3 of HRV, resting HR, sleep, sleep debt, form and how you feel.</p>
       </Card>
     );
   }
   return (
-    <Card title="Readiness" aside={`${r.signals} of 6 signals${r.capped ? " · capped" : ""}`}>
+    <Card icon={Gauge} title="Readiness" aside={`${r.signals} of 6 signals${r.capped ? " · capped" : ""}`}>
       <div className="flex items-end gap-3">
         <span className="text-6xl font-semibold leading-none">{r.score}</span>
         <span className="pb-1.5 text-base font-semibold">{READINESS_BAND_LABEL[r.band]}</span>
@@ -194,7 +171,7 @@ function Timeline({ data, theme }: { data: TodayData; theme: VizTheme }) {
     [data, theme],
   );
   const series = useMemo(() => [{ label: "Heart rate", values: data.hr.bpm, color: theme.text, width: 1.25 }], [data, theme]);
-  if (data.hr.t.length < 10) return <Card title="Heart rate · day and night"><p className="text-sm text-muted-foreground">No all-day heart rate for this day.</p></Card>;
+  if (data.hr.t.length < 10) return <Card icon={HeartPulse} title="Heart rate · day and night"><p className="text-sm text-muted-foreground">No all-day heart rate for this day.</p></Card>;
 
   const i = idx ?? data.hr.bpm.findLastIndex((v) => v !== null);
   const t = data.hr.t[i];
@@ -203,7 +180,7 @@ function Timeline({ data, theme }: { data: TodayData; theme: VizTheme }) {
   const bpms = data.hr.bpm.filter((v): v is number => v !== null);
 
   return (
-    <Card title="Heart rate · evening before to midnight" note="Shaded: sleep. Coloured lane and wash: activities. Line: resting heart rate.">
+    <Card icon={HeartPulse} title="Heart rate · evening before to midnight" note="Shaded: sleep. Coloured lane and wash: activities. Line: resting heart rate.">
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-0.5 w-3.5 bg-foreground" />Heart rate</span>
         {data.sleep && <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: alpha(theme.positive, 0.4) }} />Sleep</span>}
@@ -264,7 +241,7 @@ function OvernightHrv({ data, theme }: { data: TodayData; theme: VizTheme }) {
   const rising = second > first * 1.05;
   return (
     <Card
-      title="HRV through the night"
+      icon={Waves} title="HRV through the night"
       aside={h?.state && h.state !== "calibrating" ? `Week: ${h.state}` : undefined}
       note={`Each dot is a 5-minute reading. ${rising ? "HRV rose through the night: recovery went well." : second < first * 0.95 ? "HRV fell in the second half: a late session, meal or alcohol often does this." : "HRV was flat through the night."}`}
     >
@@ -330,7 +307,7 @@ function WeekStrip({ data, theme }: { data: TodayData; theme: VizTheme }) {
   }, [data, theme]);
   const d = data.strip[idx ?? 6];
   return (
-    <Card title="Last 7 days">
+    <Card icon={CalendarDays} title="Last 7 days">
       <Readout title={formatDateShort(d.date)} values={[{ label: "readiness", value: d.readiness !== null ? String(d.readiness) : "–" }, { label: "load", value: String(d.load) }]} />
       <EChart option={option} height={146} onIndex={setIdx} ariaLabel={`Readiness and load for the 7 days to ${data.date}.`} />
     </Card>
@@ -340,18 +317,19 @@ function WeekStrip({ data, theme }: { data: TodayData; theme: VizTheme }) {
 function DayNumbers({ data, theme }: { data: TodayData; theme: VizTheme }) {
   const s = data.summary;
   const tiles = [
-    { label: "Steps", value: s.steps !== null ? s.steps.toLocaleString("en-GB") : "–" },
-    { label: "Active kcal", value: s.activeKcal !== null ? String(Math.round(s.activeKcal)) : "–" },
-    { label: "Intensity min", value: s.intensityMin !== null ? String(s.intensityMin) : "–" },
-    { label: "Body battery at wake", value: s.bbAtWake !== null ? String(s.bbAtWake) : "–" },
-    { label: "Charged / drained", value: s.bbCharged !== null ? `+${s.bbCharged} / −${s.bbDrained ?? 0}` : "–" },
-    { label: "Breathing (awake)", value: s.respiration !== null ? `${Math.round(s.respiration)}/min` : "–" },
+    { icon: Footprints, label: "Steps", value: s.steps !== null ? s.steps.toLocaleString("en-GB") : "–" },
+    { icon: Flame, label: "Active kcal", value: s.activeKcal !== null ? String(Math.round(s.activeKcal)) : "–" },
+    { icon: Timer, label: "Intensity min", value: s.intensityMin !== null ? String(s.intensityMin) : "–" },
+    { icon: BatteryCharging, label: "Body battery at wake", value: s.bbAtWake !== null ? String(s.bbAtWake) : "–" },
+    { icon: Zap, label: "Charged / drained", value: s.bbCharged !== null ? `+${s.bbCharged} / −${s.bbDrained ?? 0}` : "–" },
+    { icon: Wind, label: "Breathing (awake)", value: s.respiration !== null ? `${Math.round(s.respiration)}/min` : "–" },
   ];
   return (
-    <Card title="The day">
+    <Card icon={Sun} title="The day">
       <div className="grid grid-cols-3 gap-2">
         {tiles.map((t) => (
           <div key={t.label} className="rounded-xl bg-background p-2.5">
+            <t.icon className="h-4 w-4 text-muted-foreground mb-1" aria-hidden />
             <p className="text-[10px] text-muted-foreground leading-tight">{t.label}</p>
             <p className="text-base font-semibold">{t.value}</p>
           </div>

@@ -21,7 +21,7 @@ import {
 } from "./endpoints";
 import { addDays, chunkRange, isoDate } from "./dates";
 import { parseFit } from "./fit";
-import { stripActivityLocation } from "./metrics";
+import { stripActivityLocation } from "./location";
 import { readZipEntry } from "./zip";
 
 /**

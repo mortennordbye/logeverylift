@@ -3,11 +3,14 @@
  * docs/plans/garmin-insights-design.md). Only exists where the Garmin feature is enabled.
  */
 
-import { GARMIN_TABS, GarminClient, type GarminTab } from "@/components/features/GarminClient";
+import { GarminShell } from "@/components/features/garmin/GarminShell";
+import { GARMIN_TABS, type GarminTab } from "@/components/features/garmin/tabs";
+import { db } from "@/db";
+import { garminConnections } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { GarminActivitiesTab } from "@/components/features/GarminActivitiesTab";
 import { GarminDataExplorer } from "@/components/features/GarminDataExplorer";
 import { GarminLoadTab } from "@/components/features/GarminLoadTab";
-import { GarminMetricsTab } from "@/components/features/GarminMetricsTab";
 import { GarminSleepTab } from "@/components/features/GarminSleepTab";
 import { GarminTodayTab } from "@/components/features/GarminTodayTab";
 import { env } from "@/lib/env";
@@ -32,10 +35,16 @@ export default async function GarminPage({ searchParams }: { searchParams: Promi
   } else if (tab === "load") {
     const { series, computedAt } = await getLoadSeries(auth.user.id);
     content = <GarminLoadTab series={series} computedAt={computedAt} />;
-  } else if (tab === "overview") {
-    content = <GarminMetricsTab />;
   } else {
     content = <GarminDataExplorer />;
   }
-  return <GarminClient tab={tab}>{content}</GarminClient>;
+  const [conn] = await db
+    .select({ lastSyncedAt: garminConnections.lastSyncedAt })
+    .from(garminConnections)
+    .where(eq(garminConnections.userId, auth.user.id));
+  return (
+    <GarminShell tab={tab} lastSyncedAt={conn?.lastSyncedAt?.toISOString() ?? null}>
+      {content}
+    </GarminShell>
+  );
 }

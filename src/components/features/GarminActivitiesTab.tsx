@@ -6,7 +6,7 @@ import { SPORTS, type Sport } from "@/lib/garmin/analytics/sport";
 import { SPORT_LABEL, SPORT_MARK } from "@/lib/garmin/charts/theme";
 import type { ActivitiesData, ActivityListRow } from "@/lib/garmin/queries";
 import { formatDateShort, formatDistanceKm } from "@/lib/utils/format";
-import { ChevronRight, X } from "lucide-react";
+import { CalendarDays, ChevronRight, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -126,11 +126,16 @@ export function GarminActivitiesTab({ data }: { data: ActivitiesData }) {
   return (
     <div className="space-y-4">
       <section className="rounded-2xl bg-muted p-4 space-y-2">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Training load by day</h2>
-          <span className="text-[11px] text-muted-foreground">swipe for older</span>
+        <div className="flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <span className="flex h-6 w-6 items-center justify-center rounded-lg bg-background">
+              <CalendarDays className="h-3.5 w-3.5 text-foreground" aria-hidden />
+            </span>
+            Training load by day
+          </h2>
+          <span className="text-[11px] text-muted-foreground">swipe calendar for older</span>
         </div>
-        <div ref={scroller} className="overflow-x-auto -mx-1 no-scrollbar">
+        <div ref={scroller} data-no-swipe className="overflow-x-auto -mx-1 no-scrollbar">
           <div style={{ width }}>{option && <EChart option={option} height={7 * CELL + 30} onItemClick={(v) => Array.isArray(v) && setDay(String(v[0]))} ariaLabel={`Daily training load from ${first} to ${last}.`} />}</div>
         </div>
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
@@ -140,7 +145,7 @@ export function GarminActivitiesTab({ data }: { data: ActivitiesData }) {
         </div>
       </section>
 
-      <div className="flex gap-2 overflow-x-auto -mx-4 px-4 no-scrollbar" role="toolbar" aria-label="Filter by sport">
+      <div data-no-swipe className="flex gap-2 overflow-x-auto -mx-4 px-4 no-scrollbar" role="toolbar" aria-label="Filter by sport">
         <button onClick={() => setSport(null)} aria-pressed={!sport} className={`h-9 px-3 rounded-full text-sm font-medium flex-none active:opacity-70 ${!sport ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}>
           All
         </button>

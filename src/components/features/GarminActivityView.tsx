@@ -1,6 +1,7 @@
 "use client";
 
 import { RouteMap } from "@/components/charts/RouteMap";
+import { Card } from "@/components/features/garmin/GarminUi";
 import { TimeSeriesChart, elapsedLabel } from "@/components/charts/TimeSeriesChart";
 import { useVizTheme } from "@/components/charts/viz-theme";
 import { SPORT_LABEL, SPORT_MARK, type VizTheme } from "@/lib/garmin/charts/theme";
@@ -16,22 +17,25 @@ import {
   zoneSeconds,
 } from "@/lib/garmin/charts/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
-import { ChevronLeft } from "lucide-react";
+import { ChartLine, ChevronLeft, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, Route as RouteIcon, Scale, Timer, TrendingUp, Zap, type LucideIcon } from "lucide-react";
+
+const STAT_ICON: Record<string, LucideIcon> = {
+  Duration: Timer,
+  Distance: RouteIcon,
+  Pace: Gauge,
+  Speed: Gauge,
+  "Heart rate": HeartPulse,
+  Power: Zap,
+  Climb: Mountain,
+  Load: Dumbbell,
+  "Training effect": TrendingUp,
+  Calories: Flame,
+};
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useSwipe } from "./garmin/use-swipe";
 import { useMemo, useState } from "react";
 
-function Card({ title, aside, children, note }: { title: string; aside?: React.ReactNode; children: React.ReactNode; note?: string }) {
-  return (
-    <section className="rounded-2xl bg-muted p-4 space-y-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
-        {aside && <span className="text-[11px] text-muted-foreground">{aside}</span>}
-      </div>
-      {children}
-      {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
-    </section>
-  );
-}
 
 function ZoneBars({ seconds, colors, label }: { seconds: number[]; colors: string[]; label: (i: number) => string }) {
   const total = seconds.reduce((a, b) => a + b, 0);
@@ -73,7 +77,7 @@ function Streams({ d, theme, onCursor }: { d: ActivityDetail; theme: VizTheme; o
   };
 
   return (
-    <Card title="Streams" note="Drag across any chart: all charts and the map dot follow. Pace runs faster upwards.">
+    <Card icon={ChartLine} title="Streams" note="Drag across any chart: all charts and the map dot follow. Pace runs faster upwards.">
       <div className="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap min-h-[34px] tabular-nums" aria-live="polite">
         <span className="text-[11px] text-muted-foreground w-full">{i !== null ? elapsedLabel(Math.round(x[i] / 1000)) : "Drag a chart"}</span>
         {i !== null &&
@@ -111,6 +115,9 @@ function Streams({ d, theme, onCursor }: { d: ActivityDetail; theme: VizTheme; o
 
 export function GarminActivityView({ d }: { d: ActivityDetail }) {
   const theme = useVizTheme();
+  const router = useRouter();
+  // Swipe right anywhere outside a chart or the map: back to the list.
+  const swipe = useSwipe({ onRight: () => (window.history.length > 1 ? router.back() : router.replace("/more/garmin?tab=activities")) });
   const [cursor, setCursor] = useState<number | null>(null);
   const zones = useMemo(() => zoneSeconds(d), [d]);
   const pz = useMemo(() => pointZones(d), [d]);
@@ -130,7 +137,7 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
           <span className="text-sm font-medium">Activities</span>
         </Link>
       </div>
-      <main className="flex-1 overflow-y-auto px-4 pb-nav-safe-lg space-y-4">
+      <main {...swipe.handlers} style={swipe.style} className="flex-1 overflow-y-auto px-4 pb-nav-safe-lg space-y-4">
         <header className="space-y-1 pt-1">
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
             <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: `var(--viz-${d.sport})` }}>
@@ -143,16 +150,22 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
         </header>
 
         <div className="grid grid-cols-2 gap-2">
-          {statTiles(d).map((t) => (
+          {statTiles(d).map((t) => {
+            const Icon = STAT_ICON[t.label] ?? Gauge;
+            return (
             <div key={t.label} className="rounded-xl bg-muted p-3">
-              <p className="text-[11px] text-muted-foreground">{t.label}</p>
+              <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <Icon className="h-3.5 w-3.5" aria-hidden />
+                {t.label}
+              </p>
               <p className="text-base font-semibold leading-tight">{t.value}</p>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {theme && hasRoute && (
-          <Card title="Route" aside="coloured by HR zone">
+          <Card icon={MapIcon} title="Route" aside="coloured by HR zone">
             <RouteMap lat={d.streams.lat!} lng={d.streams.lng!} colors={routeColors} cursor={cursor} height={260} />
             <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
               Z1
@@ -167,19 +180,19 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
         {theme && <Streams d={d} theme={theme} onCursor={setCursor} />}
 
         {theme && zones.hr.some((s) => s > 0) && (
-          <Card title="Heart-rate zones" note="Garmin's five zones from your watch settings.">
+          <Card icon={HeartPulse} title="Heart-rate zones" note="Garmin's five zones from your watch settings.">
             <ZoneBars seconds={zones.hr} colors={theme.zones} label={(i) => `Z${i + 1}`} />
           </Card>
         )}
         {theme && zones.power.some((s) => s > 0) && (
-          <Card title="Power zones">
+          <Card icon={Zap} title="Power zones">
             <ZoneBars seconds={zones.power} colors={[...theme.zones, theme.zones[4], theme.zones[4]]} label={(i) => `Z${i + 1}`} />
           </Card>
         )}
 
         {dec && (
           <Card
-            title="Aerobic decoupling"
+            icon={Scale} title="Aerobic decoupling"
             note="Efficiency (output per heartbeat) in the first half against the second, after a 10 min warm-up. Under 5 % means your aerobic base holds for this long."
           >
             {dec.valid ? (
@@ -208,7 +221,7 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
         )}
 
         {laps.length > 1 && (
-          <Card title={`Laps · ${laps.length}`}>
+          <Card icon={Flag} title={`Laps · ${laps.length}`}>
             <table className="w-full text-xs tabular-nums">
               <thead className="text-muted-foreground">
                 <tr className="text-left">
@@ -236,7 +249,7 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
 
         {sets.length > 0 && (
           <Card
-            title={`Sets on the watch · ${sets.length}`}
+            icon={Dumbbell} title={`Sets on the watch · ${sets.length}`}
             aside={d.matchedSessionId ? undefined : "no LogEveryLift session matched"}
             note="Reps and weight as the watch recorded them. The LogEveryLift session is the record of what you lifted."
           >

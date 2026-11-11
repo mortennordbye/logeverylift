@@ -113,5 +113,5 @@ export function RouteMap({
     );
   }, [cursor, lat, lng]);
 
-  return <div ref={box} style={{ height }} className="w-full overflow-hidden rounded-xl" aria-label="Route map" role="img" />;
+  return <div ref={box} style={{ height }} className="w-full overflow-hidden rounded-xl" data-no-swipe aria-label="Route map" role="img" />;
 }

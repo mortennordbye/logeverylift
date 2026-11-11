@@ -658,7 +658,7 @@ Order rationale: A gives the numbers and the tools every later phase uses. B is 
 
 ## 8. Open decisions for the owner
 
-Settled 2026-11-11 (see I-6): O-1, O-2, O-3, O-11, and O-5 by default. Still open: O-4, O-6, O-7, O-8, O-9, O-10. Each is settled before the phase that needs it.
+Settled 2026-11-11 (see I-6): O-1, O-2, O-3, O-11, and O-5 by default. Later the same day: O-8 yes (Overview removed; the worker now runs the recent-summary sync every 30 minutes and the page header has a refresh button, `refreshGarmin`), O-6 no (no manual thresholds for now). O-7 as built: five pill tabs with icons, and swiping the page left or right moves between them (`useSwipe`; charts, the map and scroll rows keep their own drag). Still open: O-4, O-9, O-10. Each is settled before the phase that needs it.
 
 - **O-1 Race date.** Add a race date and distance (Ironman or 70.3) to the cycle, or keep deriving race day from the end of the cycle? Recommended: add both to `training_cycles`.
 - **O-2 Strength in fitness.** Should strength load count toward total fitness (CTL), or only toward fatigue? Recommended: both, with the Strength chip to see it apart. The 0.22 scale factor should be tuned after four weeks of data.

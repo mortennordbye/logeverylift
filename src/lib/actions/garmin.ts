@@ -14,23 +14,40 @@ import {
 } from "@/db/schema";
 import { env } from "@/lib/env";
 import { GarminError, exchangeKey } from "@/lib/garmin/client";
-import { buildGarminMetrics, type GarminMetrics, type StoredDay } from "@/lib/garmin/metrics";
 import { forgetToken, rememberToken, syncGarmin } from "@/lib/garmin/sync";
 import { GARMIN_DAY_KINDS, endpointLabel } from "@/lib/garmin/endpoints";
+import { runGarminMetricsStep } from "@/lib/garmin/metrics-job";
 import { garminWorkerLoop, historyFloor } from "@/lib/garmin/worker";
 import { encryptSecret } from "@/lib/utils/crypto";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
-import { and, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 const DISABLED = "Garmin is not enabled on this server";
 
-/** Days of stored data the Garmin Overview shows: four weeks of dailies, eight weeks of load. */
-const VIEW_DAYS = 56;
 
 const connectSchema = z.object({ apiKey: z.string().trim().min(20).max(1000) });
+
+/**
+ * Pull recent data from Garmin now (the refresh button), then rebuild the
+ * derived metrics. The background worker does the same every 30 minutes.
+ */
+export async function refreshGarmin(): Promise<ActionResult<{ syncError: string | null }>> {
+  const auth = await requireSession();
+  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
+  try {
+    const sync = await syncGarmin(auth.user.id, { force: true });
+    if (sync.status === "not_connected") return { success: false, error: "Garmin is not connected" };
+    await runGarminMetricsStep(auth.user.id);
+    revalidatePath("/more/garmin");
+    return { success: true, data: { syncError: sync.status === "error" ? sync.error : null } };
+  } catch (e) {
+    console.error("[refreshGarmin] failed", { userId: auth.user.id }, e);
+    return { success: false, error: "Failed to refresh from Garmin" };
+  }
+}
 
 /** Check a Personal API key with Garmin, store it encrypted and run the first sync. */
 export async function connectGarmin(data: unknown): Promise<ActionResult<{ syncError: string | null }>> {
@@ -108,87 +125,6 @@ export type GarminSyncRunView = {
   error: string | null;
   durationMs: number | null;
 };
-
-export type GarminTabData = {
-  connected: boolean;
-  lastSyncedAt: string | null;
-  syncError: string | null;
-  metrics: GarminMetrics;
-  runs: GarminSyncRunView[];
-};
-
-const OVERVIEW_KINDS = ["hrv", "sleep", "daily"] as const;
-
-const metricsSchema = z.object({ refresh: z.boolean().default(false) });
-
-/**
- * Sync from Garmin when connected (skipped if the last sync is under ten
- * minutes old, unless refresh), then return the stored days and activities.
- * Stored data is returned even after a disconnect, so history stays visible.
- */
-export async function getGarminMetrics(data: unknown): Promise<ActionResult<GarminTabData>> {
-  const auth = await requireSession();
-  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
-  const parsed = metricsSchema.safeParse(data ?? {});
-  if (!parsed.success) return { success: false, error: "Invalid input" };
-  const userId = auth.user.id;
-
-  try {
-    const sync = await syncGarmin(userId, { force: parsed.data.refresh });
-
-    const today = new Date();
-    const end = new Date(today.getTime() + 86_400_000).toISOString().slice(0, 10);
-    const start = new Date(today.getTime() - (VIEW_DAYS - 1) * 86_400_000).toISOString().slice(0, 10);
-
-    const [conn] = await db
-      .select({ lastSyncedAt: garminConnections.lastSyncedAt })
-      .from(garminConnections)
-      .where(eq(garminConnections.userId, userId));
-    const dayRows = await db
-      .select({ calendarDate: garminDays.calendarDate, kind: garminDays.kind, data: garminDays.data })
-      .from(garminDays)
-      .where(and(eq(garminDays.userId, userId), gte(garminDays.calendarDate, start), inArray(garminDays.kind, OVERVIEW_KINDS)));
-    const activityRows = await db
-      .select({ garminActivityId: garminActivities.garminActivityId, data: garminActivities.data })
-      .from(garminActivities)
-      .where(and(eq(garminActivities.userId, userId), gte(garminActivities.startTimeLocal, new Date(`${start}T00:00:00Z`))));
-    const runs = await db
-      .select()
-      .from(garminSyncRuns)
-      .where(eq(garminSyncRuns.userId, userId))
-      .orderBy(desc(garminSyncRuns.startedAt), desc(garminSyncRuns.id))
-      .limit(10);
-
-    return {
-      success: true,
-      data: {
-        connected: Boolean(conn),
-        lastSyncedAt: conn?.lastSyncedAt?.toISOString() ?? null,
-        syncError: sync.status === "error" ? sync.error : null,
-        // Drop the padding day after today unless Garmin already has data for it.
-        metrics: trimFuture(buildGarminMetrics(dayRows as StoredDay[], activityRows, start, end)),
-        runs: runs.map((r) => ({
-          startedAt: r.startedAt.toISOString(),
-          status: r.status,
-          rangeStart: r.rangeStart,
-          rangeEnd: r.rangeEnd,
-          counts: (r.counts as Record<string, number> | null) ?? null,
-          error: r.error,
-          durationMs: r.durationMs,
-        })),
-      },
-    };
-  } catch (e) {
-    console.error("[getGarminMetrics] failed", { userId }, e);
-    return { success: false, error: "Failed to load Garmin data" };
-  }
-}
-
-function trimFuture(m: GarminMetrics): GarminMetrics {
-  const last = m.days.at(-1);
-  const empty = last && Object.entries(last).every(([k, v]) => k === "date" || v === null);
-  return empty ? { ...m, days: m.days.slice(0, -1) } : m;
-}
 
 export type GarminImportStatus = {
   connected: boolean;

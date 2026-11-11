@@ -80,6 +80,7 @@ export function EChart({
     <div
       ref={box}
       role="img"
+      data-no-swipe
       aria-label={ariaLabel}
       style={{ height, touchAction: "pan-y" }}
       className={`w-full transition-opacity ${ready ? "opacity-100" : "opacity-0"}`}

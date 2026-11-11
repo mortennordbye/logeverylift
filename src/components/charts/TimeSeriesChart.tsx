@@ -213,5 +213,5 @@ export function TimeSeriesChart(props: Props) {
     // The chart is rebuilt when its data or size changes; colours come with the data.
   }, [x, series, height]);
 
-  return <div ref={box} role="img" aria-label={props.ariaLabel} style={{ height, touchAction: "pan-y" }} className={`w-full ${ready ? "" : "opacity-0"}`} />;
+  return <div ref={box} role="img" data-no-swipe aria-label={props.ariaLabel} style={{ height, touchAction: "pan-y" }} className={`w-full ${ready ? "" : "opacity-0"}`} />;
 }

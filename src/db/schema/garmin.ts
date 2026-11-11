@@ -12,7 +12,7 @@
  *   JSON for that day as returned. Kinds are the endpoints in
  *   src/lib/garmin/endpoints.ts (GARMIN_DAY_KINDS).
  * - garmin_activities: one row per Garmin activity: the list summary (GPS
- *   fields removed by stripActivityLocation in src/lib/garmin/metrics.ts),
+ *   fields removed by stripActivityLocation in src/lib/garmin/location.ts),
  *   the detail and the planned workout.
  * - garmin_activity_files: the activity's original FIT file, as Garmin's ZIP.
  * - garmin_activity_streams: that FIT file parsed (src/lib/garmin/fit.ts):

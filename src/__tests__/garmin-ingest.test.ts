@@ -116,3 +116,13 @@ describe("chunkRange", () => {
     expect(chunkRange("2026-10-01", "2026-10-01", 28)).toEqual([["2026-10-01", "2026-10-01"]]);
   });
 });
+
+import { stripActivityLocation } from "@/lib/garmin/location";
+
+describe("stripActivityLocation", () => {
+  it("removes GPS and place fields and keeps the rest", () => {
+    expect(
+      stripActivityLocation({ activityId: 1, startLatitude: 59.9, startLongitude: 10.7, endLatitude: 59.9, endLongitude: 10.7, locationName: "Oslo", averageHR: 130 }),
+    ).toEqual({ activityId: 1, averageHR: 130 });
+  });
+});

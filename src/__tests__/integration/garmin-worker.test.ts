@@ -175,6 +175,16 @@ describe("runGarminWorkerTick", () => {
     expect(runs.find((r) => r.startedAt.getTime() === fresh.getTime())).toMatchObject({ status: "running" });
   });
 
+  it("pulls the recent summaries when the last sync is over 30 minutes old, and not before", async () => {
+    const userId = await connect();
+    await runGarminWorkerTick();
+    const syncRuns = async () => (await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, userId))).filter((r) => r.trigger === "sync").length;
+    expect(await syncRuns()).toBe(0);
+    await db.update(garminConnections).set({ lastSyncedAt: new Date(Date.now() - 31 * 60_000), historyDone: false }).where(eq(garminConnections.userId, userId));
+    await runGarminWorkerTick();
+    expect(await syncRuns()).toBe(1);
+  });
+
   it("lets only one of two simultaneous ticks work on a user", async () => {
     await connect();
     const results = await Promise.all([runGarminWorkerTick(), runGarminWorkerTick()]);

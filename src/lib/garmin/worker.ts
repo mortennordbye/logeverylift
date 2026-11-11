@@ -13,6 +13,7 @@ import {
   fetchRangeKinds,
   finishRun,
   startRun,
+  syncGarmin,
   tokenFor,
 } from "./sync";
 
@@ -24,6 +25,7 @@ import {
  * has work, with a lease so two app replicas never run the same user, and
  * does a bounded amount of work for it:
  *
+ * 0. The recent summaries (syncGarmin), when the last sync is older than RECENT_EVERY_MS.
  * 1. Today and yesterday's per-day data again, at most every RECENT_EVERY_MS.
  * 2. Up to FILES_PER_TICK activities still without files, newest first.
  * 3. One HISTORY_CHUNK_DAYS chunk of history, going back from historyCursor.
@@ -55,7 +57,13 @@ async function claim(now: Date) {
     or(isNull(garminConnections.pausedUntil), lt(garminConnections.pausedUntil, now)),
   );
   const hasPendingFiles = sql`exists (select 1 from ${garminActivities} a where a.user_id = ${garminConnections.userId} and a.files_fetched_at is null)`;
-  const recentDue = or(isNull(garminConnections.recentDetailAt), lt(garminConnections.recentDetailAt, new Date(now.getTime() - RECENT_EVERY_MS)));
+  const stale = new Date(now.getTime() - RECENT_EVERY_MS);
+  const recentDue = or(
+    isNull(garminConnections.recentDetailAt),
+    lt(garminConnections.recentDetailAt, stale),
+    isNull(garminConnections.lastSyncedAt),
+    lt(garminConnections.lastSyncedAt, stale),
+  );
   const [candidate] = await db
     .select({ id: garminConnections.id })
     .from(garminConnections)
@@ -98,6 +106,12 @@ export async function runGarminWorkerTick(now = new Date()): Promise<TickResult>
 
   try {
     const token = await tokenFor(userId, conn.encryptedKey);
+
+    // Recent summaries (the range endpoints and the activity list), now that no page pulls them on open.
+    if (!conn.lastSyncedAt || now.getTime() - conn.lastSyncedAt.getTime() > RECENT_EVERY_MS) {
+      const sync = await syncGarmin(userId);
+      if (sync.status === "error" && (sync.error.startsWith("rate_limited") || sync.error === "key_rejected")) throw new GarminError(sync.error);
+    }
 
     if (!conn.recentDetailAt || now.getTime() - conn.recentDetailAt.getTime() > RECENT_EVERY_MS) {
       for (const date of [addDays(today, -1), today]) await fetchDayKinds(token, userId, date, log, now);

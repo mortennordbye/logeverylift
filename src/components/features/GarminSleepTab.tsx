@@ -1,6 +1,7 @@
 "use client";
 
 import { EChart } from "@/components/charts/EChart";
+import { Card, Legend, Readout } from "@/components/features/garmin/GarminUi";
 import { useVizTheme } from "@/components/charts/viz-theme";
 import {
   clockLabel,
@@ -16,46 +17,11 @@ import {
 } from "@/lib/garmin/charts/sleep";
 import type { SleepTabData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
+import { BedDouble, Brain, CalendarClock, Clock, Heart, Hourglass, Layers, Waves } from "lucide-react";
 import { useMemo, useState } from "react";
 
-function Card({ title, aside, children, note }: { title: string; aside?: React.ReactNode; children: React.ReactNode; note?: string }) {
-  return (
-    <section className="rounded-2xl bg-muted p-4 space-y-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h2>
-        {aside && <span className="text-[11px] text-muted-foreground">{aside}</span>}
-      </div>
-      {children}
-      {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
-    </section>
-  );
-}
 
-function Legend({ items }: { items: { name: string; color: string; kind: "line" | "bar" | "dot" }[] }) {
-  return (
-    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-      {items.map((i) => (
-        <span key={i.name} className="inline-flex items-center gap-1.5">
-          <span className={i.kind === "line" ? "inline-block h-0.5 w-3.5 rounded-full" : i.kind === "dot" ? "inline-block h-2 w-2 rounded-full" : "inline-block h-2.5 w-2.5 rounded-sm"} style={{ background: i.color }} />
-          {i.name}
-        </span>
-      ))}
-    </div>
-  );
-}
 
-function Readout({ title, values }: { title: string; values: { label: string; value: string }[] }) {
-  return (
-    <div className="flex items-baseline gap-x-3 gap-y-0.5 flex-wrap min-h-[34px] tabular-nums" aria-live="polite">
-      <span className="text-[11px] text-muted-foreground w-full">{title}</span>
-      {values.map((v) => (
-        <span key={v.label} className="text-xs text-muted-foreground">
-          <span className="text-base font-semibold text-foreground">{v.value}</span> {v.label}
-        </span>
-      ))}
-    </div>
-  );
-}
 
 const hm = (h: number | null) => (h === null ? "–" : `${Math.floor(h)}h ${String(Math.round((h % 1) * 60)).padStart(2, "0")}m`);
 
@@ -111,11 +77,12 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
       </p>
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: "Regularity", value: regularity != null ? String(Math.round(regularity)) : "–" },
-          { label: "Bedtime spread", value: latest?.timing.onsetSpread != null ? `±${Math.round(latest.timing.onsetSpread)}m` : "–" },
-          { label: "Weekend shift", value: latest?.timing.socialJetlag != null ? `${Math.round(latest.timing.socialJetlag)}m` : "–" },
+          { icon: BedDouble, label: "Regularity", value: regularity != null ? String(Math.round(regularity)) : "–" },
+          { icon: Clock, label: "Bedtime spread", value: latest?.timing.onsetSpread != null ? `±${Math.round(latest.timing.onsetSpread)}m` : "–" },
+          { icon: CalendarClock, label: "Weekend shift", value: latest?.timing.socialJetlag != null ? `${Math.round(latest.timing.socialJetlag)}m` : "–" },
         ].map((tile) => (
           <div key={tile.label} className="rounded-xl bg-muted p-3">
+            <tile.icon className="h-4 w-4 text-muted-foreground mb-1" aria-hidden />
             <p className="text-[11px] text-muted-foreground">{tile.label}</p>
             <p className="text-xl font-semibold">{tile.value}</p>
           </div>
@@ -123,14 +90,14 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
       </div>
 
       {opts && t && (
-        <Card title="When you sleep · 28 nights" note="Bars run from falling asleep to waking. Lines: your median bedtime and wake time. Regular timing is one of the strongest sleep habits for recovery.">
+        <Card icon={Clock} title="When you sleep · 28 nights" note="Bars run from falling asleep to waking. Lines: your median bedtime and wake time. Regular timing is one of the strongest sleep habits for recovery.">
           <Readout title={formatDateShort(t.date)} values={[{ label: "asleep", value: clockLabel(t.onset) }, { label: "awake", value: clockLabel(t.wake) }]} />
           <EChart option={opts.timing} height={210} onIndex={setTi} ariaLabel={`Sleep windows for ${timing.length} nights.`} />
         </Card>
       )}
 
       {opts && d && (
-        <Card title="Sleep against need" note="Bar: time asleep (orange when short of need). Tick: Garmin's need for that night. Below: debt over 14 nights, recent nights weighing more.">
+        <Card icon={Hourglass} title="Sleep against need" note="Bar: time asleep (orange when short of need). Tick: Garmin's need for that night. Below: debt over 14 nights, recent nights weighing more.">
           <Legend items={[{ name: "Slept", color: "var(--viz-positive)", kind: "bar" }, { name: "Short", color: "var(--viz-bike)", kind: "bar" }, { name: "Need", color: "var(--foreground)", kind: "line" }, { name: "Debt", color: "var(--viz-bike)", kind: "line" }]} />
           <Readout
             title={formatDateShort(d.date)}
@@ -146,7 +113,7 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
       )}
 
       {opts && s && (
-        <Card title="Sleep stages" note="Shares of each night. Garmin gives totals only, so there is no stage timeline to draw.">
+        <Card icon={Layers} title="Sleep stages" note="Shares of each night. Garmin gives totals only, so there is no stage timeline to draw.">
           <Legend items={[{ name: "Deep", color: "var(--viz-band-low)", kind: "bar" }, { name: "Light", color: "var(--viz-band-mid)", kind: "bar" }, { name: "REM", color: "var(--viz-other)", kind: "bar" }, { name: "Awake", color: "var(--muted-foreground)", kind: "bar" }]} />
           <Readout title={formatDateShort(s.date)} values={[{ label: "deep", value: pct(s.deep) }, { label: "light", value: pct(s.light) }, { label: "REM", value: pct(s.rem) }, { label: "awake", value: pct(s.awake) }]} />
           <EChart option={opts.stages} height={140} onIndex={setSi} ariaLabel="Sleep stage shares per night." />
@@ -154,7 +121,7 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
       )}
 
       {opts && h && (
-        <Card title="HRV · 90 days" aside={h.hrv.bandSource === "ours" ? "Band: your 60-day range" : h.hrv.bandSource === "garmin" ? "Band: Garmin's range" : undefined} note="Dots: each night. Line: 7-day mean. Grey: your normal range. Below: night-to-night variation (CV); a rising CV often comes before a drop.">
+        <Card icon={Waves} title="HRV · 90 days" aside={h.hrv.bandSource === "ours" ? "Band: your 60-day range" : h.hrv.bandSource === "garmin" ? "Band: Garmin's range" : undefined} note="Dots: each night. Line: 7-day mean. Grey: your normal range. Below: night-to-night variation (CV); a rising CV often comes before a drop.">
           <Legend items={[{ name: "Night", color: "var(--viz-positive)", kind: "dot" }, { name: "7-day mean", color: "var(--viz-positive)", kind: "line" }, { name: "Normal range", color: "var(--muted-foreground)", kind: "bar" }, { name: "CV", color: "var(--muted-foreground)", kind: "line" }]} />
           <Readout
             title={`${formatDateShort(h.date)} · ${h.hrv.state}`}
@@ -170,7 +137,7 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
       )}
 
       {opts && r && (
-        <Card title="Resting heart rate · 90 days" note="A 7-day mean 5 bpm or more over the 60-day baseline is a warning sign of fatigue or illness.">
+        <Card icon={Heart} title="Resting heart rate · 90 days" note="A 7-day mean 5 bpm or more over the 60-day baseline is a warning sign of fatigue or illness.">
           <Legend items={[{ name: "Day", color: "var(--viz-negative)", kind: "dot" }, { name: "7-day mean", color: "var(--viz-negative)", kind: "line" }, { name: "Baseline", color: "var(--muted-foreground)", kind: "line" }]} />
           <Readout
             title={`${formatDateShort(r.date)}${r.restingHr.flag ? " · raised" : ""}`}
@@ -185,7 +152,7 @@ export function GarminSleepTab({ data }: { data: SleepTabData }) {
       )}
 
       {opts && x && (
-        <Card title="Stress through the day · 28 days" note="Garmin's stress score from heart rate variability while you are still. Rest includes sleep.">
+        <Card icon={Brain} title="Stress through the day · 28 days" note="Garmin's stress score from heart rate variability while you are still. Rest includes sleep.">
           <Legend items={[{ name: "Rest", color: "var(--viz-band-low)", kind: "bar" }, { name: "Low", color: "var(--viz-band-mid)", kind: "bar" }, { name: "Medium", color: "var(--viz-warning)", kind: "bar" }, { name: "High", color: "var(--viz-critical)", kind: "bar" }]} />
           <Readout
             title={formatDateShort(x.date)}

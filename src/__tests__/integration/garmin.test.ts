@@ -1,11 +1,11 @@
 import { db } from "@/db";
 import { garminActivities, garminConnections, garminDailyMetrics, garminDays, garminSyncRuns } from "@/db/schema";
-import { connectGarmin, disconnectGarmin, getGarminMetrics } from "@/lib/actions/garmin";
+import { connectGarmin, disconnectGarmin, refreshGarmin } from "@/lib/actions/garmin";
 import { collectUserData } from "@/lib/account-data";
 import { garminPacing } from "@/lib/garmin/client";
 import { forgetToken } from "@/lib/garmin/sync";
 import { decryptSecret } from "@/lib/utils/crypto";
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createUser } from "./factories";
 import { asUser } from "./setup";
@@ -140,64 +140,62 @@ describe("connectGarmin", () => {
   });
 });
 
-describe("getGarminMetrics", () => {
-  it("updates stored days on refresh instead of adding rows", async () => {
+async function storedDay(userId: string, kind: "hrv" | "sleep" | "daily") {
+  const [row] = await db
+    .select()
+    .from(garminDays)
+    .where(and(eq(garminDays.userId, userId), eq(garminDays.kind, kind), eq(garminDays.calendarDate, today())));
+  return row?.data as Record<string, unknown> | undefined;
+}
+
+describe("refreshGarmin", () => {
+  it("updates stored days instead of adding rows", async () => {
     const me = await createUser();
     await connect(me.id);
     garmin.restingHr = 41;
-    const result = await getGarminMetrics({ refresh: true });
+    const result = await refreshGarmin();
     if (!result.success) throw new Error(result.error);
-
-    const rows = await db.select().from(garminDays).where(eq(garminDays.userId, me.id));
-    expect(rows).toHaveLength(3);
-    expect(result.data.metrics.days.find((d) => d.date === today())?.restingHr).toBe(41);
-    expect(result.data.runs).toHaveLength(2);
-  });
-
-  it("skips Garmin when the last sync is recent", async () => {
-    const me = await createUser();
-    await connect(me.id);
-    const calls = fetchMock.mock.calls.length;
-    const result = await getGarminMetrics({});
-    expect(result.success).toBe(true);
-    expect(fetchMock.mock.calls.length).toBe(calls);
+    expect(result.data.syncError).toBeNull();
+    expect(await db.select().from(garminDays).where(eq(garminDays.userId, me.id))).toHaveLength(3);
+    expect(((await storedDay(me.id, "daily"))?.heartRate as { restingValue: number }).restingValue).toBe(41);
+    expect(await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, me.id))).toHaveLength(2);
   });
 
   it("treats Garmin's empty 204 answer as no data, not a failure", async () => {
     const me = await createUser();
     await connect(me.id);
     garmin.noHrv = true;
-    const result = await getGarminMetrics({ refresh: true });
+    const result = await refreshGarmin();
     if (!result.success) throw new Error(result.error);
     expect(result.data.syncError).toBeNull();
-    expect(result.data.runs[0]).toMatchObject({ status: "ok", counts: { hrv: 0, sleep: 1, daily: 1, activities: 1 } });
+    const [run] = await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, me.id)).orderBy(desc(garminSyncRuns.id)).limit(1);
+    expect(run).toMatchObject({ status: "ok", counts: expect.objectContaining({ hrv: 0, sleep: 1, daily: 1, activities: 1 }) });
     // HRV saved by the first sync is still there.
-    expect(result.data.metrics.days.find((d) => d.date === today())?.hrvLastNight).toBe(80);
+    expect((await storedDay(me.id, "hrv"))?.lastNightAvg).toBe(80);
   });
 
-  it("records a failed sync and still returns stored data", async () => {
+  it("records a failed call and keeps the rest of the sync", async () => {
     const me = await createUser();
     await connect(me.id);
     garmin.failSleep = true;
-    const result = await getGarminMetrics({ refresh: true });
+    garmin.restingHr = 39;
+    const result = await refreshGarmin();
     if (!result.success) throw new Error(result.error);
     expect(result.data.syncError).toBe("http_500:sleep");
-    expect(result.data.metrics.days.find((d) => d.date === today())?.restingHr).toBe(45);
-    // A failed call doesn't stop the rest of the sync; the run lists it.
-    expect(result.data.runs[0]).toMatchObject({ status: "ok", error: "http_500:sleep" });
+    expect(((await storedDay(me.id, "daily"))?.heartRate as { restingValue: number }).restingValue).toBe(39);
+    const [run] = await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, me.id)).orderBy(desc(garminSyncRuns.id)).limit(1);
+    expect(run).toMatchObject({ status: "ok", error: "http_500:sleep" });
   });
 
-  it("shows a user only their own data", async () => {
+  it("refuses a user without a connection and touches no one else's rows", async () => {
     const me = await createUser();
     const other = await createUser();
     await connect(me.id);
+    const before = fetchMock.mock.calls.length;
     asUser(other.id);
-    const result = await getGarminMetrics({ refresh: true });
-    if (!result.success) throw new Error(result.error);
-    expect(result.data.connected).toBe(false);
-    expect(result.data.metrics.activities).toEqual([]);
-    expect(result.data.metrics.days.every((d) => d.restingHr === null)).toBe(true);
-    expect(result.data.runs).toEqual([]);
+    expect(await refreshGarmin()).toEqual({ success: false, error: "Garmin is not connected" });
+    expect(fetchMock.mock.calls.length).toBe(before);
+    expect(await db.select().from(garminDays).where(eq(garminDays.userId, other.id))).toEqual([]);
   });
 });
 
@@ -209,10 +207,7 @@ describe("disconnectGarmin", () => {
     expect(await db.select().from(garminConnections)).toEqual([]);
     expect((await db.select().from(garminDays)).length).toBe(3);
 
-    const kept = await getGarminMetrics({});
-    if (!kept.success) throw new Error(kept.error);
-    expect(kept.data.connected).toBe(false);
-    expect(kept.data.metrics.activities).toHaveLength(1);
+    expect(await db.select().from(garminActivities)).toHaveLength(1);
 
     await disconnectGarmin({ deleteData: true });
     expect(await db.select().from(garminDays)).toEqual([]);
