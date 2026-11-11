@@ -32,6 +32,7 @@ import { projectionSentence, type Projection } from "@/lib/garmin/analytics/proj
 import type { RaceStatus } from "@/lib/garmin/analytics/overview";
 import { Layers } from "lucide-react";
 import { useMemo, useState } from "react";
+import Link from "next/link";
 
 const RANGES: RangeKey[] = ["6w", "3m", "1y", "all"];
 
@@ -171,7 +172,14 @@ export function GarminLoadTab({
             ...(projection && track === "total" ? [{ name: "Plan to race day (dashed), band ± 15 % load", color: "var(--foreground)", kind: "line" as const }, { name: "Race-morning target form", color: "var(--viz-good)", kind: "bar" as const }] : []),
           ]}
         />
-        {projection && track === "total" && <p className="text-sm">{projectionSentence(projection)}</p>}
+        {projection && track === "total" && (
+          <p className="text-sm">
+            {projectionSentence(projection)}{" "}
+            <Link href="/more/garmin/race" className="text-primary active:opacity-60">
+              Race page
+            </Link>
+          </p>
+        )}
         {race && !projection && track === "total" && (
           <p className="text-[11px] text-muted-foreground">No projection: race day is today, past, or more than a year away.</p>
         )}

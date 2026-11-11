@@ -33,6 +33,7 @@ function detail(over: Partial<ActivityDetail> = {}, metrics: Partial<ActivityMet
     sets: [],
     hrZoneFloors: [100, 120, 140, 160, 180],
     matchedSessionId: null,
+    fuel: null,
     ...over,
   };
 }

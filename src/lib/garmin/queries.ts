@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, programExercises, programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, garminFuelLogs, programExercises, programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
@@ -11,7 +11,8 @@ import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
 import { SPORTS, isIndoor, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
 import { projectPmc, type Projection } from "./analytics/projection";
-import type { TrendActivity } from "./analytics/trends";
+import { efPoints, thresholdHistory, type EfPoint, type TrendActivity } from "./analytics/trends";
+import { compareBricks, pacingGuide, taperStart, type BrickComparison, type FuelSession, type PacingGuide, type RunSummary } from "./analytics/race";
 import type { Efforts } from "./analytics/efforts";
 import type { Decoupling } from "./analytics/decoupling";
 import { bodySignal, raceStatus, type BodySignal, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
@@ -445,6 +446,8 @@ export type ActivityDetail = {
   sets: Json[];
   hrZoneFloors: number[] | null;
   matchedSessionId: number | null;
+  /** Carbohydrate and fluid the user logged for this session. */
+  fuel: { carbsG: number | null; fluidMl: number | null } | null;
 };
 
 const MAX_POINTS = 3000;
@@ -477,6 +480,11 @@ export async function getActivityDetail(userId: string, id: number): Promise<Act
     matchedSessionId = d?.entries?.find((e) => e.id === id)?.matchedSessionId ?? null;
   }
 
+  const [fuel] = await db
+    .select({ carbsG: garminFuelLogs.carbsG, fluidMl: garminFuelLogs.fluidMl })
+    .from(garminFuelLogs)
+    .where(and(eq(garminFuelLogs.userId, userId), eq(garminFuelLogs.garminActivityId, id)));
+
   const zone = sessionZoneMessage(s?.timeInZone);
   const highs = Array.isArray(zone?.hrZoneHighBoundary) ? (zone!.hrZoneHighBoundary as number[]) : null;
   const j = (a.data ?? {}) as Json;
@@ -493,6 +501,7 @@ export async function getActivityDetail(userId: string, id: number): Promise<Act
     sets: (s?.sets ?? []) as Json[],
     hrZoneFloors: highs && highs.length >= 6 ? highs.slice(0, 5) : null,
     matchedSessionId,
+    fuel: fuel ?? null,
   };
 }
 
@@ -826,5 +835,115 @@ export async function getTrendsData(userId: string, today = isoDate(new Date()))
     acts,
     garminVo2: vo2Rows.map((r) => ({ day: r.day, value: r.vo2, sport: r.sport as "run" | "bike" })),
     weight: weightRows.flatMap((r) => (r.kg ? [{ day: r.day, kg: Math.round(r.kg * 10) / 10 }] : [])),
+  };
+}
+
+// ── Race page ───────────────────────────────────────────────────────────────
+
+export type RaceData = {
+  today: string;
+  cycleId: number;
+  race: RaceStatus;
+  taperStart: string | null;
+  series: LoadSeries;
+  projection: Projection | null;
+  volume: VolumeData;
+  pacing: PacingGuide;
+  /** Which LTHR the pacing guide used: the app's estimate or the watch's. */
+  lthrSource: "estimate" | "watch" | null;
+  bricks: BrickComparison[];
+  fuel: FuelSession[];
+  heat: EfPoint[];
+};
+
+/** Mean of a stream array stored in jsonb, in SQL, so the streams never leave the database. */
+const streamMean = (key: string) =>
+  sql<number | null>`(select avg(v::float8) from jsonb_array_elements_text(${garminActivityStreams.streams}->${key}) v where v <> 'null')`;
+
+export async function getRaceData(userId: string, today = isoDate(new Date())): Promise<RaceData | null> {
+  const cycle = await getActiveCycle(userId);
+  const race = raceStatus(cycle, today);
+  if (!cycle?.startDate || !race) return null;
+  const [{ series }, volume, trends] = await Promise.all([getLoadSeries(userId), getVolumeData(userId, today), getTrendsData(userId, today)]);
+  const rp = await getRaceProjection(userId, series, today);
+
+  const th = thresholdHistory(trends.acts, addDays(today, -6), today).at(-1);
+  const watchLthr = [...trends.acts].reverse().find((a) => a.watchLthr)?.watchLthr ?? null;
+  const lthrRun = th?.lthrRun ?? null;
+  const pacing = pacingGuide({ distance: volume.distance, ftp: th?.ftp ?? null, cs: th?.cs ?? null, lthrBike: th?.lthrBike ?? watchLthr, lthrRun: lthrRun ?? watchLthr });
+
+  // Runs with mean speed and HR, for bricks against fresh runs.
+  const runRows = await db
+    .select({ id: garminActivities.garminActivityId, start: garminActivities.startTimeLocal, typeKey: garminActivities.activityType, data: garminActivities.data })
+    .from(garminActivities)
+    .where(and(eq(garminActivities.userId, userId), gte(garminActivities.startTimeLocal, new Date(`${addDays(today, -400)}T00:00:00Z`))));
+  const runs: RunSummary[] = runRows.flatMap((r) => {
+    const j = (r.data ?? {}) as Json;
+    const speed = num(j.averageSpeed);
+    const hr = num(j.averageHR);
+    const durationS = num(j.duration);
+    return sportOf(r.typeKey) === "run" && !isIndoor(r.typeKey) && speed && hr && durationS ? [{ id: r.id, day: isoDate(r.start), speed, hr, durationS }] : [];
+  });
+  const brickIds = new Set(volume.bricks.map((b) => b.runId));
+  const bricks = compareBricks(
+    runs.filter((r) => brickIds.has(r.id)),
+    runs.filter((r) => !brickIds.has(r.id) && r.durationS >= 1200),
+  );
+
+  // Long sessions for the fuel and fluid log: an hour or more, last year.
+  const fuelRows = await db
+    .select({
+      id: garminActivities.garminActivityId,
+      start: garminActivities.startTimeLocal,
+      typeKey: garminActivities.activityType,
+      data: garminActivities.data,
+      temperature: streamMean("temperature"),
+      carbsG: garminFuelLogs.carbsG,
+      fluidMl: garminFuelLogs.fluidMl,
+    })
+    .from(garminActivities)
+    .leftJoin(
+      garminActivityStreams,
+      and(eq(garminActivityStreams.userId, garminActivities.userId), eq(garminActivityStreams.garminActivityId, garminActivities.garminActivityId)),
+    )
+    .leftJoin(garminFuelLogs, and(eq(garminFuelLogs.userId, garminActivities.userId), eq(garminFuelLogs.garminActivityId, garminActivities.garminActivityId)))
+    .where(
+      and(
+        eq(garminActivities.userId, userId),
+        gte(garminActivities.startTimeLocal, new Date(`${addDays(today, -364)}T00:00:00Z`)),
+        sql`(${garminActivities.data}->>'duration')::float8 >= 3600`,
+      ),
+    )
+    .orderBy(desc(garminActivities.startTimeLocal));
+  const fuel: FuelSession[] = fuelRows
+    .map((r) => {
+      const j = (r.data ?? {}) as Json;
+      return {
+        id: r.id,
+        day: isoDate(r.start),
+        name: typeof j.activityName === "string" ? j.activityName : r.typeKey.replaceAll("_", " "),
+        sport: sportOf(r.typeKey),
+        durationS: num(j.duration) ?? 0,
+        sweatMl: num(j.waterEstimated),
+        temperature: r.temperature !== null ? Math.round(r.temperature * 10) / 10 : null,
+        carbsG: r.carbsG,
+        fluidMl: r.fluidMl,
+      };
+    })
+    .filter((f) => f.sport === "bike" || f.sport === "run" || f.sport === "swim");
+
+  return {
+    today,
+    cycleId: cycle.id,
+    race,
+    taperStart: taperStart(cycle.startDate, cycle.durationWeeks),
+    series,
+    projection: rp?.projection ?? null,
+    volume,
+    pacing,
+    lthrSource: lthrRun ? "estimate" : watchLthr ? "watch" : null,
+    bricks,
+    fuel,
+    heat: efPoints(trends.acts).filter((p) => p.temperature !== null),
   };
 }

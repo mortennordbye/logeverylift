@@ -262,3 +262,33 @@ export function nearest<T extends { day: string }>(xs: T[], at: number | null): 
   for (const x of xs) if (Math.abs(ms(x.day) - at) < Math.abs(ms(best.day) - at)) best = x;
   return best;
 }
+
+/** Decoupling against the session's mean temperature, one dot per steady session: how much heat costs you. */
+export function heatOption(points: EfPoint[], theme: VizTheme) {
+  const ax = axisCommon(theme);
+  return {
+    animationDuration: 300,
+    tooltip: { show: false },
+    grid: [{ top: 10, bottom: 28, ...GRID_SIDES }],
+    xAxis: [{ type: "value", scale: true, ...ax, splitLine: { show: false }, axisLabel: { ...ax.axisLabel, formatter: "{value} °C" } }],
+    yAxis: [{ type: "value", ...ax, splitNumber: 3, axisLabel: { ...ax.axisLabel, formatter: "{value}%" } }],
+    series: (["bike", "run"] as const).map((sport, i) => ({
+      name: sport,
+      type: "scatter",
+      data: points.filter((p) => p.sport === sport && p.temperature !== null && p.decoupling !== null).map((p) => [Math.round(p.temperature! * 10) / 10, p.decoupling]),
+      symbolSize: 7,
+      itemStyle: { color: theme.sport[sport], opacity: 0.8 },
+      ...(i === 0
+        ? {
+            markLine: {
+              silent: true,
+              symbol: "none",
+              lineStyle: { color: theme.status.warning, type: "dashed", width: 1 },
+              label: { show: true, position: "insideEndTop", color: theme.textMuted, fontSize: AXIS_FONT - 1, formatter: "5 %" },
+              data: [{ yAxis: 5 }],
+            },
+          }
+        : {}),
+    })),
+  };
+}

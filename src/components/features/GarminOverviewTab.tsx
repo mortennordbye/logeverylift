@@ -64,7 +64,7 @@ function RaceStrip({ data }: { data: OverviewData }) {
   }
   const phase = r.phase ? `${phaseLabel(r.phase)}${r.isDeload ? " (recovery week)" : ""}` : "Not started";
   return (
-    <Block href={r.raceSet ? tab("training") : `/cycles/${data.cycleId}/edit#race`} label={r.raceSet ? "Race and training" : "Set the race date"}>
+    <Block href={r.raceSet ? "/more/garmin/race" : `/cycles/${data.cycleId}/edit#race`} label={r.raceSet ? "Race page" : "Set the race date"}>
       <div className="flex items-center gap-3">
         <div className="flex h-12 w-12 flex-none flex-col items-center justify-center rounded-xl bg-background">
           <span className="text-lg font-semibold leading-none tabular-nums">{Math.max(0, r.daysToRace)}</span>

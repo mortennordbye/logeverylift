@@ -21,6 +21,7 @@
  *   derives from the rows above, filled by the worker. Safe to drop and rebuild.
  * - garmin_sync_runs: one row per sync or worker run, for observability.
  *   Only the latest 200 per user are kept.
+ * - garmin_fuel_logs: carbohydrate and fluid the user logged for a session.
  */
 
 import { bigint, boolean, customType, date, index, integer, jsonb, pgTable, real, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
@@ -200,4 +201,24 @@ export const garminDailyMetrics = pgTable(
     computedAt: timestamp("computed_at").defaultNow().notNull(),
   },
   (t) => [unique("uniq_garmin_daily_metrics").on(t.userId, t.day)],
+);
+
+/**
+ * What the user took in during a long session: carbohydrate and fluid, typed
+ * on the activity page. With Garmin's sweat estimate it gives the race page's
+ * fluid plan. Health data (nutrition); deleted with the Garmin data.
+ */
+export const garminFuelLogs = pgTable(
+  "garmin_fuel_logs",
+  {
+    id: serial("id").primaryKey(),
+    userId: text("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    garminActivityId: bigint("garmin_activity_id", { mode: "number" }).notNull(),
+    carbsG: integer("carbs_g"),
+    fluidMl: integer("fluid_ml"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (t) => [unique("uniq_garmin_fuel_log").on(t.userId, t.garminActivityId)],
 );

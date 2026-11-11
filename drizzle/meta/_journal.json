@@ -526,6 +526,13 @@
       "when": 1794424056013,
       "tag": "0074_quick_aqueduct",
       "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1794429836087,
+      "tag": "0075_calm_cable",
+      "breakpoints": true
     }
   ]
 }

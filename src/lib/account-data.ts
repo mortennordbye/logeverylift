@@ -17,6 +17,7 @@ import {
   garminConnections,
   garminDailyMetrics,
   garminDays,
+  garminFuelLogs,
   garminSyncRuns,
   gyms,
   inviteTokens,
@@ -117,6 +118,7 @@ export async function collectUserData(userId: string) {
     garmin_activity_metrics: await db.select().from(garminActivityMetrics).where(eq(garminActivityMetrics.userId, userId)),
     garmin_daily_metrics: await db.select().from(garminDailyMetrics).where(eq(garminDailyMetrics.userId, userId)),
     garmin_sync_runs: await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, userId)),
+    garmin_fuel_logs: await db.select().from(garminFuelLogs).where(eq(garminFuelLogs.userId, userId)),
     programs: programRows,
     program_exercises: programExerciseRows,
     program_sets: programExerciseIds.length

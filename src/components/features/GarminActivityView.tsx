@@ -19,7 +19,7 @@ import {
   zoneSeconds,
 } from "@/lib/garmin/charts/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
-import { ChartLine, ChevronLeft, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, Route as RouteIcon, Scale, Timer, TrendingUp, Zap, type LucideIcon } from "lucide-react";
+import { ChartLine, ChevronLeft, Droplets, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, Route as RouteIcon, Scale, Timer, TrendingUp, Zap, type LucideIcon } from "lucide-react";
 
 const STAT_ICON: Record<string, LucideIcon> = {
   Duration: Timer,
@@ -37,6 +37,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSwipe } from "./garmin/use-swipe";
 import { useMemo, useState } from "react";
+import { saveFuelLog } from "@/lib/actions/garmin";
+import { callAction } from "@/lib/utils/stale-bundle";
 
 
 function ZoneBars({ seconds, colors, label }: { seconds: number[]; colors: string[]; label: (i: number) => string }) {
@@ -60,6 +62,65 @@ function ZoneBars({ seconds, colors, label }: { seconds: number[]; colors: strin
 }
 
 type Span = [number, number];
+
+/** Sessions this long or longer get the fuel and fluid log. */
+const FUEL_MIN_S = 3600;
+
+/** Carbohydrate and fluid taken during the session, for the race page's fluid plan. */
+function FuelCard({ d }: { d: ActivityDetail }) {
+  const router = useRouter();
+  const [carbs, setCarbs] = useState(d.fuel?.carbsG != null ? String(d.fuel.carbsG) : "");
+  const [fluid, setFluid] = useState(d.fuel?.fluidMl != null ? String(d.fuel.fluidMl) : "");
+  const [state, setState] = useState<"idle" | "saving" | "saved" | string>("idle");
+  const sweat = typeof d.summary.waterEstimated === "number" ? d.summary.waterEstimated : null;
+  const parse = (v: string) => (v.trim() === "" ? null : Math.round(Number(v)));
+  const bad = [carbs, fluid].some((v) => v.trim() !== "" && !(Number(v) >= 0));
+
+  async function save() {
+    setState("saving");
+    const r = await callAction(saveFuelLog({ activityId: d.id, carbsG: parse(carbs), fluidMl: parse(fluid) }));
+    setState(r.success ? "saved" : r.error);
+    if (r.success) router.refresh();
+  }
+
+  const field = (id: string, label: string, unit: string, value: string, set: (v: string) => void) => (
+    <label htmlFor={id} className="flex-1 space-y-1">
+      <span className="text-[11px] text-muted-foreground">{label}</span>
+      <span className="flex items-center gap-1 rounded-xl bg-background px-3">
+        <input
+          id={id}
+          inputMode="numeric"
+          value={value}
+          onChange={(e) => {
+            set(e.target.value);
+            setState("idle");
+          }}
+          className="h-11 w-full bg-transparent text-base outline-none tabular-nums"
+          placeholder="0"
+        />
+        <span className="text-xs text-muted-foreground">{unit}</span>
+      </span>
+    </label>
+  );
+
+  return (
+    <Card
+      icon={Droplets}
+      title="Fuel and fluid"
+      aside={sweat ? `sweat loss about ${(sweat / 1000).toFixed(1)} l` : undefined}
+      note="What you took in during the session. The race page turns this and Garmin's sweat estimate into a fluid plan by temperature."
+    >
+      <div id="fuel" className="flex gap-2 scroll-mt-4">
+        {field("fuel-carbs", "Carbohydrate", "g", carbs, setCarbs)}
+        {field("fuel-fluid", "Fluid", "ml", fluid, setFluid)}
+      </div>
+      <button onClick={save} disabled={bad || state === "saving"} className="h-11 w-full rounded-xl bg-foreground text-background text-sm font-semibold disabled:opacity-40 active:opacity-70">
+        {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : "Save"}
+      </button>
+      {state !== "idle" && state !== "saving" && state !== "saved" && <p className="text-xs text-destructive">{state}</p>}
+    </Card>
+  );
+}
 
 /** Stats for the selected span: time, distance, HR, power or pace, climb. */
 function SelectionSummary({ d, span, onClear }: { d: ActivityDetail; span: Span; onClear: () => void }) {
@@ -294,6 +355,8 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
             )}
           </Card>
         )}
+
+        {(typeof d.summary.duration === "number" ? d.summary.duration : 0) >= FUEL_MIN_S && (d.sport === "bike" || d.sport === "run" || d.sport === "swim") && <FuelCard d={d} />}
 
         {laps.length > 1 && (
           <Card icon={Flag} title={`Laps · ${laps.length}`} aside={spans.some(Boolean) ? "tap a lap to select it" : undefined}>
