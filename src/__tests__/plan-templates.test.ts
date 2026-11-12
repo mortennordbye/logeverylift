@@ -202,7 +202,9 @@ describe("buildTemplatePlan — session length, split and avoid areas", () => {
     // 60 base combos per day count × 13 valid (days, split) pairs × 4 lengths × 8 avoid subsets.
     expect(built).toBe(60 * 13 * 4 * 8);
     expect(failures.slice(0, 10)).toEqual([]);
-  }, 60_000);
+    // About 14 s alone with coverage, but 35-60 s in CI next to the other suites, and it
+    // passed 60 s once (main run 43283590737). The work is fixed in size, so give it room.
+  }, 180_000);
 
   const base: TemplateParams = { goal: "strength", level: "intermediate", daysPerWeek: 4, equipment: "full_gym", weeks: 8 };
   const names = (plan: ReturnType<typeof buildTemplatePlan>) => plan.programs.flatMap((p) => p.exercises.map((e) => e.name));

@@ -59,6 +59,7 @@ const eslintConfig = defineConfig([
     // Generated artifacts:
     "drizzle/**", // drizzle-kit regenerates these from src/db/schema/
     "coverage/**", // vitest coverage output
+    ".claude/**", // agent worktrees: full repo copies with their own .next builds
   ]),
 ]);
 
