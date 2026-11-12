@@ -57,6 +57,18 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A request for 7-day training. Then add a 7-day split to `autoSplit` (for example push/pull/legs twice plus a conditioning or mobility day), add 7 to `TEMPLATE_DAYS`, and extend the combination tests.
 - **Touchpoints:** `src/lib/utils/plan-templates.ts` (`TEMPLATE_DAYS`, `autoSplit`, `SPLIT_DAYS`), `src/__tests__/plan-templates.test.ts`.
 
+### Training-limit warnings on a change-set undo over MCP
+- **What:** `restore_revision` with one `revisionId` runs the training limits as warnings (T4) and stores them on the restore. With a `changeSetId` (undo a whole review) it runs none, so an undo that brings back a long run or a fourth hard session does not warn the assistant or the user.
+- **Why deferred:** A change set can touch several programs, cycles and memory entries; the scope for the before and after read needs every touched object, and the AI coach PR (`docs/plans/ai-coach.md`, section 13) kept to the one-object case. The weekly sync's own output is checked in package D2, not here.
+- **Unblocked by:** Package D2 (sync-output warnings), which needs the same multi-object scope. Then build the scope from `restoreChangeSet`'s targets and reuse `evaluateLimits`.
+- **Touchpoints:** `src/lib/mcp/revisions.ts` (`restore_revision`), `src/lib/training-limits.ts`, `src/lib/plan-revisions.ts` (`restoreChangeSet`).
+
+### Discipline on the custom-exercise form inside a program
+- **What:** The custom-exercise form on `/exercises` shows the discipline field (swim, bike or run) when the endurance switch is on. The same form opened from a program's "Add exercise" picker does not, because the picker does not pass the switch.
+- **Why deferred:** The owner's decision 5 in `docs/plans/ai-coach.md` named the custom-exercise form; the picker is a second entry point that needs the switch read on the program page, and the assistant can set the discipline with `create_exercise` meanwhile.
+- **Unblocked by:** Reading `enduranceEnabledFor` on the program page and passing `enduranceEnabled` through `ProgramAddExerciseWrapper` to `ExercisesClient`.
+- **Touchpoints:** `src/components/features/ProgramAddExerciseWrapper.tsx`, `src/components/features/ExercisesClient.tsx`, `src/app/programs/[id]/page.tsx`.
+
 ### Sport-specific endurance fields (pool length, bike power/cadence, swim stroke)
 - **What:** The set editor captures distance/duration/incline/HR-zone only. Triathletes often want pool length, swim stroke, or bike power/cadence. The schema has no columns for these.
 - **Why deferred:** Not needed to log and track the three disciplines; add when a concrete need appears.
