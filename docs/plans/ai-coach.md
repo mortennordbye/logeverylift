@@ -8,7 +8,7 @@ D1-D6, D15, D18, T2-T5, T9, T10), the research (`docs/research/endurance-trainin
 `CLAUDE.md`, `TESTING.md` and the merged briefs [`mcp-access.md`](mcp-access.md) and
 [`foundations.md`](foundations.md).
 
-Status: brief, 2026-11-12. Open questions in section 12 must be settled before code. The
+Status: brief, 2026-11-12. The owner settled the open questions on 2026-11-12 (section 12). The
 **Findings** describe `main` at ec8ee7d; every `file:line` in them was opened then. Names marked
 *new* do not exist yet. Names from A4 (`withPlanWrite`, `plan_revisions`, `changeSetFor`,
 `diffSnapshots`, `list_revisions`, `restore_revision`) are defined in `revisions.md` and do not
@@ -67,7 +67,7 @@ For a lifter nothing changes, except a "Coach memory" entry on the More screen.
   constraint `exercises_name_unique` in `drizzle/0000_quick_rhodey.sql:53`, still in the latest
   snapshot). If user A has a custom "Trail run", user B cannot create one: the clash check passes,
   the insert fails, and B sees "Failed to create exercise". An assistant that creates exercises
-  will hit this more often. See open question 6.
+  will hit this more often. Fixed in this PR (decision 6).
 
 ### 1.3 Logged sessions and notes
 
@@ -167,7 +167,7 @@ Other changes:
   an assistant write (2.4).
 - `plan_revisions.object_type` gets the value `memory` (text enum, no SQL; A4 2.1 planned for it).
 - `workout_sessions.source` gets the value `assistant` (text, no SQL).
-- `exercises`: per open question 6, replace the global unique name with a unique name among
+- `exercises` (decision 6): replace the global unique name with a unique name among
   system exercises and a unique `(user_id, name)` among custom ones.
 
 ### 2.2 Field owners
@@ -181,7 +181,7 @@ Every row of audit section 8, decided, plus the fields this PR opens. The tool d
 | `distance_meters`, `duration_seconds` on sets with a peak anchor | Weekly sync, from the peak | Kept as today: the value is this week's, and the peak is re-derived from it, so the change lasts (`reanchoredPeaks`). The description says it edits the peak. |
 | `target_heart_rate_zone`, `rest_time_seconds` on `work` sets with a peak anchor | Weekly sync, by phase | **Refused** with: "The weekly sync sets zone and rest on this set from the block phase. To set them yourself, send `sessionRole: null` for this set; the sync then leaves its zone and rest alone, and still scales its distance or duration." Both in one write is fine. |
 | Same two fields on other sets | User, assistant | Applied. |
-| Cycle `adaptation_pct` | Weekly sync, Garmin suggestion; assistant through `set_volume` | New operation `set_volume` on `manage_training_cycle` (2.3): one percent for the current week of the active cycle, 50-110. It runs the sync for this week with that percent, the same path as the Garmin suggestion, so the limits see the scaled numbers. The next weekly sync computes the percent again (open question 3). |
+| Cycle `adaptation_pct` | Weekly sync, Garmin suggestion; assistant through `set_volume` | New operation `set_volume` on `manage_training_cycle` (2.3): one percent for the current week of the active cycle, 50-110. It runs the sync for this week with that percent, the same path as the Garmin suggestion, so the limits see the scaled numbers. The next weekly sync computes the percent again (decision 3). |
 | Cycle `race_date`, `race_distance`, `goal`, `athlete_level`, `start_date`, `end_*`, `name`, `duration_weeks` | User, assistant | Applied. Race, goal and level need the endurance switch, as in the app. A change to goal or level clears `last_synced_week`, like a duration change. |
 | Coach memory, all fields | User, assistant | Applied, revisioned. |
 | A logged session (`source` `assistant`) and its sets | Assistant at create; the user after (edit and delete in History, as today) | The assistant cannot edit or delete logged sessions in this PR. |
@@ -200,7 +200,7 @@ limits and takes `overrideLimits` and `overrideReason` (2.4).
 | `edit_cycle_slot` | write | No new fields | Limits on `upsert` |
 | `restore_revision` (A4) | write | Runs the limits as warnings only (T4); never blocks | Warnings in the result and in `limit_check` |
 | `search_exercises` (*new*) | read | Part of a name, optional `category`, `discipline`, `muscleGroup`, `equipment`, `limit` (1-50, default 20). System exercises and the user's own. Returns id, name, category, discipline, timed, custom, muscle group, equipment | none |
-| `create_exercise` (*new*) | write | The app's fields plus `discipline` and `isTimed` (open question 5). Same name check as the app | Not plan data: no revision; audit log line |
+| `create_exercise` (*new*) | write | The app's fields plus `discipline` and `isTimed` (decision 5). Same name check as the app | Not plan data: no revision; audit log line |
 | `log_session` (*new*) | write | A completed session done outside the app (2.6) | Not plan data: no version, no limits; `reason` optional |
 | `confirm_session` (*new*) | write | Marks a planned day of the active cycle as done (2.6) | Not plan data |
 | `recent_workouts`, `exercise_history` | read | Add `notes` on each session and set, and the user's own note per exercise (`exercise_notes`) in `exercise_history` | none |
@@ -229,7 +229,7 @@ data: `garminAllowedFor` is true and a `garmin_connections` row exists with `las
 no Garmin data, the cap is not checked, and the result says so in plain words: "Long-run cap not
 checked: no Garmin data for this account. Check the change against the long-run rule in
 logeverylift://docs/endurance-training-reference yourself." Hard sessions per week need only the
-plan (open question 1).
+plan (decision 1).
 
 **Rule 1: `long_run_cap`.** Cites `docs/research/endurance-training-reference.md:195`,
 evidence "Study (large cohort)".
@@ -255,7 +255,7 @@ Inference".
 - A hard session: a program with at least one live set on an endurance exercise (`discipline`
   not null) that has `sessionRole` `work` or `targetHeartRateZone` 4 or 5. Strength sessions do
   not count (the research puts heavy lifting on hard days). Long easy sessions do not count; the
-  long-run cap covers runs (open question 2).
+  long-run cap covers runs (decision 2).
 - The week: the slots of a day-of-week cycle; a program on two days counts twice. Rotation cycles
   have no fixed week, so the rule is not checked for them, and the result says so.
 - Which cycle: for a cycle or slot write, that cycle; for a program write, the active cycle if it
@@ -301,7 +301,7 @@ pure module.
   ("left knee sore after runs over 90 min, 2026-10"), decisions ("kept strength at 2x in build
   to keep muscle"). Facts with their own home do not go here (T10). Until package C3 builds the
   homes for injuries, availability and the strength goal, those go in as `limit` or
-  `observation` entries, and C3's interview moves them (open question 4).
+  `observation` entries, and C3's interview moves them (decision 4).
 - **Writes.** Server Actions in `src/lib/actions/coach-memory.ts` (*new*) for the app, and the
   MCP tool, both through one plain module `src/lib/coach-memory.ts` (*new*) that takes a
   resolved user id. Every write goes through `withPlanWrite` with object type `memory`, writer
@@ -350,7 +350,7 @@ pure module.
   assistant's name. Add (bottom bar), edit text and kind in a sheet, a switch for active,
   delete at the bottom of the sheet with a confirm. Inactive entries fold under "Not in use".
   Everyone sees it; it is not behind the endurance switch (the assistant is for everyone).
-- **Scheduled cycle** (open question 7): a cycle with a future start shows "Starts 4 Jan" on the
+- **Scheduled cycle** (decision 7): a cycle with a future start shows "Starts 4 Jan" on the
   cycles list and its page. The existing Start button still starts it today.
 - **Limit overrides** in A4's history rows and AI changes feed (2.4).
 - **Assistant-logged sessions:** a short label in History and on the session page.
@@ -375,7 +375,7 @@ One migration (`drizzle/0083_*.sql` if A4 lands as `0082` and nothing else first
 `pnpm db:generate` (create, not rename), SQL and `drizzle/meta/` committed together:
 - `CREATE TABLE coach_memory` with its index and FK.
 - `ALTER TABLE plan_revisions ADD COLUMN limit_check jsonb`.
-- If open question 6 is yes: `ALTER TABLE exercises DROP CONSTRAINT exercises_name_unique`, then
+- Decision 6: `ALTER TABLE exercises DROP CONSTRAINT exercises_name_unique`, then
   `CREATE UNIQUE INDEX uniq_exercise_system_name ON exercises (name) WHERE user_id IS NULL` and
   `CREATE UNIQUE INDEX uniq_exercise_custom_name ON exercises (user_id, name) WHERE user_id IS NOT NULL`.
   Existing rows satisfy both, since they satisfy the global one.
@@ -443,7 +443,7 @@ has a functional test.
 4. **Export:** `coach_memory` in `collectUserData` (`src/lib/account-data.ts:62`); the coverage
    test fails until then. `plan_revisions` is already exported by A4.
 5. **Delete:** cascade on `user_id`.
-6. **`LEGAL_VERSION`** bump to the merge date. `CONSENT_VERSION`: open question 8.
+6. **`LEGAL_VERSION`** bump to the merge date. `CONSENT_VERSION` stays (decision 8).
 7. **Logs:** ids and tags only (`[coachMemory]`, `[mcp:limits] refused`, `[mcp:log_session]`).
    Never memory text, notes or limit numbers in logs.
 8. **Friends:** coach memory is never shown to other users. Assistant-logged sessions follow
@@ -462,7 +462,7 @@ seen failing.
 | Unit | `remainingAfterOverride`: all overridden, one left, an override for an unbroken rule ignored; the override formatter | same |
 | Unit | Tool registration: `search_exercises` and `get_coach_memory` are read tools; every new write tool has no `readOnlyHint` | `src/__tests__/mcp-tools.test.ts` |
 | Unit | Instructions name the new tools and the limit rules | `src/__tests__/mcp-resources.test.ts` |
-| Integration | Today fails: `create_exercise` (and `createCustomExercise`) for a name another user already has as a custom exercise (if question 6 is yes) | `src/__tests__/integration/mcp-exercises.test.ts` (*new*) |
+| Integration | Today fails: `create_exercise` (and `createCustomExercise`) for a name another user already has as a custom exercise (decision 6) | `src/__tests__/integration/mcp-exercises.test.ts` (*new*) |
 | Integration | `search_exercises`: system and own, never another user's custom; filters | same |
 | Integration | `manage_training_cycle`: race, goal and level set and returned; refused without the endurance switch; goal or level change clears `last_synced_week`; `start` with a future date schedules and does not complete the active block; the scheduled block starts on its day through `getActiveCycleForUser` and completes the old one; `set_volume` writes this week's targets and `adaptation_pct`, writer `assistant`, and next week's sync computes its own | `src/__tests__/integration/mcp-cycles.test.ts` (*new*) |
 | Integration | `edit_program_exercise`: zone or rest on a `work` set with a peak anchor refused and nothing changed; the same with `sessionRole: null` applies and the next sync keeps it | `src/__tests__/integration/mcp-programs.test.ts` |
@@ -547,38 +547,23 @@ Changed: `src/lib/mcp/tools/{cycles,programs,workouts}.ts`, `src/app/api/[transp
 (A4), `src/lib/account-data.ts`, `docs/privacy/data-inventory.md`, `src/app/privacy/page.tsx`,
 `src/app/oauth/consent/page.tsx`, `src/lib/constants/legal.ts`, `src/components/features/MoreClient.tsx`.
 
-## 12. Open questions for the owner
+## 12. Owner decisions (2026-11-12)
 
-1. **Who gets the hard-sessions limit.** It needs only the plan, not Garmin. Recommended: run it
-   for every user with the endurance switch on, and run the long-run cap only with Garmin data.
-   Alternative: both only with Garmin data, as first stated.
-2. **What counts as a hard session.** Recommended: intervals only (`work` role or zone 4-5),
-   limit 3 a week; long easy runs and rides do not count, and the long-run cap covers runs.
-   Alternative: also count the week's longest run and ride as key sessions, limit 3 key sessions
-   (closer to "2-3 key sessions", but a normal week of long ride, long run and one interval session
-   is then already at the limit).
-3. **How long an assistant volume change lasts.** Recommended: one week, like the Garmin
-   suggestion; the next weekly sync computes its own percent. For a lasting change the assistant
-   edits the peaks. Alternative: a stored assistant percent that the sync keeps until a given week
-   (a new column).
-4. **Injuries and availability before C3.** Recommended: allowed in coach memory as `limit` or
-   `observation` entries until C3 builds their tables; C3's interview moves them and makes the
-   entries inactive. Alternative: refuse them now (the assistant then has nowhere to keep them
-   until C3).
-5. **Discipline on custom exercises.** The long-run cap finds runs by `discipline` `run`; the app
-   form cannot set it. Recommended: `create_exercise` takes `discipline` and `isTimed`, and the
-   app's create form gets the same two fields, discipline shown only with the endurance switch.
-   Alternative: MCP only.
-6. **Custom exercise names clash across users** (1.2). Recommended: fix in this PR's migration
-   (names unique among system exercises and per user), with a test that fails today. Alternative:
-   a BACKLOG entry.
-7. **Future start date.** Recommended: `start` with a later date keeps the cycle a draft with the
-   date set; `getActiveCycleForUser` starts it on that day and completes the old block then; the
-   cycle list shows "Starts <date>". Alternative: MCP refuses a future start until C1 (seasons)
-   orders phases.
-8. **`CONSENT_VERSION` for coach memory.** The audit (section 9) says coach memory is a new kind
-   of health data, which would send every user through `/consent` again. Recommended: keep
-   `CONSENT_VERSION`; coach memory is free text the user chooses to store, the same category as
-   free-text notes, which the health-data consent already names
-   (`docs/privacy/data-inventory.md:32`). Bump `LEGAL_VERSION` only, and name coach memory in the
-   inventory and policy. Alternative: raise `CONSENT_VERSION` as the audit says.
+The owner took every recommendation. The defaults in section 10 are accepted too.
+
+1. **Hard-sessions limit:** for every user with the endurance switch on, from the plan alone.
+   The long-run cap runs only with Garmin data.
+2. **A hard session** is an interval session: a `work` role or heart rate zone 4-5 on an
+   endurance set. At most 3 a week. Long easy sessions do not count.
+3. **An assistant volume change lasts one week.** The next weekly sync computes its own percent.
+   For a lasting change the assistant edits the peaks.
+4. **Injuries and availability** go in coach memory as `limit` or `observation` entries until C3.
+   C3's interview moves them to their tables and makes the entries inactive.
+5. **Discipline and timed** on `create_exercise` and on the app's custom-exercise form. The form
+   shows discipline only with the endurance switch on.
+6. **Custom exercise names** are fixed in this PR: unique among system exercises and per user,
+   with a test that fails first.
+7. **Future start:** the cycle stays a draft with the date set; it starts on that day and
+   completes the old block then; the cycle list shows "Starts <date>".
+8. **`LEGAL_VERSION` only.** `CONSENT_VERSION` stays: coach memory is free text, the same
+   category as the free-text notes the health-data consent already names.
