@@ -4,6 +4,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { disconnectAssistant } from "@/lib/actions/assistants";
 import type { McpAccess } from "@/lib/mcp/scopes";
 import { callAction } from "@/lib/utils/stale-bundle";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -68,6 +69,14 @@ export function AssistantsClient({ assistants }: { assistants: Assistant[] }) {
           ))}
         </div>
       )}
+
+      <Link
+        href="/more/assistants/changes"
+        className="mt-4 flex items-center justify-between rounded-xl bg-card px-4 min-h-[44px] text-sm font-medium active:opacity-60"
+      >
+        Assistant changes
+        <span className="text-muted-foreground">›</span>
+      </Link>
 
       <BottomSheet open={confirming !== null} onClose={() => setConfirming(null)} blur>
         <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4">

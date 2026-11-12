@@ -89,9 +89,11 @@ type Props = {
   cycles: TrainingCycle[];
   /** The endurance add-on (src/lib/endurance.ts); gates the triathlon plan entry. */
   enduranceEnabled: boolean;
+  /** Deleted cycles the user can restore, shown under the list. */
+  recentlyDeleted?: React.ReactNode;
 };
 
-export function CyclesListClient({ cycles: initial, enduranceEnabled }: Props) {
+export function CyclesListClient({ cycles: initial, enduranceEnabled, recentlyDeleted }: Props) {
   const router = useRouter();
   const [cycles, setCycles] = useState(initial);
   const [isEditing, setIsEditing] = useState(false);
@@ -378,6 +380,7 @@ export function CyclesListClient({ cycles: initial, enduranceEnabled }: Props) {
           </div>
         )}
 
+        {recentlyDeleted}
         {/* Spacer so the last row clears the fixed bottom nav (flex scroll
             containers ignore their own padding-bottom on iOS WebKit). */}
         <div aria-hidden className="shrink-0 pb-nav-safe" />

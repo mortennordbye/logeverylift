@@ -36,22 +36,32 @@ lasts only until that writer runs again.
 | Field | Owner | What an assistant's edit does |
 |---|---|---|
 | Target reps and weight on strength sets | The progression engine, after each logged session (`src/lib/utils/progression.ts`) | A one-off. The engine moves it again after the next session. To change the trend, change the slot's progression settings. |
-| Distance and duration on sets with a peak anchor | The weekly sync of the active cycle, scaled from the peak by the week's phase (`src/lib/periodization-sync.ts:237-238`) | A set replace stores the new value as the new peak, so the edit changes the peak, not only this week. |
-| Heart rate zone and rest on `work` sets | The weekly sync, by phase (`src/lib/periodization-sync.ts:240-243`) | Overwritten at the next weekly sync. |
+| Distance and duration on sets with a peak anchor | The weekly sync of the active cycle, scaled from the peak by the week's phase (`src/lib/periodization-sync.ts:269-270`) | A set replace stores the new value as the new peak, so the edit changes the peak, not only this week. |
+| Heart rate zone and rest on `work` sets | The weekly sync, by phase (`src/lib/periodization-sync.ts:272-274`) | Overwritten at the next weekly sync. |
 | The cycle's volume factor (`adaptationPct`) | The weekly sync, from adherence, readiness and effort | No tool writes it. |
 | Everything else in programs and cycles | The user and the assistant | Stays until changed again. |
 
 ## Limits of the app today
 
-- **No undo.** Every write applies at once and is final. There is no revision history yet.
-  Before a large change, read the current state so you can tell the user exactly what changed.
+- **Revisions, not undo buttons.** Every write applies at once (no accept step) and makes a
+  revision of the whole program or cycle: who wrote it, when, the reason, and the full state.
+  The user sees the history in the app and can restore any revision; you can with
+  `list_revisions` and `restore_revision`. A restore keeps all ids, never changes logged
+  workouts, and leaves weekly-sync targets and weights or reps the progression engine set since
+  as they are. Your writes in one conversation (within 30 minutes of each other) form one change
+  set, which the user can undo in one step.
+- **Every write needs a reason and the version you read.** `reason` is shown to the user in the
+  history. `expectedVersion` is the program's or cycle's `version` from `get_program`,
+  `get_training_cycle` or your last write's result. If the user (or another assistant) changed
+  it since, the write is refused with what changed; read it again and redo the change.
+- **Deletes can be undone.** Deleted programs and cycles stay restorable for 90 days.
 - **No training limits in code.** Nothing checks a ramp, a long-run cap or hard days per week.
   Use the endurance training reference (`logeverylift://docs/endurance-training-reference`)
   and say which rule and evidence label a change rests on.
 - **One workout slot per day** in a weekday cycle.
 - **No seasons or races above cycles.** A cycle can hold a race date and distance.
 - **Time:** "today", the cycle week, the weekly sync and the date a workout is logged on follow
-  the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:49`). With
+  the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:52`). With
   no zone set, they follow the server's clock and the phone's day.
 - **Units:** every value a tool takes or returns is metric (kg, metres, seconds). The user's
   `distanceUnit` (km or mi) and `swimUnit` (m or yd) only change what the app shows; weights

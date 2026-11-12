@@ -55,12 +55,20 @@ export default async function CycleDetailPage({
           <ChevronLeftIcon className="w-5 h-5" />
           <span className="text-sm font-medium">Back</span>
         </Link>
-        <Link
-          href={`/cycles/${cycle.id}/edit`}
-          className="text-primary text-sm font-medium min-h-[44px] flex items-center active:opacity-70"
-        >
-          Edit
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link
+            href={`/cycles/${cycle.id}/history`}
+            className="text-primary text-sm font-medium min-h-[44px] flex items-center active:opacity-70"
+          >
+            History
+          </Link>
+          <Link
+            href={`/cycles/${cycle.id}/edit`}
+            className="text-primary text-sm font-medium min-h-[44px] flex items-center active:opacity-70"
+          >
+            Edit
+          </Link>
+        </div>
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight truncate">{cycle.name}</h1>

@@ -57,7 +57,8 @@ describe("server instructions", () => {
       const text = serverInstructions(access);
       for (const doc of MCP_RESOURCE_DOCS) expect(text).toContain(doc.uri);
       expect(text).toContain("weekly review");
-      expect(text).toContain("No undo");
+      expect(text).toContain("expectedVersion");
+      expect(text).toContain("restore_revision");
     }
     expect(serverInstructions("read")).toContain("read only");
     expect(serverInstructions("write")).toContain("can read and change");
