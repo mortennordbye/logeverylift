@@ -6,7 +6,7 @@ import {
 } from "@/lib/actions/workout-sessions";
 import { deleteWorkoutSession } from "@/lib/actions/workout-sets";
 import { flushWorkoutPlan } from "@/lib/actions/programs";
-import { finishFlushPayload } from "@/lib/utils/finish-flush";
+import { finishFlushPayload, sendFinishFlush } from "@/lib/utils/finish-flush";
 import { usePendingQueue } from "@/contexts/pending-queue-context";
 import { useToast } from "@/contexts/toast-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
@@ -90,8 +90,10 @@ function FinishContent({ programId }: { programId: number }) {
     // starting weights, not this session's data, so it must not block the
     // save. The session write below is the one that matters.
     try {
-      const flushed = flush ? await flushWorkoutPlan(flush) : null;
-      const conflicts = flushed?.success ? flushed.data.conflicts : 0;
+      const flushed = flush
+        ? await sendFinishFlush(flush, flushWorkoutPlan, (payload) => enqueuePending({ kind: "flushWorkoutPlan", payload }))
+        : null;
+      const conflicts = flushed?.conflicts ?? 0;
       if (conflicts > 0) {
         showToast({
           durationMs: 8000,

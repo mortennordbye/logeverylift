@@ -141,12 +141,24 @@ export function reloadForFreshBundle(): "reloading" | "later" | "failed" {
  * request was already sent with a stale action ID, and the reload would cut
  * it off before it settles, leaving the caller waiting on nothing.
  */
+const APP_UPDATING = "App updating";
+const UNREACHABLE = "Couldn't reach the server";
+
+/**
+ * Whether a callAction result is a request that never reached the server (or
+ * whose answer never came back), as opposed to a failure the server decided.
+ * Such a write can be queued and sent again.
+ */
+export function failedInTransit(result: { success: boolean; error?: string }): boolean {
+  return !result.success && (result.error === APP_UPDATING || result.error === UNREACHABLE);
+}
+
 export async function callAction<R extends { success: boolean }>(
   call: Promise<R>,
 ): Promise<R | { success: false; error: string }> {
   if (isReloadPending()) {
     call.catch(() => {});
-    return { success: false, error: "App updating" };
+    return { success: false, error: APP_UPDATING };
   }
   try {
     const result = await call;
@@ -155,8 +167,8 @@ export async function callAction<R extends { success: boolean }>(
   } catch (err) {
     if (isStaleBundleError(err)) {
       void reloadForFreshBundle();
-      return { success: false, error: "App updating" };
+      return { success: false, error: APP_UPDATING };
     }
-    return { success: false, error: "Couldn't reach the server" };
+    return { success: false, error: UNREACHABLE };
   }
 }

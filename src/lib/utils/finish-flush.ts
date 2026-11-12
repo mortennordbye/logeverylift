@@ -1,3 +1,5 @@
+import { callAction, failedInTransit } from "@/lib/utils/stale-bundle";
+
 /**
  * The plan write a finished workout sends: each set's session override goes
  * back to the program, so the next session starts from it. One payload for the
@@ -19,4 +21,26 @@ export function finishFlushPayload(
   }));
   if (sets.length === 0) return null;
   return { programId, ...(planVersion != null ? { baseVersion: planVersion } : {}), sets };
+}
+
+type FlushPayload = NonNullable<ReturnType<typeof finishFlushPayload>>;
+
+/**
+ * Send the finish flush online. Through callAction, so a stale bundle starts
+ * the reload; and a flush that never reached the server (that, or a dropped
+ * connection) goes into the offline queue to replay, instead of being lost.
+ * A flush the server refused is not queued: sending it again cannot help.
+ */
+export async function sendFinishFlush(
+  payload: FlushPayload,
+  send: (p: FlushPayload) => Promise<{ success: true; data: { applied: number; conflicts: number } } | { success: false; error: string }>,
+  enqueue: (p: FlushPayload) => void,
+): Promise<{ conflicts: number; queued: boolean }> {
+  const result = await callAction(send(payload));
+  if (result.success) return { conflicts: result.data.conflicts, queued: false };
+  if (failedInTransit(result)) {
+    enqueue(payload);
+    return { conflicts: 0, queued: true };
+  }
+  return { conflicts: 0, queued: false };
 }
