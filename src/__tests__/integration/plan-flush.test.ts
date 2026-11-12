@@ -83,6 +83,45 @@ describe("the lifter's own writes during the workout", () => {
 });
 
 describe("flushWorkoutPlan", () => {
+  it("the same partly conflicting flush sent three times is one conflict and one applied change", async () => {
+    const tools = new Map<string, { schema: z.ZodTypeAny; handler: (a: Record<string, unknown>) => Promise<unknown> }>();
+    registerProgramTools(
+      {
+        registerTool: (name: string, config: { inputSchema: z.ZodRawShape }, handler: never) =>
+          tools.set(name, { schema: z.object(config.inputSchema), handler }),
+      } as unknown as McpServer,
+      userId,
+    );
+    const t = tools.get("edit_program_exercise")!;
+    await t.handler(
+      t.schema.parse({
+        operation: "update",
+        programExerciseId,
+        // Only set 2's weight changes; the rest as the factory made them.
+        sets: [1, 2, 3].map((n) => ({ setNumber: n, targetReps: 8, restTimeSeconds: 90, weightKg: n === 2 ? 70 : 60 })),
+        reason: "r",
+        expectedVersion: 1,
+      }) as Record<string, unknown>,
+    );
+    const payload = {
+      programId,
+      baseVersion: 1,
+      sets: [
+        { id: setIds[1], targetReps: 8, weightKg: 62.5 },
+        { id: setIds[2], targetReps: 8, weightKg: 65 },
+      ],
+    };
+    for (let i = 0; i < 3; i++) await flushWorkoutPlan(payload);
+    expect(await conflictRows()).toHaveLength(1);
+    const updates = await db
+      .select()
+      .from(planRevisions)
+      .where(and(eq(planRevisions.objectId, programId), eq(planRevisions.action, "update"), eq(planRevisions.writer, "user")));
+    expect(updates).toHaveLength(1);
+    expect(await weightOf(setIds[2])).toBe("65.00");
+  });
+
+
   it("writes thirty overrides as one revision and one version step", async () => {
     const ex = (await createExercise({ name: "Row" })).id;
     const { program, slots } = await createProgram(

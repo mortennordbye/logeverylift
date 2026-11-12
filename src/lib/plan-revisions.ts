@@ -652,7 +652,8 @@ export async function flushSetWrites(
           eq(planRevisions.objectType, "program"),
           eq(planRevisions.objectId, programId),
           eq(planRevisions.action, "conflict"),
-          eq(planRevisions.version, version),
+          // Not by version: a resend whose other sets applied the first time
+          // bumped the version since. The key is the base and the writes.
         ),
       )
       .orderBy(desc(planRevisions.id))
