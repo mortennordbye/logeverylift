@@ -102,6 +102,24 @@ hurt normal lifters if it is done carelessly.
 | Planned vs completed matching for endurance | missing | Only strength sessions are matched to Garmin activities. `autoComplete` marks a day done without a check. | high | low |
 | Export (FIT file, ZWO, calendar) | missing | The app reads FIT but does not write it. Push to the watch needs Garmin's business Training API. | medium | none |
 
+### 3b. Endurance workouts inside the app
+
+The watch runs outdoor sessions, but the user also needs to see the plan in LogEveryLift and to
+follow indoor sessions (trainer, treadmill, pool) in the app. Today an endurance set is a
+segment row that is logged after the fact in `src/components/features/LogRunModal.tsx`
+(distance, duration, RPE, incline, HR zone). The exercise timer runs one timed set at a time.
+
+| Need | Status | Notes | Priority | Lifter risk |
+|---|---|---|---|---|
+| Today and week view of planned swim/bike/run with steps, total time and distance | partial | Program detail and the cycle calendar list segments; no step view, no week totals per sport. | high | none |
+| Targets shown as the user's own numbers (watts, pace, bpm, swim pace per 100 m) | missing | Needs the threshold anchors from the profile. | high | none |
+| Guided workout player for indoor sessions: step timer, current and next target, sound and vibration at each step change, pause/skip/extend, screen kept awake | missing | The timer for timed sets is the closest part to reuse; it is a critical flow. | high | low if it reuses the timer with care |
+| Pool view: big text, sets such as 10×100 with send-off times | missing | | medium | none |
+| Outdoor session: "do this on your watch", with the FIT file to load | missing | Depends on FIT export. | medium | none |
+| Log the result per step (actual vs planned, RPE, notes), or link the Garmin activity when it arrives | partial | Per-segment logging exists; no per-step compare, no link to Garmin laps. | high | none |
+| Reusable endurance workout library (for example "3×10 min sweet spot") | missing | | medium | none |
+| Smart trainer control (ERG over Bluetooth) | out of scope | iOS Safari has no Web Bluetooth. Use a ZWO or FIT export to Zwift or the trainer app instead. | — | — |
+
 ### 4. Load, readiness and safety
 
 | Need | Status | Notes | Priority | Lifter risk |
@@ -156,7 +174,9 @@ hurt normal lifters if it is done carelessly.
 4. **Athlete profile:** triathlon opt-in that gates the UI, available days and hours,
    thresholds by hand and field tests, injuries.
 5. **Structured endurance workouts:** steps, repeats, targets relative to thresholds,
-   planned-vs-done matching, FIT export.
+   planned-vs-done matching, FIT export. Then the in-app side (section 3b): a today and week
+   view, targets in the user's own numbers, a guided player for indoor sessions, a pool view,
+   per-step results and a workout library.
 6. **Analytics and safety:** run spike guard, swim and run-pace load, illness log, readiness
    proposals.
 7. **Strength by phase, nutrition targets, race-day plan.**
