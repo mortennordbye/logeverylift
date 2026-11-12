@@ -201,7 +201,7 @@ segment row that is logged after the fact in `src/components/features/LogRunModa
 | Call the triathlon generator over MCP | missing | Lower value once the AI can build a plan from parts. | low | none |
 | Server instructions and knowledge resources | missing | `createMcpHandler` gets `{}` (`src/app/api/[transport]/route.ts:59-68`). Resources should hold the workout step syntax and the app's rules (one owner per field, guardrails). | high | none |
 | Coach memory (goals, limits, decision log) | missing | No table. Each conversation starts from nothing. | high | none |
-| Change log for every AI write, with reason and undo | missing | Every write applies at once and leaves only a log line. A set replace deletes and inserts rows, so it keeps no snapshot and the set ids change. | high | low |
+| Revisions for every plan object, with restore (decided, see Q2) | missing | Every write applies at once and leaves only a log line. A set replace deletes and inserts rows, so it keeps no snapshot and the set ids change. AI and UI edits both make revisions. | high | low |
 | Accept step before an AI change applies | missing | Research recommends proposals the user accepts. Principle 3 asks for tracking and undo, not for an accept step. See the open questions. | medium | low |
 | Guardrails in code, not in the prompt | missing | Only a 9999 kg max on weight. Research list: weekly load ramp cap, 1.10× long-run cap, key sessions per week, no hard session after a flagged low-readiness day, no heavy legs within 48 h of a key run, schema check of every workout. | high | none |
 | Safe writes during an open workout | missing | A set replace on a slot in an open session unlinks the logged sets, because `workout_sets.program_set_id` is `set null` (`src/db/schema/workout-sets.ts:71-73`). | high | **medium**: a lifter mid-workout loses the plan link |
@@ -257,7 +257,7 @@ Every brief that adds a table follows `.claude/skills/privacy-compliance/SKILL.m
 2. **Add-on switches** (section 2, first row), so every later feature has a gate. Move the
    triathlon entry and the race field behind it.
 3. **MCP coach basics:** cycle race fields over MCP, exercise search, server instructions and a
-   knowledge resource, coach memory, the change log with undo, safe writes during an open
+   knowledge resource, coach memory, revisions with restore (Q2), safe writes during an open
    workout, one owner per field, load guardrails, integration tests for the write tools, a
    revoke screen. This makes the AI coach usable on the current model.
 4. **Season level:** season and races, stored phases, taper from the race date, chained
@@ -292,13 +292,20 @@ owner does not answer.
 Recommended: **C**. Principle 3 asks for tracking and undo, which A gives. The research favours
 B for trust. A setting costs one column and lets the owner use A while cautious users pick B.
 
-**Q2. How far back does undo reach?**
-- A. Only the last AI change.
-- B. Any single change, if nothing later touched the same rows; otherwise refuse with a reason.
-- C. Any change, with later changes undone in a chain.
+**Q2. How far back does undo reach?** **Decided (owner, 2026-11-12): revisions with restore.**
 
-Recommended: **B**. It covers the real case (undo Tuesday's change on Friday) without the risk
-of C silently removing the user's own later edits.
+Every plan object (season, cycle, program with its exercises and sets, endurance workout) keeps
+a revision history. Rules for the brief:
+- Every change makes a new revision, from the AI or from the UI. The revision records who made
+  it (user or assistant), when, and the reason (required for AI changes).
+- The user can see the revisions of an object and restore any earlier one. A restore makes a new
+  revision, so a restore can itself be undone. Nothing is deleted by a restore.
+- A restore works on the whole object, not on one field. It must not touch logged workout data
+  (`workout_sets`, `workout_sessions`); logged sets keep their link to the plan.
+- A deleted object can be restored from its last revision.
+- The AI can list revisions and restore over MCP (principle 3).
+- Retention and export: revisions are user data. They go into export and delete, and the data
+  inventory gets a retention rule (section 9).
 
 **Q3. What do guardrails do when an AI change breaks one?**
 - A. Refuse the write and return the rule that blocked it.
