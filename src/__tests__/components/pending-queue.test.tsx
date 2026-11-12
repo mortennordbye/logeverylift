@@ -18,7 +18,11 @@ const updateProgramSet = vi.fn();
 vi.mock("@/lib/actions/workout-sessions", () => ({
   completeWorkoutSession: (...a: unknown[]) => completeWorkoutSession(...a),
 }));
-vi.mock("@/lib/actions/programs", () => ({ updateProgramSet: (...a: unknown[]) => updateProgramSet(...a) }));
+const flushWorkoutPlan = vi.fn();
+vi.mock("@/lib/actions/programs", () => ({
+  updateProgramSet: (...a: unknown[]) => updateProgramSet(...a),
+  flushWorkoutPlan: (...a: unknown[]) => flushWorkoutPlan(...a),
+}));
 
 // jsdom cannot reload, so the reload is faked; detection stays real.
 // `reloadReturns` is what reloadForFreshBundle reports: "reloading" when it
@@ -83,6 +87,7 @@ beforeEach(() => {
   unlogWorkoutSet.mockReset();
   completeWorkoutSession.mockReset();
   updateProgramSet.mockReset();
+  flushWorkoutPlan.mockReset();
   reloadForFreshBundle.mockReset();
   reloadReturns = "reloading";
   reloadPending = false;
@@ -90,6 +95,25 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("PendingQueueProvider", () => {
+  it("does not say the workout was saved when its finish failed in the same pass", async () => {
+    localStorage.setItem(
+      "pendingMutationQueue",
+      JSON.stringify([
+        { id: "b", kind: "flushWorkoutPlan", payload: { programId: 9, baseVersion: 1, sets: [] }, queuedAt: 1 },
+        { id: "c", kind: "completeWorkoutSession", payload: { sessionId: 1, endTime: "2026-11-12T10:00:00Z", feeling: "Good" }, queuedAt: 2 },
+      ]),
+    );
+    flushWorkoutPlan.mockResolvedValue({ success: true, data: { applied: 3, conflicts: 2 } });
+    completeWorkoutSession.mockRejectedValue(new TypeError("Load failed"));
+    mount();
+    await flush();
+    await flush();
+    expect(screen.getByText(/^2 plan changes from your workout were not applied/)).toBeTruthy();
+    expect(screen.queryByText(/Workout saved/)).toBeNull();
+    // The flush is final; the finish stays queued for its retry.
+    expect(stored()).toHaveLength(1);
+  });
+
   // docs/plans/revisions.md, 2.7: a finish-flush plan write that meets a newer
   // plan is final. It must not be retried into a "dropped" toast, and it must
   // never hold up the logged sets and the finish queued around it.
@@ -116,7 +140,7 @@ describe("PendingQueueProvider", () => {
     expect(updateProgramSet).toHaveBeenCalledTimes(1);
     expect(completeWorkoutSession).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem("pendingMutationQueue")).toBeNull();
-    expect(screen.getByText(/One plan change from it was not applied/)).toBeTruthy();
+    expect(screen.getByText(/^Workout saved\. One plan change from your workout was not applied/)).toBeTruthy();
     expect(screen.queryByText(/dropped/)).toBeNull();
 
     // Nothing is sent again later.

@@ -36,8 +36,11 @@ import {
   diffSnapshots,
   isProgramSnapshot,
   queuedWriteConflicts,
+  OTHER_WRITERS,
   restoredSetValues,
   sameSnapshot,
+  sameValue,
+  setChangesSince,
   type CycleSnapshot,
   type PlanSnapshot,
   type ProgramSnapshot,
@@ -519,80 +522,155 @@ export async function activateCycle(
 
 // ── Queued and flushed set writes (2.7) ──────────────────────────────────────
 
+export type FlushedSetWrite = { programSetId: number; fields: Record<string, unknown> };
+export type FlushResult = { applied: number[]; skipped: number[]; conflicts: number; revisionId: number | null };
+
 /**
- * Check a set write from the workout's finish flush against the version the
- * workout started on. Inside a session that has touched the program.
+ * Write the workout's set overrides back to the plan in one go, against the
+ * program version the workout started on (docs/plans/revisions.md, 2.7).
+ *
+ * Per set: applied when nobody but the lifter (and the engine) changed it
+ * since; skipped when the lifter removed it; refused, as one conflict
+ * revision for the whole flush, when an assistant changed one of its fields
+ * since or removed it. A set of another program is ignored.
  */
-export async function checkFlushedSetWrite(
+export async function flushSetWrites(
   w: PlanWriteSession,
   programId: number,
-  programSetId: number,
   baseVersion: number,
-  fields: Record<string, unknown>,
-): Promise<{ conflict: false } | { conflict: true; revisionId: number; fields: string[] }> {
+  writes: FlushedSetWrite[],
+): Promise<FlushResult> {
   const version = await w.touch({ type: "program", id: programId });
-  const [current] = await w.tx.select().from(programSets).where(eq(programSets.id, programSetId));
-  // A set removed from the plan is never written back, whatever the version.
-  if (version === baseVersion && current && !current.deletedAt) return { conflict: false };
-  const [baseRev] = await w.tx
-    .select({ snapshot: planRevisions.snapshot })
-    .from(planRevisions)
+  const result: FlushResult = { applied: [], skipped: [], conflicts: 0, revisionId: null };
+  if (writes.length === 0) return result;
+  const rows = await w.tx
+    // plan-read: includes deleted (a write to a removed set is skipped or refused, not lost)
+    .select({ set: programSets })
+    .from(programSets)
+    .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
     .where(
       and(
-        eq(planRevisions.objectType, "program"),
-        eq(planRevisions.objectId, programId),
-        eq(planRevisions.version, baseVersion),
-        ne(planRevisions.action, "conflict"),
+        eq(programExercises.programId, programId),
+        inArray(
+          programSets.id,
+          writes.map((x) => x.programSetId),
+        ),
       ),
-    )
-    .orderBy(desc(planRevisions.id))
-    .limit(1);
-  const baseSnap = baseRev?.snapshot as ProgramSnapshot | undefined;
-  const baseSet = baseSnap?.exercises.flatMap((e) => e.sets).find((s) => s.id === programSetId);
-  const conflicting =
-    !current || current.deletedAt
-      ? Object.keys(fields)
-      : queuedWriteConflicts(baseSet, current as unknown as Record<string, unknown>, fields);
-  if (conflicting.length === 0) return { conflict: false };
-  // The queue may send the same write twice (a reply lost to a navigation, a
-  // retry after it). The second is the same conflict, not a new one.
-  const rejected = { programSetId, baseVersion, fields };
-  const earlier = await w.tx
-    .select({ id: planRevisions.id, rejected: planRevisions.rejected })
-    .from(planRevisions)
-    .where(
-      and(
-        eq(planRevisions.objectType, "program"),
-        eq(planRevisions.objectId, programId),
-        eq(planRevisions.action, "conflict"),
-        eq(planRevisions.version, version),
-      ),
-    )
-    .orderBy(desc(planRevisions.id))
-    .limit(20);
-  const same = earlier.find((r) => {
-    const x = r.rejected as { programSetId?: number; baseVersion?: number; fields?: unknown } | null;
-    return x && canonical({ programSetId: x.programSetId, baseVersion: x.baseVersion, fields: x.fields }) === canonical(rejected);
-  });
-  if (same) return { conflict: true, revisionId: same.id, fields: conflicting };
-  const revisionId = await w.conflict(
-    { type: "program", id: programId },
-    { programSetId, baseVersion, fields, conflicting, setDeleted: !current || !!current.deletedAt },
-  );
-  console.info("[plan-conflict] flushed set write not applied", { programId, programSetId, baseVersion, version });
-  return { conflict: true, revisionId, fields: conflicting };
+    );
+  const byId = new Map(rows.map((r) => [r.set.id, r.set]));
+
+  let base: ProgramSnapshot | undefined;
+  let history: { writer: PlanWriter; snapshot: ProgramSnapshot }[] = [];
+  if (version !== baseVersion || rows.some((r) => r.set.deletedAt)) {
+    const [baseRev] = await w.tx
+      .select({ id: planRevisions.id, snapshot: planRevisions.snapshot })
+      .from(planRevisions)
+      .where(
+        and(
+          eq(planRevisions.userId, w.ctx.userId),
+          eq(planRevisions.objectType, "program"),
+          eq(planRevisions.objectId, programId),
+          eq(planRevisions.version, baseVersion),
+          ne(planRevisions.action, "conflict"),
+        ),
+      )
+      .orderBy(desc(planRevisions.id))
+      .limit(1);
+    if (baseRev) {
+      base = baseRev.snapshot as ProgramSnapshot;
+      history = (await revisionsAfter(w.tx, w.ctx.userId, { type: "program", id: programId }, baseRev.id)).map((h) => ({
+        writer: h.writer,
+        snapshot: h.snapshot as ProgramSnapshot,
+      }));
+    }
+  }
+
+  const rejected: { programSetId: number; fields: Record<string, unknown>; conflicting: string[]; setDeleted: boolean }[] = [];
+  for (const write of writes) {
+    const current = byId.get(write.programSetId);
+    if (!current) continue;
+    const fields = Object.keys(write.fields).filter((f) => write.fields[f] !== undefined);
+    const removed = current.deletedAt != null;
+    if (!removed && version === baseVersion) {
+      result.applied.push(current.id);
+      continue;
+    }
+    if (!base) {
+      // No record of the base (data written outside the layer): every field
+      // not already at the new value counts as changed.
+      const conflicting = removed ? fields : queuedWriteConflicts(undefined, current as unknown as Row, write.fields);
+      if (conflicting.length === 0) result.applied.push(current.id);
+      else rejected.push({ programSetId: current.id, fields: write.fields, conflicting, setDeleted: removed });
+      continue;
+    }
+    const { lastWriter, removedBy } = setChangesSince(base, history, current.id, fields);
+    if (removed) {
+      if (removedBy !== null && !OTHER_WRITERS.has(removedBy)) result.skipped.push(current.id);
+      else rejected.push({ programSetId: current.id, fields: write.fields, conflicting: fields, setDeleted: true });
+      continue;
+    }
+    const currentRow = current as unknown as Row;
+    const conflicting = fields.filter(
+      (f) => lastWriter[f] !== undefined && OTHER_WRITERS.has(lastWriter[f]) && !sameValue(currentRow[f], write.fields[f]),
+    );
+    if (conflicting.length === 0) result.applied.push(current.id);
+    else rejected.push({ programSetId: current.id, fields: write.fields, conflicting, setDeleted: false });
+  }
+
+  for (const id of result.applied) {
+    const fields = writes.find((x) => x.programSetId === id)!.fields;
+    const values: Record<string, unknown> = {};
+    for (const [f, v] of Object.entries(fields)) {
+      if (v === undefined) continue;
+      values[f] = f === "weightKg" && v != null ? Number(v).toFixed(2) : v;
+    }
+    if (Object.keys(values).length) await w.tx.update(programSets).set(values).where(eq(programSets.id, id));
+  }
+
+  if (rejected.length > 0) {
+    result.conflicts = rejected.length;
+    // The queue may send the same flush twice (a reply lost to a navigation,
+    // a retry after it). The second is the same conflict, not a new one.
+    const keyOf = (sets: { programSetId: number; fields: unknown }[], bv: unknown) =>
+      canonical({ baseVersion: bv, sets: sets.map((y) => ({ programSetId: y.programSetId, fields: y.fields })) });
+    const key = keyOf(rejected, baseVersion);
+    const earlier = await w.tx
+      .select({ id: planRevisions.id, rejected: planRevisions.rejected })
+      .from(planRevisions)
+      .where(
+        and(
+          eq(planRevisions.userId, w.ctx.userId),
+          eq(planRevisions.objectType, "program"),
+          eq(planRevisions.objectId, programId),
+          eq(planRevisions.action, "conflict"),
+          eq(planRevisions.version, version),
+        ),
+      )
+      .orderBy(desc(planRevisions.id))
+      .limit(20);
+    const same = earlier.find((r) => {
+      const x = r.rejected as { baseVersion?: number; sets?: { programSetId: number; fields: unknown }[] } | null;
+      return x?.sets && keyOf(x.sets, x.baseVersion) === key;
+    });
+    result.revisionId = same
+      ? same.id
+      : await w.conflict({ type: "program", id: programId }, { baseVersion, sets: rejected });
+    console.info("[plan-conflict] flushed set writes not applied", { programId, baseVersion, version, sets: rejected.length });
+  }
+  return result;
 }
 
 // ── Restore (2.6) ────────────────────────────────────────────────────────────
 
 type RestoreOutcome = { objectType: PlanObjectType; objectId: number; skipped: string[] };
 
-async function revisionsAfter(tx: Tx, target: PlanTarget, afterId: number) {
+async function revisionsAfter(tx: Tx, userId: string, target: PlanTarget, afterId: number) {
   return tx
     .select({ writer: planRevisions.writer, snapshot: planRevisions.snapshot, action: planRevisions.action })
     .from(planRevisions)
     .where(
       and(
+        eq(planRevisions.userId, userId),
         eq(planRevisions.objectType, target.type),
         eq(planRevisions.objectId, target.id),
         gt(planRevisions.id, afterId),
@@ -613,7 +691,7 @@ async function restoreProgramTo(
   const tx = w.tx;
   const skipped: string[] = [];
   const now = new Date();
-  const history = (await revisionsAfter(tx, { type: "program", id: programId }, targetRevisionId))
+  const history = (await revisionsAfter(tx, w.ctx.userId, { type: "program", id: programId }, targetRevisionId))
     .filter((h) => h.action !== "delete")
     .map((h) => ({ writer: h.writer, snapshot: h.snapshot as ProgramSnapshot }));
 
@@ -950,10 +1028,15 @@ export async function listRevisions(userId: string, target: PlanTarget): Promise
 }
 
 function conflictLines(rejected: unknown): string[] {
-  const r = rejected as { fields?: Record<string, unknown>; conflicting?: string[]; setDeleted?: boolean } | null;
-  if (!r?.fields) return ["A change was not applied"];
-  if (r.setDeleted) return ["Not applied: the set was removed from the plan"];
-  return [`Not applied: ${Object.entries(r.fields).map(([f, v]) => `${f} ${v ?? "none"}`).join(", ")}`];
+  const r = rejected as {
+    sets?: { programSetId: number; fields: Record<string, unknown>; setDeleted?: boolean }[];
+  } | null;
+  if (!r?.sets?.length) return ["A change was not applied"];
+  return r.sets.map((s) =>
+    s.setDeleted
+      ? "Not applied: the set was removed from the plan"
+      : `Not applied: ${Object.entries(s.fields).map(([f, v]) => `${f} ${v ?? "none"}`).join(", ")}`,
+  );
 }
 
 export type ChangeSetEntry = {

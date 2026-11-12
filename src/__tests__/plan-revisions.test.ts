@@ -1,5 +1,5 @@
-import { finishFlushPayloads } from "@/lib/utils/finish-flush";
-import { replayOutcome } from "@/lib/utils/pending-queue";
+import { finishFlushPayload } from "@/lib/utils/finish-flush";
+import { conflictCount, conflictNotice, replayOutcome } from "@/lib/utils/pending-queue";
 import {
   ASSISTANT_CHANGE_SET_WINDOW_MS,
   canonical,
@@ -10,6 +10,7 @@ import {
   queuedWriteConflicts,
   restoredSetValues,
   sameSnapshot,
+  setChangesSince,
   syncOwnedSetFields,
   type ProgramSnapshot,
 } from "@/lib/utils/plan-revisions";
@@ -160,13 +161,37 @@ describe("changeSetFor", () => {
 });
 
 describe("the finish flush", () => {
-  it("sends the version the workout started on with each set", () => {
-    expect(finishFlushPayloads({ 3: { targetReps: 8, weightKg: 82.5 } }, 4)).toEqual([
-      { id: 3, targetReps: 8, weightKg: 82.5, baseVersion: 4 },
-    ]);
-    expect(finishFlushPayloads({ 3: { targetReps: 8, weightKg: 82.5, durationSeconds: 30 } }, null)).toEqual([
-      { id: 3, targetReps: 8, weightKg: 82.5, durationSeconds: 30 },
-    ]);
+  it("is one payload for the workout, with the version it started on", () => {
+    expect(finishFlushPayload(7, { 3: { targetReps: 8, weightKg: 82.5 } }, 4)).toEqual({
+      programId: 7,
+      baseVersion: 4,
+      sets: [{ id: 3, targetReps: 8, weightKg: 82.5 }],
+    });
+    expect(finishFlushPayload(7, { 3: { targetReps: 8, weightKg: 82.5, durationSeconds: 30 } }, null)).toEqual({
+      programId: 7,
+      sets: [{ id: 3, targetReps: 8, weightKg: 82.5, durationSeconds: 30 }],
+    });
+    expect(finishFlushPayload(7, {}, 4)).toBeNull();
+  });
+});
+
+describe("setChangesSince", () => {
+  const base = snap([set(1, 1), set(2, 2)]);
+  it("names the last writer of each field, so the lifter's own change is not someone else's", () => {
+    const carried = snap([set(1, 1), set(2, 2, { weightKg: "60.00" })]);
+    const ai = snap([set(1, 1, { weightKg: "90.00" }), set(2, 2, { weightKg: "60.00" })]);
+    const history = [
+      { writer: "user" as const, snapshot: carried },
+      { writer: "assistant" as const, snapshot: ai },
+    ];
+    expect(setChangesSince(base, history, 2, ["weightKg"]).lastWriter).toEqual({ weightKg: "user" });
+    expect(setChangesSince(base, history, 1, ["weightKg"]).lastWriter).toEqual({ weightKg: "assistant" });
+  });
+
+  it("says who removed a set", () => {
+    const history = [{ writer: "user" as const, snapshot: snap([set(1, 1)]) }];
+    expect(setChangesSince(base, history, 2, ["weightKg"]).removedBy).toBe("user");
+    expect(setChangesSince(base, [], 2, ["weightKg"]).removedBy).toBeNull();
   });
 });
 
@@ -175,5 +200,13 @@ describe("replayOutcome", () => {
     expect(replayOutcome({ success: true })).toBe("done");
     expect(replayOutcome({ success: false, conflict: { programId: 1, revisionId: 2 } })).toBe("conflict");
     expect(replayOutcome({ success: false })).toBe("retry");
+    expect(replayOutcome({ success: true, data: { applied: 2, conflicts: 1 } })).toBe("conflict");
+    expect(replayOutcome({ success: true, data: { applied: 2, conflicts: 0 } })).toBe("done");
+    expect(conflictCount({ success: true, data: { applied: 0, conflicts: 3 } })).toBe(3);
+  });
+
+  it("says the workout was saved only when its finish was", () => {
+    expect(conflictNotice(1, true)).toMatch(/^Workout saved\. One plan change/);
+    expect(conflictNotice(2, false)).toMatch(/^2 plan changes from your workout were not applied/);
   });
 });

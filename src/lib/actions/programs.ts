@@ -13,8 +13,8 @@ import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-
 import {
   OpenWorkoutError,
   PlanNotFoundError,
-  checkFlushedSetWrite,
   deletePrograms,
+  flushSetWrites,
   planWrite,
   setProgram,
   slotProgram,
@@ -1079,8 +1079,12 @@ export async function updateProgramSet(
     const { result } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
       await w.touch({ type: "program", id: check.programId });
       if (baseVersion !== undefined) {
-        const verdict = await checkFlushedSetWrite(w, check.programId, id, baseVersion, rest);
-        if (verdict.conflict) return { kind: "conflict", revisionId: verdict.revisionId } as const;
+        // A flush queued by a bundle from before flushWorkoutPlan: the same
+        // rules, one set at a time.
+        const flushed = await flushSetWrites(w, check.programId, baseVersion, [{ programSetId: id, fields: rest }]);
+        if (flushed.revisionId != null) return { kind: "conflict", revisionId: flushed.revisionId } as const;
+        const [ps] = await w.tx.select().from(programSets).where(eq(programSets.id, id));
+        return { kind: "applied", ps } as const;
       }
       const [ps] = await w.tx.update(programSets).set(updates).where(eq(programSets.id, id)).returning();
       return { kind: "applied", ps } as const;
@@ -1099,6 +1103,66 @@ export async function updateProgramSet(
     return { success: true, data: result.ps };
   } catch (err) {
     return { success: false, error: String(err) };
+  }
+}
+
+const flushWorkoutPlanSchema = z.object({
+  programId: z.number().int().positive(),
+  // The program version the workout started on. Absent for a workout started
+  // by an older bundle: the overrides then apply as plain edits.
+  baseVersion: z.number().int().positive().optional(),
+  sets: z
+    .array(
+      z.object({
+        id: z.number().int().positive(),
+        targetReps: z.number().int().min(0).max(1000),
+        weightKg: z.number().min(0).max(9999),
+        durationSeconds: z.number().int().min(0).optional(),
+      }),
+    )
+    .max(200),
+});
+
+/**
+ * The finish flush: every set override of a finished workout back to the
+ * plan, in one transaction and one revision (docs/plans/revisions.md, 2.7).
+ * A set an assistant changed since the workout started keeps the newer value;
+ * those come back as `conflicts` and are stored as one "Not applied" entry in
+ * the program's history. The lifter's own edits during the workout never
+ * count against them.
+ */
+export async function flushWorkoutPlan(
+  data: unknown,
+): Promise<ActionResult<{ applied: number; conflicts: number }>> {
+  const auth = await requireSession();
+  const parsed = flushWorkoutPlanSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  const { programId, baseVersion, sets } = parsed.data;
+  try {
+    const { result } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+      const version = await w.touch({ type: "program", id: programId });
+      return flushSetWrites(
+        w,
+        programId,
+        baseVersion ?? version,
+        sets.map((s) => ({
+          programSetId: s.id,
+          fields: {
+            targetReps: s.targetReps,
+            weightKg: s.weightKg,
+            ...(s.durationSeconds != null ? { durationSeconds: s.durationSeconds } : {}),
+          },
+        })),
+      );
+    });
+    revalidatePath(`/programs/${programId}`);
+    return { success: true, data: { applied: result.applied.length, conflicts: result.conflicts } };
+  } catch (e) {
+    if (e instanceof PlanNotFoundError) return { success: false, error: e.message };
+    console.error("[flushWorkoutPlan] failed", { programId }, e);
+    return { success: false, error: "Failed to save the plan changes" };
   }
 }
 

@@ -44,6 +44,8 @@ type WorkoutSessionContextValue = {
   overrides: Record<number, SetOverride>;
   setOverride: (setId: number, data: SetOverride) => void;
   clearOverrides: () => void;
+  /** Forget one set's override: the set was deleted from the plan, so the finish has nothing to write to it. */
+  removeOverride: (setId: number) => void;
   completedSetIds: Set<number>;
   addCompletedSet: (id: number) => void;
   removeCompletedSet: (id: number) => void;
@@ -179,6 +181,15 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
       return next;
     });
 
+  const removeOverride = (setId: number) =>
+    setOverrides((prev) => {
+      if (!(setId in prev)) return prev;
+      const next = { ...prev };
+      delete next[setId];
+      localStorage.setItem(OVERRIDES_KEY, JSON.stringify(next));
+      return next;
+    });
+
   const clearOverrides = () => {
     localStorage.removeItem(OVERRIDES_KEY);
     setOverrides({});
@@ -290,6 +301,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
         overrides,
         setOverride,
         clearOverrides,
+        removeOverride,
         completedSetIds,
         addCompletedSet,
         removeCompletedSet,

@@ -79,10 +79,35 @@ export function mergeReplayed<T extends Retryable>(current: T[], replayed: T[], 
  * the finish flush can conflict; logged sets never do
  * (docs/plans/revisions.md, 2.7).
  */
-export function replayOutcome(result: { success: boolean; conflict?: unknown }): "done" | "conflict" | "retry" {
-  if (result.success) return "done";
-  if (!result.success && result.conflict) return "conflict";
+type ReplayResult = { success: boolean; conflict?: unknown; data?: unknown };
+
+export function replayOutcome(result: ReplayResult): "done" | "conflict" | "retry" {
+  if (result.success) return conflictCount(result) > 0 ? "conflict" : "done";
+  if (result.conflict) return "conflict";
   return "retry";
+}
+
+/**
+ * How many plan changes a replayed result kept out: the sets a whole-workout
+ * flush could not apply, or one for a single set write that conflicted.
+ */
+export function conflictCount(result: ReplayResult): number {
+  if (!result.success) return result.conflict ? 1 : 0;
+  const data = result.data as { conflicts?: unknown } | null | undefined;
+  return typeof data?.conflicts === "number" ? data.conflicts : 0;
+}
+
+/**
+ * The notice for plan changes the server kept out. It says the workout was
+ * saved only when the finish in the same replay was: a finish that failed or
+ * still waits is not saved yet.
+ */
+export function conflictNotice(count: number, workoutSaved: boolean): string {
+  const what =
+    count === 1
+      ? "One plan change from your workout was not applied"
+      : `${count} plan changes from your workout were not applied`;
+  return `${workoutSaved ? "Workout saved. " : ""}${what}, because the plan changed in the meantime. See the program's history.`;
 }
 
 /** "now" if something is due, else ms until the soonest item is, else null. */

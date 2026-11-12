@@ -4,8 +4,17 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useToast } from "@/contexts/toast-context";
 import { logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
 import { completeWorkoutSession } from "@/lib/actions/workout-sessions";
-import { updateProgramSet } from "@/lib/actions/programs";
-import { afterFailedReplay, afterStaleBundle, dueItems, mergeReplayed, nextReplayIn, replayOutcome } from "@/lib/utils/pending-queue";
+import { flushWorkoutPlan, updateProgramSet } from "@/lib/actions/programs";
+import {
+  afterFailedReplay,
+  afterStaleBundle,
+  conflictCount,
+  conflictNotice,
+  dueItems,
+  mergeReplayed,
+  nextReplayIn,
+  replayOutcome,
+} from "@/lib/utils/pending-queue";
 import { isReloadPending, isStaleBundleError, noteActionReached, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
 
 // Shown when a write hit a stale bundle after a deploy. The write is queued
@@ -52,11 +61,13 @@ type LogPayload = Parameters<typeof logWorkoutSet>[0];
 type UnlogPayload = Parameters<typeof unlogWorkoutSet>[0];
 type CompletePayload = Parameters<typeof completeWorkoutSession>[0];
 type UpdateProgramSetPayload = Parameters<typeof updateProgramSet>[0];
+type FlushWorkoutPlanPayload = Parameters<typeof flushWorkoutPlan>[0];
 
 type QueuedMutation =
   | { id: string; kind: "logWorkoutSet"; payload: LogPayload; queuedAt: number; attempts?: number; nextAttemptAt?: number }
   | { id: string; kind: "unlogWorkoutSet"; payload: UnlogPayload; queuedAt: number; attempts?: number; nextAttemptAt?: number }
   | { id: string; kind: "updateProgramSet"; payload: UpdateProgramSetPayload; queuedAt: number; attempts?: number; nextAttemptAt?: number }
+  | { id: string; kind: "flushWorkoutPlan"; payload: FlushWorkoutPlanPayload; queuedAt: number; attempts?: number; nextAttemptAt?: number }
   | { id: string; kind: "completeWorkoutSession"; payload: CompletePayload; queuedAt: number; attempts?: number; nextAttemptAt?: number };
 
 const STORAGE_KEY = "pendingMutationQueue";
@@ -131,6 +142,11 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
       const failed: QueuedMutation[] = [];
       const dropped: QueuedMutation[] = [];
       let conflicts = 0;
+      // Plan changes from the workout that the server kept out, for the notice.
+      let notApplied = 0;
+      // Whether this pass saved a finished workout, so the conflict notice can
+      // say so. Only then: a finish that failed or waits is not "saved".
+      let finished = false;
       let staleOutcome: ReturnType<typeof reloadForFreshBundle> | null = null;
       for (const [i, m] of snapshot.entries()) {
         let ok = false;
@@ -145,10 +161,14 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
                 ? await unlogWorkoutSet(m.payload)
                 : m.kind === "updateProgramSet"
                   ? await updateProgramSet(m.payload)
-                  : await completeWorkoutSession(m.payload);
+                  : m.kind === "flushWorkoutPlan"
+                    ? await flushWorkoutPlan(m.payload)
+                    : await completeWorkoutSession(m.payload);
           const outcome = replayOutcome(result);
           ok = outcome === "done";
           conflict = outcome === "conflict";
+          if (conflict) notApplied += conflictCount(result);
+          if (outcome === "done" && m.kind === "completeWorkoutSession") finished = true;
           noteActionReached();
         } catch (err) {
           if (isStaleBundleError(err)) {
@@ -201,13 +221,10 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
               : `${dropped.length} pending changes couldn't be saved and were dropped`,
         });
       }
-      if (conflicts > 0) {
+      if (notApplied > 0) {
         showToast({
           durationMs: 8000,
-          message:
-            conflicts === 1
-              ? "Workout saved. One plan change from it was not applied, because the plan changed in the meantime. See the program's history."
-              : `Workout saved. ${conflicts} plan changes from it were not applied, because the plan changed in the meantime. See the program's history.`,
+          message: conflictNotice(notApplied, finished),
         });
       }
       // Last, so it is the toast left on screen.

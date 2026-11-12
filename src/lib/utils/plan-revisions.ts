@@ -359,6 +359,38 @@ export function queuedWriteConflicts(
   return out;
 }
 
+/**
+ * What happened to one set after the workout's base revision, by whom: the
+ * last writer of each field, and who removed the set if it is gone. A
+ * conflict is only another writer's change. The lifter's own writes during the
+ * workout (a carried weight, a target changed in the set editor, a deleted
+ * set) and the engine's are the lifter's plan, not someone else's
+ * (docs/plans/revisions.md, 2.7).
+ */
+export function setChangesSince(
+  base: ProgramSnapshot,
+  history: { writer: PlanWriter; snapshot: ProgramSnapshot }[],
+  setId: number,
+  fields: string[],
+): { lastWriter: Record<string, PlanWriter>; removedBy: PlanWriter | null } {
+  let prev = findSet(base, setId);
+  const lastWriter: Record<string, PlanWriter> = {};
+  let removedBy: PlanWriter | null = null;
+  for (const h of history) {
+    const cur = findSet(h.snapshot, setId);
+    if (prev && !cur) removedBy = h.writer;
+    if (!prev && cur) removedBy = null;
+    if (prev && cur) {
+      for (const f of fields) if (!sameValue(prev[f], cur[f])) lastWriter[f] = h.writer;
+    }
+    prev = cur;
+  }
+  return { lastWriter, removedBy };
+}
+
+/** Writers whose change to a field the workout's flush must not overwrite. */
+export const OTHER_WRITERS: ReadonlySet<PlanWriter> = new Set(["assistant"]);
+
 // ── Change sets (2.8) ────────────────────────────────────────────────────────
 
 /** An assistant write joins its client's last change set within this window. */

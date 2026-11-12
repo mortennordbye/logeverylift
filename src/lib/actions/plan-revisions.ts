@@ -191,23 +191,27 @@ export async function applyRejectedChange(data: unknown): Promise<ActionResult<n
       .from(planRevisions)
       .where(and(eq(planRevisions.id, parsed.data.revisionId), eq(planRevisions.userId, auth.user.id)));
     if (!rev || rev.action !== "conflict") return { success: false, error: "Not found" };
-    const rejected = rev.rejected as { programSetId?: number; fields?: Record<string, unknown> } | null;
-    if (!rejected?.programSetId || !rejected.fields) return { success: false, error: "Nothing to apply" };
-    const owner = await setProgram(db, rejected.programSetId, auth.user.id);
-    if (!owner) return { success: false, error: "That set is no longer in the plan" };
-    const fields = rejected.fields;
-    const values: Partial<typeof programSets.$inferInsert> = {};
-    if (fields.targetReps !== undefined) values.targetReps = fields.targetReps as number | null;
-    if (fields.weightKg !== undefined) {
-      values.weightKg = fields.weightKg == null ? null : Number(fields.weightKg).toFixed(2);
+    const rejected = rev.rejected as { sets?: { programSetId: number; fields: Record<string, unknown> }[] } | null;
+    const writes: { programSetId: number; values: Partial<typeof programSets.$inferInsert> }[] = [];
+    for (const set of rejected?.sets ?? []) {
+      const owner = await setProgram(db, set.programSetId, auth.user.id);
+      // Only sets still in this program; a removed set has nothing to apply to.
+      if (!owner || owner.programId !== rev.objectId) continue;
+      const fields = set.fields;
+      const values: Partial<typeof programSets.$inferInsert> = {};
+      if (fields.targetReps !== undefined) values.targetReps = fields.targetReps as number | null;
+      if (fields.weightKg !== undefined) {
+        values.weightKg = fields.weightKg == null ? null : Number(fields.weightKg).toFixed(2);
+      }
+      if (fields.durationSeconds !== undefined) values.durationSeconds = fields.durationSeconds as number | null;
+      if (Object.keys(values).length > 0) writes.push({ programSetId: set.programSetId, values });
     }
-    if (fields.durationSeconds !== undefined) values.durationSeconds = fields.durationSeconds as number | null;
-    if (Object.keys(values).length === 0) return { success: false, error: "Nothing to apply" };
+    if (writes.length === 0) return { success: false, error: "That set is no longer in the plan" };
     await planWrite({ userId: auth.user.id, writer: "user", reason: "Applied a change from a workout" }, async (w) => {
-      await w.touch({ type: "program", id: owner.programId });
-      await w.tx.update(programSets).set(values).where(eq(programSets.id, rejected.programSetId!));
+      await w.touch({ type: "program", id: rev.objectId });
+      for (const x of writes) await w.tx.update(programSets).set(x.values).where(eq(programSets.id, x.programSetId));
     });
-    revalidateObject("program", owner.programId);
+    revalidateObject("program", rev.objectId);
     return { success: true, data: null };
   } catch (e) {
     console.error("[applyRejectedChange] failed", { revisionId: parsed.data.revisionId }, e);

@@ -1,19 +1,22 @@
 /**
- * The plan writes a finished workout sends: each set's session override goes
- * back to the program, so the next session starts from it. Each write carries
- * the program version the workout started on, so the server keeps a field the
- * plan changed in the meantime instead of overwriting it, and records the
- * conflict (docs/plans/revisions.md, 2.7).
+ * The plan write a finished workout sends: each set's session override goes
+ * back to the program, so the next session starts from it. One payload for the
+ * whole workout, so the server writes it in one transaction and one revision,
+ * with the program version the workout started on: a field an assistant
+ * changed in the meantime is kept, not overwritten (docs/plans/revisions.md,
+ * 2.7). Null when there is nothing to write.
  */
-export function finishFlushPayloads(
+export function finishFlushPayload(
+  programId: number,
   overrides: Record<number, { targetReps: number; weightKg: number; durationSeconds?: number }>,
   planVersion: number | null,
 ) {
-  return Object.entries(overrides).map(([setId, ov]) => ({
+  const sets = Object.entries(overrides).map(([setId, ov]) => ({
     id: Number(setId),
     targetReps: ov.targetReps,
     weightKg: ov.weightKg,
     ...(ov.durationSeconds != null ? { durationSeconds: ov.durationSeconds } : {}),
-    ...(planVersion != null ? { baseVersion: planVersion } : {}),
   }));
+  if (sets.length === 0) return null;
+  return { programId, ...(planVersion != null ? { baseVersion: planVersion } : {}), sets };
 }

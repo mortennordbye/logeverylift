@@ -5,8 +5,8 @@ import {
   createWorkoutSession,
 } from "@/lib/actions/workout-sessions";
 import { deleteWorkoutSession } from "@/lib/actions/workout-sets";
-import { updateProgramSet } from "@/lib/actions/programs";
-import { finishFlushPayloads } from "@/lib/utils/finish-flush";
+import { flushWorkoutPlan } from "@/lib/actions/programs";
+import { finishFlushPayload } from "@/lib/utils/finish-flush";
 import { usePendingQueue } from "@/contexts/pending-queue-context";
 import { useToast } from "@/contexts/toast-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
@@ -22,7 +22,7 @@ import { Suspense, use, useMemo, useState } from "react";
 type Feeling = WorkoutFeeling;
 const FEELINGS: Feeling[] = [...WORKOUT_FEELINGS];
 
-function FinishContent() {
+function FinishContent({ programId }: { programId: number }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mountTime] = useState<number>(() => Date.now());
@@ -56,7 +56,7 @@ function FinishContent() {
     // Per-set overrides (weight/reps edited during the workout) are flushed
     // back to the program template so the next session starts from them, with
     // the version the workout started on (T9).
-    const overrideWrites = finishFlushPayloads(workoutSession?.overrides ?? {}, workoutSession?.planVersion ?? null);
+    const flush = finishFlushPayload(programId, workoutSession?.overrides ?? {}, workoutSession?.planVersion ?? null);
     // The client's end time, not the server's clock at write time: a queued
     // finish that replays hours later must still record when the workout
     // actually ended, or the session's duration is wrong.
@@ -75,9 +75,7 @@ function FinishContent() {
         showToast({ variant: "error", message: "Can't finish without a session — reconnect first" });
         return false;
       }
-      overrideWrites.forEach((payload) =>
-        enqueuePending({ kind: "updateProgramSet", payload }),
-      );
+      if (flush) enqueuePending({ kind: "flushWorkoutPlan", payload: flush });
       enqueuePending({
         kind: "completeWorkoutSession",
         payload: { sessionId: existingSessionId, endTime, feeling, notes: trimmedNotes },
@@ -92,8 +90,8 @@ function FinishContent() {
     // starting weights, not this session's data, so it must not block the
     // save. The session write below is the one that matters.
     try {
-      const flushed = await Promise.all(overrideWrites.map((payload) => updateProgramSet(payload)));
-      const conflicts = flushed.filter((r) => !r.success && r.conflict).length;
+      const flushed = flush ? await flushWorkoutPlan(flush) : null;
+      const conflicts = flushed?.success ? flushed.data.conflicts : 0;
       if (conflicts > 0) {
         showToast({
           durationMs: 8000,
@@ -328,10 +326,10 @@ export default function WorkoutFinishPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  void use(params);
+  const { id } = use(params);
   return (
     <Suspense>
-      <FinishContent />
+      <FinishContent programId={Number(id)} />
     </Suspense>
   );
 }

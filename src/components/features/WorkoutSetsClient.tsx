@@ -764,6 +764,8 @@ export function WorkoutSetsClient({
       setSets(previous);
       return;
     }
+    // The finish would otherwise flush this override to a set that is gone.
+    workoutSession?.removeOverride(setId);
     router.push(
       isWorkout
         ? `/programs/${programId}/workout/exercises/${programExerciseId}?edit=true`
