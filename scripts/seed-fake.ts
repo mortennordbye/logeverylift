@@ -12,7 +12,7 @@
 
 import { eq } from "drizzle-orm";
 import { db } from "../src/db";
-import { programs, trainingCycles, users, workoutSessions } from "../src/db/schema";
+import { planRevisions, programs, trainingCycles, users, workoutSessions } from "../src/db/schema";
 import { seedDemoData } from "./lib/demo-data";
 
 const FORCE = process.argv.includes("--force");
@@ -55,6 +55,7 @@ async function seedFake() {
     await db
       .delete(trainingCycles)
       .where(eq(trainingCycles.userId, DEMO_USER_ID));
+    await db.delete(planRevisions).where(eq(planRevisions.userId, DEMO_USER_ID));
     console.log("✅ Cleared");
   }
 
