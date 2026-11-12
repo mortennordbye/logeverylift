@@ -8,7 +8,7 @@ briefs [`foundations.md`](foundations.md) (endurance switch, display units),
 [`revisions.md`](revisions.md) (the revision layer) and [`ai-coach.md`](ai-coach.md) (coach
 memory, MCP conventions).
 
-Status: brief, 2026-11-12. The findings describe `main` at 2bdac35; every `file:line` in them
+Status: building, 2026-11-12. The owner settled the open questions on 2026-11-12 (section 12). The findings describe `main` at 2bdac35; every `file:line` in them
 was opened then. Names marked *new* do not exist yet. Package C1 (seasons, races and phases) is
 built in parallel; section 2.6 names the one place where the two meet.
 
@@ -324,7 +324,10 @@ user can undo the whole interview in one step.
 current answers filled in.
 
 **Over MCP.**
-- An MCP prompt `intake_interview` (*new*), registered on the raw server like the resources. It
+- An MCP prompt `intake_interview` (*new*), registered on the raw server like the resources. The
+  read-only wrapper refuses prompt registration, so the prompt bypasses the scopes check. That is
+  safe because a prompt only returns text and writes nothing; every write it asks for goes through
+  the scoped write tools. A test checks that getting the prompt writes no row. It
   tells the model the steps above, to ask one step at a time, to read `get_athlete_profile` first,
   to write each answer with the tools in 2.8 as soon as the user gives it, and, for step 7, to
   restate each memory entry, ask the user, write the fact to its table, then deactivate the entry
@@ -565,7 +568,7 @@ Changed: `src/db/schema/plan-revisions.ts`, `src/db/schema/index.ts`, `src/lib/p
 `src/lib/constants/legal.ts`, `docs/research/endurance-training-reference.md` (the FTP 20-minute
 rule with its source), `docs/plans/garmin-insights-design.md`, `BACKLOG.md`.
 
-## 11. Open questions for the owner
+## 11. Open questions for the owner (settled, see section 12)
 
 1. **Thresholds for lifters.** D15 says thresholds by hand ship to everyone; D18 lists thresholds
    behind the endurance switch. Recommended: everyone, as D15 says, with a "Thresholds" entry in
@@ -583,3 +586,23 @@ rule with its source), `docs/plans/garmin-insights-design.md`, `BACKLOG.md`.
    stored in the revision as on every write. The refuse-and-override check moves to D3, after C1
    stores phases as cycles. The alternative is a check now against the cycle's current phase,
    which would misfire because one template serves every phase.
+
+## 12. Owner decisions (2026-11-12)
+
+The owner took every recommendation, and the defaults in section 9 too.
+
+1. **Thresholds for everyone**, with a "Thresholds" entry in More under Training. The rest of C3
+   stays behind the endurance switch. This settles the D15/D18 conflict for thresholds: D15 wins
+   for thresholds entered by hand; D18 still gates the athlete profile, injuries, the strength
+   goal, the interview and every later endurance view.
+2. **`CONSENT_VERSION` is raised in this PR**, with "injuries" in the sign-up health consent text.
+3. **The generator stays and changes lightly** (interview first, prefill, strength by goal). A
+   BACKLOG entry retires it after C4.
+4. **The D21 refuse-and-override check moves to D3.** C3 ships the default rule, its MCP read,
+   the instructions and the generator's use of it. The plan text says so.
+
+**Contact with C1** (hub, 2026-11-12): C1 moves the race to the season and adds one race reader in
+`src/lib/seasons.ts` (the season's A race, or the cycle's own race for a cycle with no season).
+`interviewRace(userId)` stays C3's only contact point and reads the active cycle's race fields
+for now. Whichever PR merges second wires it to C1's reader. Both PRs bump `LEGAL_VERSION` and add
+a migration; the hub settles the numbers at merge.

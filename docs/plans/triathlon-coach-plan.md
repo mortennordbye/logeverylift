@@ -195,7 +195,7 @@ the plan and runs alone.
 |---|---|---|---|
 | C1 | Seasons, races and phases | A2, A3, A4 | todo |
 | C2 | Session model: several slots a day, dated sessions | A2, A4, C1 | todo |
-| C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | brief ([`athlete-profile.md`](athlete-profile.md)) |
+| C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | building ([`athlete-profile.md`](athlete-profile.md)) |
 | C4 | Structured endurance workouts | C2, C3 | todo |
 | C5 | Planned vs done, missed sessions, sick periods | C2, C4 | todo |
 | C6 | Endurance in the app: views and guided player | A2, C3, C4 | todo |
@@ -239,7 +239,13 @@ a session relates to a program.
   muscle, stronger, minimal).
 - The intake interview, in the app and over MCP, writes these tables (not coach memory).
 - Strength part of a plan follows the strength goal; frequency by phase is a default the AI can
-  override with a reason (D21).
+  override with a reason (D21). C3 ships the default rule, reads it over MCP, puts it in the
+  instructions and uses it in the generator; the assistant's reason for a different count is
+  stored in the revision like every write. The check that refuses a different count until the
+  assistant overrides it moves to D3, since one cycle template cannot vary strength by phase
+  until C1 stores phases as cycles (owner, 2026-11-12).
+- Thresholds by hand are for every user (D15), with a Thresholds entry in More; the rest of C3
+  needs the endurance switch (D18). The owner settled this conflict on 2026-11-12.
 - The existing generator (`src/lib/utils/triathlon-plan.ts`) builds a fixed plan. The brief
   decides whether to change it to use the interview answers and the season, or to retire it
   because the AI builds plans from parts.
@@ -305,7 +311,10 @@ separate and never overridable.
   and the limits from data logged in the app (after D1) for users without Garmin.
 
 **D3. Strength by phase and heavy-legs placement (D10, D21).** Strength frequency follows the
-phase as a default the AI can override. The UI shows heavy leg work within 48 h before a key
+phase as a default the AI can override. C3 ships the default rule (`strength-goal.ts`); D3 adds
+the check on assistant writes that refuses a strength count other than the phase default unless
+the assistant overrides it with a reason, stored in the revision (moved from C3 by the owner,
+2026-11-12). The UI shows heavy leg work within 48 h before a key
 session, using the rule from D2; D3 does not write a second rule.
 
 **D4. Readiness-based suggestions.** When readiness flags (HRV and resting HR both off), suggest
