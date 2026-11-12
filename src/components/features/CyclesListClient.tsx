@@ -2,7 +2,7 @@
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteTrainingCycle, deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
-import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
+import { cycleLengthDays, cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { TrainingCycle } from "@/types/workout";
 import { Check, PlusIcon } from "lucide-react";
@@ -14,14 +14,14 @@ import { useEffect, useState } from "react";
 
 function formatEndDate(cycle: TrainingCycle): string {
   if (!cycle.startDate) return "";
-  const { endDate } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, new Date());
+  const { endDate } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, new Date(), cycle.durationDays);
   return endDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function getWeekProgress(cycle: TrainingCycle): { currentWeek: number; progressPct: number } {
   if (!cycle.startDate) return { currentWeek: 0, progressPct: 0 };
-  const { currentWeek, elapsedDays } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, new Date());
-  const progressPct = Math.min((Math.max(elapsedDays, 0) / (cycle.durationWeeks * 7)) * 100, 100);
+  const { currentWeek, elapsedDays } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, new Date(), cycle.durationDays);
+  const progressPct = Math.min((Math.max(elapsedDays, 0) / cycleLengthDays(cycle)) * 100, 100);
   return { currentWeek, progressPct };
 }
 
@@ -97,9 +97,11 @@ type Props = {
   enduranceEnabled: boolean;
   /** Deleted cycles the user can restore, shown under the list. */
   recentlyDeleted?: React.ReactNode;
+  /** The Seasons section, shown above the cycles (docs/plans/seasons.md, 2.10). */
+  seasons?: React.ReactNode;
 };
 
-export function CyclesListClient({ cycles: initial, enduranceEnabled, recentlyDeleted }: Props) {
+export function CyclesListClient({ cycles: initial, enduranceEnabled, recentlyDeleted, seasons }: Props) {
   const router = useRouter();
   const [cycles, setCycles] = useState(initial);
   const [isEditing, setIsEditing] = useState(false);
@@ -322,6 +324,8 @@ export function CyclesListClient({ cycles: initial, enduranceEnabled, recentlyDe
       )}
 
       <div className="flex-1 overflow-y-auto flex flex-col gap-6 px-4 pt-4">
+        {!isEditing && seasons}
+
         {/* Active */}
         {active.length > 0 && (
           <div>

@@ -116,7 +116,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "list_revisions",
     {
       description: [
-        "List the change history of one program, training cycle, coach memory entry, the athlete profile (athlete), a threshold value or an injury (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
+        "List the change history of one program, training cycle, season, coach memory entry, the athlete profile (athlete), a threshold value or an injury (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
         "Without objectType, list your own (assistant) change sets instead: each groups the writes of one review.",
         "Use the revision id or the change-set id with restore_revision.",
       ].join(" "),
@@ -158,7 +158,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "restore_revision",
     {
       description: [
-        "Restore a program, training cycle, coach memory entry, the athlete profile, a threshold value or an injury to an earlier revision (revisionId), or undo a whole change set (changeSetId).",
+        "Restore a program, training cycle, season (its fields and races; phases stay where they are), coach memory entry, the athlete profile, a threshold value or an injury to an earlier revision (revisionId), or undo a whole change set (changeSetId).",
         "A restore keeps all ids and never changes logged workouts. Weekly targets owned by the sync, and weights or reps the progression engine set since, keep their current values; the weekly sync runs again. A restore is itself a revision and can be restored.",
         "Requires a reason. Refused while the user has a workout in progress on the program.",
         "A restore of one revision runs the training limits as warnings only: it is never refused for them, and the result lists any limit the restored plan breaks.",

@@ -6,11 +6,11 @@
  * Pure.
  */
 
-import { deloadCadenceForLevel, periodizedLoad, type AthleteLevel, type TrainingGoal } from "@/lib/utils/periodization";
+import { cycleLoad, type AthleteLevel, type PhaseType, type TrainingGoal } from "@/lib/utils/periodization";
 import { addDays } from "../dates";
 import { ATL_DAYS, CTL_DAYS } from "./pmc";
 
-export type ProjectionCycle = { startDate: string; durationWeeks: number; goal: TrainingGoal; athleteLevel: AthleteLevel | null };
+export type ProjectionCycle = { startDate: string; durationWeeks: number; durationDays?: number | null; goal: TrainingGoal; athleteLevel: AthleteLevel | null; phaseType?: PhaseType | null };
 
 export type Projection = {
   /** Days after today up to and including race day. */
@@ -39,7 +39,7 @@ const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00
 
 function multiplier(cycle: ProjectionCycle, date: string): number {
   const week = Math.max(1, Math.floor(daysBetween(cycle.startDate, date) / 7) + 1);
-  return periodizedLoad(Math.min(week, cycle.durationWeeks), cycle.durationWeeks, cycle.goal, deloadCadenceForLevel(cycle.athleteLevel)).multiplier;
+  return cycleLoad(cycle, Math.min(week, cycle.durationWeeks), cycle.durationWeeks).multiplier;
 }
 
 function run(ctl0: number, atl0: number, loads: number[]) {

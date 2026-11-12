@@ -1,9 +1,11 @@
 "use client";
 
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
+import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -22,9 +24,11 @@ type Props = {
   cycle: TrainingCycle;
   /** The endurance add-on (src/lib/endurance.ts); gates the race field. */
   enduranceEnabled: boolean;
+  /** The live season the cycle is a phase of; null for none or a deleted one (it then acts as a cycle with no season). */
+  liveSeasonId?: number | null;
 };
 
-export function EditCycleForm({ cycle, enduranceEnabled }: Props) {
+export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null }: Props) {
   const router = useRouter();
   const [name, setName] = useState(cycle.name);
   const [durationWeeks, setDurationWeeks] = useState(cycle.durationWeeks);
@@ -39,6 +43,8 @@ export function EditCycleForm({ cycle, enduranceEnabled }: Props) {
 
   const scheduleLabel =
     cycle.scheduleType === "day_of_week" ? "Day of week" : "Rotation";
+  // A cycle in a season stores no race (D8).
+  const inSeason = liveSeasonId != null;
 
   // Warn if the selected duration would immediately end an active cycle
   const durationWarning = useMemo(() => {
@@ -47,11 +53,11 @@ export function EditCycleForm({ cycle, enduranceEnabled }: Props) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const elapsed = Math.floor((today.getTime() - start.getTime()) / 86400000);
-    if (durationWeeks * 7 <= elapsed) {
+    if (cycleLengthDays({ durationWeeks, durationDays: durationWeeks === cycle.durationWeeks ? cycle.durationDays : null }) <= elapsed) {
       return "This duration is shorter than time already elapsed — the cycle would end immediately.";
     }
     return null;
-  }, [cycle.status, cycle.startDate, durationWeeks]);
+  }, [cycle.status, cycle.startDate, cycle.durationWeeks, cycle.durationDays, durationWeeks]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -62,7 +68,8 @@ export function EditCycleForm({ cycle, enduranceEnabled }: Props) {
     const result = await callAction(updateTrainingCycle({
       id: cycle.id,
       name: name.trim(),
-      durationWeeks,
+      // Only a changed length: an unchanged one would drop a length in days (T8).
+      durationWeeks: durationWeeks !== cycle.durationWeeks ? durationWeeks : undefined,
       endAction,
       endMessage: endMessage.trim() || null,
       raceDate: raceDate || null,
@@ -92,7 +99,16 @@ export function EditCycleForm({ cycle, enduranceEnabled }: Props) {
         />
       </div>
 
-      {/* Duration */}
+      {/* Duration: a phase of a season sets its length on the season page. */}
+      {inSeason ? (
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Duration</span>
+          <p className="text-sm text-muted-foreground">
+            {cycle.durationDays != null ? `${cycle.durationDays} days` : `${cycle.durationWeeks} weeks`}. This cycle is a phase of a season: change its length and phase type on the{" "}
+            <Link href={`/seasons/${liveSeasonId}`} className="text-primary font-medium">season page</Link>.
+          </p>
+        </div>
+      ) : (
       <div className="flex flex-col gap-2">
         <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
           Duration
@@ -118,11 +134,20 @@ export function EditCycleForm({ cycle, enduranceEnabled }: Props) {
           <p className="text-sm text-destructive">{durationWarning}</p>
         )}
       </div>
+      )}
 
       {/* Race: what the Garmin race views count down to. Part of the endurance
           add-on; a cycle that already has a race keeps showing it, so no stored
           value is hidden from its owner. */}
-      {(enduranceEnabled || cycle.raceDate) && (
+      {inSeason && (
+        <div id="race" className="flex flex-col gap-2 scroll-mt-4">
+          <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Race</span>
+          <p className="text-sm text-muted-foreground" data-testid="season-race-note">
+            Races are set on the season.
+          </p>
+        </div>
+      )}
+      {!inSeason && (enduranceEnabled || cycle.raceDate) && (
       <div id="race" className="flex flex-col gap-2 scroll-mt-4">
         <label htmlFor="race-date" className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
           Race <span className="normal-case font-normal">(optional)</span>

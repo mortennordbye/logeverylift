@@ -21,7 +21,10 @@ export type TrainingGoal = "build" | "maintain";
 /** Ironman experience tier — drives peak volumes (see triathlon-plan) and deload cadence. */
 export type AthleteLevel = "novice" | "intermediate" | "advanced";
 
-export type TrainingPhase = "base" | "build" | "peak" | "taper" | "maintain";
+export type TrainingPhase = "base" | "build" | "peak" | "taper" | "maintain" | "general" | "transition";
+
+/** A cycle's phase type inside a season (docs/plans/seasons.md, 2.4); null = the whole block curve. */
+export type PhaseType = "general" | "base" | "build" | "peak" | "taper" | "transition";
 
 export type WeekLoad = {
   /** 1-indexed week within the block. */
@@ -144,6 +147,72 @@ export function periodizedLoad(
   };
 }
 
+// ── Phase curves (docs/plans/seasons.md, 2.5; owner decision 2) ─────────────
+// A cycle that is one phase of a season runs that phase's curve instead of the
+// whole block curve above. Each phase ramps to its own peak anchors.
+
+/**
+ * Start of the ramp in a general, base or build phase. Higher than RAMP_START
+ * because a phase usually follows another at a similar load, and a drop to
+ * 0.60 at every phase start would be a false recovery week.
+ * Evidence: Inference (from the 3-week block pattern, a Coach convention in
+ * docs/research/endurance-training-reference.md).
+ */
+export const PHASE_RAMP_START = 0.8;
+/** A peak phase holds full volume. Evidence: Coach convention. */
+export const PHASE_PEAK = 1;
+/**
+ * A transition phase after a race: half volume, and the weekly sync leaves the
+ * zone and rest of `work` sets alone. Evidence: Inference.
+ */
+export const PHASE_TRANSITION = 0.5;
+
+/**
+ * Load for one week of a phase cycle. The taper uses the same 0.60 to 0.35 cut
+ * as the block taper (Study: volume down 41-60%).
+ */
+export function phaseLoad(phaseType: PhaseType, week: number, totalWeeks: number, deloadEvery: number = DELOAD_EVERY): WeekLoad {
+  const weeks = Math.max(1, Math.floor(totalWeeks));
+  const w = clamp(Math.floor(week), 1, weeks);
+  const t = weeks > 1 ? (w - 1) / (weeks - 1) : 1;
+  switch (phaseType) {
+    case "peak":
+      return { week: w, phase: "peak", multiplier: PHASE_PEAK, isDeload: false };
+    case "taper":
+      return {
+        week: w,
+        phase: "taper",
+        multiplier: round2(clamp(lerp(TAPER_START, TAPER_END, t), MIN_MULTIPLIER, 1)),
+        isDeload: false,
+      };
+    case "transition":
+      return { week: w, phase: "transition", multiplier: PHASE_TRANSITION, isDeload: false };
+    default: {
+      let multiplier = lerp(PHASE_RAMP_START, 1, t);
+      // Deload every Nth week, never the last week of the phase.
+      const isDeload = w % deloadEvery === 0 && w !== weeks;
+      if (isDeload) multiplier *= DELOAD_FACTOR;
+      return { week: w, phase: phaseType, multiplier: round2(clamp(multiplier, MIN_MULTIPLIER, 1)), isDeload };
+    }
+  }
+}
+
+/**
+ * The load for one week of a cycle: its phase curve when it is a typed phase
+ * of a season, else the whole block curve (periodizedLoad), exactly as before
+ * seasons. Every reader of the curve goes through this.
+ */
+export function cycleLoad(
+  cycle: { goal: TrainingGoal; athleteLevel: AthleteLevel | null; phaseType?: PhaseType | null },
+  week: number,
+  totalWeeks: number,
+): WeekLoad {
+  const deloadEvery = deloadCadenceForLevel(cycle.athleteLevel);
+  return cycle.phaseType
+    ? phaseLoad(cycle.phaseType, week, totalWeeks, deloadEvery)
+    : periodizedLoad(week, totalWeeks, cycle.goal, deloadEvery);
+}
+
 /**
  * Apply a week's load multiplier to a peak distance, rounded to a clean 100 m
  * step (min 100 m). Shared by the generator (week 1) and the weekly sync.
@@ -184,6 +253,8 @@ const PHASE_LABELS: Record<TrainingPhase, string> = {
   peak: "Peak",
   taper: "Taper",
   maintain: "Maintain",
+  general: "General prep",
+  transition: "Transition",
 };
 
 export function phaseLabel(phase: TrainingPhase): string {
@@ -204,7 +275,11 @@ export function intervalPhaseRecipe(phase: TrainingPhase): {
 } {
   switch (phase) {
     case "base":
+    case "general":
       return { zone: 3, restSeconds: 60, intent: "Tempo" };
+    case "transition":
+      // Never applied: the sync leaves work sets alone in a transition phase.
+      return { zone: 2, restSeconds: 60, intent: "Easy" };
     case "build":
       return { zone: 4, restSeconds: 120, intent: "Threshold" };
     case "peak":

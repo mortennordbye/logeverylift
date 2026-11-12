@@ -14,6 +14,7 @@ import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -133,6 +134,15 @@ describe("MCP tool registration", () => {
       manage_thresholds: false,
       manage_athlete_profile: false,
       manage_injuries: false,
+    });
+  });
+
+  it("registers the season tools: list and get are read, manage_season and manage_race are write", () => {
+    expect(hints(registerSeasonTools)).toEqual({
+      list_seasons: true,
+      get_season: true,
+      manage_season: false,
+      manage_race: false,
     });
   });
 

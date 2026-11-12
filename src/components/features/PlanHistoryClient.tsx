@@ -60,7 +60,7 @@ function group(rows: HistoryRow[]): Item[] {
  * The history list (docs/plans/revisions.md, 2.9): newest first, Restore on
  * every row but the newest, "Apply my value" on a change that was not applied.
  */
-export function PlanHistoryClient({ kind, rows }: { kind: "program" | "cycle"; rows: HistoryRow[] }) {
+export function PlanHistoryClient({ kind, rows }: { kind: "program" | "cycle" | "season"; rows: HistoryRow[] }) {
   const router = useRouter();
   const [confirming, setConfirming] = useState<HistoryRow | null>(null);
   const [open, setOpen] = useState<Set<number>>(new Set());

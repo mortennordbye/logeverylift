@@ -3,7 +3,7 @@
  * range, and the state of the race the active cycle builds to.
  */
 
-import { periodizedLoad, deloadCadenceForLevel, type AthleteLevel, type TrainingGoal, type TrainingPhase } from "@/lib/utils/periodization";
+import { cycleLoad, type AthleteLevel, type PhaseType, type TrainingGoal, type TrainingPhase } from "@/lib/utils/periodization";
 import { addDays } from "../dates";
 
 export type Point = { date: string; value: number };
@@ -70,6 +70,9 @@ export type CycleForRace = {
   athleteLevel: AthleteLevel | null;
   raceDate: string | null;
   raceDistance: RaceDistance | null;
+  /** A phase of a season (docs/plans/seasons.md): its curve, and its length when in days. */
+  phaseType?: PhaseType | null;
+  durationDays?: number | null;
 };
 
 export type RaceStatus = {
@@ -90,11 +93,11 @@ const daysBetween = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00
 
 export function raceStatus(cycle: CycleForRace | null, today: string): RaceStatus | null {
   if (!cycle?.startDate) return null;
-  const lastDay = addDays(cycle.startDate, cycle.durationWeeks * 7 - 1);
+  const lastDay = addDays(cycle.startDate, (cycle.durationDays ?? cycle.durationWeeks * 7) - 1);
   const raceDay = cycle.raceDate ?? lastDay;
   const elapsed = daysBetween(cycle.startDate, today);
   const week = elapsed < 0 ? null : Math.min(cycle.durationWeeks, Math.floor(elapsed / 7) + 1);
-  const load = week ? periodizedLoad(week, cycle.durationWeeks, cycle.goal, deloadCadenceForLevel(cycle.athleteLevel)) : null;
+  const load = week ? cycleLoad(cycle, week, cycle.durationWeeks) : null;
   return {
     cycleName: cycle.name,
     raceDay,

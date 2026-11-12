@@ -21,6 +21,7 @@ import {
   oauthConsents,
   planRevisions,
   programs,
+  seasons,
   trainingCycles,
   users,
   userWeightEntries,
@@ -75,6 +76,8 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(workoutSessions).where(eq(workoutSessions.userId, userId));
     await tx.delete(exercisePrs).where(eq(exercisePrs.userId, userId));
     await tx.delete(trainingCycles).where(eq(trainingCycles.userId, userId));
+    // Races go with their seasons (cascade).
+    await tx.delete(seasons).where(eq(seasons.userId, userId));
     await tx.delete(programs).where(eq(programs.userId, userId));
     await tx.delete(planRevisions).where(eq(planRevisions.userId, userId));
     await tx.delete(coachMemory).where(eq(coachMemory.userId, userId));

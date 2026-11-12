@@ -11,6 +11,8 @@ import { getCyclePeriodization, getTrainingCycleWithSlots } from "@/lib/actions/
 import { getPrograms } from "@/lib/actions/programs";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { requireSession } from "@/lib/utils/session";
+import { seasonOfCycle } from "@/lib/seasons";
+import { dayLabel } from "@/lib/utils/seasons";
 import { ChevronLeftIcon } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -24,7 +26,7 @@ export default async function CycleDetailPage({
   const cycleId = Number(id);
   if (isNaN(cycleId)) notFound();
 
-  await requireSession();
+  const auth = await requireSession();
   const [cycleResult, programsResult, periodizationResult] = await Promise.all([
     getTrainingCycleWithSlots(cycleId),
     getPrograms(),
@@ -34,6 +36,8 @@ export default async function CycleDetailPage({
   if (!cycleResult.success) notFound();
 
   const cycle = cycleResult.data;
+  // A phase of a season shows where it sits and the season's races (D8).
+  const season = await seasonOfCycle(auth.user.id, cycle);
   const programs = programsResult.success ? programsResult.data : [];
   const periodization = periodizationResult.success ? periodizationResult.data : null;
 
@@ -78,7 +82,7 @@ export default async function CycleDetailPage({
         {/* Meta */}
         <div className="flex items-center gap-3 flex-wrap">
           <span className="text-sm text-muted-foreground">
-            {cycle.durationWeeks} weeks · {scheduleLabel}
+            {cycle.durationDays != null ? `${cycle.durationDays} days` : `${cycle.durationWeeks} weeks`} · {scheduleLabel}
           </span>
           <span
             className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${
@@ -92,6 +96,20 @@ export default async function CycleDetailPage({
             {cycle.status}
           </span>
         </div>
+
+        {season && (
+          <Link href={`/seasons/${season.id}`} data-testid="cycle-season" className="rounded-2xl bg-card px-4 py-3 min-h-[44px] active:bg-muted/50">
+            <p className="text-sm font-medium">
+              Phase {season.position} of {season.phaseCount} in {season.name}
+            </p>
+            {season.races.map((r) => (
+              <p key={r.id} className="text-xs text-muted-foreground">
+                {r.priority} race: {r.name}, {dayLabel(r.raceDate)}
+              </p>
+            ))}
+            {season.replan.flagged && <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Race changed, plan not updated</p>}
+          </Link>
+        )}
 
         {/* Periodization summary (triathlon cycles) */}
         {periodization && (

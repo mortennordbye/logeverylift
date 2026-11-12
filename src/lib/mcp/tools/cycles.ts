@@ -15,6 +15,7 @@ import { liveCycles, livePrograms, liveSlotProgram } from "@/lib/plan-live";
 import {
   activateCycle,
   deleteCycles,
+  liveSeasonId,
   planWrite,
   scheduleCycle,
   startDueScheduledCycle,
@@ -31,6 +32,8 @@ import {
   withLimits,
 } from "@/lib/training-limits";
 import { userToday } from "@/lib/user-settings";
+import { raceForCycle } from "@/lib/seasons";
+import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
 import { addDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -73,7 +76,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     "list_training_cycles",
     {
       description:
-        "List the current user's training cycles (mesocycles), newest first.",
+        "List the current user's training cycles (mesocycles), newest first. Each has `race`: the race it reads (its season's A race for a phase of a season, else its own).",
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -86,7 +89,8 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
           .from(trainingCycles)
           .where(and(eq(trainingCycles.userId, userId), liveCycles))
           .orderBy(desc(trainingCycles.createdAt));
-        return ok(rows);
+        // The race each cycle reads: its season's A race, or its own (D8).
+        return ok(await Promise.all(rows.map(async (c) => ({ ...c, race: await raceForCycle(userId, c) }))));
       } catch (e) {
         return failInternal("cycles", e);
       }
@@ -97,7 +101,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     "get_training_cycle",
     {
       description:
-        "Get one training cycle with its slots (each slot's assigned program included) and its version. Pass the version as expectedVersion when you change it.",
+        "Get one training cycle with its slots (each slot's assigned program included) and its version. Pass the version as expectedVersion when you change it. A cycle with seasonId is a phase of that season (phaseOrder, phaseType, durationDays); its race is the season's A race, returned as race. Change phases with manage_season.",
       inputSchema: { cycleId: z.number().int().positive() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -113,7 +117,9 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
           with: { slots: { with: { program: true } } },
         });
         if (!cycle) return fail("Training cycle not found");
-        return ok({ ...cycle, slots: cycle.slots.map(liveSlotProgram) });
+        // The race the cycle reads: its season's A race, or its own (D8).
+        const race = await raceForCycle(userId, cycle);
+        return ok({ ...cycle, race, slots: cycle.slots.map(liveSlotProgram) });
       } catch (e) {
         return failInternal("cycles", e);
       }
@@ -127,7 +133,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         "Create, update, delete, start or schedule a training cycle, or change this week's volume.",
         `operation='create': requires name and durationWeeks (${CYCLE_DURATION_WEEKS.join("/")}); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage, and the endurance fields below.`,
         "operation='update': requires cycleId; any of name, durationWeeks, endAction, endMessage, status ('draft'|'active'|'completed'), the endurance fields, and scheduledStartDate: null (cancels a scheduled start) are applied.",
-        "Endurance fields (need the user's endurance features on): raceDate (YYYY-MM-DD) and raceDistance ('full' Ironman or 'half' 70.3), null to clear; goal ('build' ramps endurance volume to a peak then tapers, 'maintain' holds it flat); athleteLevel ('novice' recovers every 3rd week, 'intermediate'/'advanced' every 4th). A new goal or level re-derives this week's targets.",
+        "Endurance fields (need the user's endurance features on): raceDate (YYYY-MM-DD) and raceDistance ('full' Ironman or 'half' 70.3), null to clear, only on a cycle in no season (a phase of a season reads the season's races: use manage_race); goal ('build' ramps endurance volume to a peak then tapers, 'maintain' holds it flat); athleteLevel ('novice' recovers every 3rd week, 'intermediate'/'advanced' every 4th). A new goal or level re-derives this week's targets.",
         "operation='delete': requires cycleId. The cycle and the programs it generated can be restored in the app for 90 days, and with restore_revision.",
         `operation='start': requires cycleId. Without startDate, or with today, it becomes active now (completing any other active cycle). With a later startDate (up to ${MAX_SCHEDULE_DAYS} days ahead) it stays a draft scheduled to start that day; on that day it becomes active and the old block completes. Only one cycle is scheduled at a time.`,
         `operation='set_volume': requires cycleId (the active cycle) and pct (${SET_VOLUME_MIN}-${SET_VOLUME_MAX}): this week's endurance volume as a percent of the block's curve, the same factor the weekly sync sets from adherence and readiness (adaptationPct). It rewrites this week's distances and durations at once and lasts one week: next week's sync computes its own percent. For a lasting change, edit the peaks with edit_program_exercise.`,
@@ -211,6 +217,16 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             ),
           });
           if (!existing) return fail("Training cycle not found");
+          // A cycle in a live season stores no race: the season holds it (D8).
+          // Its length belongs to the season too, which re-chains the next phase.
+          if ((await liveSeasonId(db, existing.seasonId)) != null) {
+            if (args.raceDate != null || args.raceDistance != null) {
+              return fail(`${SEASON_CYCLE_RACE} Use manage_race on season ${existing.seasonId}.`);
+            }
+            if (args.durationWeeks !== undefined && args.durationWeeks !== existing.durationWeeks) {
+              return fail(`${SEASON_CYCLE_LENGTH} Use manage_season set_phase on season ${existing.seasonId}.`);
+            }
+          }
 
           // Activating must go through operation='start', which deactivates any
           // other active cycle first.
@@ -232,7 +248,11 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
 
           const updates: Record<string, unknown> = {};
           if (args.name !== undefined) updates.name = args.name;
-          if (args.durationWeeks !== undefined) updates.durationWeeks = args.durationWeeks;
+          if (args.durationWeeks !== undefined) {
+            updates.durationWeeks = args.durationWeeks;
+            // A length in weeks replaces a length in days (T8).
+            updates.durationDays = null;
+          }
           // A new block length changes every week's targets; clearing the sync
           // stamp makes the next read re-derive them.
           if (args.durationWeeks !== undefined && args.durationWeeks !== existing.durationWeeks) {
@@ -313,7 +333,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             with: { slots: { with: { program: true } } },
           });
           if (!cycle || cycle.status !== "active" || !cycle.startDate) return fail("set_volume works on the active cycle only");
-          const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, parseDateStr(today));
+          const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, parseDateStr(today), cycle.durationDays);
           if (isOver) return fail("The cycle is over");
           const lc = await limitContext(userId);
           const scoped = await cycleScope(cycleId, currentWeek, pct);

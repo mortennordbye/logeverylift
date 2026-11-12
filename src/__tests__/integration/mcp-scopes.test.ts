@@ -8,6 +8,8 @@ import {
   planRevisions,
   programExercises,
   programs,
+  seasonRaces,
+  seasons,
   trainingCycleSlots,
   trainingCycles,
   userWeightEntries,
@@ -24,6 +26,7 @@ import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -47,7 +50,7 @@ function toolsFor(userId: string, access: McpAccess) {
     registerTool: (name: string, _config: unknown, handler: Handler) => tools.set(name, handler),
   } as unknown as McpServer;
   const server = scopedServer(base, access);
-  for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools, registerExerciseTools, registerSessionTools, registerCoachMemoryTools]) {
+  for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools, registerExerciseTools, registerSessionTools, registerCoachMemoryTools, registerSeasonTools]) {
     register(server, userId);
   }
   registerAthleteProfileTools(server, userId, undefined, { endurance: true });
@@ -68,13 +71,16 @@ async function fingerprint(userId: string) {
   const athlete = await db.select({ id: athleteProfiles.id, v: athleteProfiles.version }).from(athleteProfiles).where(eq(athleteProfiles.userId, userId));
   const thresholds = await db.select({ id: athleteThresholds.id }).from(athleteThresholds).where(eq(athleteThresholds.userId, userId));
   const injuries = await db.select({ id: athleteInjuries.id }).from(athleteInjuries).where(eq(athleteInjuries.userId, userId));
-  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length, athlete, thresholds: thresholds.length, injuries: injuries.length });
+  const seasonRows = await db.select({ id: seasons.id, name: seasons.name, version: seasons.version }).from(seasons).where(eq(seasons.userId, userId));
+  const races = await db.select({ id: seasonRaces.id }).from(seasonRaces).where(eq(seasonRaces.userId, userId));
+  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length, athlete, thresholds: thresholds.length, injuries: injuries.length, seasonRows, races: races.length });
 }
 
 let me: string;
 let programId: number;
 let exerciseId: number;
 let cycleId: number;
+let seasonId: number;
 /** A revision of the program: its baseline, before a rename made in beforeEach. */
 let baselineId: number;
 
@@ -97,6 +103,12 @@ beforeEach(async () => {
   });
   const [baseline] = await db.select({ id: planRevisions.id }).from(planRevisions).where(eq(planRevisions.action, "baseline"));
   baselineId = baseline.id;
+  // A season, and the endurance switch for its races (docs/plans/seasons.md, 2.9).
+  await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, me));
+  [{ id: seasonId }] = await db
+    .insert(seasons)
+    .values({ userId: me, name: "Season", startDate: "2027-01-04", endDate: "2027-09-30" })
+    .returning({ id: seasons.id });
 });
 
 /** One call per write tool that changes something when it runs. */
@@ -117,6 +129,8 @@ const writeCalls = (): [string, Record<string, unknown>][] => [
   ["manage_thresholds", { operation: "add", kind: "ftp", watts: 250, source: "manual", reason: "Test" }],
   ["manage_athlete_profile", { strengthGoal: "stronger", reason: "Test" }],
   ["manage_injuries", { operation: "add", area: "knee", description: "Sore", status: "active", reason: "Test" }],
+  ["manage_season", { operation: "create", name: "2027", startDate: "2027-01-04", endDate: "2027-09-30", reason: "Test" }],
+  ["manage_race", { operation: "add", seasonId, name: "Half", date: "2027-08-22", discipline: "triathlon", distance: "half", priority: "A", reason: "Test", expectedVersion: 1 }],
 ];
 
 const readCalls: [string, Record<string, unknown>][] = [
@@ -138,6 +152,8 @@ const readCalls: [string, Record<string, unknown>][] = [
   ["search_exercises", { query: "a", limit: 5 }],
   ["get_coach_memory", {}],
   ["get_athlete_profile", {}],
+  ["list_seasons", {}],
+  ["get_season", { seasonId: 0 }],
 ];
 
 describe("read only", () => {

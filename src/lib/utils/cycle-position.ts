@@ -48,24 +48,41 @@ export function parseDateStr(s: string): Date {
 }
 
 /**
+ * A cycle's length in days: `durationDays` when set (a phase measured in days,
+ * decision T8 in docs/triathlon-coach-audit.md), else whole weeks.
+ */
+export function cycleLengthDays(c: { durationWeeks: number; durationDays?: number | null }): number {
+  return c.durationDays ?? c.durationWeeks * 7;
+}
+
+/** Weeks a length in days spans, for the week-based code (a 10-day phase has 2). */
+export function weeksForDays(days: number): number {
+  return Math.max(1, Math.ceil(days / 7));
+}
+
+/**
  * Where `today` falls in a block of `durationWeeks` weeks starting on
  * `startDate`. Days are counted between local midnights and rounded, so a DST
  * change inside the range does not lose a day. `endDate` is the first day after
  * the block, and the block is over from that day on. `currentWeek` is clamped
- * to [1, durationWeeks].
+ * to [1, durationWeeks]. With `durationDays`, the block ends after that many
+ * days instead; week numbers still count 7 days each, so the last week can be
+ * short.
  */
 export function cycleWeek(
   startDate: Date,
   durationWeeks: number,
   today: Date,
+  durationDays?: number | null,
 ): { currentWeek: number; elapsedDays: number; endDate: Date; isOver: boolean } {
   const start = startOfDay(startDate);
   const elapsedDays = Math.round((startOfDay(today).getTime() - start.getTime()) / MS_PER_DAY);
+  const days = cycleLengthDays({ durationWeeks, durationDays });
   return {
     currentWeek: Math.min(durationWeeks, Math.max(1, Math.floor(elapsedDays / 7) + 1)),
     elapsedDays,
-    endDate: addDays(start, durationWeeks * 7),
-    isOver: elapsedDays >= durationWeeks * 7,
+    endDate: addDays(start, days),
+    isOver: elapsedDays >= days,
   };
 }
 

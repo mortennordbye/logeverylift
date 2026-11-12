@@ -11,6 +11,7 @@ import { sessionInsights } from "./analytics/session-insights";
 import type { CorrelationDay } from "./analytics/correlations";
 import { addDays, isoDate, mondayOf } from "./dates";
 import { garminToday } from "./today";
+import { raceForCycle, seasonTaperStart } from "@/lib/seasons";
 
 export { garminToday };
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
@@ -540,9 +541,14 @@ function staminaOf(dto: Json | null): ActivityDetail["stamina"] {
 
 // ── Overview ────────────────────────────────────────────────────────────────
 
-export type ActiveCycle = CycleForRace & { id: number };
+export type ActiveCycle = CycleForRace & { id: number; seasonId: number | null };
 
-/** The user's active training cycle, with its race fields. */
+/**
+ * The user's active training cycle, with the race it reads: the season's A
+ * race for a phase of a season, else its own (raceForCycle,
+ * docs/plans/seasons.md, 2.7). The race views know full and half only; any
+ * other kind reads as "distance not set".
+ */
 export async function getActiveCycle(userId: string): Promise<ActiveCycle | null> {
   const [c] = await db
     .select({
@@ -550,8 +556,11 @@ export async function getActiveCycle(userId: string): Promise<ActiveCycle | null
       name: trainingCycles.name,
       startDate: trainingCycles.startDate,
       durationWeeks: trainingCycles.durationWeeks,
+      durationDays: trainingCycles.durationDays,
+      phaseType: trainingCycles.phaseType,
       goal: trainingCycles.goal,
       athleteLevel: trainingCycles.athleteLevel,
+      seasonId: trainingCycles.seasonId,
       raceDate: trainingCycles.raceDate,
       raceDistance: trainingCycles.raceDistance,
     })
@@ -559,7 +568,11 @@ export async function getActiveCycle(userId: string): Promise<ActiveCycle | null
     .where(and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), liveCycles))
     .orderBy(desc(trainingCycles.createdAt))
     .limit(1);
-  return c ?? null;
+  // A cycle in no season keeps its own fields exactly as before seasons.
+  if (!c || c.seasonId == null) return c ?? null;
+  const race = await raceForCycle(userId, c);
+  const distance = race?.discipline === "triathlon" && (race.distance === "full" || race.distance === "half") ? race.distance : null;
+  return { ...c, raceDate: race?.raceDate ?? null, raceDistance: distance };
 }
 
 export type BodyKey =
@@ -1021,7 +1034,7 @@ export async function getRaceProjection(userId: string, series: LoadSeries, toda
     ctl: t.ctl[last],
     atl: t.atl[last],
     last7: daily.slice(-7),
-    cycle: { startDate: cycle.startDate, durationWeeks: cycle.durationWeeks, goal: cycle.goal, athleteLevel: cycle.athleteLevel },
+    cycle: { startDate: cycle.startDate, durationWeeks: cycle.durationWeeks, durationDays: cycle.durationDays, goal: cycle.goal, athleteLevel: cycle.athleteLevel, phaseType: cycle.phaseType },
     peakCtl: Math.max(0, ...t.ctl.slice(-90)),
   });
   return { race, projection };
@@ -1211,7 +1224,8 @@ export async function getRaceData(userId: string, todayArg?: string): Promise<Ra
     today,
     cycleId: cycle.id,
     race,
-    taperStart: taperStart(cycle.startDate, cycle.durationWeeks),
+    // A phase of a season: the season's taper phase, not a taper inside this block.
+    taperStart: (cycle.seasonId != null ? await seasonTaperStart(userId, cycle.seasonId) : null) ?? taperStart(cycle.startDate, cycle.durationWeeks),
     series,
     projection: rp?.projection ?? null,
     volume,

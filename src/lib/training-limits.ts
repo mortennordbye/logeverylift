@@ -30,7 +30,7 @@ import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from 
 import type { PlanWriteSession, Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
-import { deloadCadenceForLevel, periodizedLoad, scaledDistance, scaledDuration } from "@/lib/utils/periodization";
+import { cycleLoad, scaledDistance, scaledDuration } from "@/lib/utils/periodization";
 import {
   LONG_RUN_WINDOW_DAYS,
   hardSessionsPerWeek,
@@ -334,6 +334,7 @@ export async function cycleScope(
       durationWeeks: trainingCycles.durationWeeks,
       goal: trainingCycles.goal,
       athleteLevel: trainingCycles.athleteLevel,
+      phaseType: trainingCycles.phaseType,
     })
     .from(trainingCycles)
     .where(and(eq(trainingCycles.id, cycleId), liveCycles));
@@ -344,7 +345,7 @@ export async function cycleScope(
     .innerJoin(programs, eq(programs.id, trainingCycleSlots.programId))
     .where(and(eq(trainingCycleSlots.trainingCycleId, cycleId), livePrograms));
   const c = { ...cycle, ...settings };
-  const { multiplier } = periodizedLoad(week, c.durationWeeks, c.goal, deloadCadenceForLevel(c.athleteLevel));
+  const { multiplier } = cycleLoad(c, week, c.durationWeeks);
   return {
     scope: { programIds: [...new Set(slots.map((s) => s.programId))], cycleIds: [cycleId] },
     share: multiplier * (pct / 100),
