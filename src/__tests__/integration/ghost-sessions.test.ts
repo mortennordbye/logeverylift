@@ -88,7 +88,7 @@ describe("the ghost-session cleanup", () => {
       await expect
         .poll(async () => {
           const { rows } = await pool.query(
-            "SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock' AND query ILIKE '%workout_sessions%'",
+            "SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query ILIKE '%workout_sessions%'",
           );
           return rows[0].n;
         })

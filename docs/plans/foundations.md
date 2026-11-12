@@ -95,7 +95,10 @@ sessions, and both have the same fault:
     replays, and a deleted session made every replayed `logWorkoutSet` fail its ownership
     check, so the whole workout was lost. A closed session takes the replayed sets.
   - Instead, the weekly sync's adherence counts only sessions with at least one set, or with
-    `source = 'auto'` (days the cycle completes itself have no sets by design).
+    `source = 'auto'` (days the cycle completes itself have no sets by design)
+    (`src/lib/periodization-sync.ts:140-143`). This is a behaviour change: a workout the user
+    finished with no sets no longer counts as done. It only matters for periodized cycles, the
+    only ones the adherence nudge runs on.
 - **Ghost cleanup script (D23).** *New* `scripts/cleanup-ghost-sessions.ts`, modelled on
   `scripts/cleanup-orphaned-cycle-programs.ts`. The only code that deletes empty sessions.
   - A ghost is: `is_completed = true`, `source = 'app'`, no `workout_sets` rows, no notes, no

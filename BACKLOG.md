@@ -33,6 +33,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A user in another zone or on miles who reports one of these, or the C6 endurance views, which should reuse `todayIn` and `useUnits`. For Garmin, decide whether the user's zone or Garmin's wins (the user's zone should, with Garmin's as the fallback).
 - **Touchpoints:** listed above.
 
+### Empty sessions closed by the stale sweep still show as workouts
+- **What:** A workout screen opened and left becomes a session with no sets. The stale sweeps (`closeStaleSessions` in `src/lib/actions/workout-sessions.ts`) close it as `isCompleted` with no duration. It then shows in history and counts in the home page's "done today" and week strip (`getCompletedSessions`, `src/lib/actions/workout-sets.ts:1429`) until `scripts/cleanup-ghost-sessions.ts` removes it after 7 days. The weekly sync already ignores it.
+- **Why deferred:** The sweeps must not delete it, since its sets may still be in the phone's offline queue. Hiding it means changing history and the home page, which are near critical flows, and main has the same behaviour today. Kept out of the foundations PR to keep it off more critical-flow code.
+- **Unblocked by:** A rule for reading sessions with no sets: leave them out of history, `getCompletedSessions` and the home strip (keep `source = 'auto'` days), or mark them "empty". Tests: a component or e2e check that a closed empty session does not show as done, and that a session whose queued sets land later does.
+- **Touchpoints:** `src/lib/actions/workout-sets.ts` (`getCompletedSessions`), `src/app/page.tsx`, `src/app/history/`, `src/lib/actions/workout-sessions.ts`.
+
 ### Run the ghost-session cleanup in prod
 - **What:** Remove old empty "completed" sessions in prod with `scripts/cleanup-ghost-sessions.ts` (decision D23): completed sessions with no sets, notes or feeling, older than 7 days. The app no longer gives them a false duration (`closeStaleSessions` in `src/lib/actions/workout-sessions.ts`) and the weekly sync ignores them, but it does not delete them.
 - **Why deferred:** Deleting prod data needs the owner. Agents never run it against prod.
