@@ -44,7 +44,8 @@ import {
   type PlanWriteContext,
 } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
-import { toDateStr } from "@/lib/utils/cycle-position";
+import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
+import { deloadCadenceForLevel, periodizedLoad, type TrainingPhase } from "@/lib/utils/periodization";
 import { DELETED_PLAN_RETENTION_DAYS } from "@/lib/utils/plan-revisions";
 import { agreesWithTest, currentThresholds, thresholdRangeError, valueFromTest } from "@/lib/utils/thresholds";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
@@ -128,6 +129,22 @@ export async function interviewRace(userId: string): Promise<InterviewRace | nul
     .limit(1);
   if (!cycle || (!cycle.raceDate && !cycle.raceDistance)) return null;
   return { date: cycle.raceDate, distance: cycle.raceDistance, cycleId: cycle.id, cycleName: cycle.name };
+}
+
+/**
+ * The phase the active cycle is in this week (base, build, peak, taper or
+ * maintain), for the strength default. Null with no active cycle. C1 stores
+ * phases as cycles; then the phase comes from there.
+ */
+export async function activeCyclePhase(userId: string): Promise<TrainingPhase | null> {
+  const [cycle] = await db
+    .select({ startDate: trainingCycles.startDate, durationWeeks: trainingCycles.durationWeeks, goal: trainingCycles.goal, athleteLevel: trainingCycles.athleteLevel })
+    .from(trainingCycles)
+    .where(and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), isNull(trainingCycles.deletedAt)))
+    .limit(1);
+  if (!cycle?.startDate) return null;
+  const { currentWeek } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, await userToday(userId));
+  return periodizedLoad(currentWeek, cycle.durationWeeks, cycle.goal ?? "build", deloadCadenceForLevel(cycle.athleteLevel)).phase;
 }
 
 /** Active coach memory entries the interview offers to move (kinds limit and observation). */

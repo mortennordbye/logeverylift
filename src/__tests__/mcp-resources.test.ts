@@ -59,6 +59,9 @@ describe("server instructions", () => {
       expect(text).toContain("weekly review");
       expect(text).toContain("expectedVersion");
       expect(text).toContain("restore_revision");
+      expect(text).toContain("get_athlete_profile");
+      expect(text).toContain("manage_thresholds");
+      expect(text).toContain("intake_interview");
     }
     expect(serverInstructions("read")).toContain("read only");
     expect(serverInstructions("write")).toContain("can read and change");

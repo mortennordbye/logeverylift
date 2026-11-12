@@ -7,6 +7,7 @@
  * It does not hit the database; handlers are registered but not invoked.
  */
 
+import { registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
 import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
@@ -123,6 +124,16 @@ describe("MCP tool registration", () => {
 
   it("registers the coach memory tools: get is read, manage is write", () => {
     expect(hints(registerCoachMemoryTools)).toEqual({ get_coach_memory: true, manage_coach_memory: false });
+  });
+
+  it("registers the athlete tools: thresholds always, profile and injuries only with the endurance switch", () => {
+    expect(hints((s, u) => registerAthleteProfileTools(s, u))).toEqual({ get_athlete_profile: true, manage_thresholds: false });
+    expect(hints((s, u) => registerAthleteProfileTools(s, u, undefined, { endurance: true }))).toEqual({
+      get_athlete_profile: true,
+      manage_thresholds: false,
+      manage_athlete_profile: false,
+      manage_injuries: false,
+    });
   });
 
   it("registers the session tools, both write tools", () => {

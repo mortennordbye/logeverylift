@@ -27,6 +27,7 @@ import { serverInstructions } from "@/lib/mcp/instructions";
 import { checkRateLimit } from "@/lib/mcp/rate-limit";
 import { loadResourceDocs, registerResources } from "@/lib/mcp/resources";
 import { MCP_SCOPES, scopedServer } from "@/lib/mcp/scopes";
+import { registerAthletePrompts, registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
 import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
@@ -40,6 +41,7 @@ import { createResourceServerChallenge } from "@better-auth/oauth-provider";
 import { APIError } from "better-auth/api";
 import { createInsufficientScopeError } from "better-auth/oauth2";
 import { createMcpHandler } from "mcp-handler";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { garminAllowedFor } from "@/lib/garmin/access";
 
 /** The 401 an unauthenticated request gets, so the client runs OAuth again. */
@@ -100,7 +102,8 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
   const clientId = typeof claims.azp === "string" ? claims.azp : undefined;
 
   // Garmin tools only for accounts allowed to use Garmin (src/lib/garmin/access.ts).
-  const [garmin, docs] = await Promise.all([garminAllowedFor(userId), loadResourceDocs()]);
+  // The athlete profile and injury tools only with the endurance switch on (D18).
+  const [garmin, endurance, docs] = await Promise.all([garminAllowedFor(userId), enduranceEnabledFor(userId), loadResourceDocs()]);
   return createMcpHandler(
     (mcpServer) => {
       const server = scopedServer(mcpServer, access);
@@ -113,8 +116,11 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       registerSessionTools(server, userId);
       registerExerciseTools(server, userId);
       registerCoachMemoryTools(server, userId, clientId);
+      registerAthleteProfileTools(server, userId, clientId, { endurance });
       if (garmin) registerGarminTools(server, userId);
       registerResources(mcpServer, docs);
+      // On the raw server: a prompt only returns text, and its writes go through the scoped tools.
+      registerAthletePrompts(mcpServer, userId);
     },
     { instructions: serverInstructions(access) },
     { basePath: "/api" },
