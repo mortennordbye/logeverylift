@@ -5,7 +5,7 @@
  */
 
 import { db } from "@/db";
-import { planRevisions } from "@/db/schema";
+import { PLAN_OBJECT_TYPES, planRevisions, type PlanObjectType } from "@/db/schema";
 import { fail, failInternal, ok } from "@/lib/mcp/result";
 import {
   OpenWorkoutError,
@@ -103,7 +103,7 @@ export async function planErrorResult(userId: string, e: unknown) {
 }
 
 /** The limit scope of a restored program or cycle (T4: restores get warnings, never a block). */
-async function restoreScope(userId: string, type: "program" | "cycle" | "memory", id: number): Promise<LimitScope | null> {
+async function restoreScope(userId: string, type: PlanObjectType, id: number): Promise<LimitScope | null> {
   if (type === "program") return { programIds: [id], cycleIds: await limitCyclesWith(db, userId, id) };
   if (type === "cycle") return (await cycleScope(id, 1))?.scope ?? null;
   return null;
@@ -114,12 +114,12 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "list_revisions",
     {
       description: [
-        "List the change history of one program, training cycle or coach memory entry (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
+        "List the change history of one program, training cycle, coach memory entry, the athlete profile (athlete), a threshold value or an injury (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
         "Without objectType, list your own (assistant) change sets instead: each groups the writes of one review.",
         "Use the revision id or the change-set id with restore_revision.",
       ].join(" "),
       inputSchema: {
-        objectType: z.enum(["program", "cycle", "memory"]).optional(),
+        objectType: z.enum(PLAN_OBJECT_TYPES).optional(),
         objectId: z.number().int().positive().optional(),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -154,7 +154,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "restore_revision",
     {
       description: [
-        "Restore a program or training cycle to an earlier revision (revisionId), or undo a whole change set (changeSetId).",
+        "Restore a program, training cycle, coach memory entry, the athlete profile, a threshold value or an injury to an earlier revision (revisionId), or undo a whole change set (changeSetId).",
         "A restore keeps all ids and never changes logged workouts. Weekly targets owned by the sync, and weights or reps the progression engine set since, keep their current values; the weekly sync runs again. A restore is itself a revision and can be restored.",
         "Requires a reason. Refused while the user has a workout in progress on the program.",
         "A restore of one revision runs the training limits as warnings only: it is never refused for them, and the result lists any limit the restored plan breaks.",

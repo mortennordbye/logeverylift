@@ -54,6 +54,11 @@ function revalidateObject(type: PlanObjectType, id: number) {
     revalidatePath("/more/coach-memory");
     return;
   }
+  if (type === "athlete" || type === "threshold" || type === "injury") {
+    revalidatePath("/more/athlete");
+    revalidatePath("/more/thresholds");
+    return;
+  }
   if (type === "program") {
     revalidatePath("/programs");
     revalidatePath(`/programs/${id}`);
@@ -138,6 +143,8 @@ export async function undoPlanChangeSet(data: unknown): Promise<ActionResult<{ o
     revalidatePath("/cycles");
     revalidatePath("/more/assistants/changes");
     revalidatePath("/more/coach-memory");
+    revalidatePath("/more/athlete");
+    revalidatePath("/more/thresholds");
     revalidatePath("/");
     return { success: true, data: done };
   } catch (e) {

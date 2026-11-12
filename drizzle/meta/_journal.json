@@ -589,6 +589,13 @@
       "when": 1794509483745,
       "tag": "0083_ai_coach",
       "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1794516520688,
+      "tag": "0084_athlete_profile",
+      "breakpoints": true
     }
   ]
 }

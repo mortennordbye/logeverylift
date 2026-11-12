@@ -15,13 +15,16 @@ export type ChangeSetCard = {
   reasons: string[];
   /** Training limits the assistant went past on purpose, with its reason. */
   overrides: string[];
-  objects: { type: "program" | "cycle" | "memory"; id: number; name: string; changes: string[] }[];
+  objects: { type: "program" | "cycle" | "memory" | "athlete" | "threshold" | "injury"; id: number; name: string; changes: string[] }[];
 };
 
 const HREF: Record<ChangeSetCard["objects"][number]["type"], (id: number) => string> = {
   program: (id) => `/programs/${id}/history`,
   cycle: (id) => `/cycles/${id}/history`,
   memory: () => "/more/coach-memory",
+  athlete: () => "/more/athlete",
+  threshold: () => "/more/thresholds",
+  injury: () => "/more/athlete",
 };
 
 /**
@@ -53,7 +56,7 @@ export function AssistantChangesClient({ sets }: { sets: ChangeSetCard[] }) {
   return (
     <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-3">
       <p className="text-sm text-muted-foreground">
-        Changes your assistants made to your programs, cycles and coach memory, grouped by conversation. Logged
+        Changes your assistants made to your programs, cycles, coach memory and athlete profile, grouped by conversation. Logged
         workouts never change.
       </p>
       {notice && (

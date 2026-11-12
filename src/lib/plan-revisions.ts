@@ -13,6 +13,9 @@
 
 import { db } from "@/db";
 import {
+  athleteInjuries,
+  athleteProfiles,
+  athleteThresholds,
   coachMemory,
   exercises,
   planRevisions,
@@ -38,6 +41,7 @@ import {
   isMemorySnapshot,
   isProgramSnapshot,
   MEMORY_KEPT,
+  ROW_KEPT,
   queuedWriteConflicts,
   OTHER_WRITERS,
   restoredSetValues,
@@ -48,6 +52,9 @@ import {
   type CycleSnapshot,
   type MemorySnapshot,
   type PlanSnapshot,
+  isAthleteSnapshot,
+  isInjurySnapshot,
+  isThresholdSnapshot,
   type ProgramSnapshot,
   type Row,
 } from "@/lib/utils/plan-revisions";
@@ -88,12 +95,19 @@ export class PlanConflictError extends Error {
   }
 }
 
+const NOT_FOUND: Record<PlanObjectType, string> = {
+  program: "Program not found",
+  cycle: "Training cycle not found",
+  memory: "Memory entry not found",
+  athlete: "Athlete profile not found",
+  threshold: "Threshold not found",
+  injury: "Injury not found",
+};
+
 /** The object is missing, deleted, or not the caller's. */
 export class PlanNotFoundError extends Error {
   constructor(readonly target: PlanTarget) {
-    super(
-      target.type === "program" ? "Program not found" : target.type === "cycle" ? "Training cycle not found" : "Memory entry not found",
-    );
+    super(NOT_FOUND[target.type]);
   }
 }
 
@@ -113,8 +127,19 @@ const bumps = (writer: PlanWriter, action: PlanRevisionAction) =>
 
 const key = (t: PlanTarget) => `${t.type}:${t.id}`;
 
+/** The one-row object types: the whole object is one row (docs/plans/athlete-profile.md, 2.2). */
+const ROW_TABLES = {
+  memory: coachMemory,
+  athlete: athleteProfiles,
+  threshold: athleteThresholds,
+  injury: athleteInjuries,
+} as const;
+type RowType = keyof typeof ROW_TABLES;
+const isRowType = (type: PlanObjectType): type is RowType => type in ROW_TABLES;
+
 /** The table that holds an object's row, with its owner, version and soft delete. */
-const tableOf = (type: PlanObjectType) => (type === "program" ? programs : type === "cycle" ? trainingCycles : coachMemory);
+const tableOf = (type: PlanObjectType) =>
+  type === "program" ? programs : type === "cycle" ? trainingCycles : ROW_TABLES[type as RowType];
 
 function stripRow<T extends Record<string, unknown>>(row: T, omit: string[]): Row {
   const out: Record<string, unknown> = {};
@@ -178,8 +203,21 @@ export async function snapshotMemory(ex: Executor, memoryId: number): Promise<Me
   return { v: 1, memory: stripRow(row, ["version", "updatedAt"]) };
 }
 
+/** A one-row object other than memory: `{ v: 1, athlete | threshold | injury: row }`. */
+async function snapshotRow(ex: Executor, type: Exclude<RowType, "memory">, id: number): Promise<PlanSnapshot> {
+  const table = ROW_TABLES[type];
+  const [row] = await ex.select().from(table).where(eq(table.id, id));
+  return { v: 1, [type]: stripRow(row, ["version", "updatedAt"]) } as PlanSnapshot;
+}
+
 const snapshotOf = (ex: Executor, t: PlanTarget): Promise<PlanSnapshot> =>
-  t.type === "program" ? snapshotProgram(ex, t.id) : t.type === "cycle" ? snapshotCycle(ex, t.id) : snapshotMemory(ex, t.id);
+  t.type === "program"
+    ? snapshotProgram(ex, t.id)
+    : t.type === "cycle"
+      ? snapshotCycle(ex, t.id)
+      : t.type === "memory"
+        ? snapshotMemory(ex, t.id)
+        : snapshotRow(ex, t.type as Exclude<RowType, "memory">, t.id);
 
 // ── The write session ────────────────────────────────────────────────────────
 
@@ -1058,10 +1096,70 @@ async function restoreMemoryTo(
   return [];
 }
 
+/** Live thresholds per kind, and live injuries, a user may keep (docs/plans/athlete-profile.md, 2.1). */
+export const THRESHOLDS_PER_KIND_MAX = 100;
+export const INJURIES_MAX = 50;
+
+/**
+ * Refuse a new live threshold of a kind, or injury, past the cap. Takes a
+ * per-user lock for the rest of the transaction, so two adds cannot both pass.
+ */
+export async function assertAthleteRoom(tx: Tx, userId: string, type: "threshold" | "injury", kind?: string) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_${type}:${userId}`}))`);
+  if (type === "threshold") {
+    const [{ n }] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(athleteThresholds)
+      .where(
+        and(
+          eq(athleteThresholds.userId, userId),
+          isNull(athleteThresholds.deletedAt),
+          eq(athleteThresholds.kind, kind as (typeof athleteThresholds.$inferSelect)["kind"]),
+        ),
+      );
+    if (n >= THRESHOLDS_PER_KIND_MAX) {
+      throw new PlanStateError(`At most ${THRESHOLDS_PER_KIND_MAX} values per threshold. Delete old ones first.`);
+    }
+    return;
+  }
+  const [{ n }] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(athleteInjuries)
+    .where(and(eq(athleteInjuries.userId, userId), isNull(athleteInjuries.deletedAt)));
+  if (n >= INJURIES_MAX) throw new PlanStateError(`At most ${INJURIES_MAX} injuries. Delete old ones first.`);
+}
+
+/** Restore one athlete profile, threshold or injury row: its fields come back, and a deleted one is live again. */
+async function restoreRowTo(
+  w: PlanWriteSession,
+  type: Exclude<RowType, "memory">,
+  id: number,
+  values: Row,
+  targetRevisionId: number,
+): Promise<string[]> {
+  await w.touch({ type, id }, { allowDeleted: true, action: "restore", restoredFromId: targetRevisionId });
+  const table = ROW_TABLES[type];
+  const [row] = await w.tx.select({ deletedAt: table.deletedAt }).from(table).where(eq(table.id, id));
+  const set: Record<string, unknown> = { ...values };
+  for (const k of ROW_KEPT) delete set[k];
+  // Bringing a deleted row back adds one live row: the cap applies.
+  if (row?.deletedAt && type !== "athlete") await assertAthleteRoom(w.tx, w.ctx.userId, type, String(set.kind ?? ""));
+  // jsonb gives timestamps back as strings.
+  if (typeof set.interviewCompletedAt === "string") set.interviewCompletedAt = new Date(set.interviewCompletedAt);
+  await w.tx
+    .update(table)
+    .set({ ...(set as Record<string, never>), deletedAt: null, updatedAt: new Date() })
+    .where(eq(table.id, id));
+  return [];
+}
+
 /** Restore one object to a revision (the restore is itself a revision). */
 async function restoreInSession(w: PlanWriteSession, rev: typeof planRevisions.$inferSelect): Promise<string[]> {
   const snap = rev.snapshot as PlanSnapshot;
   if (isMemorySnapshot(snap)) return restoreMemoryTo(w, rev.objectId, snap, rev.id);
+  if (isAthleteSnapshot(snap)) return restoreRowTo(w, "athlete", rev.objectId, snap.athlete, rev.id);
+  if (isThresholdSnapshot(snap)) return restoreRowTo(w, "threshold", rev.objectId, snap.threshold, rev.id);
+  if (isInjurySnapshot(snap)) return restoreRowTo(w, "injury", rev.objectId, snap.injury, rev.id);
   return isProgramSnapshot(snap)
     ? restoreProgramTo(w, rev.objectId, snap, rev.id)
     : restoreCycleTo(w, rev.objectId, snap, rev.id);
@@ -1128,7 +1226,7 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
   }
   // Cycles first, then programs: the lock order every write uses. Memory
   // entries last; nothing else locks them.
-  const order: Record<PlanObjectType, number> = { cycle: 0, program: 1, memory: 2 };
+  const order: Record<PlanObjectType, number> = { cycle: 0, program: 1, memory: 2, athlete: 3, threshold: 4, injury: 5 };
   const firsts = [...firstByObject.values()].sort((a, b) =>
     a.objectType === b.objectType ? a.objectId - b.objectId : order[a.objectType] - order[b.objectType],
   );
@@ -1139,6 +1237,12 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
     if (firsts.some((f) => f.objectType === "memory")) {
       await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`coach_memory:${ctx.userId}`}))`);
     }
+    // The same for the athlete caps (assertAthleteRoom).
+    for (const type of ["threshold", "injury"] as const) {
+      if (firsts.some((f) => f.objectType === type)) {
+        await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_${type}:${ctx.userId}`}))`);
+      }
+    }
     const skipped: string[] = [];
     for (const first of firsts) {
       const target = { type: first.objectType, id: first.objectId };
@@ -1147,9 +1251,10 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
           if (await openWorkoutOn(w.tx, ctx.userId, [target.id])) throw new OpenWorkoutError();
           await w.touch(target, { action: "delete" });
           await softDeleteProgram(w.tx, target.id);
-        } else if (target.type === "memory") {
+        } else if (isRowType(target.type)) {
           await w.touch(target, { action: "delete" });
-          await w.tx.update(coachMemory).set({ deletedAt: new Date() }).where(eq(coachMemory.id, target.id));
+          const table = ROW_TABLES[target.type];
+          await w.tx.update(table).set({ deletedAt: new Date() }).where(eq(table.id, target.id));
         } else {
           await w.touch(target, { action: "delete" });
           await w.tx.update(trainingCycles).set({ deletedAt: new Date() }).where(eq(trainingCycles.id, target.id));
@@ -1393,6 +1498,14 @@ export async function purgePlanRevisions(now = new Date()) {
     const ids = oldMemory.map((m) => m.id);
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "memory"), inArray(planRevisions.objectId, ids)));
     await db.delete(coachMemory).where(inArray(coachMemory.id, ids));
+  }
+  for (const type of ["athlete", "threshold", "injury"] as const) {
+    const table = ROW_TABLES[type];
+    const old = await db.select({ id: table.id }).from(table).where(lt(table.deletedAt, trashCut));
+    if (!old.length) continue;
+    const ids = old.map((r) => r.id);
+    await db.delete(planRevisions).where(and(eq(planRevisions.objectType, type), inArray(planRevisions.objectId, ids)));
+    await db.delete(table).where(inArray(table.id, ids));
   }
   // plan-read: includes deleted (the purge reads deleted rows on purpose)
   const oldCycles = await db.select({ id: trainingCycles.id }).from(trainingCycles).where(lt(trainingCycles.deletedAt, trashCut));

@@ -5,6 +5,9 @@ import {
   aiSetupPlans,
   customWeightUsage,
   dismissedMakeups,
+  athleteInjuries,
+  athleteProfiles,
+  athleteThresholds,
   coachMemory,
   exerciseNotes,
   exercisePrs,
@@ -137,6 +140,10 @@ export async function collectUserData(userId: string) {
     // The change history of the user's programs and cycles (docs/plans/revisions.md, 6).
     plan_revisions: await db.select().from(planRevisions).where(eq(planRevisions.userId, userId)),
     coach_memory: await db.select().from(coachMemory).where(eq(coachMemory.userId, userId)),
+    // The athlete profile (docs/plans/athlete-profile.md, 4).
+    athlete_profiles: await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, userId)),
+    athlete_thresholds: await db.select().from(athleteThresholds).where(eq(athleteThresholds.userId, userId)),
+    athlete_injuries: await db.select().from(athleteInjuries).where(eq(athleteInjuries.userId, userId)),
     ai_setup_plans: await db.select().from(aiSetupPlans).where(eq(aiSetupPlans.userId, userId)),
     ai_generations: await db.select().from(aiGenerations).where(eq(aiGenerations.userId, userId)),
     custom_weight_usage: await db.select().from(customWeightUsage).where(eq(customWeightUsage.userId, userId)),
