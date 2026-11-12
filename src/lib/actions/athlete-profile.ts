@@ -18,7 +18,8 @@ import {
   getAthleteProfile,
   garminSuggestions,
   interviewRace,
-  listDeletedAthleteRows,
+  listDeletedInjuries,
+  listDeletedThresholds,
   listInjuries,
   listThresholds,
   memoryToOffer,
@@ -65,7 +66,7 @@ export async function getThresholdsData() {
   try {
     const thresholds = await listThresholds(userId);
     const [deleted, suggestions, settings, today] = await Promise.all([
-      listDeletedAthleteRows(userId, "threshold"),
+      listDeletedThresholds(userId),
       garminSuggestions(userId, thresholds),
       getUserSettings(userId),
       userToday(userId),
@@ -85,15 +86,17 @@ export async function getAthleteData() {
   const userId = auth.user.id;
   try {
     if (!(await enduranceEnabledFor(userId))) return { success: true as const, data: null };
-    const [profile, injuries, deletedInjuries, race, memory, thresholds, settings] = await Promise.all([
+    const [profile, injuries, deletedInjuries, race, memory, thresholds, settings, today] = await Promise.all([
       getAthleteProfile(userId),
       listInjuries(userId),
-      listDeletedAthleteRows(userId, "injury"),
+      listDeletedInjuries(userId),
       interviewRace(userId),
       memoryToOffer(userId),
       listThresholds(userId),
       getUserSettings(userId),
+      userToday(userId),
     ]);
+    const suggestions = await garminSuggestions(userId, thresholds);
     return {
       success: true as const,
       data: {
@@ -104,6 +107,8 @@ export async function getAthleteData() {
         memory,
         thresholds,
         units: settings.units,
+        suggestions,
+        today: toDateStr(today),
         missing: missingSteps(profile, thresholds, race),
       },
     };

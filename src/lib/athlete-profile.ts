@@ -97,20 +97,23 @@ export async function listInjuries(userId: string, includePast = true): Promise<
   return rows.filter((r) => includePast || r.status !== "past").sort((a, b) => rank[a.status] - rank[b.status]);
 }
 
-/** Thresholds or injuries the user deleted and can still restore (90 days), newest first. */
-export async function listDeletedAthleteRows(userId: string, type: "threshold" | "injury") {
-  const since = new Date(Date.now() - DELETED_PLAN_RETENTION_DAYS * 86_400_000);
-  if (type === "threshold") {
-    return db
-      .select()
-      .from(athleteThresholds)
-      .where(and(eq(athleteThresholds.userId, userId), isNotNull(athleteThresholds.deletedAt), gt(athleteThresholds.deletedAt, since)))
-      .orderBy(desc(athleteThresholds.deletedAt));
-  }
+const deletedSince = () => new Date(Date.now() - DELETED_PLAN_RETENTION_DAYS * 86_400_000);
+
+/** Thresholds the user deleted and can still restore (90 days), newest first. */
+export async function listDeletedThresholds(userId: string) {
+  return db
+    .select()
+    .from(athleteThresholds)
+    .where(and(eq(athleteThresholds.userId, userId), isNotNull(athleteThresholds.deletedAt), gt(athleteThresholds.deletedAt, deletedSince())))
+    .orderBy(desc(athleteThresholds.deletedAt));
+}
+
+/** Injuries the user deleted and can still restore (90 days), newest first. */
+export async function listDeletedInjuries(userId: string) {
   return db
     .select()
     .from(athleteInjuries)
-    .where(and(eq(athleteInjuries.userId, userId), isNotNull(athleteInjuries.deletedAt), gt(athleteInjuries.deletedAt, since)))
+    .where(and(eq(athleteInjuries.userId, userId), isNotNull(athleteInjuries.deletedAt), gt(athleteInjuries.deletedAt, deletedSince())))
     .orderBy(desc(athleteInjuries.deletedAt));
 }
 
