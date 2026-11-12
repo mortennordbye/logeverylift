@@ -135,10 +135,12 @@ export async function listDeletedCoachMemory(userId: string) {
 
 /** Bring a deleted entry back from the revision of its delete. Null when there is none. */
 export async function restoreDeletedCoachMemory(ctx: PlanWriteContext, id: number) {
+  // The same window the Recently deleted list shows: older entries are gone for good soon.
+  const since = new Date(Date.now() - DELETED_PLAN_RETENTION_DAYS * 86_400_000);
   const [row] = await db
     .select({ deletedAt: coachMemory.deletedAt })
     .from(coachMemory)
-    .where(and(eq(coachMemory.id, id), eq(coachMemory.userId, ctx.userId)));
+    .where(and(eq(coachMemory.id, id), eq(coachMemory.userId, ctx.userId), gt(coachMemory.deletedAt, since)));
   if (!row?.deletedAt) return null;
   const [rev] = await db
     .select({ id: planRevisions.id })

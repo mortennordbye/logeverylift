@@ -610,7 +610,7 @@ The owner took every recommendation. The defaults in section 10 are accepted too
   existing lists.
 - **Review fixes (2026-11-12).** The limits also count the week of a draft scheduled to start
   (it starts later as the app, unchecked), and check an update to the active cycle's length,
-  goal or level against this week as it will run. Any activation drops other scheduled starts;
+  goal or level (or of a scheduled draft, at its first week) against the week as it will run. Any activation drops other scheduled starts;
   only a draft can be scheduled. `log_session` refuses a duplicate under a per-day lock (same
   program, or with no program the same exercises), reads times in the user's zone, and refuses
   `rir` with `rpe`. A deleted memory entry can be restored in the app (Recently deleted on the

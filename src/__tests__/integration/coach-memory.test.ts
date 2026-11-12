@@ -210,3 +210,28 @@ describe("review fixes", () => {
   });
 });
 
+describe("restoring deleted entries, ownership and age", () => {
+  it("never restores or lists another user's deleted entry", async () => {
+    asUser(other);
+    const theirs = await addCoachMemoryEntry({ kind: "observation", text: "Their knee" });
+    const id = theirs.success ? theirs.data.id : 0;
+    await deleteCoachMemoryEntry({ id });
+
+    asUser(me);
+    const listed = await getCoachMemory();
+    expect(listed.success && listed.data.deleted).toEqual([]);
+    expect((await restoreCoachMemoryEntry({ id })).success).toBe(false);
+    expect((await rowOf(id)).deletedAt).not.toBeNull();
+  });
+
+  it("does not restore an entry deleted more than 90 days ago", async () => {
+    asUser(me);
+    const added = await addCoachMemoryEntry({ kind: "preference", text: "Old one" });
+    const id = added.success ? added.data.id : 0;
+    await deleteCoachMemoryEntry({ id });
+    await db.update(coachMemory).set({ deletedAt: new Date(Date.now() - 91 * 86_400_000) }).where(eq(coachMemory.id, id));
+    expect((await restoreCoachMemoryEntry({ id })).success).toBe(false);
+    expect((await rowOf(id)).deletedAt).not.toBeNull();
+  });
+});
+

@@ -22,6 +22,9 @@ what it describes, that package updates this file and the server instructions in
   `manage_training_cycle` `start` with a later `startDate` keeps the cycle a draft scheduled to
   start that day; on that day it becomes active and the old block completes
   (`startDueScheduledCycle` in `src/lib/plan-revisions.ts`). One cycle is scheduled at a time.
+  The app starts a due cycle when the active cycle is read: on page render, and over MCP in
+  `list_training_cycles`, `get_training_cycle`, `confirm_session` and `set_volume`, also on a
+  read-only connection. That start is the app's own write (writer `sync`), not yours.
 - **Exercise.** The built-in library plus the user's own custom exercises. An endurance
   exercise has a discipline (swim, bike or run). `search_exercises` finds them;
   `create_exercise` makes a custom one. A custom name must not match a built-in exercise or

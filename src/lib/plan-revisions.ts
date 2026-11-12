@@ -1134,6 +1134,11 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
   );
   const targets = firsts.map((r) => ({ type: r.objectType, id: r.objectId }));
   const { result } = await planWrite(ctx, async (w) => {
+    // A memory restore may take the per-user cap lock after its row lock;
+    // take it first here, so two undos cannot wait on each other.
+    if (firsts.some((f) => f.objectType === "memory")) {
+      await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`coach_memory:${ctx.userId}`}))`);
+    }
     const skipped: string[] = [];
     for (const first of firsts) {
       const target = { type: first.objectType, id: first.objectId };

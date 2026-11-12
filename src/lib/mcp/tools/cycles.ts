@@ -132,7 +132,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         `operation='start': requires cycleId. Without startDate, or with today, it becomes active now (completing any other active cycle). With a later startDate (up to ${MAX_SCHEDULE_DAYS} days ahead) it stays a draft scheduled to start that day; on that day it becomes active and the old block completes. Only one cycle is scheduled at a time.`,
         `operation='set_volume': requires cycleId (the active cycle) and pct (${SET_VOLUME_MIN}-${SET_VOLUME_MAX}): this week's endurance volume as a percent of the block's curve, the same factor the weekly sync sets from adherence and readiness (adaptationPct). It rewrites this week's distances and durations at once and lasts one week: next week's sync computes its own percent. For a lasting change, edit the peaks with edit_program_exercise.`,
         `Every operation requires reason; all but create also require expectedVersion (the cycle's version). The result has the new version. ${REVISION_RULES}`,
-        `On start, set_volume, and an update to durationWeeks, goal or athleteLevel of the active cycle: ${LIMITS_TEXT}`,
+        `On start, set_volume, and an update to durationWeeks, goal or athleteLevel of the active or a scheduled cycle: ${LIMITS_TEXT}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
@@ -254,17 +254,25 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
           // A new length, goal or level rescales this week's periodized targets
           // at the next sync (as the app, unchecked), so the limits look at the
           // week as it will run now (docs/plans/ai-coach.md, 2.4).
+          // A scheduled draft starts later as the app, unchecked, so its first
+          // week is checked the same way, at the old and the new settings.
           let limits: ReturnType<typeof limitSummary> | undefined;
-          if (updates.lastSyncedWeek === null && existing.status === "active" && existing.startDate) {
+          const running = existing.status === "active" && existing.startDate;
+          const scheduled = existing.status === "draft" && existing.scheduledStartDate;
+          if (updates.lastSyncedWeek === null && (running || scheduled)) {
             const settings = {
               durationWeeks: args.durationWeeks ?? existing.durationWeeks,
               goal: args.goal ?? existing.goal,
               athleteLevel: args.athleteLevel !== undefined ? args.athleteLevel : existing.athleteLevel,
             };
-            const { currentWeek } = cycleWeek(parseDateStr(existing.startDate), settings.durationWeeks, await userToday(userId));
+            const week = running
+              ? cycleWeek(parseDateStr(existing.startDate!), settings.durationWeeks, await userToday(userId)).currentWeek
+              : 1;
+            const pct = running ? existing.adaptationPct : 100;
             const lc = await limitContext(userId);
-            const scoped = await cycleScope(cycleId, currentWeek, existing.adaptationPct, settings);
-            const before = lc.endurance && scoped ? await planFacts(db, scoped.scope) : NO_FACTS;
+            const scoped = await cycleScope(cycleId, week, pct, settings);
+            const old = running ? null : await cycleScope(cycleId, 1, 100);
+            const before = lc.endurance && scoped ? await planFacts(db, scoped.scope, old?.share ?? null) : NO_FACTS;
             const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
             const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
             if (blocking.length) throw new LimitRefusedError(blocking);

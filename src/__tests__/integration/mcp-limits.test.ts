@@ -391,3 +391,29 @@ describe("review fixes", () => {
   });
 });
 
+describe("a scheduled draft's settings", () => {
+  it("checks a goal change on a scheduled draft against its first week", async () => {
+    const week1 = periodizedLoad(1, 8, "build", deloadCadenceForLevel(null)).multiplier;
+    // Week 1 of a build block is well under the cap; at "maintain" (1.0) it is over.
+    const peak = 120 * MIN;
+    expect(scaledDuration(peak, week1)).toBeLessThan(88 * MIN);
+    const { program } = await createProgram(me, [{ exerciseId: run, sets: [{ durationSeconds: peak, peakDurationSeconds: peak, targetReps: null }] }]);
+    const [draft] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Next", durationWeeks: 8, goal: "build", scheduledStartDate: toDateStr(addDays(new Date(), 3)) })
+      .returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: draft.id, dayOfWeek: 7, programId: program.id });
+
+    const result = await mcpTools(registerCycleTools, me)("manage_training_cycle", {
+      operation: "update",
+      cycleId: draft.id,
+      goal: "maintain",
+      reason: "Hold volume",
+      expectedVersion: 1,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].rule).toBe("long_run_cap");
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, draft.id)))[0].goal).toBe("build");
+  });
+});
+
