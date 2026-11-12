@@ -141,8 +141,8 @@ parallel once A4 is done.
 | ID | Package | Needs | Status |
 |---|---|---|---|
 | B1 | MCP parity, part 1 | A1, A4 | todo |
-| B2 | MCP scopes, consent and revoke | none | todo |
-| B3 | MCP knowledge resources and server instructions | research doc (done) | todo |
+| B2 | MCP scopes, consent and revoke | none | building ([`mcp-access.md`](mcp-access.md)) |
+| B3 | MCP knowledge resources and server instructions | research doc (done) | building ([`mcp-access.md`](mcp-access.md)) |
 | B4 | Coach memory | A4 | todo |
 
 **B1. MCP parity, part 1.** Cycle fields over MCP (race date and distance, goal, athlete level,
@@ -161,7 +161,9 @@ write tool.
 **B2. MCP scopes, consent and revoke (D5, D6).** Read-only and read-write scopes on the consent
 page. Consent text names workout history, notes, the illness log (when it exists) and Garmin
 reads. A screen that lists connected assistants and revokes them. Privacy: data inventory row
-for MCP, policy text, `LEGAL_VERSION` and `CONSENT_VERSION` bumps.
+for MCP, policy text, and a `LEGAL_VERSION` bump. `CONSENT_VERSION` stays: assistants are a new
+recipient of data already listed as health data, which users are told about, not asked again
+(owner, 2026-11-12; rule in `src/lib/constants/legal.ts`).
 
 **B3. Knowledge resources and server instructions (T1).** Server instructions that explain the
 app's model (seasons, cycles, programs, dated sessions, who owns which field, revisions, limits,

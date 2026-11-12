@@ -53,7 +53,7 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Connected AI assistants:</strong> if you connect an assistant such as Claude or ChatGPT through the
-          app&apos;s MCP server, the connection and its access tokens.
+          app&apos;s MCP server, the connection, the access you chose for it, and its access tokens.
         </li>
       </ul>
       <p>
@@ -157,10 +157,13 @@ export default function PrivacyPage() {
         database.
       </p>
       <p>
-        <strong>AI assistants you connect yourself</strong> (MCP) can read and change your profile, body weight,
-        programs and cycles. They can also read your workout history: sets, weights, heart rate zones, effort,
-        how you felt and your readiness, but not your notes. That provider&apos;s own privacy policy applies to what it does with the data. You can
-        disconnect at any time.
+        <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
+        read only, or read and change. They can read your profile, body weight, programs, cycles and workout
+        history: sets, weights, heart rate zones, effort, how you felt, your readiness and the notes you write on
+        workouts and sets. If Garmin is on for your account, they can also read data from it. With read and change
+        access they can also change your profile, body weight, programs and cycles. That provider&apos;s own privacy
+        policy applies to what it does with the data. You can disconnect an assistant at any time in More →
+        Connected assistants, and it loses access at once.
       </p>
       <p>The &quot;Copy prompt&quot; button in AI Setup only copies text to your clipboard; nothing is sent from our server.</p>
 

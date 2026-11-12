@@ -201,7 +201,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### MCP tool coverage is partial (no logging, exercises or social)
 - **What:** The MCP server exposes ~18 tools across programs, training cycles, profile/weight, and read-only workout history and metrics. Logging a workout, the exercise library, and social are NOT exposed.
 - **Why deferred:** v1 scope was deliberately limited to two domains. The Server Actions for the other domains exist and follow the same `requireSession()` pattern.
-- **Unblocked by:** A decision to widen the MCP surface. Mirror the existing pattern: add a `src/lib/mcp/tools/<domain>.ts` with a `register<Domain>Tools(server, userId)` and call it from the endpoint. Reuse the action logic but scope by the MCP `userId` (never reuse the cookie-session actions directly).
+- **Unblocked by:** A decision to widen the MCP surface. Mirror the existing pattern: add a `src/lib/mcp/tools/<domain>.ts` with a `register<Domain>Tools(server, userId)` and call it from the endpoint on the scoped `server`. Mark read tools `readOnlyHint: true`; any other tool needs read and change access (`src/lib/mcp/scopes.ts`). Reuse the action logic but scope by the MCP `userId` (never reuse the cookie-session actions directly).
 - **Touchpoints:** `src/lib/mcp/tools/`, `src/app/api/[transport]/route.ts`.
 
 ### `.well-known` route files are outside the tsc program

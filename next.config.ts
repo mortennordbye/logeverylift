@@ -1,6 +1,7 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import withSerwistInit from "@serwist/next";
 import type { NextConfig } from "next";
+import { MCP_RESOURCE_DOCS } from "./src/lib/mcp/resource-docs";
 
 // Configure Serwist for PWA functionality
 const withSerwist = withSerwistInit({
@@ -15,6 +16,13 @@ const nextConfig: NextConfig = {
   // Enable standalone output for Docker deployments
   // This creates a minimal production server in .next/standalone/
   output: "standalone",
+
+  // The MCP resources read these docs at runtime; tracing copies them into the
+  // standalone build, which is all the Docker runner stage ships
+  // (src/lib/mcp/resources.ts).
+  outputFileTracingIncludes: {
+    "/api/[transport]": MCP_RESOURCE_DOCS.map((doc) => `./${doc.path}`),
+  },
 
   // Explicitly enable Turbopack (Next.js 16 default)
   // Empty config silences the webpack/turbopack conflict warning

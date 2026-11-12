@@ -561,6 +561,13 @@
       "when": 1794470531645,
       "tag": "0079_curvy_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1794492192445,
+      "tag": "0080_mcp_scopes",
+      "breakpoints": true
     }
   ]
 }

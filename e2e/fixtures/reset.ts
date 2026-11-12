@@ -14,6 +14,7 @@ import {
   exercisePrs,
   exercises,
   friendships,
+  oauthConsents,
   programs,
   trainingCycles,
   users,
@@ -26,8 +27,9 @@ import {
  *
  * Every spec starts from here, so none depends on what an earlier one left
  * behind: a spec that logs a set, reorders a list or imports a plan no longer
- * has to undo it, and a failure mid-spec cannot poison the next run. The auth
- * rows are left alone, so the stored login stays valid.
+ * has to undo it, and a failure mid-spec cannot poison the next run. The login
+ * rows are left alone, so the stored login stays valid; connected assistants
+ * (OAuth consents) are cleared, so More → Connected assistants starts empty.
  *
  * History is generated from a fixed seed. The suggestions and PR rows a spec
  * sees are derived from it, and with Math.random they would differ per run.
@@ -75,6 +77,7 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(dismissedMakeups).where(eq(dismissedMakeups.userId, userId));
     await tx.delete(exerciseNotes).where(eq(exerciseNotes.userId, userId));
     await tx.delete(userWeightEntries).where(eq(userWeightEntries.userId, userId));
+    await tx.delete(oauthConsents).where(eq(oauthConsents.userId, userId));
     await tx.delete(exercises).where(eq(exercises.userId, userId));
     await tx
       .delete(friendships)

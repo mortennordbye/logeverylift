@@ -6,6 +6,10 @@ import { expect, test } from "./fixtures/test";
 // authorization server from the endpoint's 401, register, send the user
 // through consent, swap the code for a token, call a tool.
 //
+// It runs against the standalone production build (scripts/e2e-serve.sh), the
+// same files the Docker image ships, so reading the resources here is the test
+// that the docs reach production (docs/plans/mcp-access.md, 2.4).
+//
 // The browser is already signed in (the worker's storage state). Signing in
 // through the form here would spend the per-IP sign-in budget the whole suite
 // shares; the login page's hand-back to the flow is covered by
@@ -62,7 +66,7 @@ async function authorize(page: Page, server: { authorization_endpoint: string },
     response_type: "code",
     client_id: clientId,
     redirect_uri: CALLBACK,
-    scope: "openid offline_access",
+    scope: "openid offline_access mcp:read mcp:write",
     state: "s-123",
     resource,
     code_challenge: createHash("sha256").update(verifier).digest("base64url"),
@@ -117,11 +121,49 @@ test("an MCP client connects through consent and calls a tool with its token", a
   expect(tokenRes.status(), await tokenRes.text()).toBe(200);
   const { access_token } = await tokenRes.json();
 
-  const tools = await request.post("/api/mcp", {
-    headers: { authorization: `Bearer ${access_token}`, accept: "application/json, text/event-stream" },
-    data: { jsonrpc: "2.0", id: 1, method: "tools/list" },
+  // One JSON-RPC call; the endpoint answers as JSON or as one SSE event.
+  const rpc = async (method: string, params: Record<string, unknown> = {}) => {
+    const res = await request.post("/api/mcp", {
+      headers: { authorization: `Bearer ${access_token}`, accept: "application/json, text/event-stream" },
+      data: { jsonrpc: "2.0", id: 1, method, params },
+    });
+    const text = await res.text();
+    const json = text.startsWith("{") ? text : /^data: (.*)$/m.exec(text)?.[1];
+    return { status: res.status(), body: json ? JSON.parse(json) : null, text };
+  };
+
+  // Read only was preselected.
+  const tools = await rpc("tools/list");
+  expect(tools.status).toBe(200);
+  expect(tools.text).toContain("get_profile");
+  const profile = await rpc("tools/call", { name: "get_profile", arguments: {} });
+  expect(profile.body.result.isError, profile.text).toBeFalsy();
+  const write = await rpc("tools/call", { name: "update_profile", arguments: { name: "Changed by assistant" } });
+  expect(write.body.result.isError).toBe(true);
+  expect(write.body.result.content[0].text).toContain("This connection is read-only");
+
+  // The server instructions and both resources, read from the production build.
+  const init = await rpc("initialize", {
+    protocolVersion: "2025-06-18",
+    capabilities: {},
+    clientInfo: { name: "e2e", version: "1" },
   });
-  expect(tools.status()).toBe(200);
-  expect(await tools.text()).toContain("get_profile");
+  expect(init.body.result.instructions).toContain("weekly review");
+  const listed = await rpc("resources/list");
+  const uris = listed.body.result.resources.map((r: { uri: string }) => r.uri);
+  expect(uris).toEqual(["logeverylift://docs/endurance-training-reference", "logeverylift://docs/app-rules"]);
+  for (const uri of uris) {
+    const read = await rpc("resources/read", { uri });
+    expect(read.body.result?.contents?.[0]?.text, read.text).toMatch(/^<!-- version \d{4}-\d{2}-\d{2}\+[0-9a-f]{12} -->/);
+  }
+
+  // Disconnect in the app; the same token stops working at once.
+  await page.goto("/more/assistants");
+  await expect(page.getByText("E2E Assistant")).toBeVisible();
+  await expect(page.getByText(/Read only · Connected/)).toBeVisible();
+  await page.getByRole("button", { name: "Disconnect" }).first().click();
+  await page.getByRole("button", { name: "Disconnect" }).last().click();
+  await expect(page.getByTestId("assistants-empty")).toBeVisible();
+  expect((await rpc("tools/list")).status).toBe(401);
   await request.dispose();
 });
