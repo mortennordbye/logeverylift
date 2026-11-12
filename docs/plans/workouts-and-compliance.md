@@ -12,7 +12,9 @@ are skipped, not stacked"), `CLAUDE.md`, `TESTING.md`, and the merged briefs
 parallel on `feat/sessions-c2`; its brief is `docs/plans/sessions.md` on that branch. This brief
 builds on C2's model. Section 12 lists what depends on C2's final code.
 
-Status: brief, 2026-11-12. No code until C2 is on `main`. The findings describe `main` at
+Status: brief, 2026-11-12. The hub decided the open questions on 2026-11-13 (section 18,
+"Decisions"). The pure modules that do not depend on C2 are built (section 13, step 0). The rest
+waits for C2 on `main`. The findings describe `main` at
 7ca6da4 (after PR #227); every `file:line` in them was opened then. Names marked *new* do not
 exist yet. Names from C2 (`planned_sessions`, the matcher, `manage_planned_session`) exist only on
 the C2 branch.
@@ -195,7 +197,7 @@ Step      = { id?, type: "warmup" | "work" | "recovery" | "cooldown" | "rest",
               sendOffSeconds?, stroke?, equipment?, note? }
 End       = { type: "time", seconds } | { type: "distance", meters } | { type: "lap" }
 Target    = { metric: "power", anchor: "ftp", low, high }               // % of FTP
-          | { metric: "power", anchor: "ftp", zone: 1-7 }                // Coggan zone
+          | { metric: "power", anchor: "ftp", zone: 1-5 }                // Coggan zone, research table
           | { metric: "hr", anchor: "lthr" | "max_hr", low, high }       // % of the anchor
           | { metric: "hr", anchor: "lthr", zone: 1-5 }                  // Friel zone
           | { metric: "pace", anchor: "threshold_pace" | "css", low, high }  // % of threshold speed
@@ -839,6 +841,10 @@ This brief uses C2's brief as the API. Before any code, after C2 merges:
 
 ## 13. Order of work
 
+0. Before C2 merges (done): the pure modules `src/lib/utils/workout-steps.ts` and
+   `src/lib/utils/session-compliance.ts` (schema, resolver, estimate, summary, hard rule; ratio,
+   bands, consistency, `suggestMoveDay`, `returnInfo`), `docs/mcp/workout-steps.md` and their
+   unit tests. The resource is not registered yet: it names tools that come with step 8.
 1. After C2 merges: rebase, check section 12, fix this brief. Run C2's characterization tests.
 2. The weekly sync lifter test (6.10, point 3) on `main`, green, own commit, before any change.
 3. Migration and schema.
@@ -958,3 +964,29 @@ change, and nothing changes a plan by itself.
     day sheet can still answer them.
 21. **`confirm_session` for sport sessions with the switch on?** Recommend: refuse and point to
     `confirm_planned_session`, so the assistant cannot hide a miss behind an auto row.
+
+### Decisions
+
+Decided by the hub on 2026-11-13, owner may change. The hub took every recommendation above.
+
+1. A session holds a copy of a library workout, not a reference.
+2. No step editor in this PR; C6 adds it (BACKLOG entry).
+3. A session runs a program or a workout, never both (check constraint).
+4. No workouts or bricks on rotation cycles.
+5. The weekly sync never scales workouts.
+6. Garmin matches are derived on read, with a stored pick.
+7. `autoComplete` is ignored for sessions with a sport when the switch is on; lifters unchanged.
+8. Illness is derived from sick periods; only `missed` is a new stored status.
+9. With no priority set, a session is key when hard or the longest bike or run of its week at 90 minutes or more.
+10. A week is complete at 80% or more of its counted sessions.
+11. Consistency covers the last 12 full weeks, with this week shown apart.
+12. Compliance uses duration, then distance; TSS waits for D1.
+13. Lifters get no app change; `get_compliance` and the new MCP fields are for everyone.
+14. No sick periods without the endurance switch.
+15. No RPE targets or ramps in version 1.
+16. No FIT export code now.
+17. No starter workouts shipped with the app.
+18. The return rule shows until the first done session, at most 7 days; the assistant gets it for 14 days.
+19. A missed key session with no free day gets no suggestion: skip it.
+20. "Did you do it?" covers the last 7 days.
+21. `confirm_session` refuses sessions with a sport when the switch is on.
