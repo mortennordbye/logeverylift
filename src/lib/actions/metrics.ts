@@ -2,6 +2,7 @@
 
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
+import { liveCycles } from "@/lib/plan-live";
 import { exercisePrs, exercises, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { isUnverifiedPr } from "@/lib/utils/pr-provenance";
 import { computeStreakWeeks } from "@/lib/utils/training-streak";
@@ -1507,7 +1508,7 @@ export async function getMetricsCycles(): Promise<ActionResult<CyclePickerItem[]
           sql`${workoutSessions.date} < ${trainingCycles.startDate}::date + (${trainingCycles.durationWeeks} * 7 * interval '1 day')`,
         ),
       )
-      .where(eq(trainingCycles.userId, userId))
+      .where(and(eq(trainingCycles.userId, userId), liveCycles))
       .groupBy(
         trainingCycles.id,
         trainingCycles.name,
@@ -1568,7 +1569,7 @@ export async function getCycleMetrics(
         durationWeeks: trainingCycles.durationWeeks,
       })
       .from(trainingCycles)
-      .where(and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId)));
+      .where(and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId), liveCycles));
 
     const cycleRow = cycleRows[0] ?? null;
 

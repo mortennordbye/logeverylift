@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/db";
+import { liveCycles } from "@/lib/plan-live";
 import { aiSetupPlans, trainingCycles } from "@/db/schema";
 import { checkinDue, revisionFor, type Revision } from "@/lib/utils/ai-checkin";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
@@ -28,7 +29,7 @@ export async function recordAiSetupImport(data: unknown): Promise<ActionResult<{
     const [cycle] = await db
       .select({ userId: trainingCycles.userId })
       .from(trainingCycles)
-      .where(eq(trainingCycles.id, cycleId));
+      .where(and(eq(trainingCycles.id, cycleId), liveCycles));
     assertOwner(cycle, auth.user.id);
     if (revisionOf !== null) {
       const [original] = await db
@@ -65,7 +66,7 @@ export async function getPendingCheckin(): Promise<ActionResult<PendingCheckin |
         startDate: trainingCycles.startDate,
       })
       .from(aiSetupPlans)
-      .innerJoin(trainingCycles, eq(aiSetupPlans.cycleId, trainingCycles.id))
+      .innerJoin(trainingCycles, and(eq(aiSetupPlans.cycleId, trainingCycles.id), liveCycles))
       .where(and(eq(aiSetupPlans.userId, auth.user.id), eq(aiSetupPlans.checkinStatus, "pending")))
       .orderBy(desc(aiSetupPlans.id));
     const today = new Date();

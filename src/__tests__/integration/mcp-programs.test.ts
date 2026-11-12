@@ -59,6 +59,8 @@ describe("edit_program_exercise update with sets", () => {
     const result = await call("edit_program_exercise", {
       operation: "update",
       programExerciseId: slots[0].programExerciseId,
+      reason: "Test",
+      expectedVersion: 1,
       sets: [
         {
           setNumber: 1,
@@ -93,6 +95,8 @@ describe("edit_program_exercise update with sets", () => {
     const result = await call("edit_program_exercise", {
       operation: "update",
       programExerciseId: slots[0].programExerciseId,
+      reason: "Test",
+      expectedVersion: 1,
       sets: [{ setNumber: 1, targetReps: 10, targetRpe: 8 }],
     });
 
@@ -108,6 +112,8 @@ describe("edit_program_exercise update with sets", () => {
     const result = await toolsFor(me)("edit_program_exercise", {
       operation: "update",
       programExerciseId: slots[0].programExerciseId,
+      reason: "Test",
+      expectedVersion: 1,
       sets: [{ setNumber: 1, repRangeMin: 12, repRangeMax: 8 }],
     });
     expect(result.isError).toBe(true);
@@ -123,6 +129,8 @@ describe("edit_program_exercise update with an exerciseId", () => {
     const result = await toolsFor(me)("edit_program_exercise", {
       operation: "update",
       programExerciseId: slots[0].programExerciseId,
+      reason: "Test",
+      expectedVersion: 1,
       exerciseId: theirs.id,
     });
 
@@ -142,8 +150,14 @@ describe("edit_program_exercise update with an exerciseId", () => {
     const call = toolsFor(me);
     const id = slots[0].programExerciseId;
 
-    for (const exerciseId of [system.id, mine.id]) {
-      const result = await call("edit_program_exercise", { operation: "update", programExerciseId: id, exerciseId });
+    for (const [i, exerciseId] of [system.id, mine.id].entries()) {
+      const result = await call("edit_program_exercise", {
+        operation: "update",
+        programExerciseId: id,
+        exerciseId,
+        reason: "Test",
+        expectedVersion: i + 1,
+      });
       expect(result.isError).toBeFalsy();
       const [slot] = await db
         .select({ exerciseId: programExercises.exerciseId })

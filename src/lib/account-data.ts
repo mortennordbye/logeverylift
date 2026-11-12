@@ -27,6 +27,7 @@ import {
   oauthClients,
   oauthConsents,
   oauthRefreshTokens,
+  planRevisions,
   programExercises,
   programSets,
   programShares,
@@ -62,16 +63,19 @@ function columnsWithout<T extends PgTable>(table: T, omit: (keyof T["_"]["column
 export async function collectUserData(userId: string) {
   const [user] = await db.select().from(users).where(eq(users.id, userId));
 
+  // plan-read: includes deleted (the export holds all of the user's data)
   const programRows = await db.select().from(programs).where(eq(programs.userId, userId));
   const programIds = programRows.map((p) => p.id);
   const programExerciseRows = programIds.length
-    ? await db.select().from(programExercises).where(inArray(programExercises.programId, programIds))
+    ? // plan-read: includes deleted (the export holds all of the user's data)
+      await db.select().from(programExercises).where(inArray(programExercises.programId, programIds))
     : [];
   const programExerciseIds = programExerciseRows.map((pe) => pe.id);
 
   const sessionRows = await db.select().from(workoutSessions).where(eq(workoutSessions.userId, userId));
   const sessionIds = sessionRows.map((s) => s.id);
 
+  // plan-read: includes deleted (the export holds all of the user's data)
   const cycleRows = await db.select().from(trainingCycles).where(eq(trainingCycles.userId, userId));
   const cycleIds = cycleRows.map((c) => c.id);
 
@@ -122,12 +126,15 @@ export async function collectUserData(userId: string) {
     programs: programRows,
     program_exercises: programExerciseRows,
     program_sets: programExerciseIds.length
-      ? await db.select().from(programSets).where(inArray(programSets.programExerciseId, programExerciseIds))
+      ? // plan-read: includes deleted (the export holds all of the user's data)
+        await db.select().from(programSets).where(inArray(programSets.programExerciseId, programExerciseIds))
       : [],
     training_cycles: cycleRows,
     training_cycle_slots: cycleIds.length
       ? await db.select().from(trainingCycleSlots).where(inArray(trainingCycleSlots.trainingCycleId, cycleIds))
       : [],
+    // The change history of the user's programs and cycles (docs/plans/revisions.md, 6).
+    plan_revisions: await db.select().from(planRevisions).where(eq(planRevisions.userId, userId)),
     ai_setup_plans: await db.select().from(aiSetupPlans).where(eq(aiSetupPlans.userId, userId)),
     ai_generations: await db.select().from(aiGenerations).where(eq(aiGenerations.userId, userId)),
     custom_weight_usage: await db.select().from(customWeightUsage).where(eq(customWeightUsage.userId, userId)),

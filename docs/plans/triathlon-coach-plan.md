@@ -86,10 +86,10 @@ everything that writes plan data. A1-A3 share one brief and one PR:
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| A1 | Bug fixes and ghost-session cleanup | none | building |
-| A2 | User time zone and display units | none | building |
-| A3 | Endurance switch | none | building |
-| A4 | Revisions, stable ids and plan versions | A1 | todo |
+| A1 | Bug fixes and ghost-session cleanup | none | done |
+| A2 | User time zone and display units | none | done |
+| A3 | Endurance switch | none | done |
+| A4 | Revisions, stable ids and plan versions | A1 | building ([`revisions.md`](revisions.md)) |
 
 **A1. Bug fixes and ghost-session cleanup.** Audit "Bugs found" 1-4 and D23.
 - MCP `edit_program_exercise`: accept every planned-set field the tool description names
@@ -117,9 +117,10 @@ endurance package gates on this flag, never on the role.
 **A4. Revisions, stable ids and plan versions (D2, T2, T3, T5, T6, T9).** The base of all plan
 writes.
 - Program sets are updated in place, matched by id (diff), never deleted and inserted again.
-  This also fixes "safe writes during an open workout" (audit section 7). Two paths delete sets
-  today, and both must change: the MCP set replace (`src/lib/mcp/tools/programs.ts:500`) and
-  `deleteProgramSet` in the UI (`src/lib/actions/programs.ts:1116`).
+  This also fixes "safe writes during an open workout" (audit section 7). The plan first named
+  two paths that delete sets (the MCP set replace and `deleteProgramSet`); the A4 brief found
+  seven delete paths in all, listed in [`revisions.md`](revisions.md) section 1.1, and all of
+  them change.
 - Soft delete for every plan object (T6): program sets, program exercises, programs and cycles
   now, and seasons, sessions and workouts when they exist. Readers filter out deleted rows.
 - A revision store: object type and id, a full snapshot, writer (`user`, `assistant`,
@@ -144,22 +145,25 @@ parallel once A4 is done.
 | ID | Package | Needs | Status |
 |---|---|---|---|
 | B1 | MCP parity, part 1 | A1, A4 | todo |
-| B2 | MCP scopes, consent and revoke | none | building ([`mcp-access.md`](mcp-access.md)) |
-| B3 | MCP knowledge resources and server instructions | research doc (done) | building ([`mcp-access.md`](mcp-access.md)) |
+| B2 | MCP scopes, consent and revoke | none | done ([`mcp-access.md`](mcp-access.md)) |
+| B3 | MCP knowledge resources and server instructions | research doc (done) | done ([`mcp-access.md`](mcp-access.md)) |
 | B4 | Coach memory | A4 | todo |
 
 **B1. MCP parity, part 1.** Cycle fields over MCP (race date and distance, goal, athlete level,
 a future start date), exercise search, create a custom exercise, log or confirm a session, read
-session notes (D6), list and restore revisions (A4), change-set id per AI session (T3), and the
-optimistic version check (T9) on every write. Integration tests for every existing and new MCP
-write tool.
+session notes (D6), an explicit change-set argument for the model (T3), and the optimistic
+version check (T9) on the tools B1 adds. Integration tests for every existing and new MCP write
+tool. Package A4 already ships `list_revisions`, `restore_revision`, writer tagging, a required
+`reason`, a default change set per OAuth client (a 30-minute window) and the version check on
+every existing write tool (`revisions.md`, section 2.10), because plan principle 3 puts the MCP
+tools in the package that adds the UI.
 - Field owners for the existing conflicts (audit section 8). After A1, MCP can set
   `targetHeartRateZone` and rest on `work` sets, but the weekly sync overwrites them the next
   week. The brief decides for each field in that table who owns it, including how an AI volume
   change goes through `adaptation_pct`, and writes it into the tool descriptions.
-- Open question for the brief: what one "AI session" is for the change-set id. The MCP handler
-  is stateless (`src/app/api/[transport]/route.ts:59-68`), so the id needs a rule, for example
-  an explicit change-set argument from the model, or the token plus a time window.
+- What one "AI session" is for the change-set id: A4 settles the default (token client plus a
+  30-minute window, since the handler is stateless, `src/app/api/[transport]/route.ts:99-111`). B1
+  adds the explicit argument for a model that wants to name its review.
 
 **B2. MCP scopes, consent and revoke (D5, D6).** Read-only and read-write scopes on the consent
 page. Consent text names workout history, notes, the illness log (when it exists) and Garmin

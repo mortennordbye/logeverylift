@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import {
+  planRevisions,
   programExercises,
   programs,
   trainingCycleSlots,
@@ -8,6 +9,7 @@ import {
   users,
 } from "@/db/schema";
 import { connectionAccess } from "@/lib/mcp/access";
+import { planWrite } from "@/lib/plan-revisions";
 import { READ_ONLY_REFUSAL, scopedServer, type McpAccess } from "@/lib/mcp/scopes";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
@@ -43,7 +45,7 @@ function toolsFor(userId: string, access: McpAccess) {
 /** Everything a write tool here could touch for this user. */
 async function fingerprint(userId: string) {
   const [user] = await db.select({ name: users.name, weightKg: users.weightKg, timeZone: users.timeZone, distanceUnit: users.distanceUnit, swimUnit: users.swimUnit, enduranceEnabled: users.enduranceEnabled }).from(users).where(eq(users.id, userId));
-  const progs = await db.select({ id: programs.id, name: programs.name }).from(programs).where(eq(programs.userId, userId)).orderBy(asc(programs.id));
+  const progs = await db.select({ id: programs.id, name: programs.name, deletedAt: programs.deletedAt }).from(programs).where(eq(programs.userId, userId)).orderBy(asc(programs.id));
   const slots = await db.select({ id: programExercises.id }).from(programExercises).innerJoin(programs, eq(programs.id, programExercises.programId)).where(eq(programs.userId, userId));
   const cycles = await db.select({ id: trainingCycles.id, name: trainingCycles.name }).from(trainingCycles).where(eq(trainingCycles.userId, userId));
   const cycleSlots = await db.select({ id: trainingCycleSlots.id }).from(trainingCycleSlots).innerJoin(trainingCycles, eq(trainingCycles.id, trainingCycleSlots.trainingCycleId)).where(eq(trainingCycles.userId, userId));
@@ -55,24 +57,35 @@ let me: string;
 let programId: number;
 let exerciseId: number;
 let cycleId: number;
+/** A revision of the program: its baseline, before a rename made in beforeEach. */
+let baselineId: number;
 
 beforeEach(async () => {
   me = (await createUser()).id;
   exerciseId = (await createExercise()).id;
   programId = (await createProgram(me, [{ exerciseId, sets: [{ targetReps: 8, weightKg: "60" }] }])).program.id;
   [{ id: cycleId }] = await db.insert(trainingCycles).values({ userId: me, name: "Block", durationWeeks: 8 }).returning({ id: trainingCycles.id });
+  // A user rename, so the program has history to restore: baseline then update.
+  // The program is at version 2 after it.
+  await planWrite({ userId: me, writer: "user" }, async (w) => {
+    await w.touch({ type: "program", id: programId });
+    await w.tx.update(programs).set({ name: "Renamed by the user" }).where(eq(programs.id, programId));
+  });
+  const [baseline] = await db.select({ id: planRevisions.id }).from(planRevisions).where(eq(planRevisions.action, "baseline"));
+  baselineId = baseline.id;
 });
 
 /** One call per write tool that changes something when it runs. */
 const writeCalls = (): [string, Record<string, unknown>][] => [
   ["update_profile", { name: "Changed", timeZone: "Europe/Oslo", distanceUnit: "mi", swimUnit: "yd" }],
   ["manage_weight", { operation: "log", weightKg: 81 }],
-  ["create_program", { name: "New program" }],
-  ["update_program", { programId, name: "Renamed" }],
-  ["delete_program", { programId }],
-  ["edit_program_exercise", { operation: "add", programId, exerciseId }],
-  ["manage_training_cycle", { operation: "create", name: "Next block", durationWeeks: 4 }],
-  ["edit_cycle_slot", { operation: "upsert", trainingCycleId: cycleId, dayOfWeek: 1, label: "Monday" }],
+  ["create_program", { name: "New program", reason: "Test" }],
+  ["update_program", { programId, name: "Renamed", reason: "Test", expectedVersion: 2 }],
+  ["delete_program", { programId, reason: "Test", expectedVersion: 2 }],
+  ["edit_program_exercise", { operation: "add", programId, exerciseId, reason: "Test", expectedVersion: 2 }],
+  ["restore_revision", { revisionId: baselineId, reason: "Test" }],
+  ["manage_training_cycle", { operation: "create", name: "Next block", durationWeeks: 4, reason: "Test" }],
+  ["edit_cycle_slot", { operation: "upsert", trainingCycleId: cycleId, dayOfWeek: 1, label: "Monday", reason: "Test", expectedVersion: 1 }],
 ];
 
 const readCalls: [string, Record<string, unknown>][] = [
@@ -90,6 +103,7 @@ const readCalls: [string, Record<string, unknown>][] = [
   ["get_garmin_trends", {}],
   ["list_garmin_activities", { limit: 5 }],
   ["get_garmin_activity", { id: 1 }],
+  ["list_revisions", {}],
 ];
 
 describe("read only", () => {

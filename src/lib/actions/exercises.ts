@@ -1,12 +1,13 @@
 "use server";
 
 import { db } from "@/db";
-import { exerciseNotes, exercises, programExercises, programs } from "@/db/schema";
+import { exerciseNotes, exercises, programExercises, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { getSystemExercises } from "@/lib/data/exercises";
+import { liveProgramExercises, livePrograms } from "@/lib/plan-live";
 import { requireSession } from "@/lib/utils/session";
 import { createExerciseSchema, upsertExerciseNoteSchema } from "@/lib/validators/workout";
 import type { ActionResult, Exercise } from "@/types/workout";
-import { asc, eq, and, exists, isNull, or } from "drizzle-orm";
+import { asc, eq, and, exists, isNull, or, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -113,6 +114,42 @@ export async function deleteCustomExercise(id: number): Promise<ActionResult<und
     if (!existing) {
       return { success: false, error: "Exercise not found or not deletable" };
     }
+    // The foreign keys cascade: deleting the exercise would delete every set
+    // ever logged with it, and every program slot that uses it. So an
+    // exercise in use stays (docs/plans/revisions.md, owner decision 4).
+    // Any user's logged sets: a friend who copied a program with this
+    // exercise logs against the same row.
+    const [logged] = await db
+      .select({ userId: workoutSessions.userId })
+      .from(workoutSets)
+      .innerJoin(workoutSessions, eq(workoutSessions.id, workoutSets.sessionId))
+      .where(eq(workoutSets.exerciseId, id))
+      .orderBy(sql`${workoutSessions.userId} = ${auth.user.id} desc`)
+      .limit(1);
+    if (logged) {
+      return {
+        success: false,
+        error:
+          logged.userId === auth.user.id
+            ? "This exercise has logged sets in your history, so it can't be deleted. Deleting it would delete those sets."
+            : "A friend who copied one of your programs has logged sets with this exercise, so it can't be deleted. Deleting it would delete their sets.",
+      };
+    }
+    const usedIn = await db
+      .select({ name: programs.name, userId: programs.userId })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .where(and(eq(programExercises.exerciseId, id), liveProgramExercises, livePrograms));
+    if (usedIn.length > 0) {
+      const own = [...new Set(usedIn.filter((p) => p.userId === auth.user.id).map((p) => p.name))];
+      return {
+        success: false,
+        error:
+          own.length > 0
+            ? `This exercise is used in ${own.map((n) => `"${n}"`).join(", ")}. Remove it from ${own.length === 1 ? "that program" : "those programs"} first.`
+            : "This exercise is used in a program a friend copied from you, so it can't be deleted.",
+      };
+    }
     await db.delete(exercises).where(
       and(
         eq(exercises.id, id),
@@ -204,7 +241,7 @@ async function findVisibleExercise(exerciseId: number, userId: string) {
               .select({ id: programExercises.id })
               .from(programExercises)
               .innerJoin(programs, eq(programs.id, programExercises.programId))
-              .where(and(eq(programExercises.exerciseId, exercises.id), eq(programs.userId, userId))),
+              .where(and(eq(programExercises.exerciseId, exercises.id), eq(programs.userId, userId), liveProgramExercises, livePrograms)),
           ),
         ),
       ),

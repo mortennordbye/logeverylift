@@ -427,6 +427,10 @@ export const updateProgramSetSchema = programSetFields
     // On a periodized set: the distance or duration written is this week's
     // value, and the server re-derives that dimension's peak from it (PZ-36).
     anchor: z.enum(["distance", "duration"]).optional(),
+    // The program version the workout started on. Sent by the finish flush
+    // only: a write based on an older plan is checked field by field and not
+    // applied when the plan changed under it (docs/plans/revisions.md, 2.7).
+    baseVersion: z.number().int().positive().optional(),
     // Null on either clears the range back to a fixed target.
     repRangeMin: z.number().int().positive().max(1000).nullable().optional(),
     repRangeMax: z.number().int().positive().max(1000).nullable().optional(),

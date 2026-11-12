@@ -44,10 +44,14 @@ export async function register() {
 
   // Expired sessions hold an IP address and user agent, and expired MCP
   // tokens pile up with every refresh; drop them at boot and daily after that.
+  // Plan history past its retention (a year, and 90 days for deleted plans,
+  // docs/plans/revisions.md section 9) goes in the same daily run.
   const { purgeExpiredOAuthTokens, purgeExpiredSessions } = await import("@/lib/account-data");
+  const { purgePlanRevisions } = await import("@/lib/plan-revisions");
   const purge = () => {
     purgeExpiredSessions().catch((err) => console.error("[purgeExpiredSessions] failed", err));
     purgeExpiredOAuthTokens().catch((err) => console.error("[purgeExpiredOAuthTokens] failed", err));
+    purgePlanRevisions().catch((err) => console.error("[purgePlanRevisions] failed", err));
   };
   void purge();
   setInterval(purge, 24 * 60 * 60 * 1000).unref();

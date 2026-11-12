@@ -5,10 +5,11 @@ import {
   createWorkoutSession,
 } from "@/lib/actions/workout-sessions";
 import { deleteWorkoutSession } from "@/lib/actions/workout-sets";
-import { updateProgramSet } from "@/lib/actions/programs";
+import { flushWorkoutPlan } from "@/lib/actions/programs";
+import { finishFlushPayload, sendFinishFlush } from "@/lib/utils/finish-flush";
 import { usePendingQueue } from "@/contexts/pending-queue-context";
 import { useToast } from "@/contexts/toast-context";
-import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { useOverridesReady, useWorkoutSession } from "@/contexts/workout-session-context";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { WORKOUT_FEELINGS, type WorkoutFeeling } from "@/lib/validators/workout";
 import { formatDateLong, formatDuration, formatTimeOfDay } from "@/lib/utils/format";
@@ -21,7 +22,7 @@ import { Suspense, use, useMemo, useState } from "react";
 type Feeling = WorkoutFeeling;
 const FEELINGS: Feeling[] = [...WORKOUT_FEELINGS];
 
-function FinishContent() {
+function FinishContent({ programId }: { programId: number }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mountTime] = useState<number>(() => Date.now());
@@ -30,13 +31,20 @@ function FinishContent() {
   const { enqueue: enqueuePending } = usePendingQueue();
   const { showToast } = useToast();
 
+  // The workout's start lives in the browser (the stored active workout),
+  // which the provider restores in an effect. So the summary below shows the
+  // start, date and duration only after hydration and that restore: on the
+  // server they would be the time of the request, and the two renders would
+  // not match (React #418). Hydration matters as well as `restored`: this page
+  // sits in a Suspense boundary, which React may hydrate after the provider's
+  // effect has already run (the hazard useRenderedOverrides documents).
+  const restored = useOverridesReady();
+  const contextStart = workoutSession?.startTime ?? null;
+  const startParam = searchParams.get("start");
   const startTime = useMemo(() => {
-    const contextStart = workoutSession?.startTime;
     if (contextStart) return new Date(contextStart);
-    const raw = searchParams.get("start");
-    return raw ? new Date(raw) : new Date();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return startParam ? new Date(startParam) : new Date(mountTime);
+  }, [contextStart, startParam, mountTime]);
 
   const durationMinutes = useMemo(
     () => Math.max(1, Math.round((mountTime - startTime.getTime()) / 60000)),
@@ -53,15 +61,9 @@ function FinishContent() {
     const existingSessionId = workoutSession?.sessionId;
     const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
     // Per-set overrides (weight/reps edited during the workout) are flushed
-    // back to the program template so the next session starts from them.
-    const overrideWrites = Object.entries(workoutSession?.overrides ?? {}).map(
-      ([setId, ov]) => ({
-        id: Number(setId),
-        targetReps: ov.targetReps,
-        weightKg: ov.weightKg,
-        ...(ov.durationSeconds != null ? { durationSeconds: ov.durationSeconds } : {}),
-      }),
-    );
+    // back to the program template so the next session starts from them, with
+    // the version the workout started on (T9).
+    const flush = finishFlushPayload(programId, workoutSession?.overrides ?? {}, workoutSession?.planVersion ?? null);
     // The client's end time, not the server's clock at write time: a queued
     // finish that replays hours later must still record when the workout
     // actually ended, or the session's duration is wrong.
@@ -80,9 +82,7 @@ function FinishContent() {
         showToast({ variant: "error", message: "Can't finish without a session — reconnect first" });
         return false;
       }
-      overrideWrites.forEach((payload) =>
-        enqueuePending({ kind: "updateProgramSet", payload }),
-      );
+      if (flush) enqueuePending({ kind: "flushWorkoutPlan", payload: flush });
       enqueuePending({
         kind: "completeWorkoutSession",
         payload: { sessionId: existingSessionId, endTime, feeling, notes: trimmedNotes },
@@ -97,7 +97,19 @@ function FinishContent() {
     // starting weights, not this session's data, so it must not block the
     // save. The session write below is the one that matters.
     try {
-      await Promise.all(overrideWrites.map((payload) => updateProgramSet(payload)));
+      const flushed = flush
+        ? await sendFinishFlush(flush, flushWorkoutPlan, (payload) => enqueuePending({ kind: "flushWorkoutPlan", payload }))
+        : null;
+      const conflicts = flushed?.conflicts ?? 0;
+      if (conflicts > 0) {
+        showToast({
+          durationMs: 8000,
+          message:
+            conflicts === 1
+              ? "One plan change from this workout was not applied, because the plan changed in the meantime. See the program's history."
+              : `${conflicts} plan changes from this workout were not applied, because the plan changed in the meantime. See the program's history.`,
+        });
+      }
     } catch (err) {
       console.error("[finish] override flush failed", err);
     }
@@ -182,16 +194,16 @@ function FinishContent() {
           <div className="bg-card rounded-2xl p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Date</span>
-              <span className="text-sm font-medium">{formatDateLong(startTime)}</span>
+              <span className="text-sm font-medium">{restored ? formatDateLong(startTime) : "—"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Started</span>
-              <span className="text-sm font-medium">{formatTimeOfDay(startTime)}</span>
+              <span className="text-sm font-medium">{restored ? formatTimeOfDay(startTime) : "—"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Duration</span>
               <span className="text-sm font-medium">
-                {formatDuration(durationMinutes)}
+                {restored ? formatDuration(durationMinutes) : "—"}
               </span>
             </div>
           </div>
@@ -323,10 +335,10 @@ export default function WorkoutFinishPage({
 }: {
   params: Promise<{ id: string }>;
 }) {
-  void use(params);
+  const { id } = use(params);
   return (
     <Suspense>
-      <FinishContent />
+      <FinishContent programId={Number(id)} />
     </Suspense>
   );
 }

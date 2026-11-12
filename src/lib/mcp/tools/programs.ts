@@ -7,8 +7,19 @@
  */
 
 import { db } from "@/db";
-import { exercises, programExercises, programSets, programs } from "@/db/schema";
+import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
+import {
+  REVISION_RULES,
+  assistantContext,
+  expectedVersionArg,
+  planErrorResult,
+  reasonArg,
+  registerRevisionTools,
+} from "@/lib/mcp/revisions";
+import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { deletePrograms, planWrite, softDeleteSlot, versionKey, type Tx } from "@/lib/plan-revisions";
+import { matchSets } from "@/lib/utils/plan-revisions";
 import { periodizationShare } from "@/lib/periodization-sync";
 import {
   MAX_BACKOFF_AFTER,
@@ -27,7 +38,7 @@ import {
 import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { REP_RANGE_MESSAGE, repRangeIsWellFormed } from "@/lib/validators/workout";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { and, asc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 
 /**
@@ -67,6 +78,9 @@ const ADVANCE_FOR_LEGACY_MODE: Record<
 // The ranges match the app's own set validators (validators/workout.ts).
 const setShape = z
   .object({
+    // The stored set this entry updates. Without it, the entry updates the
+    // stored set at the same setNumber (docs/plans/revisions.md, 2.3).
+    id: z.number().int().positive().optional(),
     setNumber: z.number().int().positive(),
     targetReps: z.number().int().positive().nullable().optional(),
     repRangeMin: z.number().int().positive().max(1000).nullable().optional(),
@@ -86,6 +100,24 @@ const setShape = z
   .refine(repRangeIsWellFormed, { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] });
 
 type SetInput = z.infer<typeof setShape>;
+
+/** Thrown inside the set-list transaction so a refused list writes nothing. */
+class SetListRefused extends Error {}
+
+/**
+ * Rows logged against a set in the user's open sessions move with it when its
+ * position changes, the rule reorderProgramSets uses.
+ */
+async function moveOpenSessionRows(tx: Tx, userId: string, programSetId: number, setNumber: number) {
+  const open = tx
+    .select({ id: workoutSessions.id })
+    .from(workoutSessions)
+    .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, false)));
+  await tx
+    .update(workoutSets)
+    .set({ setNumber })
+    .where(and(eq(workoutSets.programSetId, programSetId), inArray(workoutSets.sessionId, open)));
+}
 
 function setValues(programExerciseId: number, s: SetInput) {
   return {
@@ -107,23 +139,28 @@ function setValues(programExerciseId: number, s: SetInput) {
   };
 }
 
-/** Returns the owning userId for a program exercise, or null if not found. */
+/** Returns the owning userId for a live program exercise, or null if not found. */
 async function programExerciseOwner(programExerciseId: number) {
   const [row] = await db
     .select({ userId: programs.userId, programId: programs.id })
     .from(programExercises)
     .innerJoin(programs, eq(programs.id, programExercises.programId))
-    .where(eq(programExercises.id, programExerciseId))
+    .where(and(eq(programExercises.id, programExerciseId), liveProgramExercises, livePrograms))
     .limit(1);
   return row ?? null;
 }
 
-export function registerProgramTools(server: McpServer, userId: string) {
+const programVersion = (versions: Map<string, number>, programId: number) =>
+  versions.get(versionKey({ type: "program", id: programId }));
+
+export function registerProgramTools(server: McpServer, userId: string, clientId?: string) {
+  registerRevisionTools(server, userId, clientId);
+
   server.registerTool(
     "list_programs",
     {
       description:
-        "List the current user's workout programs (id, name, createdAt), ordered by name.",
+        "List the current user's workout programs (id, name, version, createdAt), ordered by name. Deleted programs are left out.",
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -132,7 +169,7 @@ export function registerProgramTools(server: McpServer, userId: string) {
         const rows = await db
           .select()
           .from(programs)
-          .where(eq(programs.userId, userId))
+          .where(and(eq(programs.userId, userId), livePrograms))
           .orderBy(asc(programs.name));
         return ok(rows);
       } catch (e) {
@@ -145,20 +182,21 @@ export function registerProgramTools(server: McpServer, userId: string) {
     "get_program",
     {
       description:
-        "Get one program with its ordered exercise slots and planned sets.",
+        "Get one program with its ordered exercise slots and planned sets, and its version. Pass the version as expectedVersion when you change it.",
       inputSchema: { programId: z.number().int().positive() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
     async ({ programId }) => {
       try {
         const program = await db.query.programs.findFirst({
-          where: and(eq(programs.id, programId), eq(programs.userId, userId)),
+          where: and(eq(programs.id, programId), eq(programs.userId, userId), livePrograms),
           with: {
             programExercises: {
+              where: liveProgramExercises,
               orderBy: (pe, { asc }) => [asc(pe.orderIndex)],
               with: {
                 exercise: true,
-                programSets: { orderBy: (ps, { asc }) => [asc(ps.setNumber)] },
+                programSets: { where: liveProgramSets, orderBy: (ps, { asc }) => [asc(ps.setNumber)] },
               },
             },
           },
@@ -174,16 +212,17 @@ export function registerProgramTools(server: McpServer, userId: string) {
   server.registerTool(
     "create_program",
     {
-      description: "Create a new empty workout program.",
-      inputSchema: { name: z.string().min(1).max(100) },
+      description: `Create a new empty workout program. ${REVISION_RULES}`,
+      inputSchema: { name: z.string().min(1).max(100), reason: reasonArg },
       annotations: { openWorldHint: false },
     },
-    async ({ name }) => {
+    async ({ name, reason }) => {
       try {
-        const [program] = await db
-          .insert(programs)
-          .values({ name, userId })
-          .returning();
+        const { result: program } = await planWrite(assistantContext(userId, clientId, reason), async (w) => {
+          const [row] = await w.tx.insert(programs).values({ name, userId }).returning();
+          w.create({ type: "program", id: row.id });
+          return row;
+        });
         return ok(program);
       } catch (e) {
         return failInternal("programs", e);
@@ -194,24 +233,26 @@ export function registerProgramTools(server: McpServer, userId: string) {
   server.registerTool(
     "update_program",
     {
-      description: "Rename an existing program.",
+      description: "Rename an existing program. Returns the program with its new version.",
       inputSchema: {
         programId: z.number().int().positive(),
         name: z.string().min(1).max(100),
+        reason: reasonArg,
+        expectedVersion: expectedVersionArg,
       },
       annotations: { idempotentHint: true, openWorldHint: false },
     },
-    async ({ programId, name }) => {
+    async ({ programId, name, reason, expectedVersion }) => {
       try {
-        const [updated] = await db
-          .update(programs)
-          .set({ name })
-          .where(and(eq(programs.id, programId), eq(programs.userId, userId)))
-          .returning();
-        if (!updated) return fail("Program not found");
+        await planWrite(assistantContext(userId, clientId, reason), async (w) => {
+          await w.touch({ type: "program", id: programId }, { expectedVersion });
+          await w.tx.update(programs).set({ name }).where(eq(programs.id, programId));
+        });
+        // plan-read: includes deleted (re-reads the row this call just wrote)
+        const [updated] = await db.select().from(programs).where(eq(programs.id, programId));
         return ok(updated);
       } catch (e) {
-        return failInternal("programs", e);
+        return (await planErrorResult(userId, e)) ?? failInternal("programs", e);
       }
     },
   );
@@ -220,21 +261,21 @@ export function registerProgramTools(server: McpServer, userId: string) {
     "delete_program",
     {
       description:
-        "Delete a program and all of its exercises and sets. This is permanent.",
-      inputSchema: { programId: z.number().int().positive() },
+        "Delete a program with its exercises and sets. Logged workouts keep their link. The user can restore it in the app for 90 days, and you can with restore_revision. Refused while the user has a workout in progress on it.",
+      inputSchema: {
+        programId: z.number().int().positive(),
+        reason: reasonArg,
+        expectedVersion: expectedVersionArg,
+      },
       annotations: { destructiveHint: true, idempotentHint: true, openWorldHint: false },
     },
-    async ({ programId }) => {
+    async ({ programId, reason, expectedVersion }) => {
       try {
-        const [deleted] = await db
-          .delete(programs)
-          .where(and(eq(programs.id, programId), eq(programs.userId, userId)))
-          .returning({ id: programs.id });
-        if (!deleted) return fail("Program not found");
+        await deletePrograms(assistantContext(userId, clientId, reason), [programId], expectedVersion);
         audit("delete_program", { userId, programId });
         return ok({ deleted: true, programId });
       } catch (e) {
-        return failInternal("programs", e);
+        return (await planErrorResult(userId, e)) ?? failInternal("programs", e);
       }
     },
   );
@@ -249,8 +290,9 @@ export function registerProgramTools(server: McpServer, userId: string) {
         "progressionMode is the retired single-axis setting. It is still accepted and mapped onto progressionAdvance, but prefer the axes.",
         "Each set takes setNumber and optional targetReps, repRangeMin and repRangeMax (both or neither, min <= targetReps <= max), targetRir (0-5), weightKg, durationSeconds, distanceMeters, inclinePercent, targetHeartRateZone (1-5), sessionRole ('work' marks a hard interval rep), startDelaySeconds (0-60, prep time before a timed set), restTimeSeconds and setType. Any other key fails the call. All values are metric.",
         "In an active training cycle the weekly sync owns targetHeartRateZone and restTimeSeconds on sets with sessionRole 'work' and rewrites them each week from the block phase. On a set with a peak anchor, a new distanceMeters or durationSeconds sets this week's value and the peak is re-derived from it.",
-        "operation='update': requires programExerciseId; any provided slot fields are updated. A new exerciseId must be a built-in exercise or one of the user's own. If sets[] is provided it REPLACES all existing sets for the slot; a set without sessionRole keeps the role of the old set with the same setNumber.",
+        "operation='update': requires programExerciseId; any provided slot fields are updated. A new exerciseId must be a built-in exercise or one of the user's own. If sets[] is provided it becomes the slot's full set list: an entry with id updates that set, an entry without id updates the set at the same setNumber, other entries are added, and stored sets that no entry names are removed. Set ids never change, so logged workouts keep their link. A set without sessionRole keeps the role it had.",
         "operation='remove': requires programExerciseId.",
+        `Every operation requires reason and expectedVersion (the program's version). The result has the program's new version. ${REVISION_RULES}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
@@ -290,6 +332,8 @@ export function registerProgramTools(server: McpServer, userId: string) {
           .optional(),
         // When true, accepting a bump also rewrites this slot's planned sets.
         progressionApplyToPlan: z.boolean().optional(),
+        reason: reasonArg,
+        expectedVersion: expectedVersionArg,
         sets: z
           .array(setShape)
           .max(50)
@@ -297,23 +341,24 @@ export function registerProgramTools(server: McpServer, userId: string) {
             (arr) => new Set(arr.map((s) => s.setNumber)).size === arr.length,
             { message: "setNumber values must be unique within sets" },
           )
+          .refine(
+            (arr) => {
+              const ids = arr.map((s) => s.id).filter((id) => id != null);
+              return new Set(ids).size === ids.length;
+            },
+            { message: "set ids must be unique within sets" },
+          )
           .optional(),
       },
     },
     async (args) => {
+      const ctx = assistantContext(userId, clientId, args.reason);
       try {
         if (args.operation === "add") {
           const { programId, exerciseId } = args;
           if (programId == null || exerciseId == null) {
             return fail("programId and exerciseId are required to add an exercise");
           }
-          // Verify program ownership.
-          const [prog] = await db
-            .select({ userId: programs.userId })
-            .from(programs)
-            .where(eq(programs.id, programId))
-            .limit(1);
-          if (!prog || prog.userId !== userId) return fail("Program not found");
 
           // Verify the exercise exists and is accessible (system or owned).
           const [ex] = await db
@@ -328,18 +373,19 @@ export function registerProgramTools(server: McpServer, userId: string) {
             .limit(1);
           if (!ex) return fail("Exercise not found");
 
-          let orderIndex = args.orderIndex;
-          if (orderIndex === undefined) {
-            const existing = await db
-              .select({ id: programExercises.id })
-              .from(programExercises)
-              .where(eq(programExercises.programId, programId));
-            orderIndex = existing.length;
-          }
-
           // Insert the slot and its sets atomically — a failed sets insert must
           // not leave a slot with no sets.
-          const pe = await db.transaction(async (tx) => {
+          const { result: pe, versions } = await planWrite(ctx, async (w) => {
+            const tx = w.tx;
+            await w.touch({ type: "program", id: programId }, { expectedVersion: args.expectedVersion });
+            let orderIndex = args.orderIndex;
+            if (orderIndex === undefined) {
+              const existing = await tx
+                .select({ id: programExercises.id })
+                .from(programExercises)
+                .where(and(eq(programExercises.programId, programId), liveProgramExercises));
+              orderIndex = existing.length;
+            }
             const [inserted] = await tx
               .insert(programExercises)
               .values({
@@ -384,7 +430,7 @@ export function registerProgramTools(server: McpServer, userId: string) {
             }
             return inserted;
           });
-          return ok(pe);
+          return ok({ ...pe, programVersion: programVersion(versions, programId) });
         }
 
         if (args.operation === "update") {
@@ -402,7 +448,7 @@ export function registerProgramTools(server: McpServer, userId: string) {
               progressionRequiredHits: programExercises.progressionRequiredHits,
             })
             .from(programExercises)
-            .where(eq(programExercises.id, programExerciseId));
+            .where(and(eq(programExercises.id, programExerciseId), liveProgramExercises));
 
           // The same check as add: a slot may only point at a built-in
           // exercise or one of the user's own.
@@ -469,23 +515,26 @@ export function registerProgramTools(server: McpServer, userId: string) {
           const share =
             args.sets !== undefined ? await periodizationShare(owner.programId, userId) : 1;
 
-          // Apply the slot edits and the wholesale set-replace in one
-          // transaction: deleting the old sets must roll back if the re-insert
-          // fails, otherwise the slot is left with no sets (data loss).
-          await db.transaction(async (tx) => {
-            if (Object.keys(peUpdates).length > 0) {
-              await tx
-                .update(programExercises)
-                .set(peUpdates)
-                .where(eq(programExercises.id, programExerciseId));
-            }
-            if (args.sets !== undefined) {
-              // The replace has no fields for a cycle's anchors, so they would
-              // vanish with the old rows and the sets would silently drop out
-              // of the block. Carry them across by set number, re-derived the
-              // way an edit in the app re-derives them (PZ-36, PZ-37).
+          // The slot edits and the set diff in one transaction, as one revision.
+          let versions = new Map<string, number>();
+          try {
+            ({ versions } = await planWrite(ctx, async (w) => {
+              const tx = w.tx;
+              await w.touch({ type: "program", id: owner.programId }, { expectedVersion: args.expectedVersion });
+              if (Object.keys(peUpdates).length > 0) {
+                await tx
+                  .update(programExercises)
+                  .set(peUpdates)
+                  .where(eq(programExercises.id, programExerciseId));
+              }
+              if (args.sets === undefined) return;
+              // Matched by id, then by set number, and updated in place, so ids
+              // stay and logged rows keep their link (docs/plans/revisions.md,
+              // 2.3). The anchors and the role carry over from the matched set,
+              // re-derived the way an edit in the app re-derives them (PZ-36).
               const old = await tx
                 .select({
+                  id: programSets.id,
                   setNumber: programSets.setNumber,
                   distanceMeters: programSets.distanceMeters,
                   durationSeconds: programSets.durationSeconds,
@@ -494,29 +543,45 @@ export function registerProgramTools(server: McpServer, userId: string) {
                   sessionRole: programSets.sessionRole,
                 })
                 .from(programSets)
-                .where(eq(programSets.programExerciseId, programExerciseId));
-              const oldByNumber = new Map(old.map((o) => [o.setNumber, o]));
-              await tx
-                .delete(programSets)
-                .where(eq(programSets.programExerciseId, programExerciseId));
-              if (args.sets.length > 0) {
-                await tx.insert(programSets).values(
-                  args.sets.map((s) => {
-                    const row = setValues(programExerciseId, s);
-                    const prev = oldByNumber.get(s.setNumber);
-                    if (!prev) return row;
-                    const mode =
-                      row.distanceMeters != null ? "distance" : row.durationSeconds != null ? "duration" : null;
-                    const peaks = mode ? reanchoredPeaks(prev, row, mode, share) : null;
-                    // A role sent in the input wins; without one the old set's is kept.
-                    const sessionRole = s.sessionRole !== undefined ? row.sessionRole : prev.sessionRole;
-                    return peaks ? { ...row, ...peaks, sessionRole } : { ...row, sessionRole };
-                  }),
-                );
+                .where(and(eq(programSets.programExerciseId, programExerciseId), liveProgramSets));
+              const match = matchSets(old, args.sets);
+              if ("error" in match) {
+                // Throw, so the slot edits above roll back with it and no
+                // revision or version step is stored for a refused call.
+                throw new SetListRefused(match.error);
               }
-            }
-          });
-          return ok({ updated: true, programExerciseId });
+              const oldById = new Map(old.map((o) => [o.id, o]));
+              for (const { id, input: s } of match.updates) {
+                const row = setValues(programExerciseId, s);
+                const prev = oldById.get(id)!;
+                const mode =
+                  row.distanceMeters != null ? "distance" : row.durationSeconds != null ? "duration" : null;
+                const peaks = mode ? reanchoredPeaks(prev, row, mode, share) : null;
+                // A role sent in the input wins; without one the old set's is kept.
+                const sessionRole = s.sessionRole !== undefined ? row.sessionRole : prev.sessionRole;
+                await tx
+                  .update(programSets)
+                  .set({ ...row, ...(peaks ?? {}), sessionRole })
+                  .where(eq(programSets.id, id));
+                if (prev.setNumber !== row.setNumber) await moveOpenSessionRows(tx, userId, id, row.setNumber);
+              }
+              if (match.inserts.length > 0) {
+                await tx
+                  .insert(programSets)
+                  .values(match.inserts.map((s) => setValues(programExerciseId, s)));
+              }
+              if (match.deletes.length > 0) {
+                await tx
+                  .update(programSets)
+                  .set({ deletedAt: new Date() })
+                  .where(inArray(programSets.id, match.deletes));
+              }
+            }));
+          } catch (e) {
+            if (e instanceof SetListRefused) return fail(e.message);
+            throw e;
+          }
+          return ok({ updated: true, programExerciseId, programVersion: programVersion(versions, owner.programId) });
         }
 
         // remove
@@ -526,13 +591,15 @@ export function registerProgramTools(server: McpServer, userId: string) {
         }
         const owner = await programExerciseOwner(programExerciseId);
         if (!owner || owner.userId !== userId) return fail("Exercise slot not found");
-        await db
-          .delete(programExercises)
-          .where(eq(programExercises.id, programExerciseId));
+        // Soft: logged sets keep their link, and a restore brings it back.
+        const { versions } = await planWrite(ctx, async (w) => {
+          await w.touch({ type: "program", id: owner.programId }, { expectedVersion: args.expectedVersion });
+          await softDeleteSlot(w.tx, programExerciseId);
+        });
         audit("remove_program_exercise", { userId, programExerciseId });
-        return ok({ removed: true, programExerciseId });
+        return ok({ removed: true, programExerciseId, programVersion: programVersion(versions, owner.programId) });
       } catch (e) {
-        return failInternal("programs", e);
+        return (await planErrorResult(userId, e)) ?? failInternal("programs", e);
       }
     },
   );

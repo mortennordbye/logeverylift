@@ -13,8 +13,16 @@ vi.mock("@/lib/actions/workout-sets", () => ({
   logWorkoutSet: (...a: unknown[]) => logWorkoutSet(...a),
   unlogWorkoutSet: (...a: unknown[]) => unlogWorkoutSet(...a),
 }));
-vi.mock("@/lib/actions/workout-sessions", () => ({ completeWorkoutSession: vi.fn() }));
-vi.mock("@/lib/actions/programs", () => ({ updateProgramSet: vi.fn() }));
+const completeWorkoutSession = vi.fn();
+const updateProgramSet = vi.fn();
+vi.mock("@/lib/actions/workout-sessions", () => ({
+  completeWorkoutSession: (...a: unknown[]) => completeWorkoutSession(...a),
+}));
+const flushWorkoutPlan = vi.fn();
+vi.mock("@/lib/actions/programs", () => ({
+  updateProgramSet: (...a: unknown[]) => updateProgramSet(...a),
+  flushWorkoutPlan: (...a: unknown[]) => flushWorkoutPlan(...a),
+}));
 
 // jsdom cannot reload, so the reload is faked; detection stays real.
 // `reloadReturns` is what reloadForFreshBundle reports: "reloading" when it
@@ -77,6 +85,9 @@ beforeEach(() => {
   localStorage.clear();
   logWorkoutSet.mockReset();
   unlogWorkoutSet.mockReset();
+  completeWorkoutSession.mockReset();
+  updateProgramSet.mockReset();
+  flushWorkoutPlan.mockReset();
   reloadForFreshBundle.mockReset();
   reloadReturns = "reloading";
   reloadPending = false;
@@ -84,6 +95,59 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("PendingQueueProvider", () => {
+  it("does not say the workout was saved when its finish failed in the same pass", async () => {
+    localStorage.setItem(
+      "pendingMutationQueue",
+      JSON.stringify([
+        { id: "b", kind: "flushWorkoutPlan", payload: { programId: 9, baseVersion: 1, sets: [] }, queuedAt: 1 },
+        { id: "c", kind: "completeWorkoutSession", payload: { sessionId: 1, endTime: "2026-11-12T10:00:00Z", feeling: "Good" }, queuedAt: 2 },
+      ]),
+    );
+    flushWorkoutPlan.mockResolvedValue({ success: true, data: { applied: 3, conflicts: 2 } });
+    completeWorkoutSession.mockRejectedValue(new TypeError("Load failed"));
+    mount();
+    await flush();
+    await flush();
+    expect(screen.getByText(/^2 plan changes from your workout were not applied/)).toBeTruthy();
+    expect(screen.queryByText(/Workout saved/)).toBeNull();
+    // The flush is final; the finish stays queued for its retry.
+    expect(stored()).toHaveLength(1);
+  });
+
+  // docs/plans/revisions.md, 2.7: a finish-flush plan write that meets a newer
+  // plan is final. It must not be retried into a "dropped" toast, and it must
+  // never hold up the logged sets and the finish queued around it.
+  it("drops a conflicting plan write as final, with its own notice, and still saves the sets and the finish", async () => {
+    localStorage.setItem(
+      "pendingMutationQueue",
+      JSON.stringify([
+        { id: "a", kind: "logWorkoutSet", payload, queuedAt: 0 },
+        { id: "b", kind: "updateProgramSet", payload: { id: 3, weightKg: 82.5, baseVersion: 1 }, queuedAt: 1 },
+        { id: "c", kind: "completeWorkoutSession", payload: { sessionId: 1, endTime: "2026-11-12T10:00:00Z", feeling: "Good" }, queuedAt: 2 },
+      ]),
+    );
+    logWorkoutSet.mockResolvedValue(ok);
+    updateProgramSet.mockResolvedValue({
+      success: false,
+      error: "The plan changed since this workout started, so this change was not applied",
+      conflict: { programId: 9, revisionId: 4 },
+    });
+    completeWorkoutSession.mockResolvedValue({ success: true, data: undefined });
+    mount();
+    await flush();
+    await flush();
+    expect(logWorkoutSet).toHaveBeenCalledTimes(1);
+    expect(updateProgramSet).toHaveBeenCalledTimes(1);
+    expect(completeWorkoutSession).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem("pendingMutationQueue")).toBeNull();
+    expect(screen.getByText(/^Workout saved\. One plan change from your workout was not applied/)).toBeTruthy();
+    expect(screen.queryByText(/dropped/)).toBeNull();
+
+    // Nothing is sent again later.
+    await act(async () => { await vi.advanceTimersByTimeAsync(BACKOFF_MS.reduce((a, b) => a + b, 0) + 1000); });
+    expect(updateProgramSet).toHaveBeenCalledTimes(1);
+  });
+
   it("replays a queue left in storage on a cold open, without waiting for an online event", async () => {
     localStorage.setItem(
       "pendingMutationQueue",

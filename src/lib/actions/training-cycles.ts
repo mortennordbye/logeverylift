@@ -18,6 +18,8 @@ import {
 } from "@/lib/utils/periodization";
 import { applyWearableSuggestion, hasPeakAnchor, syncDueCycle, syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { enduranceEnabledFor } from "@/lib/endurance";
+import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
+import { OpenWorkoutError, PlanNotFoundError, activateCycle, deleteCycles, planWrite, type Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
@@ -60,7 +62,7 @@ export async function getTrainingCycles(): Promise<ActionResult<TrainingCycle[]>
     const rows = await db
       .select()
       .from(trainingCycles)
-      .where(eq(trainingCycles.userId, auth.user.id))
+      .where(and(eq(trainingCycles.userId, auth.user.id), liveCycles))
       .orderBy(asc(trainingCycles.status), asc(trainingCycles.createdAt));
     return { success: true, data: rows };
   } catch (err) {
@@ -77,6 +79,7 @@ export async function getTrainingCycleWithSlots(
       where: and(
         eq(trainingCycles.id, cycleId),
         eq(trainingCycles.userId, auth.user.id),
+        liveCycles,
       ),
       with: {
         slots: {
@@ -92,7 +95,7 @@ export async function getTrainingCycleWithSlots(
       return { success: false, error: "Cycle not found" };
     }
 
-    return { success: true, data: cycle as TrainingCycleWithSlots };
+    return { success: true, data: { ...cycle, slots: cycle.slots.map(liveSlotProgram) } as TrainingCycleWithSlots };
   } catch (err) {
     return { success: false, error: String(err) };
   }
@@ -102,7 +105,7 @@ export async function getAllCyclesWithSlots(): Promise<ActionResult<TrainingCycl
   const auth = await requireSession();
   try {
     const rows = await db.query.trainingCycles.findMany({
-      where: eq(trainingCycles.userId, auth.user.id),
+      where: and(eq(trainingCycles.userId, auth.user.id), liveCycles),
       orderBy: [asc(trainingCycles.startDate)],
       with: {
         slots: {
@@ -111,7 +114,10 @@ export async function getAllCyclesWithSlots(): Promise<ActionResult<TrainingCycl
         },
       },
     });
-    return { success: true, data: rows as TrainingCycleWithSlots[] };
+    return {
+      success: true,
+      data: rows.map((c) => ({ ...c, slots: c.slots.map(liveSlotProgram) })) as TrainingCycleWithSlots[],
+    };
   } catch (err) {
     return { success: false, error: String(err) };
   }
@@ -144,6 +150,7 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
       where: and(
         eq(trainingCycles.userId, userId),
         eq(trainingCycles.status, "active"),
+        liveCycles,
       ),
       with: {
         slots: {
@@ -174,14 +181,14 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     // post-update result returned below, and every route that shows cycle
     // state resolves its data per request.
     if (isOver) {
-      await db
-        .update(trainingCycles)
-        .set({ status: "completed" })
-        .where(eq(trainingCycles.id, cycle.id));
+      await planWrite({ userId, writer: "sync", reason: "The block ended" }, async (w) => {
+        await w.touch({ type: "cycle", id: cycle.id });
+        await w.tx.update(trainingCycles).set({ status: "completed" }).where(eq(trainingCycles.id, cycle.id));
+      });
       return { success: true, data: null };
     }
 
-    const slots = cycle.slots as TrainingCycleWithSlots["slots"];
+    const slots = cycle.slots.map(liveSlotProgram) as TrainingCycleWithSlots["slots"];
 
     // Periodization: once per cycle-week, scale the endurance targets from their
     // stored peak via the curve (Base→Build→Peak→Taper, or flat for "maintain").
@@ -337,7 +344,7 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     return {
       success: true,
       data: {
-        cycle: cycle as unknown as TrainingCycleWithSlots,
+        cycle: { ...cycle, slots } as unknown as TrainingCycleWithSlots,
         todaySlot,
         currentWeek,
         endDate: endDateStr,
@@ -534,10 +541,11 @@ export async function getCyclePeriodization(
   const auth = await requireSession();
   try {
     const cycle = await db.query.trainingCycles.findFirst({
-      where: and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, auth.user.id)),
+      where: and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, auth.user.id), liveCycles),
       with: { slots: { with: { program: true } } },
     });
     if (!cycle) return { success: true, data: null };
+    cycle.slots = cycle.slots.map(liveSlotProgram);
 
     const programIds = (cycle.slots ?? [])
       .map((s) => s.programId)
@@ -552,6 +560,8 @@ export async function getCyclePeriodization(
         and(
           inArray(programExercises.programId, programIds),
           hasPeakAnchor,
+          liveProgramExercises,
+          liveProgramSets,
         ),
       )
       .limit(1);
@@ -622,6 +632,7 @@ export async function getProgramPeriodization(
           eq(trainingCycleSlots.programId, programId),
           eq(trainingCycles.userId, auth.user.id),
           eq(trainingCycles.status, "active"),
+          liveCycles,
         ),
       )
       .limit(1);
@@ -635,6 +646,24 @@ export async function getProgramPeriodization(
 // ─────────────────────────────────────────────────────────────────────────────
 // Mutations
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Run a write to one cycle inside the revision layer (docs/plans/revisions.md,
+ * 2.2). Null when it is not the caller's live cycle.
+ */
+async function writeCycle<T>(userId: string, cycleId: number, fn: (tx: Tx) => Promise<T>): Promise<{ result: T } | null> {
+  try {
+    const { result } = await planWrite({ userId, writer: "user" }, async (w) => {
+      await w.touch({ type: "cycle", id: cycleId });
+      return fn(w.tx);
+    });
+    return { result };
+  } catch (e) {
+    if (e instanceof PlanNotFoundError) return null;
+    throw e;
+  }
+}
+
 
 export async function createTrainingCycle(
   data: unknown,
@@ -651,10 +680,14 @@ export async function createTrainingCycle(
   }
 
   try {
-    const [cycle] = await db
-      .insert(trainingCycles)
-      .values({ ...validation.data, userId: auth.user.id })
-      .returning();
+    const { result: cycle } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+      const [row] = await w.tx
+        .insert(trainingCycles)
+        .values({ ...validation.data, userId: auth.user.id })
+        .returning();
+      w.create({ type: "cycle", id: row.id });
+      return row;
+    });
 
     revalidatePath("/cycles");
     return { success: true, data: cycle };
@@ -680,6 +713,7 @@ export async function updateTrainingCycle(
       where: and(
         eq(trainingCycles.id, id),
         eq(trainingCycles.userId, auth.user.id),
+        liveCycles,
       ),
     });
     if (!existing) return { success: false, error: "Cycle not found" };
@@ -708,14 +742,19 @@ export async function updateTrainingCycle(
     const durationChanged =
       rest.durationWeeks !== undefined && rest.durationWeeks !== existing.durationWeeks;
 
-    const [cycle] = await db
-      .update(trainingCycles)
-      .set({
-        ...rest,
-        ...(durationChanged && { lastSyncedWeek: null }),
-      } as Partial<typeof trainingCycles.$inferInsert>)
-      .where(eq(trainingCycles.id, id))
-      .returning();
+    const done = await writeCycle(auth.user.id, id, async (tx) => {
+      const [row] = await tx
+        .update(trainingCycles)
+        .set({
+          ...rest,
+          ...(durationChanged && { lastSyncedWeek: null }),
+        } as Partial<typeof trainingCycles.$inferInsert>)
+        .where(eq(trainingCycles.id, id))
+        .returning();
+      return row;
+    });
+    if (!done) return { success: false, error: "Cycle not found" };
+    const cycle = done.result;
 
     revalidatePath("/cycles");
     revalidatePath(`/cycles/${id}`);
@@ -725,6 +764,10 @@ export async function updateTrainingCycle(
   }
 }
 
+/**
+ * Delete a cycle (softly), with the programs it generated, in one change set:
+ * one restore brings them all back (docs/plans/revisions.md, 2.3).
+ */
 export async function deleteTrainingCycle(
   cycleId: number,
 ): Promise<ActionResult<void>> {
@@ -734,16 +777,16 @@ export async function deleteTrainingCycle(
     const [existing] = await db
       .select({ userId: trainingCycles.userId })
       .from(trainingCycles)
-      .where(eq(trainingCycles.id, cycleId));
+      .where(and(eq(trainingCycles.id, cycleId), liveCycles));
     if (!existing) return { success: false, error: "Training cycle not found" };
     if (existing.userId !== auth.user.id) return { success: false, error: "Unauthorized" };
 
-    await db
-      .delete(trainingCycles)
-      .where(eq(trainingCycles.id, cycleId));
+    await deleteCycles({ userId: auth.user.id, writer: "user" }, [cycleId]);
     revalidatePath("/cycles");
+    revalidatePath("/programs");
     return { success: true, data: undefined };
   } catch (err) {
+    if (err instanceof OpenWorkoutError) return { success: false, error: err.message };
     return { success: false, error: String(err) };
   }
 }
@@ -754,12 +797,18 @@ export async function deleteManyTrainingCycles(
   if (cycleIds.length === 0) return { success: true, data: undefined };
   const auth = await requireSession();
   try {
-    await db.delete(trainingCycles).where(
-      and(inArray(trainingCycles.id, cycleIds), eq(trainingCycles.userId, auth.user.id))
-    );
+    const owned = await db
+      .select({ id: trainingCycles.id })
+      .from(trainingCycles)
+      .where(and(inArray(trainingCycles.id, cycleIds), eq(trainingCycles.userId, auth.user.id), liveCycles));
+    if (owned.length > 0) {
+      await deleteCycles({ userId: auth.user.id, writer: "user" }, owned.map((c) => c.id));
+    }
     revalidatePath("/cycles");
+    revalidatePath("/programs");
     return { success: true, data: undefined };
   } catch (err) {
+    if (err instanceof OpenWorkoutError) return { success: false, error: err.message };
     return { success: false, error: String(err) };
   }
 }
@@ -771,31 +820,15 @@ export async function startTrainingCycle(
   const userId = auth.user.id;
 
   try {
-    // Only one active cycle at a time — deactivate any current active cycle
-    await db
-      .update(trainingCycles)
-      .set({ status: "completed" })
-      .where(
-        and(
-          eq(trainingCycles.userId, userId),
-          eq(trainingCycles.status, "active"),
-        ),
-      );
-
-    const today = toDateStr(await userToday(userId));
-    const [cycle] = await db
-      .update(trainingCycles)
-      .set({ status: "active", startDate: today })
-      .where(and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId)))
-      .returning();
-
-    if (!cycle) return { success: false, error: "Training cycle not found" };
+    // Only one active cycle at a time — any other active cycle completes.
+    const cycle = await activateCycle({ userId, writer: "user" }, cycleId);
 
     revalidatePath("/cycles");
     revalidatePath(`/cycles/${cycleId}`);
     revalidatePath("/");
     return { success: true, data: cycle };
   } catch (err) {
+    if (err instanceof PlanNotFoundError) return { success: false, error: "Training cycle not found" };
     return { success: false, error: String(err) };
   }
 }
@@ -807,38 +840,15 @@ export async function restartTrainingCycle(
   const userId = auth.user.id;
 
   try {
-    // Verify ownership
-    const existing = await db.query.trainingCycles.findFirst({
-      where: and(
-        eq(trainingCycles.id, cycleId),
-        eq(trainingCycles.userId, userId),
-      ),
-    });
-    if (!existing) return { success: false, error: "Cycle not found" };
-
-    // Deactivate any currently active cycle
-    await db
-      .update(trainingCycles)
-      .set({ status: "completed" })
-      .where(
-        and(
-          eq(trainingCycles.userId, userId),
-          eq(trainingCycles.status, "active"),
-        ),
-      );
-
-    const today = toDateStr(await userToday(userId));
-    const [cycle] = await db
-      .update(trainingCycles)
-      .set({ status: "active", startDate: today })
-      .where(eq(trainingCycles.id, cycleId))
-      .returning();
+    // Deactivate any currently active cycle, then start this one today.
+    const cycle = await activateCycle({ userId, writer: "user" }, cycleId);
 
     revalidatePath("/cycles");
     revalidatePath(`/cycles/${cycleId}`);
     revalidatePath("/");
     return { success: true, data: cycle };
   } catch (err) {
+    if (err instanceof PlanNotFoundError) return { success: false, error: "Cycle not found" };
     return { success: false, error: String(err) };
   }
 }
@@ -855,40 +865,31 @@ export async function upsertCycleSlot(
 
     const { trainingCycleId, dayOfWeek, orderIndex, ...rest } = validation.data;
 
-    // Verify ownership of the cycle
-    const [cycle] = await db
-      .select({ userId: trainingCycles.userId })
-      .from(trainingCycles)
-      .where(eq(trainingCycles.id, trainingCycleId))
-      .limit(1);
-    if (!cycle || cycle.userId !== auth.user.id) {
-      return { success: false, error: "Cycle not found" };
-    }
-
     // If assigning a program to the slot, verify the caller owns it — otherwise
     // a user could attach (and surface) another user's program in their cycle.
     if (rest.programId != null) {
       const [prog] = await db
         .select({ userId: programs.userId })
         .from(programs)
-        .where(eq(programs.id, rest.programId))
+        .where(and(eq(programs.id, rest.programId), livePrograms))
         .limit(1);
       if (!prog || prog.userId !== auth.user.id) {
         return { success: false, error: "Program not found" };
       }
     }
 
+    const done = await writeCycle(auth.user.id, trainingCycleId, async (tx) => {
     // Find existing slot to upsert
     let existingSlot = null;
     if (dayOfWeek !== undefined) {
-      existingSlot = await db.query.trainingCycleSlots.findFirst({
+      existingSlot = await tx.query.trainingCycleSlots.findFirst({
         where: and(
           eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
           eq(trainingCycleSlots.dayOfWeek, dayOfWeek),
         ),
       });
     } else if (orderIndex !== undefined) {
-      existingSlot = await db.query.trainingCycleSlots.findFirst({
+      existingSlot = await tx.query.trainingCycleSlots.findFirst({
         where: and(
           eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
           eq(trainingCycleSlots.orderIndex, orderIndex),
@@ -898,22 +899,25 @@ export async function upsertCycleSlot(
 
     let slot: TrainingCycleSlot;
     if (existingSlot) {
-      const [updated] = await db
+      const [updated] = await tx
         .update(trainingCycleSlots)
         .set({ ...rest, dayOfWeek, orderIndex })
         .where(eq(trainingCycleSlots.id, existingSlot.id))
         .returning();
       slot = updated;
     } else {
-      const [inserted] = await db
+      const [inserted] = await tx
         .insert(trainingCycleSlots)
         .values({ trainingCycleId, dayOfWeek, orderIndex, ...rest })
         .returning();
       slot = inserted;
     }
+    return slot;
+    });
+    if (!done) return { success: false, error: "Cycle not found" };
 
     revalidatePath(`/cycles/${trainingCycleId}`);
-    return { success: true, data: slot };
+    return { success: true, data: done.result };
   } catch (err) {
     return { success: false, error: String(err) };
   }
@@ -925,22 +929,19 @@ export async function removeCycleSlot(
 ): Promise<ActionResult<void>> {
   const auth = await requireSession();
   try {
-    const [cycle] = await db
-      .select({ userId: trainingCycles.userId })
-      .from(trainingCycles)
-      .where(eq(trainingCycles.id, cycleId))
-      .limit(1);
-    if (!cycle || cycle.userId !== auth.user.id) {
-      return { success: false, error: "Cycle not found" };
-    }
-    await db
-      .delete(trainingCycleSlots)
-      .where(
-        and(
-          eq(trainingCycleSlots.id, slotId),
-          eq(trainingCycleSlots.trainingCycleId, cycleId),
+    // A hard delete: nothing logged points at a slot, and the cycle's history
+    // keeps it for a restore (docs/plans/revisions.md, 2.3).
+    const done = await writeCycle(auth.user.id, cycleId, (tx) =>
+      tx
+        .delete(trainingCycleSlots)
+        .where(
+          and(
+            eq(trainingCycleSlots.id, slotId),
+            eq(trainingCycleSlots.trainingCycleId, cycleId),
+          ),
         ),
-      );
+    );
+    if (!done) return { success: false, error: "Cycle not found" };
     revalidatePath(`/cycles/${cycleId}`);
     return { success: true, data: undefined };
   } catch (err) {
@@ -956,17 +957,9 @@ export async function reorderCycleSlots(
   const validation = reorderCycleSlotsSchema.safeParse({ cycleId, orderedIds });
   if (!validation.success) return { success: false, error: "Invalid input" };
   try {
-    const [cycle] = await db
-      .select({ userId: trainingCycles.userId })
-      .from(trainingCycles)
-      .where(eq(trainingCycles.id, cycleId))
-      .limit(1);
-    if (!cycle || cycle.userId !== auth.user.id) {
-      return { success: false, error: "Cycle not found" };
-    }
-    await Promise.all(
-      validation.data.orderedIds.map((id, index) =>
-        db
+    const done = await writeCycle(auth.user.id, cycleId, async (tx) => {
+      for (const [index, id] of validation.data.orderedIds.entries()) {
+        await tx
           .update(trainingCycleSlots)
           .set({ orderIndex: index + 1 })
           .where(
@@ -974,9 +967,10 @@ export async function reorderCycleSlots(
               eq(trainingCycleSlots.id, id),
               eq(trainingCycleSlots.trainingCycleId, validation.data.cycleId),
             ),
-          ),
-      ),
-    );
+          );
+      }
+    });
+    if (!done) return { success: false, error: "Cycle not found" };
     revalidatePath(`/cycles/${cycleId}`);
     return { success: true, data: undefined };
   } catch (err) {
@@ -1012,7 +1006,7 @@ export async function importCycle(
     ? await db
         .select({ id: programs.id, name: programs.name })
         .from(programs)
-        .where(and(inArray(programs.name, programNames), eq(programs.userId, auth.user.id)))
+        .where(and(inArray(programs.name, programNames), eq(programs.userId, auth.user.id), livePrograms))
     : [];
 
   const nameToId = new Map(matched.map((p) => [p.name, p.id]));
@@ -1023,11 +1017,13 @@ export async function importCycle(
   )];
 
   try {
-    const cycleId = await db.transaction(async (tx) => {
+    const { result: cycleId } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+      const tx = w.tx;
       const [cycle] = await tx
         .insert(trainingCycles)
         .values({ ...cycleFields, userId: auth.user.id })
         .returning({ id: trainingCycles.id });
+      w.create({ type: "cycle", id: cycle.id });
 
       for (const slot of slots) {
         await tx.insert(trainingCycleSlots).values({

@@ -288,6 +288,7 @@ export async function exportAllSessions(): Promise<ActionResult<ExportedSessions
         programName: programs.name,
       })
       .from(workoutSessions)
+      // plan-read: includes deleted (history keeps the name of a deleted program)
       .leftJoin(programs, eq(workoutSessions.programId, programs.id))
       .where(
         and(

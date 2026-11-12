@@ -6,6 +6,7 @@ import { getAiRateLimitStatus } from "@/lib/actions/ai-generate";
 import { parseUserGoals } from "@/lib/utils/goals";
 import { requireSession } from "@/lib/utils/session";
 import { db } from "@/db";
+import { livePrograms } from "@/lib/plan-live";
 import { exercisePrs } from "@/db/schema/exercise-prs";
 import { exercises } from "@/db/schema/exercises";
 import { programs } from "@/db/schema/programs";
@@ -33,7 +34,7 @@ export default async function AiSetupPage({ searchParams }: Props) {
       .from(exercisePrs)
       .innerJoin(exercises, eq(exercisePrs.exerciseId, exercises.id))
       .where(and(eq(exercisePrs.userId, userId), isNull(exercisePrs.supersededAt))),
-    db.select({ name: programs.name }).from(programs).where(eq(programs.userId, userId)),
+    db.select({ name: programs.name }).from(programs).where(and(eq(programs.userId, userId), livePrograms)),
   ]);
 
   const exerciseList = exerciseResult.success ? exerciseResult.data : [];

@@ -4,8 +4,17 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { useToast } from "@/contexts/toast-context";
 import { logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
 import { completeWorkoutSession } from "@/lib/actions/workout-sessions";
-import { updateProgramSet } from "@/lib/actions/programs";
-import { afterFailedReplay, afterStaleBundle, dueItems, mergeReplayed, nextReplayIn } from "@/lib/utils/pending-queue";
+import { flushWorkoutPlan, updateProgramSet } from "@/lib/actions/programs";
+import {
+  afterFailedReplay,
+  afterStaleBundle,
+  conflictCount,
+  conflictNotice,
+  dueItems,
+  mergeReplayed,
+  nextReplayIn,
+  replayOutcome,
+} from "@/lib/utils/pending-queue";
 import { isReloadPending, isStaleBundleError, noteActionReached, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
 
 // Shown when a write hit a stale bundle after a deploy. The write is queued
@@ -52,11 +61,13 @@ type LogPayload = Parameters<typeof logWorkoutSet>[0];
 type UnlogPayload = Parameters<typeof unlogWorkoutSet>[0];
 type CompletePayload = Parameters<typeof completeWorkoutSession>[0];
 type UpdateProgramSetPayload = Parameters<typeof updateProgramSet>[0];
+type FlushWorkoutPlanPayload = Parameters<typeof flushWorkoutPlan>[0];
 
 type QueuedMutation =
   | { id: string; kind: "logWorkoutSet"; payload: LogPayload; queuedAt: number; attempts?: number; nextAttemptAt?: number }
   | { id: string; kind: "unlogWorkoutSet"; payload: UnlogPayload; queuedAt: number; attempts?: number; nextAttemptAt?: number }
   | { id: string; kind: "updateProgramSet"; payload: UpdateProgramSetPayload; queuedAt: number; attempts?: number; nextAttemptAt?: number }
+  | { id: string; kind: "flushWorkoutPlan"; payload: FlushWorkoutPlanPayload; queuedAt: number; attempts?: number; nextAttemptAt?: number }
   | { id: string; kind: "completeWorkoutSession"; payload: CompletePayload; queuedAt: number; attempts?: number; nextAttemptAt?: number };
 
 const STORAGE_KEY = "pendingMutationQueue";
@@ -130,9 +141,16 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
 
       const failed: QueuedMutation[] = [];
       const dropped: QueuedMutation[] = [];
+      let conflicts = 0;
+      // Plan changes from the workout that the server kept out, for the notice.
+      let notApplied = 0;
+      // Whether this pass saved a finished workout, so the conflict notice can
+      // say so. Only then: a finish that failed or waits is not "saved".
+      let finished = false;
       let staleOutcome: ReturnType<typeof reloadForFreshBundle> | null = null;
       for (const [i, m] of snapshot.entries()) {
         let ok = false;
+        let conflict = false;
         try {
           // Replayed in queue order, so a log followed by an un-log of the
           // same set resolves to "not logged", matching what the user did.
@@ -143,8 +161,14 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
                 ? await unlogWorkoutSet(m.payload)
                 : m.kind === "updateProgramSet"
                   ? await updateProgramSet(m.payload)
-                  : await completeWorkoutSession(m.payload);
-          ok = result.success;
+                  : m.kind === "flushWorkoutPlan"
+                    ? await flushWorkoutPlan(m.payload)
+                    : await completeWorkoutSession(m.payload);
+          const outcome = replayOutcome(result);
+          ok = outcome === "done";
+          conflict = outcome === "conflict";
+          if (conflict) notApplied += conflictCount(result);
+          if (outcome === "done" && m.kind === "completeWorkoutSession") finished = true;
           noteActionReached();
         } catch (err) {
           if (isStaleBundleError(err)) {
@@ -161,6 +185,11 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
           ok = false;
         }
         if (ok) continue;
+        // Final: the item leaves the queue, and is neither synced nor dropped.
+        if (conflict) {
+          conflicts++;
+          continue;
+        }
         const next = afterFailedReplay(m, Date.now());
         if (next.dropped) dropped.push(m);
         else failed.push(next.item);
@@ -173,7 +202,7 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
       // them again.
       setQueue((prev) => mergeReplayed(prev, snapshot, failed));
 
-      const succeeded = snapshot.length - failed.length - dropped.length;
+      const succeeded = snapshot.length - failed.length - dropped.length - conflicts;
       if (succeeded > 0) {
         showToast({
           message:
@@ -190,6 +219,12 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
             dropped.length === 1
               ? "1 pending change couldn't be saved and was dropped"
               : `${dropped.length} pending changes couldn't be saved and were dropped`,
+        });
+      }
+      if (notApplied > 0) {
+        showToast({
+          durationMs: 8000,
+          message: conflictNotice(notApplied, finished),
         });
       }
       // Last, so it is the toast left on screen.

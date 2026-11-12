@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
   exercises,
+  planRevisions,
   programExercises,
   programSets,
   programs,
@@ -777,6 +778,8 @@ async function wipeDemoUserData(demoUserId: string): Promise<void> {
   await db.delete(workoutSessions).where(eq(workoutSessions.userId, demoUserId));
   await db.delete(programs).where(eq(programs.userId, demoUserId));
   await db.delete(trainingCycles).where(eq(trainingCycles.userId, demoUserId));
+  // The history of the plans just wiped (docs/plans/revisions.md): no FK to them.
+  await db.delete(planRevisions).where(eq(planRevisions.userId, demoUserId));
 }
 
 export async function adminPrepareDemoUser(forceReseed = false): Promise<ActionResult<{ userId: string }>> {
@@ -814,6 +817,7 @@ export async function adminPrepareDemoUser(forceReseed = false): Promise<ActionR
     }
 
     // Seed data if empty or force-reseed requested
+    // plan-read: includes deleted (any demo row means the demo is seeded)
     const existingPrograms = await db
       .select({ id: programs.id })
       .from(programs)

@@ -9,6 +9,19 @@
 import { db } from "@/db";
 import { exercises, programExercises, programSets, programs, workoutSessions, workoutSets } from "@/db/schema";
 import { periodizationShare } from "@/lib/periodization-sync";
+import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import {
+  OpenWorkoutError,
+  PlanNotFoundError,
+  deletePrograms,
+  flushSetWrites,
+  planWrite,
+  setProgram,
+  slotProgram,
+  softDeleteSlot,
+  type Tx,
+} from "@/lib/plan-revisions";
+import type { PlanWriter } from "@/db/schema";
 import { exerciseTypeFromPattern, programOverrideForRole } from "@/lib/utils/exercise-type";
 import { reanchoredPeaks } from "@/lib/utils/periodization";
 import { warmupRamp } from "@/lib/utils/plates";
@@ -49,6 +62,47 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Writes through the revision layer (docs/plans/revisions.md, 2.2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Run a write to one exercise slot inside the revision layer, so it makes a
+ * revision of its program. Null when the slot is not the caller's live slot.
+ */
+async function writeSlot<T>(
+  userId: string,
+  programExerciseId: number,
+  fn: (tx: Tx, programId: number) => Promise<T>,
+  writer: PlanWriter = "user",
+): Promise<{ programId: number; result: T } | null> {
+  const programId = await slotProgram(db, programExerciseId, userId);
+  if (programId == null) return null;
+  const { result } = await planWrite({ userId, writer }, async (w) => {
+    await w.touch({ type: "program", id: programId });
+    return fn(w.tx, programId);
+  });
+  return { programId, result };
+}
+
+/** The same for a write to a whole program. Null when it is not the caller's live program. */
+async function writeProgram<T>(
+  userId: string,
+  programId: number,
+  fn: (tx: Tx) => Promise<T>,
+): Promise<{ result: T } | null> {
+  try {
+    const { result } = await planWrite({ userId, writer: "user" }, async (w) => {
+      await w.touch({ type: "program", id: programId });
+      return fn(w.tx);
+    });
+    return { result };
+  } catch (e) {
+    if (e instanceof PlanNotFoundError) return null;
+    throw e;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Programs
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -58,7 +112,7 @@ export async function getPrograms(): Promise<ActionResult<Program[]>> {
     const rows = await db
       .select()
       .from(programs)
-      .where(eq(programs.userId, auth.user.id))
+      .where(and(eq(programs.userId, auth.user.id), livePrograms))
       .orderBy(asc(programs.name));
     return { success: true, data: rows };
   } catch (err) {
@@ -75,13 +129,16 @@ export async function getProgramWithExercises(
       where: and(
         eq(programs.id, programId),
         eq(programs.userId, auth.user.id),
+        livePrograms,
       ),
       with: {
         programExercises: {
+          where: (pe, { isNull }) => isNull(pe.deletedAt),
           orderBy: (pe, { asc }) => [asc(pe.orderIndex)],
           with: {
             exercise: true,
             programSets: {
+              where: (ps, { isNull }) => isNull(ps.deletedAt),
               orderBy: (ps, { asc }) => [asc(ps.setNumber)],
             },
           },
@@ -109,13 +166,16 @@ export async function getProgramsWithExercises(
       where: and(
         inArray(programs.id, ids),
         eq(programs.userId, auth.user.id),
+        livePrograms,
       ),
       with: {
         programExercises: {
+          where: (pe, { isNull }) => isNull(pe.deletedAt),
           orderBy: (pe, { asc }) => [asc(pe.orderIndex)],
           with: {
             exercise: true,
             programSets: {
+              where: (ps, { isNull }) => isNull(ps.deletedAt),
               orderBy: (ps, { asc }) => [asc(ps.setNumber)],
             },
           },
@@ -139,10 +199,14 @@ export async function createProgram(
   }
 
   try {
-    const [program] = await db
-      .insert(programs)
-      .values({ ...validation.data, userId: auth.user.id })
-      .returning();
+    const { result: program } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+      const [row] = await w.tx
+        .insert(programs)
+        .values({ ...validation.data, userId: auth.user.id })
+        .returning();
+      w.create({ type: "program", id: row.id });
+      return row;
+    });
 
     revalidatePath("/programs");
     return { success: true, data: program };
@@ -162,15 +226,10 @@ export async function updateProgram(
   }
 
   try {
-    await db
-      .update(programs)
-      .set({ name: validation.data.name })
-      .where(
-        and(
-          eq(programs.id, validation.data.id),
-          eq(programs.userId, auth.user.id),
-        ),
-      );
+    const done = await writeProgram(auth.user.id, validation.data.id, (tx) =>
+      tx.update(programs).set({ name: validation.data.name }).where(eq(programs.id, validation.data.id)),
+    );
+    if (!done) return { success: false, error: "Program not found" };
 
     revalidatePath("/programs");
     return { success: true, data: undefined };
@@ -179,19 +238,30 @@ export async function updateProgram(
   }
 }
 
+/**
+ * Delete programs (softly: docs/plans/revisions.md, 2.3). They stay
+ * restorable from Recently deleted, and logged sessions keep their link.
+ * Refused while a workout in progress uses one of them.
+ */
 export async function deleteManyPrograms(
   programIds: number[],
 ): Promise<ActionResult<void>> {
   if (programIds.length === 0) return { success: true, data: undefined };
   const auth = await requireSession();
   try {
-    await db.delete(programs).where(
-      and(inArray(programs.id, programIds), eq(programs.userId, auth.user.id))
-    );
+    const owned = await db
+      .select({ id: programs.id })
+      .from(programs)
+      .where(and(inArray(programs.id, programIds), eq(programs.userId, auth.user.id), livePrograms));
+    if (owned.length > 0) {
+      await deletePrograms({ userId: auth.user.id, writer: "user" }, owned.map((p) => p.id));
+    }
     revalidatePath("/programs");
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    if (err instanceof OpenWorkoutError) return { success: false, error: err.message };
+    console.error("[deleteManyPrograms] failed", err);
+    return { success: false, error: "Failed to delete" };
   }
 }
 
@@ -208,34 +278,28 @@ export async function addExerciseToProgram(
     if (!validation.success) {
       return { success: false, error: "Invalid input" };
     }
+    const programId = validation.data.programId;
 
-    // Verify the program belongs to the authenticated user
-    const [prog] = await db
-      .select({ userId: programs.userId })
-      .from(programs)
-      .where(eq(programs.id, validation.data.programId))
-      .limit(1);
-    if (!prog || prog.userId !== auth.user.id) {
-      return { success: false, error: "Program not found" };
-    }
+    const done = await writeProgram(auth.user.id, programId, async (tx) => {
+      // Place at end if no orderIndex given
+      if (validation.data.orderIndex === undefined) {
+        const existing = await tx
+          .select({ id: programExercises.id })
+          .from(programExercises)
+          .where(and(eq(programExercises.programId, programId), liveProgramExercises));
+        validation.data.orderIndex = existing.length;
+      }
+      const [pe] = await tx
+        .insert(programExercises)
+        .values(validation.data as typeof programExercises.$inferInsert)
+        .returning();
+      return pe;
+    });
+    if (!done) return { success: false, error: "Program not found" };
 
-    // Place at end if no orderIndex given
-    if (validation.data.orderIndex === undefined) {
-      const existing = await db
-        .select()
-        .from(programExercises)
-        .where(eq(programExercises.programId, validation.data.programId));
-      validation.data.orderIndex = existing.length;
-    }
-
-    const [pe] = await db
-      .insert(programExercises)
-      .values(validation.data as typeof programExercises.$inferInsert)
-      .returning();
-
-    revalidatePath(`/programs/${validation.data.programId}`);
-    revalidatePath(`/programs/${validation.data.programId}/workout`);
-    return { success: true, data: pe };
+    revalidatePath(`/programs/${programId}`);
+    revalidatePath(`/programs/${programId}/workout`);
+    return { success: true, data: done.result };
   } catch (err) {
     return { success: false, error: String(err) };
   }
@@ -252,22 +316,22 @@ export async function removeExerciseFromProgram(
   });
   if (!validation.success) return { success: false, error: "Invalid input" };
   try {
-    const [prog] = await db
-      .select({ userId: programs.userId })
-      .from(programs)
-      .where(eq(programs.id, validation.data.programId))
-      .limit(1);
-    if (!prog || prog.userId !== auth.user.id) {
-      return { success: false, error: "Program not found" };
-    }
-    await db
-      .delete(programExercises)
-      .where(
-        and(
-          eq(programExercises.id, validation.data.programExerciseId),
-          eq(programExercises.programId, validation.data.programId),
-        ),
-      );
+    // Soft: logged sets keep their link, and the program's history can bring
+    // the slot back with the same ids (docs/plans/revisions.md, 2.3).
+    const done = await writeProgram(auth.user.id, validation.data.programId, async (tx) => {
+      const [slot] = await tx
+        .select({ id: programExercises.id })
+        .from(programExercises)
+        .where(
+          and(
+            eq(programExercises.id, validation.data.programExerciseId),
+            eq(programExercises.programId, validation.data.programId),
+            liveProgramExercises,
+          ),
+        );
+      if (slot) await softDeleteSlot(tx, slot.id);
+    });
+    if (!done) return { success: false, error: "Program not found" };
     revalidatePath(`/programs/${validation.data.programId}`);
     return { success: true, data: undefined };
   } catch (err) {
@@ -284,25 +348,16 @@ export async function updateProgramExerciseIncrement(
     return { success: false, error: "Increment must be between 0 and 100 kg" };
   }
   try {
-    const [check] = await db
-      .select({ userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
-      return { success: false, error: "Not found" };
-    }
-    const [pe] = await db
-      .update(programExercises)
-      // Null hands the step back to the automatic ladder.
-      .set({ overloadIncrementKg: incrementKg == null ? null : incrementKg.toString() })
-      .where(eq(programExercises.id, programExerciseId))
-      .returning({ programId: programExercises.programId });
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
-    }
+    const done = await writeSlot(auth.user.id, programExerciseId, (tx) =>
+      tx
+        .update(programExercises)
+        // Null hands the step back to the automatic ladder.
+        .set({ overloadIncrementKg: incrementKg == null ? null : incrementKg.toString() })
+        .where(eq(programExercises.id, programExerciseId)),
+    );
+    if (!done) return { success: false, error: "Not found" };
+    revalidatePath(`/programs/${done.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
     return { success: true, data: undefined };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -324,19 +379,15 @@ export async function clearWeightStack(data: unknown): Promise<ActionResult<void
   }
   const { programExerciseId } = parsed.data;
   try {
-    const [existing] = await db
-      .select({ userId: programs.userId, programId: programs.id })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId));
-    assertOwner(existing, auth.user.id);
-
-    await db
-      .update(programExercises)
-      .set({ weightStack: FORGOTTEN_STACK })
-      .where(eq(programExercises.id, programExerciseId));
-    revalidatePath(`/programs/${existing.programId}/workout/exercises/${programExerciseId}`);
-    revalidatePath(`/programs/${existing.programId}/exercises/${programExerciseId}`);
+    const done = await writeSlot(auth.user.id, programExerciseId, (tx) =>
+      tx
+        .update(programExercises)
+        .set({ weightStack: FORGOTTEN_STACK })
+        .where(eq(programExercises.id, programExerciseId)),
+    );
+    assertOwner(done ? { userId: auth.user.id } : undefined, auth.user.id);
+    revalidatePath(`/programs/${done!.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done!.programId}/exercises/${programExerciseId}`);
     return { success: true, data: undefined };
   } catch (e) {
     if (e instanceof ForbiddenError) return { success: false, error: e.message };
@@ -363,25 +414,18 @@ export async function setProgramExerciseType(
   }
   const { programExerciseId, exerciseType } = validation.data;
   try {
-    const [check] = await db
-      .select({ userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
+    const done = await writeSlot(auth.user.id, programExerciseId, (tx) =>
+      tx
+        .update(programExercises)
+        .set({ exerciseType })
+        .where(eq(programExercises.id, programExerciseId)),
+    );
+    if (!done) {
       return { success: false, error: "Not found" };
     }
-    const [pe] = await db
-      .update(programExercises)
-      .set({ exerciseType })
-      .where(eq(programExercises.id, programExerciseId))
-      .returning({ programId: programExercises.programId });
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}`);
-    }
+    revalidatePath(`/programs/${done.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}`);
     return { success: true, data: undefined };
   } catch (err) {
     console.error("[setProgramExerciseType] failed", err);
@@ -406,25 +450,18 @@ export async function updateProgramExerciseNotes(
   }
   const { programExerciseId, notes } = validation.data;
   try {
-    const [check] = await db
-      .select({ userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
+    const done = await writeSlot(auth.user.id, programExerciseId, (tx) =>
+      tx
+        .update(programExercises)
+        .set({ notes: notes === "" ? null : notes })
+        .where(eq(programExercises.id, programExerciseId)),
+    );
+    if (!done) {
       return { success: false, error: "Not found" };
     }
-    const [pe] = await db
-      .update(programExercises)
-      .set({ notes: notes === "" ? null : notes })
-      .where(eq(programExercises.id, programExerciseId))
-      .returning({ programId: programExercises.programId });
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}`);
-    }
+    revalidatePath(`/programs/${done.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}`);
     return { success: true, data: undefined };
   } catch (err) {
     console.error("[updateProgramExerciseNotes] failed", err);
@@ -449,24 +486,17 @@ export async function setProgramExerciseApplyToPlan(
   }
   const { programExerciseId, applyToPlan } = validation.data;
   try {
-    const [check] = await db
-      .select({ userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
+    const done = await writeSlot(auth.user.id, programExerciseId, (tx) =>
+      tx
+        .update(programExercises)
+        .set({ progressionApplyToPlan: applyToPlan })
+        .where(eq(programExercises.id, programExerciseId)),
+    );
+    if (!done) {
       return { success: false, error: "Not found" };
     }
-    const [pe] = await db
-      .update(programExercises)
-      .set({ progressionApplyToPlan: applyToPlan })
-      .where(eq(programExercises.id, programExerciseId))
-      .returning({ programId: programExercises.programId });
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
-    }
+    revalidatePath(`/programs/${done.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
     return { success: true, data: undefined };
   } catch (err) {
     console.error("[setProgramExerciseApplyToPlan] failed", err);
@@ -491,24 +521,17 @@ export async function setProgramExerciseSuppressEffortPrompt(
   }
   const { programExerciseId, suppressEffortPrompt } = validation.data;
   try {
-    const [check] = await db
-      .select({ userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
+    const done = await writeSlot(auth.user.id, programExerciseId, (tx) =>
+      tx
+        .update(programExercises)
+        .set({ progressionSuppressEffortPrompt: suppressEffortPrompt })
+        .where(eq(programExercises.id, programExerciseId)),
+    );
+    if (!done) {
       return { success: false, error: "Not found" };
     }
-    const [pe] = await db
-      .update(programExercises)
-      .set({ progressionSuppressEffortPrompt: suppressEffortPrompt })
-      .where(eq(programExercises.id, programExerciseId))
-      .returning({ programId: programExercises.programId });
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
-    }
+    revalidatePath(`/programs/${done.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
     return { success: true, data: undefined };
   } catch (err) {
     console.error("[setProgramExerciseSuppressEffortPrompt] failed", err);
@@ -549,7 +572,7 @@ export async function applyProgressionToPlan(
       })
       .from(programExercises)
       .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
+      .where(and(eq(programExercises.id, programExerciseId), liveProgramExercises, livePrograms))
       .limit(1);
     if (!slot || slot.userId !== auth.user.id) {
       return { success: false, error: "Not found" };
@@ -571,6 +594,7 @@ export async function applyProgressionToPlan(
             updates.map((u) => u.programSetId),
           ),
           eq(programSets.setType, "working"),
+          liveProgramSets,
         ),
       );
     const ownedIds = new Set(owned.map((r) => r.id));
@@ -582,27 +606,34 @@ export async function applyProgressionToPlan(
       return { success: false, error: "Nothing to apply" };
     }
 
-    await db.transaction(async (tx) => {
-      for (const u of applicable) {
-        await tx
-          .update(programSets)
-          .set({
-            // decimal(6,2): fix the scale here so float noise from the
-            // increment rounding (32.500000000000004) never reaches the column.
-            ...(u.weightKg !== undefined
-              ? { weightKg: u.weightKg.toFixed(2) }
-              : {}),
-            ...(u.targetReps !== undefined ? { targetReps: u.targetReps } : {}),
-            ...(u.durationSeconds !== undefined
-              ? { durationSeconds: u.durationSeconds }
-              : {}),
-            ...(u.distanceMeters !== undefined
-              ? { distanceMeters: u.distanceMeters }
-              : {}),
-          })
-          .where(eq(programSets.id, u.programSetId));
-      }
-    });
+    // Writer "progression": the engine owns these numbers (audit section 8),
+    // so a restore keeps them unless the user or an assistant moved them later.
+    await writeSlot(
+      auth.user.id,
+      programExerciseId,
+      async (tx) => {
+        for (const u of applicable) {
+          await tx
+            .update(programSets)
+            .set({
+              // decimal(6,2): fix the scale here so float noise from the
+              // increment rounding (32.500000000000004) never reaches the column.
+              ...(u.weightKg !== undefined
+                ? { weightKg: u.weightKg.toFixed(2) }
+                : {}),
+              ...(u.targetReps !== undefined ? { targetReps: u.targetReps } : {}),
+              ...(u.durationSeconds !== undefined
+                ? { durationSeconds: u.durationSeconds }
+                : {}),
+              ...(u.distanceMeters !== undefined
+                ? { distanceMeters: u.distanceMeters }
+                : {}),
+            })
+            .where(eq(programSets.id, u.programSetId));
+        }
+      },
+      "progression",
+    );
 
     // Deliberately not revalidating the live workout route: the caller already
     // holds the same values as a session override, so refreshing it mid-set
@@ -626,24 +657,15 @@ export async function updateProgramExerciseIncrementReps(
     return { success: false, error: "Increment must be a whole number between 0 and 100" };
   }
   try {
-    const [check] = await db
-      .select({ userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
-      return { success: false, error: "Not found" };
-    }
-    const [pe] = await db
-      .update(programExercises)
-      .set({ overloadIncrementReps: incrementReps })
-      .where(eq(programExercises.id, programExerciseId))
-      .returning({ programId: programExercises.programId });
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
-    }
+    const done = await writeSlot(auth.user.id, programExerciseId, (tx) =>
+      tx
+        .update(programExercises)
+        .set({ overloadIncrementReps: incrementReps })
+        .where(eq(programExercises.id, programExerciseId)),
+    );
+    if (!done) return { success: false, error: "Not found" };
+    revalidatePath(`/programs/${done.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
     return { success: true, data: undefined };
   } catch (err) {
     return { success: false, error: String(err) };
@@ -721,7 +743,7 @@ export async function setProgramExerciseProgression(
       })
       .from(programExercises)
       .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
+      .where(and(eq(programExercises.id, programExerciseId), liveProgramExercises, livePrograms))
       .limit(1);
     if (!check || check.userId !== auth.user.id) {
       return { success: false, error: "Not found" };
@@ -749,14 +771,12 @@ export async function setProgramExerciseProgression(
       updates.progressionConfigAt = new Date();
     }
 
-    const [pe] = await db
-      .update(programExercises)
-      .set(updates)
-      .where(eq(programExercises.id, programExerciseId))
-      .returning({ programId: programExercises.programId });
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${programExerciseId}`);
+    const done = await writeSlot(auth.user.id, programExerciseId, (tx) =>
+      tx.update(programExercises).set(updates).where(eq(programExercises.id, programExerciseId)),
+    );
+    if (done) {
+      revalidatePath(`/programs/${done.programId}/workout/exercises/${programExerciseId}`);
+      revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
     }
     return { success: true, data: undefined };
   } catch (err) {
@@ -798,17 +818,8 @@ export async function setProgramExerciseSetDefaults(
   const { programExerciseId, repRangeMin, repRangeMax, targetRir, targetReps } =
     validation.data;
   try {
-    const [check] = await db
-      .select({ userId: programs.userId, programId: programExercises.programId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, programExerciseId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
-      return { success: false, error: "Not found" };
-    }
-
-    const working = await db
+    const done = await writeSlot(auth.user.id, programExerciseId, async (tx) => {
+    const working = await tx
       .select({
         id: programSets.id,
         targetReps: programSets.targetReps,
@@ -821,6 +832,7 @@ export async function setProgramExerciseSetDefaults(
         and(
           eq(programSets.programExerciseId, programExerciseId),
           eq(programSets.setType, "working"),
+          liveProgramSets,
         ),
       );
 
@@ -861,20 +873,24 @@ export async function setProgramExerciseSetDefaults(
         judgingRuleChanged = true;
       }
 
-      await db.update(programSets).set(updates).where(eq(programSets.id, set.id));
+      await tx.update(programSets).set(updates).where(eq(programSets.id, set.id));
     }
 
     // E-13: a session logged under a rule that has since changed cannot answer
     // today's question. Stamped only when a rule actually moved.
     if (judgingRuleChanged) {
-      await db
+      await tx
         .update(programExercises)
         .set({ progressionConfigAt: new Date() })
         .where(eq(programExercises.id, programExerciseId));
     }
+    });
+    if (!done) {
+      return { success: false, error: "Not found" };
+    }
 
-    revalidatePath(`/programs/${check.programId}/workout/exercises/${programExerciseId}`);
-    revalidatePath(`/programs/${check.programId}/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/workout/exercises/${programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/exercises/${programExerciseId}`);
     return { success: true, data: undefined };
   } catch (err) {
     console.error("[setProgramExerciseSetDefaults] failed", err);
@@ -893,18 +909,10 @@ export async function reorderProgramExercises(
   });
   if (!validation.success) return { success: false, error: "Invalid input" };
   try {
-    const [prog] = await db
-      .select({ userId: programs.userId })
-      .from(programs)
-      .where(eq(programs.id, validation.data.programId))
-      .limit(1);
-    if (!prog || prog.userId !== auth.user.id) {
-      return { success: false, error: "Program not found" };
-    }
     // One transaction: a failure part-way through would otherwise leave two
     // exercises sharing an index, and the order the user sees after a reload
     // would be neither the old one nor the new one.
-    await db.transaction(async (tx) => {
+    const done = await writeProgram(auth.user.id, validation.data.programId, async (tx) => {
       for (const [index, id] of validation.data.orderedIds.entries()) {
         await tx
           .update(programExercises)
@@ -917,6 +925,7 @@ export async function reorderProgramExercises(
           );
       }
     });
+    if (!done) return { success: false, error: "Program not found" };
     revalidatePath(`/programs/${validation.data.programId}`);
     return { success: true, data: undefined };
   } catch (err) {
@@ -939,24 +948,14 @@ export async function addProgramSet(
       return { success: false, error: "Invalid input" };
     }
 
-    // Verify ownership via programExercise → program
-    const [peCheck] = await db
-      .select({ programId: programExercises.programId, userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, validation.data.programExerciseId))
-      .limit(1);
-    if (!peCheck || peCheck.userId !== auth.user.id) {
-      return { success: false, error: "Not found" };
-    }
-
+    const done = await writeSlot(auth.user.id, validation.data.programExerciseId, async (tx) => {
     // A new working set joins the exercise's scheme: it takes the effort cap
     // and rep range the slot's last working set carries. Under scope "all" the
     // cap is read from the last working set, so a set added without one would
     // switch the cap off and turn the preset into Custom.
     const values = { ...validation.data };
     if (values.setType === "working") {
-      const [last] = await db
+      const [last] = await tx
         .select({
           targetRir: programSets.targetRir,
           repRangeMin: programSets.repRangeMin,
@@ -967,6 +966,7 @@ export async function addProgramSet(
           and(
             eq(programSets.programExerciseId, values.programExerciseId),
             eq(programSets.setType, "working"),
+            liveProgramSets,
           ),
         )
         .orderBy(desc(programSets.setNumber))
@@ -988,25 +988,19 @@ export async function addProgramSet(
       }
     }
 
-    const [ps] = await db
+    const [ps] = await tx
       .insert(programSets)
       .values(values as typeof programSets.$inferInsert)
       .returning();
+    return ps;
+    });
+    if (!done) return { success: false, error: "Not found" };
 
-    // Look up programId to revalidate the correct paths
-    const [pe] = await db
-      .select({ programId: programExercises.programId })
-      .from(programExercises)
-      .where(eq(programExercises.id, validation.data.programExerciseId))
-      .limit(1);
+    revalidatePath(`/programs/${done.programId}/workout/exercises/${validation.data.programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/exercises/${validation.data.programExerciseId}`);
+    revalidatePath(`/programs/${done.programId}/workout`);
 
-    if (pe) {
-      revalidatePath(`/programs/${pe.programId}/workout/exercises/${validation.data.programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/exercises/${validation.data.programExerciseId}`);
-      revalidatePath(`/programs/${pe.programId}/workout`);
-    }
-
-    return { success: true, data: ps };
+    return { success: true, data: done.result };
   } catch (err) {
     return { success: false, error: String(err) };
   }
@@ -1022,9 +1016,11 @@ export async function updateProgramSet(
       return { success: false, error: "Invalid input" };
     }
 
-    const { id, anchor, ...rest } = validation.data;
+    const { id, anchor, baseVersion, ...rest } = validation.data;
 
-    // Verify ownership via programSet → programExercise → program
+    // Ownership via programSet → programExercise → program. A set deleted from
+    // the plan since the write was made is found here too when the write comes
+    // from the finish flush, so the flush can report it as a conflict.
     const [check] = await db
       .select({
         userId: programs.userId,
@@ -1032,15 +1028,20 @@ export async function updateProgramSet(
         programExerciseId: programExercises.id,
         peakDistanceMeters: programSets.peakDistanceMeters,
         peakDurationSeconds: programSets.peakDurationSeconds,
+        setDeleted: programSets.deletedAt,
+        slotDeleted: programExercises.deletedAt,
       })
+      // plan-read: includes deleted (a flushed write to a removed set is a conflict, not "not found")
       .from(programSets)
       .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
       .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programSets.id, id))
+      .where(and(eq(programSets.id, id), livePrograms))
       .limit(1);
     if (!check || check.userId !== auth.user.id) {
       return { success: false, error: "Not found" };
     }
+    const removed = check.setDeleted != null || check.slotDeleted != null;
+    if (removed && baseVersion === undefined) return { success: false, error: "Not found" };
     // Strip undefined values so partial updates don't overwrite existing fields
     const updates = Object.fromEntries(
       Object.entries(rest).filter(([, v]) => v !== undefined),
@@ -1048,7 +1049,7 @@ export async function updateProgramSet(
     // PZ-36: a number typed on a periodized set is this week's, so its peak is
     // re-derived from it rather than left for the next sync to overwrite it
     // with. Only a set that is already periodized can be re-anchored.
-    if (anchor && (check.peakDistanceMeters != null || check.peakDurationSeconds != null)) {
+    if (!removed && anchor && (check.peakDistanceMeters != null || check.peakDurationSeconds != null)) {
       // The share runs a due weekly sync, which may rewrite this row, so the
       // stored values are read again after it: compared with the pre-sync
       // ones, an untouched value would be written back over the new week's.
@@ -1061,7 +1062,7 @@ export async function updateProgramSet(
           peakDurationSeconds: programSets.peakDurationSeconds,
         })
         .from(programSets)
-        .where(eq(programSets.id, id));
+        .where(and(eq(programSets.id, id), liveProgramSets));
       const peaks = reanchoredPeaks(
         stored,
         {
@@ -1075,18 +1076,94 @@ export async function updateProgramSet(
       );
       if (peaks) Object.assign(updates, peaks);
     }
-    const [ps] = await db
-      .update(programSets)
-      .set(updates)
-      .where(eq(programSets.id, id))
-      .returning();
+    const { result } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+      await w.touch({ type: "program", id: check.programId });
+      if (baseVersion !== undefined) {
+        // A flush queued by a bundle from before flushWorkoutPlan: the same
+        // rules, one set at a time.
+        const flushed = await flushSetWrites(w, check.programId, baseVersion, [{ programSetId: id, fields: rest }]);
+        if (flushed.revisionId != null) return { kind: "conflict", revisionId: flushed.revisionId } as const;
+        // plan-read: includes deleted (returns the row as it stands, removed or not)
+        const [ps] = await w.tx.select().from(programSets).where(eq(programSets.id, id));
+        return { kind: "applied", ps } as const;
+      }
+      const [ps] = await w.tx.update(programSets).set(updates).where(eq(programSets.id, id)).returning();
+      return { kind: "applied", ps } as const;
+    });
+    if (result.kind === "conflict") {
+      return {
+        success: false,
+        error: "The plan changed since this workout started, so this change was not applied",
+        conflict: { programId: check.programId, revisionId: result.revisionId },
+      };
+    }
 
     revalidatePath(`/programs/${check.programId}/exercises/${check.programExerciseId}`);
     revalidatePath(`/programs/${check.programId}/workout/exercises/${check.programExerciseId}`);
 
-    return { success: true, data: ps };
+    return { success: true, data: result.ps };
   } catch (err) {
     return { success: false, error: String(err) };
+  }
+}
+
+const flushWorkoutPlanSchema = z.object({
+  programId: z.number().int().positive(),
+  // The program version the workout started on. Absent for a workout started
+  // by an older bundle: the overrides then apply as plain edits.
+  baseVersion: z.number().int().positive().optional(),
+  sets: z
+    .array(
+      z.object({
+        id: z.number().int().positive(),
+        targetReps: z.number().int().min(0).max(1000),
+        weightKg: z.number().min(0).max(9999),
+        durationSeconds: z.number().int().min(0).optional(),
+      }),
+    )
+    .max(200),
+});
+
+/**
+ * The finish flush: every set override of a finished workout back to the
+ * plan, in one transaction and one revision (docs/plans/revisions.md, 2.7).
+ * A set an assistant changed since the workout started keeps the newer value;
+ * those come back as `conflicts` and are stored as one "Not applied" entry in
+ * the program's history. The lifter's own edits during the workout never
+ * count against them.
+ */
+export async function flushWorkoutPlan(
+  data: unknown,
+): Promise<ActionResult<{ applied: number; conflicts: number }>> {
+  const auth = await requireSession();
+  const parsed = flushWorkoutPlanSchema.safeParse(data);
+  if (!parsed.success) {
+    return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
+  }
+  const { programId, baseVersion, sets } = parsed.data;
+  try {
+    const { result } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+      const version = await w.touch({ type: "program", id: programId });
+      return flushSetWrites(
+        w,
+        programId,
+        baseVersion ?? version,
+        sets.map((s) => ({
+          programSetId: s.id,
+          fields: {
+            targetReps: s.targetReps,
+            weightKg: s.weightKg,
+            ...(s.durationSeconds != null ? { durationSeconds: s.durationSeconds } : {}),
+          },
+        })),
+      );
+    });
+    revalidatePath(`/programs/${programId}`);
+    return { success: true, data: { applied: result.applied.length, conflicts: result.conflicts } };
+  } catch (e) {
+    if (e instanceof PlanNotFoundError) return { success: false, error: e.message };
+    console.error("[flushWorkoutPlan] failed", { programId }, e);
+    return { success: false, error: "Failed to save the plan changes" };
   }
 }
 
@@ -1099,22 +1176,16 @@ export async function deleteProgramSet(
   const validation = deleteProgramSetSchema.safeParse({ programSetId });
   if (!validation.success) return { success: false, error: "Invalid input" };
   try {
-    // Verify ownership of the set itself via programSet → programExercise →
-    // program. Checking only the caller-supplied programId would let a caller
-    // name their own program and delete any other user's set.
-    const [check] = await db
-      .select({ userId: programs.userId })
-      .from(programSets)
-      .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programSets.id, validation.data.programSetId))
-      .limit(1);
-    if (!check || check.userId !== auth.user.id) {
-      return { success: false, error: "Program not found" };
-    }
-    await db
-      .delete(programSets)
-      .where(eq(programSets.id, validation.data.programSetId));
+    // Ownership of the set itself via programSet → programExercise → program.
+    // Checking only the caller-supplied programId would let a caller name
+    // their own program and delete any other user's set.
+    const owner = await setProgram(db, validation.data.programSetId, auth.user.id);
+    if (!owner) return { success: false, error: "Program not found" };
+    // Soft: a set deleted mid-workout keeps the rows logged against it linked,
+    // and the program's history can bring it back (docs/plans/revisions.md, 2.3).
+    await writeProgram(auth.user.id, owner.programId, (tx) =>
+      tx.update(programSets).set({ deletedAt: new Date() }).where(eq(programSets.id, validation.data.programSetId)),
+    );
     revalidatePath(`/programs/${programId}/workout/exercises/${programExerciseId}`);
     revalidatePath(`/programs/${programId}/workout`);
     return { success: true, data: undefined };
@@ -1134,17 +1205,7 @@ export async function reorderProgramSets(
   });
   if (!validation.success) return { success: false, error: "Invalid input" };
   try {
-    // Verify ownership via programExercise → program
-    const [peCheck] = await db
-      .select({ programId: programExercises.programId, userId: programs.userId })
-      .from(programExercises)
-      .innerJoin(programs, eq(programs.id, programExercises.programId))
-      .where(eq(programExercises.id, validation.data.programExerciseId))
-      .limit(1);
-    if (!peCheck || peCheck.userId !== auth.user.id) {
-      return { success: false, error: "Not found" };
-    }
-    await db.transaction(async (tx) => {
+    const done = await writeSlot(auth.user.id, validation.data.programExerciseId, async (tx) => {
       // Workouts still in progress for this user. Their logged rows record the
       // position each set was logged at, and the set list sends positions in
       // the new order from here on, so the rows move with their sets. Finished
@@ -1169,19 +1230,13 @@ export async function reorderProgramSets(
           .where(and(eq(workoutSets.programSetId, id), inArray(workoutSets.sessionId, openSessions)));
       }
     });
-    const [pe] = await db
-      .select({ programId: programExercises.programId })
-      .from(programExercises)
-      .where(eq(programExercises.id, validation.data.programExerciseId))
-      .limit(1);
-    if (pe) {
-      revalidatePath(
-        `/programs/${pe.programId}/workout/exercises/${validation.data.programExerciseId}`,
-      );
-      revalidatePath(
-        `/programs/${pe.programId}/exercises/${validation.data.programExerciseId}`,
-      );
-    }
+    if (!done) return { success: false, error: "Not found" };
+    revalidatePath(
+      `/programs/${done.programId}/workout/exercises/${validation.data.programExerciseId}`,
+    );
+    revalidatePath(
+      `/programs/${done.programId}/exercises/${validation.data.programExerciseId}`,
+    );
     return { success: true, data: undefined };
   } catch (err) {
     console.error("[reorderProgramSets] failed", err);
@@ -1208,11 +1263,15 @@ export async function addWarmupSets(
   if (!validation.success) return { success: false, error: "Invalid input" };
   const { programExerciseId, workingKg } = validation.data;
   try {
-    const result = await db.transaction(async (tx): Promise<
+    const programId = await slotProgram(db, programExerciseId, auth.user.id);
+    if (programId == null) return { success: false, error: "Not found" };
+    const { result } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w): Promise<
       { error: string } | { programId: number; inserted: ProgramSet[] }
     > => {
-      // Locks the slot so a double tap can't add the ramp twice: the second
-      // call waits here, then sees the first one's warm-ups.
+      const tx = w.tx;
+      // Locks the program, so a double tap can't add the ramp twice: the
+      // second call waits here, then sees the first one's warm-ups.
+      await w.touch({ type: "program", id: programId });
       const [pe] = await tx
         .select({
           programId: programExercises.programId,
@@ -1220,17 +1279,16 @@ export async function addWarmupSets(
           equipment: exercises.equipment,
         })
         .from(programExercises)
-        .innerJoin(programs, eq(programs.id, programExercises.programId))
+        .innerJoin(programs, and(eq(programs.id, programExercises.programId), livePrograms))
         .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
-        .where(eq(programExercises.id, programExerciseId))
-        .for("update", { of: programExercises });
+        .where(and(eq(programExercises.id, programExerciseId), liveProgramExercises));
       if (!pe || pe.userId !== auth.user.id) return { error: "Not found" };
       if (pe.equipment !== "barbell") return { error: "Warm-ups are for barbell exercises" };
 
       const existing = await tx
         .select()
         .from(programSets)
-        .where(eq(programSets.programExerciseId, programExerciseId))
+        .where(and(eq(programSets.programExerciseId, programExerciseId), liveProgramSets))
         .orderBy(asc(programSets.setNumber), asc(programSets.id));
       if (existing.some((s) => s.setType === "warmup")) {
         return { error: "This exercise already has warm-up sets" };
@@ -1354,13 +1412,14 @@ export async function exportAllPrograms(): Promise<ActionResult<ExportedPrograms
 
   try {
     const userPrograms = await db.query.programs.findMany({
-      where: eq(programs.userId, userId),
+      where: and(eq(programs.userId, userId), livePrograms),
       with: {
         programExercises: {
+          where: liveProgramExercises,
           orderBy: [asc(programExercises.orderIndex)],
           with: {
             exercise: true,
-            programSets: { orderBy: [asc(programSets.setNumber)] },
+            programSets: { where: liveProgramSets, orderBy: [asc(programSets.setNumber)] },
           },
         },
       },
@@ -1510,11 +1569,13 @@ export async function importProgram(
   const skippedExercises: string[] = [];
   try {
     for (const programData of programList) {
-      await db.transaction(async (tx) => {
+      await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+        const tx = w.tx;
         const [program] = await tx
           .insert(programs)
           .values({ name: programData.name, userId: auth.user.id })
           .returning({ id: programs.id });
+        w.create({ type: "program", id: program.id });
 
         for (const slot of programData.exercises) {
           const entry = exerciseMap.get(slot.exercise.name);

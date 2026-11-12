@@ -32,7 +32,8 @@ export default function PrivacyPage() {
         <li>
           <strong>Training:</strong> workouts, sets, reps, weights, durations, distances, heart rate zones, effort
           ratings (RIR/RPE), missed sets, how you felt and your readiness score, personal records, programs, training
-          cycles and any notes you write.
+          cycles and any notes you write. Each change to a program or cycle is kept as a version you can restore,
+          with who made it (you, an assistant you connected, or the app) and the reason given.
         </li>
         <li>
           <strong>Settings:</strong> your time zone (taken from your browser the first time you open the app, so
@@ -166,7 +167,7 @@ export default function PrivacyPage() {
         read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
         on, programs, cycles and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the notes you write on
         workouts and sets. If Garmin is on for your account, they can also read data from it. With read and change
-        access they can also change your profile, body weight, time zone, display units, programs and cycles. That provider&apos;s own privacy
+        access they can also change your profile, body weight, time zone, display units, programs and cycles, and see and restore earlier versions of your programs and cycles. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More →
         Connected assistants, and it loses access at once.
       </p>
@@ -178,6 +179,10 @@ export default function PrivacyPage() {
         <li>
           Deleting your account removes it from the live database at once. Encrypted backups are rotated out within
           90 days.
+        </li>
+        <li>
+          Earlier versions of your programs and cycles: one year, but the newest version of each is always kept.
+          Programs and cycles you delete can be restored for 90 days, then they are deleted for good.
         </li>
         <li>Login sessions, with IP address and user agent: 30 days after last use.</li>
         <li>Server logs: 7 days.</li>

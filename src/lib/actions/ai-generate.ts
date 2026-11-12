@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/db";
+import { livePrograms } from "@/lib/plan-live";
 import { aiGenerations } from "@/db/schema/ai-generations";
 import { aiModelConfigs } from "@/db/schema/ai-model-configs";
 import { aiPlanCache } from "@/db/schema/ai-plan-cache";
@@ -153,7 +154,7 @@ export async function editPlanWithAi(data: unknown): Promise<ActionResult<AiEdit
         .from(exercisePrs)
         .innerJoin(exercises, eq(exercisePrs.exerciseId, exercises.id))
         .where(and(eq(exercisePrs.userId, userId), isNull(exercisePrs.supersededAt))),
-      db.select({ name: programs.name }).from(programs).where(eq(programs.userId, userId)),
+      db.select({ name: programs.name }).from(programs).where(and(eq(programs.userId, userId), livePrograms)),
       getAllExercises(),
       generationsToday(userId),
     ]);

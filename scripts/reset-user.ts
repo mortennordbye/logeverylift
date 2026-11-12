@@ -12,6 +12,7 @@
 import { eq } from "drizzle-orm";
 import { db } from "../src/db";
 import {
+  planRevisions,
   programs,
   trainingCycles,
   users,
@@ -55,6 +56,8 @@ async function resetUser() {
     .delete(trainingCycles)
     .where(eq(trainingCycles.userId, userId))
     .returning({ id: trainingCycles.id });
+  // Plan revisions have no FK to the plans, so they go by user.
+  await db.delete(planRevisions).where(eq(planRevisions.userId, userId));
 
   console.log(`✅ Deleted ${deletedSessions.length} workout session(s) (+ sets)`);
   console.log(`✅ Deleted ${deletedPrograms.length} program(s) (+ exercises + sets)`);

@@ -441,6 +441,7 @@ export async function getFriendsActivityFeed(): Promise<ActionResult<FriendActiv
           gt(workoutSessions.startTime, since),
         ),
       )
+      // plan-read: includes deleted (history keeps the name of a deleted program)
       .leftJoin(programs, eq(programs.id, workoutSessions.programId))
       .leftJoin(
         workoutSets,
@@ -673,7 +674,8 @@ export async function getFriendProfile(
         totalVolumeKg: sql<number>`coalesce(sum(${workoutSets.weightKg}::numeric * ${workoutSets.actualReps}), 0)`,
       })
         .from(workoutSessions)
-        .leftJoin(programs, eq(programs.id, workoutSessions.programId))
+        // plan-read: includes deleted (history keeps the name of a deleted program)
+      .leftJoin(programs, eq(programs.id, workoutSessions.programId))
         .leftJoin(workoutSets, and(eq(workoutSets.sessionId, workoutSessions.id), eq(workoutSets.isCompleted, true)))
         .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, true)))
         .groupBy(workoutSessions.id, programs.name)
@@ -1006,6 +1008,7 @@ export async function getReactionsToMyWorkouts(): Promise<ActionResult<ReceivedR
       .from(workoutReactions)
       .innerJoin(workoutSessions, eq(workoutSessions.id, workoutReactions.sessionId))
       .innerJoin(users, eq(users.id, workoutReactions.userId))
+      // plan-read: includes deleted (history keeps the name of a deleted program)
       .leftJoin(programs, eq(programs.id, workoutSessions.programId))
       .where(and(eq(workoutSessions.userId, me), gt(workoutReactions.createdAt, cutoff)))
       .orderBy(sql`${workoutReactions.createdAt} desc`)
@@ -1123,6 +1126,7 @@ export async function getFriendSessionDetail(data: unknown): Promise<ActionResul
           ),
         ),
       )
+      // plan-read: includes deleted (history keeps the name of a deleted program)
       .leftJoin(programs, eq(programs.id, workoutSessions.programId))
       .where(
         and(

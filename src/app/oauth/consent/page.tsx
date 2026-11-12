@@ -46,14 +46,15 @@ export default async function OAuthConsentPage({
             <div>
               <h1 className="text-3xl font-bold tracking-tight">Connect {client.name ?? "an AI assistant"}?</h1>
               <p className="mt-2 text-sm text-muted-foreground">
-                It will be able to read your profile and body weight, your programs and training cycles, and
-                your workout history: sets, weights, heart rate zones, effort, how you felt, your readiness, and
-                the notes you write on workouts and sets.
+                It will be able to read your profile and body weight, your programs and training cycles with
+                their change history, and your workout history: sets, weights, heart rate zones, effort, how you
+                felt, your readiness, and the notes you write on workouts and sets.
                 {garmin && " It can also read data from your Garmin account: readiness, sleep, heart rate, training load and activities."}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
-                With read and change access it can also change your profile, body weight, programs and cycles.
-                Changes apply at once. You can disconnect it at any time in More → Connected assistants.
+                With read and change access it can also change your profile, body weight, programs and cycles,
+                and restore earlier versions of them. Changes apply at once, and each one is kept in the plan&apos;s
+                history, where you can undo it. You can disconnect it at any time in More → Connected assistants.
               </p>
             </div>
             <OAuthConsentForm

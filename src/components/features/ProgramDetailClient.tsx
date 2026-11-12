@@ -303,6 +303,14 @@ export function ProgramDetailClient({
         <div className="flex-1" />
         <div className="shrink-0 flex items-center gap-3">
           {!isEditing && (
+            <Link
+              href={`/programs/${programId}/history`}
+              className="text-primary text-sm font-medium min-h-[44px] flex items-center active:opacity-70"
+            >
+              History
+            </Link>
+          )}
+          {!isEditing && (
             <ProgramShareButton
               programId={programId}
               friends={friends}

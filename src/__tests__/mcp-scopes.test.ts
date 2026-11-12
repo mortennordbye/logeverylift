@@ -32,6 +32,7 @@ const READ_TOOLS = [
   "get_training_cycle",
   "list_garmin_activities",
   "list_programs",
+  "list_revisions",
   "list_training_cycles",
   "personal_records",
   "recent_workouts",
@@ -45,6 +46,7 @@ const WRITE_TOOLS = [
   "edit_program_exercise",
   "manage_training_cycle",
   "manage_weight",
+  "restore_revision",
   "update_profile",
   "update_program",
 ];

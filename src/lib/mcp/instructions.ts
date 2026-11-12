@@ -4,7 +4,7 @@
  *
  * They describe the app as it is today, never features that are planned: a
  * model told about a feature looks for its tools. When a package adds a
- * feature (revisions, coach memory, seasons, dated
+ * feature (coach memory, seasons, dated
  * sessions, training limits), it adds or changes its section here and in
  * docs/mcp/app-rules.md in the same PR, and removes the matching line from
  * "Not in the app yet".
@@ -25,8 +25,9 @@ const SECTIONS = {
 
   owners: `Who owns which field. The progression engine owns target reps and weight on strength sets: an edit is a one-off until the next session. The weekly sync owns distance and duration on sets with a peak anchor (an edit becomes the new peak) and heart rate zone and rest on "work" sets (overwritten next week). Details: ${RULES.uri}.`,
 
+  revisions: `Revisions. Every change to a program or cycle, by you, the user or the app, is a revision the user can see and restore in the app; list_revisions and restore_revision do the same for you. Every write takes a reason (shown to the user) and expectedVersion, the version you read with get_program or get_training_cycle or got back from your last write. A write based on an older version is refused with what changed since: read again and redo it. Your writes within 30 minutes form one change set the user can undo in one step. A restore never changes logged workouts. There is no undo button for you to promise beyond that.`,
+
   missing: `Not in the app yet, so do not look for it or promise it:
-- No undo or revision history. Every write applies at once and is final. Say exactly what you changed.
 - No training limits checked in code. Check changes against ${REFERENCE.uri} yourself and name the rule and its evidence label.
 - One workout slot per day in a weekday cycle. No seasons above cycles.
 - No session notes over MCP.`,
@@ -47,7 +48,7 @@ const ACCESS: Record<McpAccess, string> = {
 };
 
 export function serverInstructions(access: McpAccess): string {
-  return [SECTIONS.app, SECTIONS.owners, SECTIONS.missing, ACCESS[access], SECTIONS.review, SECTIONS.resources].join(
+  return [SECTIONS.app, SECTIONS.owners, SECTIONS.revisions, SECTIONS.missing, ACCESS[access], SECTIONS.review, SECTIONS.resources].join(
     "\n\n",
   );
 }

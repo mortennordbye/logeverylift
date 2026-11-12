@@ -62,3 +62,18 @@ export function weekDatesOf(dateStr: string): string[] {
     return toDateStr(d);
   });
 }
+
+/**
+ * "12 Nov, 14:05" in the user's zone (UTC with none). Formatted on the server
+ * and passed down as text, so the server and the browser render the same
+ * string and hydration cannot disagree about the zone.
+ */
+export function shortDateTime(at: Date, timeZone: string | null | undefined): string {
+  return at.toLocaleString("en-GB", {
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: timeZone ?? "UTC",
+  });
+}

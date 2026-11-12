@@ -17,10 +17,13 @@ import { localDateStr } from "@/lib/utils/user-date";
 export function WorkoutSessionInitializer({
   programId,
   timeZone,
+  planVersion,
 }: {
   programId: number;
   /** The user's stored zone; null dates the session in the phone's zone. */
   timeZone: string | null;
+  /** The program's version now; kept for a new workout as the version it started on. */
+  planVersion: number | null;
 }) {
   const workoutSession = useWorkoutSession();
   const hydrateCompletedSetIds = workoutSession?.hydrateCompletedSetIds;
@@ -72,16 +75,19 @@ export function WorkoutSessionInitializer({
     let storedProgramId: number | null = null;
     let storedStart: string | null = null;
     let storedSessionId: number | null = null;
+    let storedPlanVersion: number | null = null;
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as {
           programId: number;
           startTime: string;
           sessionId: number | null;
+          planVersion?: number | null;
         };
         storedProgramId = parsed.programId;
         storedStart = parsed.startTime;
         storedSessionId = parsed.sessionId;
+        storedPlanVersion = parsed.planVersion ?? null;
       } catch {
         // fall through and re-init
       }
@@ -115,6 +121,7 @@ export function WorkoutSessionInitializer({
           programId,
           startTime.toISOString(),
           result.data.id,
+          planVersion,
         );
       }
     };
@@ -132,7 +139,9 @@ export function WorkoutSessionInitializer({
       // Only a definite `false` replaces it — a failed check means offline or
       // server down, where the session we have is the best we've got.
       const sessionId = storedSessionId;
-      workoutSession?.setActiveWorkout(programId, storedStart, sessionId);
+      // The version the workout started on, not today's: a resumed workout
+      // keeps comparing against the plan it was shown.
+      workoutSession?.setActiveWorkout(programId, storedStart, sessionId, storedPlanVersion);
       void (async () => {
         const check = await isSessionResumable({ sessionId, programId }).catch(() => null);
         if (check?.success && !check.data) await startFreshSession();
