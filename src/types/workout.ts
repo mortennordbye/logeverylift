@@ -115,6 +115,18 @@ export type TrainingCycleWithSlots = TrainingCycle & {
 export type MissedSlot = {
   date: string; // ISO date string (YYYY-MM-DD)
   slot: TrainingCycleSlotWithProgram;
+  /** The dated session that was missed (weekday cycles; docs/plans/sessions.md). */
+  plannedSessionId?: number;
+};
+
+/** One of today's planned sessions on a weekday cycle (docs/plans/sessions.md, 4.2). */
+export type TodaySession = {
+  plannedSessionId: number;
+  /** The template slot, with the program this session runs. */
+  slot: TrainingCycleSlotWithProgram;
+  done: boolean;
+  /** The completed auto row for a day tracked outside the app, if any. */
+  autoSessionId: number | null;
 };
 
 // The active cycle with today's slot resolved
@@ -129,6 +141,11 @@ export type ActiveCycleInfo = {
    * - Day-of-week mode: missed days within the last 7 days bounded by [startDate, today).
    */
   missedSlots: MissedSlot[];
+  /**
+   * Today's planned sessions in order (weekday cycles). Empty on a rest day,
+   * on a rotation cycle, and when today's sessions were moved or skipped.
+   */
+  todaySessions: TodaySession[];
 };
 
 // ============================================================================

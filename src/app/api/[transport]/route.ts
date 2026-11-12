@@ -35,6 +35,7 @@ import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
+import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { requireMcpAuth } from "@better-auth/mcp";
@@ -116,6 +117,7 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       registerSeasonTools(server, userId, clientId);
       registerWorkoutTools(server, userId);
       registerSessionTools(server, userId);
+      registerPlannedSessionTools(server, userId, clientId);
       registerExerciseTools(server, userId);
       registerCoachMemoryTools(server, userId, clientId);
       registerAthleteProfileTools(server, userId, clientId, { endurance });

@@ -14,8 +14,9 @@ what it describes, that package updates this file and the server instructions in
   reps or a rep range, weight, rest, or for endurance work a duration, distance, incline and
   heart rate zone. Each slot also holds its progression settings.
 - **Training cycle.** A template that runs programs for a number of weeks. The schedule is
-  either by weekday (one slot per day, 1 = Monday to 7 = Sunday) or a rotation (slots in order,
-  one per workout). A slot points at a program, or at nothing for a rest day. A slot marked
+  either by weekday (1 = Monday to 7 = Sunday, up to three slots a day in order, `daySlot` 1-3)
+  or a rotation (slots in order, one per workout). A slot points at a program, or at nothing for
+  a rest day, which is then the only slot of its day. A slot marked
   `autoComplete` is a day the user tracks outside the app; it completes itself. A cycle is a
   draft, active or completed, and only one is active at a time. With the endurance features on,
   a cycle in no season holds a race date and distance, a goal (`build` or `maintain`) and an
@@ -40,6 +41,15 @@ what it describes, that package updates this file and the server instructions in
   date change of any race, or an A race added, removed or changed in priority, flags the season
   for a re-plan; the app never moves phases itself. Re-plan, then `clear_replan`. Deleting a
   season keeps its cycles; they act as cycles with no season until it is restored.
+- **Dated session.** A weekday cycle makes one dated session per program slot for the whole
+  block, when it starts or is scheduled (`list_planned_sessions`). Each can be moved (from today
+  to the block's last day), skipped, changed (program, label, notes, order) or added by hand
+  (`manage_planned_session`); a day holds at most three. A slot change rewrites only the sessions
+  from today on that nobody changed; changed ones and past ones stay. Done and missed are never
+  stored: a session is done when a workout is logged for it, or, failing that, a workout of its
+  program that day, or any workout that day. A rotation cycle has no fixed dates, since a missed
+  session repeats the next day: its sessions are worked out from the walk, and one can only be
+  skipped or given another program, by `rotationPosition`.
 - **Exercise.** The built-in library plus the user's own custom exercises. An endurance
   exercise has a discipline (swim, bike or run). `search_exercises` finds them;
   `create_exercise` makes a custom one. A custom name must not match a built-in exercise or
@@ -103,8 +113,8 @@ lasts only until that writer runs again.
   as they are. Your writes in one conversation (within 30 minutes of each other) form one change
   set, which the user can undo in one step.
 - **Every write needs a reason and the version you read.** `reason` is shown to the user in the
-  history. `expectedVersion` is the program's or cycle's `version` from `get_program`,
-  `get_training_cycle` or your last write's result. If the user (or another assistant) changed
+  history. `expectedVersion` is the program's, cycle's or dated session's `version` from
+  `get_program`, `get_training_cycle`, `list_planned_sessions` or your last write's result. If the user (or another assistant) changed
   it since, the write is refused with what changed; read it again and redo the change.
 - **Deletes can be undone.** Deleted programs, cycles and seasons stay restorable for 90 days.
 - **Two training limits in code** (`src/lib/utils/training-limits.ts`), for users with
@@ -117,7 +127,9 @@ lasts only until that writer runs again.
     week and are not counted.
 
   Checked writes: program set edits, slot changes, starting or scheduling a cycle, `set_volume`,
-  and a change to the active cycle's length, goal or level (they rescale this week's targets).
+  a change to the active cycle's length, goal or level (they rescale this week's targets), and a
+  dated session moved, changed, added or planned again (counted in each Monday-to-Sunday week
+  it touches, with moved sessions where they land and skipped ones left out).
 
   A limit blocks only a write that makes things worse. A refused write changes nothing; send it
   again with `overrideLimits` and `overrideReason` if it still fits, and the revision stores the
@@ -125,7 +137,6 @@ lasts only until that writer runs again.
   The weekly load ramp, the low-readiness rule and heavy legs within 48 h of a key session are
   not in code yet: check them against the endurance training reference
   (`logeverylift://docs/endurance-training-reference`) and name the rule and its evidence label.
-- **One workout slot per day** in a weekday cycle.
 - **Time:** "today", the cycle week, the weekly sync and the date a workout is logged on follow
   the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:53`). With
   no zone set, they follow the server's clock and the phone's day.

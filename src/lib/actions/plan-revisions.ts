@@ -8,7 +8,7 @@
 
 import { db } from "@/db";
 import { oauthClients, planRevisions, programSets, programs, seasons, trainingCycles, type PlanObjectType } from "@/db/schema";
-import {
+import { listCycleSessionRevisions,
   OpenWorkoutError,
   PlanNotFoundError,
   PlanStateError,
@@ -92,7 +92,10 @@ export async function getPlanHistory(data: unknown): Promise<ActionResult<PlanHi
       .from(table)
       .where(and(eq(table.id, id), eq(table.userId, auth.user.id)));
     if (!row) return { success: false, error: type === "program" ? "Program not found" : type === "season" ? "Season not found" : "Cycle not found" };
-    const revisions = await listRevisions(auth.user.id, { type, id });
+    const own = await listRevisions(auth.user.id, { type, id });
+    // A cycle's history also lists the changes to its dated sessions (docs/plans/sessions.md, 5).
+    const revisions =
+      type === "cycle" ? [...own, ...(await listCycleSessionRevisions(auth.user.id, id))].sort((a, b) => b.id - a.id) : own;
     const names = await clientNames(revisions.map((r) => r.clientId));
     return {
       success: true,

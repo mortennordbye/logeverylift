@@ -1,6 +1,8 @@
 "use client";
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { PlannedSessionActions } from "@/components/features/PlannedSessionActions";
+import type { PlannedView } from "@/lib/planned-sessions";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import { useUserSettings } from "@/contexts/user-settings-context";
 import { cycleLengthDays } from "@/lib/utils/cycle-position";
@@ -30,6 +32,8 @@ type Props = {
   cycles: TrainingCycleWithSlots[];
   completedDates: string[]; // "YYYY-MM-DD"
   programsMap: Record<number, ProgramWithExercises>;
+  /** Dated sessions of weekday cycles (docs/plans/sessions.md, 5). */
+  planned?: PlannedView[];
 };
 
 function toDateStr(d: Date): string {
@@ -58,14 +62,21 @@ type DayInfo = {
   slotLabel: string | null;
   slotNotes: string | null;
   isScheduled: boolean;
+  /** The day's dated sessions, when the cycle has them. */
+  sessions: PlannedView[];
+  /** The last day a session of this cycle can move to. */
+  lastDay: string | null;
 };
 
-function getDayInfo(dateStr: string, cycles: TrainingCycleWithSlots[]): DayInfo {
+function getDayInfo(dateStr: string, cycles: TrainingCycleWithSlots[], plannedByDate: Map<string, PlannedView[]> = new Map()): DayInfo {
   const [y, m, d] = dateStr.split("-").map(Number);
   const jsDay = new Date(y, m - 1, d).getDay();
   const dayOfWeek = jsDay === 0 ? 7 : jsDay; // 1=Mon…7=Sun
 
-  for (let i = 0; i < cycles.length; i++) {
+  // The active cycle first: a block completed early still spans its old dates,
+  // and the active one is what the user follows on those days.
+  const order = cycles.map((_, i) => i).sort((a, b) => Number(cycles[b].status === "active") - Number(cycles[a].status === "active"));
+  for (const i of order) {
     const cycle = cycles[i];
     if (!cycle.startDate) continue;
 
@@ -77,7 +88,30 @@ function getDayInfo(dateStr: string, cycles: TrainingCycleWithSlots[]): DayInfo 
     if (dateStr < cycle.startDate || dateStr >= endStr) continue;
 
     if (cycle.scheduleType === "day_of_week") {
-      const slot = cycle.slots.find((s) => s.dayOfWeek === dayOfWeek);
+      // A cycle with dated sessions shows the day's sessions: a moved one on
+      // its new day, several on one day. Only a rest day comes from the template.
+      const sessions = cycle.status === "active" ? (plannedByDate.get(dateStr) ?? []).filter((p) => p.cycleId === cycle.id) : [];
+      const lastDay = toDateStr(new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - 1));
+      if (sessions.length) {
+        const first = sessions.find((p) => p.status !== "skipped") ?? sessions[0];
+        return {
+          cycleIndex: i,
+          cycleId: cycle.id,
+          cycleName: cycle.name,
+          cycleStatus: cycle.status,
+          cycleScheduleType: "day_of_week",
+          programId: first.programId,
+          programName: first.programName,
+          slotLabel: first.label,
+          slotNotes: first.notes,
+          isScheduled: true,
+          sessions,
+          lastDay,
+        };
+      }
+      // Only the active block reads its dated sessions; others show the template, as before.
+      const hasDated = cycle.sessionsGeneratedAt != null && cycle.status === "active";
+      const slot = cycle.slots.find((s) => s.dayOfWeek === dayOfWeek && (!hasDated || s.programId == null));
       if (slot) {
         return {
           cycleIndex: i,
@@ -90,6 +124,8 @@ function getDayInfo(dateStr: string, cycles: TrainingCycleWithSlots[]): DayInfo 
           slotLabel: slot.label ?? null,
           slotNotes: slot.notes ?? null,
           isScheduled: true,
+          sessions: [],
+          lastDay,
         };
       }
     } else {
@@ -105,6 +141,8 @@ function getDayInfo(dateStr: string, cycles: TrainingCycleWithSlots[]): DayInfo 
         slotLabel: null,
         slotNotes: null,
         isScheduled: true,
+        sessions: [],
+        lastDay: null,
       };
     }
   }
@@ -120,6 +158,8 @@ function getDayInfo(dateStr: string, cycles: TrainingCycleWithSlots[]): DayInfo 
     slotLabel: null,
     slotNotes: null,
     isScheduled: false,
+    sessions: [],
+    lastDay: null,
   };
 }
 
@@ -129,7 +169,9 @@ function formatSheetDate(dateStr: string): string {
   return `${WEEKDAY_NAMES[date.getDay()]}, ${MONTH_NAMES[m - 1]} ${d}, ${y}`;
 }
 
-export function CycleCalendarClient({ cycles, completedDates, programsMap }: Props) {
+export function CycleCalendarClient({ cycles, completedDates, programsMap, planned = [] }: Props) {
+  const plannedByDate = new Map<string, PlannedView[]>();
+  for (const p of planned) plannedByDate.set(p.date, [...(plannedByDate.get(p.date) ?? []), p]);
   // Today in the user's zone, the same day the server's cycle views use.
   const { timeZone, units } = useUserSettings();
   const today = todayIn(timeZone);
@@ -160,7 +202,7 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap }: Pro
   }
 
   // Detail sheet data
-  const sheetInfo = selectedDate ? getDayInfo(selectedDate, cycles) : null;
+  const sheetInfo = selectedDate ? getDayInfo(selectedDate, cycles, plannedByDate) : null;
   const sheetCompleted = selectedDate ? completedSet.has(selectedDate) : false;
   const sheetProgram = sheetInfo?.programId ? programsMap[sheetInfo.programId] : null;
   const sheetColors = sheetInfo?.cycleIndex != null ? colorMap.get(sheetInfo.cycleIndex) : null;
@@ -192,7 +234,7 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap }: Pro
         {grid.map((dateStr, idx) => {
           if (!dateStr) return <div key={`pad-${idx}`} />;
 
-          const info = getDayInfo(dateStr, cycles);
+          const info = getDayInfo(dateStr, cycles, plannedByDate);
           const isToday = dateStr === todayStr;
           const isCompleted = completedSet.has(dateStr);
           const isPast = dateStr < todayStr;
@@ -209,6 +251,7 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap }: Pro
           return (
             <button
               key={dateStr}
+              data-testid={`day-${dateStr}`}
               onClick={() => setSelectedDate(dateStr)}
               className={`flex flex-col items-center justify-center rounded-lg active:opacity-60 transition-opacity
                 ${colors && info.isScheduled ? colors.light : ""}
@@ -335,6 +378,29 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap }: Pro
                       <p className="text-sm text-muted-foreground italic mt-0.5">No program assigned</p>
                     </div>
                   )}
+
+                  {/* The day's dated sessions: each can be moved or skipped alone */}
+                  {sheetInfo.sessions.map((p, i) => {
+                    const name = p.programName ?? p.label ?? "Session";
+                    return (
+                      <div key={p.id} data-testid="planned-session" className="border-b border-border">
+                        {(sheetInfo.sessions.length > 1 || p.status === "skipped") && (
+                          <p className="px-4 pt-3 text-sm font-medium">
+                            {sheetInfo.sessions.length > 1 ? `${i + 1}. ` : ""}
+                            {name}
+                          </p>
+                        )}
+                        {p.id != null && sheetInfo.lastDay && (
+                          <PlannedSessionActions
+                            session={{ id: p.id, date: p.date, status: p.status, touched: p.touched, templateDate: p.templateDate }}
+                            today={todayStr}
+                            lastDay={sheetInfo.lastDay}
+                            name={name}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
 
                   {/* Exercise list */}
                   {sheetProgram && sheetProgram.programExercises.length > 0 && (

@@ -312,3 +312,31 @@ describe("0085: triathlon cycles move into a season", () => {
     expect((seasonRevs[0].snapshot as { phases: unknown[] }).phases).toEqual([{ cycleId: c.id, name: "Half build", phaseOrder: 1, phaseType: null }]);
   });
 });
+
+describe("0086: planned sessions", () => {
+  it("numbers existing slots 1, keeps old auto rows unique per program and day, and allows one per planned session", async () => {
+    const user = await createUser();
+    const { program } = await createProgram(user.id, [{ exerciseId: (await createExercise()).id, sets: [{}] }]);
+    const [c] = await db.insert(trainingCycles).values({ userId: user.id, name: "Block", durationWeeks: 4 }).returning();
+    await db.execute(sql`INSERT INTO training_cycle_slots (training_cycle_id, day_of_week, program_id) VALUES (${c.id}, 1, ${program.id})`);
+    const { rows } = await db.execute<{ day_slot: number }>(sql`SELECT day_slot FROM training_cycle_slots WHERE training_cycle_id = ${c.id}`);
+    expect(rows).toEqual([{ day_slot: 1 }]);
+    // A second slot on the same day needs its own number.
+    await expect(
+      db.execute(sql`INSERT INTO training_cycle_slots (training_cycle_id, day_of_week, program_id) VALUES (${c.id}, 1, ${program.id})`),
+    ).rejects.toThrow();
+    await db.execute(sql`INSERT INTO training_cycle_slots (training_cycle_id, day_of_week, day_slot, program_id) VALUES (${c.id}, 1, 2, ${program.id})`);
+    // Auto rows with no planned session: one per program and day, as before.
+    const auto = { date: "2026-11-02", isCompleted: true, source: "auto" as const };
+    await createSession(user.id, program.id, auto);
+    await expect(createSession(user.id, program.id, auto)).rejects.toThrow();
+    // With planned sessions, two auto rows of one program on one day are fine; one per session.
+    const { rows: planned } = await db.execute<{ id: number }>(sql`
+      INSERT INTO planned_sessions (user_id, cycle_id, date, program_id)
+      VALUES (${user.id}, ${c.id}, '2026-11-03', ${program.id}), (${user.id}, ${c.id}, '2026-11-03', ${program.id})
+      RETURNING id`);
+    await createSession(user.id, program.id, { ...auto, date: "2026-11-03", plannedSessionId: planned[0].id });
+    await createSession(user.id, program.id, { ...auto, date: "2026-11-03", plannedSessionId: planned[1].id });
+    await expect(createSession(user.id, program.id, { ...auto, date: "2026-11-03", plannedSessionId: planned[1].id })).rejects.toThrow();
+  });
+});

@@ -7,13 +7,14 @@
  * src/__tests__/plan-write-guard.test.ts fails the build otherwise.
  */
 
-import { programExercises, programSets, programs, trainingCycles } from "@/db/schema";
+import { plannedSessions, programExercises, programSets, programs, trainingCycles } from "@/db/schema";
 import { isNull } from "drizzle-orm";
 
 export const livePrograms = isNull(programs.deletedAt);
 export const liveProgramExercises = isNull(programExercises.deletedAt);
 export const liveProgramSets = isNull(programSets.deletedAt);
 export const liveCycles = isNull(trainingCycles.deletedAt);
+export const livePlannedSessions = isNull(plannedSessions.deletedAt);
 
 // In a relational `with` block, filter inline:
 //   programSets: { where: (ps, { isNull }) => isNull(ps.deletedAt), ... }

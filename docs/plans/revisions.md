@@ -68,7 +68,7 @@ The plan named only the first two paths. All of them change in this package.
 | Writer (T2 tag) | Where | What it writes |
 |---|---|---|
 | `user` | Server Actions in `src/lib/actions/programs.ts` (create, rename, delete, slot fields, progression settings, sets, reorder, warm-ups `addWarmupSets` at `src/lib/actions/programs.ts:1203`, import at `src/lib/actions/programs.ts:1424`) | Programs, exercises, sets |
-| `user` | `src/lib/actions/training-cycles.ts` (create `src/lib/actions/training-cycles.ts:639`, update `src/lib/actions/training-cycles.ts:666`, delete, start `src/lib/actions/training-cycles.ts:767`, restart `src/lib/actions/training-cycles.ts:803`, slots `src/lib/actions/training-cycles.ts:846-985`, import `src/lib/actions/training-cycles.ts:987`) | Cycles, slots |
+| `user` | `src/lib/actions/training-cycles.ts` (create `src/lib/actions/training-cycles.ts:639`, update `src/lib/actions/training-cycles.ts:666`, delete, start `src/lib/actions/training-cycles.ts:767`, restart `src/lib/actions/training-cycles.ts:803`, slots `src/lib/actions/training-cycles.ts:789-875`, import `src/lib/actions/training-cycles.ts:877`; lines as of C2) | Cycles, slots |
 | `user` | `generateTriathlonPlan` (`src/lib/actions/triathlon-plan.ts:58`), `copySharedProgram` (`src/lib/actions/program-shares.ts:144`) | Whole new cycles and programs |
 | `user` | The workout finish flush: session overrides go back to the plan through `updateProgramSet`, online (`src/app/programs/[id]/workout/finish/page.tsx:100`) or queued (`:84`) | `targetReps`, `weightKg`, `durationSeconds` |
 | `user` | Mid-workout plan writes: rest time (`src/components/features/WorkoutSetsList.tsx:292`), weight carry to the next set (`:634`), the set editor (`src/components/features/SetEditView.tsx:296`, `:371`) | Set fields |
@@ -77,7 +77,7 @@ The plan named only the first two paths. All of them change in this package.
 | `progression` | `learnWeightStacks` (`src/lib/weight-stack-learning.ts:33`, write at `:168`) after a session | `program_exercises.weight_stack` |
 | `sync` | `syncPeriodizedTargets` (`src/lib/periodization-sync.ts:183`, set writes at `:244`, cycle write at `:251`). Runs from `syncDueCycle` (`:43`), from `getActiveCycleForUser` during a page render (`src/lib/actions/training-cycles.ts:189-191`), from `getCyclePeriodization` (`:569-570`), and before an MCP set replace (`src/lib/mcp/tools/programs.ts:469-470`) | `distanceMeters`, `durationSeconds` on sets with a peak anchor; `targetHeartRateZone`, `restTimeSeconds` on `work` sets; cycle `lastSyncedWeek`, `adaptationPct`, `adaptationNote` |
 | `sync` | `getActiveCycleForUser` marks a finished block completed (`src/lib/actions/training-cycles.ts:176-180`) | Cycle `status` |
-| `apply` | `applyWearableSuggestion` (`src/lib/periodization-sync.ts:331`) through `applyWearablePlanSuggestion` (`src/lib/actions/training-cycles.ts:1029`) | The same as `sync`, with the suggested percent |
+| `apply` | `applyWearableSuggestion` (`src/lib/periodization-sync.ts:331`) through `applyWearablePlanSuggestion` (`src/lib/actions/training-cycles.ts:951`, as of C2) | The same as `sync`, with the suggested percent |
 | none (system) | Demo and fake data in `src/lib/actions/admin.ts` (`:366-446`, `:594-676`, deletes at `:547-552`, `:778-779`), and the scripts in `scripts/` | Seed data; no revisions needed |
 
 The offline queue (1.4) carries one plan write: `updateProgramSet` from the finish flush.

@@ -9,14 +9,15 @@ import { useState } from "react";
  * "Decline" action next to a missed workout's "Make up" link. Permanently hides
  * that missed day from the "Missed this week" list.
  */
-export function DeclineMakeupButton({ date }: { date: string }) {
+export function DeclineMakeupButton({ date, plannedSessionId }: { date: string; plannedSessionId?: number }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
 
   async function handleDecline() {
     if (pending) return;
     setPending(true);
-    const result = await callAction(dismissMissedWorkout({ date }));
+    // With the dated session, only that one is skipped (a day can hold several).
+    const result = await callAction(dismissMissedWorkout(plannedSessionId != null ? { date, plannedSessionId } : { date }));
     if (result.success) {
       router.refresh();
     } else {

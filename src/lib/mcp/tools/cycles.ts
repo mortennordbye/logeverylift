@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/db";
-import { programs, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { programs, trainingCycles } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
@@ -32,6 +32,7 @@ import {
   withLimits,
 } from "@/lib/training-limits";
 import { userToday } from "@/lib/user-settings";
+import { removeSlotInTx, upsertSlotInTx } from "@/lib/planned-sessions";
 import { raceForCycle } from "@/lib/seasons";
 import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
 import { addDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
@@ -401,8 +402,9 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     {
       description: [
         "Upsert or remove a slot in a training cycle.",
-        "operation='upsert': requires trainingCycleId and either dayOfWeek (1=Mon..7=Sun, for day_of_week cycles) or orderIndex (1,2,3.. for rotation cycles); optional label, programId (the program to run; null to clear), notes, autoComplete (true for a day tracked outside the app, which then completes itself; omit to leave unchanged). An existing slot at that day/position is updated, otherwise a new one is created.",
-        "operation='remove': requires slotId and cycleId.",
+        "operation='upsert': requires trainingCycleId and either dayOfWeek (1=Mon..7=Sun, for day_of_week cycles) or orderIndex (1,2,3.. for rotation cycles); optional daySlot (1-3, the session's order in the day on a weekday cycle: a day can hold up to three sessions, for example strength in the morning and a run in the evening; default 1; a rest day is the only slot of its day), label, programId (the program to run; null to clear), notes, autoComplete (true for a day tracked outside the app, which then completes itself; omit to leave unchanged). An existing slot at that day/position is updated, otherwise a new one is created.",
+        "operation='remove': requires slotId and cycleId. The day's other sessions keep their order.",
+        "A slot change rewrites the dated sessions from today on that nobody moved or changed (list_planned_sessions); past ones and changed ones stay.",
         `Both require reason and expectedVersion (the cycle's version); the result has the new version. ${REVISION_RULES}`,
         `On upsert: ${LIMITS_TEXT}`,
       ].join(" "),
@@ -415,6 +417,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         slotId: z.number().int().positive().optional(),
         dayOfWeek: z.number().int().min(1).max(7).optional(),
         orderIndex: z.number().int().positive().optional(),
+        daySlot: z.number().int().min(1).max(3).optional(),
         label: z.string().max(100).nullable().optional(),
         programId: z.number().int().positive().nullable().optional(),
         notes: z.string().max(500).nullable().optional(),
@@ -481,38 +484,10 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             const tx = w.tx;
             await w.touch({ type: "cycle", id: trainingCycleId }, { expectedVersion: args.expectedVersion });
             // A slot changes the week's sessions, not the programs' runs.
-            return withLimits(w, lc, { programIds: [], cycleIds: [trainingCycleId] }, override, async () => {
-              let existingSlot = null;
-              if (effDay !== null) {
-                existingSlot = await tx.query.trainingCycleSlots.findFirst({
-                  where: and(
-                    eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
-                    eq(trainingCycleSlots.dayOfWeek, effDay),
-                  ),
-                });
-              } else if (effOrder !== null) {
-                existingSlot = await tx.query.trainingCycleSlots.findFirst({
-                  where: and(
-                    eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
-                    eq(trainingCycleSlots.orderIndex, effOrder),
-                  ),
-                });
-              }
-
-              if (existingSlot) {
-                const [updated] = await tx
-                  .update(trainingCycleSlots)
-                  .set({ ...rest, dayOfWeek: effDay, orderIndex: effOrder })
-                  .where(eq(trainingCycleSlots.id, existingSlot.id))
-                  .returning();
-                return updated;
-              }
-              const [inserted] = await tx
-                .insert(trainingCycleSlots)
-                .values({ trainingCycleId, dayOfWeek: effDay, orderIndex: effOrder, ...rest })
-                .returning();
-              return inserted;
-            });
+            return withLimits(w, lc, { programIds: [], cycleIds: [trainingCycleId] }, override, () =>
+              // Up to three sessions a day, keyed by daySlot (docs/plans/sessions.md, 3.1).
+              upsertSlotInTx(tx, trainingCycleId, { dayOfWeek: effDay, orderIndex: effOrder, daySlot: args.daySlot }, rest),
+            );
           });
           return ok({ ...slot, cycleVersion: cycleVersion(versions, trainingCycleId), limits: limitSummary(check, unusedOverrides) });
         }
@@ -526,15 +501,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         if (!owner || owner.userId !== userId) return fail("Training cycle not found");
         const { result: removed, versions } = await planWrite(ctx, async (w) => {
           await w.touch({ type: "cycle", id: cycleId }, { expectedVersion: args.expectedVersion });
-          return w.tx
-            .delete(trainingCycleSlots)
-            .where(
-              and(
-                eq(trainingCycleSlots.id, slotId),
-                eq(trainingCycleSlots.trainingCycleId, cycleId),
-              ),
-            )
-            .returning({ id: trainingCycleSlots.id });
+          return removeSlotInTx(w.tx, cycleId, slotId);
         });
         if (removed.length === 0) return fail("Slot not found");
         audit("remove_cycle_slot", { userId, cycleId, slotId });

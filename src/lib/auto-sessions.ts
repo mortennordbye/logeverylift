@@ -16,7 +16,7 @@ import { workoutSessions } from "@/db/schema";
  */
 export async function insertAutoSessions(
   userId: string,
-  due: { date: string; programId: number }[],
+  due: { date: string; programId: number; plannedSessionId?: number | null }[],
 ): Promise<void> {
   if (due.length === 0) return;
   await db
@@ -27,6 +27,7 @@ export async function insertAutoSessions(
         return {
           userId,
           programId: d.programId,
+          plannedSessionId: d.plannedSessionId ?? null,
           date: d.date,
           startTime: at,
           endTime: at,

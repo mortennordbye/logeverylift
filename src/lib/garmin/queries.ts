@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
-import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, garminFuelLogs, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
+import { liveCycles, livePlannedSessions, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, garminFuelLogs, plannedSessions, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
@@ -949,10 +949,39 @@ export type VolumeData = {
   planned: Record<Endurance, number> | null;
 };
 
-/** Planned endurance sets for one week of a day-of-week cycle (rotation cycles have no fixed week). */
-async function plannedSets(cycleId: number): Promise<PlannedSet[] | null> {
-  const [c] = await db.select({ scheduleType: trainingCycles.scheduleType }).from(trainingCycles).where(and(eq(trainingCycles.id, cycleId), liveCycles));
+/**
+ * Planned endurance sets for one week of a day-of-week cycle (rotation cycles
+ * have no fixed week). With dated sessions (docs/plans/sessions.md, hub
+ * decision 16), the sessions of the calendar week of `today`: moved ones where
+ * they land, skipped ones left out. Before they exist, the template's week.
+ */
+async function plannedSets(cycleId: number, today: string): Promise<PlannedSet[] | null> {
+  const [c] = await db
+    .select({ scheduleType: trainingCycles.scheduleType, generated: trainingCycles.sessionsGeneratedAt })
+    .from(trainingCycles)
+    .where(and(eq(trainingCycles.id, cycleId), liveCycles));
   if (c?.scheduleType !== "day_of_week") return null;
+  if (c.generated) {
+    const monday = mondayOf(today);
+    const dated = await db
+      .select({ discipline: exercises.discipline, durationS: programSets.durationSeconds, distanceM: programSets.distanceMeters })
+      .from(plannedSessions)
+      .innerJoin(programs, and(eq(programs.id, plannedSessions.programId), livePrograms))
+      .innerJoin(programExercises, and(eq(programExercises.programId, plannedSessions.programId), liveProgramExercises))
+      .innerJoin(programSets, and(eq(programSets.programExerciseId, programExercises.id), liveProgramSets))
+      .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+      .where(
+        and(
+          eq(plannedSessions.cycleId, cycleId),
+          livePlannedSessions,
+          eq(plannedSessions.status, "planned"),
+          gte(plannedSessions.date, monday),
+          lte(plannedSessions.date, addDays(monday, 6)),
+          sql`${exercises.discipline} is not null`,
+        ),
+      );
+    return dated.map((r) => ({ discipline: r.discipline as Endurance, durationS: r.durationS, distanceM: r.distanceM }));
+  }
   const rows = await db
     .select({ discipline: exercises.discipline, durationS: programSets.durationSeconds, distanceM: programSets.distanceMeters })
     .from(trainingCycleSlots)
@@ -1004,7 +1033,7 @@ export async function getVolumeData(userId: string, todayArg?: string): Promise<
 
   const cycle = await getActiveCycle(userId);
   const distance: RaceDistance = cycle?.raceDistance ?? "full";
-  const sets = cycle ? await plannedSets(cycle.id) : null;
+  const sets = cycle ? await plannedSets(cycle.id, today) : null;
   const recent = activities.filter((a) => a.day >= addDays(today, -55));
   return {
     today,

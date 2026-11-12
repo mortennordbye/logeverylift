@@ -100,6 +100,10 @@ export const trainingCycles = pgTable("training_cycles", {
   // Length in days (T8). When set it is the length, and durationWeeks is
   // ceil(days / 7) so week-based code keeps working. Null = durationWeeks * 7.
   durationDays: integer("duration_days"),
+  // When the dated sessions were first made from the template
+  // (docs/plans/sessions.md, 3.5). Null = not yet: the first read makes them.
+  // Owned by the session layer; left out of snapshots and restores.
+  sessionsGeneratedAt: timestamp("sessions_generated_at"),
 }, (t) => [
   index("idx_tc_user_status").on(t.userId, t.status),
   index("idx_tc_season").on(t.seasonId, t.phaseOrder),
@@ -128,9 +132,12 @@ export const trainingCycleSlots = pgTable(
     // getActiveCycleForUser writes a completed source='auto' session for the day
     // so it counts as done without being logged here.
     autoComplete: boolean("auto_complete").default(false).notNull(),
+    // Order inside the day on a weekday cycle (1-3): a day can hold several
+    // sessions (D7). Always 1 on a rotation cycle.
+    daySlot: integer("day_slot").default(1).notNull(),
   },
   (t) => [
-    unique("uniq_cycle_day").on(t.trainingCycleId, t.dayOfWeek),
+    unique("uniq_cycle_day").on(t.trainingCycleId, t.dayOfWeek, t.daySlot),
     unique("uniq_cycle_order").on(t.trainingCycleId, t.orderIndex),
   ],
 );

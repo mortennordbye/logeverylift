@@ -35,6 +35,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { programs } from "./programs";
+import { plannedSessions } from "./planned-sessions";
 import { users } from "./users";
 
 export const workoutFeelingEnum = pgEnum("workout_feeling", [
@@ -68,11 +69,20 @@ export const workoutSessions = pgTable("workout_sessions", {
   // "assistant" = logged by the user's connected AI assistant (MCP log_session);
   // otherwise it reads like an "app" session.
   source: text("source", { enum: ["app", "auto", "assistant"] }).default("app").notNull(),
+  // The planned session this workout was started for (docs/plans/sessions.md,
+  // 3.3). Null for a workout started any other way; the matcher still links it
+  // by date and program on read.
+  plannedSessionId: integer("planned_session_id").references(() => plannedSessions.id, { onDelete: "set null" }),
 }, (t) => [
   index("idx_ws_user_completed_start").on(t.userId, t.isCompleted, t.startTime),
-  // At most one auto session per program per day, so concurrent renders of
-  // getActiveCycleForUser can't double-insert.
+  index("idx_ws_planned").on(t.plannedSessionId),
+  // At most one auto session per planned session, and, for auto rows with no
+  // planned session (rotation days, older rows), one per program per day, so
+  // concurrent renders of getActiveCycleForUser can't double-insert.
+  uniqueIndex("uniq_ws_auto_planned")
+    .on(t.userId, t.plannedSessionId)
+    .where(sql`${t.source} = 'auto' AND ${t.plannedSessionId} IS NOT NULL`),
   uniqueIndex("uniq_ws_auto_day")
     .on(t.userId, t.programId, t.date)
-    .where(sql`${t.source} = 'auto'`),
+    .where(sql`${t.source} = 'auto' AND ${t.plannedSessionId} IS NULL`),
 ]);

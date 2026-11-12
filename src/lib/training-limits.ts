@@ -17,6 +17,7 @@ import {
   garminActivities,
   garminActivityMetrics,
   garminConnections,
+  plannedSessions,
   programExercises,
   programSets,
   programs,
@@ -26,7 +27,7 @@ import {
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { isIndoor, sportOf } from "@/lib/garmin/analytics/sport";
-import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { liveCycles, livePlannedSessions, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import type { PlanWriteSession, Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
@@ -47,7 +48,7 @@ import {
   type RunHistory,
   type WeekSession,
 } from "@/lib/utils/training-limits";
-import { and, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 
 type Executor = typeof db | Tx;
 
@@ -187,6 +188,61 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
     }));
 }
 
+/** Whether each program is a hard session (an interval endurance set), by id. */
+async function hardPrograms(ex: Executor, programIds: number[]): Promise<Map<number, boolean>> {
+  const ids = [...new Set(programIds)];
+  const sets = ids.length
+    ? await ex
+        .select({
+          programId: programs.id,
+          discipline: exercises.discipline,
+          sessionRole: programSets.sessionRole,
+          targetHeartRateZone: programSets.targetHeartRateZone,
+        })
+        .from(programs)
+        .innerJoin(programExercises, eq(programExercises.programId, programs.id))
+        .innerJoin(programSets, eq(programSets.programExerciseId, programExercises.id))
+        .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+        .where(and(inArray(programs.id, ids), livePrograms, liveProgramExercises, liveProgramSets))
+    : [];
+  return new Map(
+    ids.map((id) => [
+      id,
+      isHardSession(
+        sets
+          .filter((x) => x.programId === id)
+          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone })),
+      ),
+    ]),
+  );
+}
+
+/**
+ * One calendar week (Monday to Sunday) of a user's dated sessions on weekday
+ * cycles (docs/plans/sessions.md, 6): a moved session counts in the week it
+ * lands in, a skipped one does not, and several on one day count each.
+ */
+export async function calendarWeekSessions(ex: Executor, userId: string, monday: string): Promise<WeekSession[]> {
+  const { addDaysStr, dowOf } = await import("@/lib/utils/planned-sessions");
+  const rows = await ex
+    .select({ date: plannedSessions.date, programId: plannedSessions.programId })
+    .from(plannedSessions)
+    .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), isNull(trainingCycles.deletedAt)))
+    .where(
+      and(
+        eq(plannedSessions.userId, userId),
+        livePlannedSessions,
+        eq(plannedSessions.status, "planned"),
+        gte(plannedSessions.date, monday),
+        lte(plannedSessions.date, addDaysStr(monday, 6)),
+      ),
+    );
+  const hard = await hardPrograms(ex, rows.map((r) => r.programId).filter((id): id is number => id != null));
+  return rows
+    .filter((r) => r.programId != null)
+    .map((r) => ({ dayOfWeek: dowOf(r.date!), hard: hard.get(r.programId!) ?? false }));
+}
+
 /**
  * The cycles whose week a change to this program changes: the active cycle,
  * and a draft scheduled to start, which becomes active on its day without
@@ -208,8 +264,12 @@ export async function limitCyclesWith(ex: Executor, userId: string, programId: n
   return rows.map((r) => r.id).sort((a, b) => a - b);
 }
 
-/** What a write is about: the programs whose runs it can change and the cycles whose week it can change. */
-export type LimitScope = { programIds: number[]; cycleIds: number[] };
+/**
+ * What a write is about: the programs whose runs it can change, the cycles
+ * whose week it can change, and, for a change to dated sessions, the calendar
+ * weeks (their Mondays) it moves sessions in or out of.
+ */
+export type LimitScope = { programIds: number[]; cycleIds: number[]; sessionWeeks?: { userId: string; mondays: string[] } };
 
 export type PlanFacts = {
   runs: Map<number, { label: string; run: PlannedRun }>;
@@ -220,6 +280,10 @@ export type PlanFacts = {
 export async function planFacts(ex: Executor, scope: LimitScope, share: number | null = null): Promise<PlanFacts> {
   const weeks = new Map<number, WeekSession[] | null>();
   for (const id of scope.cycleIds) weeks.set(id, await cycleWeekSessions(ex, id));
+  // Calendar weeks get keys below zero, apart from the cycle ids.
+  for (const [i, monday] of (scope.sessionWeeks?.mondays ?? []).entries()) {
+    weeks.set(-(i + 1), await calendarWeekSessions(ex, scope.sessionWeeks!.userId, monday));
+  }
   return { runs: await programRuns(ex, scope.programIds, share), weeks };
 }
 

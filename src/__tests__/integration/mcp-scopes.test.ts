@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import {
+  plannedSessions,
   athleteInjuries,
   athleteProfiles,
   athleteThresholds,
@@ -27,6 +28,7 @@ import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
+import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -50,7 +52,7 @@ function toolsFor(userId: string, access: McpAccess) {
     registerTool: (name: string, _config: unknown, handler: Handler) => tools.set(name, handler),
   } as unknown as McpServer;
   const server = scopedServer(base, access);
-  for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools, registerExerciseTools, registerSessionTools, registerCoachMemoryTools, registerSeasonTools]) {
+  for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools, registerExerciseTools, registerSessionTools, registerCoachMemoryTools, registerSeasonTools, registerPlannedSessionTools]) {
     register(server, userId);
   }
   registerAthleteProfileTools(server, userId, undefined, { endurance: true });
@@ -73,7 +75,12 @@ async function fingerprint(userId: string) {
   const injuries = await db.select({ id: athleteInjuries.id }).from(athleteInjuries).where(eq(athleteInjuries.userId, userId));
   const seasonRows = await db.select({ id: seasons.id, name: seasons.name, version: seasons.version }).from(seasons).where(eq(seasons.userId, userId));
   const races = await db.select({ id: seasonRaces.id }).from(seasonRaces).where(eq(seasonRaces.userId, userId));
-  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length, athlete, thresholds: thresholds.length, injuries: injuries.length, seasonRows, races: races.length });
+  const planned = await db
+    .select({ id: plannedSessions.id, date: plannedSessions.date, status: plannedSessions.status, deletedAt: plannedSessions.deletedAt })
+    .from(plannedSessions)
+    .where(eq(plannedSessions.userId, userId))
+    .orderBy(asc(plannedSessions.id));
+  return JSON.stringify({ planned, user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length, athlete, thresholds: thresholds.length, injuries: injuries.length, seasonRows, races: races.length });
 }
 
 let me: string;
@@ -130,6 +137,7 @@ const writeCalls = (): [string, Record<string, unknown>][] => [
   ["manage_athlete_profile", { strengthGoal: "stronger", reason: "Test" }],
   ["manage_injuries", { operation: "add", area: "knee", description: "Sore", status: "active", reason: "Test" }],
   ["manage_season", { operation: "create", name: "2027", startDate: "2027-01-04", endDate: "2027-09-30", reason: "Test" }],
+  ["manage_planned_session", { operation: "add", cycleId, date: toDateStr(new Date()), programId, reason: "Test" }],
   ["manage_race", { operation: "add", seasonId, name: "Half", date: "2027-08-22", discipline: "triathlon", distance: "half", priority: "A", reason: "Test", expectedVersion: 1 }],
 ];
 
@@ -154,6 +162,7 @@ const readCalls: [string, Record<string, unknown>][] = [
   ["get_athlete_profile", {}],
   ["list_seasons", {}],
   ["get_season", { seasonId: 0 }],
+  ["list_planned_sessions", { from: toDateStr(new Date()), to: toDateStr(new Date()) }],
 ];
 
 describe("read only", () => {

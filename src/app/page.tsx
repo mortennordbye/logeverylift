@@ -3,6 +3,7 @@ import { DeclineMakeupButton } from "@/components/features/DeclineMakeupButton";
 import { PolicyUpdateNotice } from "@/components/features/PolicyUpdateNotice";
 import { SharePromptLoader } from "@/components/features/SharePromptLoader";
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
+import { TodaySessionsList } from "@/components/features/TodaySessionsList";
 import { WeeklyGoalProgress } from "@/components/features/WeeklyGoalProgress";
 import { WorkoutInsightBanner } from "@/components/features/WorkoutInsightBanner";
 import { getPendingCheckin } from "@/lib/actions/ai-checkin";
@@ -10,6 +11,7 @@ import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/actions/workout-sets";
 import { needsPolicyNotice, needsTermsConsent } from "@/lib/consent";
+import { listPlanned } from "@/lib/planned-sessions";
 import { userToday } from "@/lib/user-settings";
 import { parseDateStr } from "@/lib/utils/cycle-position";
 import { weekDatesOf } from "@/lib/utils/user-date";
@@ -77,7 +79,11 @@ export default async function Home() {
     sessionsResult.success ? sessionsResult.data.map((s) => s.date) : [],
   );
 
-  const completedToday = completedDates.has(todayStr);
+  // A day with several sessions (docs/plans/sessions.md, 5) lists them; a day
+  // with one keeps the card exactly as it was.
+  const todaySessions = info?.todaySessions ?? [];
+  const severalToday = todaySessions.length > 1;
+  const completedToday = severalToday ? todaySessions.every((s) => s.done) : completedDates.has(todayStr);
   // Today's session written by the cycle for a day tracked outside the app.
   const todayAutoSession =
     todayProgram && sessionsResult.success
@@ -106,6 +112,16 @@ export default async function Home() {
   // Day-of-week mode: missed workouts to surface as make-up prompts.
   const dowMissed =
     info?.cycle.scheduleType === "day_of_week" ? info.missedSlots : [];
+
+  // This week's dated sessions, so a moved session shows on its new day and a
+  // day with several shows how many. Outside the block the template shows, as before.
+  const weekPlanned =
+    info?.cycle.scheduleType === "day_of_week"
+      ? (await listPlanned(session.user.id, weekDates[0], weekDates[6], info.cycle.id)).filter((p) => p.status !== "skipped")
+      : [];
+  const blockStart = info?.cycle.startDate ?? "";
+  const blockEnd = info?.endDate ?? "";
+  const plannedOn = (date: string) => weekPlanned.filter((p) => p.date === date);
 
   const slotByDay =
     info?.cycle.scheduleType === "day_of_week"
@@ -153,7 +169,7 @@ export default async function Home() {
             </div>
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               <p className="text-xl font-bold">
-                {todayProgram?.name ?? (isRestDay ? "Rest Day" : "No program today")}
+                {severalToday ? `${todaySessions.length} sessions today` : (todayProgram?.name ?? (isRestDay ? "Rest Day" : "No program today"))}
               </p>
               {completedToday && (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 bg-emerald-500/15 px-2 py-0.5 rounded-full shrink-0">
@@ -170,7 +186,17 @@ export default async function Home() {
               )}
             </div>
             {insight && <WorkoutInsightBanner insight={insight} />}
-            {todayProgram ? (
+            {severalToday ? (
+              <>
+                <TodaySessionsList sessions={todaySessions} />
+                <Link
+                  href="/new-workout"
+                  className="inline-flex items-center gap-2 rounded-xl border border-border px-4 py-2.5 text-sm font-medium text-muted-foreground active:opacity-70"
+                >
+                  Different Program
+                </Link>
+              </>
+            ) : todayProgram ? (
               <div className="flex gap-2 flex-wrap">
                 {completedToday ? (
                   <Link
@@ -217,7 +243,7 @@ export default async function Home() {
             <ul className="flex flex-col divide-y divide-amber-500/20">
               {dowMissed.map((m) =>
                 m.slot.program ? (
-                  <li key={m.date} className="flex items-center justify-between gap-2 py-2">
+                  <li key={`${m.date}-${m.plannedSessionId ?? m.slot.id}`} className="flex items-center justify-between gap-2 py-2">
                     <span className="text-sm min-w-0">
                       <span className="text-muted-foreground">{dowLabel(m.date)} — </span>
                       <span className="font-medium">{m.slot.program.name}</span>
@@ -230,7 +256,7 @@ export default async function Home() {
                       >
                         Make up
                       </Link>
-                      <DeclineMakeupButton date={m.date} />
+                      <DeclineMakeupButton date={m.date} plannedSessionId={m.plannedSessionId} />
                     </div>
                   </li>
                 ) : null,
@@ -249,7 +275,9 @@ export default async function Home() {
               <div className="grid grid-cols-7 gap-0.5">
                 {weekDates.map((dateStr, i) => {
                   const slot = slotByDay[i + 1];
-                  const hasProgram = !!slot?.program;
+                  const inBlock = dateStr >= blockStart && dateStr < blockEnd;
+                  const planned = plannedOn(dateStr);
+                  const hasProgram = inBlock ? planned.length > 0 : !!slot?.program;
                   const isToday = dateStr === todayStr;
                   const isPast = dateStr < todayStr;
                   const isCompleted = completedDates.has(dateStr);
@@ -267,6 +295,11 @@ export default async function Home() {
                           <svg className="w-3.5 h-3.5 text-primary-foreground" viewBox="0 0 14 14" fill="none">
                             <path d="M2.5 7l3 3 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
+                        )}
+                        {!isCompleted && inBlock && planned.length > 1 && (
+                          <span className="text-[10px] font-bold text-primary" aria-label={`${planned.length} sessions`}>
+                            {planned.length}
+                          </span>
                         )}
                       </div>
                       <span className={`text-[9px] ${isToday ? "text-primary font-semibold" : isPast ? "text-muted-foreground/40" : "text-muted-foreground"}`}>

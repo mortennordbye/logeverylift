@@ -5,13 +5,15 @@ top of A1-A4, B1-B4 and C1 (seasons, built in parallel on `feat/seasons-c1`). In
 (`docs/triathlon-coach-audit.md`, sections 1, 7, 8, 11 and decisions D7, D11, D16, D19, T5, T6,
 T7), `CLAUDE.md`, `TESTING.md`, the draft brief [`quick-workout-and-swap.md`](quick-workout-and-swap.md)
 (merged into this package, section 13), and the merged briefs [`foundations.md`](foundations.md),
-[`revisions.md`](revisions.md) and [`ai-coach.md`](ai-coach.md). C1's brief is `seasons.md` on
-the C1 branch.
+[`revisions.md`](revisions.md), [`ai-coach.md`](ai-coach.md), [`seasons.md`](seasons.md) (C1) and
+[`athlete-profile.md`](athlete-profile.md) (C3).
 
-Status: brief, 2026-11-12. The hub decided the open questions (section 14, "Decisions"). The
-characterization tests (8.1) are on the branch. The model change waits for C1 to merge.
-The **Findings** describe `main` at 2bdac35 (after PR #224); every `file:line` in them was opened
-then. Names marked *new* do not exist yet.
+Status: built on `feat/sessions-c2`, 2026-11-13, on top of C1 (#227) and C3 (#226). The hub
+decided the open questions (section 14, "Decisions"). The characterization tests (8.1) merged
+first (#225) and pass unchanged after the build. Section 19 says where the build differs from
+this brief, and section 11 what C1 changed. The **Findings** describe `main` at 2bdac35 (after
+PR #224); every `file:line` in them was opened then, and the code has moved since. Names marked
+*new* were new when the brief was written.
 
 This is the riskiest package in the plan. It changes the core lifter flow. **A lifter with one
 slot per day must see no change.** The build starts with characterization tests that pass on
@@ -666,6 +668,10 @@ Decided by the hub on 2026-11-12, owner may change. The hub took every recommend
 
 ## 17. Plan corrections (in the build PR)
 
+Made: C1 `done` and C2 `building` in the plan and the briefs README (C1's own PR left C1 at
+`building`). The plan's C2 text now says that rotation dates are a projection.
+
+
 - C2 status `brief`.
 - The plan says "The cycle template creates dated planned sessions for every cycle". For rotation
   cycles the dates are a projection with stored overrides (Q2). Say so in the plan.
@@ -689,3 +695,37 @@ Changed: `src/db/schema/training-cycles.ts`, `src/db/schema/workout-sessions.ts`
 `src/types/workout.ts`, `src/lib/account-data.ts`, `docs/privacy/data-inventory.md`,
 `src/app/privacy/page.tsx`, `src/app/oauth/consent/page.tsx`, `src/lib/constants/legal.ts`,
 `docs/cycles-and-plans.md`, `docs/data-model.md`.
+
+## 19. Where the build differs from the brief
+
+- **What C1 changed (section 11).** Generation reads the length from `cycleLengthDays` and the
+  end from `cycleWeek` with `durationDays`. C1's chained phases schedule the next phase through
+  `chainSeason`, a cycle write inside `planWrite`, so the regeneration step makes that phase's
+  sessions when it is scheduled; a catch-up start of a phase whose day has passed makes its past
+  sessions too, since it is the cycle's first generation. The backfill locks the cycle with C1's
+  `lockCycleRows`. The revision object types are now program, cycle, memory, athlete, threshold,
+  injury, season and `planned_session`; the change-set undo locks sessions last.
+- **The regeneration step** sits in `PlanWriteSession.finish` (`src/lib/plan-revisions.ts`): it
+  compares each touched cycle's template (slots, status, dates, length, schedule type) before
+  and after, and regenerates on a change. `sessions_generated_at` is left out of the cycle
+  snapshot, so stamping it makes no revision.
+- **The one-session Start link and the Make up link keep their old address** (no `?planned=`).
+  The characterization spec C12 pins the old addresses, and the matcher links such a workout to
+  its session by program and date. Only the rows of a day with several sessions carry
+  `?planned=<id>`.
+- **New workout page:** unchanged. Its card reads `todaySlot`, which is the first session not
+  yet done.
+- **Training limits on template writes** still count the template's week (now with several
+  slots a day, each counted). The calendar week of dated sessions is counted for session
+  writes (`move`, `change`, `add`, `unskip`), where sessions can leave their template day.
+- **Rotation overrides** are written over MCP only; the app has no rotation skip button yet, and
+  the rotation calendar stays as it was (decision 14).
+- **Decline with a date and no session** (an app bundle from before C2) skips every session
+  planned that day, which is what a decline meant before.
+- **A session restore** is refused when a completed workout is linked to the session, or when it
+  would move a session whose day has passed.
+- **Cycle history** lists the revisions of the cycle's dated sessions with the template's own.
+- **Calendar:** when a completed cycle and the active one span the same day, the active one now
+  shows. The e2e spec found this: a block completed early kept its old dates and hid the new one.
+- **`findDayOfWeekMissed`** is no longer called by the app. It stays for the characterization
+  tests and for the property test that the matcher misses exactly what it missed.

@@ -984,6 +984,7 @@ export async function getCompletedSessions(
         isCompleted: workoutSessions.isCompleted,
         readiness: workoutSessions.readiness,
         intendedDate: workoutSessions.intendedDate,
+        plannedSessionId: workoutSessions.plannedSessionId,
         source: workoutSessions.source,
         programName: programs.name,
         setCount: sql<number>`COUNT(${workoutSets.id})`,
@@ -1015,6 +1016,7 @@ export async function getCompletedSessions(
         workoutSessions.isCompleted,
         workoutSessions.readiness,
         workoutSessions.intendedDate,
+        workoutSessions.plannedSessionId,
         workoutSessions.source,
         programs.name,
       )
@@ -1069,6 +1071,7 @@ export async function getSessionDetail(
           isCompleted: workoutSessions.isCompleted,
           readiness: workoutSessions.readiness,
           intendedDate: workoutSessions.intendedDate,
+          plannedSessionId: workoutSessions.plannedSessionId,
           source: workoutSessions.source,
           programName: programs.name,
         })

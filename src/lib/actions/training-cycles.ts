@@ -17,9 +17,10 @@ import {
 } from "@/lib/utils/periodization";
 import { applyWearableSuggestion, hasPeakAnchor, syncDueCycle, syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { insertAutoSessions } from "@/lib/auto-sessions";
+import { declineDay, dismissIfDayClear, removeSlotInTx, rotationOverrides, skipForAutoDay, upsertSlotInTx, weekdayToday } from "@/lib/planned-sessions";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
-import { OpenWorkoutError, PlanNotFoundError, activateCycle, deleteCycles, liveSeasonId, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
+import { OpenWorkoutError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
@@ -33,6 +34,7 @@ import type {
   ActionResult,
   ActiveCycleInfo,
   MissedSlot,
+  TodaySession,
   TrainingCycle,
   TrainingCycleSlot,
   TrainingCycleSlotWithProgram,
@@ -42,8 +44,6 @@ import {
   autoCompleteDue,
   autoDayKey,
   cycleWeek,
-  findDayOfWeekMissed,
-  jsDayToDow,
   parseDateStr,
   resolveRotation,
   toDateStr,
@@ -214,81 +214,15 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     const missedEnabled = userPref?.missedWorkoutsEnabled ?? true;
 
     let todaySlot: TrainingCycleSlotWithProgram | null = null;
+    let todaySessions: TodaySession[] = [];
     let missedSlots: MissedSlot[] = [];
 
-    // Days tracked outside the app (slot.autoComplete) get a completed
-    // source='auto' session written here, before the missed logic reads
-    // sessions, so they count as done everywhere a completed session counts.
-    const hasAutoSlots = slots.some((s) => s.autoComplete);
-
     if (cycle.scheduleType === "day_of_week") {
-      const dayOfWeek = jsDayToDow(today.getDay());
-      todaySlot = slots.find((s) => s.dayOfWeek === dayOfWeek) ?? null;
-
-      if (missedEnabled || hasAutoSlots) {
-        // Look back up to 7 days for missed active slots (bounded by startDate).
-        const lookbackStart = new Date(today);
-        lookbackStart.setDate(lookbackStart.getDate() - 7);
-        const windowStart = lookbackStart < startDate ? startDate : lookbackStart;
-        const sessions = await db
-          .select({
-            programId: workoutSessions.programId,
-            date: workoutSessions.date,
-            intendedDate: workoutSessions.intendedDate,
-          })
-          .from(workoutSessions)
-          .where(
-            and(
-              eq(workoutSessions.userId, userId),
-              eq(workoutSessions.isCompleted, true),
-              gte(workoutSessions.date, toDateStr(windowStart)),
-            ),
-          );
-        // A slot is satisfied by a session logged on its date OR by a make-up
-        // session that points back to it via intendedDate.
-        const completedDates = new Set<string>();
-        const loggedKeys = new Set<string>();
-        for (const s of sessions) {
-          completedDates.add(s.date);
-          if (s.intendedDate) completedDates.add(s.intendedDate);
-          if (s.programId != null) {
-            loggedKeys.add(autoDayKey(s.programId, s.date));
-            if (s.intendedDate) loggedKeys.add(autoDayKey(s.programId, s.intendedDate));
-          }
-        }
-
-        // Declined missed days — filtered out so they stop nagging.
-        const dismissed = await db
-          .select({ date: dismissedMakeups.date })
-          .from(dismissedMakeups)
-          .where(eq(dismissedMakeups.userId, userId));
-        const dismissedDates = new Set(dismissed.map((d) => d.date));
-
-        if (hasAutoSlots) {
-          const due = autoCompleteDue({
-            scheduleType: "day_of_week",
-            startDate,
-            slots,
-            todaySlotId: null,
-            loggedKeys,
-            skippedDates: dismissedDates,
-            today,
-          });
-          await insertAutoSessions(userId, due);
-          for (const d of due) completedDates.add(d.date);
-        }
-
-        if (missedEnabled) {
-          const missed = findDayOfWeekMissed(startDate, slots, completedDates, today, 7);
-          missedSlots = missed
-            .filter((m) => !dismissedDates.has(m.date))
-            .map((m) => {
-              const slot = slotById.get(m.slotId);
-              return slot ? { date: m.date, slot } : null;
-            })
-            .filter((x): x is MissedSlot => x !== null);
-        }
-      }
+      // Weekday cycles read their dated sessions (docs/plans/sessions.md, 4.2).
+      const day = await weekdayToday({ userId, cycleId: cycle.id, startDate, slots, today, missedEnabled });
+      todaySlot = day.todaySlot;
+      todaySessions = day.todaySessions;
+      missedSlots = day.missedSlots;
     } else {
       // Rotation: walk forward from startDate, advancing position per-slot.
       // todaySlot is always needed; the missed list is gated on the opt-out.
@@ -303,13 +237,25 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
           ),
         );
       const sortedDates = sessions.map((s) => s.date).sort();
-      const { todaySlotId, missed } = resolveRotation(
+      // Skips and program changes stored on walk positions (4.3).
+      const overrides = await rotationOverrides(db, cycle.id);
+      const { todaySlotId, todayPosition, missed } = resolveRotation(
         startDate,
         slots,
         sortedDates,
         today,
+        overrides.skipped,
       );
       todaySlot = todaySlotId != null ? (slotById.get(todaySlotId) ?? null) : null;
+      if (todaySlot && overrides.skipped.has(todayPosition)) {
+        todaySlot = null;
+      } else if (todaySlot && overrides.changed.get(todayPosition)?.programId != null) {
+        const [program] = await db
+          .select()
+          .from(programs)
+          .where(and(eq(programs.id, overrides.changed.get(todayPosition)!.programId!), livePrograms));
+        if (program) todaySlot = { ...todaySlot, programId: program.id, program };
+      }
 
       // The walk never consumes today, so writing today's auto session doesn't
       // change todaySlot or missed; the rotation advances on its own tomorrow.
@@ -353,6 +299,7 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
         currentWeek,
         endDate: endDateStr,
         missedSlots,
+        todaySessions,
       },
     };
   } catch (err) {
@@ -388,6 +335,8 @@ export async function skipAutoCompletedDay(
         userId: workoutSessions.userId,
         date: workoutSessions.date,
         source: workoutSessions.source,
+        programId: workoutSessions.programId,
+        plannedSessionId: workoutSessions.plannedSessionId,
       })
       .from(workoutSessions)
       .where(eq(workoutSessions.id, parsed.data.sessionId));
@@ -396,20 +345,18 @@ export async function skipAutoCompletedDay(
       return { success: false, error: "Only automatic days can be skipped" };
     }
 
-    await db.transaction(async (tx) => {
-      await tx
-        .delete(workoutSessions)
-        .where(
-          and(
-            eq(workoutSessions.id, parsed.data.sessionId),
-            eq(workoutSessions.userId, auth.user.id),
-          ),
-        );
-      await tx
-        .insert(dismissedMakeups)
-        .values({ userId: auth.user.id, date: existing.date })
-        .onConflictDoNothing();
-    });
+    await db
+      .delete(workoutSessions)
+      .where(
+        and(
+          eq(workoutSessions.id, parsed.data.sessionId),
+          eq(workoutSessions.userId, auth.user.id),
+        ),
+      );
+    // The planned session it stood for is skipped (docs/plans/sessions.md, 4.4),
+    // so it is neither written again nor missed.
+    await skipForAutoDay({ userId: auth.user.id, writer: "user" }, existing);
+    await dismissIfDayClear(auth.user.id, existing.date);
     revalidatePath("/");
     revalidatePath("/history");
     return { success: true, data: null };
@@ -424,11 +371,14 @@ const dismissMissedWorkoutSchema = z.object({
   date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format"),
+  // The one dated session to skip. Without it (an older app), every session
+  // planned that day is skipped, as a decline did before C2.
+  plannedSessionId: z.number().int().positive().optional(),
 });
 
 /**
  * Decline a specific missed workout so it stops appearing in the "Missed this
- * week" list. Keyed by the original scheduled date of the missed slot.
+ * week" list: its dated session is skipped (docs/plans/sessions.md, 4.4).
  */
 export async function dismissMissedWorkout(
   data: unknown,
@@ -444,10 +394,7 @@ export async function dismissMissedWorkout(
   }
 
   try {
-    await db
-      .insert(dismissedMakeups)
-      .values({ userId: auth.user.id, date: parsed.data.date })
-      .onConflictDoNothing();
+    await declineDay({ userId: auth.user.id, writer: "user" }, parsed.data.date, parsed.data.plannedSessionId);
     revalidatePath("/");
     return { success: true, data: null };
   } catch (e) {
@@ -849,7 +796,7 @@ export async function upsertCycleSlot(
       return { success: false, error: "Invalid input" };
     }
 
-    const { trainingCycleId, dayOfWeek, orderIndex, ...rest } = validation.data;
+    const { trainingCycleId, dayOfWeek, orderIndex, daySlot, ...rest } = validation.data;
 
     // If assigning a program to the slot, verify the caller owns it — otherwise
     // a user could attach (and surface) another user's program in their cycle.
@@ -864,47 +811,18 @@ export async function upsertCycleSlot(
       }
     }
 
-    const done = await writeCycle(auth.user.id, trainingCycleId, async (tx) => {
-    // Find existing slot to upsert
-    let existingSlot = null;
-    if (dayOfWeek !== undefined) {
-      existingSlot = await tx.query.trainingCycleSlots.findFirst({
-        where: and(
-          eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
-          eq(trainingCycleSlots.dayOfWeek, dayOfWeek),
-        ),
-      });
-    } else if (orderIndex !== undefined) {
-      existingSlot = await tx.query.trainingCycleSlots.findFirst({
-        where: and(
-          eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
-          eq(trainingCycleSlots.orderIndex, orderIndex),
-        ),
-      });
-    }
-
-    let slot: TrainingCycleSlot;
-    if (existingSlot) {
-      const [updated] = await tx
-        .update(trainingCycleSlots)
-        .set({ ...rest, dayOfWeek, orderIndex })
-        .where(eq(trainingCycleSlots.id, existingSlot.id))
-        .returning();
-      slot = updated;
-    } else {
-      const [inserted] = await tx
-        .insert(trainingCycleSlots)
-        .values({ trainingCycleId, dayOfWeek, orderIndex, ...rest })
-        .returning();
-      slot = inserted;
-    }
-    return slot;
-    });
+    if (dayOfWeek === undefined && orderIndex === undefined) return { success: false, error: "Invalid input" };
+    // A day can hold up to three sessions (docs/plans/sessions.md, 3.1).
+    const done = await writeCycle(auth.user.id, trainingCycleId, (tx) =>
+      upsertSlotInTx(tx, trainingCycleId, { dayOfWeek: dayOfWeek ?? null, orderIndex: orderIndex ?? null, daySlot }, rest),
+    );
     if (!done) return { success: false, error: "Cycle not found" };
 
     revalidatePath(`/cycles/${trainingCycleId}`);
-    return { success: true, data: done.result };
+    revalidatePath("/");
+    return { success: true, data: done.result as TrainingCycleSlot };
   } catch (err) {
+    if (err instanceof PlanStateError) return { success: false, error: err.message };
     return { success: false, error: String(err) };
   }
 }
@@ -917,18 +835,10 @@ export async function removeCycleSlot(
   try {
     // A hard delete: nothing logged points at a slot, and the cycle's history
     // keeps it for a restore (docs/plans/revisions.md, 2.3).
-    const done = await writeCycle(auth.user.id, cycleId, (tx) =>
-      tx
-        .delete(trainingCycleSlots)
-        .where(
-          and(
-            eq(trainingCycleSlots.id, slotId),
-            eq(trainingCycleSlots.trainingCycleId, cycleId),
-          ),
-        ),
-    );
+    const done = await writeCycle(auth.user.id, cycleId, (tx) => removeSlotInTx(tx, cycleId, slotId));
     if (!done) return { success: false, error: "Cycle not found" };
     revalidatePath(`/cycles/${cycleId}`);
+    revalidatePath("/");
     return { success: true, data: undefined };
   } catch (err) {
     return { success: false, error: String(err) };

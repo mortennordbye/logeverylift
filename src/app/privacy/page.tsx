@@ -32,8 +32,9 @@ export default function PrivacyPage() {
         <li>
           <strong>Training:</strong> workouts, sets, reps, weights, durations, distances, heart rate zones, effort
           ratings (RIR/RPE), missed sets, how you felt and your readiness score, personal records, programs, training
-          cycles, seasons (a long goal in your own words, its dates and the goal after it) and the races in them (name,
-          date, kind, distance and priority), and any notes you write. Each change to a program, cycle or season is kept
+          cycles and their dated sessions (each day&apos;s planned sessions, and any you move, skip or add, with an optional
+          reason you write), seasons (a long goal in your own words, its dates and the goal after it) and the races in them (name,
+          date, kind, distance and priority), and any notes you write. Each change to a program, cycle, dated session or season is kept
           as a version you can restore, with who made it (you, an assistant you connected, or the app) and the reason given.
         </li>
         <li>
@@ -181,9 +182,9 @@ export default function PrivacyPage() {
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
-        on, programs, cycles, seasons and their races, coach memory, thresholds, the athlete profile with injuries, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
+        on, programs, cycles and their dated sessions, seasons and their races, coach memory, thresholds, the athlete profile with injuries, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
-        access they can also change your profile, body weight, time zone, display units, programs, cycles, seasons and races, see and restore earlier
+        access they can also change your profile, body weight, time zone, display units, programs, cycles, dated sessions, seasons and races, see and restore earlier
         versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile and injuries, create custom exercises, and log a workout you did or mark a planned day
         as done. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More →

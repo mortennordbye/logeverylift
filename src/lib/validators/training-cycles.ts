@@ -36,6 +36,8 @@ export const upsertCycleSlotSchema = z.object({
   dayOfWeek: z.number().int().min(1).max(7).optional(),
   // rotation mode: 1, 2, 3…
   orderIndex: z.number().int().positive().optional(),
+  // day_of_week mode: the session's order in the day, 1-3 (docs/plans/sessions.md, 3.1)
+  daySlot: z.number().int().min(1).max(3).optional(),
   label: z.string().max(100).optional(),
   programId: z.number().int().positive().nullable().optional(),
   notes: z.string().max(500).optional(),
