@@ -86,9 +86,9 @@ everything that writes plan data. A1-A3 share one brief and one PR:
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| A1 | Bug fixes and ghost-session cleanup | none | building |
-| A2 | User time zone and display units | none | building |
-| A3 | Endurance switch | none | building |
+| A1 | Bug fixes and ghost-session cleanup | none | done |
+| A2 | User time zone and display units | none | done |
+| A3 | Endurance switch | none | done |
 | A4 | Revisions, stable ids and plan versions | A1 | building ([`revisions.md`](revisions.md)) |
 
 **A1. Bug fixes and ghost-session cleanup.** Audit "Bugs found" 1-4 and D23.
@@ -145,8 +145,8 @@ parallel once A4 is done.
 | ID | Package | Needs | Status |
 |---|---|---|---|
 | B1 | MCP parity, part 1 | A1, A4 | todo |
-| B2 | MCP scopes, consent and revoke | none | building ([`mcp-access.md`](mcp-access.md)) |
-| B3 | MCP knowledge resources and server instructions | research doc (done) | building ([`mcp-access.md`](mcp-access.md)) |
+| B2 | MCP scopes, consent and revoke | none | done ([`mcp-access.md`](mcp-access.md)) |
+| B3 | MCP knowledge resources and server instructions | research doc (done) | done ([`mcp-access.md`](mcp-access.md)) |
 | B4 | Coach memory | A4 | todo |
 
 **B1. MCP parity, part 1.** Cycle fields over MCP (race date and distance, goal, athlete level,

@@ -27,7 +27,7 @@ when the brief was written.
 | 6 | [Share card and recap](share-card-and-recap.md) | todo | no | no |
 | 7 | [Web push and reminders](web-push-and-reminders.md) | todo | yes | yes (rest timer) |
 | 8 | [Garmin deep data](garmin-deep-data.md) | phase 1 merged to main (#208, #215) | yes | no |
-| 9 | [MCP access: scopes, revoke, instructions, resources](mcp-access.md) (endurance plan B2, B3) | building | data migration only | no |
+| 9 | [MCP access: scopes, revoke, instructions, resources](mcp-access.md) (endurance plan B2, B3) | done | data migration only | no |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.
@@ -59,5 +59,5 @@ brief here before code. Inputs: the audit (`docs/triathlon-coach-audit.md`) and 
 
 | Package | Brief | Status |
 |---|---|---|
-| A1-A3 | [Foundations: bug fixes, time zone and units, endurance switch](foundations.md) | building |
+| A1-A3 | [Foundations: bug fixes, time zone and units, endurance switch](foundations.md) | done |
 | A4 | [Revisions, stable ids and plan versions](revisions.md) | building |
