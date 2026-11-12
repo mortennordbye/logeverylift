@@ -32,6 +32,8 @@ type BodyArea = "upper_body" | "lower_body" | "core" | "full_body" | "cardio";
 type MuscleGroup = "chest" | "back" | "shoulders" | "biceps" | "triceps" | "forearms" | "quads" | "hamstrings" | "glutes" | "calves" | "abs" | "lower_back" | "full_body" | "cardio";
 type Equipment = "barbell" | "dumbbell" | "machine" | "cable" | "bodyweight" | "kettlebell" | "bands" | "other";
 type MovementPattern = "push" | "pull" | "hinge" | "squat" | "carry" | "rotation" | "isometric" | "cardio";
+const DISCIPLINES = ["swim", "bike", "run"] as const;
+type Discipline = (typeof DISCIPLINES)[number];
 type ViewId = "all" | "bodyArea" | "muscles" | "equipment" | "timed" | "function" | "custom";
 
 const BODY_AREA_ORDER: BodyArea[] = ["upper_body", "lower_body", "core", "full_body", "cardio"];
@@ -323,6 +325,9 @@ function ExerciseFormFields({
   equipment, setEquipment,
   movementPattern, setMovementPattern,
   exType, setExType,
+  discipline, setDiscipline,
+  isTimed, setIsTimed,
+  showDiscipline,
   error,
   loading,
   submitLabel,
@@ -334,6 +339,10 @@ function ExerciseFormFields({
   equipment: Equipment | ""; setEquipment: (v: Equipment | "") => void;
   movementPattern: MovementPattern | ""; setMovementPattern: (v: MovementPattern | "") => void;
   exType: ExerciseType | ""; setExType: (v: ExerciseType | "") => void;
+  discipline: Discipline | ""; setDiscipline: (v: Discipline | "") => void;
+  isTimed: boolean; setIsTimed: (v: boolean) => void;
+  /** Swim, bike or run: only with the endurance add-on on. */
+  showDiscipline: boolean;
   error: string;
   loading: boolean;
   submitLabel: string;
@@ -413,6 +422,29 @@ function ExerciseFormFields({
           <option key={val} value={val}>{EXERCISE_TYPE_LABELS[val]}</option>
         ))}
       </select>
+      {showDiscipline && (
+        <select
+          value={discipline}
+          onChange={(e) => setDiscipline(e.target.value as Discipline | "")}
+          aria-label="Discipline"
+          className="w-full rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2 ring-primary"
+        >
+          <option value="">Discipline (optional)</option>
+          {DISCIPLINES.map((val) => (
+            <option key={val} value={val}>{capitalize(val)}</option>
+          ))}
+        </select>
+      )}
+      <button
+        type="button"
+        aria-pressed={isTimed}
+        onClick={() => setIsTimed(!isTimed)}
+        className={`w-full min-h-11 rounded-xl px-4 py-3 text-left text-base transition-colors active:opacity-70 ${
+          isTimed ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+        }`}
+      >
+        {isTimed ? "Held for time" : "Counted in reps"}
+      </button>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <button
         type="submit"
@@ -431,10 +463,13 @@ export function ExercisesClient({
   exercises,
   onSelectExercise,
   onBack,
+  enduranceEnabled = false,
 }: {
   exercises: Exercise[];
   onSelectExercise?: (exercise: Exercise) => Promise<void>;
   onBack?: () => void;
+  /** Shows the discipline field on the custom-exercise form. */
+  enduranceEnabled?: boolean;
 }) {
   const router = useRouter();
   const [view, setView] = useState<ViewId | "menu">("menu");
@@ -449,6 +484,8 @@ export function ExercisesClient({
   const [equipment, setEquipment] = useState<Equipment | "">("");
   const [movementPattern, setMovementPattern] = useState<MovementPattern | "">("");
   const [exType, setExType] = useState<ExerciseType | "">("");
+  const [discipline, setDiscipline] = useState<Discipline | "">("");
+  const [isTimed, setIsTimed] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [selectLoading, setSelectLoading] = useState(false);
@@ -470,6 +507,8 @@ export function ExercisesClient({
     setEquipment((exercise.equipment as Equipment | "") ?? "");
     setMovementPattern((exercise.movementPattern as MovementPattern | "") ?? "");
     setExType((exercise.exerciseType as ExerciseType | "") ?? "");
+    setDiscipline(exercise.discipline ?? "");
+    setIsTimed(exercise.isTimed);
     setError("");
   }
 
@@ -477,6 +516,7 @@ export function ExercisesClient({
     setEditingExercise(null);
     setName(""); setCategory("strength"); setBodyArea("");
     setMuscleGroup(""); setEquipment(""); setMovementPattern(""); setExType("");
+    setDiscipline(""); setIsTimed(false);
     setError("");
   }
 
@@ -494,6 +534,7 @@ export function ExercisesClient({
   function resetForm() {
     setName(""); setCategory("strength"); setBodyArea("");
     setMuscleGroup(""); setEquipment(""); setMovementPattern(""); setExType("");
+    setDiscipline(""); setIsTimed(false);
     setError("");
   }
 
@@ -507,6 +548,9 @@ export function ExercisesClient({
       bodyArea: bodyArea || undefined, muscleGroup: muscleGroup || undefined,
       equipment: equipment || undefined, movementPattern: movementPattern || undefined,
       exerciseType: exType || undefined,
+      // A hidden field must not clear a discipline set earlier.
+      ...(enduranceEnabled && { discipline: discipline || null }),
+      isTimed,
     }));
     setLoading(false);
     if (!result.success) { setError(result.error ?? "Failed to update exercise"); return; }
@@ -525,6 +569,8 @@ export function ExercisesClient({
       bodyArea: bodyArea || undefined, muscleGroup: muscleGroup || undefined,
       equipment: equipment || undefined, movementPattern: movementPattern || undefined,
       exerciseType: exType || undefined,
+      discipline: (enduranceEnabled && discipline) || undefined,
+      isTimed,
     }));
     setLoading(false);
     if (!result.success) { setError(result.error ?? "Failed to create exercise"); return; }
@@ -572,6 +618,9 @@ export function ExercisesClient({
               equipment={equipment} setEquipment={setEquipment}
               movementPattern={movementPattern} setMovementPattern={setMovementPattern}
               exType={exType} setExType={setExType}
+              discipline={discipline} setDiscipline={setDiscipline}
+              isTimed={isTimed} setIsTimed={setIsTimed}
+              showDiscipline={enduranceEnabled}
               error={error} loading={loading} submitLabel={loading ? "Saving…" : "Save Changes"}
             />
           </form>
@@ -660,6 +709,9 @@ export function ExercisesClient({
                 equipment={equipment} setEquipment={setEquipment}
                 movementPattern={movementPattern} setMovementPattern={setMovementPattern}
                 exType={exType} setExType={setExType}
+                discipline={discipline} setDiscipline={setDiscipline}
+                isTimed={isTimed} setIsTimed={setIsTimed}
+                showDiscipline={enduranceEnabled}
                 error={error} loading={loading} submitLabel={loading ? "Creating…" : "Create Exercise"}
               />
             </form>

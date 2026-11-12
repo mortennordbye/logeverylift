@@ -1,6 +1,6 @@
 "use server";
 
-import { inArray, eq } from "drizzle-orm";
+import { and, inArray, eq, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { db } from "@/db";
 import {
@@ -356,7 +356,7 @@ async function seedDemoDataForUser(userId: string): Promise<void> {
   const exerciseRows = await db
     .select({ id: exercises.id, name: exercises.name })
     .from(exercises)
-    .where(inArray(exercises.name, exerciseNames));
+    .where(and(inArray(exercises.name, exerciseNames), isNull(exercises.userId)));
 
   const exerciseIdByName = new Map(exerciseRows.map((e) => [e.name, e.id]));
 
@@ -579,7 +579,7 @@ async function seedDataForUser(userId: string): Promise<{ programs: number; sess
   const exerciseRows = await db
     .select({ id: exercises.id, name: exercises.name })
     .from(exercises)
-    .where(inArray(exercises.name, exerciseNames));
+    .where(and(inArray(exercises.name, exerciseNames), isNull(exercises.userId)));
 
   const exerciseIdByName = new Map(exerciseRows.map((e) => [e.name, e.id]));
 

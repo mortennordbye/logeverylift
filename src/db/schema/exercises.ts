@@ -17,7 +17,8 @@
  * - Add created_by_user_id for custom exercises
  */
 
-import { boolean, pgTable, serial, text } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, pgTable, serial, text, uniqueIndex } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
 export const exerciseCategoryEnum = [
@@ -91,7 +92,9 @@ export const exerciseTypeEnum = [
 
 export const exercises = pgTable("exercises", {
   id: serial("id").primaryKey(),
-  name: text("name").notNull().unique(),
+  // Unique among system exercises, and per user among custom ones (the two
+  // indexes below), so two users can each have their own "Trail run".
+  name: text("name").notNull(),
   category: text("category", { enum: exerciseCategoryEnum }).notNull(),
   isCustom: boolean("is_custom").default(false).notNull(),
   isTimed: boolean("is_timed").default(false).notNull(),
@@ -105,4 +108,7 @@ export const exercises = pgTable("exercises", {
   // for legacy/cardio rows; backfilled from movement_pattern. Can be overridden
   // per program via program_exercises.exerciseType.
   exerciseType: text("exercise_type", { enum: exerciseTypeEnum }),
-});
+}, (t) => [
+  uniqueIndex("uniq_exercise_system_name").on(t.name).where(sql`${t.userId} IS NULL`),
+  uniqueIndex("uniq_exercise_custom_name").on(t.userId, t.name).where(sql`${t.userId} IS NOT NULL`),
+]);

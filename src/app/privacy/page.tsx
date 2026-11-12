@@ -167,7 +167,9 @@ export default function PrivacyPage() {
         read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
         on, programs, cycles and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the notes you write on
         workouts and sets. If Garmin is on for your account, they can also read data from it. With read and change
-        access they can also change your profile, body weight, time zone, display units, programs and cycles, and see and restore earlier versions of your programs and cycles. That provider&apos;s own privacy
+        access they can also change your profile, body weight, time zone, display units, programs and cycles, see and restore earlier
+        versions of your programs and cycles, create custom exercises, and log a workout you did or mark a planned day as done. History
+        shows such a workout as logged by your assistant. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More →
         Connected assistants, and it loses access at once.
       </p>

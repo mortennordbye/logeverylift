@@ -8,9 +8,11 @@
  */
 
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
+import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { describe, expect, it, vi } from "vitest";
@@ -98,5 +100,25 @@ describe("MCP tool registration", () => {
       ].sort(),
     );
     for (const tool of tools) expect(tool.annotations).toEqual(READ_ONLY);
+  });
+
+  /** Each tool's name and whether it is a read tool (readOnlyHint true). */
+  function hints(register: (s: McpServer, userId: string) => void) {
+    const out: Record<string, boolean> = {};
+    const stub = {
+      registerTool(name: string, config: { annotations?: { readOnlyHint?: boolean } }) {
+        out[name] = config.annotations?.readOnlyHint === true;
+      },
+    } as unknown as McpServer;
+    register(stub, "test-user");
+    return out;
+  }
+
+  it("registers the exercise tools: search is read, create is write", () => {
+    expect(hints(registerExerciseTools)).toEqual({ search_exercises: true, create_exercise: false });
+  });
+
+  it("registers the session tools, both write tools", () => {
+    expect(hints(registerSessionTools)).toEqual({ log_session: false, confirm_session: false });
   });
 });

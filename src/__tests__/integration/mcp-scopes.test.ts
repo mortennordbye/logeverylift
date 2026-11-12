@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import {
+  exercises,
   planRevisions,
   programExercises,
   programs,
@@ -7,16 +8,20 @@ import {
   trainingCycles,
   userWeightEntries,
   users,
+  workoutSessions,
 } from "@/db/schema";
 import { connectionAccess } from "@/lib/mcp/access";
 import { planWrite } from "@/lib/plan-revisions";
 import { READ_ONLY_REFUSAL, scopedServer, type McpAccess } from "@/lib/mcp/scopes";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
+import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { toDateStr } from "@/lib/utils/cycle-position";
 import { asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createExercise, createOAuthClient, createOAuthConnection, createProgram, createUser } from "./factories";
@@ -36,7 +41,7 @@ function toolsFor(userId: string, access: McpAccess) {
     registerTool: (name: string, _config: unknown, handler: Handler) => tools.set(name, handler),
   } as unknown as McpServer;
   const server = scopedServer(base, access);
-  for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools]) {
+  for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools, registerExerciseTools, registerSessionTools]) {
     register(server, userId);
   }
   return tools;
@@ -50,7 +55,9 @@ async function fingerprint(userId: string) {
   const cycles = await db.select({ id: trainingCycles.id, name: trainingCycles.name }).from(trainingCycles).where(eq(trainingCycles.userId, userId));
   const cycleSlots = await db.select({ id: trainingCycleSlots.id }).from(trainingCycleSlots).innerJoin(trainingCycles, eq(trainingCycles.id, trainingCycleSlots.trainingCycleId)).where(eq(trainingCycles.userId, userId));
   const weights = await db.select({ id: userWeightEntries.id }).from(userWeightEntries).where(eq(userWeightEntries.userId, userId));
-  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length });
+  const sessions = await db.select({ id: workoutSessions.id }).from(workoutSessions).where(eq(workoutSessions.userId, userId));
+  const custom = await db.select({ id: exercises.id }).from(exercises).where(eq(exercises.userId, userId));
+  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length });
 }
 
 let me: string;
@@ -64,7 +71,12 @@ beforeEach(async () => {
   me = (await createUser()).id;
   exerciseId = (await createExercise()).id;
   programId = (await createProgram(me, [{ exerciseId, sets: [{ targetReps: 8, weightKg: "60" }] }])).program.id;
-  [{ id: cycleId }] = await db.insert(trainingCycles).values({ userId: me, name: "Block", durationWeeks: 8 }).returning({ id: trainingCycles.id });
+  // Active since today, with the program on Wednesday, so confirm_session has a day to confirm.
+  [{ id: cycleId }] = await db
+    .insert(trainingCycles)
+    .values({ userId: me, name: "Block", durationWeeks: 8, status: "active", startDate: toDateStr(new Date()) })
+    .returning({ id: trainingCycles.id });
+  await db.insert(trainingCycleSlots).values({ trainingCycleId: cycleId, dayOfWeek: 3, programId });
   // A user rename, so the program has history to restore: baseline then update.
   // The program is at version 2 after it.
   await planWrite({ userId: me, writer: "user" }, async (w) => {
@@ -86,6 +98,9 @@ const writeCalls = (): [string, Record<string, unknown>][] => [
   ["restore_revision", { revisionId: baselineId, reason: "Test" }],
   ["manage_training_cycle", { operation: "create", name: "Next block", durationWeeks: 4, reason: "Test" }],
   ["edit_cycle_slot", { operation: "upsert", trainingCycleId: cycleId, dayOfWeek: 1, label: "Monday", reason: "Test", expectedVersion: 1 }],
+  ["create_exercise", { name: "My trail run", category: "cardio", discipline: "run" }],
+  ["log_session", { date: toDateStr(new Date()), sets: [{ exerciseId, setNumber: 1, reps: 5, weightKg: 60 }] }],
+  ["confirm_session", { date: toDateStr(new Date()), programId }],
 ];
 
 const readCalls: [string, Record<string, unknown>][] = [
@@ -104,6 +119,7 @@ const readCalls: [string, Record<string, unknown>][] = [
   ["list_garmin_activities", { limit: 5 }],
   ["get_garmin_activity", { id: 1 }],
   ["list_revisions", {}],
+  ["search_exercises", { query: "a", limit: 5 }],
 ];
 
 describe("read only", () => {

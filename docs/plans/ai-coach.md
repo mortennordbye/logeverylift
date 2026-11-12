@@ -326,8 +326,10 @@ pure module.
 - Writes, in one transaction: a completed session with `source` `assistant`, its sets (no
   `program_set_id`: the assistant logs what was done, not against a planned set), the deletion of
   an `auto` row for the same program and day (as `completeWorkoutSession` does), and a records
-  rebuild from the session start for each exercise (`rebuildPRsFrom`). After commit:
-  `learnWeightStacks`, as the app does on finish.
+  rebuild from the session start for each exercise (`rebuildPRsFrom`). Each set's `created_at`
+  is the session's time, since the rebuild orders and dates sets by it. No weight-stack
+  learning: it learns from sets linked to a program slot, and these sets link to none, so the
+  tool writes no plan data.
 - To call the records helpers, `rebuildPRsFrom` and the helpers it uses move unchanged from
   `src/lib/actions/workout-sets.ts` into `src/lib/workout-records.ts` (*new*, plain module).
   Pure move; `logWorkoutSet` imports them from there. This touches the set logging flow, so the
@@ -338,8 +340,9 @@ pure module.
 `confirm_session`:
 - Input: `date` (in the active cycle, not in the future) and `programId` (the program of a slot
   of the active cycle).
-- Writes the `auto` row for that program and day with `insertAutoSessions`, moved to the same
-  plain module. A second confirm is a no-op (`uniq_ws_auto_day`). The result says the day now
+- Writes the `auto` row for that program and day with `insertAutoSessions`, moved unchanged to
+  `src/lib/auto-sessions.ts` (*new*, plain module). If the day is already logged, nothing is
+  written and the result says so. A second confirm is a no-op (`uniq_ws_auto_day`). The result says the day now
   counts as done for adherence and the weekly sync.
 
 ### 2.7 UI

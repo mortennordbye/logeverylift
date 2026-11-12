@@ -18,9 +18,15 @@ what it describes, that package updates this file and the server instructions in
   one per workout). A slot points at a program, or at nothing for a rest day. A slot marked
   `autoComplete` is a day the user tracks outside the app; it completes itself. A cycle is a
   draft, active or completed, and only one is active at a time.
+- **Exercise.** The built-in library plus the user's own custom exercises. An endurance
+  exercise has a discipline (swim, bike or run). `search_exercises` finds them;
+  `create_exercise` makes a custom one. A custom name must not match a built-in exercise or
+  another of the user's own.
 - **Workout session.** One logged workout, with its sets: reps, weight, duration, distance,
-  heart rate zone, effort (RIR or RPE), and how the user felt. Assistants can read sessions but
-  cannot log or edit them.
+  heart rate zone, effort (RIR or RPE), how the user felt, and the user's notes on the session
+  and each set. Assistants can read sessions, log one done outside the app (`log_session`, up to
+  60 days back, shown to the user as logged by the assistant), and mark a planned day of the
+  active cycle as done (`confirm_session`). They cannot edit or delete sessions.
 - **Profile and body weight.** Name, gender, birth year, height, goals, experience level, and a
   weight history.
 - **Settings.** The user's time zone and display units (`get_profile`, `update_profile`), and
@@ -66,7 +72,8 @@ lasts only until that writer runs again.
 - **Units:** every value a tool takes or returns is metric (kg, metres, seconds). The user's
   `distanceUnit` (km or mi) and `swimUnit` (m or yd) only change what the app shows; weights
   are always kg.
-- **No session notes over MCP yet.** Tools leave free-text notes out.
+- **Notes are private.** Session, set and exercise notes are the user's own words and can hold
+  health details. Use them for coaching only.
 
 ## Access
 

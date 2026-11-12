@@ -7,12 +7,14 @@
  * exported from a "use server" file is a callable action, and one taking a
  * userId would let a client name somebody else's.
  *
- * Free-text notes are left out. They are the most sensitive thing a session
- * holds and no question these tools answer needs them.
+ * Free-text notes are returned: the user's own notes on sessions and sets,
+ * and their note per exercise (decision D6 in docs/triathlon-coach-audit.md).
+ * The MCP consent page names them, and they never reach friends.
  */
 
 import { db } from "@/db";
 import {
+  exerciseNotes,
   exercisePrs,
   exercises,
   programs,
@@ -42,6 +44,7 @@ const SET_FIELDS = {
   rir: workoutSets.rir,
   rpe: workoutSets.rpe,
   isFailed: workoutSets.isFailed,
+  notes: workoutSets.notes,
 };
 
 type SetRow = {
@@ -60,6 +63,7 @@ function shapeSet(s: SetRow) {
     rir: s.rir,
     rpe: s.rpe,
     isFailed: s.isFailed,
+    notes: s.notes,
   };
 }
 
@@ -78,7 +82,7 @@ export function registerWorkoutTools(server: McpServer, userId: string) {
     "recent_workouts",
     {
       description:
-        "The user's completed workouts over the last N days, newest first: date, program, duration, how they felt, readiness, and each exercise's sets with reps, weight, effort and any distance or duration. Use this for questions like 'what did I lift last week'.",
+        "The user's completed workouts over the last N days, newest first: date, program, duration, how they felt, readiness, the user's notes, and each exercise's sets with reps, weight, effort, any distance or duration, and set notes. Use this for questions like 'what did I lift last week'. Notes are the user's own words: health details in them are private, so use them for coaching only.",
       inputSchema: { days: z.number().int().min(1).max(90).default(14) },
       annotations: READ_ONLY,
     },
@@ -92,6 +96,7 @@ export function registerWorkoutTools(server: McpServer, userId: string) {
             endTime: workoutSessions.endTime,
             feeling: workoutSessions.feeling,
             readiness: workoutSessions.readiness,
+            notes: workoutSessions.notes,
             source: workoutSessions.source,
             programName: programs.name,
           })
@@ -128,6 +133,7 @@ export function registerWorkoutTools(server: McpServer, userId: string) {
                 : null,
             feeling: s.feeling ?? null,
             readiness: s.readiness ?? null,
+            notes: s.notes ?? null,
             exercises: byExercise(sets.filter((set) => set.sessionId === s.id)),
           })),
         });
@@ -141,7 +147,7 @@ export function registerWorkoutTools(server: McpServer, userId: string) {
     "exercise_history",
     {
       description:
-        "The user's sessions of one exercise, newest first, with every set. Matches on part of the name among exercises they have logged. If several match and none exactly, returns the candidates to choose from instead.",
+        "The user's sessions of one exercise, newest first, with every set and its notes, each session's notes, and the user's own standing note on the exercise (note). Matches on part of the name among exercises they have logged. If several match and none exactly, returns the candidates to choose from instead.",
       inputSchema: {
         exercise: z.string().trim().min(1).max(100),
         sessions: z.number().int().min(1).max(20).default(10),
@@ -173,7 +179,7 @@ export function registerWorkoutTools(server: McpServer, userId: string) {
         const [{ id: exerciseId, name }] = chosen;
 
         const sessions = await db
-          .selectDistinct({ id: workoutSessions.id, date: workoutSessions.date })
+          .selectDistinct({ id: workoutSessions.id, date: workoutSessions.date, notes: workoutSessions.notes })
           .from(workoutSessions)
           .innerJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
           .where(
@@ -201,10 +207,17 @@ export function registerWorkoutTools(server: McpServer, userId: string) {
               .orderBy(asc(workoutSets.setNumber), asc(workoutSets.id))
           : [];
 
+        const [note] = await db
+          .select({ note: exerciseNotes.note })
+          .from(exerciseNotes)
+          .where(and(eq(exerciseNotes.userId, userId), eq(exerciseNotes.exerciseId, exerciseId)));
+
         return ok({
           exercise: name,
+          note: note?.note ?? null,
           sessions: sessions.map((s) => ({
             date: s.date,
+            notes: s.notes ?? null,
             sets: sets.filter((set) => set.sessionId === s.id).map(shapeSet),
           })),
         });

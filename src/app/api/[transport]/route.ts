@@ -1,8 +1,9 @@
 /**
  * MCP server endpoint (Streamable HTTP).
  *
- * Exposes read-write tools over the user's programs, training cycles, and
- * profile/weight, and read-only tools over their workout history, to any MCP client (Claude Desktop/Code, etc.). The endpoint
+ * Exposes read-write tools over the user's programs, training cycles,
+ * profile/weight and exercises, tools that read their workout history and log
+ * or confirm sessions, to any MCP client (Claude Desktop/Code, etc.). The endpoint
  * resolves to /api/mcp.
  *
  * Auth: `requireMcpAuth` (@better-auth/mcp) verifies the OAuth bearer token on
@@ -27,9 +28,11 @@ import { checkRateLimit } from "@/lib/mcp/rate-limit";
 import { loadResourceDocs, registerResources } from "@/lib/mcp/resources";
 import { MCP_SCOPES, scopedServer } from "@/lib/mcp/scopes";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
+import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { requireMcpAuth } from "@better-auth/mcp";
 import { createResourceServerChallenge } from "@better-auth/oauth-provider";
@@ -106,6 +109,8 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       registerProgramTools(server, userId, clientId);
       registerCycleTools(server, userId, clientId);
       registerWorkoutTools(server, userId);
+      registerSessionTools(server, userId);
+      registerExerciseTools(server, userId);
       if (garmin) registerGarminTools(server, userId);
       registerResources(mcpServer, docs);
     },

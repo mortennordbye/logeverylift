@@ -144,6 +144,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
         <h1 className="text-3xl font-bold tracking-tight">{formatDate(startTime)}</h1>
         <p className="text-muted-foreground mt-1">
           {detail.programName ?? "Ad hoc workout"}
+          {detail.source === "assistant" && " · logged by your assistant"}
         </p>
 
         {/* Summary row */}

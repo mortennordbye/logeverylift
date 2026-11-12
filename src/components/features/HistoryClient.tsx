@@ -113,6 +113,9 @@ export function HistoryClient({ sessions }: { sessions: SessionWithStats[] }) {
                             {session.totalVolumeKg.toLocaleString()}kg
                           </span>
                         )}
+                        {session.source === "assistant" && (
+                          <span className="text-xs bg-muted rounded-full px-2.5 py-1">By your assistant</span>
+                        )}
                       </>
                     )}
                   </div>

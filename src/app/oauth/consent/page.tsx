@@ -53,8 +53,9 @@ export default async function OAuthConsentPage({
               </p>
               <p className="mt-2 text-sm text-muted-foreground">
                 With read and change access it can also change your profile, body weight, programs and cycles,
-                and restore earlier versions of them. Changes apply at once, and each one is kept in the plan&apos;s
-                history, where you can undo it. You can disconnect it at any time in More → Connected assistants.
+                create custom exercises, log workouts you did, and restore earlier versions of your programs and
+                cycles. Changes apply at once, and each plan change is kept in the plan&apos;s history, where you can
+                undo it. You can disconnect it at any time in More → Connected assistants.
               </p>
             </div>
             <OAuthConsentForm

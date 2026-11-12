@@ -2,7 +2,7 @@ import { db } from "../src/db";
 import { exercises } from "../src/db/schema";
 import { aiModelConfigs } from "../src/db/schema/ai-model-configs";
 import { exerciseTypeFromPattern } from "../src/lib/utils/exercise-type";
-import { inArray } from "drizzle-orm";
+import { and, inArray, isNull } from "drizzle-orm";
 
 // Free OpenRouter models change often; AI Setup skips any that are no longer
 // listed, and the admin "Test" button shows which still answer.
@@ -283,7 +283,7 @@ async function seed() {
       "Front Lever", "Back Lever", "Tuck Planche", "Human Flag", "Crow Pose",
     ];
     await db.update(exercises).set({ isTimed: true }).where(
-      inArray(exercises.name, timedExerciseNames),
+      and(inArray(exercises.name, timedExerciseNames), isNull(exercises.userId)),
     );
     console.log(`✅ Marked ${timedExerciseNames.length} exercises as timed`);
 
