@@ -11,7 +11,8 @@ import {
 import { updateProgramSet } from "@/lib/actions/programs";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
-import { toDateStr } from "@/lib/utils/cycle-position";
+import { addDays, toDateStr } from "@/lib/utils/cycle-position";
+import { deloadCadenceForLevel, periodizedLoad, scaledDuration } from "@/lib/utils/periodization";
 import { and, desc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createUser } from "./factories";
@@ -180,7 +181,7 @@ describe("long-run cap", () => {
     const result = await setRun(p, 200)(lifter);
     expect(result.isError, result.raw).toBe(false);
     expect(result.data.limits.notChecked).toEqual([
-      expect.objectContaining({ rule: "long_run_cap", why: expect.stringContaining("No Garmin data") }),
+      expect.objectContaining({ rule: "long_run_cap", why: expect.stringContaining("no Garmin data") }),
       expect.objectContaining({ rule: "hard_sessions_per_week" }),
     ]);
   });
@@ -294,3 +295,99 @@ describe("restore", () => {
     expect(restore.limitCheck).toMatchObject({ warnings: [expect.objectContaining({ rule: "long_run_cap" })] });
   });
 });
+
+describe("review fixes", () => {
+  it("counts the week of a scheduled draft that holds the program", async () => {
+    const easy = await runProgram(me, 40);
+    const [draft] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Next", durationWeeks: 8, scheduledStartDate: toDateStr(addDays(new Date(), 3)) })
+      .returning();
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: draft.id, dayOfWeek: 1, programId: await hardProgram(me) },
+      { trainingCycleId: draft.id, dayOfWeek: 3, programId: await hardProgram(me) },
+      { trainingCycleId: draft.id, dayOfWeek: 5, programId: await hardProgram(me) },
+      { trainingCycleId: draft.id, dayOfWeek: 7, programId: easy.programId },
+    ]);
+    const result = await mcpTools(registerProgramTools, me)("edit_program_exercise", {
+      operation: "update",
+      programExerciseId: easy.programExerciseId,
+      sets: [{ id: easy.setId, setNumber: 1, durationSeconds: 40 * MIN, sessionRole: "work" }],
+      reason: "Intervals on Sunday",
+      expectedVersion: await versionOf(easy.programId),
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].rule).toBe("hard_sessions_per_week");
+    expect((await db.select().from(programSets).where(eq(programSets.id, easy.setId)))[0].sessionRole).toBeNull();
+  });
+
+  it("checks a shorter block, which makes this week's runs longer", async () => {
+    const before = periodizedLoad(2, 16, "build", deloadCadenceForLevel("intermediate")).multiplier;
+    const peak = Math.round((80 * MIN) / before);
+    const { program, slots } = await createProgram(me, [
+      { exerciseId: run, sets: [{ durationSeconds: scaledDuration(peak, before), peakDurationSeconds: peak, targetReps: null }] },
+    ]);
+    const [cycle] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Long block", durationWeeks: 16, status: "active", startDate: toDateStr(addDays(new Date(), -8)), athleteLevel: "intermediate", lastSyncedWeek: 2 })
+      .returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: cycle.id, dayOfWeek: 7, programId: program.id });
+
+    const result = await mcpTools(registerCycleTools, me)("manage_training_cycle", {
+      operation: "update",
+      cycleId: cycle.id,
+      durationWeeks: 4,
+      reason: "Shorter block",
+      expectedVersion: 1,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].rule).toBe("long_run_cap");
+    const [row] = await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycle.id));
+    expect(row).toMatchObject({ durationWeeks: 16, lastSyncedWeek: 2, version: 1 });
+    expect(await durationOf(slots[0].setIds[0])).toBe(scaledDuration(peak, before));
+  });
+
+  it("refuses set_volume over the cap and changes nothing", async () => {
+    const week = periodizedLoad(2, 8, "build", deloadCadenceForLevel(null)).multiplier;
+    const peak = Math.round((86 * MIN) / week);
+    const { program, slots } = await createProgram(me, [
+      { exerciseId: run, sets: [{ durationSeconds: scaledDuration(peak, week), peakDurationSeconds: peak, targetReps: null }] },
+    ]);
+    const [cycle] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Block", durationWeeks: 8, status: "active", startDate: toDateStr(addDays(new Date(), -8)), lastSyncedWeek: 2 })
+      .returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: cycle.id, dayOfWeek: 7, programId: program.id });
+    const revisionsBefore = await revisionCount();
+
+    const result = await mcpTools(registerCycleTools, me)("manage_training_cycle", {
+      operation: "set_volume",
+      cycleId: cycle.id,
+      pct: 110,
+      reason: "More volume",
+      expectedVersion: 1,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].rule).toBe("long_run_cap");
+    expect(await durationOf(slots[0].setIds[0])).toBe(scaledDuration(peak, week));
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycle.id)))[0].adaptationPct).toBe(100);
+    expect(await revisionCount()).toBe(revisionsBefore);
+  });
+
+  it("looks back 30 days, not 31", async () => {
+    // Only a run 30 days ago is longer than the planned one; it is outside the window.
+    await garminRun(me, 30, 150 * MIN, 25_000);
+    const p = await runProgram(me, 60);
+    const result = await setRun(p, 100)(me);
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].message).toContain("(1:20 h on");
+  });
+
+  it("names the long-run rule when Garmin data is missing", async () => {
+    const lifter = (await createUser({ enduranceEnabled: true })).id;
+    const p = await runProgram(lifter, 60);
+    const result = await setRun(p, 70)(lifter);
+    expect(result.data.limits.notChecked[0].why).toMatch(/^Long-run cap not checked: no Garmin data for this account\./);
+  });
+});
+

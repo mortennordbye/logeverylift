@@ -13,11 +13,11 @@ import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } f
 import { REVISION_RULES, assistantContext, expectedVersionArg, planErrorResult, reasonArg } from "@/lib/mcp/revisions";
 import { liveCycles, livePrograms, liveSlotProgram } from "@/lib/plan-live";
 import {
-  PlanConflictError,
   activateCycle,
   deleteCycles,
   planWrite,
   scheduleCycle,
+  startDueScheduledCycle,
   versionKey,
 } from "@/lib/plan-revisions";
 import { syncPeriodizedTargets } from "@/lib/periodization-sync";
@@ -79,6 +79,8 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     },
     async () => {
       try {
+        // A block scheduled for today becomes active on the first read, as in the app.
+        await startDueScheduledCycle(userId);
         const rows = await db
           .select()
           .from(trainingCycles)
@@ -101,6 +103,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     },
     async ({ cycleId }) => {
       try {
+        await startDueScheduledCycle(userId);
         const cycle = await db.query.trainingCycles.findFirst({
           where: and(
             eq(trainingCycles.id, cycleId),
@@ -129,7 +132,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         `operation='start': requires cycleId. Without startDate, or with today, it becomes active now (completing any other active cycle). With a later startDate (up to ${MAX_SCHEDULE_DAYS} days ahead) it stays a draft scheduled to start that day; on that day it becomes active and the old block completes. Only one cycle is scheduled at a time.`,
         `operation='set_volume': requires cycleId (the active cycle) and pct (${SET_VOLUME_MIN}-${SET_VOLUME_MAX}): this week's endurance volume as a percent of the block's curve, the same factor the weekly sync sets from adherence and readiness (adaptationPct). It rewrites this week's distances and durations at once and lasts one week: next week's sync computes its own percent. For a lasting change, edit the peaks with edit_program_exercise.`,
         `Every operation requires reason; all but create also require expectedVersion (the cycle's version). The result has the new version. ${REVISION_RULES}`,
-        `On start and set_volume: ${LIMITS_TEXT}`,
+        `On start, set_volume, and an update to durationWeeks, goal or athleteLevel of the active cycle: ${LIMITS_TEXT}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
@@ -248,6 +251,27 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             updates.lastSyncedWeek = null;
           }
 
+          // A new length, goal or level rescales this week's periodized targets
+          // at the next sync (as the app, unchecked), so the limits look at the
+          // week as it will run now (docs/plans/ai-coach.md, 2.4).
+          let limits: ReturnType<typeof limitSummary> | undefined;
+          if (updates.lastSyncedWeek === null && existing.status === "active" && existing.startDate) {
+            const settings = {
+              durationWeeks: args.durationWeeks ?? existing.durationWeeks,
+              goal: args.goal ?? existing.goal,
+              athleteLevel: args.athleteLevel !== undefined ? args.athleteLevel : existing.athleteLevel,
+            };
+            const { currentWeek } = cycleWeek(parseDateStr(existing.startDate), settings.durationWeeks, await userToday(userId));
+            const lc = await limitContext(userId);
+            const scoped = await cycleScope(cycleId, currentWeek, existing.adaptationPct, settings);
+            const before = lc.endurance && scoped ? await planFacts(db, scoped.scope) : NO_FACTS;
+            const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
+            const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
+            if (blocking.length) throw new LimitRefusedError(blocking);
+            ctx.limitCheck = check;
+            limits = limitSummary(check, unusedOverrides);
+          }
+
           const { versions } = await planWrite(ctx, async (w) => {
             await w.touch({ type: "cycle", id: cycleId }, { expectedVersion });
             if (Object.keys(updates).length > 0) {
@@ -256,7 +280,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
           });
           // plan-read: includes deleted (re-reads the row this call just wrote)
           const [cycle] = await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId));
-          return ok({ ...cycle, version: cycleVersion(versions, cycleId) ?? cycle.version });
+          return ok({ ...cycle, version: cycleVersion(versions, cycleId) ?? cycle.version, ...(limits && { limits }) });
         }
 
         if (args.operation === "delete") {
@@ -273,20 +297,21 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
 
         if (args.operation === "set_volume") {
           if (args.pct == null) return fail("pct is required for set_volume");
+          // A block scheduled for today becomes the active one first.
+          await startDueScheduledCycle(userId);
           const pct = args.pct;
           const cycle = await db.query.trainingCycles.findFirst({
             where: and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId), liveCycles),
             with: { slots: { with: { program: true } } },
           });
           if (!cycle || cycle.status !== "active" || !cycle.startDate) return fail("set_volume works on the active cycle only");
-          if (cycle.version !== expectedVersion) throw new PlanConflictError({ type: "cycle", id: cycleId }, cycle.version, expectedVersion);
           const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, parseDateStr(today));
           if (isOver) return fail("The cycle is over");
           const lc = await limitContext(userId);
           const scoped = await cycleScope(cycleId, currentWeek, pct);
           const before = lc.endurance && scoped ? await planFacts(db, scoped.scope) : NO_FACTS;
           const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
-          const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override, { hasCycle: true });
+          const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
           if (blocking.length) throw new LimitRefusedError(blocking);
           await syncPeriodizedTargets(
             cycleId,
@@ -298,6 +323,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             cycle.athleteLevel,
             { pct, note: `Set by the assistant: ${args.reason}` },
             { ...ctx, limitCheck: check },
+            expectedVersion,
           );
           audit("set_cycle_volume", { userId, cycleId, pct });
           // plan-read: includes deleted (re-reads the row this call just wrote)
@@ -315,7 +341,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         const lc = await limitContext(userId);
         const scoped = await cycleScope(cycleId, 1);
         const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
-        const { blocking, check, unusedOverrides } = evaluateLimits(lc, NO_FACTS, after, override, { hasCycle: true });
+        const { blocking, check, unusedOverrides } = evaluateLimits(lc, NO_FACTS, after, override);
         if (blocking.length) throw new LimitRefusedError(blocking);
         const checked = { ...ctx, limitCheck: check };
         if (start > today) {
@@ -427,7 +453,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             const tx = w.tx;
             await w.touch({ type: "cycle", id: trainingCycleId }, { expectedVersion: args.expectedVersion });
             // A slot changes the week's sessions, not the programs' runs.
-            return withLimits(w, lc, { programIds: [], cycleId: trainingCycleId }, override, async () => {
+            return withLimits(w, lc, { programIds: [], cycleIds: [trainingCycleId] }, override, async () => {
               let existingSlot = null;
               if (effDay !== null) {
                 existingSlot = await tx.query.trainingCycleSlots.findFirst({

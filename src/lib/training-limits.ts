@@ -47,7 +47,7 @@ import {
   type RunHistory,
   type WeekSession,
 } from "@/lib/utils/training-limits";
-import { and, eq, gte, inArray } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
 
 type Executor = typeof db | Tx;
 
@@ -61,7 +61,7 @@ export type LimitContext = {
 
 const NO_ENDURANCE = "The endurance features are off for this account, so no training limit runs.";
 const NO_GARMIN =
-  "No Garmin data for this account. Check the change against the long-run rule in logeverylift://docs/endurance-training-reference yourself.";
+  "Long-run cap not checked: no Garmin data for this account. Check the change against the long-run rule in logeverylift://docs/endurance-training-reference yourself.";
 
 export async function limitContext(userId: string): Promise<LimitContext> {
   if (!(await enduranceEnabledFor(userId))) return { endurance: false, runs: null, runsWhy: NO_ENDURANCE };
@@ -72,7 +72,8 @@ export async function limitContext(userId: string): Promise<LimitContext> {
     .where(eq(garminConnections.userId, userId));
   if (!conn?.lastSyncedAt) return { endurance: true, runs: null, runsWhy: NO_GARMIN };
 
-  const from = toDateStr(addDays(await userToday(userId), -LONG_RUN_WINDOW_DAYS));
+  // The 30 days up to and including today.
+  const from = toDateStr(addDays(await userToday(userId), -(LONG_RUN_WINDOW_DAYS - 1)));
   const rows = await db
     .select({
       typeKey: garminActivities.activityType,
@@ -186,41 +187,43 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
     }));
 }
 
-/** The active cycle holding this program, if any. */
-export async function activeCycleWith(ex: Executor, userId: string, programId: number): Promise<number | null> {
-  const [row] = await ex
-    .select({ id: trainingCycles.id })
+/**
+ * The cycles whose week a change to this program changes: the active cycle,
+ * and a draft scheduled to start, which becomes active on its day without
+ * another check (startDueScheduledCycle runs as the app).
+ */
+export async function limitCyclesWith(ex: Executor, userId: string, programId: number): Promise<number[]> {
+  const rows = await ex
+    .selectDistinct({ id: trainingCycles.id })
     .from(trainingCycles)
     .innerJoin(trainingCycleSlots, eq(trainingCycleSlots.trainingCycleId, trainingCycles.id))
     .where(
       and(
         eq(trainingCycles.userId, userId),
-        eq(trainingCycles.status, "active"),
+        or(eq(trainingCycles.status, "active"), and(eq(trainingCycles.status, "draft"), isNotNull(trainingCycles.scheduledStartDate))),
         liveCycles,
         eq(trainingCycleSlots.programId, programId),
       ),
-    )
-    .limit(1);
-  return row?.id ?? null;
+    );
+  return rows.map((r) => r.id).sort((a, b) => a - b);
 }
 
-/** What a write is about: the programs whose runs it can change and the cycle whose week it can change. */
-export type LimitScope = { programIds: number[]; cycleId: number | null };
+/** What a write is about: the programs whose runs it can change and the cycles whose week it can change. */
+export type LimitScope = { programIds: number[]; cycleIds: number[] };
 
 export type PlanFacts = {
   runs: Map<number, { label: string; run: PlannedRun }>;
-  /** null: no weekday cycle in scope (rotation, or none). */
-  week: WeekSession[] | null;
+  /** Each cycle's week; null for a rotation cycle (no fixed week). */
+  weeks: Map<number, WeekSession[] | null>;
 };
 
 export async function planFacts(ex: Executor, scope: LimitScope, share: number | null = null): Promise<PlanFacts> {
-  return {
-    runs: await programRuns(ex, scope.programIds, share),
-    week: scope.cycleId != null ? await cycleWeekSessions(ex, scope.cycleId) : null,
-  };
+  const weeks = new Map<number, WeekSession[] | null>();
+  for (const id of scope.cycleIds) weeks.set(id, await cycleWeekSessions(ex, id));
+  return { runs: await programRuns(ex, scope.programIds, share), weeks };
 }
 
-export const NO_FACTS: PlanFacts = { runs: new Map(), week: [] };
+export const NO_FACTS: PlanFacts = { runs: new Map(), weeks: new Map() };
 
 // ── Evaluating ──────────────────────────────────────────────────────────────
 
@@ -232,7 +235,6 @@ export function evaluateLimits(
   before: PlanFacts,
   after: PlanFacts,
   override: LimitOverride,
-  scope: { hasCycle: boolean },
 ): { blocking: BrokenLimit[]; check: LimitCheck; unusedOverrides: LimitRule[] } {
   const checked: LimitRule[] = [];
   const notChecked: LimitNotChecked[] = [];
@@ -253,14 +255,20 @@ export function evaluateLimits(
     } else {
       notChecked.push({ rule: "long_run_cap", why: lc.runsWhy ?? NO_GARMIN });
     }
-    if (after.week) {
+    const weeks = [...after.weeks].filter((e): e is [number, WeekSession[]] => e[1] != null);
+    if (weeks.length) {
       checked.push("hard_sessions_per_week");
-      const hit = hardSessionsPerWeek(before.week ?? [], after.week);
-      if (hit) broken.push(hit);
+      const hits = weeks
+        .map(([id, week]) => hardSessionsPerWeek(before.weeks.get(id) ?? [], week))
+        .filter((h): h is BrokenLimit => h != null);
+      // One result per rule, so one override covers it.
+      if (hits.length) broken.push({ ...hits[0], message: hits.map((h) => h.message).join(" "), numbers: hits.length > 1 ? { cycles: hits.map((h) => h.numbers) } : hits[0].numbers });
     } else {
       notChecked.push({
         rule: "hard_sessions_per_week",
-        why: scope.hasCycle ? "Rotation cycles have no fixed week, so hard sessions per week are not counted." : "The change is not in a weekday cycle that is active or being started.",
+        why: after.weeks.size
+          ? "Rotation cycles have no fixed week, so hard sessions per week are not counted."
+          : "The change is not in a weekday cycle that is active, scheduled or being started.",
       });
     }
   }
@@ -304,7 +312,7 @@ export async function withLimits<T>(
   const before = lc.endurance ? await planFacts(w.tx, scope) : NO_FACTS;
   const result = await write();
   const after = lc.endurance ? await planFacts(w.tx, scope) : NO_FACTS;
-  const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override, { hasCycle: scope.cycleId != null });
+  const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
   if (blocking.length) throw new LimitRefusedError(blocking);
   w.ctx.limitCheck = check;
   return { result, check, unusedOverrides };
@@ -314,7 +322,13 @@ export async function withLimits<T>(
  * A cycle's limit scope (its live slot programs and its week) and the share
  * of peak its periodized sets run at in one week, times a volume percent.
  */
-export async function cycleScope(cycleId: number, week: number, pct = 100): Promise<{ scope: LimitScope; share: number } | null> {
+export async function cycleScope(
+  cycleId: number,
+  week: number,
+  pct = 100,
+  /** The block's settings to scale by, when a write is about to change them. */
+  settings: Partial<{ durationWeeks: number; goal: "build" | "maintain"; athleteLevel: "novice" | "intermediate" | "advanced" | null }> = {},
+): Promise<{ scope: LimitScope; share: number } | null> {
   const [cycle] = await db
     .select({
       durationWeeks: trainingCycles.durationWeeks,
@@ -329,9 +343,10 @@ export async function cycleScope(cycleId: number, week: number, pct = 100): Prom
     .from(trainingCycleSlots)
     .innerJoin(programs, eq(programs.id, trainingCycleSlots.programId))
     .where(and(eq(trainingCycleSlots.trainingCycleId, cycleId), livePrograms));
-  const { multiplier } = periodizedLoad(week, cycle.durationWeeks, cycle.goal, deloadCadenceForLevel(cycle.athleteLevel));
+  const c = { ...cycle, ...settings };
+  const { multiplier } = periodizedLoad(week, c.durationWeeks, c.goal, deloadCadenceForLevel(c.athleteLevel));
   return {
-    scope: { programIds: [...new Set(slots.map((s) => s.programId))], cycleId },
+    scope: { programIds: [...new Set(slots.map((s) => s.programId))], cycleIds: [cycleId] },
     share: multiplier * (pct / 100),
   };
 }

@@ -18,6 +18,7 @@ import {
   workoutSets,
 } from "@/db/schema";
 import { insertAutoSessions } from "@/lib/auto-sessions";
+import { startDueScheduledCycle } from "@/lib/plan-revisions";
 import { liveCycles, livePrograms, liveSlotProgram } from "@/lib/plan-live";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { userToday } from "@/lib/user-settings";
@@ -201,6 +202,8 @@ export function registerSessionTools(server: McpServer, userId: string) {
     },
     async ({ date, programId }) => {
       try {
+        // A block scheduled for today becomes the active one first.
+        await startDueScheduledCycle(userId);
         const cycle = await db.query.trainingCycles.findFirst({
           where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), liveCycles),
           with: { slots: { where: eq(trainingCycleSlots.programId, programId), with: { program: true } } },

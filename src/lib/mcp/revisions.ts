@@ -21,7 +21,7 @@ import {
 import { limitSummary } from "@/lib/mcp/limits";
 import {
   NO_FACTS,
-  activeCycleWith,
+  limitCyclesWith,
   cycleScope,
   evaluateLimits,
   limitContext,
@@ -104,7 +104,7 @@ export async function planErrorResult(userId: string, e: unknown) {
 
 /** The limit scope of a restored program or cycle (T4: restores get warnings, never a block). */
 async function restoreScope(userId: string, type: "program" | "cycle" | "memory", id: number): Promise<LimitScope | null> {
-  if (type === "program") return { programIds: [id], cycleId: await activeCycleWith(db, userId, id) };
+  if (type === "program") return { programIds: [id], cycleIds: await limitCyclesWith(db, userId, id) };
   if (type === "cycle") return (await cycleScope(id, 1))?.scope ?? null;
   return null;
 }
@@ -184,7 +184,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
           if (!done) return fail("Revision not found");
           if (!scope) return ok({ restored: true, ...done });
           const after = await planFacts(db, scope);
-          const { blocking, check } = evaluateLimits(lc, before, after, { rules: [], reason: null }, { hasCycle: scope.cycleId != null });
+          const { blocking, check } = evaluateLimits(lc, before, after, { rules: [], reason: null });
           check.warnings = blocking;
           check.passed = check.checked.filter((r) => !blocking.some((b) => b.rule === r));
           // Stored on the restore's revisions, so the user sees the warning too.

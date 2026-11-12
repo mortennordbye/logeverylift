@@ -211,6 +211,8 @@ export async function syncPeriodizedTargets(
    * which passes its whole write context.
    */
   writer: "sync" | "apply" | PlanWriteContext = "sync",
+  /** An assistant's write (set_volume) is refused when the cycle moved past this version (T9). */
+  expectedVersion?: number,
 ): Promise<{ pct: number; note: string }> {
   // A slot keeps its program id when the program is deleted; the sync never
   // writes into a deleted program.
@@ -242,7 +244,7 @@ export async function syncPeriodizedTargets(
     async (w) => {
   const tx = w.tx;
   // Cycle first, then programs: the lock order every plan write uses.
-  await w.touch({ type: "cycle", id: cycleId });
+  await w.touch({ type: "cycle", id: cycleId }, { expectedVersion });
   if (programIds.length > 0) {
     const peakSets = await tx
       .select({

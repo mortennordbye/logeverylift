@@ -530,22 +530,54 @@ export async function activateCycle(
   ctx: PlanWriteContext,
   cycleId: number,
   expectedVersion?: number,
-  /** The block's first day; today when omitted. A scheduled start passes its own day. */
+  /** The block's first day; today when omitted. */
   startDate?: string,
+) {
+  return (await activateCycleIf(ctx, cycleId, expectedVersion, startDate))!;
+}
+
+/** activateCycle, or nothing (null) when `onlyIfScheduledFor` no longer holds under the lock. */
+async function activateCycleIf(
+  ctx: PlanWriteContext,
+  cycleId: number,
+  expectedVersion?: number,
+  startDate?: string,
+  /** A scheduled start: go ahead only if the cycle is still a draft scheduled for this day. */
+  onlyIfScheduledFor?: string,
 ) {
   const { toDateStr } = await import("@/lib/utils/cycle-position");
   const { userToday } = await import("@/lib/user-settings");
   const today = startDate ?? toDateStr(await userToday(ctx.userId));
   const { result } = await planWrite(ctx, async (w) => {
+    // Every other active cycle completes, and any other scheduled start is
+    // dropped: once the user picks a block, no older plan starts by itself.
     const active = await w.tx
-      .select({ id: trainingCycles.id })
+      .select({ id: trainingCycles.id, status: trainingCycles.status })
       .from(trainingCycles)
-      .where(and(eq(trainingCycles.userId, ctx.userId), eq(trainingCycles.status, "active"), isNull(trainingCycles.deletedAt)));
+      .where(
+        and(
+          eq(trainingCycles.userId, ctx.userId),
+          or(eq(trainingCycles.status, "active"), isNotNull(trainingCycles.scheduledStartDate)),
+          isNull(trainingCycles.deletedAt),
+        ),
+      );
     const ids = [...new Set([...active.map((c) => c.id), cycleId])].sort((a, b) => a - b);
     for (const id of ids) await w.touch({ type: "cycle", id }, id === cycleId ? { expectedVersion } : {});
-    const others = active.map((c) => c.id).filter((id) => id !== cycleId);
+    if (onlyIfScheduledFor) {
+      // Re-read under the lock: a racing read may have started it already.
+      const [row] = await w.tx
+        .select({ status: trainingCycles.status, day: trainingCycles.scheduledStartDate })
+        .from(trainingCycles)
+        .where(eq(trainingCycles.id, cycleId));
+      if (row?.status !== "draft" || row.day !== onlyIfScheduledFor) return null;
+    }
+    const others = active.filter((c) => c.id !== cycleId && c.status === "active").map((c) => c.id);
     if (others.length) {
       await w.tx.update(trainingCycles).set({ status: "completed" }).where(inArray(trainingCycles.id, others));
+    }
+    const scheduled = active.filter((c) => c.id !== cycleId).map((c) => c.id);
+    if (scheduled.length) {
+      await w.tx.update(trainingCycles).set({ scheduledStartDate: null }).where(inArray(trainingCycles.id, scheduled));
     }
     const [cycle] = await w.tx
       .update(trainingCycles)
@@ -589,7 +621,11 @@ export async function scheduleCycle(ctx: PlanWriteContext, cycleId: number, day:
       .select({ status: trainingCycles.status })
       .from(trainingCycles)
       .where(eq(trainingCycles.id, cycleId));
-    if (day && row.status === "active") throw new PlanStateError("This cycle is already active.");
+    if (day && row.status !== "draft") {
+      throw new PlanStateError(
+        row.status === "active" ? "This cycle is already active." : "Only a draft cycle can be scheduled to start. Create a new cycle for another block.",
+      );
+    }
     await w.tx.update(trainingCycles).set({ scheduledStartDate: day }).where(eq(trainingCycles.id, cycleId));
   });
 }
@@ -618,8 +654,8 @@ export async function startDueScheduledCycle(userId: string): Promise<boolean> {
     .orderBy(desc(trainingCycles.scheduledStartDate))
     .limit(1);
   if (!due?.day) return false;
-  await activateCycle({ userId, writer: "sync", reason: "Scheduled start" }, due.id, undefined, due.day);
-  return true;
+  const started = await activateCycleIf({ userId, writer: "sync", reason: "Scheduled start" }, due.id, undefined, due.day, due.day);
+  return started != null;
 }
 
 // ── Queued and flushed set writes (2.7) ──────────────────────────────────────

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { planRevisions, programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
-import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
+import { getActiveCycleForUser, startTrainingCycle } from "@/lib/actions/training-cycles";
+import { startDueScheduledCycle } from "@/lib/plan-revisions";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { periodizedLoad, deloadCadenceForLevel, scaledDuration } from "@/lib/utils/periodization";
@@ -165,3 +166,46 @@ describe("set_volume", () => {
     expect((await call("manage_training_cycle", { operation: "set_volume", cycleId: a, pct: 120, reason: "x", expectedVersion: 4 })).isError).toBe(true);
   });
 });
+
+describe("scheduled starts, review fixes", () => {
+  it("clears a scheduled start when the user starts another cycle in the app", async () => {
+    const b = await draft(me);
+    const c = await draft(me);
+    await mcpTools(registerCycleTools, me)("manage_training_cycle", { operation: "start", cycleId: b, startDate: day(3), reason: "Next block", expectedVersion: 1 });
+    asUser(me);
+    expect((await startTrainingCycle(c)).success).toBe(true);
+    expect((await cycleRow(b)).scheduledStartDate).toBeNull();
+
+    // Its day would have come: nothing starts, and C stays active.
+    expect(await startDueScheduledCycle(me)).toBe(false);
+    expect((await cycleRow(c)).status).toBe("active");
+  });
+
+  it("refuses to schedule a completed cycle", async () => {
+    const done = await draft(me, { status: "completed", startDate: day(-100) });
+    const result = await mcpTools(registerCycleTools, me)("manage_training_cycle", { operation: "start", cycleId: done, startDate: day(3), reason: "Again", expectedVersion: 1 });
+    expect(result.isError).toBe(true);
+    expect(result.raw).toContain("draft");
+    expect((await cycleRow(done)).scheduledStartDate).toBeNull();
+  });
+
+  it("starts a due scheduled cycle when the assistant lists cycles", async () => {
+    const next = await draft(me, { scheduledStartDate: day(0) });
+    await mcpTools(registerCycleTools, me)("list_training_cycles");
+    expect(await cycleRow(next)).toMatchObject({ status: "active", startDate: day(0), scheduledStartDate: null });
+  });
+
+  it("starts a due scheduled cycle once when several reads race", async () => {
+    const old = await draft(me, { status: "active", startDate: day(-20) });
+    const next = await draft(me, { scheduledStartDate: day(-1) });
+    await Promise.all([startDueScheduledCycle(me), startDueScheduledCycle(me), startDueScheduledCycle(me)]);
+    expect(await cycleRow(next)).toMatchObject({ status: "active", startDate: day(-1) });
+    expect((await cycleRow(old)).status).toBe("completed");
+    const starts = await db
+      .select()
+      .from(planRevisions)
+      .where(and(eq(planRevisions.objectType, "cycle"), eq(planRevisions.objectId, next), eq(planRevisions.reason, "Scheduled start")));
+    expect(starts).toHaveLength(1);
+  });
+});
+
