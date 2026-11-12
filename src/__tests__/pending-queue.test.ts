@@ -1,7 +1,9 @@
 import {
   BACKOFF_MS,
   MAX_ATTEMPTS,
+  STALE_BUNDLE_RETRY_MS,
   afterFailedReplay,
+  afterStaleBundle,
   dueItems,
   mergeReplayed,
   nextReplayIn,
@@ -56,5 +58,16 @@ describe("offline queue retry rules", () => {
     expect(nextReplayIn([], 0)).toBeNull();
     expect(nextReplayIn([item("a")], 0)).toBe("now");
     expect(nextReplayIn([item("a", { nextAttemptAt: 30_000 }), item("b", { nextAttemptAt: 5_000 })], 1_000)).toBe(4_000);
+  });
+
+  it("a stale bundle costs no attempt and never drops the item, however often it happens", () => {
+    // After a deploy the old bundle's action IDs are unknown to the server.
+    // That is not the write's fault, and the write succeeds once the new
+    // bundle loads, so it must survive any number of these.
+    let current: Retryable = item("a", { attempts: 2 });
+    for (let i = 0; i < MAX_ATTEMPTS * 3; i++) current = afterStaleBundle(current, i * 1_000);
+    expect(current.attempts).toBe(2);
+    const last = (MAX_ATTEMPTS * 3 - 1) * 1_000;
+    expect(current.nextAttemptAt).toBe(last + STALE_BUNDLE_RETRY_MS);
   });
 });

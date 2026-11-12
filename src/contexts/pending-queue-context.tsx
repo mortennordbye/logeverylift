@@ -5,8 +5,12 @@ import { useToast } from "@/contexts/toast-context";
 import { logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
 import { completeWorkoutSession } from "@/lib/actions/workout-sessions";
 import { updateProgramSet } from "@/lib/actions/programs";
-import { afterFailedReplay, dueItems, mergeReplayed, nextReplayIn } from "@/lib/utils/pending-queue";
-import { isStaleBundleError, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
+import { afterFailedReplay, afterStaleBundle, dueItems, mergeReplayed, nextReplayIn } from "@/lib/utils/pending-queue";
+import { isReloadPending, isStaleBundleError, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
+
+// Shown when a write hit a stale bundle after a deploy. The write is queued
+// either way, so the user can carry on logging.
+const APP_UPDATING = "Updating app. Your sets are saved on this phone.";
 
 /**
  * Offline mutation queue.
@@ -101,7 +105,9 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
   );
 
   const replayAll = useCallback(async () => {
-    if (replayingRef.current) return;
+    // A reload for the new bundle is under way: this bundle's action IDs are
+    // stale, so anything sent now fails. The new page replays the queue.
+    if (replayingRef.current || isReloadPending()) return;
     replayingRef.current = true;
     try {
       // Snapshot the queue at start; new enqueues during replay stay for next
@@ -115,7 +121,7 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
       const failed: QueuedMutation[] = [];
       const dropped: QueuedMutation[] = [];
       let staleBundleSeen = false;
-      for (const m of snapshot) {
+      for (const [i, m] of snapshot.entries()) {
         let ok = false;
         try {
           // Replayed in queue order, so a log followed by an un-log of the
@@ -131,12 +137,16 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
           ok = result.success;
         } catch (err) {
           if (isStaleBundleError(err)) {
-            // Whole replay batch is doomed — every queued action will hit
-            // the same stale-bundle error. Stop, keep them queued (with
-            // unincremented attempts), reload so the new bundle picks up.
+            // Every later item hits the same error, so stop here. This item
+            // and the rest stay queued without spending an attempt; only a
+            // reload with the new action IDs can send them.
             staleBundleSeen = true;
-            failed.push(m);
-            continue;
+            const reloading = reloadForFreshBundle();
+            for (const rest of snapshot.slice(i)) {
+              // No reload yet (the page was just reloaded): wait and retry.
+              failed.push(reloading ? rest : afterStaleBundle(rest, Date.now()));
+            }
+            break;
           }
           ok = false;
         }
@@ -146,22 +156,13 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
         else failed.push(next.item);
       }
 
-      if (staleBundleSeen) {
-        // Persist the queue as-is, then reload — the new bundle will replay
-        // these on next mount.
-        setQueue((prev) => prev);
-        showToast({
-          message: "App updating — refreshing…",
-          durationMs: 3000,
-        });
-        void reloadForFreshBundle();
-        return;
-      }
-
       // Drop the snapshot, keep failed ones (with bumped attempt counts)
       // + anything enqueued during replay. Dropped ones disappear silently
-      // from the queue but we surface a toast so the user knows.
+      // from the queue but we surface a toast so the user knows. Items saved
+      // before a stale-bundle error leave too, so the new page doesn't send
+      // them again.
       setQueue((prev) => mergeReplayed(prev, snapshot, failed));
+      if (staleBundleSeen) showToast({ message: APP_UPDATING, durationMs: 4000 });
 
       const succeeded = snapshot.length - failed.length - dropped.length;
       if (succeeded > 0) {
@@ -239,8 +240,8 @@ export function usePendingQueue(): PendingQueueContextValue {
  *
  * Both wrappers: (a) queue immediately when the browser is offline, (b) on a
  * transient server error, show a Retry toast and queue so an `online` event
- * retries automatically, (c) reload on a stale-bundle error instead of queueing
- * a call the new server won't recognise.
+ * retries automatically, (c) on a stale-bundle error (a deploy changed the
+ * action IDs), queue the write and reload, so the new bundle sends it.
  *
  * Lives here rather than in a component because the workout set list and the
  * set-edit view both write sets and must behave identically — a set corrected
@@ -278,11 +279,12 @@ export function useWorkoutSetWriter() {
       }
       return r;
     } catch (err) {
-      // Stale bundle: cached client calling an action ID the new server
-      // doesn't know. Don't enqueue (replay would loop and drop) — reload
-      // so the user gets fresh chunks. They'll re-tap when they're back.
+      // Stale bundle: this client's action IDs are from before a deploy.
+      // Queue the write and reload; the new page sends it with the new IDs.
+      // Stale-bundle failures never count as attempts, so it can't be dropped.
       if (isStaleBundleError(err)) {
-        showToast({ message: "App updating — refreshing…", durationMs: 3000 });
+        enqueue({ kind: "logWorkoutSet", payload });
+        showToast({ message: APP_UPDATING, durationMs: 4000 });
         void reloadForFreshBundle();
         return { success: false, error: "App updating" };
       }
@@ -316,7 +318,8 @@ export function useWorkoutSetWriter() {
       }
     } catch (err) {
       if (isStaleBundleError(err)) {
-        showToast({ message: "App updating — refreshing…", durationMs: 3000 });
+        enqueue({ kind: "unlogWorkoutSet", payload });
+        showToast({ message: APP_UPDATING, durationMs: 4000 });
         void reloadForFreshBundle();
         return;
       }

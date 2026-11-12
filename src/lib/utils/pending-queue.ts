@@ -42,6 +42,20 @@ export function afterFailedReplay<T extends Retryable>(
   return { dropped: false, item: { ...item, attempts, nextAttemptAt: now + delay } };
 }
 
+// How long a write that hit a stale bundle waits before it is sent again,
+// when the page can't reload yet (src/lib/utils/stale-bundle.ts).
+export const STALE_BUNDLE_RETRY_MS = 30_000;
+
+/**
+ * What a stale-bundle failure does to an item: wait, but spend no attempt.
+ * The write itself is fine and goes through once the new bundle has loaded, so
+ * it must never count towards MAX_ATTEMPTS. Counting it is what dropped sets
+ * after a deploy.
+ */
+export function afterStaleBundle<T extends Retryable>(item: T, now: number): T {
+  return { ...item, nextAttemptAt: now + STALE_BUNDLE_RETRY_MS };
+}
+
 /**
  * The queue after a replay pass: replayed items leave unless they were kept
  * (failed, backed off), and anything enqueued while the pass ran stays where
