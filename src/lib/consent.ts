@@ -3,6 +3,21 @@ import { users } from "@/db/schema";
 import { CONSENT_VERSION, LEGAL_VERSION, legalVersionBefore } from "@/lib/constants/legal";
 import type { requireSession } from "@/lib/utils/session";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
+
+// Both boxes must be ticked: the terms, and explicit consent to health data
+// (GDPR Art. 9(2)(a)), which the training log can't work without. Sent by the
+// consent page (acceptTerms) and with a new account (SignupForm).
+export const termsConsentSchema = z.object({
+  version: z.literal(LEGAL_VERSION),
+  terms: z.literal(true),
+  healthData: z.literal(true),
+});
+
+/** The user columns that record accepting the current terms and the health data consent. */
+export function consentRecord(now = new Date()) {
+  return { termsVersion: LEGAL_VERSION, policySeenVersion: LEGAL_VERSION, termsAcceptedAt: now, healthConsentAt: now };
+}
 
 /**
  * Whether this signed-in user still has to accept the terms: they never have,
