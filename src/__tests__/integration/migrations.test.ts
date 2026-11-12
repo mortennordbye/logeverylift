@@ -1,10 +1,17 @@
 import { db } from "@/db";
-import { exercisePrs, workoutSets } from "@/db/schema";
-import { asc, sql } from "drizzle-orm";
+import { exercisePrs, oauthClients, oauthConsents, oauthRefreshTokens, workoutSets } from "@/db/schema";
+import { asc, eq, sql } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createExercise, createProgram, createSession, createUser } from "./factories";
+import {
+  createExercise,
+  createOAuthClient,
+  createOAuthConnection,
+  createProgram,
+  createSession,
+  createUser,
+} from "./factories";
 
 /**
  * Data steps in migrations, run against rows shaped like the production data
@@ -138,5 +145,43 @@ describe("0067: create workout_reactions where 0022 was skipped", () => {
     } finally {
       await db.execute(sql.raw(statement(file, 'CREATE TABLE IF NOT EXISTS "workout_reactions"')));
     }
+  });
+});
+
+describe("0080: MCP scopes", () => {
+  const file = "0080_mcp_scopes.sql";
+  const run = async () => {
+    for (const s of readFileSync(path.resolve(__dirname, "../../../drizzle", file), "utf8").split("--> statement-breakpoint")) {
+      await db.execute(sql.raw(s));
+    }
+  };
+  const OLD = ["openid", "profile", "email", "offline_access"];
+
+  it("lets old clients ask for the scopes, ends old connections, keeps new ones, and is idempotent", async () => {
+    const me = (await createUser()).id;
+    const oldClient = await createOAuthClient({ scopes: OLD });
+    const newClient = await createOAuthClient();
+    const unscoped = await createOAuthClient({ scopes: null });
+    const old = await createOAuthConnection(me, oldClient.clientId, ["openid", "offline_access"]);
+    const kept = await createOAuthConnection(me, newClient.clientId, ["openid", "mcp:read"]);
+
+    await run();
+    const scopesOf = async (clientId: string) =>
+      (await db.select({ scopes: oauthClients.scopes }).from(oauthClients).where(eq(oauthClients.clientId, clientId)))[0].scopes;
+    expect(await scopesOf(oldClient.clientId)).toEqual([...OLD, "mcp:read", "mcp:write"]);
+    expect(await scopesOf(newClient.clientId)).toEqual([...OLD, "mcp:read", "mcp:write"]);
+    expect(await scopesOf(unscoped.clientId)).toBeNull();
+
+    expect(await db.select().from(oauthConsents).where(eq(oauthConsents.id, old.consent.id))).toEqual([]);
+    expect(await db.select().from(oauthConsents).where(eq(oauthConsents.id, kept.consent.id))).toHaveLength(1);
+    const revokedOf = async (id: string) =>
+      (await db.select({ revoked: oauthRefreshTokens.revoked }).from(oauthRefreshTokens).where(eq(oauthRefreshTokens.id, id)))[0].revoked;
+    const revokedAt = await revokedOf(old.refresh.id);
+    expect(revokedAt).not.toBeNull();
+    expect(await revokedOf(kept.refresh.id)).toBeNull();
+
+    await run();
+    expect(await scopesOf(oldClient.clientId)).toEqual([...OLD, "mcp:read", "mcp:write"]);
+    expect(await revokedOf(old.refresh.id)).toEqual(revokedAt);
   });
 });

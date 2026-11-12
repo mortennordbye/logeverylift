@@ -1,6 +1,10 @@
 import { db } from "@/db";
 import {
   exercises,
+  oauthAccessTokens,
+  oauthClients,
+  oauthConsents,
+  oauthRefreshTokens,
   programExercises,
   programSets,
   programs,
@@ -96,4 +100,46 @@ export async function createSession(
     })
     .returning();
   return row;
+}
+
+/** A registered MCP client, as dynamic registration leaves it (no owner). */
+export async function createOAuthClient(overrides: Partial<typeof oauthClients.$inferInsert> = {}) {
+  const n = next();
+  const [row] = await db
+    .insert(oauthClients)
+    .values({
+      id: `oc-${n}`,
+      clientId: `client-${n}`,
+      name: `Assistant ${n}`,
+      redirectUris: ["http://127.0.0.1/cb"],
+      scopes: ["openid", "profile", "email", "offline_access", "mcp:read", "mcp:write"],
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    })
+    .returning();
+  return row;
+}
+
+/**
+ * A user's connection to a client: the consent plus a refresh token and an
+ * opaque access token with the same scopes.
+ */
+export async function createOAuthConnection(userId: string, clientId: string, scopes: string[]) {
+  const n = next();
+  const now = new Date();
+  const later = new Date(now.getTime() + 3_600_000);
+  const [consent] = await db
+    .insert(oauthConsents)
+    .values({ id: `consent-${n}`, clientId, userId, scopes, createdAt: now, updatedAt: now })
+    .returning();
+  const [refresh] = await db
+    .insert(oauthRefreshTokens)
+    .values({ id: `rt-${n}`, token: `rt-token-${n}`, clientId, userId, scopes, createdAt: now, expiresAt: later })
+    .returning();
+  const [access] = await db
+    .insert(oauthAccessTokens)
+    .values({ id: `at-${n}`, token: `at-token-${n}`, clientId, userId, scopes, createdAt: now, expiresAt: later, refreshId: refresh.id })
+    .returning();
+  return { consent, refresh, access };
 }

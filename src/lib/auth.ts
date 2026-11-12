@@ -21,6 +21,7 @@ import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin, jwt } from "better-auth/plugins";
 import { mcp } from "@better-auth/mcp";
+import { MCP_SCOPES } from "@/lib/mcp/scopes";
 
 /** The MCP endpoint's URL: the audience its access tokens are bound to. */
 export const MCP_RESOURCE = `${env.BETTER_AUTH_URL}/api/mcp`;
@@ -98,6 +99,10 @@ export const auth = betterAuth({
       loginPage: "/login",
       consentPage: "/oauth/consent",
       resource: MCP_RESOURCE,
+      // The provider's defaults plus the two MCP access levels the user picks
+      // from on the consent page (src/lib/mcp/scopes.ts). Clients registered
+      // before these existed got them in a data migration (drizzle/0080_mcp_scopes.sql).
+      scopes: ["openid", "profile", "email", "offline_access", ...MCP_SCOPES],
       // MCP clients register without a session (RFC 7591), as they did on the
       // 1.6 plugin. Access still needs the user's login and consent.
       allowDynamicClientRegistration: true,
