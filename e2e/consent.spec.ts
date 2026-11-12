@@ -30,7 +30,9 @@ test("asks a user behind on the terms to accept them before home", async ({ page
 test("a user on an old consent version gets a clean consent page and returns home", async ({ page }, testInfo) => {
   const errors: string[] = [];
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(m.text());
+    // Linux WebKit (CI) reports the app-wide viewport meta's `interactive-widget` key as a console
+    // error on every page. It is not about this page, so it does not count.
+    if (m.type() === "error" && !m.text().includes('"interactive-widget" not recognized')) errors.push(m.text());
   });
   page.on("pageerror", (e) => errors.push(e.message));
   const email = e2eUser(testInfo.parallelIndex).email;
