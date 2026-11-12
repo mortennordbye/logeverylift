@@ -10,9 +10,9 @@ repo yet.
 
 Status words: **has** (works), **partial** (some of it works), **missing**, **out of scope**.
 
-This audit is the input for build briefs in `docs/plans/`. A brief author must settle the
-questions in [Open questions for the owner](#open-questions-for-the-owner) that touch the brief
-before writing it.
+This audit is the input for build briefs in `docs/plans/`. The owner's answers are in
+[Decisions](#decisions-owner-2026-11-12) at the end. They win over any row above that says
+otherwise. A brief author asks the owner only about decisions marked "open".
 
 ## Design principles for the build
 
@@ -180,7 +180,7 @@ segment row that is logged after the fact in `src/components/features/LogRunModa
 | Strength frequency by phase (2×/week in base, 1-2× in build, 1× in peak) | missing | The cycle spec retired phase re-prescription of strength reps and rest (`docs/specs/cycle-periodization.md`, "Strength periodization: considered, not implemented"), and decision D-6 gives `target_reps` to the progression engine alone. Frequency by phase was never built. | medium | **medium**: must not touch strength-only cycles |
 | Heavy legs vs key run/ride placement (no heavy lower body within 48 h of a key session) | partial | A generic insight after heavy strength days (Garmin). | medium | none |
 | Strength taper (last heavy session 7-10 days before the race) | missing | | low | none |
-| Heavy (≥80% 1RM, 3-6 reps) main lifts and plyometrics in the templates | partial | The generator runs fixed 8-12 rep ranges by choice, "to spare the CNS" (cycle spec). The research says light high-rep work does not improve economy. See the open questions. | low | none |
+| Heavy (≥80% 1RM, 3-6 reps) main lifts and plyometrics in the templates | partial | The generator runs fixed 8-12 rep ranges by choice, "to spare the CNS" (cycle spec). The research says light high-rep work does not improve economy. Decided by the intake interview (D10). | low | none |
 
 ### 6. Nutrition and race day
 
@@ -201,8 +201,8 @@ segment row that is logged after the fact in `src/components/features/LogRunModa
 | Call the triathlon generator over MCP | missing | Lower value once the AI can build a plan from parts. | low | none |
 | Server instructions and knowledge resources | missing | `createMcpHandler` gets `{}` (`src/app/api/[transport]/route.ts:59-68`). Resources should hold the workout step syntax and the app's rules (one owner per field, guardrails). | high | none |
 | Coach memory (goals, limits, decision log) | missing | No table. Each conversation starts from nothing. | high | none |
-| Revisions for every plan object, with restore (decided, see Q2) | missing | Every write applies at once and leaves only a log line. A set replace deletes and inserts rows, so it keeps no snapshot and the set ids change. AI and UI edits both make revisions. | high | low |
-| Accept step before an AI change applies | missing | Research recommends proposals the user accepts. Principle 3 asks for tracking and undo, not for an accept step. See the open questions. | medium | low |
+| Revisions for every plan object, with restore (decided, see D2) | missing | Every write applies at once and leaves only a log line. A set replace deletes and inserts rows, so it keeps no snapshot and the set ids change. AI and UI edits both make revisions. | high | low |
+| Accept step before an AI change applies | missing | Research recommends proposals the user accepts. Decided: no accept step (D1). | n/a | n/a |
 | Guardrails in code, not in the prompt | missing | Only a 9999 kg max on weight. Research list: weekly load ramp cap, 1.10× long-run cap, key sessions per week, no hard session after a flagged low-readiness day, no heavy legs within 48 h of a key run, schema check of every workout. | high | none |
 | Safe writes during an open workout | missing | A set replace on a slot in an open session unlinks the logged sets, because `workout_sets.program_set_id` is `set null` (`src/db/schema/workout-sets.ts:71-73`). | high | **medium**: a lifter mid-workout loses the plan link |
 | One owner per field (AI, progression engine, weekly sync) | partial | See section 8. | high | **medium** |
@@ -254,48 +254,44 @@ Every brief that adds a table follows `.claude/skills/privacy-compliance/SKILL.m
 ## Suggested order
 
 1. **Fix the four bugs** with tests. Small and independent.
-2. **Add-on switches** (section 2, first row), so every later feature has a gate. Move the
-   triathlon entry and the race field behind it.
+2. **Add-on switches** (section 2, first row), so every later feature has a gate (D15). Move
+   the triathlon entry and the race field behind it. Add the user's time zone and display
+   units (D14), since every later step uses dates and numbers.
 3. **MCP coach basics:** cycle race fields over MCP, exercise search, server instructions and a
-   knowledge resource, coach memory, revisions with restore (Q2), safe writes during an open
-   workout, one owner per field, load guardrails, integration tests for the write tools, a
-   revoke screen. This makes the AI coach usable on the current model.
-4. **Season level:** season and races, stored phases, taper from the race date, chained
-   blocks, session priority, more than one session per day (with care for the lifter flows
-   listed above, and agreed with the quick-workout brief). Migrate existing triathlon cycles.
-5. **Athlete profile:** available days and hours, thresholds by hand and field tests,
-   injuries.
+   knowledge resource, coach memory, revisions with restore (D2), safe writes during an open
+   workout, one owner per field, training limits that warn the AI (D3), read-only and
+   read-write scopes (D5), notes and illness log readable by assistants (D6), integration tests
+   for the write tools, a revoke screen. This makes the AI coach usable on the current model.
+4. **Season level:** season and races (D8), stored phases, taper from the race date, chained
+   blocks, session priority, several slots per day and dated sessions (D7, with care for the
+   lifter flows listed above, and agreed with the quick-workout brief). Migrate existing
+   triathlon cycles.
+5. **Athlete profile and intake interview:** the interview (D10), available days and hours,
+   thresholds by hand and field tests (D12), injuries.
 6. **Structured endurance workouts:** steps, repeats, targets relative to thresholds,
    planned-vs-done matching with compliance bands, export. Then the in-app side (section 3b):
    a today and week view, targets in the user's own numbers, a guided player for indoor
    sessions, a pool view, per-step results and a workout library.
 7. **Analytics and safety without Garmin:** session-RPE load, run spike guard, swim and
-   run-pace load, illness log, skip-not-stack for missed endurance sessions, readiness swaps.
-8. **Strength by phase, nutrition targets, race-day plan, units and time zone.**
+   run-pace load, illness log, confirm-then-skip for missed endurance sessions (D11), readiness swaps.
+8. **Strength by phase (D10), nutrition targets, race-day plan.**
 
 Each step gets its own brief in `docs/plans/` before code. Each brief also covers the MCP tools
 for what it adds (principle 3), the privacy checklist (section 9) and the test layers
 (section 11).
 
-## Open questions for the owner
+## Decisions (owner, 2026-11-12)
 
-Each question changes what gets built. The recommendation is the default a brief uses if the
-owner does not answer.
+The owner answered the open questions from the review pass. Briefs build to these. Where a
+decision says "open", the brief must ask the owner before code.
 
 ### AI changes and control
 
-**Q1. Does an AI change apply at once, or wait for the user to accept it?**
-- A. Apply at once; log it with a reason; the user can undo from a change list.
-- B. Write a proposal; the app applies it only after the user taps Accept.
-- C. A per-user setting, default A.
+**D1. AI changes apply at once.** No accept step. The safety net is revisions (D2). The MCP
+tool result tells the model what changed, so it can report it to the user.
 
-Recommended: **C**. Principle 3 asks for tracking and undo, which A gives. The research favours
-B for trust. A setting costs one column and lets the owner use A while cautious users pick B.
-
-**Q2. How far back does undo reach?** **Decided (owner, 2026-11-12): revisions with restore.**
-
-Every plan object (season, cycle, program with its exercises and sets, endurance workout) keeps
-a revision history. Rules for the brief:
+**D2. Revisions with restore.** Every plan object (season, cycle, program with its exercises
+and sets, endurance workout) keeps a revision history.
 - Every change makes a new revision, from the AI or from the UI. The revision records who made
   it (user or assistant), when, and the reason (required for AI changes).
 - The user can see the revisions of an object and restore any earlier one. A restore makes a new
@@ -304,109 +300,89 @@ a revision history. Rules for the brief:
   (`workout_sets`, `workout_sessions`); logged sets keep their link to the plan.
 - A deleted object can be restored from its last revision.
 - The AI can list revisions and restore over MCP (principle 3).
-- Retention and export: revisions are user data. They go into export and delete, and the data
-  inventory gets a retention rule (section 9).
+- Revisions are user data: they go into export and delete, and the data inventory gets a
+  retention rule (section 9).
 
-**Q3. What do guardrails do when an AI change breaks one?**
-- A. Refuse the write and return the rule that blocked it.
-- B. Apply it and add a warning to the change log.
-- C. Refuse, but let the user override in the app, and log the override.
+**D3. Training limits warn the AI, and the AI decides.** The limits (weekly load ramp, the
+1.10× long-run cap, hard sessions per week, no hard session after a low-readiness day, no
+heavy legs within 48 h of a key session) are checked in code. When an AI write breaks one:
+1. The write is not applied. The tool returns each broken limit with its reason, the numbers
+   (for example "run 1:45 h is 1.31× your longest run in 30 days, 1:20 h; limit 1.10×") and
+   the evidence level.
+2. The AI may send the write again with an explicit override and a reason, if it judges the
+   change still fits (for example, the athlete confirmed a longer run done outside the app).
+3. The applied revision stores the override, the limits it passed and the reason, so the user
+   sees it.
+The schema check of a workout (valid steps, targets in range) is not a training limit. It is
+always enforced and cannot be overridden.
 
-Recommended: **C**. The model cannot talk its way past a rule, and the user stays in control.
-
-**Q4. Do guardrails apply to edits the user makes in the UI too?**
-- A. AI only.
-- B. Both, as a warning in the UI.
-
-Recommended: **B**. The same rules protect the user, and a warning does not block lifters.
+**D4. No limit checks on the user's own UI edits.** Only AI writes are checked.
 
 ### MCP access
 
-**Q5. Do connections get scopes?**
-- A. No; one full read-write token, as today.
-- B. Two scopes: read-only and read-write, picked on the consent page.
-- C. Per-area scopes (training, health, Garmin).
+**D5. Two scopes: read-only and read-write.** The user picks one on the consent page.
 
-Recommended: **B**. It lets a user try the coach with no write risk. C adds consent screens
-few users will read.
-
-**Q6. May an assistant read free-text notes and the illness log?**
-- A. No, as today for notes.
-- B. Yes, after a separate opt-in on the consent page.
-
-Recommended: **B**. The coach needs illness and injury context, and the inventory already
-names MCP as a recipient. A separate opt-in keeps the health-data basis clean.
+**D6. Assistants can read free-text notes and the illness and injury log.** No separate
+opt-in: the MCP consent page must say it plainly, and the data inventory and privacy policy
+must list it (MCP is a recipient of health data). Notes stay hidden from friends.
 
 ### Model and structure
 
-**Q7. How does the session model change for more than one session a day?**
-- A. Keep one slot per day, with an ordered list of programs inside the slot.
-- B. Allow more than one slot per day, each with a time of day (AM, PM).
-- C. Planned sessions as dated rows (the research model), with cycles as templates that create them.
+**D7. Both: a weekly template with several slots per day, and dated sessions.** The cycle stays
+a weekly template, and a day can hold more than one slot (for example strength AM, run PM).
+The template creates dated planned sessions. Each dated session can be moved, skipped or
+changed alone, and compliance is tracked per dated session. The lifter flows that assume one
+session per day (missed-workout detection, the rotation walker, the auto-session index) must be
+changed with tests, so a lifter with one slot per day sees no change.
 
-Recommended: **C**. It is the only one that supports moving one session, compliance per session
-and AI swaps without the weekday template in the way (principle 1). It is also the biggest
-change, so it needs its own brief with the lifter flows as tests.
+**D8. The race lives on the season, and a cycle without a season can have its own race.** A
+season holds a list of races with A/B/C priority. A cycle inside a season shows the season's
+races and stores none of its own, so each fact has one home. A cycle with no season (a simple
+user) keeps its own race fields. Existing triathlon cycles migrate into a season.
 
-**Q8. Where does the race live once seasons exist?**
-- A. On the season, as a list of races with A/B/C priority; the cycle columns are migrated and dropped.
-- B. Keep the cycle columns and add the season on top.
-
-Recommended: **A**. Two places for one fact drift apart.
-
-**Q9. How are workout steps stored?**
-- A. A JSON tree per workout, checked with Zod.
-- B. Step rows with a parent id for repeats.
-- C. Keep `program_sets` rows and add step columns.
-
-Recommended: **A**. The step tree is read and written whole, export formats are trees, and Zod
-gives one check for the app and MCP. C keeps the flat model principle 1 asks to change.
+**D9. Workout steps are a JSON tree, checked with Zod.** One schema is used by the app, MCP
+and export.
 
 ### Training rules
 
-**Q10. Strength in a triathlon plan: keep 8-12 reps flat, or move to heavy work?**
-- A. Keep the generator's flat 8-12 rep ranges.
-- B. Heavy 3-6 reps at RIR 2-3 for the main lower-body lifts, frequency by phase, accessories as now.
-- C. A setting per plan, default A.
+**D10. Strength in a triathlon plan comes from an intake interview, not a fixed default.**
+Making a triathlon plan (in the app or by the AI) starts with an interview. It asks the
+strength goal (keep muscle, get stronger, minimal), along with race, available days and hours,
+experience, thresholds and injuries. The strength part follows the answer:
+- Keep muscle: moderate rep ranges with the main lifts kept heavy enough to keep strength.
+  Research: concurrent training cost no muscle growth (Schumann 2022).
+- Get stronger / performance: heavy main leg lifts at 3-6 reps plus plyometrics (research
+  favourite for running economy).
+- Minimal: one short session a week to keep what is there.
+Frequency drops by phase in all three (2× in base, 1× in race-specific phases). The answers
+are stored in coach memory, and the AI can ask the same interview over MCP.
 
-Recommended: **B**. The research is clear that heavy work improves economy and light high-rep
-work does not. It changes reps only through the progression settings, so decision D-6 still
-holds.
+**D11. Missed endurance sessions: confirm first, then skip or move.**
+1. When a planned session's day passes, look for a matching Garmin activity (sport, day, time
+   or distance). If one matches, mark the session done and link the activity.
+2. If none matches, ask the user: "Did you do it?" The user may only have forgotten to log
+   it. They can confirm it as done (with time, distance and RPE) or say it was missed.
+3. A confirmed miss is skipped for easy sessions. A missed key session (long ride, long run,
+   race-specific session) moves to a free day in the same week if one exists. Never stack two
+   hard days.
+The AI sees the same state over MCP, and it can read Garmin activities to check.
 
-**Q11. Missed endurance sessions: keep "make up", or skip?**
-- A. Same make-up prompt as strength.
-- B. Skip for endurance; offer to move only a missed key session.
-
-Recommended: **B**. It follows the research and leaves the lifter flow as it is.
-
-**Q12. Thresholds: who can enter them?**
-- A. Garmin estimates only (decision O-6 as it stands).
-- B. Manual entry and field tests for everyone; Garmin estimates as a suggestion for admins.
-
-Recommended: **B**. Without it, normal users have no targets, so sections 3 and 3b do not work
-for them.
+**D12. Everyone can enter thresholds by hand and log field tests.** FTP, threshold HR (bike and
+run), threshold run pace and swim CSS. Garmin estimates show next to the value as a
+suggestion. This reverses decision O-6 in `docs/plans/garmin-insights-design.md`.
 
 ### Platform and scope
 
-**Q13. How do planned workouts reach the watch?**
-- A. FIT file download only.
-- B. FIT download plus an intervals.icu sync with the user's own API key.
-- C. Wait for Garmin's Training API.
+**D13. Getting workouts to the watch: open.** The owner will come back to it. Briefs must not
+depend on a delivery route. FIT export, ZWO and intervals.icu stay on the list as options.
 
-Recommended: **A** first, **B** as a later brief. A works for every user and needs no third
-party. B adds a new data recipient (privacy checklist) but removes the manual step.
+**D14. Time zone and units both now.** The user's time zone decides "today", week numbers and
+the weekly sync. Units (kg/lb, km/mi, pace per km or mile, swim per 100 m or 100 yd) are a
+display setting; storage stays metric.
 
-**Q14. Units and time zone: in these briefs, or later?**
-- A. Add both now, display only (storage stays metric, dates stay local dates).
-- B. Time zone now, units later.
-- C. Both later.
-
-Recommended: **B**. The time zone bug affects the weekly sync and day matching for real users
-now. Units matter only when users outside metric countries ask.
-
-**Q15. Who gets the triathlon add-on?**
-- A. Admins only at first, like Garmin.
-- B. Every user who switches it on.
-
-Recommended: **B**, once the features in a step work without Garmin. Gate each step by the
-add-on switch, not by role.
+**D15. Owner only for now, built for everyone.** The endurance and triathlon add-on is on for
+the owner (admin) at first. It must not depend on the admin role in its data model or logic:
+gate it with a per-user add-on switch that only an admin can turn on for now. Each feature
+should work without Garmin where it can (logged sessions, RPE load), so it can open to other
+users later by changing who may turn the switch on. Features that are useful to every user
+(revisions, time zone, units, thresholds by hand, MCP scopes, exercise search) ship to everyone.
