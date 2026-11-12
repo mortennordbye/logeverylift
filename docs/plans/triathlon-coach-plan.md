@@ -89,7 +89,7 @@ everything that writes plan data. A1-A3 share one brief and one PR:
 | A1 | Bug fixes and ghost-session cleanup | none | building |
 | A2 | User time zone and display units | none | building |
 | A3 | Endurance switch | none | building |
-| A4 | Revisions, stable ids and plan versions | A1 | todo |
+| A4 | Revisions, stable ids and plan versions | A1 | brief ([`revisions.md`](revisions.md)) |
 
 **A1. Bug fixes and ghost-session cleanup.** Audit "Bugs found" 1-4 and D23.
 - MCP `edit_program_exercise`: accept every planned-set field the tool description names
