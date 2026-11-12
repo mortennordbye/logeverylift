@@ -231,9 +231,16 @@ Migration files in `drizzle/` are committed to git and **must never be regenerat
 
 ## Server Action stability across deploys
 
-Production must set `NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY` to a stable 32-byte base64 value (`openssl rand -base64 32`). Without it, Next.js generates a fresh key per build, so action IDs are randomized on every deploy — PWA users with cached client bundles then call action IDs the new server doesn't recognize and see `Failed to find Server Action`. Those calls feed into the offline-replay queue, which retries 5× and drops them. Net effect: **silent data loss for any user mid-workout when a deploy lands**.
+**Server Action IDs change on every deploy, by design.** Next.js salts the IDs with the action encryption key at build time, and the build writes that key into `.next/server/server-reference-manifest.json`. The image is public on GHCR, so a stable key would be public too. Each build therefore gets a fresh random key. Do not add a build key, and do not set `NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY`: Next 16 does not read it.
 
-Set the secret once in the k8s/ArgoCD secret store and never rotate it. The boot-time `env.ts` warns if it's missing in production. Client-side, `src/lib/utils/stale-bundle.ts` detects the specific error and forces a Service Worker update + page reload instead of dropping the write — but the stable key is the only thing that prevents the failure mode in the first place.
+So a client that was open across a deploy sends action IDs the new server does not know. The server logs `Failed to find Server Action` and answers with the header `x-nextjs-action-not-found: 1`; the client router then throws an `UnrecognizedActionError` (`Server Action "<id>" was not found on the server`). The client handles it:
+
+- `isStaleBundleError()` (`src/lib/utils/stale-bundle.ts`) detects that error. `callAction()` and the offline queue (`src/contexts/pending-queue-context.tsx`) both use it, for live writes and replays.
+- A set write that hits it goes into the offline queue. A stale-bundle failure never counts as a retry (`afterStaleBundle` in `src/lib/utils/pending-queue.ts`), so the queue never drops a set for it.
+- `reloadForFreshBundle()` asks the Service Worker to update and reloads the page. The new page replays the queue with the new IDs. A page that a reload opened in the last 30 seconds does not reload again; the queue retries every 30 seconds instead, so a rolling deploy cannot cause a reload loop.
+- The user sees "Updating app. Your sets are saved on this phone."
+
+Covered by `src/__tests__/components/pending-queue.test.tsx` and `e2e/stale-bundle.spec.ts`, which rewrites the action ID on every action POST so the real server answers with its not-found response.
 
 ## Architecture
 
