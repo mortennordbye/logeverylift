@@ -844,7 +844,8 @@ This brief uses C2's brief as the API. Before any code, after C2 merges:
 0. Before C2 merges (done): the pure modules `src/lib/utils/workout-steps.ts` and
    `src/lib/utils/session-compliance.ts` (schema, resolver, estimate, summary, hard rule; ratio,
    bands, consistency, `suggestMoveDay`, `returnInfo`), `docs/mcp/workout-steps.md` and their
-   unit tests. The resource is not registered yet: it names tools that come with step 8.
+   unit tests. The resource is not registered yet: it names tools that come with step 8. The
+   derived priority (3.4) waits for C2, since it reads a session's week.
 1. After C2 merges: rebase, check section 12, fix this brief. Run C2's characterization tests.
 2. The weekly sync lifter test (6.10, point 3) on `main`, green, own commit, before any change.
 3. Migration and schema.
