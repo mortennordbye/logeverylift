@@ -31,6 +31,7 @@ import {
   EXERCISE_KEPT,
   PROGRAM_KEPT,
   REVISION_RETENTION_DAYS,
+  canonical,
   changeSetFor,
   diffSnapshots,
   isProgramSnapshot,
@@ -552,6 +553,27 @@ export async function checkFlushedSetWrite(
       ? Object.keys(fields)
       : queuedWriteConflicts(baseSet, current as unknown as Record<string, unknown>, fields);
   if (conflicting.length === 0) return { conflict: false };
+  // The queue may send the same write twice (a reply lost to a navigation, a
+  // retry after it). The second is the same conflict, not a new one.
+  const rejected = { programSetId, baseVersion, fields };
+  const earlier = await w.tx
+    .select({ id: planRevisions.id, rejected: planRevisions.rejected })
+    .from(planRevisions)
+    .where(
+      and(
+        eq(planRevisions.objectType, "program"),
+        eq(planRevisions.objectId, programId),
+        eq(planRevisions.action, "conflict"),
+        eq(planRevisions.version, version),
+      ),
+    )
+    .orderBy(desc(planRevisions.id))
+    .limit(20);
+  const same = earlier.find((r) => {
+    const x = r.rejected as { programSetId?: number; baseVersion?: number; fields?: unknown } | null;
+    return x && canonical({ programSetId: x.programSetId, baseVersion: x.baseVersion, fields: x.fields }) === canonical(rejected);
+  });
+  if (same) return { conflict: true, revisionId: same.id, fields: conflicting };
   const revisionId = await w.conflict(
     { type: "program", id: programId },
     { programSetId, baseVersion, fields, conflicting, setDeleted: !current || !!current.deletedAt },

@@ -416,6 +416,20 @@ describe("versions and conflicts", () => {
     expect(applied.weightKg).toBe("82.50");
   });
 
+  it("the same conflicting write sent twice by the queue is one conflict, not two", async () => {
+    await mcp(userId)("edit_program_exercise", {
+      operation: "update",
+      programExerciseId,
+      sets: [{ setNumber: 1, weightKg: 100 }, { setNumber: 2, weightKg: 82.5 }, { setNumber: 3, weightKg: 85 }],
+      reason: "Heavier top set",
+      expectedVersion: 1,
+    });
+    const first = await updateProgramSet({ id: setIds[0], weightKg: 82.5, baseVersion: 1 });
+    const again = await updateProgramSet({ id: setIds[0], weightKg: 82.5, baseVersion: 1 });
+    expect(!first.success && !again.success && first.conflict?.revisionId === again.conflict?.revisionId).toBe(true);
+    expect((await revisions()).filter((r) => r.action === "conflict")).toHaveLength(1);
+  });
+
   it("a flushed write to a field nobody else changed still applies", async () => {
     await updateProgramSet({ id: setIds[2], weightKg: 90 }); // another set, by the user
     const r = await updateProgramSet({ id: setIds[0], weightKg: 81, baseVersion: 1 });

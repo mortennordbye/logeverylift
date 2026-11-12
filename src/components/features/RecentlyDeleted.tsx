@@ -5,7 +5,8 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export type DeletedPlan = { id: number; name: string; deletedAt: string; revisionId: number | null };
+/** `deletedOn` is formatted on the server in the user's zone. */
+export type DeletedPlan = { id: number; name: string; deletedOn: string; revisionId: number | null };
 
 /**
  * Deleted programs or cycles, restorable for 90 days (docs/plans/revisions.md,
@@ -53,7 +54,7 @@ export function RecentlyDeleted({ kind, items }: { kind: "program" | "cycle"; it
                 <div className="min-w-0">
                   <p className="font-medium truncate">{item.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    Deleted {new Date(item.deletedAt).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                    Deleted {item.deletedOn}
                   </p>
                 </div>
                 <button

@@ -10,15 +10,11 @@ import { useState } from "react";
 export type ChangeSetCard = {
   changeSetId: string;
   clientName: string;
-  firstAt: string;
-  lastAt: string;
+  /** When the change set started, formatted in the user's zone. */
+  when: string;
   reasons: string[];
   objects: { type: "program" | "cycle"; id: number; name: string; changes: string[] }[];
 };
-
-function when(iso: string) {
-  return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
-}
 
 /**
  * The AI changes feed (docs/plans/revisions.md, 2.9): one card per assistant
@@ -67,7 +63,7 @@ export function AssistantChangesClient({ sets }: { sets: ChangeSetCard[] }) {
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="font-medium truncate">{s.clientName}</p>
-                <p className="text-xs text-muted-foreground">{when(s.firstAt)}</p>
+                <p className="text-xs text-muted-foreground">{s.when}</p>
               </div>
               <button
                 onClick={() => {

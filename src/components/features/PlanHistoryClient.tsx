@@ -13,7 +13,8 @@ export type HistoryRow = {
   writer: "user" | "assistant" | "progression" | "sync" | "apply";
   clientName: string | null;
   reason: string | null;
-  createdAt: string;
+  /** When, already formatted in the user's zone (shortDateTime). */
+  when: string;
   changes: string[];
 };
 
@@ -33,10 +34,6 @@ function who(r: HistoryRow): string {
     case "apply":
       return "Garmin suggestion";
   }
-}
-
-function when(iso: string) {
-  return new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 }
 
 /** Runs of automatic rows fold into one line, so the user's and the assistant's changes stand out. */
@@ -106,7 +103,7 @@ export function PlanHistoryClient({ kind, rows }: { kind: "program" | "cycle"; r
               <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-semibold text-amber-600">Not applied</span>
             )}
           </p>
-          <p className="text-xs text-muted-foreground">{when(row.createdAt)}</p>
+          <p className="text-xs text-muted-foreground">{row.when}</p>
         </div>
         {row.action === "conflict" ? (
           <button
@@ -178,7 +175,7 @@ export function PlanHistoryClient({ kind, rows }: { kind: "program" | "cycle"; r
         <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4">
           <h2 className="text-lg font-semibold">Restore this version?</h2>
           <p className="text-sm text-muted-foreground">
-            The {kind} goes back to how it was on {confirming ? when(confirming.createdAt) : ""}. Logged workouts do
+            The {kind} goes back to how it was on {confirming?.when ?? ""}. Logged workouts do
             not change. Weekly targets from the cycle, and weights or reps progression set since then, keep their
             current values, and the weekly sync runs again. You can undo the restore from this list.
           </p>

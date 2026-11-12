@@ -6,9 +6,11 @@ audit (`docs/triathlon-coach-audit.md`, sections 7, 8, 9, 11 and decisions D1, D
 T2, T3, T5, T6, T9), `CLAUDE.md`, `TESTING.md` and the MCP access brief
 ([`mcp-access.md`](mcp-access.md)).
 
-Status: building. The owner answered the open questions on 2026-11-12 (section 12). The
-**Findings** section describes the code on `main` at ec8ee7d (after PRs #220 and #221); every
-`file:line` in it was opened then. Names marked *new* do not exist yet.
+Status: built on `feat/revisions-a4` to the owner's answers (section 12). The **Findings**
+section describes the code on `main` at ec8ee7d (after PRs #220 and #221); every `file:line` in
+it was opened then, and the code has moved since. The **Design** sections describe what this PR
+built; section 13 lists where the build differs from the first draft of this brief. Names marked
+*new* were new when the brief was written.
 
 ## 0. Goal
 
@@ -281,10 +283,9 @@ principle 5) or a reader that shows deleted rows.
   cycle readers and the sync.
 - `resolvePlanSlot` keeps resolving a named set by id **including deleted rows** (the log keeps
   its link), while the position fallback and `workingSetCount` count live sets only.
-- The open workout must still show a logged row whose plan set was deleted mid-session. Today
-  such a row has a null link and shows as an extra set. After A4 it has a link to a hidden row,
-  so the code that loads the session's logged rows must not join it away. A component test
-  covers it (section 5).
+- A logged row whose plan set was deleted mid-session keeps its link. The workout's set list
+  shows the plan's live sets, so the deleted set leaves the list, as it did before; the logged
+  row stays in the session, the history and the export (integration tests, section 5).
 - Writes to a deleted object are refused as "not found", except restore.
 - "Recently deleted" lists on `/programs` and `/cycles` read deleted objects on purpose.
 
@@ -403,7 +404,7 @@ Owner decision 3.
 ### 2.9 UI
 
 - **Program history** at `/programs/[id]/history`, linked from the program page header. Rows
-  newest first, grouped by day: who ("You", the assistant's client name, "Progression",
+  newest first: who ("You", the assistant's client name, "Progression",
   "Weekly sync", "Garmin suggestion"), time, reason, and a short diff ("Bench press, set 2:
   60 → 62.5 kg"). Runs of automatic rows fold into one line ("3 automatic changes"). Each row
   but the newest has Restore. The confirm sheet shows what changes, says that logged workouts
@@ -496,7 +497,7 @@ seen failing.
 | Unit | Guard: no plan write outside the revision module; every plan read filters or is marked | `src/__tests__/plan-write-guard.test.ts` (*new*) |
 | Component | Queue replay with a conflict on a flush item: the item leaves, conflict toast, no "dropped" toast, and the queued `logWorkoutSet` and `completeWorkoutSession` around it still replay and leave the queue (fake timers) | `src/__tests__/components/pending-queue.test.tsx` |
 | Component | Finish page sends `baseVersion` with each flush item, online and queued | `src/__tests__/components/finish-page.test.tsx` |
-| Component | Set list during a workout: delete a planned set that has a logged row; the logged row stays on screen | `src/__tests__/components/` (next to the existing set list tests) |
+| Component | A new workout keeps the program's version, and a resumed one keeps the version it started on | `src/__tests__/components/workout-plan-version.test.tsx` |
 | Integration | Today fails: `deleteProgramSet` on a set with a logged row; the row keeps `program_set_id` | `src/__tests__/integration/plan-revisions.test.ts` (*new*) |
 | Integration | Today fails: MCP `edit_program_exercise` with `sets[]` during an open session; set ids unchanged and logged rows keep their links | `src/__tests__/integration/mcp-programs.test.ts` |
 | Integration | Each writer in 1.2 makes one revision with the right writer, action and change set; a no-op write makes none; version bumps only for user, assistant and restore | `plan-revisions.test.ts` |
@@ -527,7 +528,7 @@ Then the full e2e suite (set writes are used in the workout) and the smoke pass 
    Soft-deleted rows are exported too (they are already, since the export does not filter).
 5. **Delete:** `user_id` cascades.
 6. **`LEGAL_VERSION`** bump (told, not asked). `CONSENT_VERSION` stays: no new kind of data.
-7. **Logs:** ids and tags only (`[restoreRevision]`, `[plan-conflict]`), never snapshot content.
+7. **Logs:** ids and tags only (`[restorePlanRevision]`, `[undoPlanChangeSet]`, `[plan-conflict]`), never snapshot content.
 8. **Friends:** no change; revisions are never shown to other users. A shared program copies the
    live program only, never its history.
 
@@ -609,3 +610,22 @@ The owner took every recommendation.
 
 The defaults in section 8, and `list_revisions` and `restore_revision` in this package, are
 accepted. The plan's A4 and B1 text is fixed in this PR (section 11).
+
+## 13. Where the build differs from the first draft
+
+- **No component test for a logged row on screen after a mid-workout set delete.** The draft
+  said such a row "shows as an extra set" today. It does not: the set list renders the plan's
+  sets, so a deleted set leaves the list before and after A4. What matters, that the logged row
+  keeps its link and stays in history, is covered by integration tests.
+- **The workout's plan version comes from the workout layout.** The layout reads the program's
+  version and the session initializer stores it in `activeWorkout` when a workout starts; a
+  resumed workout keeps the stored one. The finish flush builds its payloads in
+  `src/lib/utils/finish-flush.ts`.
+- **A conflict with no base revision is a conflict.** When the server finds no revision at the
+  workout's version, every field not already at the new value counts as changed. This only
+  happens for data written outside the revision layer.
+- **Cycle start completes other cycles inside the layer.** `activateCycle` in
+  `src/lib/plan-revisions.ts` touches each active cycle and the new one in one transaction, for
+  the app and for MCP.
+- **The guard tests are text scans** (`src/__tests__/plan-write-guard.test.ts`). They cannot see a
+  slot's `program` relation, so slot readers use `liveSlotProgram` by hand.

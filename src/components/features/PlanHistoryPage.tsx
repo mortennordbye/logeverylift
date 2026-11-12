@@ -1,5 +1,8 @@
 import { PlanHistoryClient } from "@/components/features/PlanHistoryClient";
 import { getPlanHistory } from "@/lib/actions/plan-revisions";
+import { getUserSettings } from "@/lib/user-settings";
+import { shortDateTime } from "@/lib/utils/user-date";
+import { requireSession } from "@/lib/utils/session";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -7,7 +10,8 @@ import { notFound } from "next/navigation";
 /** The shared server half of the program and cycle history pages. */
 export async function PlanHistoryPage({ type, id }: { type: "program" | "cycle"; id: number }) {
   if (!Number.isInteger(id) || id <= 0) notFound();
-  const result = await getPlanHistory({ type, id });
+  const auth = await requireSession();
+  const [result, { timeZone }] = await Promise.all([getPlanHistory({ type, id }), getUserSettings(auth.user.id)]);
   if (!result.success) notFound();
   const { name, deleted, revisions } = result.data;
   const list = type === "program" ? "/programs" : "/cycles";
@@ -39,7 +43,7 @@ export async function PlanHistoryPage({ type, id }: { type: "program" | "cycle";
           writer: r.writer,
           clientName: r.clientName,
           reason: r.reason,
-          createdAt: r.createdAt.toISOString(),
+          when: shortDateTime(r.createdAt, timeZone),
           changes: r.changes,
         }))}
       />
