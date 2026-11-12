@@ -221,6 +221,7 @@ export type LimitCheck = {
 /** The user-facing line for a stored limit check, or null when the assistant went past none. */
 export function limitOverrideLine(stored: unknown): string | null {
   const c = stored as Partial<LimitCheck> | null;
+  if (c?.warnings?.length) return `Breaks a training limit: ${c.warnings.map((w) => w.message).join(" ")}`;
   if (!c?.overridden?.length) return null;
   return overrideLine(c.overridden, c.overrideReason ?? "none given");
 }

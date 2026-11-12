@@ -106,10 +106,14 @@ export function registerProfileTools(server: McpServer, userId: string) {
           goals !== undefined
             ? { goals: goals && goals.length > 0 ? JSON.stringify(goals) : null }
             : {};
+        // Nothing known to set (only unknown keys, which the schema drops):
+        // say so, instead of the database's "No values to set".
+        const updates = { ...rest, ...goalsValue };
+        if (Object.values(updates).every((v) => v === undefined)) return fail("No profile field to update");
 
         await db
           .update(users)
-          .set({ ...rest, ...goalsValue })
+          .set(updates)
           .where(eq(users.id, userId));
 
         const newWeight = rest.weightKg;
