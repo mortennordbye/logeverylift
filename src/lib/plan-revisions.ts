@@ -531,8 +531,9 @@ export async function checkFlushedSetWrite(
   fields: Record<string, unknown>,
 ): Promise<{ conflict: false } | { conflict: true; revisionId: number; fields: string[] }> {
   const version = await w.touch({ type: "program", id: programId });
-  if (version === baseVersion) return { conflict: false };
   const [current] = await w.tx.select().from(programSets).where(eq(programSets.id, programSetId));
+  // A set removed from the plan is never written back, whatever the version.
+  if (version === baseVersion && current && !current.deletedAt) return { conflict: false };
   const [baseRev] = await w.tx
     .select({ snapshot: planRevisions.snapshot })
     .from(planRevisions)
