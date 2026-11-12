@@ -26,7 +26,7 @@ when the brief was written.
 | 5 | [Quick workout and session-only swap](quick-workout-and-swap.md) | merged into package C2 of the endurance plan | yes | yes |
 | 6 | [Share card and recap](share-card-and-recap.md) | todo | no | no |
 | 7 | [Web push and reminders](web-push-and-reminders.md) | todo | yes | yes (rest timer) |
-| 8 | [Garmin deep data](garmin-deep-data.md) | phase 1 in progress (local branch) | yes | no |
+| 8 | [Garmin deep data](garmin-deep-data.md) | phase 1 merged to main (#208, #215) | yes | no |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.

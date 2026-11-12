@@ -1,6 +1,6 @@
 # Garmin deep data: plan
 
-> **Status:** phase 1 in progress on the local branch `feat/garmin-metrics` (not pushed after PR #208's first two commits; the owner merges when happy).
+> **Status:** phase 1 merged to `main` (PRs #208 and #215).
 > **Written:** 2026-11-11, after probing all 26 Personal API endpoints with the owner's account.
 
 Written to be picked up with no conversation history. Read section 0 first.

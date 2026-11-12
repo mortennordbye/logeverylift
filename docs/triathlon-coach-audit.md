@@ -356,7 +356,8 @@ experience, thresholds and injuries. The strength part follows the answer:
   favourite for running economy).
 - Minimal: one short session a week to keep what is there.
 Frequency drops by phase in all three (2× in base, 1× in race-specific phases). The answers
-are stored in coach memory, and the AI can ask the same interview over MCP.
+are stored in their own tables (T10 replaces the earlier "stored in coach memory"), and the AI
+can ask the same interview over MCP.
 
 **D11. Missed endurance sessions: confirm first, then skip or move.**
 1. When a planned session's day passes, look for a matching Garmin activity (sport, day, time
