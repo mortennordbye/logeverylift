@@ -149,6 +149,16 @@ test("an MCP client connects through consent and calls a tool with its token", a
   });
   expect(memory.body.result.isError).toBe(true);
   expect(memory.body.result.content[0].text).toContain("This connection is read-only");
+  // The athlete profile tools (docs/plans/athlete-profile.md, 2.8): thresholds for every user, and the prompt.
+  for (const name of ["get_athlete_profile", "manage_thresholds"]) expect(tools.text).toContain(name);
+  const threshold = await rpc("tools/call", {
+    name: "manage_thresholds",
+    arguments: { operation: "add", kind: "ftp", watts: 250, source: "manual", reason: "e2e" },
+  });
+  expect(threshold.body.result.isError).toBe(true);
+  expect(threshold.body.result.content[0].text).toContain("This connection is read-only");
+  const prompts = await rpc("prompts/list");
+  expect(prompts.text).toContain("intake_interview");
 
   // The server instructions and both resources, read from the production build.
   const init = await rpc("initialize", {

@@ -22,6 +22,9 @@ const SECTIONS = {
 - Exercises: the built-in library and the user's own custom exercises. Find one with search_exercises; make a custom one with create_exercise (set its discipline swim, bike or run on an endurance exercise).
 - Workout sessions: what the user logged, set by set, with the user's notes. You can read them. You can log a session done outside the app (log_session) and mark a planned day of the active cycle as done (confirm_session). You cannot edit or delete a session.
 - Profile and body weight history.
+- Thresholds (every user): FTP, threshold heart rate for bike and run, threshold run pace, swim CSS and max HR, each value with its date and source (typed in, a field test, or a Garmin estimate the user took), so the stored values are the history. get_athlete_profile reads them; manage_thresholds adds, changes or deletes one.
+- Athlete profile (endurance features only): endurance experience, available days, hours per week, the longest day, the strength goal (keep_muscle, stronger, minimal), injuries and limits, and the intake interview. get_athlete_profile reads it; manage_athlete_profile and manage_injuries change it. The prompt intake_interview runs the interview step by step.
+- Strength in an endurance plan follows the strength goal: get_athlete_profile gives the default sessions per week for the phase and the scheme. It is a default: plan another count only with the reason in your write's reason.
 - Coach memory: what earlier conversations agreed or learned (preferences, life limits, observations, decisions), kept for you between conversations. get_coach_memory reads it; manage_coach_memory changes it. The user sees and edits it in the app.
 - Settings in get_profile: the user's time zone, which decides "today", the cycle week and the weekly sync; display units (km or mi, m or yd), which change only what the app shows, since every tool value is metric (kg, metres, seconds); and enduranceEnabled, the endurance add-on (triathlon plan, race on a cycle), which only an admin can turn on.`,
 
@@ -33,10 +36,10 @@ const SECTIONS = {
 
   missing: `Not in the app yet, so do not look for it or promise it:
 - One workout slot per day in a weekday cycle. No seasons above cycles.
-- No tables yet for injuries, availability or thresholds: keep injuries and weekly availability in coach memory as limit or observation entries.`,
+- Strength frequency by phase is a default only; no code refuses another count yet.`,
 
   review: `A weekly review:
-1. Read get_coach_memory first, then get_profile, the active cycle (list_training_cycles, get_training_cycle), recent_workouts, weekly_volume and personal_records. If Garmin tools are listed, read get_garmin_status and get_garmin_trends.
+1. Read get_coach_memory first, then get_athlete_profile and get_profile, the active cycle (list_training_cycles, get_training_cycle), recent_workouts, weekly_volume and personal_records. If Garmin tools are listed, read get_garmin_status and get_garmin_trends.
 2. Compare the week with the plan: what was done, what was missed, effort and readiness, any warning sign.
 3. Report that to the user in short points, citing the rules you rely on.
 4. Propose changes with a reason each. Apply only what the user asks for.

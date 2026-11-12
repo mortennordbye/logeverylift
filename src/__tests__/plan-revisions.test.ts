@@ -11,6 +11,7 @@ import {
   restoredSetValues,
   sameSnapshot,
   setChangesSince,
+  snapshotName,
   syncOwnedSetFields,
   type ProgramSnapshot,
 } from "@/lib/utils/plan-revisions";
@@ -208,5 +209,38 @@ describe("replayOutcome", () => {
   it("says the workout was saved only when its finish was", () => {
     expect(conflictNotice(1, true)).toMatch(/^Workout saved\. One plan change/);
     expect(conflictNotice(2, false)).toMatch(/^2 plan changes from your workout were not applied/);
+  });
+});
+
+describe("athlete profile snapshots (docs/plans/athlete-profile.md, 2.2)", () => {
+  const t = (over: Record<string, unknown> = {}) => ({
+    v: 1 as const,
+    threshold: { id: 1, kind: "ftp", value: 250, measuredOn: "2026-11-01", source: "manual", notes: null, deletedAt: null, ...over },
+  });
+  const inj = (over: Record<string, unknown> = {}) => ({
+    v: 1 as const,
+    injury: { id: 2, area: "lower_back", side: "left", description: "x", avoid: null, status: "active", deletedAt: null, ...over },
+  });
+
+  it("names each type", () => {
+    expect(snapshotName(t())).toBe("FTP");
+    expect(snapshotName(inj())).toBe("Injury: left lower back");
+    expect(snapshotName({ v: 1, athlete: { id: 3 } })).toBe("Athlete profile");
+  });
+
+  it("reads a threshold change in its units", () => {
+    expect(diffSnapshots(null, t())).toEqual(["Added FTP 250 W on 2026-11-01 (manual)"]);
+    expect(diffSnapshots(t(), t({ value: 265, measuredOn: "2026-11-10" }))).toEqual(["250 W on 2026-11-01 → 265 W on 2026-11-10"]);
+    expect(diffSnapshots(t(), t({ deletedAt: "2026-11-12T00:00:00.000Z" }))).toEqual(["Deleted"]);
+  });
+
+  it("reads injury and profile changes", () => {
+    expect(diffSnapshots(inj(), inj({ status: "past" }))).toEqual(["status active → past"]);
+    expect(
+      diffSnapshots(
+        { v: 1, athlete: { id: 3, availableDays: [1, 3], strengthGoal: null } },
+        { v: 1, athlete: { id: 3, availableDays: [1, 3, 6], strengthGoal: "keep_muscle" } },
+      ),
+    ).toEqual(["Days Mon Wed → Mon Wed Sat", "Strength goal none → keep muscle"]);
   });
 });

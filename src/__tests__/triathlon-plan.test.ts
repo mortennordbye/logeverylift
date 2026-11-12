@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import PLAN_BEFORE_C3 from "./fixtures/triathlon-plan-16w-main.json";
 import {
   buildTriathlonPlan,
+  planDefaultsFromProfile,
   planExerciseNames,
   snapWeeks,
 } from "@/lib/utils/triathlon-plan";
@@ -319,5 +321,60 @@ describe("buildTriathlonPlan", () => {
   it("defaults to the intermediate level and records it on the blueprint", () => {
     expect(buildTriathlonPlan({ weeks: 24 }).level).toBe("intermediate");
     expect(buildTriathlonPlan({ weeks: 24, level: "advanced" }).level).toBe("advanced");
+  });
+});
+
+describe("buildTriathlonPlan by strength goal (docs/plans/athlete-profile.md, 2.7)", () => {
+  const strengthDays = (plan: ReturnType<typeof buildTriathlonPlan>) =>
+    plan.days.filter((d) => d.exercises.some((e) => e.name === "Front Squat" || e.name === "Romanian Deadlift"));
+
+  it("keep muscle and no goal give the plan main built before strength goals", () => {
+    // Pinned: the output of buildTriathlonPlan({ weeks: 16 }) on main before C3 (2bdac35).
+    expect(buildTriathlonPlan({ weeks: 16, strengthGoal: "keep_muscle" })).toEqual(PLAN_BEFORE_C3);
+    expect(buildTriathlonPlan({ weeks: 16, strengthGoal: null })).toEqual(PLAN_BEFORE_C3);
+    expect(buildTriathlonPlan({ weeks: 16 })).toEqual(PLAN_BEFORE_C3);
+  });
+
+  it("stronger: heavy 4 x 5 main leg lifts with plyometrics first, two days", () => {
+    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "stronger" });
+    const days = strengthDays(plan);
+    expect(days.map((d) => d.dayOfWeek)).toEqual([1, 4]);
+    expect(days[0].exercises[0]).toMatchObject({ name: "Box Jump", exerciseType: "plyometric" });
+    expect(days[1].exercises[0]).toMatchObject({ name: "Pogo Hops", exerciseType: "plyometric" });
+    for (const name of ["Front Squat", "Romanian Deadlift"]) {
+      const lift = plan.days.flatMap((d) => d.exercises).find((e) => e.name === name)!;
+      const working = lift.sets.filter((s) => s.setType !== "warmup");
+      expect(working.map((s) => s.targetReps)).toEqual([5, 5, 5, 5]);
+    }
+    expect(planExerciseNames(plan)).toEqual(expect.arrayContaining(["Box Jump", "Pogo Hops"]));
+  });
+
+  it("minimal: one full-body session on Monday, Thursday free, swims kept", () => {
+    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "minimal" });
+    expect(strengthDays(plan).map((d) => d.dayOfWeek)).toEqual([1]);
+    const thu = plan.days.find((d) => d.dayOfWeek === 4)!;
+    expect(thu).toMatchObject({ label: "Rest", exercises: [], autoComplete: false });
+    expect(plan.days.filter((d) => d.exercises.some((e) => e.name === "Swim"))).toHaveLength(2);
+  });
+
+  it("minimal with a rest day drops the empty Thursday first, so no session is lost", () => {
+    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "minimal", restDays: [5] });
+    const sessions = plan.days.filter((d) => d.exercises.length > 0).map((d) => d.label);
+    expect(sessions).toHaveLength(6);
+    expect(sessions).toContain("Recovery Swim");
+  });
+});
+
+describe("planDefaultsFromProfile", () => {
+  it("rest days are the days not available, at most two, with a note past two", () => {
+    expect(planDefaultsFromProfile({ availableDays: [1, 2, 3, 4, 6, 7], enduranceLevel: "novice" })).toEqual({ restDays: [5], level: "novice", note: null });
+    expect(planDefaultsFromProfile({ availableDays: [1, 2, 3, 4, 5, 6, 7], enduranceLevel: null })).toEqual({ restDays: [], level: "intermediate", note: null });
+    const tight = planDefaultsFromProfile({ availableDays: [2, 4, 6, 7], enduranceLevel: null });
+    expect(tight.restDays).toEqual([1, 3]);
+    expect(tight.note).toContain("4 days");
+  });
+
+  it("no availability keeps the old default", () => {
+    expect(planDefaultsFromProfile({ availableDays: null, enduranceLevel: "advanced" })).toEqual({ restDays: [5, 6], level: "advanced", note: null });
   });
 });

@@ -49,7 +49,7 @@ export function registerCoachMemoryTools(server: McpServer, userId: string, clie
         "Add, change, deactivate, activate or delete a coach memory entry.",
         `operation='add': kind and text (up to ${COACH_MEMORY_TEXT_MAX} characters); optional date (YYYY-MM-DD, default today). At most ${COACH_MEMORY_MAX} entries.`,
         "operation='update': id and any of kind, text, date. operation='deactivate' / 'activate': id; an inactive entry is kept but left out of get_coach_memory by default. operation='delete': id; the user can restore it.",
-        "Keep one fact per entry. After each change you and the user agree on, add a 'decision' entry with the date and why. Facts with their own place in the app (a race goes on the cycle) do not go here. Injuries and weekly availability go here as 'limit' or 'observation' entries until the app has a place for them.",
+        "Keep one fact per entry. After each change you and the user agree on, add a 'decision' entry with the date and why. Facts with their own place in the app do not go here: a race goes on the cycle; thresholds, injuries, weekly availability and the strength goal go in the athlete profile (get_athlete_profile, manage_thresholds; with endurance features on, manage_athlete_profile and manage_injuries).",
         `Every operation requires reason; all but add also require expectedVersion (the entry's version). ${REVISION_RULES}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },

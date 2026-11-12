@@ -5,9 +5,11 @@ import { acceptTerms } from "@/lib/actions/legal";
 import { LEGAL_VERSION } from "@/lib/constants/legal";
 import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export function ConsentForm() {
+  const router = useRouter();
   const [consent, setConsent] = useState<ConsentState>({ terms: false, healthData: false });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +23,9 @@ export function ConsentForm() {
       setError(result.error);
       return;
     }
-    window.location.href = "/";
+    // A soft navigation: a hard one (window.location) aborts the refresh the
+    // action's revalidation starts, and WebKit then shows the global error.
+    router.replace("/");
   }
 
   return (

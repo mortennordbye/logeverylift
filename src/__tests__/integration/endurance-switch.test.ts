@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { trainingCycles, users } from "@/db/schema";
+import { athleteProfiles, exercises, programExercises, programs, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
 import { setUserEndurance } from "@/lib/actions/admin";
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
@@ -84,5 +84,27 @@ describe("generateTriathlonPlan", () => {
     const result = await generateTriathlonPlan({ weeks: 12 });
     expect(result.success).toBe(true);
     expect(await db.select().from(trainingCycles).where(eq(trainingCycles.userId, athlete))).toHaveLength(1);
+  });
+
+  it("builds the strength part from the profile's strength goal (docs/plans/athlete-profile.md, 2.7)", async () => {
+    await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, athlete));
+    asUser(athlete);
+    await db.insert(athleteProfiles).values({ userId: athlete, strengthGoal: "stronger" });
+    const result = await generateTriathlonPlan({ weeks: 12 });
+    expect(result.success, JSON.stringify(result)).toBe(true);
+    if (!result.success) return;
+    const names = await db
+      .select({ name: exercises.name, program: programs.name })
+      .from(programExercises)
+      .innerJoin(programs, eq(programs.id, programExercises.programId))
+      .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+      .where(eq(programs.createdByCycleId, result.data.cycleId));
+    expect(names.map((n) => n.name)).toEqual(expect.arrayContaining(["Box Jump", "Pogo Hops"]));
+
+    await db.update(athleteProfiles).set({ strengthGoal: "minimal" }).where(eq(athleteProfiles.userId, athlete));
+    const minimal = await generateTriathlonPlan({ weeks: 12 });
+    if (!minimal.success) throw new Error(minimal.error);
+    const slots = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, minimal.data.cycleId));
+    expect(slots.find((s) => s.dayOfWeek === 4)).toMatchObject({ programId: null, label: "Rest" });
   });
 });

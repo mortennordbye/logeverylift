@@ -1,5 +1,8 @@
 import { db } from "@/db";
 import {
+  athleteInjuries,
+  athleteProfiles,
+  athleteThresholds,
   coachMemory,
   exercises,
   planRevisions,
@@ -14,6 +17,7 @@ import {
 import { connectionAccess } from "@/lib/mcp/access";
 import { planWrite } from "@/lib/plan-revisions";
 import { READ_ONLY_REFUSAL, scopedServer, type McpAccess } from "@/lib/mcp/scopes";
+import { registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
 import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
@@ -46,6 +50,7 @@ function toolsFor(userId: string, access: McpAccess) {
   for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools, registerExerciseTools, registerSessionTools, registerCoachMemoryTools]) {
     register(server, userId);
   }
+  registerAthleteProfileTools(server, userId, undefined, { endurance: true });
   return tools;
 }
 
@@ -60,7 +65,10 @@ async function fingerprint(userId: string) {
   const sessions = await db.select({ id: workoutSessions.id }).from(workoutSessions).where(eq(workoutSessions.userId, userId));
   const custom = await db.select({ id: exercises.id }).from(exercises).where(eq(exercises.userId, userId));
   const memory = await db.select({ id: coachMemory.id }).from(coachMemory).where(eq(coachMemory.userId, userId));
-  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length });
+  const athlete = await db.select({ id: athleteProfiles.id, v: athleteProfiles.version }).from(athleteProfiles).where(eq(athleteProfiles.userId, userId));
+  const thresholds = await db.select({ id: athleteThresholds.id }).from(athleteThresholds).where(eq(athleteThresholds.userId, userId));
+  const injuries = await db.select({ id: athleteInjuries.id }).from(athleteInjuries).where(eq(athleteInjuries.userId, userId));
+  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length, athlete, thresholds: thresholds.length, injuries: injuries.length });
 }
 
 let me: string;
@@ -71,7 +79,8 @@ let cycleId: number;
 let baselineId: number;
 
 beforeEach(async () => {
-  me = (await createUser()).id;
+  // With the endurance switch on, so the athlete profile tools are registered.
+  me = (await createUser({ enduranceEnabled: true })).id;
   exerciseId = (await createExercise()).id;
   programId = (await createProgram(me, [{ exerciseId, sets: [{ targetReps: 8, weightKg: "60" }] }])).program.id;
   // Active since today, with the program on Wednesday, so confirm_session has a day to confirm.
@@ -105,6 +114,9 @@ const writeCalls = (): [string, Record<string, unknown>][] => [
   ["log_session", { date: toDateStr(new Date()), sets: [{ exerciseId, setNumber: 1, reps: 5, weightKg: 60 }] }],
   ["confirm_session", { date: toDateStr(new Date()), programId }],
   ["manage_coach_memory", { operation: "add", kind: "preference", text: "Long rides on Saturday", reason: "Test" }],
+  ["manage_thresholds", { operation: "add", kind: "ftp", watts: 250, source: "manual", reason: "Test" }],
+  ["manage_athlete_profile", { strengthGoal: "stronger", reason: "Test" }],
+  ["manage_injuries", { operation: "add", area: "knee", description: "Sore", status: "active", reason: "Test" }],
 ];
 
 const readCalls: [string, Record<string, unknown>][] = [
@@ -125,6 +137,7 @@ const readCalls: [string, Record<string, unknown>][] = [
   ["list_revisions", {}],
   ["search_exercises", { query: "a", limit: 5 }],
   ["get_coach_memory", {}],
+  ["get_athlete_profile", {}],
 ];
 
 describe("read only", () => {

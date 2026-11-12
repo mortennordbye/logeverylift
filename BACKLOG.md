@@ -57,6 +57,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A request for 7-day training. Then add a 7-day split to `autoSplit` (for example push/pull/legs twice plus a conditioning or mobility day), add 7 to `TEMPLATE_DAYS`, and extend the combination tests.
 - **Touchpoints:** `src/lib/utils/plan-templates.ts` (`TEMPLATE_DAYS`, `autoSplit`, `SPLIT_DAYS`), `src/__tests__/plan-templates.test.ts`.
 
+### Retire the triathlon plan generator after C4
+- **What:** Remove the fixed triathlon plan generator (the "Triathlon plan" page and its action) once the assistant builds endurance plans from structured workouts and seasons.
+- **Why deferred:** It is still the only way to make an endurance plan in the app. Package C3 changed it lightly (the intake interview first, prefill from the profile, strength by goal) and decided with the owner on 2026-11-12 to retire it later (`docs/plans/athlete-profile.md`, 2.7 and 12). It plans a full distance from fixed volumes and ignores hours per week, the longest day, the race distance and thresholds.
+- **Unblocked by:** Package C4 (structured endurance workouts) merged, with C1's seasons, so the assistant builds a plan from parts. Then ask the owner before removing it, delete the page, form, action and blueprint with their tests, and drop the cycles-list entry.
+- **Touchpoints:** `src/lib/utils/triathlon-plan.ts`, `src/lib/actions/triathlon-plan.ts`, `src/components/features/TriathlonPlanForm.tsx`, `src/app/cycles/triathlon/page.tsx`, `src/components/features/CyclesListClient.tsx` (the "Triathlon plan" entry), `src/__tests__/triathlon-plan.test.ts`.
+
 ### Training-limit warnings on a change-set undo over MCP
 - **What:** `restore_revision` with one `revisionId` runs the training limits as warnings (T4) and stores them on the restore. With a `changeSetId` (undo a whole review) it runs none, so an undo that brings back a long run or a fourth hard session does not warn the assistant or the user.
 - **Why deferred:** A change set can touch several programs, cycles and memory entries; the scope for the before and after read needs every touched object, and the AI coach PR (`docs/plans/ai-coach.md`, section 13) kept to the one-object case. The weekly sync's own output is checked in package D2, not here.

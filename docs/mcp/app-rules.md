@@ -39,8 +39,26 @@ what it describes, that package updates this file and the server instructions in
 - **Coach memory.** Short entries the assistant keeps between conversations: a `preference`, a
   `limit` (in the athlete's life: time, travel, equipment), an `observation` or a `decision`,
   each with a date and an in-use flag. The user sees and edits them in More → Coach memory.
-  Every change is a revision. Injuries and weekly availability go here until the app has its own
-  place for them. A race goes on the cycle, not here.
+  Every change is a revision. Injuries, availability and the strength goal go in the athlete
+  profile, thresholds in their own list, a race on the cycle; not here.
+- **Thresholds.** For every user: FTP (W), threshold heart rate for bike and run and max HR
+  (bpm), threshold run pace and swim CSS (stored as m/s; tools also give and take seconds per km
+  or per 100 m). One row per value with its date and source (`manual`, `test`, `garmin`), so the
+  rows are the history; the latest date is current, and a value older than 8 weeks is stale.
+  A field test (`run_30min`, `bike_30min`, `ftp_20min`, `css_400_200`, `swim_t1000`) sends its inputs, and the
+  app computes the value. Garmin estimates show as suggestions for accounts with Garmin; they
+  are stored only when taken. `get_athlete_profile`, `manage_thresholds`.
+- **Athlete profile** (endurance features only). Endurance experience, available days, hours
+  per week, the longest day, the strength goal, injuries and limits (area, side, what to avoid,
+  status active, managed or past), and whether the intake interview is done. The interview (the
+  `intake_interview` prompt, or the steps in the app) writes these, not coach memory, and offers
+  each `limit` or `observation` memory entry so its fact can move here; the entry is then made
+  inactive. `get_athlete_profile`, `manage_athlete_profile`, `manage_injuries`. Every change is a
+  revision.
+- **Strength in an endurance plan.** The strength goal sets a default: keep muscle and get
+  stronger 2 sessions a week in general prep and base, 1 in build and peak, 1 light in the taper
+  (last heavy session 7-10 days out), none in transition; minimal 1 a week. It is a default: plan
+  another count only with the reason in the write's `reason`. No code refuses another count yet.
 - **Settings.** The user's time zone and display units (`get_profile`, `update_profile`), and
   whether the endurance add-on is on (`enduranceEnabled`). The add-on gates the triathlon plan
   and the race on a cycle in the app. Only an admin can turn it on; no tool can set it

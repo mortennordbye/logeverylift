@@ -20,8 +20,22 @@
  * engine adds weight after two sessions at target. The core hold progresses by
  * duration. The endurance swim that a third strength day once displaced rides
  * on Wednesday with the mid bike, so no swim volume is lost.
+ *
+ * The strength part follows the athlete's strength goal from the intake
+ * interview (docs/plans/athlete-profile.md, 2.7; D10), at the base phase, since
+ * a generated cycle is one template (strengthDefault in strength-goal.ts):
+ * - keep_muscle, or no goal: Workout A and B as above.
+ * - stronger: the main leg lifts (Front Squat, Romanian Deadlift) at 4 x 5,
+ *   heavy, with plyometrics first (Box Jump in A, Pogo Hops in B): heavy work
+ *   and plyometrics improve economy, light work does not (research, line 208).
+ * - minimal: one full-body session on Monday; Thursday is a rest day.
+ *
+ * Not used: hours per week, the longest day, the race distance (the volumes
+ * are for a full) and thresholds. The assistant plans from those. This
+ * generator retires after package C4 (BACKLOG.md).
  */
 
+import type { StrengthGoal } from "@/db/schema/athlete-profile";
 import type { ExerciseType } from "@/lib/utils/exercise-type";
 import {
   deloadCadenceForLevel,
@@ -115,6 +129,8 @@ export type BuildTriathlonPlanParams = {
   goal?: TrainingGoal;
   /** Experience tier — scales peak volumes and deload cadence. Default "intermediate". */
   level?: AthleteLevel;
+  /** The strength goal from the athlete profile; none keeps the A/B template. */
+  strengthGoal?: StrengthGoal | null;
 };
 
 /** Peak (race-prep) per-session distances in meters for each endurance slot. */
@@ -163,7 +179,13 @@ export function snapWeeks(weeks: number): number {
  * Two strength days (Mon/Thu) run a flat hypertrophy/maintenance block with no RIR cap
  * (Workout A / Workout B); the rest of the week is the polarized endurance schedule.
  */
-export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "intermediate" }: BuildTriathlonPlanParams): PlanBlueprint {
+export function buildTriathlonPlan({
+  weeks,
+  restDays,
+  goal = "build",
+  level = "intermediate",
+  strengthGoal = null,
+}: BuildTriathlonPlanParams): PlanBlueprint {
   const durationWeeks = snapWeeks(weeks);
   const week1Load = periodizedLoad(1, durationWeeks, goal, deloadCadenceForLevel(level));
   const week1Multiplier = week1Load.multiplier;
@@ -244,6 +266,41 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
     lift("Cable Crunch", "load", "isolation", [W(15, 120), W(15, 120)], INC_ISOLATION),
   ];
 
+  // Get stronger: the main leg lifts heavy at 4 x 5 (3-6 reps at about 80-90%
+  // 1RM), plyometrics first while fresh (2-4 x 5-10 contacts).
+  const plyo = (name: string, reps: number): PlanExercise => ({
+    name,
+    progressionAdvance: "manual",
+    exerciseType: "plyometric",
+    overloadIncrementReps: 0,
+    sets: [1, 2, 3].map(() => ({ targetReps: reps, restTimeSeconds: 90, setType: "working" as const })),
+  });
+  const heavy = (name: string) => lift(name, "load", "compound", [WU(5), W(5, 180), W(5, 180), W(5, 180), W(5, 180)], INC_COMPOUND);
+  const strongerA: PlanExercise[] = [plyo("Box Jump", 5), heavy("Front Squat"), ...workoutA.slice(1)];
+  const strongerB: PlanExercise[] = [plyo("Pogo Hops", 10), heavy("Romanian Deadlift"), ...workoutB.slice(1)];
+
+  // Minimal: one 30-40 minute full-body session, 2 working sets on the main lifts.
+  const fullBody: PlanExercise[] = [
+    lift("Front Squat", "load", "compound", [WU(6), W(6, 150), W(6, 150)], INC_COMPOUND),
+    lift("Romanian Deadlift", "load", "compound", [W(6, 150), W(6, 150)], INC_COMPOUND),
+    lift("Pull-up", "load", "compound", [W(6, 150), W(6, 150)], INC_COMPOUND),
+    lift("Dumbbell Bench Press", "load", "compound", [W(8, 150), W(8, 150)], INC_COMPOUND),
+    lift("Pallof Hold", "duration", "isometric", [HOLD(30, 5, 60), HOLD(30, 5, 60)]),
+  ];
+
+  const strengthDays: { mon: { label: string; exercises: PlanExercise[] }; thu: { label: string; exercises: PlanExercise[] } } =
+    strengthGoal === "minimal"
+      ? { mon: { label: "Strength — Full Body", exercises: fullBody }, thu: { label: "Rest", exercises: [] } }
+      : strengthGoal === "stronger"
+        ? {
+            mon: { label: "Workout A — Heavy Squat & Jumps", exercises: strongerA },
+            thu: { label: "Workout B — Heavy Hinge & Hops", exercises: strongerB },
+          }
+        : {
+            mon: { label: "Workout A — Squat & Horizontal", exercises: workoutA },
+            thu: { label: "Workout B — Hinge & Vertical", exercises: workoutB },
+          };
+
   // Each session is built from structured segments — not one distance blob — so it
   // reads like a real workout. Easy Z2 warmup/cooldown bracket the work; the single
   // weekly quality run is genuine Z4 threshold intervals (you don't run 8 km flat
@@ -304,8 +361,7 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   const days: Omit<PlanDay, "autoComplete">[] = [
     {
       dayOfWeek: 1,
-      label: "Workout A — Squat & Horizontal",
-      exercises: workoutA,
+      ...strengthDays.mon,
     },
     {
       dayOfWeek: 2,
@@ -321,8 +377,7 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
     },
     {
       dayOfWeek: 4,
-      label: "Workout B — Hinge & Vertical",
-      exercises: workoutB,
+      ...strengthDays.thu,
     },
     {
       dayOfWeek: 5,
@@ -353,6 +408,8 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
   const restSet = new Set((restDays ?? []).filter((d) => d >= 1 && d <= 7));
   if (restSet.size > 0) {
     const importance: Record<number, number> = { 7: 6, 6: 5, 1: 4, 4: 3, 3: 2, 2: 1, 5: 0 };
+    // A day that is already empty (Thursday for a minimal strength goal) goes first.
+    for (const d of days) if (d.exercises.length === 0) importance[d.dayOfWeek] = -1;
     const keptDays = days.map((d) => d.dayOfWeek).filter((dow) => !restSet.has(dow));
     const keptSessions = [...days]
       .sort((a, b) => importance[b.dayOfWeek] - importance[a.dayOfWeek])
@@ -391,6 +448,26 @@ export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "i
       ...d,
       autoComplete: d.exercises.length > 0 && d.exercises.every((ex) => ENDURANCE_EXERCISES.has(ex.name)),
     })),
+  };
+}
+
+/**
+ * The plan form's starting values from the athlete profile
+ * (docs/plans/athlete-profile.md, 2.7): rest days are the days not available,
+ * at most two (the plan has room for two), and the level is the endurance level.
+ */
+export function planDefaultsFromProfile(profile: {
+  availableDays: number[] | null;
+  enduranceLevel: AthleteLevel | null;
+}): { restDays: number[]; level: AthleteLevel; note: string | null } {
+  const level = profile.enduranceLevel ?? "intermediate";
+  if (!profile.availableDays?.length) return { restDays: [5, 6], level, note: null };
+  const off = [1, 2, 3, 4, 5, 6, 7].filter((d) => !profile.availableDays!.includes(d));
+  if (off.length <= 2) return { restDays: off, level, note: null };
+  return {
+    restDays: off.slice(0, 2),
+    level,
+    note: `You can train ${profile.availableDays.length} days a week; this plan needs 5. Move or drop sessions after it is made.`,
   };
 }
 

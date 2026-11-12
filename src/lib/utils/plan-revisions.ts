@@ -5,7 +5,9 @@
  * side is src/lib/plan-revisions.ts.
  */
 
+import type { ThresholdKind } from "@/db/schema/athlete-profile";
 import type { PlanWriter } from "@/db/schema/plan-revisions";
+import { THRESHOLD_LABEL, formatThreshold } from "@/lib/utils/thresholds";
 
 export type Row = { id: number } & Record<string, unknown>;
 export type ExerciseSnap = Row & { exerciseName?: string | null; sets: Row[] };
@@ -14,16 +16,37 @@ export type SlotSnap = Row & { programName?: string | null };
 export type CycleSnapshot = { v: 1; cycle: Row; slots: SlotSnap[] };
 /** A coach memory entry (docs/plans/ai-coach.md, 2.5). */
 export type MemorySnapshot = { v: 1; memory: Row };
-export type PlanSnapshot = ProgramSnapshot | CycleSnapshot | MemorySnapshot;
+/** The athlete profile, one threshold value, one injury (docs/plans/athlete-profile.md, 2.2). */
+export type AthleteSnapshot = { v: 1; athlete: Row };
+export type ThresholdSnapshot = { v: 1; threshold: Row };
+export type InjurySnapshot = { v: 1; injury: Row };
+export type PlanSnapshot =
+  | ProgramSnapshot
+  | CycleSnapshot
+  | MemorySnapshot
+  | AthleteSnapshot
+  | ThresholdSnapshot
+  | InjurySnapshot;
 
 export const isProgramSnapshot = (s: PlanSnapshot): s is ProgramSnapshot => "program" in s;
 export const isCycleSnapshot = (s: PlanSnapshot): s is CycleSnapshot => "cycle" in s;
 export const isMemorySnapshot = (s: PlanSnapshot): s is MemorySnapshot => "memory" in s;
+export const isAthleteSnapshot = (s: PlanSnapshot): s is AthleteSnapshot => "athlete" in s;
+export const isThresholdSnapshot = (s: PlanSnapshot): s is ThresholdSnapshot => "threshold" in s;
+export const isInjurySnapshot = (s: PlanSnapshot): s is InjurySnapshot => "injury" in s;
+
+const INJURY_AREA_TEXT = (area: unknown) => String(area ?? "other").replace("_", " ");
 
 /** The name an object goes by in the history and the AI changes feed. */
 export function snapshotName(s: PlanSnapshot): string {
   if (isProgramSnapshot(s)) return String(s.program.name);
   if (isCycleSnapshot(s)) return String(s.cycle.name);
+  if (isAthleteSnapshot(s)) return "Athlete profile";
+  if (isThresholdSnapshot(s)) return THRESHOLD_LABEL[s.threshold.kind as ThresholdKind] ?? "Threshold";
+  if (isInjurySnapshot(s)) {
+    const side = s.injury.side ? `${s.injury.side} ` : "";
+    return `Injury: ${side}${INJURY_AREA_TEXT(s.injury.area)}`;
+  }
   const text = String(s.memory.text);
   return text.length > 40 ? `${text.slice(0, 39)}…` : text;
 }
@@ -192,6 +215,35 @@ const MEMORY_FIELDS: Record<string, string> = {
 
 const DAYS = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+const ATHLETE_FIELDS: Record<string, string> = {
+  enduranceLevel: "Experience",
+  availableDays: "Days",
+  hoursPerWeek: "Hours a week",
+  longestDayMinutes: "Longest day",
+  longDay: "Long day",
+  strengthGoal: "Strength goal",
+  interviewCompletedAt: "Interview",
+};
+
+function athleteValue(field: string, v: unknown): string {
+  if (v == null) return "none";
+  if (field === "availableDays" && Array.isArray(v)) return v.length ? v.map((d) => DAYS[Number(d)] ?? d).join(" ") : "none";
+  if (field === "longDay") return DAYS[Number(v)] ?? String(v);
+  if (field === "longestDayMinutes") return `${Math.floor(Number(v) / 60)}:${String(Number(v) % 60).padStart(2, "0")} h`;
+  if (field === "hoursPerWeek") return `${Number(v)} h`;
+  if (field === "strengthGoal") return String(v).replace("_", " ");
+  if (field === "interviewCompletedAt") return "finished";
+  return String(v);
+}
+
+const INJURY_FIELDS: Record<string, string> = {
+  area: "area",
+  side: "side",
+  status: "status",
+  startedOn: "since",
+  endedOn: "until",
+};
+
 function fieldLines(prefix: string, labels: Record<string, string>, before: Row, after: Row, setFields = false): string[] {
   const out: string[] = [];
   for (const [field, label] of Object.entries(labels)) {
@@ -216,6 +268,45 @@ function exerciseLabel(e: ExerciseSnap): string {
  * set 2: weight 60 kg → 62.5 kg"). `before` null means the object was created.
  */
 export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot): string[] {
+  if (isAthleteSnapshot(after)) {
+    const prev = before && isAthleteSnapshot(before) ? before.athlete : null;
+    const out: string[] = [];
+    for (const [field, label] of Object.entries(ATHLETE_FIELDS)) {
+      const a = athleteValue(field, after.athlete[field]);
+      if (!prev) {
+        if (after.athlete[field] != null) out.push(`${label}: ${a}`);
+        continue;
+      }
+      const b = athleteValue(field, prev[field]);
+      if (a !== b) out.push(`${label} ${b} → ${a}`);
+    }
+    if (prev && !sameValue(prev.deletedAt ?? null, after.athlete.deletedAt ?? null)) {
+      out.push(after.athlete.deletedAt ? "Cleared" : "Restored");
+    }
+    return prev || out.length ? out : ["Created the athlete profile"];
+  }
+  if (isThresholdSnapshot(after)) {
+    const t = after.threshold;
+    const kind = t.kind as ThresholdKind;
+    const text = (r: Row) => `${formatThreshold(kind, Number(r.value))} on ${r.measuredOn}`;
+    const prev = before && isThresholdSnapshot(before) ? before.threshold : null;
+    if (!prev) return [`Added ${THRESHOLD_LABEL[kind]} ${text(t)} (${t.source})`];
+    const out: string[] = [];
+    if (!sameValue(prev.value, t.value) || !sameValue(prev.measuredOn, t.measuredOn)) out.push(`${text(prev)} → ${text(t)}`);
+    if (!sameValue(prev.source, t.source)) out.push(`source ${prev.source} → ${t.source}`);
+    if (!sameValue(prev.notes ?? null, t.notes ?? null)) out.push("notes changed");
+    if (!sameValue(prev.deletedAt ?? null, t.deletedAt ?? null)) out.push(t.deletedAt ? "Deleted" : "Restored");
+    return out;
+  }
+  if (isInjurySnapshot(after)) {
+    const prev = before && isInjurySnapshot(before) ? before.injury : null;
+    if (!prev) return [`Added ${snapshotName(after).toLowerCase()} (${after.injury.status})`];
+    const out = fieldLines("", INJURY_FIELDS, prev, after.injury);
+    if (!sameValue(prev.description, after.injury.description)) out.push("description changed");
+    if (!sameValue(prev.avoid ?? null, after.injury.avoid ?? null)) out.push("what to avoid changed");
+    if (!sameValue(prev.deletedAt ?? null, after.injury.deletedAt ?? null)) out.push(after.injury.deletedAt ? "Deleted" : "Restored");
+    return out;
+  }
   if (isMemorySnapshot(after)) {
     const prev = before && isMemorySnapshot(before) ? before : null;
     if (!prev) return [`Added ${after.memory.kind} "${snapshotName(after)}"`];
@@ -283,6 +374,8 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
 
 /** Memory fields a restore never writes back. */
 export const MEMORY_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt"] as const;
+/** Fields a restore of a one-row object (athlete profile, threshold, injury) never writes back. */
+export const ROW_KEPT = MEMORY_KEPT;
 /** Program fields a restore never writes back. */
 export const PROGRAM_KEPT = ["id", "userId", "createdByCycleId", "createdAt"] as const;
 /** Exercise slot fields a restore never writes back (progressionConfigAt is recomputed). */
