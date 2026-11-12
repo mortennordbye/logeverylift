@@ -66,6 +66,37 @@ describe("open sign-up", () => {
   });
 });
 
+describe("admin create-user", () => {
+  it("records no consent for the new user, even when sent", async () => {
+    await signUp("admin@test.local");
+    const { headers } = await auth.api.signInEmail({
+      body: { email: "admin@test.local", password: "correct-horse-battery" },
+      returnHeaders: true,
+    });
+    await db.update(users).set({ role: "admin" }).where(eq(users.email, "admin@test.local"));
+    // Only the session token: the cached session cookie still says "user".
+    const token = /better-auth\.session_token=[^;]+/.exec(headers.get("set-cookie") ?? "")?.[0];
+    expect(token).toBeDefined();
+
+    await auth.api.createUser({
+      headers: new Headers({ cookie: token! }),
+      body: {
+        name: "Someone",
+        email: "someone@test.local",
+        password: "correct-horse-battery",
+        data: { termsVersion: LEGAL_VERSION, policySeenVersion: LEGAL_VERSION, termsAcceptedAt: new Date(), healthConsentAt: new Date() },
+      },
+    });
+
+    const row = await byEmail("someone@test.local");
+    expect(row).toBeDefined();
+    expect(row.termsVersion).toBeNull();
+    expect(row.policySeenVersion).toBeNull();
+    expect(row.termsAcceptedAt).toBeNull();
+    expect(row.healthConsentAt).toBeNull();
+  });
+});
+
 describe("invite sign-up (registerWithToken)", () => {
   it("stores the consent with the account", async () => {
     const inviter = await createUser();

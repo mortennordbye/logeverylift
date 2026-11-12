@@ -83,8 +83,18 @@ export const auth = betterAuth({
       // be cut off unseen, and home then asked a user who had just ticked both
       // boxes to accept again. Without a valid `consent`, the account is
       // created without it and home asks for it (src/app/consent).
+      //
+      // Admin create-user passes its `data` straight to the insert. Only the
+      // server's own call, registerWithToken, may record consent through it
+      // (it has no request or headers); an admin must not give consent on
+      // someone else's behalf.
       create: {
         before: async (user, ctx) => {
+          if (ctx?.path === "/admin/create-user" && (ctx.request || ctx.headers)) {
+            return {
+              data: { ...user, termsVersion: null, policySeenVersion: null, termsAcceptedAt: null, healthConsentAt: null },
+            };
+          }
           if (ctx?.path !== "/sign-up/email") return;
           const consent = termsConsentSchema.safeParse((ctx.body as { consent?: unknown } | undefined)?.consent);
           if (!consent.success) return;
