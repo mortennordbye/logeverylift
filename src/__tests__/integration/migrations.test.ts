@@ -1,5 +1,13 @@
 import { db } from "@/db";
-import { exercisePrs, oauthClients, oauthConsents, oauthRefreshTokens, workoutSets } from "@/db/schema";
+import {
+  exercisePrs,
+  oauthClients,
+  oauthConsents,
+  oauthRefreshTokens,
+  trainingCycles,
+  users,
+  workoutSets,
+} from "@/db/schema";
 import { asc, eq, sql } from "drizzle-orm";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -183,5 +191,25 @@ describe("0080: MCP scopes", () => {
     await run();
     expect(await scopesOf(oldClient.clientId)).toEqual([...OLD, "mcp:read", "mcp:write"]);
     expect(await revokedOf(old.refresh.id)).toEqual(revokedAt);
+  });
+});
+
+describe("0081: the endurance switch starts on for those who use it", () => {
+  it("turns it on for admins and triathlon-generator users only", async () => {
+    const admin = await createUser({ role: "admin" });
+    const triathlete = await createUser();
+    const lifter = await createUser();
+    await db.insert(trainingCycles).values([
+      { userId: triathlete.id, name: "Triathlon", durationWeeks: 12, athleteLevel: "intermediate" },
+      { userId: lifter.id, name: "Strength", durationWeeks: 8 },
+    ]);
+
+    await db.execute(sql.raw(statement("0081_user_settings_endurance.sql", 'UPDATE "user"')));
+
+    const rows = await db.select({ id: users.id, on: users.enduranceEnabled }).from(users);
+    const on = new Map(rows.map((r) => [r.id, r.on]));
+    expect(on.get(admin.id)).toBe(true);
+    expect(on.get(triathlete.id)).toBe(true);
+    expect(on.get(lifter.id)).toBe(false);
   });
 });
