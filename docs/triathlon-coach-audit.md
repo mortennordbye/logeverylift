@@ -9,6 +9,20 @@ recovery, strength, nutrition, workout data models). It is not in the repo yet.
 
 Status words: **has** (works), **partial** (some of it works), **missing**.
 
+## Design principles for the build
+
+These come from the owner and apply to every brief that follows from this audit.
+
+1. **Change the app, do not work around it.** Where the current model is in the way (one
+   session per day, flat segment rows, the race on the cycle), the brief changes the model.
+   Endurance and triathlon must feel native to LogEveryLift, not bolted on.
+2. **Layers of complexity.** Normal users keep the simple app. More complex parts are add-ons
+   the user switches on: endurance, triathlon, structured workouts, the AI coach. Nothing from
+   an add-on shows until it is on.
+3. **The AI can do everything the UI can.** Over MCP, an assistant can create and adapt
+   seasons, cycles, programs and workouts end to end. Every AI change is tracked: what changed,
+   the reason, when, and a way to undo it.
+
 ## Principle: lifters first, triathlon opt-in
 
 Most users only lift. Every triathlon feature must be additive and hidden until the user turns
