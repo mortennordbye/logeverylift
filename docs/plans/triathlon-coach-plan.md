@@ -195,7 +195,7 @@ the plan and runs alone.
 |---|---|---|---|
 | C1 | Seasons, races and phases | A2, A3, A4 | todo |
 | C2 | Session model: several slots a day, dated sessions | A2, A4, C1 | todo |
-| C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | todo |
+| C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | brief ([`athlete-profile.md`](athlete-profile.md)) |
 | C4 | Structured endurance workouts | C2, C3 | todo |
 | C5 | Planned vs done, missed sessions, sick periods | C2, C4 | todo |
 | C6 | Endurance in the app: views and guided player | A2, C3, C4 | todo |
