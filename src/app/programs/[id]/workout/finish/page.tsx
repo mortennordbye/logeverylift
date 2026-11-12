@@ -9,7 +9,7 @@ import { flushWorkoutPlan } from "@/lib/actions/programs";
 import { finishFlushPayload, sendFinishFlush } from "@/lib/utils/finish-flush";
 import { usePendingQueue } from "@/contexts/pending-queue-context";
 import { useToast } from "@/contexts/toast-context";
-import { useWorkoutSession } from "@/contexts/workout-session-context";
+import { useOverridesReady, useWorkoutSession } from "@/contexts/workout-session-context";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { WORKOUT_FEELINGS, type WorkoutFeeling } from "@/lib/validators/workout";
 import { formatDateLong, formatDuration, formatTimeOfDay } from "@/lib/utils/format";
@@ -31,13 +31,20 @@ function FinishContent({ programId }: { programId: number }) {
   const { enqueue: enqueuePending } = usePendingQueue();
   const { showToast } = useToast();
 
+  // The workout's start lives in the browser (the stored active workout),
+  // which the provider restores in an effect. So the summary below shows the
+  // start, date and duration only after hydration and that restore: on the
+  // server they would be the time of the request, and the two renders would
+  // not match (React #418). Hydration matters as well as `restored`: this page
+  // sits in a Suspense boundary, which React may hydrate after the provider's
+  // effect has already run (the hazard useRenderedOverrides documents).
+  const restored = useOverridesReady();
+  const contextStart = workoutSession?.startTime ?? null;
+  const startParam = searchParams.get("start");
   const startTime = useMemo(() => {
-    const contextStart = workoutSession?.startTime;
     if (contextStart) return new Date(contextStart);
-    const raw = searchParams.get("start");
-    return raw ? new Date(raw) : new Date();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    return startParam ? new Date(startParam) : new Date(mountTime);
+  }, [contextStart, startParam, mountTime]);
 
   const durationMinutes = useMemo(
     () => Math.max(1, Math.round((mountTime - startTime.getTime()) / 60000)),
@@ -187,16 +194,16 @@ function FinishContent({ programId }: { programId: number }) {
           <div className="bg-card rounded-2xl p-5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Date</span>
-              <span className="text-sm font-medium">{formatDateLong(startTime)}</span>
+              <span className="text-sm font-medium">{restored ? formatDateLong(startTime) : "—"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Started</span>
-              <span className="text-sm font-medium">{formatTimeOfDay(startTime)}</span>
+              <span className="text-sm font-medium">{restored ? formatTimeOfDay(startTime) : "—"}</span>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Duration</span>
               <span className="text-sm font-medium">
-                {formatDuration(durationMinutes)}
+                {restored ? formatDuration(durationMinutes) : "—"}
               </span>
             </div>
           </div>

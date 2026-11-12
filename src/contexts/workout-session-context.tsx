@@ -368,7 +368,9 @@ export function useRenderedOverrides(): Record<number, SetOverride> {
  * True once local state may be seeded from `overrides`: after hydration (the
  * same reason as useRenderedOverrides) and after the provider has restored
  * them from localStorage (before that they are just empty). A component that
- * copies overrides into its own state mounts once this is true.
+ * copies overrides into its own state mounts once this is true. The same holds
+ * for anything else rendered from the stored workout, such as its start time
+ * on the finish page.
  */
 export function useOverridesReady(): boolean {
   const session = useWorkoutSession();
