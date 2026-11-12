@@ -155,8 +155,8 @@ Two new scopes: `mcp:read` and `mcp:write`.
 
 - Route `/more/assistants`, a row "Connected assistants" in the Account group of More.
 - Server Component lists the user's `oauth_consent` rows joined to `oauth_client` for the name,
-  with: assistant name (or "Unnamed assistant"), access (read only or read and change),
-  connected date (`created_at`), last change (`updated_at`). Empty state: "No assistants
+  with: assistant name (or "Unnamed assistant"), access (read only or read and change) and
+  connected date (`created_at`), newest first. Empty state: "No assistants
   connected." with one line on how to connect.
 - "Disconnect" opens a confirm sheet, then calls a new Server Action `disconnectAssistant({ id })`
   (canonical template, through `callAction()`). In one transaction, filtered by
@@ -223,9 +223,8 @@ Describing features that are "coming" invites the model to look for tools that a
   reads `path.join(process.cwd(), <doc path>)`; the standalone server runs from its own
   directory, as `scripts/e2e-serve.sh` and the Dockerfile do. One list of paths in
   `src/lib/mcp/resources.ts` is the source; `next.config.ts` imports it, so the two cannot
-  drift. No Dockerfile change. Fallback if tracing does not pick the files up under Turbopack: a
-  `COPY --from=builder /app/docs/mcp ...` line per file in the runner stage, and the same copy in
-  `scripts/e2e-serve.sh`.
+  drift. No Dockerfile change. Checked in the build: Turbopack copies both files to
+  `.next/standalone/docs/`.
 - Resources are readable under both scopes. They hold no user data.
 
 ## 3. Data model and migration
@@ -299,7 +298,7 @@ resources and the server instructions.
 | Integration | Per-request consent check against real `oauth_consent` rows: live, deleted, narrowed | same file |
 | Integration | `disconnectAssistant`: deletes only the caller's consent, revokes the caller's tokens for that client, leaves another user's untouched, refuses another user's consent id | `src/__tests__/integration/mcp-assistants.test.ts` |
 | Integration | Migration: an old client gains the scopes; old consents and refresh tokens are cleared; a new-style consent survives; running it twice is a no-op | `src/__tests__/integration/migrations.test.ts` |
-| e2e | Extend `e2e/mcp-oauth.spec.ts`: ask for the mcp scopes, pick read only, `tools/list` works, a write tool is refused, `resources/list` shows both, `resources/read` returns each with a version, then disconnect on the new screen and the same token gets 401. This runs against the standalone production build, so it is the test that each resource ships in the build. | `e2e/mcp-oauth.spec.ts` |
+| e2e | The e2e reset (`e2e/fixtures/reset.ts`) clears the account's consents, so the screen starts empty. Extend `e2e/mcp-oauth.spec.ts`: ask for the mcp scopes, pick read only, `tools/list` works, a write tool is refused, `resources/list` shows both, `resources/read` returns each with a version, then disconnect on the new screen and the same token gets 401. This runs against the standalone production build, so it is the test that each resource ships in the build. | `e2e/mcp-oauth.spec.ts` |
 
 Not a critical flow in `CLAUDE.md` terms, so no smoke pass. CI runs e2e.
 
