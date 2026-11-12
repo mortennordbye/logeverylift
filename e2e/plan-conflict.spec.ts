@@ -93,10 +93,18 @@ test("finishing a workout whose plan changed meanwhile saves the workout and kee
   );
   await assistantChangesWeight(active.programId, programExerciseId, planned);
 
-  await page.goto(`/programs/${active.programId}/workout/finish`);
+  // Reload the workout so the provider picks the override up, then finish the
+  // way a lifter does. (A direct load of the finish page renders its timer on
+  // the server with another start time and fails hydration.)
+  await page.goto(`/programs/${active.programId}/workout`);
+  await page.getByRole("button", { name: "Finished", exact: true }).click();
+  await page.getByRole("button", { name: "Yes, finish", exact: true }).click();
+  await expect(page).toHaveURL(/\/workout\/finish/);
   await page.getByRole("button", { name: "Save Workout" }).click();
   await page.getByRole("button", { name: "Yes, save", exact: true }).click();
   await expect(page.getByText(/One plan change from this workout was not applied/)).toBeVisible();
+  // The save then goes home; let that navigation land before the spec moves on.
+  await expect(page).toHaveURL(/\/$/);
   await expectSavedAndKept(page, active, setId);
 });
 

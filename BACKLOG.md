@@ -87,6 +87,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Reading today's planned session from the active cycle, and the muscle groups of yesterday's sets.
 - **Touchpoints:** `src/lib/garmin/analytics/session-insights.ts`, `getSessionInsights` in `src/lib/garmin/queries.ts`.
 
+### Finish page fails hydration when it is loaded directly
+- **What:** Loading `/programs/[id]/workout/finish` straight from the server (a refresh on the finish page, or a deep link) can throw React error #418, a text mismatch. On the server the page has no workout context, so its start time is the request time: the date, the time of day and the duration it renders (`startTime` and `durationMinutes` in `src/app/programs/[id]/workout/finish/page.tsx`) differ from what the browser renders from the stored workout. Reaching the page by tapping Finished, the normal path, renders it on the client only and is fine.
+- **Why deferred:** Found by the A4 conflict e2e spec (`e2e/plan-conflict.spec.ts`) while it loaded the page directly. It predates A4 and is outside its scope; the spec now goes through Finished like a lifter.
+- **Unblocked by:** Nothing. Render the three values only after mount (or from the stored start time on both sides), with a component test that renders the page on the server and hydrates it with a stored workout.
+- **Touchpoints:** `src/app/programs/[id]/workout/finish/page.tsx`, `src/contexts/workout-session-context.tsx`.
+
 ### iOS backgrounding — residual gaps after the resume-hardening pass
 - **What:** A Jun 2026 pass made the rest/exercise timers and completed-set toggles re-sync on resume (visibilitychange + pageshow + focus; rest timers rebuild from `restTimerEnds`, completed sets re-pull from the server). Two gaps remain: (1) the **exercise (timed-set) countdown** isn't persisted, so a *cold* eviction mid-timed-set loses it entirely (only warm resume recovers it); (2) **unsaved SetEditView edits** (typed but not Saved) live only in React state and are lost on eviction — only Saved overrides persist to localStorage.
 - **Why deferred:** (1) timed sets are short and rarely span a long background; persisting `endsAt` to the context/localStorage is extra surface for an edge case. (2) auto-persisting drafts on each keystroke is a bigger change; the explicit Save is the documented contract.
