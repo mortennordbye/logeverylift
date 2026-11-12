@@ -1,5 +1,5 @@
 import { garminView } from "@/components/features/garmin/tabs";
-import { bodySignal, changeOver, intensityWeek, normalRange, parseFitnessAge, raceStatus, rollingMean, stageShares, type CycleForRace } from "@/lib/garmin/analytics/overview";
+import { bodySignal, changeOver, clockFromMinutes, garminPhrase, intensityWeek, normalRange, parseFitnessAge, raceStatus, rollingMean, stageShares, type CycleForRace } from "@/lib/garmin/analytics/overview";
 import { addDays } from "@/lib/garmin/dates";
 import { describe, expect, it } from "vitest";
 
@@ -171,5 +171,24 @@ describe("stageShares", () => {
   it("is each stage's share of the time asleep, awake left out", () => {
     expect(stageShares({ deepS: 5100, lightS: 18600, remS: 6300 })).toEqual({ deep: 17, light: 62, rem: 21 });
     expect(stageShares({ deepS: 0, lightS: 0, remS: 0 })).toEqual({ deep: 0, light: 0, rem: 0 });
+  });
+});
+
+describe("garminPhrase", () => {
+  it("turns Garmin's feedback codes into words with a tone", () => {
+    expect(garminPhrase("POSITIVE_LONG_AND_DEEP")).toEqual({ text: "Long and deep", tone: "positive" });
+    expect(garminPhrase("NEGATIVE_SHORT_AND_NONRECOVERING")).toEqual({ text: "Short and not recovering", tone: "negative" });
+    expect(garminPhrase("NEGATIVE_NOT_ENOUGH_REM")).toEqual({ text: "Not enough REM", tone: "negative" });
+    expect(garminPhrase("ALIGNED")).toEqual({ text: "Aligned", tone: "neutral" });
+    expect(garminPhrase("NONE")).toBeNull();
+    expect(garminPhrase(null)).toBeNull();
+  });
+});
+
+describe("clockFromMinutes", () => {
+  it("reads minutes after midnight as a clock time", () => {
+    expect(clockFromMinutes(1320)).toBe("22:00");
+    expect(clockFromMinutes(1345)).toBe("22:25");
+    expect(clockFromMinutes(-60)).toBe("23:00");
   });
 });

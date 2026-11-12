@@ -64,6 +64,14 @@ describe("getRaceData", () => {
     expect(r.taperStart).toBe("2027-02-01");
     expect(r.fuel).toEqual([expect.objectContaining({ id: 33, sweatMl: 2400, carbsG: 210, fluidMl: 1800, durationS: 10800 })]);
   });
+
+  it("takes a session's temperature from Garmin's summary when its file has none", async () => {
+    const me = await createUser();
+    await longRide(me.id, 34);
+    await db.update(garminActivities).set({ detail: { summaryDTO: { averageTemperature: 21.46 } } }).where(eq(garminActivities.garminActivityId, 34));
+    await db.insert(trainingCycles).values({ userId: me.id, name: "IM", durationWeeks: 24, status: "active", startDate: "2026-09-07", raceDate: "2027-02-21", raceDistance: "full" });
+    expect((await getRaceData(me.id))!.fuel).toEqual([expect.objectContaining({ id: 34, temperature: 21.5 })]);
+  });
 });
 
 describe("Garmin MCP tools", () => {

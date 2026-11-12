@@ -1,11 +1,11 @@
 "use client";
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
-import { changeOver, stageShares, type BodySignal } from "@/lib/garmin/analytics/overview";
+import { changeOver, clockFromMinutes, garminPhrase, stageShares, type BodySignal } from "@/lib/garmin/analytics/overview";
 import { isGap, rateSignal, type Rating, type RatingGap, type Tone } from "@/lib/garmin/analytics/norms";
 import type { BodyKey, OverviewData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
-import { Activity, Armchair, BatteryMedium, BedDouble, BedSingle, BicepsFlexed, Brain, ChevronRight, Droplet, Eye, Footprints, Gauge, Heart, HeartPulse, Hourglass, Moon, MoonStar, Scale, Sunrise, Wind, X, type LucideIcon } from "lucide-react";
+import { Activity, Armchair, BatteryMedium, BedDouble, BedSingle, BicepsFlexed, Bone, Brain, Building, ChevronRight, Droplet, Droplets, Eye, Flame, Footprints, Gauge, Heart, HeartPulse, Hourglass, Moon, MoonStar, Mountain, Route, Scale, Sunrise, Timer, Wind, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { EChart } from "@/components/charts/EChart";
 import { useVizTheme } from "@/components/charts/viz-theme";
@@ -218,6 +218,76 @@ const BODY: Record<BodyKey, BodyConfig> = {
     color: "var(--viz-fitness-age)",
     about: "Skeletal muscle from your smart scale. A scale estimates it from electrical impedance, so watch the trend over weeks, not single readings.",
   },
+  floors: {
+    label: "Floors climbed",
+    unit: "",
+    format: (v) => String(Math.round(v)),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Building,
+    color: "var(--viz-zone-3)",
+    about: "Floors your watch counted going up on your last complete day, from its barometer: about 3 m of climb each.",
+  },
+  distance: {
+    label: "Distance",
+    unit: "km",
+    format: (v) => v.toFixed(1),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Route,
+    color: "var(--viz-run)",
+    about: "Everything you walked, ran and rode on your last complete day, as Garmin counts it, training included.",
+  },
+  activeTime: {
+    label: "Active time",
+    unit: "min",
+    format: (v) => String(Math.round(v)),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Timer,
+    color: "var(--viz-good)",
+    about: "Minutes Garmin counted as active or highly active on your last complete day, training included.",
+  },
+  calories: {
+    label: "Calories",
+    unit: "kcal",
+    format: (v) => Math.round(v).toLocaleString("en-GB"),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Flame,
+    color: "var(--viz-bike)",
+    about: "Everything you burned on your last complete day: resting energy plus activity, as Garmin estimates it.",
+  },
+  altitude: {
+    label: "Altitude",
+    unit: "m",
+    format: (v) => String(Math.round(v)),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Mountain,
+    color: "var(--viz-zone-4)",
+    about: "The average height above sea level your watch recorded on your last complete day. Above about 1,500 m, HRV, resting HR and sleep change until you adapt.",
+  },
+  boneMass: {
+    label: "Bone mass",
+    unit: "kg",
+    format: (v) => v.toFixed(1),
+    href: tab("trends"),
+    hrefLabel: "Trends",
+    icon: Bone,
+    color: "var(--viz-strength)",
+    about: "Your smart scale's estimate of bone mineral mass. It changes very slowly; a scale estimate is not a bone density test.",
+  },
+  bodyWater: {
+    label: "Body water",
+    unit: "%",
+    format: (v) => v.toFixed(1),
+    href: tab("trends"),
+    hrefLabel: "Trends",
+    icon: Droplets,
+    color: "var(--viz-respiration)",
+    about: "Your smart scale's estimate of water as a share of body weight. It moves with hydration and the time of day, so compare weigh-ins made at the same time.",
+  },
 };
 
 const TONE_COLOR: Record<Tone, string> = {
@@ -244,10 +314,15 @@ const PROFILE_HREF = "/more/account#body-profile";
 /** The small line under a signal's name. */
 function tileSub(k: BodyKey, data: OverviewData): string | undefined {
   if (k === "vo2max") return `Garmin, ${data.vo2Sport === "run" ? "running" : "cycling"}`;
-  if (k === "hrv") return data.rating.hrvBaseline ? `last night · 7 d ${data.rating.hrvBaseline.weeklyAvg}` : "last night";
+  if (k === "hrv") {
+    const high = data.hrvStatus?.nightHigh;
+    return `last night${data.rating.hrvBaseline ? ` · 7 d ${data.rating.hrvBaseline.weeklyAvg}` : ""}${high ? ` · high ${high}` : ""}`;
+  }
   if (k === "weight" && data.rating.bodyFat !== null) return `${data.rating.bodyFat} % body fat`;
   if (k === "steps") return "7-day average";
-  if (k === "stress" || k === "sedentary") return "last full day";
+  if (k === "stress" || k === "sedentary" || k === "distance" || k === "activeTime" || k === "altitude") return "last full day";
+  if (k === "floors") return data.floorGoal ? `last full day · goal ${data.floorGoal}` : "last full day";
+  if (k === "calories") return data.bmr ? `last full day · ${data.bmr.toLocaleString("en-GB")} at rest` : "last full day";
   return undefined;
 }
 
@@ -497,6 +572,32 @@ function NightCard({ data, onOpen }: { data: OverviewData; onOpen: (k: BodyKey) 
         <Chip r={sleepR} s={sleep} />
       </button>
 
+      {n && (garminPhrase(n.feedback) || garminPhrase(n.insight)) && (
+        <p className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="text-muted-foreground">Garmin:</span>
+          {[garminPhrase(n.feedback), garminPhrase(n.insight)].map((ph, i) =>
+            ph ? (
+              <span key={i} className="rounded-full px-2 py-0.5 font-medium" style={{ background: `color-mix(in srgb, ${PHRASE_COLOR[ph.tone]} 18%, transparent)`, color: PHRASE_COLOR[ph.tone] }}>
+                {ph.text}
+              </span>
+            ) : null,
+          )}
+        </p>
+      )}
+      {n?.nextNeedMin && (
+        <p className="flex items-center gap-2 rounded-xl bg-background px-3 py-2 text-xs">
+          <MoonStar className="h-3.5 w-3.5 flex-none text-muted-foreground" aria-hidden />
+          <span>
+            Tonight you need <b className="font-semibold">{hm(n.nextNeedMin * 60)}</b>
+            {n.bedtime && (
+              <>
+                {" "}· bed <b className="font-semibold tabular-nums">{clockFromMinutes(n.bedtime[0])}–{clockFromMinutes(n.bedtime[1])}</b>
+              </>
+            )}
+          </span>
+        </p>
+      )}
+
       {n && shares && total > 0 && (
         <>
           <div className="flex h-3 overflow-hidden rounded-full" role="img" aria-label={`Deep ${shares.deep} %, light ${shares.light} %, REM ${shares.rem} %, awake ${hm(n.awakeS)}.`}>
@@ -546,13 +647,36 @@ function NightCard({ data, onOpen }: { data: OverviewData; onOpen: (k: BodyKey) 
       <div className="grid grid-cols-3 gap-2">
         <AwakeStat data={data} onOpen={onOpen} />
         <MiniStat k="sleepStress" data={data} onOpen={onOpen} />
-        <MiniStat k="spo2" data={data} onOpen={onOpen} />
+        <MiniStat
+          k="spo2"
+          data={data}
+          onOpen={onOpen}
+          extra={n && (n.lowestSpO2 !== null || n.spo2Avg7 !== null) ? [n.lowestSpO2 !== null ? `low ${n.lowestSpO2}` : null, n.spo2Avg7 !== null ? `7 d ${Math.round(n.spo2Avg7)}` : null].filter(Boolean).join(" · ") : undefined}
+        />
+        {n?.breathing && <InfoStat label="Breathing variations" value={garminPhrase(n.breathing)?.text ?? "None"} tone={n.breathing === "NONE" ? "good" : n.breathing === "LOW" ? "ok" : "fair"} />}
+        {n?.alignment && <InfoStat label="Sleep timing" value={garminPhrase(n.alignment)!.text} tone={n.alignment === "ALIGNED" ? "good" : "fair"} note="against your best window" />}
+        {n && n.napS > 0 && <InfoStat label="Naps" value={hm(n.napS)} tone={null} />}
       </div>
     </section>
   );
 }
 
-function MiniStat({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen: (k: BodyKey) => void }) {
+const PHRASE_COLOR = { positive: "var(--viz-good)", negative: "var(--viz-serious)", neutral: "var(--muted-foreground)" } as const;
+
+/** A night fact with no scale or trend of its own, so no sheet. */
+function InfoStat({ label, value, tone, note }: { label: string; value: string; tone: Tone | null; note?: string }) {
+  return (
+    <div className="rounded-xl bg-background p-2.5 space-y-1">
+      <span className="block text-[11px] text-muted-foreground leading-tight">{label}</span>
+      <span className="block text-sm font-semibold leading-tight" style={tone ? { color: TONE_COLOR[tone] } : undefined}>
+        {value}
+      </span>
+      {note && <span className="block text-[10px] text-muted-foreground leading-tight">{note}</span>}
+    </div>
+  );
+}
+
+function MiniStat({ k, data, onOpen, extra }: { k: BodyKey; data: OverviewData; onOpen: (k: BodyKey) => void; extra?: string }) {
   const c = BODY[k];
   const s = data.body[k];
   const r = rated(ratingOf(k, s, data));
@@ -564,6 +688,7 @@ function MiniStat({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen:
         {s.value !== null && c.unit && <span className="text-[11px] font-normal text-muted-foreground"> {c.unit}</span>}
       </span>
       <Chip r={r} s={s} />
+      {extra && <span className="block text-[10px] text-muted-foreground tabular-nums">{extra}</span>}
     </button>
   );
 }
@@ -839,10 +964,18 @@ export function BodyOverview({ data }: { data: OverviewData }) {
         <Title>Day to day</Title>
         <StepsCard data={data} onOpen={open} />
         <div className="rounded-2xl bg-muted divide-y divide-border overflow-hidden">
-          <StatRow k="stress" data={data} onOpen={open} />
-          <StatRow k="sedentary" data={data} onOpen={open} />
-          <StatRow k="weight" data={data} onOpen={open} />
-          <StatRow k="muscleMass" data={data} onOpen={open} />
+          {(["activeTime", "distance", "floors", "calories", "stress", "sedentary", "altitude"] as const).map((k) => (
+            <StatRow key={k} k={k} data={data} onOpen={open} />
+          ))}
+        </div>
+      </section>
+
+      <section aria-label="Body composition" className="space-y-2">
+        <Title>Body composition</Title>
+        <div className="rounded-2xl bg-muted divide-y divide-border overflow-hidden">
+          {(["weight", "muscleMass", "boneMass", "bodyWater"] as const).map((k) => (
+            <StatRow key={k} k={k} data={data} onOpen={open} />
+          ))}
         </div>
       </section>
 

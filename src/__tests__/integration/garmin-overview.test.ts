@@ -158,7 +158,7 @@ describe("Garmin's own numbers", () => {
     expect(d.body.sleepScore.value).toBe(81);
     expect(d.body.respiration.value).toBe(14.5);
     expect(d.body.fitnessAge.value).toBe(18);
-    expect(d.hrvStatus).toEqual({ label: "Balanced", weeklyAvg: 89 });
+    expect(d.hrvStatus).toEqual({ label: "Balanced", weeklyAvg: 89, nightHigh: null });
     expect(d.intensity).toMatchObject({ minutes: 30 + 20 + 20 + 10, goal: 150 });
   });
 
@@ -190,6 +190,7 @@ describe("Garmin's own numbers", () => {
     await db.insert(garminActivities).values({ userId: me.id, garminActivityId: 32, startTimeLocal: new Date("2026-11-11T09:00:00Z"), activityType: "running", data: {} });
 
     expect((await getActivityDetail(me.id, 31))?.stamina).toEqual({ start: 99, end: 70, min: 64 });
+    expect((await getActivityDetail(me.id, 31))?.dto).toMatchObject({ beginPotentialStamina: 99 });
     expect((await getActivityDetail(me.id, 32))?.stamina).toBeNull();
     expect(await getActivityDetail((await createUser()).id, 31)).toBeNull();
   });
@@ -268,6 +269,6 @@ describe("getOverviewData sleep quality and day to day", () => {
     expect(d.stepsWeek.map((x) => x.steps)).toEqual([null, null, null, 8000, 8000, 8000, 8000]);
     expect(d.stepsWeek.at(-1)?.date).toBe("2026-11-10");
     expect(d.stepGoal).toBe(9000);
-    expect(d.night).toEqual({ date: "2026-11-11", deepS: 5100, lightS: 18600, remS: 6300, awakeS: 900, optimal: { deep: [16, 33], light: [30, 64], rem: [21, 31] } });
+    expect(d.night).toMatchObject({ date: "2026-11-11", deepS: 5100, lightS: 18600, remS: 6300, awakeS: 900, optimal: { deep: [16, 33], light: [30, 64], rem: [21, 31] } });
   });
 });

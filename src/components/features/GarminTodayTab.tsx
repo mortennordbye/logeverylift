@@ -10,9 +10,11 @@ import type { Severity } from "@/lib/garmin/analytics/insights";
 import { CONTRIBUTOR_LABEL, READINESS_BAND_LABEL } from "@/lib/garmin/analytics/readiness";
 import { SPORT_LABEL, type VizTheme } from "@/lib/garmin/charts/theme";
 import { addDays } from "@/lib/garmin/dates";
+import { bodyBatteryOption } from "@/lib/garmin/charts/body";
+import { garminPhrase } from "@/lib/garmin/analytics/overview";
 import type { TodayData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
-import { AlertTriangle, BatteryCharging, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Flame, Footprints, Gauge, HeartPulse, Info, ShieldAlert, Sun, Timer, Waves, Wind, Zap } from "lucide-react";
+import { AlertTriangle, BatteryMedium, BatteryCharging, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Flame, Footprints, Gauge, HeartPulse, Info, ShieldAlert, Sun, Timer, Waves, Wind, Zap } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -345,6 +347,42 @@ function DayNumbers({ data, theme }: { data: TodayData; theme: VizTheme }) {
   );
 }
 
+const BB_EVENT: Record<string, string> = { SLEEP: "Sleep", ACTIVITY: "Activity", NAP: "Nap", RECOVERY: "Rest", STRESS: "Stress" };
+
+/** Garmin's body battery for the day: its key levels and what moved them. */
+function BodyBattery({ data, theme }: { data: TodayData; theme: VizTheme }) {
+  const bb = data.bodyBattery;
+  const [at, setAt] = useState<number | null>(null);
+  const color = useMemo(() => getComputedStyle(document.documentElement).getPropertyValue("--viz-strength").trim() || theme.text, [theme]);
+  const option = useMemo(() => (bb ? bodyBatteryOption(bb.points, data.window, color, theme) : null), [bb, data.window, color, theme]);
+  if (!bb || !option) return null;
+  const point = at === null ? bb.points.at(-1)! : bb.points.reduce((a, b) => (Math.abs(b.t - at) < Math.abs(a.t - at) ? b : a));
+  return (
+    <Card icon={BatteryMedium} title="Body battery" note="Garmin sends a few key levels a day, not a full curve; the line joins them. Below: what charged or drained it.">
+      <Readout title={`${clock(point.t)}${at === null ? " · drag the chart to read a point" : ""}`} values={[{ label: "of 100", value: String(point.level) }]} />
+      <EChart option={option} height={150} onIndex={setAt} ariaLabel={`Body battery from ${bb.points[0].level} to ${bb.points.at(-1)!.level} over the day.`} />
+      {bb.events.length > 0 && (
+        <ul className="divide-y divide-border text-sm">
+          {bb.events.map((e) => (
+            <li key={`${e.type}-${e.start}`} className="flex items-center justify-between gap-3 py-2">
+              <span className="min-w-0">
+                <span className="block">
+                  {BB_EVENT[e.type] ?? garminPhrase(e.type)?.text ?? e.type} <span className="text-muted-foreground tabular-nums">· {clock(e.start)} · {hm(e.minutes * 60)}</span>
+                </span>
+                {e.feedback && <span className="block text-[11px] text-muted-foreground">{garminPhrase(e.feedback)?.text}</span>}
+              </span>
+              <span className="font-semibold tabular-nums" style={{ color: e.impact >= 0 ? "var(--viz-good)" : "var(--viz-serious)" }}>
+                {e.impact > 0 ? "+" : ""}
+                {e.impact}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
 /** On the newest day the full readiness card lives on Overview; this links to it. */
 function ReadinessLink({ data }: { data: TodayData }) {
   const r = data.metrics?.readiness;
@@ -375,6 +413,7 @@ export function GarminTodayTab({ data, isLatest }: { data: TodayData; isLatest: 
       {isLatest ? <ReadinessLink data={data} /> : <ReadinessCard data={data} />}
       <Insights data={data} />
       {theme && <Timeline data={data} theme={theme} />}
+      {theme && <BodyBattery data={data} theme={theme} />}
       {theme && <OvernightHrv data={data} theme={theme} />}
       {theme && <WeekStrip data={data} theme={theme} />}
       {theme && <DayNumbers data={data} theme={theme} />}

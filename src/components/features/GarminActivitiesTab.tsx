@@ -7,7 +7,7 @@ import { SportBadge } from "@/components/features/garmin/GarminUi";
 import { SPORT_LABEL } from "@/lib/garmin/charts/theme";
 import type { ActivitiesData, ActivityListRow } from "@/lib/garmin/queries";
 import { formatDateShort, formatDistanceKm } from "@/lib/utils/format";
-import { CalendarDays, ChevronRight, X } from "lucide-react";
+import { CalendarDays, ChevronRight, Trophy, X } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -43,7 +43,15 @@ function Row({ a }: { a: ActivityListRow }) {
       <Link href={`/more/garmin/activity/${a.id}`} className="flex items-center gap-3 py-2.5 min-h-[56px] active:opacity-60">
         <SportBadge sport={a.sport} size="lg" label />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium truncate">{a.name}</p>
+          <p className="flex items-center gap-1.5 text-sm font-medium">
+            <span className="truncate">{a.name}</span>
+            {a.pr && (
+              <span className="inline-flex flex-none items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none" style={{ background: "color-mix(in srgb, var(--viz-strength) 20%, transparent)", color: "var(--viz-strength)" }}>
+                <Trophy className="h-2.5 w-2.5" aria-hidden />
+                PR
+              </span>
+            )}
+          </p>
           <p className="text-[11px] text-muted-foreground tabular-nums">
             {formatDateShort(date.toISOString().slice(0, 10))} {date.toISOString().slice(11, 16)} · {hm(a.durationS)}
             {a.distanceM ? ` · ${formatDistanceKm(a.distanceM)}` : ""}

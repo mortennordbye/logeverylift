@@ -43,9 +43,44 @@ export function benefitLabel(v: unknown): string | null {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
+/** Garmin's "how did you feel" answer on the watch, stored as 0, 25, 50, 75 or 100. */
+const FEEL = ["Very weak", "Weak", "Normal", "Strong", "Very strong"];
+
+export function feelLabel(v: unknown): string | null {
+  const n = num(v);
+  return n === null ? null : (FEEL[Math.round(Math.min(100, Math.max(0, n)) / 25)] ?? null);
+}
+
+/** Garmin's split keys in the activity summary: the fastest time over each distance, in seconds. */
+const SPLITS: { key: string; label: string; m: number }[] = [
+  { key: "fastestSplit_100", label: "100 m", m: 100 },
+  { key: "fastestSplit_400", label: "400 m", m: 400 },
+  { key: "fastestSplit_750", label: "750 m", m: 750 },
+  { key: "fastestSplit_1000", label: "1 km", m: 1000 },
+  { key: "fastestSplit_1609", label: "1 mile", m: 1609 },
+  { key: "fastestSplit_5000", label: "5 km", m: 5000 },
+  { key: "fastestSplit_10000", label: "10 km", m: 10000 },
+  { key: "fastestSplit_21098", label: "Half marathon", m: 21098 },
+  { key: "fastestSplit_40000", label: "40 km", m: 40000 },
+];
+
+/** Garmin's fastest splits in this activity, shortest first, with the pace (s per km) each one means. */
+export function fastestSplits(summary: Json): { label: string; seconds: number; secPerKm: number }[] {
+  return SPLITS.flatMap((sp) => {
+    const t = num(summary[sp.key]);
+    return t && t > 0 ? [{ label: sp.label, seconds: t, secPerKm: (t / sp.m) * 1000 }] : [];
+  });
+}
+
 export function statTiles(d: ActivityDetail): StatTile[] {
   const s = d.summary;
+  const dto = d.dto ?? {};
+  const pick = (key: string) => num(dto[key]) ?? num(s[key]);
   const tiles: StatTile[] = [{ label: "Duration", value: durationLabel(num(s.duration)) }];
+  if (s.isPR === true) tiles.push({ label: "Garmin PR", value: "Personal record" });
+  const moving = num(s.movingDuration);
+  const total = num(s.duration);
+  if (moving && total && total - moving >= 30) tiles.push({ label: "Moving time", value: `${durationLabel(moving)} of ${durationLabel(total)}` });
   const dist = num(s.distance);
   if (dist) tiles.push({ label: "Distance", value: `${(dist / 1000).toFixed(dist >= 10_000 ? 1 : 2)} km` });
   const speed = num(s.averageSpeed);
@@ -57,7 +92,11 @@ export function statTiles(d: ActivityDetail): StatTile[] {
   if (num(s.averageHR)) tiles.push({ label: "Heart rate", value: `${Math.round(num(s.averageHR)!)} avg · ${Math.round(num(s.maxHR) ?? 0)} max` });
   if (num(s.normPower)) tiles.push({ label: "Power", value: `${Math.round(num(s.normPower)!)} W NP · ${Math.round(num(s.avgPower) ?? 0)} avg` });
   else if (num(s.avgPower)) tiles.push({ label: "Power", value: `${Math.round(num(s.avgPower)!)} W avg` });
-  if (num(s.elevationGain)) tiles.push({ label: "Climb", value: `${Math.round(num(s.elevationGain)!)} m` });
+  if (num(s.elevationGain)) {
+    const loss = num(s.elevationLoss);
+    const [lo, hi] = [num(s.minElevation), num(s.maxElevation)];
+    tiles.push({ label: "Climb", value: `↑ ${Math.round(num(s.elevationGain)!)} m${loss ? ` · ↓ ${Math.round(loss)} m` : ""}${lo !== null && hi !== null ? ` · ${Math.round(lo)}–${Math.round(hi)} m high` : ""}` });
+  }
   if (d.metrics?.load != null) tiles.push({ label: "Load", value: `${Math.round(d.metrics.load)} (${d.metrics.loadMethod === "power" ? "power" : d.metrics.loadMethod === "trimp" ? "HR" : d.metrics.loadMethod === "srpe" ? "RPE" : d.metrics.loadMethod})` });
   const garminLoad = num(s.activityTrainingLoad);
   if (garminLoad !== null) tiles.push({ label: "Garmin load", value: String(Math.round(garminLoad)) });
@@ -67,6 +106,17 @@ export function statTiles(d: ActivityDetail): StatTile[] {
   if (d.stamina) tiles.push({ label: "Stamina", value: `${d.stamina.start} → ${d.stamina.end} %${d.stamina.min !== null && d.stamina.min < d.stamina.end ? ` · ${d.stamina.min} % low` : ""}` });
   const bb = num(s.differenceBodyBattery);
   if (bb !== null) tiles.push({ label: "Body battery", value: `${bb > 0 ? "+" : ""}${Math.round(bb)}` });
+  const recovery = num(dto.recoveryHeartRate);
+  if (recovery !== null && recovery > 0) tiles.push({ label: "Recovery HR", value: `−${Math.round(recovery)} bpm in 2 min` });
+  const breath = pick("avgRespirationRate");
+  if (breath) tiles.push({ label: "Breathing", value: `${Math.round(breath)} avg · ${Math.round(pick("maxRespirationRate") ?? breath)} max /min` });
+  const [tMin, tMax] = [pick("minTemperature"), pick("maxTemperature")];
+  if (tMin !== null && tMax !== null) tiles.push({ label: "Temperature", value: `${Math.round(tMin)}–${Math.round(tMax)} °C at the watch` });
+  const feel = feelLabel(dto.directWorkoutFeel);
+  const rpe = num(dto.directWorkoutRpe);
+  if (feel || rpe) tiles.push({ label: "How it felt", value: [feel, rpe ? `RPE ${Math.round(rpe / 10)}` : null].filter(Boolean).join(" · ") });
+  const compliance = num(dto.directWorkoutComplianceScore);
+  if (compliance !== null) tiles.push({ label: "Workout compliance", value: `${Math.round(compliance)} %` });
   if (num(s.calories)) tiles.push({ label: "Calories", value: `${Math.round(num(s.calories)!)} kcal` });
   return tiles;
 }

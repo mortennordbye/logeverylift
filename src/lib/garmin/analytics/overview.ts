@@ -140,6 +140,8 @@ export type FitnessAgePart = { key: string; label: string; value: number; unit: 
 export type FitnessAge = {
   age: number;
   chronological: number | null;
+  /** Garmin's fitness age before its latest update. */
+  previous: number | null;
   /** What Garmin says would lower it, most impact first; parts with no target are context. */
   parts: FitnessAgePart[];
 };
@@ -164,7 +166,8 @@ export function parseFitnessAge(j: Json | null | undefined): FitnessAge | null {
     return [{ part: { key, ...meta, value, target: num(c.targetValue), potentialAge: num(c.potentialAge) }, priority: num(c.priority) ?? 99 }];
   });
   parts.sort((a, b) => a.priority - b.priority);
-  return { age: Math.round(age * 10) / 10, chronological: num(j?.chronologicalAge), parts: parts.map((p) => p.part) };
+  const previous = num(j?.previousFitnessAge);
+  return { age: Math.round(age * 10) / 10, chronological: num(j?.chronologicalAge), previous: previous === null ? null : Math.round(previous * 10) / 10, parts: parts.map((p) => p.part) };
 }
 
 /**
@@ -207,4 +210,26 @@ export function stageShares(n: { deepS: number; lightS: number; remS: number }):
   const total = n.deepS + n.lightS + n.remS;
   if (total <= 0) return { deep: 0, light: 0, rem: 0 };
   return { deep: Math.round((n.deepS / total) * 100), light: Math.round((n.lightS / total) * 100), rem: Math.round((n.remS / total) * 100) };
+}
+
+/**
+ * One of Garmin's feedback codes ("POSITIVE_LONG_AND_DEEP",
+ * "NEGATIVE_STRESSFUL_DAY") as words and a tone; null for NONE or no code.
+ */
+export function garminPhrase(code: unknown): { text: string; tone: "positive" | "negative" | "neutral" } | null {
+  if (typeof code !== "string" || !code || code === "NONE") return null;
+  const tone = code.startsWith("POSITIVE_") ? "positive" : code.startsWith("NEGATIVE_") ? "negative" : "neutral";
+  const words = code
+    .replace(/^(POSITIVE|NEGATIVE)_/, "")
+    .toLowerCase()
+    .replaceAll("_", " ")
+    .replace("nonrecovering", "not recovering")
+    .replace(/\brem\b/g, "REM");
+  return { text: words.charAt(0).toUpperCase() + words.slice(1), tone };
+}
+
+/** Minutes after midnight (1320) as a clock time ("22:00"). */
+export function clockFromMinutes(mins: number): string {
+  const m = ((Math.round(mins) % 1440) + 1440) % 1440;
+  return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`;
 }

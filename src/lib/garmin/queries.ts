@@ -4,7 +4,7 @@ import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
 import { lttbIndices, takeIndices } from "./charts/downsample";
-import type { DailyMetrics } from "./analytics/daily";
+import { bodyBatteryDay, type BodyBatteryDay, type DailyMetrics } from "./analytics/daily";
 import { insightsFor, type Insight } from "./analytics/insights";
 import { sessionInsights } from "./analytics/session-insights";
 import type { CorrelationDay } from "./analytics/correlations";
@@ -114,6 +114,8 @@ export type TodayData = {
     respiration: number | null;
   };
   metrics: DailyMetrics | null;
+  /** Garmin's body battery key levels and the events that moved it, for the day. */
+  bodyBattery: BodyBatteryDay | null;
   strip: { date: string; readiness: number | null; load: number }[];
   insights: Insight[];
 };
@@ -136,7 +138,7 @@ export async function getTodayData(userId: string, date: string): Promise<TodayD
       and(
         eq(garminDays.userId, userId),
         inArray(garminDays.calendarDate, [prev, date]),
-        inArray(garminDays.kind, ["heart_rate", "hrv_detail", "spo2", "sleep", "user_summary"]),
+        inArray(garminDays.kind, ["heart_rate", "hrv_detail", "spo2", "sleep", "user_summary", "body_battery"]),
       ),
     );
   const get = (d: string, kind: string) => (rows.find((r) => r.date === d && r.kind === kind)?.data ?? null) as Json | null;
@@ -258,6 +260,7 @@ export async function getTodayData(userId: string, date: string): Promise<TodayD
     window,
     hr,
     spo2,
+    bodyBattery: bodyBatteryDay(get(date, "body_battery"), offset),
     hrvNight,
     sleep,
     restingHr: num(get(date, "heart_rate")?.restingHeartRate) ?? num(u.restingHeartRate),
@@ -369,6 +372,8 @@ export type ActivityListRow = {
   load: number | null;
   loadMethod: string | null;
   hrPreview: (number | null)[];
+  /** Garmin flagged a personal record in this activity. */
+  pr: boolean;
 };
 
 export type ActivitiesData = {
@@ -430,6 +435,7 @@ export async function getActivitiesData(userId: string, limit = 120): Promise<Ac
         load: r.load,
         loadMethod: r.loadMethod,
         hrPreview: r.hrPreview ?? [],
+        pr: j.isPR === true,
       };
     }),
   };
@@ -453,6 +459,8 @@ export type ActivityDetail = {
   fuel: { carbsG: number | null; fluidMl: number | null } | null;
   /** Garmin's stamina in % at the start and end, and its lowest point (activity detail summaryDTO). */
   stamina: { start: number; end: number; min: number | null } | null;
+  /** Garmin's activity detail summary (summaryDTO): feel, RPE, recovery HR, compliance, temperature. */
+  dto: Json | null;
 };
 
 const MAX_POINTS = 3000;
@@ -514,6 +522,7 @@ export async function getActivityDetail(userId: string, id: number): Promise<Act
     matchedSessionId,
     fuel: fuel ?? null,
     stamina: staminaOf(a.dto),
+    dto: a.dto ?? null,
   };
 }
 
@@ -568,7 +577,14 @@ export type BodyKey =
   | "steps"
   | "stress"
   | "sedentary"
-  | "muscleMass";
+  | "muscleMass"
+  | "floors"
+  | "distance"
+  | "activeTime"
+  | "calories"
+  | "altitude"
+  | "boneMass"
+  | "bodyWater";
 
 export type OverviewData = {
   date: string;
@@ -581,7 +597,7 @@ export type OverviewData = {
   /** Which of Garmin's two VO2 max values the tile shows. */
   vo2Sport: "run" | "bike";
   /** Garmin's own HRV status word for the day ("Balanced"), and its 7-day average. */
-  hrvStatus: { label: string; weeklyAvg: number | null } | null;
+  hrvStatus: { label: string; weeklyAvg: number | null; nightHigh: number | null } | null;
   /** Intensity minutes this week against the goal set in Garmin. */
   intensity: IntensityWeek;
   /** What the tiles' population ratings need (analytics/norms.ts). */
@@ -591,6 +607,9 @@ export type OverviewData = {
   /** Steps on each of the last 7 complete days (null for a day with none), and the Garmin step goal. */
   stepsWeek: { date: string; steps: number | null }[];
   stepGoal: number | null;
+  /** Garmin's floors goal, and resting calories on the last complete day. */
+  floorGoal: number | null;
+  bmr: number | null;
   /** Fitness, fatigue and form for the last 42 days, all sports. */
   pmc: { dates: string[]; ctl: number[]; atl: number[]; tsb: number[]; calibrating: boolean };
   last: (ActivityListRow & { decoupling: ActivityMetrics["decoupling"] }) | null;
@@ -723,6 +742,7 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
       load: lastRow.load,
       loadMethod: lastRow.loadMethod,
       hrPreview: m.hrPreview ?? [],
+      pr: j.isPR === true,
       decoupling: m.decoupling ?? null,
     };
   }
@@ -736,12 +756,14 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     insights: today ? insightsFor(series) : [],
     body,
     vo2Sport,
-    hrvStatus: hrvLabel ? { label: hrvLabel, weeklyAvg: num(hrvToday?.weeklyAvg) } : null,
+    hrvStatus: hrvLabel ? { label: hrvLabel, weeklyAvg: num(hrvToday?.weeklyAvg), nightHigh: num(hrvToday?.lastNight5MinHigh) } : null,
     intensity: intensityWeek(summaries, date, mondayOf(date)),
     rating,
-    night: nightStages(dayRows.findLast((r) => r.kind === "sleep") ?? null),
+    night: await withSpo2Avg(userId, date, nightStages(dayRows.findLast((r) => r.kind === "sleep") ?? null)),
     stepsWeek,
     stepGoal: points("user_summary", (j) => num(j.dailyStepGoal)).at(-1)?.value ?? null,
+    floorGoal: points("user_summary", (j) => num(j.userFloorsAscendedGoal)).at(-1)?.value ?? null,
+    bmr: points("user_summary", (j) => num(j.bmrKilocalories)).filter((p) => p.date < date).at(-1)?.value ?? null,
     pmc: {
       dates: recent.map((m) => m.date),
       ctl: recent.map((m) => r1(m.pmc.total.ctl)),
@@ -789,6 +811,24 @@ function dayToDaySignals(points: PointsOf, date: string) {
       const g = num((j.latestWeight as Json | undefined)?.muscleMass);
       return g !== null ? Math.round(g / 100) / 10 : null;
     }), date, { days: 90 }),
+    floors: bodySignal(done(points("user_summary", (j) => (num(j.floorsAscended) !== null ? Math.round(num(j.floorsAscended)!) : null))), date, opts),
+    distance: bodySignal(done(points("user_summary", (j) => (num(j.totalDistanceMeters) !== null ? Math.round(num(j.totalDistanceMeters)! / 100) / 10 : null))), date, opts),
+    activeTime: bodySignal(
+      done(points("user_summary", (j) => {
+        const a = num(j.activeSeconds);
+        const h = num(j.highlyActiveSeconds);
+        return a === null && h === null ? null : Math.round(((a ?? 0) + (h ?? 0)) / 60);
+      })),
+      date,
+      opts,
+    ),
+    calories: bodySignal(done(points("user_summary", (j) => num(j.totalKilocalories))), date, opts),
+    altitude: bodySignal(done(points("user_summary", (j) => (num(j.averageMonitoringEnvironmentAltitude) !== null ? Math.round(num(j.averageMonitoringEnvironmentAltitude)!) : null))), date, opts),
+    boneMass: bodySignal(points("weight", (j) => {
+      const g = num((j.latestWeight as Json | undefined)?.boneMass);
+      return g !== null ? Math.round(g / 100) / 10 : null;
+    }), date, { days: 90 }),
+    bodyWater: bodySignal(points("weight", (j) => num((j.latestWeight as Json | undefined)?.bodyWater)), date, { days: 90 }),
   };
 }
 
@@ -799,6 +839,20 @@ export type NightStages = {
   remS: number;
   awakeS: number;
   optimal: { deep: [number, number] | null; light: [number, number] | null; rem: [number, number] | null };
+  /** Garmin's codes for the night: its feedback and its insight on what shaped it. */
+  feedback: string | null;
+  insight: string | null;
+  /** Tonight's sleep need in minutes, and Garmin's recommended bedtime (minutes after midnight). */
+  nextNeedMin: number | null;
+  bedtime: [number, number] | null;
+  /** Garmin's breathing variations rating (NONE, LOW, ...). */
+  breathing: string | null;
+  lowestSpO2: number | null;
+  /** Garmin's 7-day average SpO2 (spo2 endpoint). */
+  spo2Avg7: number | null;
+  napS: number;
+  /** Sleep timing against Garmin's best window for you (ALIGNED, BEHIND, ...). */
+  alignment: string | null;
 };
 
 function nightStages(row: { date: string; data: unknown } | null): NightStages | null {
@@ -812,7 +866,39 @@ function nightStages(row: { date: string; data: unknown } | null): NightStages |
     const b = num(p?.optimalEnd);
     return a !== null && b !== null ? [a, b] : null;
   };
-  return { date: row.date, deepS, lightS, remS, awakeS: awakeS ?? 0, optimal: { deep: range("deepPercentage"), light: range("lightPercentage"), rem: range("remPercentage") } };
+  const next = j.nextSleepNeed as Json | undefined;
+  const [bedStart, bedEnd] = [num(next?.recommendedBedtimeStartMins), num(next?.recommendedBedtimeEndMins)];
+  const naps = Array.isArray(j.dailyNapDTOS) ? (j.dailyNapDTOS as Json[]) : [];
+  const alignment = (j.sleepAlignment as Json | undefined)?.status;
+  return {
+    date: row.date,
+    deepS,
+    lightS,
+    remS,
+    awakeS: awakeS ?? 0,
+    optimal: { deep: range("deepPercentage"), light: range("lightPercentage"), rem: range("remPercentage") },
+    feedback: typeof j.sleepScoreFeedback === "string" ? j.sleepScoreFeedback : null,
+    insight: typeof j.sleepScoreInsight === "string" ? j.sleepScoreInsight : null,
+    nextNeedMin: num(next?.actual),
+    bedtime: bedStart !== null && bedEnd !== null ? [bedStart, bedEnd] : null,
+    breathing: typeof j.breathingDisruptionSeverity === "string" ? j.breathingDisruptionSeverity : null,
+    lowestSpO2: num(j.lowestSpO2Value),
+    spo2Avg7: null,
+    napS: naps.reduce((t, n) => t + (num(n.napTimeSec) ?? 0), 0),
+    alignment: typeof alignment === "string" ? alignment : null,
+  };
+}
+
+/** Adds Garmin's 7-day SpO2 average from the newest spo2 row, read on its own: those rows carry hourly arrays. */
+async function withSpo2Avg(userId: string, date: string, night: NightStages | null): Promise<NightStages | null> {
+  if (!night) return null;
+  const [row] = await db
+    .select({ avg: sql<number | null>`(${garminDays.data}->>'lastSevenDaysAvgSpO2')::float8` })
+    .from(garminDays)
+    .where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "spo2"), lte(garminDays.calendarDate, date), sql`${garminDays.data}->>'lastSevenDaysAvgSpO2' is not null`))
+    .orderBy(desc(garminDays.calendarDate))
+    .limit(1);
+  return { ...night, spo2Avg7: row?.avg ?? null };
 }
 
 /** Garmin's optimal ranges from the newest night's sleep score parts. */
@@ -1072,7 +1158,8 @@ export async function getRaceData(userId: string, today = isoDate(new Date())): 
       start: garminActivities.startTimeLocal,
       typeKey: garminActivities.activityType,
       data: garminActivities.data,
-      temperature: streamMean("temperature"),
+      // The FIT stream when it has temperature, else Garmin's summary average.
+      temperature: sql<number | null>`coalesce(${streamMean("temperature")}, (${garminActivities.detail}->'summaryDTO'->>'averageTemperature')::float8)`,
       carbsG: garminFuelLogs.carbsG,
       fluidMl: garminFuelLogs.fluidMl,
     })

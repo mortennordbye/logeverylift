@@ -52,3 +52,17 @@ export function signalOption(days: SignalDays, normal: [number, number] | null, 
     ],
   };
 }
+
+/** Garmin's body battery key levels on the Day tab's clock window, 0 to 100, with the crosshair. */
+export function bodyBatteryOption(points: { t: number; level: number }[], window: [number, number], color: string, theme: VizTheme) {
+  const ax = axisCommon(theme);
+  const hhmm = (ms: number) => new Date(ms).toISOString().slice(11, 16);
+  return {
+    animationDuration: 300,
+    ...pointer(theme),
+    grid: [{ top: 8, left: 34, right: 10, bottom: 22 }],
+    xAxis: [{ type: "value", min: window[0], max: window[1], ...ax, splitLine: { show: false }, axisLabel: { ...ax.axisLabel, formatter: hhmm, hideOverlap: true }, splitNumber: 5 }],
+    yAxis: [{ type: "value", min: 0, max: 100, interval: 25, ...ax }],
+    series: [{ name: "Body battery", type: "line", data: points.map((p) => [p.t, p.level]), symbolSize: 7, lineStyle: { width: 2.5, color }, itemStyle: { color }, areaStyle: { color, opacity: 0.12 } }],
+  };
+}

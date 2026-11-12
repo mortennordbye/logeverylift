@@ -36,6 +36,13 @@ function data(over: Partial<OverviewData["rating"]> = {}): OverviewData {
     stress: 33,
     sedentary: 13.8,
     muscleMass: 37.4,
+    floors: 18,
+    distance: 11.3,
+    activeTime: 108,
+    calories: 3245,
+    altitude: 97,
+    boneMass: 6.3,
+    bodyWater: 58.1,
   };
   const keys = Object.keys(values) as BodyKey[];
   return {
@@ -51,7 +58,26 @@ function data(over: Partial<OverviewData["rating"]> = {}): OverviewData {
       sleepRanges: { deep: [16, 33], rem: [21, 31], awakeMax: 1 },
       ...over,
     },
-    night: { date: "2026-11-12", deepS: 5100, lightS: 18600, remS: 6300, awakeS: 900, optimal: { deep: [16, 33], light: [30, 64], rem: [21, 31] } },
+    night: {
+      date: "2026-11-12",
+      deepS: 5100,
+      lightS: 18600,
+      remS: 6300,
+      awakeS: 900,
+      optimal: { deep: [16, 33], light: [30, 64], rem: [21, 31] },
+      feedback: "POSITIVE_LONG_AND_DEEP",
+      insight: "NEGATIVE_STRESSFUL_DAY",
+      nextNeedMin: 510,
+      bedtime: [1320, 1340],
+      breathing: "NONE",
+      lowestSpO2: 87,
+      spo2Avg7: 97.4,
+      napS: 1200,
+      alignment: "BEHIND",
+    },
+    hrvStatus: { label: "Balanced", weeklyAvg: 89, nightHigh: 110 },
+    floorGoal: 10,
+    bmr: 2399,
     stepsWeek: ["05", "06", "07", "08", "09", "10", "11"].map((d, i) => ({ date: `2026-11-${d}`, steps: i === 1 ? null : 7000 + i * 1000 })),
     stepGoal: 10000,
   } as OverviewData;
@@ -97,5 +123,31 @@ describe("BodyOverview", () => {
     expect(screen.getByRole("link", { name: /Want a rating\? Add your gender/ }).getAttribute("href")).toBe("/more/account#body-profile");
     fireEvent.click(vo2);
     expect(within(screen.getByRole("dialog")).getByRole("link", { name: /Add your gender in Account/ }).getAttribute("href")).toBe("/more/account#body-profile");
+  });
+});
+
+describe("BodyOverview: the rest of Garmin's day", () => {
+  it("shows Garmin's verdict, tonight's need and the night's extra facts", () => {
+    render(<BodyOverview data={data()} />);
+    const night = screen.getByRole("region", { name: "Last night" });
+    expect(within(night).getByText("Long and deep")).toBeTruthy();
+    expect(within(night).getByText("Stressful day")).toBeTruthy();
+    expect(within(night).getByText("8 h 30")).toBeTruthy();
+    expect(within(night).getByText("22:00–22:20")).toBeTruthy();
+    expect(within(night).getByText("low 87 · 7 d 97")).toBeTruthy();
+    expect(within(night).getByText("Breathing variations").nextSibling?.textContent).toBe("None");
+    expect(within(night).getByText("Sleep timing").nextSibling?.textContent).toBe("Behind");
+    expect(within(night).getByText("Naps").nextSibling?.textContent).toBe("20 min");
+    expect(within(screen.getByRole("button", { name: /^HRV 75/ })).getByText("last night · 7 d 89 · high 110")).toBeTruthy();
+  });
+
+  it("lists the day's activity and the body composition as rows", () => {
+    render(<BodyOverview data={data()} />);
+    const day = screen.getByRole("region", { name: "Day to day" });
+    expect(within(within(day).getByRole("button", { name: /^Floors climbed 18/ })).getByText("last full day · goal 10")).toBeTruthy();
+    expect(within(within(day).getByRole("button", { name: /^Calories 3,245/ })).getByText("last full day · 2,399 at rest")).toBeTruthy();
+    for (const name of [/^Active time 108/, /^Distance 11\.3/, /^Altitude 97/]) expect(within(day).getByRole("button", { name })).toBeTruthy();
+    const body = screen.getByRole("region", { name: "Body composition" });
+    for (const name of [/^Weight 89\.7/, /^Muscle mass 37\.4/, /^Bone mass 6\.3/, /^Body water 58\.1/]) expect(within(body).getByRole("button", { name })).toBeTruthy();
   });
 });

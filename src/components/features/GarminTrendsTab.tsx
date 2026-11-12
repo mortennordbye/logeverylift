@@ -330,7 +330,11 @@ function FitnessAgeCard({ age }: { age: NonNullable<TrendsData["fitnessAge"]> })
           </span>
         )}
       </p>
-      {yearAgo && <p className="text-[11px] text-muted-foreground">A year ago: {ageNumber(yearAgo.age)}</p>}
+      {(yearAgo || age.previous !== null) && (
+        <p className="text-[11px] text-muted-foreground">
+          {[age.previous !== null ? `Before Garmin's last update: ${ageNumber(age.previous)}` : null, yearAgo ? `A year ago: ${ageNumber(yearAgo.age)}` : null].filter(Boolean).join(" · ")}
+        </p>
+      )}
       <ul className="divide-y divide-border">
         {age.parts.map((p) => (
           <li key={p.key} className="flex items-center justify-between gap-3 py-2 text-sm">

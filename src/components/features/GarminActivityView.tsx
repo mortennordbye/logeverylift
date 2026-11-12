@@ -14,12 +14,13 @@ import {
   pointZones,
   setRows,
   statTiles,
+  fastestSplits,
   streamPanels,
   verdict,
   zoneSeconds,
 } from "@/lib/garmin/charts/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
-import { Award, BatteryMedium, ChartLine, ChevronLeft, Droplets, Fuel, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, MountainSnow, Route as RouteIcon, Scale, Timer, TrendingUp, Watch, Zap, type LucideIcon } from "lucide-react";
+import { Award, BatteryMedium, ChartLine, ChevronLeft, ClipboardCheck, Droplets, Fuel, Medal, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, MountainSnow, Route as RouteIcon, Scale, Smile, Thermometer, Timer, TimerReset, TrendingUp, Trophy, Watch, Wind, Zap, type LucideIcon } from "lucide-react";
 
 const STAT_ICON: Record<string, LucideIcon> = {
   Duration: Timer,
@@ -37,6 +38,13 @@ const STAT_ICON: Record<string, LucideIcon> = {
   "Primary benefit": Award,
   Stamina: Fuel,
   "Body battery": BatteryMedium,
+  "Garmin PR": Trophy,
+  "Moving time": TimerReset,
+  "Recovery HR": HeartPulse,
+  Breathing: Wind,
+  Temperature: Thermometer,
+  "How it felt": Smile,
+  "Workout compliance": ClipboardCheck,
 };
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -302,6 +310,22 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
             );
           })}
         </div>
+
+        {fastestSplits(d.summary).length > 0 && (
+          <Card icon={Medal} title="Fastest splits" aside="Garmin, this activity">
+            <ul className="divide-y divide-border">
+              {fastestSplits(d.summary).map((sp) => (
+                <li key={sp.label} className="flex items-center justify-between py-2 text-sm tabular-nums">
+                  <span>{sp.label}</span>
+                  <span>
+                    <b className="font-semibold">{durationLabel(sp.seconds)}</b>
+                    <span className="text-muted-foreground">{d.sport === "bike" ? ` · ${(3600 / sp.secPerKm).toFixed(1)} km/h` : ` · ${paceLabel(1000 / sp.secPerKm)} /km`}</span>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        )}
 
         {theme && hasRoute && (
           <Card icon={MapIcon} title="Route" aside="coloured by HR zone">

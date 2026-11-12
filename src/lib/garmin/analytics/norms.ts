@@ -17,8 +17,9 @@
  *   (sleep score parts); sleep and day stress: Garmin's 0 to 100 stress bands.
  * - Blood oxygen asleep: 95 % or more is normal, below 90 % is low.
  * - Steps: Tudor-Locke step-defined activity categories (7-day average).
- * - Sleeping HR, sitting time and muscle mass have no fair population scale;
- *   they are judged only against the user's own normal.
+ * - Sleeping HR, sitting time, muscle mass, floors, distance, active time,
+ *   calories, altitude, bone mass and body water have no fair population
+ *   scale; they are judged only against the user's own normal.
  */
 
 import type { BodyKey } from "../queries";
@@ -242,6 +243,13 @@ export function rateSignal(key: BodyKey, v: number, ctx: RatingContext): Rating 
     case "sleepHr":
     case "sedentary":
     case "muscleMass":
+    case "floors":
+    case "distance":
+    case "activeTime":
+    case "calories":
+    case "altitude":
+    case "boneMass":
+    case "bodyWater":
       return null;
     case "weight": {
       if (ctx.bodyFat !== null && ctx.sex) {

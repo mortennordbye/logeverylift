@@ -198,3 +198,35 @@ export function seriesRange(oldestDay: string | null, today: string): { start: s
   if (!oldestDay || oldestDay > today) return null;
   return { start: oldestDay, end: today };
 }
+
+export type BodyBatteryDay = {
+  /** Garmin's key levels for the day, local wall-clock ms (written as UTC), oldest first. */
+  points: { t: number; level: number }[];
+  /** What charged or drained it: sleep, activities, stress, with Garmin's feedback code. */
+  events: { type: string; start: number; minutes: number; impact: number; feedback: string | null }[];
+};
+
+/**
+ * The body_battery daily report: bodyBatteryValuesArray holds [GMT ms, level]
+ * pairs (a few key points, not a full curve) and bodyBatteryActivityEvent the
+ * events. Null when the day has no levels.
+ */
+export function bodyBatteryDay(j: Record<string, unknown> | null, offsetMs: number): BodyBatteryDay | null {
+  const pairs = Array.isArray(j?.bodyBatteryValuesArray) ? (j!.bodyBatteryValuesArray as unknown[][]) : [];
+  const points = pairs
+    .filter((p) => typeof p?.[0] === "number" && typeof p?.[1] === "number")
+    .map((p) => ({ t: (p[0] as number) + offsetMs, level: p[1] as number }))
+    .sort((a, b) => a.t - b.t);
+  if (!points.length) return null;
+  const raw = Array.isArray(j?.bodyBatteryActivityEvent) ? (j!.bodyBatteryActivityEvent as Record<string, unknown>[]) : [];
+  const events = raw.flatMap((e) => {
+    const start = typeof e.eventStartTimeGmt === "string" ? Date.parse(`${e.eventStartTimeGmt.replace(/\.\d+$/, "")}Z`) : NaN;
+    const impact = typeof e.bodyBatteryImpact === "number" ? e.bodyBatteryImpact : null;
+    if (!Number.isFinite(start) || impact === null) return [];
+    const tz = typeof e.timezoneOffset === "number" ? e.timezoneOffset : offsetMs;
+    const ms = typeof e.durationInMilliseconds === "number" ? e.durationInMilliseconds : 0;
+    const feedback = typeof e.shortFeedback === "string" && e.shortFeedback !== "NONE" ? e.shortFeedback : null;
+    return [{ type: String(e.eventType ?? "EVENT"), start: start + tz, minutes: Math.round(ms / 60000), impact, feedback }];
+  });
+  return { points, events: events.sort((a, b) => a.start - b.start) };
+}

@@ -1,4 +1,4 @@
-import { benefitLabel, lapRows, lapSpans, paceLabel, pointZones, selectionStats, setRows, statTiles, streamPanels, verdict } from "@/lib/garmin/charts/activity";
+import { benefitLabel, fastestSplits, feelLabel, lapRows, lapSpans, paceLabel, pointZones, selectionStats, setRows, statTiles, streamPanels, verdict } from "@/lib/garmin/charts/activity";
 import type { ActivityMetrics } from "@/lib/garmin/analytics/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
 import { describe, expect, it } from "vitest";
@@ -35,6 +35,7 @@ function detail(over: Partial<ActivityDetail> = {}, metrics: Partial<ActivityMet
     matchedSessionId: null,
     fuel: null,
     stamina: null,
+    dto: null,
     ...over,
   };
 }
@@ -157,5 +158,46 @@ describe("benefitLabel", () => {
     expect(benefitLabel("VO2MAX")).toBe("VO2 max");
     expect(benefitLabel("NO_BENEFIT")).toBeNull();
     expect(benefitLabel(null)).toBeNull();
+  });
+});
+
+describe("statTiles: the rest of Garmin's activity summary", () => {
+  const value = (tiles: { label: string; value: string }[], label: string) => tiles.find((t) => t.label === label)?.value;
+
+  it("shows feel and RPE, recovery HR, compliance, breathing, temperature, PR, moving time and elevation", () => {
+    const tiles = statTiles(
+      detail({
+        summary: { duration: 2100, movingDuration: 1930, isPR: true, elevationGain: 100, elevationLoss: 98, minElevation: 12, maxElevation: 80, avgRespirationRate: 28.4, maxRespirationRate: 38 },
+        dto: { directWorkoutFeel: 75, directWorkoutRpe: 60, recoveryHeartRate: 17, directWorkoutComplianceScore: 84.6, minTemperature: 20, maxTemperature: 25 },
+      }),
+    );
+    expect(value(tiles, "How it felt")).toBe("Strong · RPE 6");
+    expect(value(tiles, "Recovery HR")).toBe("−17 bpm in 2 min");
+    expect(value(tiles, "Workout compliance")).toBe("85 %");
+    expect(value(tiles, "Breathing")).toBe("28 avg · 38 max /min");
+    expect(value(tiles, "Temperature")).toBe("20–25 °C at the watch");
+    expect(value(tiles, "Garmin PR")).toBe("Personal record");
+    expect(value(tiles, "Moving time")).toBe("32:10 of 35:00");
+    expect(value(tiles, "Climb")).toBe("↑ 100 m · ↓ 98 m · 12–80 m high");
+  });
+
+  it("leaves them out without data, and moving time when it hardly differs", () => {
+    const tiles = statTiles(detail({ summary: { duration: 2100, movingDuration: 2090 } }));
+    for (const label of ["How it felt", "Recovery HR", "Workout compliance", "Breathing", "Temperature", "Garmin PR", "Moving time"]) expect(value(tiles, label)).toBeUndefined();
+  });
+
+  it("maps Garmin's feel steps to words", () => {
+    expect([0, 25, 50, 75, 100].map(feelLabel)).toEqual(["Very weak", "Weak", "Normal", "Strong", "Very strong"]);
+    expect(feelLabel(null)).toBeNull();
+  });
+});
+
+describe("fastestSplits", () => {
+  it("lists the splits Garmin found, shortest first, with their pace", () => {
+    expect(fastestSplits({ fastestSplit_5000: 1813.3, fastestSplit_1000: 334, fastestSplit_10000: null })).toEqual([
+      { label: "1 km", seconds: 334, secPerKm: 334 },
+      { label: "5 km", seconds: 1813.3, secPerKm: 1813.3 / 5 },
+    ]);
+    expect(fastestSplits({})).toEqual([]);
   });
 });
