@@ -1,6 +1,7 @@
 import { ENDURANCE, type DemandRow, type VolumeWeek } from "@/lib/garmin/analytics/demands";
 import { RACE_LABEL } from "@/lib/garmin/analytics/overview";
-import { SPORT_LABEL, SPORT_MARK } from "@/lib/garmin/charts/theme";
+import { SportBadge } from "@/components/features/garmin/GarminUi";
+import { SPORT_LABEL } from "@/lib/garmin/charts/theme";
 import type { VolumeData } from "@/lib/garmin/queries";
 import { CheckCircle2, ChevronRight } from "lucide-react";
 import Link from "next/link";
@@ -69,9 +70,7 @@ export function WeekAgainstPlan({ week, planned }: { week: VolumeWeek; planned: 
         return (
           <li key={s} className="grid grid-cols-[4.5rem_1fr_5.5rem] items-center gap-2 text-xs">
             <span className="flex items-center gap-1.5">
-              <span aria-hidden className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white" style={{ background: `var(--viz-${s})` }}>
-                {SPORT_MARK[s]}
-              </span>
+              <SportBadge sport={s} />
               {SPORT_LABEL[s]}
             </span>
             <span className="relative h-3 rounded-full bg-background" role="img" aria-label={`${SPORT_LABEL[s]}: ${hm(done)} done${plan !== null ? ` of ${hm(plan)} planned` : ""}`}>

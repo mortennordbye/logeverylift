@@ -1,10 +1,10 @@
 "use client";
 
 import { RouteMap } from "@/components/charts/RouteMap";
-import { Card } from "@/components/features/garmin/GarminUi";
+import { Card, SportBadge } from "@/components/features/garmin/GarminUi";
 import { TimeSeriesChart, elapsedLabel } from "@/components/charts/TimeSeriesChart";
 import { useVizTheme } from "@/components/charts/viz-theme";
-import { SPORT_LABEL, SPORT_MARK, type VizTheme } from "@/lib/garmin/charts/theme";
+import { SPORT_LABEL, type VizTheme } from "@/lib/garmin/charts/theme";
 import {
   durationLabel,
   lapRows,
@@ -276,9 +276,7 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
       <main {...swipe.handlers} style={swipe.style} className="flex-1 overflow-y-auto px-4 pb-nav-safe-lg space-y-4">
         <header className="space-y-1 pt-1">
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white" style={{ background: `var(--viz-${d.sport})` }}>
-              {SPORT_MARK[d.sport]}
-            </span>
+            <SportBadge sport={d.sport} size="md" />
             {SPORT_LABEL[d.sport]} · {date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })} {date.toISOString().slice(11, 16)}
           </div>
           <h1 className="text-2xl font-bold tracking-tight">{d.name}</h1>

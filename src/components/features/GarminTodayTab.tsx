@@ -3,12 +3,12 @@
 import { insightHref } from "@/lib/garmin/analytics/insights";
 
 import { EChart } from "@/components/charts/EChart";
-import { Card, Contributors, Readout, SEVERITY_COLOR, SEVERITY_ICON } from "@/components/features/garmin/GarminUi";
+import { Card, Contributors, Readout, SEVERITY_COLOR, SEVERITY_ICON, SPORT_ICON } from "@/components/features/garmin/GarminUi";
 import { TimeSeriesChart } from "@/components/charts/TimeSeriesChart";
 import { useVizTheme } from "@/components/charts/viz-theme";
 import type { Severity } from "@/lib/garmin/analytics/insights";
 import { CONTRIBUTOR_LABEL, READINESS_BAND_LABEL } from "@/lib/garmin/analytics/readiness";
-import { SPORT_LABEL, SPORT_MARK, type VizTheme } from "@/lib/garmin/charts/theme";
+import { SPORT_LABEL, type VizTheme } from "@/lib/garmin/charts/theme";
 import { addDays } from "@/lib/garmin/dates";
 import type { TodayData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
@@ -161,7 +161,7 @@ function Timeline({ data, theme }: { data: TodayData; theme: VizTheme }) {
         <span className="inline-flex items-center gap-1.5"><span className="inline-block h-0.5 w-3.5 bg-foreground" />Heart rate</span>
         {data.sleep && <span className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: alpha(theme.positive, 0.4) }} />Sleep</span>}
         {[...new Set(data.activities.map((a) => a.sport))].map((s) => (
-          <span key={s} className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: theme.sport[s] }} /><b className="text-foreground">{SPORT_MARK[s]}</b>{SPORT_LABEL[s]}</span>
+          <span key={s} className="inline-flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: theme.sport[s] }} />{(() => { const Icon = SPORT_ICON[s]; return <Icon className="h-3 w-3 text-foreground" aria-hidden />; })()}{SPORT_LABEL[s]}</span>
         ))}
       </div>
       <Readout

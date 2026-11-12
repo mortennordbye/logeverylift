@@ -1,11 +1,11 @@
 "use client";
 
 import { EChart } from "@/components/charts/EChart";
-import { Card, Legend, Readout, Stat } from "@/components/features/garmin/GarminUi";
+import { Card, Legend, Readout, SportBadge, Stat } from "@/components/features/garmin/GarminUi";
 import { useVizTheme } from "@/components/charts/viz-theme";
 import type { Track } from "@/lib/garmin/analytics/pmc";
 import { rampBand } from "@/lib/garmin/analytics/pmc";
-import { SPORTS, type Sport } from "@/lib/garmin/analytics/sport";
+import { SPORTS } from "@/lib/garmin/analytics/sport";
 import {
   DISTRIBUTION_TEXT,
   RANGE_LABEL,
@@ -22,7 +22,7 @@ import {
   type LoadSeries,
   type RangeKey,
 } from "@/lib/garmin/charts/load";
-import { SPORT_LABEL, SPORT_MARK } from "@/lib/garmin/charts/theme";
+import { SPORT_LABEL } from "@/lib/garmin/charts/theme";
 import { formatDateShort } from "@/lib/utils/format";
 import { CalendarRange, ChartColumn, Flame, Gauge, HeartPulse, Mountain, Rocket, TrendingUp } from "lucide-react";
 import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
@@ -55,17 +55,6 @@ function Chip({ active, onClick, children, label }: { active: boolean; onClick: 
   );
 }
 
-function SportDot({ sport }: { sport: Sport }) {
-  return (
-    <span
-      aria-hidden
-      className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white"
-      style={{ background: `var(--viz-${sport})` }}
-    >
-      {SPORT_MARK[sport]}
-    </span>
-  );
-}
 
 
 
@@ -177,7 +166,7 @@ export function GarminLoadTab({
         </Chip>
         {sportsWithLoad.map((s) => (
           <Chip key={s} active={track === s} onClick={() => setTrack(s)} label={SPORT_LABEL[s]}>
-            <SportDot sport={s} />
+            <SportBadge sport={s} />
             {SPORT_LABEL[s]}
           </Chip>
         ))}
@@ -247,7 +236,7 @@ export function GarminLoadTab({
 
       {perSport && sportsWithFitness(series, range).length > 0 && (
         <Card icon={Layers} title="Fitness per sport" note="Each sport's own 42-day fitness. A balanced Ironman build lifts swim, bike and run together; one line carrying the rest means the others lag.">
-          <Legend items={sportsWithFitness(series, range).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "line" as const, mark: SPORT_MARK[s] }))} />
+          <Legend items={sportsWithFitness(series, range).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "line" as const, sport: s }))} />
           {(() => {
             const i = sportIdx !== null ? from + sportIdx : last;
             return (
@@ -279,7 +268,7 @@ export function GarminLoadTab({
           <>
             <Legend
               items={[
-                ...SPORTS.filter((s) => weeks.some((w) => w.loads[s] > 0)).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, mark: SPORT_MARK[s] })),
+                ...SPORTS.filter((s) => weeks.some((w) => w.loads[s] > 0)).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, sport: s })),
                 { name: "ACWR", color: "var(--muted-foreground)", kind: "dot" },
               ]}
             />
@@ -297,7 +286,7 @@ export function GarminLoadTab({
           </>
         ) : (
           <>
-            <Legend items={SPORTS.filter((s) => volWeeks.some((w) => w.hours[s] > 0)).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, mark: SPORT_MARK[s] }))} />
+            <Legend items={SPORTS.filter((s) => volWeeks.some((w) => w.hours[s] > 0)).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, sport: s }))} />
             {(() => {
               const w = volWeeks[hourIdx ?? volWeeks.length - 1];
               return w ? (
@@ -317,7 +306,7 @@ export function GarminLoadTab({
       </Card>
 
       <Card icon={Mountain} title="Long-session ladder" note="The longest swim, ride and run of each week, 16 weeks. The dashed line is the race target. Close the gap one step a week: ride +30 min, run +15 min, swim +400 m.">
-        <Legend items={(["swim", "bike", "run"] as const).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, mark: SPORT_MARK[s] }))} />
+        <Legend items={(["swim", "bike", "run"] as const).map((s) => ({ name: SPORT_LABEL[s], color: `var(--viz-${s})`, kind: "bar" as const, sport: s }))} />
         {(() => {
           const w = ladderWeeks[ladderIdx ?? ladderWeeks.length - 1];
           if (!w) return null;

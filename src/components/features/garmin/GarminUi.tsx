@@ -1,6 +1,28 @@
 import type { Severity } from "@/lib/garmin/analytics/insights";
 import { CONTRIBUTOR_LABEL, type Readiness } from "@/lib/garmin/analytics/readiness";
-import { AlertTriangle, CheckCircle2, Info, ShieldAlert, type LucideIcon } from "lucide-react";
+import type { Sport } from "@/lib/garmin/analytics/sport";
+import { SPORT_LABEL } from "@/lib/garmin/charts/theme";
+import { Activity, AlertTriangle, Bike, CheckCircle2, Dumbbell, Footprints, Info, ShieldAlert, Waves, type LucideIcon } from "lucide-react";
+
+/** Icons so a sport is never told by colour alone (3.1). */
+export const SPORT_ICON: Record<Sport, LucideIcon> = { swim: Waves, bike: Bike, run: Footprints, strength: Dumbbell, other: Activity };
+
+const BADGE_SIZE = { sm: ["h-4 w-4", "h-2.5 w-2.5"], md: ["h-5 w-5", "h-3 w-3"], lg: ["h-9 w-9", "h-[18px] w-[18px]"] } as const;
+
+/** The sport's icon on a circle in its colour. */
+export function SportBadge({ sport, size = "sm", label = false }: { sport: Sport; size?: keyof typeof BADGE_SIZE; label?: boolean }) {
+  const Icon = SPORT_ICON[sport];
+  const [box, icon] = BADGE_SIZE[size];
+  return (
+    <span
+      className={`inline-flex ${box} flex-none items-center justify-center rounded-full text-white`}
+      style={{ background: `var(--viz-${sport})` }}
+      {...(label ? { role: "img", "aria-label": SPORT_LABEL[sport] } : { "aria-hidden": true })}
+    >
+      <Icon className={icon} strokeWidth={2.5} aria-hidden />
+    </span>
+  );
+}
 
 export const SEVERITY_ICON: Record<Severity, LucideIcon> = { warning: ShieldAlert, caution: AlertTriangle, good: CheckCircle2, info: Info };
 export const SEVERITY_COLOR: Record<Severity, string> = { warning: "var(--viz-critical)", caution: "var(--viz-warning)", good: "var(--viz-good)", info: "var(--muted-foreground)" };
@@ -56,8 +78,8 @@ export function Readout({ title, values }: { title: string; values: { label: str
   );
 }
 
-/** Line key for lines, dot for points, swatch for bars and areas, plus an optional letter mark. */
-export function Legend({ items }: { items: { name: string; color: string; kind: "line" | "bar" | "dot"; mark?: string }[] }) {
+/** Line key for lines, dot for points, swatch for bars and areas, plus an optional sport icon. */
+export function Legend({ items }: { items: { name: string; color: string; kind: "line" | "bar" | "dot"; sport?: Sport }[] }) {
   return (
     <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
       {items.map((i) => (
@@ -66,7 +88,7 @@ export function Legend({ items }: { items: { name: string; color: string; kind: 
             className={i.kind === "line" ? "inline-block h-0.5 w-3.5 rounded-full" : i.kind === "dot" ? "inline-block h-2 w-2 rounded-full" : "inline-block h-2.5 w-2.5 rounded-sm"}
             style={{ background: i.color }}
           />
-          {i.mark && <span className="font-semibold text-foreground">{i.mark}</span>}
+          {i.sport && (() => { const Icon = SPORT_ICON[i.sport]; return <Icon className="h-3 w-3 text-foreground" aria-hidden />; })()}
           {i.name}
         </span>
       ))}

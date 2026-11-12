@@ -15,6 +15,4 @@ export type VizTheme = {
   zones: string[];
 };
 
-/** One-letter marks so a sport is never told by colour alone (3.1). */
-export const SPORT_MARK: Record<Sport, string> = { swim: "S", bike: "B", run: "R", strength: "G", other: "O" };
 export const SPORT_LABEL: Record<Sport, string> = { swim: "Swim", bike: "Bike", run: "Run", strength: "Strength", other: "Other" };

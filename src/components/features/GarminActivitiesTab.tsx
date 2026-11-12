@@ -3,7 +3,8 @@
 import { EChart } from "@/components/charts/EChart";
 import { useVizTheme } from "@/components/charts/viz-theme";
 import { SPORTS, type Sport } from "@/lib/garmin/analytics/sport";
-import { SPORT_LABEL, SPORT_MARK } from "@/lib/garmin/charts/theme";
+import { SportBadge } from "@/components/features/garmin/GarminUi";
+import { SPORT_LABEL } from "@/lib/garmin/charts/theme";
 import type { ActivitiesData, ActivityListRow } from "@/lib/garmin/queries";
 import { formatDateShort, formatDistanceKm } from "@/lib/utils/format";
 import { CalendarDays, ChevronRight, X } from "lucide-react";
@@ -16,14 +17,6 @@ function hm(seconds: number | null) {
   if (!seconds) return "–";
   const m = Math.round(seconds / 60);
   return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : `${m}m`;
-}
-
-function SportBadge({ sport }: { sport: Sport }) {
-  return (
-    <span className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-full text-sm font-bold text-white" style={{ background: `var(--viz-${sport})` }} aria-label={SPORT_LABEL[sport]}>
-      {SPORT_MARK[sport]}
-    </span>
-  );
 }
 
 /** A 60 × 20 heart-rate sparkline from the 40 stored preview points. */
@@ -48,7 +41,7 @@ function Row({ a }: { a: ActivityListRow }) {
   return (
     <li>
       <Link href={`/more/garmin/activity/${a.id}`} className="flex items-center gap-3 py-2.5 min-h-[56px] active:opacity-60">
-        <SportBadge sport={a.sport} />
+        <SportBadge sport={a.sport} size="lg" label />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium truncate">{a.name}</p>
           <p className="text-[11px] text-muted-foreground tabular-nums">
@@ -151,9 +144,7 @@ export function GarminActivitiesTab({ data }: { data: ActivitiesData }) {
         </button>
         {sports.map((s) => (
           <button key={s} onClick={() => setSport(sport === s ? null : s)} aria-pressed={sport === s} className={`h-9 px-3 rounded-full text-sm font-medium flex-none flex items-center gap-1.5 active:opacity-70 ${sport === s ? "bg-foreground text-background" : "bg-muted text-muted-foreground"}`}>
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white" style={{ background: `var(--viz-${s})` }}>
-              {SPORT_MARK[s]}
-            </span>
+            <SportBadge sport={s} />
             {SPORT_LABEL[s]}
           </button>
         ))}

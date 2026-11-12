@@ -2,18 +2,18 @@
 
 import { insightHref } from "@/lib/garmin/analytics/insights";
 
-import { Contributors, SEVERITY_COLOR, SEVERITY_ICON } from "@/components/features/garmin/GarminUi";
+import { Contributors, SEVERITY_COLOR, SEVERITY_ICON, SportBadge } from "@/components/features/garmin/GarminUi";
 import { RACE_LABEL, type BodySignal } from "@/lib/garmin/analytics/overview";
 import { READINESS_BAND_LABEL } from "@/lib/garmin/analytics/readiness";
 import { durationLabel } from "@/lib/garmin/charts/activity";
 import { formBandLabel } from "@/lib/garmin/charts/load";
-import { SPORT_LABEL, SPORT_MARK } from "@/lib/garmin/charts/theme";
+import { SPORT_LABEL } from "@/lib/garmin/charts/theme";
 import type { BodyKey, OverviewData, VolumeData } from "@/lib/garmin/queries";
 import { byGap } from "@/lib/garmin/analytics/demands";
 import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
 import { phaseLabel } from "@/lib/utils/periodization";
 import { formatDateShort } from "@/lib/utils/format";
-import { Activity, CalendarRange, ChevronRight, Flag, Gauge, Mountain, TrendingUp } from "lucide-react";
+import { Activity, BatteryMedium, CalendarRange, ChevronRight, Flag, Gauge, Heart, HeartPulse, Moon, Mountain, Scale, TrendingUp, Wind, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -152,13 +152,15 @@ function WeekDots({ strip }: { strip: OverviewData["strip"] }) {
   );
 }
 
-const BODY: Record<BodyKey, { label: string; unit: string; format: (v: number) => string; href: string; higherIsGood: boolean | null }> = {
-  sleep: { label: "Sleep", unit: "h", format: (v) => v.toFixed(1), href: tab("recovery"), higherIsGood: true },
-  hrv: { label: "HRV", unit: "ms", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: true },
-  restingHr: { label: "Resting HR", unit: "bpm", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: false },
-  vo2max: { label: "VO2 max", unit: "", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: true },
-  bodyBattery: { label: "Body battery", unit: "", format: (v) => String(Math.round(v)), href: tab("day"), higherIsGood: true },
-  weight: { label: "Weight", unit: "kg", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: null },
+type BodyConfig = { label: string; unit: string; format: (v: number) => string; href: string; higherIsGood: boolean | null; icon: LucideIcon; color: string };
+
+const BODY: Record<BodyKey, BodyConfig> = {
+  sleep: { label: "Sleep", unit: "h", format: (v) => v.toFixed(1), href: tab("recovery"), higherIsGood: true, icon: Moon, color: "var(--viz-swim)" },
+  hrv: { label: "HRV", unit: "ms", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: true, icon: HeartPulse, color: "var(--viz-run)" },
+  restingHr: { label: "Resting HR", unit: "bpm", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: false, icon: Heart, color: "var(--viz-negative)" },
+  vo2max: { label: "VO2 max", unit: "", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: true, icon: Wind, color: "var(--viz-bike)" },
+  bodyBattery: { label: "Body battery", unit: "", format: (v) => String(Math.round(v)), href: tab("day"), higherIsGood: true, icon: BatteryMedium, color: "var(--viz-strength)" },
+  weight: { label: "Weight", unit: "kg", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: null, icon: Scale, color: "var(--viz-other)" },
 };
 
 function stateText(s: BodySignal, good: boolean | null) {
@@ -177,7 +179,7 @@ function stateColor(s: BodySignal, good: boolean | null) {
 }
 
 /** The tile's line over its window, with your normal as a band. */
-function Spark({ s }: { s: BodySignal }) {
+function Spark({ s, color }: { s: BodySignal; color: string }) {
   const w = 100;
   const h = 28;
   if (s.points.length < 2) return <div style={{ height: h }} />;
@@ -191,25 +193,31 @@ function Spark({ s }: { s: BodySignal }) {
   const y = (v: number) => h - 2 - ((v - lo) / span) * (h - 4);
   return (
     <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height: h }} aria-hidden>
-      {s.normal && <rect x={0} width={w} y={y(s.normal[1])} height={Math.max(1, y(s.normal[0]) - y(s.normal[1]))} fill="var(--muted-foreground)" opacity={0.15} />}
-      <polyline points={s.points.map((p) => `${x(p.date)},${y(p.value)}`).join(" ")} fill="none" stroke="var(--foreground)" strokeWidth={1.5} vectorEffect="non-scaling-stroke" />
+      {s.normal && <rect x={0} width={w} y={y(s.normal[1])} height={Math.max(1, y(s.normal[0]) - y(s.normal[1]))} fill={color} opacity={0.18} />}
+      <polyline points={s.points.map((p) => `${x(p.date)},${y(p.value)}`).join(" ")} fill="none" stroke={color} strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
     </svg>
   );
 }
 
 function BodyTile({ k, s, vo2Sport }: { k: BodyKey; s: BodySignal; vo2Sport: "run" | "bike" }) {
   const c = BODY[k];
+  const Icon = c.icon;
   return (
     <Link href={c.href} replace scroll={false} className="rounded-xl bg-background p-2.5 active:opacity-70 flex flex-col gap-1 min-h-[104px]">
-      <p className="text-[11px] text-muted-foreground leading-tight">
-        {c.label}
-        {k === "vo2max" && <span className="block text-[9px]">Garmin, {vo2Sport === "run" ? "running" : "cycling"}</span>}
-      </p>
+      <div className="flex items-start gap-1.5">
+        <span aria-hidden className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-full" style={{ background: `color-mix(in srgb, ${c.color} 20%, transparent)`, color: c.color }}>
+          <Icon className="h-3 w-3" strokeWidth={2.5} />
+        </span>
+        <p className="text-[11px] text-muted-foreground leading-tight pt-0.5">
+          {c.label}
+          {k === "vo2max" && <span className="block text-[9px]">Garmin, {vo2Sport === "run" ? "running" : "cycling"}</span>}
+        </p>
+      </div>
       <p className="text-lg font-semibold leading-tight tabular-nums">
         {s.value !== null ? c.format(s.value) : "–"}
         {s.value !== null && c.unit && <span className="text-[11px] font-normal text-muted-foreground"> {c.unit}</span>}
       </p>
-      <Spark s={s} />
+      <Spark s={s} color={c.color} />
       <p className="text-[10px] leading-tight" style={{ color: stateColor(s, c.higherIsGood) }}>
         {stateText(s, c.higherIsGood)}
       </p>
@@ -269,9 +277,7 @@ function LastSession({ data }: { data: OverviewData }) {
     <Block href={`/more/garmin/activity/${a.id}`} label={`Last session: ${a.name}`}>
       <Heading icon={Activity} title="Last session" aside={formatDateShort(new Date(a.start).toISOString().slice(0, 10))} />
       <p className="text-sm font-semibold flex items-center gap-2">
-        <span aria-hidden className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[9px] font-bold text-white" style={{ background: `var(--viz-${a.sport})` }}>
-          {SPORT_MARK[a.sport]}
-        </span>
+        <SportBadge sport={a.sport} />
         <span className="truncate">{a.name}</span>
       </p>
       <p className="text-[11px] text-muted-foreground tabular-nums">
