@@ -17,15 +17,15 @@
 import { MCP_RESOURCE, auth } from "@/lib/auth";
 import { checkRateLimit } from "@/lib/mcp/rate-limit";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
-import { env } from "@/lib/env";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { requireMcpAuth } from "@better-auth/mcp";
 import { createMcpHandler } from "mcp-handler";
+import { garminAllowedFor } from "@/lib/garmin/access";
 
-function serve(req: Request, claims: { sub?: string }) {
+async function serve(req: Request, claims: { sub?: string }) {
   // requireMcpAuth only invokes us with a verified token, but never register
   // user-scoped tools without a concrete userId — a falsy id must fail closed,
   // not fall through to queries scoped to `undefined`.
@@ -54,14 +54,15 @@ function serve(req: Request, claims: { sub?: string }) {
     );
   }
 
+  // Garmin tools only for accounts allowed to use Garmin (src/lib/garmin/access.ts).
+  const garmin = await garminAllowedFor(userId);
   return createMcpHandler(
     (server) => {
       registerProfileTools(server, userId);
       registerProgramTools(server, userId);
       registerCycleTools(server, userId);
       registerWorkoutTools(server, userId);
-      // Garmin metrics only where the Garmin feature is enabled.
-      if (env.GARMIN_KEY_ENCRYPTION_KEY) registerGarminTools(server, userId);
+      if (garmin) registerGarminTools(server, userId);
     },
     {},
     { basePath: "/api" },

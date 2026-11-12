@@ -1,8 +1,8 @@
 import { MoreClient } from "@/components/features/MoreClient";
 import { getMyFriendCode } from "@/lib/actions/friend-invites";
 import { getFriendsBadgeCount } from "@/lib/actions/friends";
-import { env } from "@/lib/env";
 import { requireSession } from "@/lib/utils/session";
+import { garminAllowed } from "@/lib/garmin/access";
 
 export default async function MorePage() {
   const session = await requireSession();
@@ -13,7 +13,7 @@ export default async function MorePage() {
       role={role}
       friendsBadge={badge.success ? badge.data : 0}
       friendCode={code.success ? code.data : null}
-      showGarmin={Boolean(env.GARMIN_KEY_ENCRYPTION_KEY)}
+      showGarmin={garminAllowed(role)}
     />
   );
 }

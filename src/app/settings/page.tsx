@@ -7,9 +7,9 @@
 import { SettingsClient } from "@/components/features/SettingsClient";
 import { db } from "@/db";
 import { garminConnections, users } from "@/db/schema";
-import { env } from "@/lib/env";
 import { requireSession } from "@/lib/utils/session";
 import { eq } from "drizzle-orm";
+import { garminAllowed } from "@/lib/garmin/access";
 
 export default async function SettingsPage() {
   const auth = await requireSession();
@@ -17,7 +17,8 @@ export default async function SettingsPage() {
     .select({ missedWorkoutsEnabled: users.missedWorkoutsEnabled })
     .from(users)
     .where(eq(users.id, auth.user.id));
-  const [garminConn] = env.GARMIN_KEY_ENCRYPTION_KEY
+  const garminOn = garminAllowed(auth.user.role);
+  const [garminConn] = garminOn
     ? await db
         .select({ lastSyncedAt: garminConnections.lastSyncedAt })
         .from(garminConnections)
@@ -28,7 +29,7 @@ export default async function SettingsPage() {
     <SettingsClient
       missedWorkoutsEnabled={pref?.missedWorkoutsEnabled ?? true}
       garmin={
-        env.GARMIN_KEY_ENCRYPTION_KEY
+        garminOn
           ? { connected: Boolean(garminConn), lastSyncedAt: garminConn?.lastSyncedAt?.toISOString() ?? null }
           : null
       }

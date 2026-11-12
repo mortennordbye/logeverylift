@@ -15,17 +15,17 @@ import { GarminOverviewTab } from "@/components/features/GarminOverviewTab";
 import { GarminSleepTab } from "@/components/features/GarminSleepTab";
 import { GarminTodayTab } from "@/components/features/GarminTodayTab";
 import { GarminTrendsTab } from "@/components/features/GarminTrendsTab";
-import { env } from "@/lib/env";
 import { garminToday, getActivitiesData, getCorrelationDays, getSessionInsights, getLoadSeries, getOverviewData, getRaceProjection, getSleepData, getTodayData, getTrendsData, getVolumeData, latestGarminDate } from "@/lib/garmin/queries";
 import { requireSession } from "@/lib/utils/session";
 import { rankInsights } from "@/lib/garmin/analytics/insights";
 import { findings } from "@/lib/garmin/analytics/correlations";
 import { wearableSuggestion } from "@/lib/periodization-sync";
 import { notFound } from "next/navigation";
+import { garminAllowed } from "@/lib/garmin/access";
 
 export default async function GarminPage({ searchParams }: { searchParams: Promise<{ tab?: string; date?: string }> }) {
   const auth = await requireSession();
-  if (!env.GARMIN_KEY_ENCRYPTION_KEY) notFound();
+  if (!garminAllowed(auth.user.role)) notFound();
   const params = await searchParams;
   const tab = garminView(params.tab);
 
