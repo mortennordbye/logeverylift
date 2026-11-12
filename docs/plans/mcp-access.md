@@ -119,8 +119,12 @@ Two new scopes: `mcp:read` and `mcp:write`.
   - Neither `mcp:read` nor `mcp:write`: refuse with 403 `insufficient_scope` naming
     `mcp:read mcp:write`, so a client can step up. This covers old tokens and clients that ask
     only for `openid`.
-  - The consent row can only narrow the token. Reconnecting as read-only takes write away from
-    an older read-write token at once.
+  - The consent row can only narrow the token. To change access, the user disconnects, then
+    connects again (the text of the read-only refusal says so). Reconnecting without a
+    disconnect does not offer the choice: the provider skips the consent page when the stored
+    consent already covers the requested scopes. The other way round, a read-only user sees
+    the consent page on every new authorization, because the client asks for `mcp:write`,
+    which the stored consent lacks.
 - **Enforcement on every tool.** A new module `src/lib/mcp/scopes.ts` wraps the `McpServer`
   passed to the five `register*Tools` functions. Its `registerTool` reads the tool's
   annotations: `readOnlyHint: true` is a read tool, anything else is a write tool (fails
@@ -130,7 +134,12 @@ Two new scopes: `mcp:read` and `mcp:write`.
   assistants) and connect again with read and change access." The model then knows why and can
   tell the user.
   - This needs no change inside the tool bodies, which keeps clear of the A1 work in
-    `src/lib/mcp/tools/programs.ts`. The only edit in `route.ts` is to pass the wrapped server.
+    `src/lib/mcp/tools/programs.ts`. In `route.ts` the change is the wiring: the per-request
+    consent lookup, the 401 and 403 answers, passing the wrapped server to the tool modules,
+    the instructions and the resources.
+  - Any other registration method (`tool`, `prompt`, `registerPrompt`, `resource`,
+    `registerResource`) throws on the read-only wrapper, so nothing reaches the client
+    unchecked. Resources are registered on the unwrapped server.
   - Write tools in read-only also get " (needs read and change access)" added to their
     description, so the model does not plan with them.
 - **Consent page.** Shows the two choices as large radio rows (44 px+), read only selected by
@@ -249,8 +258,19 @@ scope. Their access tokens fail the consent check (401), their refresh tokens ar
 the assistant must connect again through the new consent page, where the user picks read only
 or read and change. The owner's own Claude connector needs one reconnect.
 
-**Rollback.** Code rollback alone is safe: the old code ignores scopes, and the extra scopes on
-`oauth_client` do no harm. To undo the data:
+**Rollback.** A code rollback alone is not safe. The old route has no scope check, so every
+read-only connection could write again. Run this data step together with a code rollback; it
+ends the read-only connections, and the users connect again:
+
+```sql
+UPDATE "oauth_refresh_token" SET "revoked" = now()
+  WHERE "revoked" IS NULL AND NOT ('mcp:write' = ANY("scopes"));
+DELETE FROM "oauth_consent" WHERE NOT ('mcp:write' = ANY("scopes"));
+```
+
+Access tokens are JWTs and cannot be revoked, and the old route does not check the consent, so a
+read-only connection's current token can still write until it expires (1 hour by default). The
+extra scopes on `oauth_client` do no harm to the old code. To undo them as well:
 `UPDATE "oauth_client" SET "scopes" = array_remove(array_remove("scopes", 'mcp:read'), 'mcp:write');`.
 Deleted consents and revoked refresh tokens cannot be brought back; users reconnect. No training
 data is touched.

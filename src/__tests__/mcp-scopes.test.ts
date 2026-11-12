@@ -130,4 +130,14 @@ describe("scopedServer", () => {
       expect(await tool.handler()).toEqual({ content: [{ type: "text", text: `Error: ${READ_ONLY_REFUSAL}` }], isError: true });
     }
   });
+
+  it.each(["tool", "prompt", "registerPrompt", "resource", "registerResource"])(
+    "throws on %s() under read only instead of registering it unchecked",
+    (method) => {
+      const real = vi.fn();
+      const scoped = scopedServer({ [method]: real } as unknown as McpServer, "read");
+      expect(() => (scoped as unknown as Record<string, () => void>)[method]()).toThrow(/not scoped/);
+      expect(real).not.toHaveBeenCalled();
+    },
+  );
 });

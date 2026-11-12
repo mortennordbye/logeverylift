@@ -54,10 +54,14 @@ export function isReadTool(config: { annotations?: { readOnlyHint?: boolean } })
   return config.annotations?.readOnlyHint === true;
 }
 
+/** Registration methods on McpServer that the read-only wrapper does not check. */
+const UNSCOPED_REGISTRATIONS = new Set(["tool", "prompt", "registerPrompt", "resource", "registerResource"]);
+
 /**
  * The server the tool modules register on. With write access it is the server
  * itself. With read access, write tools stay listed so the model knows they
- * exist, but their handler refuses without running.
+ * exist, but their handler refuses without running. Every other registration
+ * method throws, so nothing reaches the client unchecked.
  */
 export function scopedServer(server: McpServer, access: McpAccess): McpServer {
   if (access === "write") return server;
@@ -76,6 +80,13 @@ export function scopedServer(server: McpServer, access: McpAccess): McpServer {
   return new Proxy(server, {
     get(target, prop) {
       if (prop === "registerTool") return registerTool;
+      // Fail closed: any other way to add something callable would skip the
+      // read-only check, so it throws instead of registering.
+      if (typeof prop === "string" && UNSCOPED_REGISTRATIONS.has(prop)) {
+        return () => {
+          throw new Error(`scopedServer: ${prop}() is not scoped; register tools with registerTool`);
+        };
+      }
       const value = Reflect.get(target, prop, target);
       return typeof value === "function" ? value.bind(target) : value;
     },
