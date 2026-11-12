@@ -1265,12 +1265,16 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
         await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_${type}:${ctx.userId}`}))`);
       }
     }
-    // The athlete profile and injuries belong to the endurance add-on (D18).
-    if (firsts.some((f) => f.objectType === "athlete" || f.objectType === "injury") && !(await enduranceEnabledFor(ctx.userId))) {
-      throw new PlanStateError(ENDURANCE_OFF);
-    }
     const skipped: string[] = [];
-    for (const first of firsts) {
+    // The athlete profile and injuries belong to the endurance add-on (D18).
+    // With it off, they stay as they are and the rest of the set undoes.
+    let todo = firsts;
+    const gated = firsts.filter((f) => f.objectType === "athlete" || f.objectType === "injury");
+    if (gated.length && !(await enduranceEnabledFor(ctx.userId))) {
+      todo = firsts.filter((f) => !gated.includes(f));
+      skipped.push("Your athlete profile and injuries were not changed: endurance features are off for this account");
+    }
+    for (const first of todo) {
       const target = { type: first.objectType, id: first.objectId };
       const [prior] =
         first.action === "create"
@@ -1293,8 +1297,8 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
       // before that delete.
       if (first.action === "create" || prior?.action === "delete") {
         if (target.type === "program") {
-          if (await openWorkoutOn(w.tx, ctx.userId, [target.id])) throw new OpenWorkoutError();
           if (!(await liveForUndo(w, target))) continue;
+          if (await openWorkoutOn(w.tx, ctx.userId, [target.id])) throw new OpenWorkoutError();
           await w.touch(target, { action: "delete" });
           await softDeleteProgram(w.tx, target.id);
         } else if (isRowType(target.type)) {

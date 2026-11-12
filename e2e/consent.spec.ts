@@ -24,6 +24,36 @@ test("asks a user behind on the terms to accept them before home", async ({ page
   expect(row.termsVersion).toBe(LEGAL_VERSION);
 });
 
+// A CONSENT_VERSION raise sends every user here at once (docs/plans/athlete-profile.md, 4), so the
+// page must render cleanly: no page error and no console error, on a direct load and when the home
+// page redirects to it.
+test("a user on an old consent version gets a clean consent page and returns home", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(m.text());
+  });
+  page.on("pageerror", (e) => errors.push(e.message));
+  const email = e2eUser(testInfo.parallelIndex).email;
+  await testDb().update(users).set({ termsVersion: "2026-10-25" }).where(eq(users.email, email));
+
+  await page.goto("/consent");
+  await expect(page.getByRole("heading", { name: "Updated terms" })).toBeVisible();
+  // Let the page's link prefetches finish: WebKit logs an aborted fetch as a console error.
+  await page.waitForLoadState("networkidle");
+  expect(errors, "on a direct load").toEqual([]);
+  await page.goto("/");
+  await page.waitForURL((url) => url.pathname === "/consent");
+  await expect(page.getByRole("heading", { name: "Updated terms" })).toBeVisible();
+  await expect(page.getByText(/injuries/)).toBeVisible();
+  expect(errors, "while the consent page loaded").toEqual([]);
+  await page.getByRole("checkbox", { name: /I accept the terms of use/ }).check();
+  await page.getByRole("checkbox", { name: /I consent to LogEveryLift storing/ }).check();
+  await page.getByRole("button", { name: "Continue" }).click();
+  await page.waitForURL((url) => url.pathname === "/");
+  await expect(page.getByRole("heading", { name: "LogEveryLift" })).toBeVisible();
+  expect(errors, "after accepting").toEqual([]);
+});
+
 test("tells a user once that the policy changed, without asking them to accept again", async ({ page }, testInfo) => {
   const email = e2eUser(testInfo.parallelIndex).email;
   await testDb()

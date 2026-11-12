@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { athleteInjuries, athleteProfiles, athleteThresholds, coachMemory, planRevisions, trainingCycles, users } from "@/db/schema";
+import { athleteInjuries, athleteProfiles, athleteThresholds, coachMemory, planRevisions, programs, trainingCycles, users } from "@/db/schema";
 import { collectUserData } from "@/lib/account-data";
 import {
   addInjuryEntry,
@@ -16,14 +16,14 @@ import {
   updateInjuryEntry,
   updateThresholdValue,
 } from "@/lib/actions/athlete-profile";
-import { garminSuggestions, interviewRace } from "@/lib/athlete-profile";
+import { addThreshold, changeThreshold, garminSuggestions, interviewRace } from "@/lib/athlete-profile";
 import { addCoachMemory } from "@/lib/coach-memory";
 import { restorePlanRevision, undoPlanChangeSet } from "@/lib/actions/plan-revisions";
-import { THRESHOLDS_PER_KIND_MAX, listRevisions, purgePlanRevisions, restoreChangeSet } from "@/lib/plan-revisions";
+import { THRESHOLDS_PER_KIND_MAX, deleteCycles, deletePrograms, listRevisions, purgePlanRevisions, restoreChangeSet, restoreRevision } from "@/lib/plan-revisions";
 import { and, asc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createUser } from "./factories";
+import { createProgram, createUser } from "./factories";
 import { asUser } from "./setup";
 
 /** The athlete profile, thresholds, injuries and the interview in the app (docs/plans/athlete-profile.md). */
@@ -283,16 +283,58 @@ describe("review fixes", () => {
     asUser(me);
     const changeSetId = `interview:${randomUUID()}`;
     const i = await addInjuryEntry({ area: "knee", description: "Sore", status: "active", changeSetId });
-    if (!i.success) throw new Error(i.error);
+    const t = await addThresholdValue({ kind: "max_hr", value: 190, source: "manual", changeSetId });
+    if (!i.success || !t.success) throw new Error("setup");
     await updateInjuryEntry({ id: i.data.id, status: "past" });
     await db.update(users).set({ enduranceEnabled: false }).where(eq(users.id, me));
     const [created] = await revisionsOf("injury", i.data.id);
     const restored = await restorePlanRevision({ revisionId: created.id });
     expect(!restored.success && restored.error).toContain("Endurance features are not on");
+    // A change set that also touched an injury: the injury is skipped and said so, the rest undoes.
     const undone = await undoPlanChangeSet({ changeSetId });
-    expect(!undone.success && undone.error).toContain("Endurance features are not on");
+    if (!undone.success) throw new Error(undone.error);
+    expect(undone.data.skipped.join(" ")).toContain("endurance features are off");
     const [row] = await db.select().from(athleteInjuries).where(eq(athleteInjuries.id, i.data.id));
     expect(row).toMatchObject({ status: "past", deletedAt: null });
+    const [threshold] = await db.select().from(athleteThresholds).where(eq(athleteThresholds.id, t.data.id));
+    expect(threshold.deletedAt).not.toBeNull();
+  });
+
+  it("an object created and deleted in one change set is skipped by the undo, and the rest undoes", async () => {
+    const ctx = { userId: me, writer: "assistant" as const, reason: "x", changeSetId: "mcp:set-a" };
+    const kept = await addThreshold({ userId: me, writer: "user" }, { kind: "ftp", value: 250, source: "manual" });
+    const gone = await addThreshold(ctx, { kind: "max_hr", value: 190, source: "manual" });
+    await changeThreshold(ctx, gone.threshold.id, "delete");
+    await changeThreshold(ctx, kept.threshold.id, { value: 270 });
+    const done = await restoreChangeSet({ userId: me, writer: "user" }, "mcp:set-a");
+    expect(done).not.toBeNull();
+    const rows = await db.select().from(athleteThresholds).orderBy(asc(athleteThresholds.id));
+    expect(rows.map((r) => [r.kind, r.value, r.deletedAt != null])).toEqual([
+      ["ftp", 250, false],
+      ["max_hr", 190, true],
+    ]);
+  });
+
+  it("a program and a cycle deleted before the change set are deleted again by its undo", async () => {
+    const program = (await createProgram(me, [])).program.id;
+    const [cycle] = await db.insert(trainingCycles).values({ userId: me, name: "Old", durationWeeks: 4, status: "draft" }).returning();
+    const user = { userId: me, writer: "user" as const };
+    await deletePrograms(user, [program]);
+    await deleteCycles(user, [cycle.id]);
+    const del = async (type: "program" | "cycle", id: number) =>
+      (
+        await db
+          .select({ id: planRevisions.id })
+          .from(planRevisions)
+          .where(and(eq(planRevisions.objectType, type), eq(planRevisions.objectId, id), eq(planRevisions.action, "delete")))
+      )[0].id;
+    const ctx = { userId: me, writer: "assistant" as const, reason: "x", changeSetId: "mcp:set-b" };
+    await restoreRevision(ctx, await del("program", program));
+    await restoreRevision(ctx, await del("cycle", cycle.id));
+    expect((await db.select().from(programs).where(eq(programs.id, program)))[0].deletedAt).toBeNull();
+    await restoreChangeSet({ userId: me, writer: "user" }, "mcp:set-b");
+    expect((await db.select().from(programs).where(eq(programs.id, program)))[0].deletedAt).not.toBeNull();
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycle.id)))[0].deletedAt).not.toBeNull();
   });
 });
 

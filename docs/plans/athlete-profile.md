@@ -646,3 +646,10 @@ a migration; the hub settles the numbers at merge.
   MCP, need the endurance switch. The plan-write guard test now covers coach memory and the
   three athlete tables. A restore of one revision takes the cap lock before the row lock, as a
   change-set undo does.
+- **Consent screen after the `CONSENT_VERSION` raise (hub smoke pass).** `/consent` gets its own
+  `loading.tsx`, as every page that reads data needs under cacheComponents. Accepting now goes
+  home with a soft navigation: the hard one aborted the refresh the action's revalidation starts,
+  and WebKit showed the global error ("Load failed"). An e2e check loads the page for a user on
+  an old consent version and fails on any console or page error.
+- **Undo with the endurance switch off.** A change set that touched the athlete profile or an
+  injury still undoes: those objects stay as they are and the result says so; the rest undoes.
