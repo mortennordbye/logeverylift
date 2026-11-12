@@ -24,7 +24,10 @@ export async function setTimeZone(data: unknown): Promise<ActionResult<{ changed
       .set({ timeZone: parsed.data.timeZone })
       .where(where)
       .returning({ id: users.id });
-    if (rows.length > 0) revalidatePath("/", "layout");
+    // Not for the one-time fill: it runs on whatever page the user opens
+    // first, and revalidating there re-renders that page under the user.
+    // The provider already has the zone, and every later request reads it.
+    if (rows.length > 0 && !parsed.data.ifUnset) revalidatePath("/settings");
     return { success: true, data: { changed: rows.length > 0 } };
   } catch (e) {
     console.error("[setTimeZone] failed", e);
@@ -45,7 +48,7 @@ export async function setDisplayUnits(data: unknown): Promise<ActionResult<null>
       .update(users)
       .set({ ...(distanceUnit ? { distanceUnit } : {}), ...(swimUnit ? { swimUnit } : {}) })
       .where(eq(users.id, auth.user.id));
-    revalidatePath("/", "layout");
+    revalidatePath("/settings");
     return { success: true, data: null };
   } catch (e) {
     console.error("[setDisplayUnits] failed", e);

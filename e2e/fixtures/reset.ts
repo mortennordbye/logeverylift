@@ -96,6 +96,11 @@ export async function resetE2EUser(email: string): Promise<void> {
         aiConsentAt: null,
         friendsSeenAt: now,
         primaryGymId: null,
+        // Settings as for a new user: the browser fills the zone on first load.
+        timeZone: null,
+        distanceUnit: "km",
+        swimUnit: "m",
+        enduranceEnabled: false,
       })
       .where(eq(users.id, userId));
   });

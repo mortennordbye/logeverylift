@@ -1,41 +1,49 @@
 "use client";
 
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
-import { createContext, useContext, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /**
  * The signed-in user's time zone and display units, for Client Components.
- * The root layout cannot wait for the session (it would lose its static
- * shell), so the provider starts metric with no zone and
- * UserSettingsLoader, streamed in beside the page, fills it in through
- * UserSettingsHydrator.
+ *
+ * A small store rather than a React context: a context provider has to wrap
+ * the page in the root layout, and a client component around the page there
+ * made the cacheComponents shell render each page twice in the DOM. The store
+ * starts metric with no zone; UserSettingsLoader, streamed in beside the page,
+ * fills it through UserSettingsHydrator.
  */
 
 export type ClientUserSettings = { timeZone: string | null; units: Units };
 
-type Ctx = ClientUserSettings & { set: (s: ClientUserSettings) => void };
+const INITIAL: ClientUserSettings = { timeZone: null, units: DEFAULT_UNITS };
 
-const UserSettingsContext = createContext<Ctx | null>(null);
+let current: ClientUserSettings = INITIAL;
+const listeners = new Set<() => void>();
 
-export function UserSettingsProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<ClientUserSettings>({ timeZone: null, units: DEFAULT_UNITS });
-  return (
-    <UserSettingsContext.Provider value={{ ...settings, set: setSettings }}>{children}</UserSettingsContext.Provider>
-  );
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
-/** The user's settings; metric with no zone outside the provider or before it is filled. */
+/** For UserSettingsHydrator only. A no-op when nothing changed. */
+export function setUserSettings(next: ClientUserSettings) {
+  if (
+    next.timeZone === current.timeZone &&
+    next.units.distance === current.units.distance &&
+    next.units.swim === current.units.swim
+  ) {
+    return;
+  }
+  current = next;
+  for (const l of listeners) l();
+}
+
+/** The user's settings; metric with no zone until they are loaded. */
 export function useUserSettings(): ClientUserSettings {
-  const ctx = useContext(UserSettingsContext);
-  return ctx ? { timeZone: ctx.timeZone, units: ctx.units } : { timeZone: null, units: DEFAULT_UNITS };
+  return useSyncExternalStore(subscribe, () => current, () => INITIAL);
 }
 
 /** The user's display units. */
 export function useUnits(): Units {
   return useUserSettings().units;
-}
-
-/** The provider's setter, for UserSettingsHydrator only. */
-export function useSetUserSettings(): ((s: ClientUserSettings) => void) | undefined {
-  return useContext(UserSettingsContext)?.set;
 }

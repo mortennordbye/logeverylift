@@ -219,10 +219,13 @@ date and the server's "today" agree. With no stored zone, both keep the phone's 
 The cycle calendar's "today" uses the same zone (`todayIn`).
 
 **Client settings.** The root layout cannot wait for the session without losing its static
-shell. So `UserSettingsProvider` (`src/contexts/user-settings-context.tsx`) wraps the app,
-starts metric with no zone, and `UserSettingsLoader`, streamed in its own Suspense next to the
-page, fills it through `UserSettingsHydrator`. Components read `useUnits()` or
-`useUserSettings()`. On a cold load a component can render once in metric before the settings
+shell. So a small store (`src/contexts/user-settings-context.tsx`, read with
+`useSyncExternalStore`) starts metric with no zone, and `UserSettingsLoader`, streamed in its
+own Suspense next to the page, fills it through `UserSettingsHydrator`. Components read
+`useUnits()` or `useUserSettings()`. It is a store and not a context on purpose: a context
+provider around the page in the root layout made every page render twice in the DOM under
+`cacheComponents`, which the e2e suite caught (strict-mode "resolved to 2 elements" in ten
+specs). On a cold load a component can render once in metric before the settings
 arrive; the set editor and the new-set view then re-show the distance field in the right unit.
 
 **Units (endurance only, owner decision 2).**
