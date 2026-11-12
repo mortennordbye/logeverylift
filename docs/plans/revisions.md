@@ -6,9 +6,9 @@ audit (`docs/triathlon-coach-audit.md`, sections 7, 8, 9, 11 and decisions D1, D
 T2, T3, T5, T6, T9), `CLAUDE.md`, `TESTING.md` and the MCP access brief
 ([`mcp-access.md`](mcp-access.md)).
 
-Status: brief. Open questions in section 12 must be settled before code. The **Findings**
-section describes the code on `origin/feat/foundations-a1-a3` at 5cef043; every `file:line` in
-it was opened then. Names marked *new* do not exist yet.
+Status: building. The owner answered the open questions on 2026-11-12 (section 12). The
+**Findings** section describes the code on `main` at ec8ee7d (after PRs #220 and #221); every
+`file:line` in it was opened then. Names marked *new* do not exist yet.
 
 ## 0. Goal
 
@@ -127,15 +127,19 @@ Two facts make the read side harder:
 ### 1.4 The offline queue
 
 - The queue holds four kinds: `logWorkoutSet`, `unlogWorkoutSet`, `updateProgramSet` and
-  `completeWorkoutSession` (`src/contexts/pending-queue-context.tsx:42-46`). Only
+  `completeWorkoutSession` (`src/contexts/pending-queue-context.tsx:56-60`). Only
   `updateProgramSet` writes plan data. It is there for the finish flush
   (`src/app/programs/[id]/workout/finish/page.tsx:84`).
 - A replay counts an item as done only when `result.success` is true
-  (`src/contexts/pending-queue-context.tsx:123-131`). Anything else backs off and, after
-  `MAX_ATTEMPTS`, is dropped with a toast (`:144-146`, `:175-183`;
+  (`src/contexts/pending-queue-context.tsx:139-147`). Anything else backs off and, after
+  `MAX_ATTEMPTS`, is dropped with a toast (`:164-166`, `:185-193`;
   `afterFailedReplay` in `src/lib/utils/pending-queue.ts:35-43`). So a conflict answer from the
   server would today be retried six times and then dropped as "couldn't be saved". The design
   must make a conflict a final, visible outcome that is not a drop.
+- Since PR #221, a stale-bundle error is its own outcome: the item and every later one stay
+  queued without spending an attempt (`afterStaleBundle`, `src/lib/utils/pending-queue.ts:55-57`;
+  the replay loop at `src/contexts/pending-queue-context.tsx:150-160`). A conflict is a third
+  outcome next to it, and it must not disturb that rule.
 - A queued `logWorkoutSet` that names a deleted program set still saves the row, without a link
   (`src/lib/actions/workout-sets.ts:153-161`). With soft delete the set row still exists, so the
   row keeps its link. The position fallback (`:168-190`) must skip soft-deleted sets, or a log
@@ -159,7 +163,7 @@ Two facts make the read side harder:
 - Deleting a custom exercise cascades to its program slots and to every **logged** set of that
   exercise (`deleteCustomExercise`, `src/lib/actions/exercises.ts:102-121`; the cascades at
   `src/db/schema/programs.ts:55-57` and `src/db/schema/workout-sets.ts:56-58`). This loses logged
-  data. It is not a plan write, so it is not in A4's scope; see open question 4.
+  data. It is not a plan write, but the owner chose to fix it in this PR (section 12, decision 4).
 - The daily purge hook exists (`src/instrumentation.ts:47-53`); the retention job (section 9)
   joins it.
 
@@ -298,7 +302,7 @@ From audit section 8, made exact. "Kept on restore" means a restore leaves the c
 | Exercise slot | `weight_stack` | progression (learned), user (clear) | Kept |
 | Exercise slot | `progression_mode` (retired) | user, assistant | Restored |
 | Set | `set_number`, `set_type`, rep range, `target_rir`, `incline_percent`, `start_delay_seconds`, `session_role`, peak anchors | user, assistant | Restored |
-| Set | `target_reps`, `weight_kg`; `duration_seconds`, `distance_meters` on sets with no peak anchor | user, assistant, progression | Open question 1. Recommended: kept when the last change to the field after the target revision came from `progression`, else restored |
+| Set | `target_reps`, `weight_kg`; `duration_seconds`, `distance_meters` on sets with no peak anchor | user, assistant, progression | Kept when the last change to the field after the target revision came from `progression`, else restored (decision 1) |
 | Set | `distance_meters`, `duration_seconds` on sets with a peak anchor | sync (derived from the peak) | Recomputed by the sync from the restored peak |
 | Set | `target_heart_rate_zone`, `rest_time_seconds` on `work` sets in a cycle with peak anchors | sync (by phase) | Recomputed by the sync |
 | Set | the same two fields elsewhere | user, assistant | Restored |
@@ -383,7 +387,7 @@ as the base:
 
 **Online edits in the app** (set editor, rest picker, program page, cycle form) send no version
 and apply as today: last write wins, and the overwritten state is one tap away in the history.
-See open question 3.
+Owner decision 3.
 
 ### 2.8 Change sets (T3)
 
@@ -558,7 +562,7 @@ Then the full e2e suite (set writes are used in the workout) and the smoke pass 
 
 ## 9. Retention rule
 
-Recommended (open question 2):
+Owner decision 2:
 - Revisions are kept 365 days. A daily purge (next to `purgeExpiredSessions`) deletes older
   ones, but always keeps each object's newest revision, so an object can always be restored to
   its last state.
@@ -586,20 +590,22 @@ Recommended (open question 2):
   (2.10). B1 keeps the explicit change-set argument, version checks on its new tools, and field
   ownership in tool descriptions.
 
-## 12. Open questions for the owner
+## 12. Owner decisions (2026-11-12)
 
-1. **Progression numbers on restore.** T2 says engine-owned fields keep their values. But the user
-   and the AI also write target reps and weight, so a strict rule would make an AI weight change
-   impossible to undo. Recommended: on restore, a set's target reps, weight (and duration or
-   distance on sets with no peak anchor) keep the current value only when the last change to that
-   field since the restored revision came from progression; otherwise they go back.
-2. **Retention.** Recommended: history 365 days (newest revision per object always kept), deleted
-   programs and cycles restorable for 90 days, then deleted for good. Alternative: keep everything
-   until account deletion.
-3. **Online edits in the app.** Recommended: no version check (last write wins, every change is a
-   revision). The version check covers AI writes and the workout's finish flush, online or
-   queued. Alternative: the program and cycle edit screens also send a version and show a
-   conflict, which adds a conflict screen to normal editing.
-4. **Deleting a custom exercise** deletes every logged set of it (1.6). Recommended: fix it in this
-   PR, small: refuse to delete a custom exercise that has logged sets or is in a live program,
-   and say where it is used. Alternative: a BACKLOG entry.
+The owner took every recommendation.
+
+1. **Progression numbers on restore.** A set's target reps and weight (and duration or distance
+   on a set with no peak anchor) go back to the restored values, except when the last change to
+   that field after the restored revision came from `progression`; then the current value stays.
+2. **Retention.** Revisions are kept 365 days, and each object's newest revision is always kept.
+   Deleted programs and cycles can be restored for 90 days; then a daily purge deletes them for
+   good. The purge runs in the existing daily job in `src/instrumentation.ts`, the `setInterval`
+   that runs `purgeExpiredSessions` and `purgeExpiredOAuthTokens` at boot and every 24 hours.
+3. **Online edits in the app** send no version: last write wins, and every change is a revision.
+   The version check covers AI writes and the workout's finish flush, online or queued.
+4. **Deleting a custom exercise** is fixed in this PR: it is refused when the exercise has logged
+   sets or is in a live program, and the message says where it is used. A failing test comes
+   first.
+
+The defaults in section 8, and `list_revisions` and `restore_revision` in this package, are
+accepted. The plan's A4 and B1 text is fixed in this PR (section 11).
