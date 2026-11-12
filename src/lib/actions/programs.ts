@@ -1083,6 +1083,7 @@ export async function updateProgramSet(
         // rules, one set at a time.
         const flushed = await flushSetWrites(w, check.programId, baseVersion, [{ programSetId: id, fields: rest }]);
         if (flushed.revisionId != null) return { kind: "conflict", revisionId: flushed.revisionId } as const;
+        // plan-read: includes deleted (returns the row as it stands, removed or not)
         const [ps] = await w.tx.select().from(programSets).where(eq(programSets.id, id));
         return { kind: "applied", ps } as const;
       }
