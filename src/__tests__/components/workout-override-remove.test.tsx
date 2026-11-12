@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { WorkoutSessionProvider, useWorkoutSession } from "@/contexts/workout-session-context";
 import { act, render } from "@testing-library/react";
+import { useEffect } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -11,9 +12,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/actions/workout-sessions", () => ({ setSessionReadiness: vi.fn() }));
 vi.mock("@/lib/notifications", () => ({ requestNotificationPermission: vi.fn(), scheduleRestNotification: vi.fn() }));
 
-let session: ReturnType<typeof useWorkoutSession> = null as never;
+// The probe hands the context out through a ref object, the pattern the lint
+// rule allows, so the test can call it.
+const probe: { current: ReturnType<typeof useWorkoutSession> } = { current: null };
 function Probe() {
-  session = useWorkoutSession();
+  const value = useWorkoutSession();
+  useEffect(() => {
+    probe.current = value;
+  });
   return null;
 }
 
@@ -27,11 +33,11 @@ describe("removeOverride", () => {
       </WorkoutSessionProvider>,
     );
     await act(async () => {
-      session!.setOverride(3, { targetReps: 8, weightKg: 65 });
-      session!.setOverride(4, { targetReps: 8, weightKg: 70 });
+      probe.current!.setOverride(3, { targetReps: 8, weightKg: 65 });
+      probe.current!.setOverride(4, { targetReps: 8, weightKg: 70 });
     });
-    await act(async () => session!.removeOverride(3));
-    expect(Object.keys(session!.overrides)).toEqual(["4"]);
+    await act(async () => probe.current!.removeOverride(3));
+    expect(Object.keys(probe.current!.overrides)).toEqual(["4"]);
     expect(Object.keys(JSON.parse(localStorage.getItem("workoutOverrides") ?? "{}"))).toEqual(["4"]);
   });
 });
