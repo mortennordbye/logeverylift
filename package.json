@@ -18,6 +18,7 @@
     "db:seed-fake": "tsx scripts/seed-fake.ts",
     "db:reset-user": "tsx scripts/reset-user.ts",
     "db:cleanup-programs": "tsx scripts/cleanup-orphaned-cycle-programs.ts",
+    "db:cleanup-ghosts": "tsx scripts/cleanup-ghost-sessions.ts",
     "db:diagnose": "tsx scripts/diagnose.ts",
     "ai:smoke": "tsx scripts/ai-smoke.ts",
     "create-admin": "tsx scripts/create-admin.ts",
