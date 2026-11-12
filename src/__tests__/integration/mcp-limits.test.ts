@@ -253,6 +253,26 @@ describe("hard sessions per week", () => {
       expect.objectContaining({ rule: "hard_sessions_per_week", why: expect.stringContaining("Rotation") }),
     ]);
   });
+
+  // Characterization test for package C2 (docs/plans/sessions.md, 8.1, C10).
+  it("counts one hard program on two days as two sessions, by weekday", async () => {
+    const twice = await hardProgram(me);
+    const cycleId = await activeCycle(me, [
+      { day: 1, programId: twice },
+      { day: 3, programId: twice },
+      { day: 5, programId: await hardProgram(me) },
+    ]);
+    const result = await mcpTools(registerCycleTools, me)("edit_cycle_slot", {
+      operation: "upsert",
+      trainingCycleId: cycleId,
+      dayOfWeek: 7,
+      programId: twice,
+      reason: "Third day of the same intervals",
+      expectedVersion: 1,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].message).toBe("This week would hold 4 hard sessions (Mon, Wed, Fri, Sun). Limit 3.");
+  });
 });
 
 describe("start", () => {

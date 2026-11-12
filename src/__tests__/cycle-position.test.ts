@@ -233,3 +233,57 @@ describe("findDayOfWeekMissed", () => {
     expect(missed).toHaveLength(0);
   });
 });
+
+// Characterization tests for package C2 (docs/plans/sessions.md, 8.1, C1 and
+// C2): what a lifter gets today. They pass on main before the session model
+// changes, and their assertions must not change after it.
+describe("C2 characterization: findDayOfWeekMissed (C1)", () => {
+  // Mon = 201, Wed = 203, Sat = rest; Tue, Thu, Fri and Sun have no slot.
+  const slots: Slot[] = [dowSlot(21, 1, 201), dowSlot(23, 3, 203), dowSlot(26, 6, null)];
+
+  it("never flags a rest day or a day with no slot", () => {
+    // Today Mon 2026-05-11; the window is Mon 4 to Sun 10.
+    const missed = findDayOfWeekMissed(d("2026-05-04"), slots, new Set(), d("2026-05-11"));
+    expect(missed).toEqual([
+      { date: "2026-05-04", slotId: 21 },
+      { date: "2026-05-06", slotId: 23 },
+    ]);
+  });
+
+  it("looks back 7 days and no further, and never at today", () => {
+    // Today Wed 2026-05-13: Mon 4 is 9 days back, Wed 6 is 7, Mon 11 is 2.
+    const missed = findDayOfWeekMissed(d("2026-05-01"), slots, new Set(), d("2026-05-13"));
+    expect(missed.map((m) => m.date)).toEqual(["2026-05-06", "2026-05-11"]);
+  });
+
+  it("is cleared by any date in the set: it does not know which program was done", () => {
+    const missed = findDayOfWeekMissed(d("2026-05-04"), slots, new Set(["2026-05-06"]), d("2026-05-11"));
+    expect(missed.map((m) => m.date)).toEqual(["2026-05-04"]);
+  });
+});
+
+describe("C2 characterization: walkRotation (C2)", () => {
+  const slots: Slot[] = [rotationSlot(1, 1, 101), rotationSlot(2, 2, 102), rotationSlot(3, 3, null)];
+  const start = d("2026-05-04");
+
+  it("advances one step for two sessions on one day (BACKLOG: two workouts in one day)", () => {
+    const r = resolveRotation(start, slots, ["2026-05-04", "2026-05-04"], d("2026-05-06"));
+    // 04: slot 1 done; 05: slot 2 waits and is missed; today 06 is still slot 2.
+    expect(r.todaySlotId).toBe(2);
+    expect(r.missed).toEqual([{ date: "2026-05-05", slotIndex: 1, slotId: 2 }]);
+  });
+
+  it("does not care which program a session was for", () => {
+    // The dates are all it reads; the caller passes every completed session.
+    const r = resolveRotation(start, slots, ["2026-05-04", "2026-05-05"], d("2026-05-07"));
+    // 04 slot 1, 05 slot 2, 06 rest; today 07 is slot 1 again.
+    expect(r.todaySlotId).toBe(1);
+    expect(r.missed).toEqual([]);
+  });
+
+  it("ignores sessions before the start and on today", () => {
+    const r = resolveRotation(start, slots, ["2026-05-03", "2026-05-05"], d("2026-05-05"));
+    expect(r.todaySlotId).toBe(1);
+    expect(r.missed).toEqual([{ date: "2026-05-04", slotIndex: 0, slotId: 1 }]);
+  });
+});
