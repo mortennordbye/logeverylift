@@ -141,8 +141,8 @@ parallel once A4 is done.
 | ID | Package | Needs | Status |
 |---|---|---|---|
 | B1 | MCP parity, part 1 | A1, A4 | todo |
-| B2 | MCP scopes, consent and revoke | none | todo |
-| B3 | MCP knowledge resources and server instructions | research doc (done) | todo |
+| B2 | MCP scopes, consent and revoke | none | brief ([`mcp-access.md`](mcp-access.md)) |
+| B3 | MCP knowledge resources and server instructions | research doc (done) | brief ([`mcp-access.md`](mcp-access.md)) |
 | B4 | Coach memory | A4 | todo |
 
 **B1. MCP parity, part 1.** Cycle fields over MCP (race date and distance, goal, athlete level,
