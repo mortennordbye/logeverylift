@@ -9,7 +9,8 @@ import Link from "next/link";
 /** Coach memory (docs/plans/ai-coach.md, 2.7): what the user's assistant keeps between conversations. */
 export default async function CoachMemoryPage() {
   const result = await getCoachMemory();
-  const entries = result.success ? result.data : [];
+  const entries = result.success ? result.data.entries : [];
+  const deleted = result.success ? result.data.deleted : [];
   const clientIds = [...new Set(entries.map((e) => e.lastClientId).filter((id): id is string => !!id))];
   const names = clientIds.length
     ? new Map(
@@ -42,6 +43,7 @@ export default async function CoachMemoryPage() {
           active: e.active,
           by: e.lastWriter === "assistant" ? (e.lastClientId && names.get(e.lastClientId)) || "Your assistant" : "You",
         }))}
+        deleted={deleted.map((e) => ({ id: e.id, text: e.text, deletedOn: e.deletedAt!.toISOString().slice(0, 10) }))}
       />
     </div>
   );

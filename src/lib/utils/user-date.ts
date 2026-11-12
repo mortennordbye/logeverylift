@@ -77,3 +77,36 @@ export function shortDateTime(at: Date, timeZone: string | null | undefined): st
     timeZone: timeZone ?? "UTC",
   });
 }
+
+/**
+ * The instant that is `hour:minute` on `dateStr` in `timeZone` (the runtime's
+ * zone with none). For a time the user gave as a day and a clock time.
+ */
+export function instantInZone(dateStr: string, hour: number, minute: number, timeZone: string | null | undefined): Date {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  if (!timeZone || !isValidTimeZone(timeZone)) return new Date(y, m - 1, d, hour, minute);
+  const wall = Date.UTC(y, m - 1, d, hour, minute);
+  // The zone's offset at an instant: its wall clock there, read as UTC, minus the instant.
+  const offsetAt = (t: number) => {
+    const parts = Object.fromEntries(
+      new Intl.DateTimeFormat("en-US", {
+        timeZone,
+        hourCycle: "h23",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      })
+        .formatToParts(new Date(t))
+        .map((p) => [p.type, p.value]),
+    );
+    return Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second) - t;
+  };
+  // Twice, so a guess that lands across a DST change still settles.
+  let t = wall - offsetAt(wall);
+  t = wall - offsetAt(t);
+  return new Date(t);
+}
+

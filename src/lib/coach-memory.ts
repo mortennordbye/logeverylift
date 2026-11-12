@@ -12,13 +12,22 @@
 
 import { db } from "@/db";
 import { coachMemory, planRevisions, type CoachMemoryKind } from "@/db/schema";
-import { PlanStateError, planWrite, versionKey, type PlanWriteContext } from "@/lib/plan-revisions";
+import {
+  COACH_MEMORY_MAX,
+  assertMemoryRoom,
+  planWrite,
+  restoreRevision,
+  versionKey,
+  type PlanWriteContext,
+} from "@/lib/plan-revisions";
+import { DELETED_PLAN_RETENTION_DAYS } from "@/lib/utils/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
-import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
+import { PlanConflictError, PlanNotFoundError } from "@/lib/plan-revisions";
+import { and, desc, eq, gt, inArray, isNotNull, isNull } from "drizzle-orm";
 
 /** Live entries (active or not) a user may keep, so the assistant's read stays small. */
-export const COACH_MEMORY_MAX = 200;
+export { COACH_MEMORY_MAX };
 export const COACH_MEMORY_TEXT_MAX = 1000;
 
 export type CoachMemoryEntry = typeof coachMemory.$inferSelect & {
@@ -64,15 +73,7 @@ export type MemoryInput = { kind: CoachMemoryKind; text: string; entryDate?: str
 export async function addCoachMemory(ctx: PlanWriteContext, input: MemoryInput) {
   const entryDate = input.entryDate ?? toDateStr(await userToday(ctx.userId));
   const { result, versions } = await planWrite(ctx, async (w) => {
-    const [{ n }] = await w.tx
-      .select({ n: count() })
-      .from(coachMemory)
-      .where(and(eq(coachMemory.userId, ctx.userId), isNull(coachMemory.deletedAt)));
-    if (n >= COACH_MEMORY_MAX) {
-      throw new PlanStateError(
-        `Coach memory is full (${COACH_MEMORY_MAX} entries). Delete or merge old entries first.`,
-      );
-    }
+    await assertMemoryRoom(w.tx, ctx.userId);
     const [row] = await w.tx
       .insert(coachMemory)
       .values({ userId: ctx.userId, kind: input.kind, text: input.text, entryDate })
@@ -92,6 +93,18 @@ export async function changeCoachMemory(
   change: MemoryChange | "delete",
   expectedVersion?: number,
 ) {
+  // Nothing to change: no write, no revision, no new version.
+  if (change !== "delete" && Object.values(change).every((v) => v === undefined)) {
+    const [row] = await db
+      .select()
+      .from(coachMemory)
+      .where(and(eq(coachMemory.id, id), eq(coachMemory.userId, ctx.userId), isNull(coachMemory.deletedAt)));
+    if (!row) throw new PlanNotFoundError({ type: "memory", id });
+    if (expectedVersion !== undefined && expectedVersion !== row.version) {
+      throw new PlanConflictError({ type: "memory", id }, row.version, expectedVersion);
+    }
+    return { entry: row, version: row.version };
+  }
   const { result, versions } = await planWrite(ctx, async (w) => {
     if (change === "delete") {
       await w.touch({ type: "memory", id }, { action: "delete", expectedVersion });
@@ -108,5 +121,39 @@ export async function changeCoachMemory(
     return row;
   });
   return { entry: result, version: versions.get(versionKey({ type: "memory", id })) ?? null };
+}
+
+/** Entries the user deleted that can still be restored (90 days), newest first. */
+export async function listDeletedCoachMemory(userId: string) {
+  const since = new Date(Date.now() - DELETED_PLAN_RETENTION_DAYS * 86_400_000);
+  return db
+    .select()
+    .from(coachMemory)
+    .where(and(eq(coachMemory.userId, userId), isNotNull(coachMemory.deletedAt), gt(coachMemory.deletedAt, since)))
+    .orderBy(desc(coachMemory.deletedAt));
+}
+
+/** Bring a deleted entry back from the revision of its delete. Null when there is none. */
+export async function restoreDeletedCoachMemory(ctx: PlanWriteContext, id: number) {
+  const [row] = await db
+    .select({ deletedAt: coachMemory.deletedAt })
+    .from(coachMemory)
+    .where(and(eq(coachMemory.id, id), eq(coachMemory.userId, ctx.userId)));
+  if (!row?.deletedAt) return null;
+  const [rev] = await db
+    .select({ id: planRevisions.id })
+    .from(planRevisions)
+    .where(
+      and(
+        eq(planRevisions.userId, ctx.userId),
+        eq(planRevisions.objectType, "memory"),
+        eq(planRevisions.objectId, id),
+        eq(planRevisions.action, "delete"),
+      ),
+    )
+    .orderBy(desc(planRevisions.id))
+    .limit(1);
+  if (!rev) return null;
+  return restoreRevision(ctx, rev.id);
 }
 

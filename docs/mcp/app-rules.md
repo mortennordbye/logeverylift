@@ -77,7 +77,11 @@ lasts only until that writer runs again.
     large cohort). Needs Garmin data; without it the cap is not checked, and the result says so.
   - `hard_sessions_per_week`: at most 3 interval sessions (a `work` set or zone 4-5 on an
     endurance set) in a weekday cycle's week (Coach convention; what counts as hard is
-    Inference). Rotation cycles have no fixed week and are not counted.
+    Inference): the active cycle and a draft scheduled to start. Rotation cycles have no fixed
+    week and are not counted.
+
+  Checked writes: program set edits, slot changes, starting or scheduling a cycle, `set_volume`,
+  and a change to the active cycle's length, goal or level (they rescale this week's targets).
 
   A limit blocks only a write that makes things worse. A refused write changes nothing; send it
   again with `overrideLimits` and `overrideReason` if it still fits, and the revision stores the

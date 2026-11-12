@@ -7,8 +7,8 @@ import { trackActions } from "./helpers";
 
 /**
  * Coach memory (docs/plans/ai-coach.md, 2.7): the user adds an entry, edits
- * it, switches it off and deletes it; each change is a row change and a
- * revision written as the user.
+ * it, switches it off, deletes it and restores it; each change is a row
+ * change and a revision written as the user.
  */
 
 async function userId(parallelIndex: number) {
@@ -63,4 +63,11 @@ test("add, edit, switch off and delete a coach memory entry", async ({ page }, t
     { action: "update", writer: "user" },
     { action: "delete", writer: "user" },
   ]);
+
+  // Deleted entries can be restored for 90 days.
+  await page.getByText("Recently deleted (1)").click();
+  await page.getByRole("button", { name: "Restore", exact: true }).click();
+  await settle();
+  await expect(page.getByText("Not in use (1)")).toBeVisible();
+  await expect.poll(async () => (await entries(uid))[0].deletedAt).toBeNull();
 });

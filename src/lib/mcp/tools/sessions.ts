@@ -21,13 +21,15 @@ import { insertAutoSessions } from "@/lib/auto-sessions";
 import { startDueScheduledCycle } from "@/lib/plan-revisions";
 import { liveCycles, livePrograms, liveSlotProgram } from "@/lib/plan-live";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
-import { userToday } from "@/lib/user-settings";
+import { getUserSettings, userToday } from "@/lib/user-settings";
+import { instantInZone, localDateStr } from "@/lib/utils/user-date";
+import type { Tx } from "@/lib/plan-revisions";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { rpeFromRir } from "@/lib/utils/rir";
 import { WORKOUT_FEELINGS } from "@/lib/validators/workout";
 import { lockRecords, rebuildPRsFrom } from "@/lib/workout-records";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { and, eq, inArray, isNull, ne, or } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
 /** How far back log_session reaches. */
@@ -53,15 +55,48 @@ const loggedSet = z
   })
   .strict();
 
+class DuplicateSession extends Error {
+  constructor(id: number) {
+    super(`The user already logged this on that day (session ${id}). Read recent_workouts.`);
+  }
+}
+
+/**
+ * A completed session the new log would repeat: the same program on the same
+ * day; or, with no program, an assistant-logged session that day with the
+ * same exercises.
+ */
+async function findDuplicate(tx: Tx, userId: string, date: string, programId: number | null, exerciseIds: number[]) {
+  const sameDay = and(eq(workoutSessions.userId, userId), eq(workoutSessions.date, date), eq(workoutSessions.isCompleted, true));
+  if (programId != null) {
+    const [dup] = await tx
+      .select({ id: workoutSessions.id })
+      .from(workoutSessions)
+      .where(and(sameDay, eq(workoutSessions.programId, programId), ne(workoutSessions.source, "auto")))
+      .limit(1);
+    return dup?.id ?? null;
+  }
+  const rows = await tx
+    .select({ id: workoutSessions.id, exerciseId: workoutSets.exerciseId })
+    .from(workoutSessions)
+    .innerJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
+    .where(and(sameDay, isNull(workoutSessions.programId), eq(workoutSessions.source, "assistant")));
+  const want = [...exerciseIds].sort((a, b) => a - b).join(",");
+  const bySession = new Map<number, Set<number>>();
+  for (const r of rows) bySession.set(r.id, (bySession.get(r.id) ?? new Set()).add(r.exerciseId));
+  for (const [id, ids] of bySession) if ([...ids].sort((a, b) => a - b).join(",") === want) return id;
+  return null;
+}
+
 export function registerSessionTools(server: McpServer, userId: string) {
   server.registerTool(
     "log_session",
     {
       description: [
         "Log a completed workout the user did outside the app (for example a run they tell you about), with its sets.",
-        `date is the day it happened (YYYY-MM-DD, today or up to ${LOG_SESSION_MAX_DAYS_BACK} days back, in the user's time zone). Optional programId (one of the user's programs, when it was a planned session), startTime (ISO), durationMinutes, feeling, notes.`,
-        "Each set takes exerciseId (search_exercises), setNumber, and any of reps, weightKg, durationSeconds, distanceMeters, heartRateZone (1-5), rir (0-5), rpe (1-10), notes, setType. All values are metric. Any other key fails the call.",
-        "Personal records are rebuilt from this session on. It replaces a day the cycle auto-completed for the same program. Refused when the user already logged that program on that date: read recent_workouts first. The session shows as logged by the assistant; you cannot edit or delete it afterwards (the user can, in History).",
+        `date is the day it happened (YYYY-MM-DD, today or up to ${LOG_SESSION_MAX_DAYS_BACK} days back, in the user's time zone). Optional programId (one of the user's programs, when it was a planned session), startTime (ISO with offset; it must fall on date in the user's time zone; default noon there), durationMinutes, feeling, notes.`,
+        "Each set takes exerciseId (search_exercises), setNumber, and any of reps, weightKg, durationSeconds, distanceMeters, heartRateZone (1-5), rir (0-5) or rpe (1-10), not both, notes, setType. All values are metric. Any other key fails the call.",
+        "Personal records are rebuilt from this session on. It replaces a day the cycle auto-completed for the same program. Refused when the user already logged that program on that date, or, without a program, the same exercises that day: read recent_workouts first. The session shows as logged by the assistant; you cannot edit or delete it afterwards (the user can, in History).",
       ].join(" "),
       inputSchema: {
         date: dateStr,
@@ -83,17 +118,23 @@ export function registerSessionTools(server: McpServer, userId: string) {
     },
     async (args) => {
       try {
+        const both = args.sets.find((s) => s.rir != null && s.rpe != null);
+        if (both) return fail(`Set ${both.setNumber}: send rir or rpe, not both (rpe is derived from rir).`);
+        const { timeZone } = await getUserSettings(userId);
         const today = toDateStr(await userToday(userId));
         if (args.date > today) return fail("date is in the future");
         if (args.date < toDateStr(addDays(await userToday(userId), -LOG_SESSION_MAX_DAYS_BACK))) {
           return fail(`date is more than ${LOG_SESSION_MAX_DAYS_BACK} days back`);
         }
-        // Without a time: noon on the day, as an auto-completed day, or now if
-        // that is still to come today.
+        // Without a time: noon on the day in the user's zone, as an
+        // auto-completed day, or now if that is still to come today.
         const start = args.startTime
           ? new Date(args.startTime)
-          : new Date(Math.min(new Date(`${args.date}T12:00:00`).getTime(), Date.now()));
+          : new Date(Math.min(instantInZone(args.date, 12, 0, timeZone).getTime(), Date.now()));
         if (start.getTime() > Date.now()) return fail("startTime is in the future");
+        if (localDateStr(start, timeZone) !== args.date) {
+          return fail(`startTime is on ${localDateStr(start, timeZone)} in the user's time zone, not on date ${args.date}`);
+        }
 
         if (args.programId != null) {
           const [prog] = await db
@@ -101,22 +142,6 @@ export function registerSessionTools(server: McpServer, userId: string) {
             .from(programs)
             .where(and(eq(programs.id, args.programId), eq(programs.userId, userId), livePrograms));
           if (!prog) return fail("Program not found");
-          const [dup] = await db
-            .select({ id: workoutSessions.id })
-            .from(workoutSessions)
-            .where(
-              and(
-                eq(workoutSessions.userId, userId),
-                eq(workoutSessions.programId, args.programId),
-                eq(workoutSessions.date, args.date),
-                eq(workoutSessions.isCompleted, true),
-                ne(workoutSessions.source, "auto"),
-              ),
-            )
-            .limit(1);
-          if (dup) {
-            return fail(`The user already logged this program on ${args.date} (session ${dup.id}). Read recent_workouts.`);
-          }
         }
 
         const exerciseIds = [...new Set(args.sets.map((s) => s.exerciseId))];
@@ -126,7 +151,13 @@ export function registerSessionTools(server: McpServer, userId: string) {
           .where(and(inArray(exercises.id, exerciseIds), or(isNull(exercises.userId), eq(exercises.userId, userId))));
         if (visible.length !== exerciseIds.length) return fail("Exercise not found");
 
+        const programId = args.programId ?? null;
         const session = await db.transaction(async (tx) => {
+          // One log per user and day at a time, so a retried call cannot
+          // write the same session twice.
+          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`log_session:${userId}:${args.date}`}))`);
+          const dup = await findDuplicate(tx, userId, args.date, programId, exerciseIds);
+          if (dup) return new DuplicateSession(dup);
           const [row] = await tx
             .insert(workoutSessions)
             .values({
@@ -181,6 +212,7 @@ export function registerSessionTools(server: McpServer, userId: string) {
           return row;
         });
 
+        if (session instanceof DuplicateSession) return fail(session.message);
         audit("log_session", { userId, sessionId: session.id });
         return ok({ logged: true, sessionId: session.id, date: session.date, sets: args.sets.length });
       } catch (e) {

@@ -172,7 +172,7 @@ export default function PrivacyPage() {
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
         on, programs, cycles, coach memory and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
-        notes you write on workouts and sets. If Garmin is on for your account, they can also read data from it. With read and change
+        notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
         access they can also change your profile, body weight, time zone, display units, programs and cycles, see and restore earlier
         versions of your programs and cycles, write coach memory, create custom exercises, and log a workout you did or mark a planned day
         as done. History shows such a workout as logged by your assistant. That provider&apos;s own privacy

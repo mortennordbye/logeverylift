@@ -1019,6 +1019,25 @@ async function restoreCycleTo(
   return skipped;
 }
 
+/** Live coach memory entries a user may keep (docs/plans/ai-coach.md, 2.1). */
+export const COACH_MEMORY_MAX = 200;
+
+/**
+ * Refuse a new live memory entry past the cap. Takes a per-user lock for the
+ * rest of the transaction, so two adds (or an add and a restore) that race
+ * cannot both pass the count.
+ */
+export async function assertMemoryRoom(tx: Tx, userId: string) {
+  await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`coach_memory:${userId}`}))`);
+  const [{ n }] = await tx
+    .select({ n: sql<number>`count(*)::int` })
+    .from(coachMemory)
+    .where(and(eq(coachMemory.userId, userId), isNull(coachMemory.deletedAt)));
+  if (n >= COACH_MEMORY_MAX) {
+    throw new PlanStateError(`Coach memory is full (${COACH_MEMORY_MAX} entries). Delete or merge old entries first.`);
+  }
+}
+
 /** Restore a coach memory entry: its fields come back, and a deleted one is live again. */
 async function restoreMemoryTo(
   w: PlanWriteSession,
@@ -1027,6 +1046,9 @@ async function restoreMemoryTo(
   targetRevisionId: number,
 ): Promise<string[]> {
   await w.touch({ type: "memory", id: memoryId }, { allowDeleted: true, action: "restore", restoredFromId: targetRevisionId });
+  const [row] = await w.tx.select({ deletedAt: coachMemory.deletedAt }).from(coachMemory).where(eq(coachMemory.id, memoryId));
+  // Bringing a deleted entry back adds one live entry: the cap applies.
+  if (row?.deletedAt) await assertMemoryRoom(w.tx, w.ctx.userId);
   const values: Record<string, unknown> = { ...targetSnap.memory };
   for (const k of MEMORY_KEPT) delete values[k];
   await w.tx

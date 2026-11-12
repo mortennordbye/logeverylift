@@ -385,17 +385,24 @@ One migration (`drizzle/0083_*.sql` if A4 lands as `0082` and nothing else first
   Existing rows satisfy both, since they satisfy the global one.
 - No `CREATE TYPE` (text enums). No data step.
 
-**Rollback.** Data lost: coach memory entries and their revisions, and the stored limit checks.
-Logged sessions with `source` `assistant` stay; the old code reads them as normal sessions.
-1. Deploy the previous image. It ignores the new table and column.
-2. If custom exercises with the same name for two users exist, rename all but one (list them with
+**Rollback.** Data lost: coach memory entries and their revisions, the stored limit checks, and
+scheduled starts (a scheduled draft stays a draft and no longer starts by itself). Logged
+sessions with `source` `assistant` stay; the old code reads them as normal sessions.
+1. Before the old image runs, delete the memory revisions. This step is required: the old
+   image's history and assistant feed (`listAssistantChangeSets`, `diffSnapshots`) read every
+   revision and fail on a memory snapshot.
+   ```sql
+   DELETE FROM plan_revisions WHERE object_type = 'memory';
+   ```
+2. Deploy the previous image. It ignores the new table and columns.
+3. If custom exercises with the same name for two users exist, rename all but one (list them with
    `SELECT name FROM exercises GROUP BY name HAVING count(*) > 1`) before restoring the old
    constraint.
-3. Then, optionally:
+4. Then, optionally:
    ```sql
    DROP TABLE coach_memory;
-   DELETE FROM plan_revisions WHERE object_type = 'memory';
    ALTER TABLE plan_revisions DROP COLUMN limit_check;
+   ALTER TABLE training_cycles DROP COLUMN scheduled_start_date;
    DROP INDEX IF EXISTS uniq_exercise_system_name;
    DROP INDEX IF EXISTS uniq_exercise_custom_name;
    ALTER TABLE exercises ADD CONSTRAINT exercises_name_unique UNIQUE (name);
@@ -601,4 +608,11 @@ The owner took every recommendation. The defaults in section 10 are accepted too
 - **No component test for the new screens.** The coach memory screen is covered by
   `e2e/coach-memory.spec.ts`; the "Starts <date>" label and the override line are plain text in
   existing lists.
+- **Review fixes (2026-11-12).** The limits also count the week of a draft scheduled to start
+  (it starts later as the app, unchecked), and check an update to the active cycle's length,
+  goal or level against this week as it will run. Any activation drops other scheduled starts;
+  only a draft can be scheduled. `log_session` refuses a duplicate under a per-day lock (same
+  program, or with no program the same exercises), reads times in the user's zone, and refuses
+  `rir` with `rpe`. A deleted memory entry can be restored in the app (Recently deleted on the
+  coach memory screen) and with `list_revisions`/`restore_revision`, within the 200 cap.
 

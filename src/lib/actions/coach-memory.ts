@@ -7,7 +7,15 @@
  */
 
 import { COACH_MEMORY_KINDS } from "@/db/schema";
-import { COACH_MEMORY_TEXT_MAX, addCoachMemory, changeCoachMemory, listCoachMemory, type CoachMemoryEntry } from "@/lib/coach-memory";
+import {
+  COACH_MEMORY_TEXT_MAX,
+  addCoachMemory,
+  changeCoachMemory,
+  listCoachMemory,
+  listDeletedCoachMemory,
+  restoreDeletedCoachMemory,
+  type CoachMemoryEntry,
+} from "@/lib/coach-memory";
 import { PlanNotFoundError, PlanStateError } from "@/lib/plan-revisions";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
@@ -32,10 +40,13 @@ function known(e: unknown, action: string): ActionResult<never> {
   return { success: false, error: "Could not save coach memory" };
 }
 
-export async function getCoachMemory(): Promise<ActionResult<CoachMemoryEntry[]>> {
+export async function getCoachMemory(): Promise<
+  ActionResult<{ entries: CoachMemoryEntry[]; deleted: Awaited<ReturnType<typeof listDeletedCoachMemory>> }>
+> {
   const auth = await requireSession();
   try {
-    return { success: true, data: await listCoachMemory(auth.user.id, true) };
+    const [entries, deleted] = await Promise.all([listCoachMemory(auth.user.id, true), listDeletedCoachMemory(auth.user.id)]);
+    return { success: true, data: { entries, deleted } };
   } catch (e) {
     console.error("[getCoachMemory] failed", e);
     return { success: false, error: "Could not load coach memory" };
@@ -81,3 +92,19 @@ export async function deleteCoachMemoryEntry(data: unknown): Promise<ActionResul
     return known(e, "deleteCoachMemoryEntry");
   }
 }
+
+/** Bring back an entry the user deleted (for 90 days, within the 200-entry cap). */
+export async function restoreCoachMemoryEntry(data: unknown): Promise<ActionResult<undefined>> {
+  const auth = await requireSession();
+  const parsed = deleteSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Invalid input" };
+  try {
+    const done = await restoreDeletedCoachMemory({ userId: auth.user.id, writer: "user" }, parsed.data.id);
+    if (!done) return { success: false, error: "That entry is not deleted, or it can no longer be restored" };
+    revalidatePath("/more/coach-memory");
+    return { success: true, data: undefined };
+  } catch (e) {
+    return known(e, "restoreCoachMemoryEntry");
+  }
+}
+

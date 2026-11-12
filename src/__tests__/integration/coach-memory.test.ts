@@ -4,6 +4,7 @@ import {
   addCoachMemoryEntry,
   deleteCoachMemoryEntry,
   getCoachMemory,
+  restoreCoachMemoryEntry,
   updateCoachMemoryEntry,
 } from "@/lib/actions/coach-memory";
 import { COACH_MEMORY_MAX } from "@/lib/coach-memory";
@@ -123,7 +124,7 @@ describe("in the app", () => {
     expect((await updateCoachMemoryEntry({ id, text: "Hotel gym or bands on trips", active: false })).success).toBe(true);
     expect(await rowOf(id)).toMatchObject({ text: "Hotel gym or bands on trips", active: false });
     const list = await getCoachMemory();
-    expect(list.success && list.data.map((e) => [e.id, e.lastWriter])).toEqual([[id, "user"]]);
+    expect(list.success && list.data.entries.map((e) => [e.id, e.lastWriter])).toEqual([[id, "user"]]);
     expect((await deleteCoachMemoryEntry({ id })).success).toBe(true);
     expect((await revisionsOf(id)).map((r) => r.writer)).toEqual(["user", "user", "user"]);
   });
@@ -152,3 +153,60 @@ describe("retention", () => {
     expect(await revisionsOf(id)).toEqual([]);
   });
 });
+
+describe("review fixes", () => {
+  it("lists a memory entry's revisions over MCP", async () => {
+    const { id } = (await mcpTools(registerCoachMemoryTools, me)("manage_coach_memory", { operation: "add", kind: "preference", text: "Swims at 7", reason: "x" })).data;
+    const list = await mcpTools(registerProgramTools, me)("list_revisions", { objectType: "memory", objectId: id });
+    expect(list.isError, list.raw).toBe(false);
+    expect(list.data.map((r: { action: string }) => r.action)).toEqual(["create"]);
+  });
+
+  it("restores a deleted entry in the app, and shows it under recently deleted until then", async () => {
+    asUser(me);
+    const added = await addCoachMemoryEntry({ kind: "observation", text: "Knee sore after 90 min runs" });
+    const id = added.success ? added.data.id : 0;
+    await deleteCoachMemoryEntry({ id });
+    const listed = await getCoachMemory();
+    expect(listed.success && listed.data.deleted.map((e) => e.id)).toEqual([id]);
+
+    expect((await restoreCoachMemoryEntry({ id })).success).toBe(true);
+    expect(await rowOf(id)).toMatchObject({ deletedAt: null, text: "Knee sore after 90 min runs" });
+    expect((await restoreCoachMemoryEntry({ id })).success).toBe(false);
+  });
+
+  it("refuses to restore past the cap", async () => {
+    asUser(me);
+    const added = await addCoachMemoryEntry({ kind: "preference", text: "Gone" });
+    const id = added.success ? added.data.id : 0;
+    await deleteCoachMemoryEntry({ id });
+    await db.insert(coachMemory).values(
+      Array.from({ length: COACH_MEMORY_MAX }, (_, i) => ({ userId: me, kind: "observation" as const, text: `Note ${i}`, entryDate: "2026-11-01" })),
+    );
+    const result = await restoreCoachMemoryEntry({ id });
+    expect(result).toMatchObject({ success: false, error: expect.stringContaining("full") });
+    expect((await rowOf(id)).deletedAt).not.toBeNull();
+  });
+
+  it("keeps the cap when two adds race", async () => {
+    await db.insert(coachMemory).values(
+      Array.from({ length: COACH_MEMORY_MAX - 1 }, (_, i) => ({ userId: me, kind: "observation" as const, text: `Note ${i}`, entryDate: "2026-11-01" })),
+    );
+    const call = mcpTools(registerCoachMemoryTools, me);
+    const results = await Promise.all([
+      call("manage_coach_memory", { operation: "add", kind: "decision", text: "A", reason: "x" }),
+      call("manage_coach_memory", { operation: "add", kind: "decision", text: "B", reason: "x" }),
+    ]);
+    expect(results.filter((r) => !r.isError)).toHaveLength(1);
+    expect(await db.select().from(coachMemory).where(eq(coachMemory.userId, me))).toHaveLength(COACH_MEMORY_MAX);
+  });
+
+  it("does nothing for an update with nothing in it", async () => {
+    const call = mcpTools(registerCoachMemoryTools, me);
+    const { id } = (await call("manage_coach_memory", { operation: "add", kind: "preference", text: "Same", reason: "x" })).data;
+    const result = await call("manage_coach_memory", { operation: "update", id, reason: "Nothing", expectedVersion: 1 });
+    expect(result.data.version).toBe(1);
+    expect(await revisionsOf(id)).toHaveLength(1);
+  });
+});
+

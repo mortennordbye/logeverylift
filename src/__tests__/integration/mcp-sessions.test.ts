@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { exercisePrs, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
+import { exercisePrs, trainingCycleSlots, trainingCycles, users, workoutSessions, workoutSets } from "@/db/schema";
+import { localDateStr } from "@/lib/utils/user-date";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { and, eq, isNull } from "drizzle-orm";
@@ -76,7 +77,7 @@ describe("log_session", () => {
 
     const second = await call("log_session", { date, programId: program.id, sets: [{ exerciseId: squat, setNumber: 1, reps: 5, weightKg: 80 }] });
     expect(second.isError).toBe(true);
-    expect(second.raw).toContain("already logged this program");
+    expect(second.raw).toContain("already logged this on that day");
     expect(await sessionsOf(me)).toHaveLength(1);
   });
 
@@ -138,3 +139,55 @@ describe("confirm_session", () => {
     expect(await sessionsOf(me)).toEqual([]);
   });
 });
+
+describe("log_session, review fixes", () => {
+  const set = () => ({ exerciseId: squat, setNumber: 1, reps: 5, weightKg: 80 });
+
+  it("refuses a second log of the same exercises on the same day without a program", async () => {
+    const call = mcpTools(registerSessionTools, me);
+    expect((await call("log_session", { date: day(-1), sets: [set()] })).isError).toBe(false);
+    const again = await call("log_session", { date: day(-1), sets: [set()] });
+    expect(again.isError).toBe(true);
+    expect(again.raw).toContain("already logged");
+    expect(await sessionsOf(me)).toHaveLength(1);
+  });
+
+  it("writes one session when the same log races", async () => {
+    const { program } = await createProgram(me, [{ exerciseId: squat, sets: [{}] }]);
+    const call = mcpTools(registerSessionTools, me);
+    const args = { date: day(-1), programId: program.id, sets: [set()] };
+    const results = await Promise.all([call("log_session", args), call("log_session", args), call("log_session", args)]);
+    expect(results.filter((r) => !r.isError)).toHaveLength(1);
+    expect(await sessionsOf(me)).toHaveLength(1);
+  });
+
+  it("refuses a startTime on another day than date", async () => {
+    const result = await mcpTools(registerSessionTools, me)("log_session", {
+      date: day(-2),
+      startTime: `${day(-1)}T09:00:00Z`,
+      sets: [set()],
+    });
+    expect(result.isError).toBe(true);
+    expect(result.raw).toContain("startTime");
+    expect(await sessionsOf(me)).toEqual([]);
+  });
+
+  it("dates a session without a time at noon in the user's time zone", async () => {
+    const zone = "Pacific/Kiritimati"; // UTC+14: far from the server's clock
+    await db.update(users).set({ timeZone: zone }).where(eq(users.id, me));
+    const date = localDateStr(new Date(Date.now() - 2 * 86_400_000), zone);
+    const result = await mcpTools(registerSessionTools, me)("log_session", { date, sets: [set()] });
+    expect(result.isError, result.raw).toBe(false);
+    const [session] = await sessionsOf(me);
+    expect(localDateStr(session.startTime, zone)).toBe(date);
+    expect(new Intl.DateTimeFormat("en-GB", { timeZone: zone, hour: "2-digit", hourCycle: "h23" }).format(session.startTime)).toBe("12");
+  });
+
+  it("refuses rir and rpe on the same set", async () => {
+    const result = await mcpTools(registerSessionTools, me)("log_session", { date: day(-1), sets: [{ ...set(), rir: 2, rpe: 9 }] });
+    expect(result.isError).toBe(true);
+    expect(result.raw).toContain("rir or rpe");
+    expect(await sessionsOf(me)).toEqual([]);
+  });
+});
+

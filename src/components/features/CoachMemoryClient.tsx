@@ -1,7 +1,7 @@
 "use client";
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
-import { addCoachMemoryEntry, deleteCoachMemoryEntry, updateCoachMemoryEntry } from "@/lib/actions/coach-memory";
+import { addCoachMemoryEntry, deleteCoachMemoryEntry, restoreCoachMemoryEntry, updateCoachMemoryEntry } from "@/lib/actions/coach-memory";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -30,14 +30,27 @@ type Draft = { id: number | null; kind: Kind; text: string; active: boolean };
  * The coach memory screen: entries by kind, add and edit in a sheet, switch
  * an entry off, delete at the bottom of the sheet with a confirm.
  */
-export function CoachMemoryClient({ entries }: { entries: MemoryRow[] }) {
+export type DeletedMemoryRow = { id: number; text: string; deletedOn: string };
+
+export function CoachMemoryClient({ entries, deleted }: { entries: MemoryRow[]; deleted: DeletedMemoryRow[] }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Draft | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [restoreError, setRestoreError] = useState<string | null>(null);
   const active = entries.filter((e) => e.active);
+
+  async function restore(id: number) {
+    setRestoreError(null);
+    const result = await callAction(restoreCoachMemoryEntry({ id }));
+    if (!result.success) {
+      setRestoreError(result.error);
+      return;
+    }
+    router.refresh();
+  }
   const inactive = entries.filter((e) => !e.active);
 
   function open(d: Draft) {
@@ -116,6 +129,29 @@ export function CoachMemoryClient({ entries }: { entries: MemoryRow[] }) {
             Not in use ({inactive.length})
           </summary>
           <div className="space-y-2 pt-2">{inactive.map(row)}</div>
+        </details>
+      )}
+
+      {deleted.length > 0 && (
+        <details className="space-y-2">
+          <summary className="min-h-[44px] flex items-center text-sm font-medium text-muted-foreground">
+            Recently deleted ({deleted.length})
+          </summary>
+          <p className="text-xs text-muted-foreground">Deleted entries can be restored for 90 days.</p>
+          {restoreError && <p className="text-sm text-destructive">{restoreError}</p>}
+          <div className="space-y-2 pt-2">
+            {deleted.map((d) => (
+              <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl bg-card px-4 py-2" data-testid="memory-deleted">
+                <div className="min-w-0">
+                  <p className="text-sm truncate">{d.text}</p>
+                  <p className="text-xs text-muted-foreground">Deleted {d.deletedOn}</p>
+                </div>
+                <button onClick={() => restore(d.id)} className="shrink-0 min-h-[44px] px-3 text-sm font-medium text-primary active:opacity-60">
+                  Restore
+                </button>
+              </div>
+            ))}
+          </div>
         </details>
       )}
 

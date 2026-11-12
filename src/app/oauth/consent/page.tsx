@@ -48,7 +48,7 @@ export default async function OAuthConsentPage({
               <p className="mt-2 text-sm text-muted-foreground">
                 It will be able to read your profile and body weight, your programs and training cycles with
                 their change history, your coach memory, and your workout history: sets, weights, heart rate zones, effort, how you
-                felt, your readiness, and the notes you write on workouts and sets.
+                felt, your readiness, and the notes you write on workouts, sets and exercises.
                 {garmin && " It can also read data from your Garmin account: readiness, sleep, heart rate, training load and activities."}
               </p>
               <p className="mt-2 text-sm text-muted-foreground">

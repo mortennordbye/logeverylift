@@ -30,7 +30,7 @@ import {
 } from "@/lib/training-limits";
 import { diffSnapshots, type PlanSnapshot } from "@/lib/utils/plan-revisions";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { and, asc, eq, gt, lt, ne, desc, max } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, ne, desc, max } from "drizzle-orm";
 import { z } from "zod";
 
 export const reasonArg = z
@@ -114,12 +114,12 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "list_revisions",
     {
       description: [
-        "List the change history of one program or training cycle (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
+        "List the change history of one program, training cycle or coach memory entry (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
         "Without objectType, list your own (assistant) change sets instead: each groups the writes of one review.",
         "Use the revision id or the change-set id with restore_revision.",
       ].join(" "),
       inputSchema: {
-        objectType: z.enum(["program", "cycle"]).optional(),
+        objectType: z.enum(["program", "cycle", "memory"]).optional(),
         objectId: z.number().int().positive().optional(),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -191,7 +191,17 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
           await db
             .update(planRevisions)
             .set({ limitCheck: check })
-            .where(and(eq(planRevisions.userId, userId), gt(planRevisions.id, last ?? 0), eq(planRevisions.writer, "assistant")));
+            .where(
+              and(
+                eq(planRevisions.userId, userId),
+                gt(planRevisions.id, last ?? 0),
+                // Only this restore's rows: a restore by this client, not
+                // another assistant's write that landed meanwhile.
+                eq(planRevisions.writer, "assistant"),
+                eq(planRevisions.action, "restore"),
+                clientId ? eq(planRevisions.clientId, clientId) : isNull(planRevisions.clientId),
+              ),
+            );
           return ok({ restored: true, ...done, limits: limitSummary(check) });
         }
         if (changeSetId) {
