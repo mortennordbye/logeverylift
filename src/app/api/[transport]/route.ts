@@ -12,20 +12,48 @@
  * client can never act on another user's data. Unauthenticated calls get a 401
  * whose WWW-Authenticate header starts the OAuth flow (see the .well-known
  * discovery routes).
+ *
+ * Access (docs/plans/mcp-access.md): the token's scopes narrowed by the user's
+ * live consent for the client (src/lib/mcp/access.ts). No consent means the
+ * user disconnected the assistant, so the request gets a 401 and the client
+ * starts over; no mcp scope gets a 403 insufficient_scope. Read-only access
+ * registers the tools through scopedServer, which makes write tools refuse.
  */
 
 import { MCP_RESOURCE, auth } from "@/lib/auth";
+import { connectionAccess } from "@/lib/mcp/access";
+import { serverInstructions } from "@/lib/mcp/instructions";
 import { checkRateLimit } from "@/lib/mcp/rate-limit";
+import { loadResourceDocs, registerResources } from "@/lib/mcp/resources";
+import { MCP_SCOPES, scopedServer } from "@/lib/mcp/scopes";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { requireMcpAuth } from "@better-auth/mcp";
+import { createResourceServerChallenge } from "@better-auth/oauth-provider";
+import { APIError } from "better-auth/api";
+import { createInsufficientScopeError } from "better-auth/oauth2";
 import { createMcpHandler } from "mcp-handler";
 import { garminAllowedFor } from "@/lib/garmin/access";
 
-async function serve(req: Request, claims: { sub?: string }) {
+/** The 401 an unauthenticated request gets, so the client runs OAuth again. */
+function revokedResponse(): Response {
+  const challenge = createResourceServerChallenge(
+    new APIError("UNAUTHORIZED", { message: "This connection was disconnected. Connect again." }),
+    MCP_RESOURCE,
+    { challengeScopes: MCP_SCOPES },
+  )!;
+  const headers = new Headers(challenge.headers);
+  headers.set("content-type", "application/json");
+  return new Response(
+    JSON.stringify({ jsonrpc: "2.0", error: { code: -32000, message: challenge.message }, id: null }),
+    { status: challenge.statusCode, headers },
+  );
+}
+
+async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?: unknown }) {
   // requireMcpAuth only invokes us with a verified token, but never register
   // user-scoped tools without a concrete userId — a falsy id must fail closed,
   // not fall through to queries scoped to `undefined`.
@@ -54,21 +82,35 @@ async function serve(req: Request, claims: { sub?: string }) {
     );
   }
 
+  const connection = await connectionAccess(
+    userId,
+    typeof claims.azp === "string" ? claims.azp : undefined,
+    typeof claims.scope === "string" ? claims.scope : undefined,
+  );
+  if (connection.kind === "revoked") return revokedResponse();
+  if (connection.kind === "no_scope") {
+    // requireMcpAuth turns this into a 403 naming the scopes, so the client can step up.
+    throw createInsufficientScopeError(MCP_SCOPES, "This connection has no LogEveryLift access. Connect again.");
+  }
+  const { access } = connection;
+
   // Garmin tools only for accounts allowed to use Garmin (src/lib/garmin/access.ts).
-  const garmin = await garminAllowedFor(userId);
+  const [garmin, docs] = await Promise.all([garminAllowedFor(userId), loadResourceDocs()]);
   return createMcpHandler(
-    (server) => {
+    (mcpServer) => {
+      const server = scopedServer(mcpServer, access);
       registerProfileTools(server, userId);
       registerProgramTools(server, userId);
       registerCycleTools(server, userId);
       registerWorkoutTools(server, userId);
       if (garmin) registerGarminTools(server, userId);
+      registerResources(mcpServer, docs);
     },
-    {},
+    { instructions: serverInstructions(access) },
     { basePath: "/api" },
   )(req);
 }
 
-const handler = requireMcpAuth(auth, serve, { resource: MCP_RESOURCE });
+const handler = requireMcpAuth(auth, serve, { resource: MCP_RESOURCE, challengeScopes: MCP_SCOPES });
 
 export { handler as DELETE, handler as GET, handler as POST };
