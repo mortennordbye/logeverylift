@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { BodySignals, SIGNAL_GROUPS } from "@/components/features/garmin/BodySignals";
+import { BodyOverview } from "@/components/features/garmin/BodySignals";
 import type { BodySignal } from "@/lib/garmin/analytics/overview";
 import type { BodyKey, OverviewData } from "@/lib/garmin/queries";
 import { fireEvent, render, screen, within } from "@testing-library/react";
@@ -51,47 +51,50 @@ function data(over: Partial<OverviewData["rating"]> = {}): OverviewData {
       sleepRanges: { deep: [16, 33], rem: [21, 31], awakeMax: 1 },
       ...over,
     },
+    night: { date: "2026-11-12", deepS: 5100, lightS: 18600, remS: 6300, awakeS: 900, optimal: { deep: [16, 33], light: [30, 64], rem: [21, 31] } },
+    stepsWeek: ["05", "06", "07", "08", "09", "10", "11"].map((d, i) => ({ date: `2026-11-${d}`, steps: i === 1 ? null : 7000 + i * 1000 })),
+    stepGoal: 10000,
   } as OverviewData;
 }
 
-describe("BodySignals", () => {
-  it("rates each tile and opens a sheet with the scale and the next band", () => {
-    render(<BodySignals data={data()} {...SIGNAL_GROUPS[0]} />);
-    const vo2 = screen.getByRole("button", { name: /VO2 max/ });
-    expect(within(vo2).getByText("Good")).toBeTruthy();
-    expect(within(screen.getByRole("button", { name: /^HRV/ })).getByText("Balanced")).toBeTruthy();
+describe("BodyOverview", () => {
+  it("draws ratings you build as gauges and opens the sheet with the bands", () => {
+    render(<BodyOverview data={data()} />);
+    const vo2 = screen.getByRole("button", { name: /^VO2 max 51/ });
+    expect(within(vo2).getByRole("img", { name: "51.0, Good" })).toBeTruthy();
 
     fireEvent.click(vo2);
     const sheet = screen.getByRole("dialog");
     expect(within(sheet).getByText("Good for men aged 20–29: better than 60 to 80 % of them.")).toBeTruthy();
     expect(within(sheet).getByText(/is 0\.1 higher/)).toBeTruthy();
+    expect(within(sheet).getByText("45.4–51.1")).toBeTruthy();
     expect(within(sheet).getByRole("link", { name: /Open Trends/ }).getAttribute("href")).toBe("/more/garmin?tab=trends");
   });
 
+  it("shows trend signals as tiles with a chip, and last night's stages in one card", () => {
+    render(<BodyOverview data={data()} />);
+    expect(within(screen.getByRole("button", { name: /^HRV 75/ })).getByText("Balanced")).toBeTruthy();
+    const night = screen.getByRole("region", { name: "Last night" });
+    expect(within(night).getByRole("img", { name: /Deep 17 %, light 62 %, REM 21 %, awake 15 min/ })).toBeTruthy();
+    expect(within(night).getByRole("button", { name: "Awake periods 2" })).toBeTruthy();
+
+    fireEvent.click(within(night).getByRole("button", { name: "Deep sleep 17 %" }));
+    expect(within(screen.getByRole("dialog")).getByText(/Garmin's range for your night is 16 to 33 %/)).toBeTruthy();
+  });
+
+  it("shows a week of steps against the goal, and body measures as rows", () => {
+    render(<BodyOverview data={data()} />);
+    const steps = screen.getByRole("button", { name: /^Steps 8,200/ });
+    expect(within(steps).getByText("goal 10,000")).toBeTruthy();
+    expect(within(steps).getByText("Somewhat active")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Muscle mass 37\.4/ })).toBeTruthy();
+  });
+
   it("points to Account when a rating needs the user's gender", () => {
-    render(<BodySignals data={data({ sex: null })} {...SIGNAL_GROUPS[0]} />);
-    const vo2 = screen.getByRole("button", { name: /VO2 max/ });
+    render(<BodyOverview data={data({ sex: null })} />);
+    const vo2 = screen.getByRole("button", { name: /^VO2 max/ });
     expect(within(vo2).getByText("Tap to compare")).toBeTruthy();
     fireEvent.click(vo2);
     expect(within(screen.getByRole("dialog")).getByRole("link", { name: /Add your gender in Account/ }).getAttribute("href")).toBe("/more/account");
-  });
-});
-
-describe("BodySignals: sleep quality and day to day", () => {
-  it("rates against Garmin's ranges, and leaves tiles with no scale to your own normal", () => {
-    render(<BodySignals data={data()} {...SIGNAL_GROUPS[1]} />);
-    expect(within(screen.getByRole("button", { name: /^Deep sleep/ })).getByText("Optimal")).toBeTruthy();
-    expect(within(screen.getByRole("button", { name: /^Awake periods/ })).getByText("More than optimal")).toBeTruthy();
-    expect(within(screen.getByRole("button", { name: /^Sleep stress/ })).getByText("Rest")).toBeTruthy();
-    expect(within(screen.getByRole("button", { name: /^Sleeping HR/ })).getByText("Learning your normal")).toBeTruthy();
-  });
-
-  it("shows steps as a 7-day average on the step categories", () => {
-    render(<BodySignals data={data()} {...SIGNAL_GROUPS[2]} />);
-    const steps = screen.getByRole("button", { name: /^Steps/ });
-    expect(within(steps).getByText("7-day average")).toBeTruthy();
-    expect(within(steps).getByText("Somewhat active")).toBeTruthy();
-    fireEvent.click(steps);
-    expect(within(screen.getByRole("dialog")).getByText((_, el) => el?.tagName === "P" && el.textContent === "Active is 1800 steps a day higher.")).toBeTruthy();
   });
 });

@@ -1,18 +1,25 @@
 "use client";
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
-import type { BodySignal } from "@/lib/garmin/analytics/overview";
+import { changeOver, stageShares, type BodySignal } from "@/lib/garmin/analytics/overview";
 import { isGap, rateSignal, type Rating, type RatingGap, type Tone } from "@/lib/garmin/analytics/norms";
 import type { BodyKey, OverviewData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
 import { Activity, Armchair, BatteryMedium, BedDouble, BedSingle, BicepsFlexed, Brain, ChevronRight, Droplet, Eye, Footprints, Gauge, Heart, HeartPulse, Hourglass, Moon, MoonStar, Scale, Sunrise, Wind, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { EChart } from "@/components/charts/EChart";
+import { useVizTheme } from "@/components/charts/viz-theme";
+import { Readout } from "@/components/features/garmin/GarminUi";
+import { signalDays, signalOption } from "@/lib/garmin/charts/body";
+import { useMemo, useState } from "react";
 
 /**
- * The Overview's body grid: each signal rated on a published scale, the way
- * Garmin rates VO2 max, and a sheet with the scale, the trend against your own
- * normal, and what the signal means.
+ * The Overview's body signals, each in the view that suits it: arc gauges
+ * (like Garmin's VO2 max) for ratings you build over weeks, with where you
+ * were 4 weeks ago marked; trend tiles for signals that only mean something
+ * against your own normal; one card for last night's sleep; a week of steps
+ * against the goal; and rows with the 30-day change for slow body measures.
+ * Every view opens a sheet with the scale, the 90-day trend and what it means.
  */
 
 const tab = (t: string) => `/more/garmin?tab=${t}`;
@@ -213,13 +220,6 @@ const BODY: Record<BodyKey, BodyConfig> = {
   },
 };
 
-/** The Overview's three groups of tiles. */
-export const SIGNAL_GROUPS: { title: string; keys: BodyKey[] }[] = [
-  { title: "Body · how you compare", keys: ["sleep", "sleepScore", "hrv", "restingHr", "respiration", "bodyBattery", "vo2max", "fitnessAge", "weight"] },
-  { title: "Sleep quality · last night", keys: ["deepSleep", "remSleep", "sleepStress", "awakeCount", "spo2", "sleepHr"] },
-  { title: "Day to day", keys: ["steps", "stress", "sedentary", "muscleMass"] },
-];
-
 const TONE_COLOR: Record<Tone, string> = {
   poor: "var(--viz-critical)",
   fair: "var(--viz-serious)",
@@ -234,7 +234,8 @@ const NEEDS_TEXT: Record<RatingGap["needs"], string> = {
   age: "Add your year of birth in Account to compare with people your age.",
 };
 
-/** The small line under a tile's name. */
+
+/** The small line under a signal's name. */
 function tileSub(k: BodyKey, data: OverviewData): string | undefined {
   if (k === "vo2max") return `Garmin, ${data.vo2Sport === "run" ? "running" : "cycling"}`;
   if (k === "hrv") return data.rating.hrvBaseline ? `last night · 7 d ${data.rating.hrvBaseline.weeklyAvg}` : "last night";
@@ -248,6 +249,11 @@ function ratingOf(k: BodyKey, s: BodySignal, data: OverviewData): Rating | Ratin
   return s.value === null ? null : rateSignal(k, s.value, data.rating);
 }
 
+const rated = (r: Rating | RatingGap | null): Rating | null => (r && !isGap(r) ? r : null);
+const bandOf = (r: Rating | null) => (r ? r.bands[r.index] : null);
+/** Where a value sits along its scale, 0 to 1 (bands drawn equal width, like Garmin's). */
+const position = (r: Rating) => (r.index + r.within) / r.bands.length;
+
 function normalText(s: BodySignal): string {
   if (s.value === null) return "No recent value.";
   if (!s.normal) return "Still learning your normal: it needs 10 days in the 4 weeks before.";
@@ -255,171 +261,488 @@ function normalText(s: BodySignal): string {
   return `${s.state === "below" ? "Below" : "Above"} your normal.`;
 }
 
-/** Garmin-style scale: equal-width bands in their tone, a marker at the value. */
-function RatingBar({ r, large = false }: { r: Rating; large?: boolean }) {
-  const n = r.bands.length;
-  const pos = ((r.index + r.within) / n) * 100;
-  return (
-    <div>
-      <div className="relative">
-        <div className={`flex gap-0.5 ${large ? "h-2.5" : "h-1.5"}`}>
-          {r.bands.map((b, i) => (
-            <span key={i} className="flex-1 first:rounded-l-full last:rounded-r-full" style={{ background: TONE_COLOR[b.tone], opacity: i === r.index ? 1 : 0.4 }} />
-          ))}
-        </div>
-        <span
-          className={`absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-background bg-foreground ${large ? "h-4 w-4" : "h-2.5 w-2.5"}`}
-          style={{ left: `clamp(${large ? 8 : 5}px, ${pos}%, calc(100% - ${large ? 8 : 5}px))` }}
-        />
-      </div>
-      {large && (
-        <>
-          <div className="mt-1.5 flex text-[10px] leading-tight text-muted-foreground">
-            {r.bands.map((b, i) => (
-              <span key={i} className={`flex-1 text-center ${i === r.index ? "font-semibold text-foreground" : ""}`}>
-                {b.label}
-              </span>
-            ))}
-          </div>
-          <div className="relative mt-0.5 h-3 text-[10px] tabular-nums text-muted-foreground">
-            {r.bands.slice(1).map((b, i) => (
-              <span key={i} className="absolute -translate-x-1/2" style={{ left: `${((i + 1) / n) * 100}%` }}>
-                {cut(b.edge ?? b.from!)}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
-    </div>
-  );
+function shortNormal(s: BodySignal): string {
+  if (s.value === null) return "No recent value";
+  if (!s.normal) return "Learning your normal";
+  return s.state === "within" ? "In your normal" : `${s.state === "below" ? "Below" : "Above"} your normal`;
 }
 
 const cut = (v: number) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
 
-function BodyTile({ k, s, data, onOpen }: { k: BodyKey; s: BodySignal; data: OverviewData; onOpen: () => void }) {
+/** Nightly signals change too much night to night; their trend compares 7-day averages. */
+const NIGHTLY = new Set<BodyKey>(["sleepScore", "bodyBattery"]);
+const windowOf = (k: BodyKey) => (NIGHTLY.has(k) ? 7 : 1);
+
+/** "↑ 0.4 in 4 wk" (or "7-day avg ↑ 3 in 4 wk"), or null without a value that far back. */
+function changeText(k: BodyKey, s: BodySignal, days: number): string | null {
+  const c = changeOver(s, days, windowOf(k));
+  if (!c) return null;
+  const f = BODY[k].format;
+  const span = days === 28 ? "4 wk" : `${days} d`;
+  const avg = windowOf(k) > 1 ? "7-day avg " : "";
+  if (f(Math.abs(c.delta)) === f(0)) return `${avg}no change in ${span}`;
+  return `${avg}${c.delta > 0 ? "↑" : "↓"} ${f(Math.abs(c.delta))}${BODY[k].unit && BODY[k].unit !== "/day" ? ` ${BODY[k].unit}` : ""} in ${span}`;
+}
+
+function Chip({ r, s }: { r: Rating | null; s: BodySignal }) {
+  const b = bandOf(r);
+  if (b) {
+    return (
+      <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none" style={{ background: `color-mix(in srgb, ${TONE_COLOR[b.tone]} 20%, transparent)`, color: TONE_COLOR[b.tone] }}>
+        {b.label}
+      </span>
+    );
+  }
+  return <span className="text-[10px] text-muted-foreground">{shortNormal(s)}</span>;
+}
+
+function IconDot({ k, size = "sm" }: { k: BodyKey; size?: "sm" | "lg" }) {
   const c = BODY[k];
   const Icon = c.icon;
-  const sub = tileSub(k, data);
-  const r = ratingOf(k, s, data);
-  const rated = r && !isGap(r) ? r : null;
-  const band = rated?.bands[rated.index];
   return (
-    <button onClick={onOpen} aria-haspopup="dialog" className="rounded-xl bg-background p-2.5 active:opacity-70 flex flex-col gap-1.5 min-h-[112px] text-left">
+    <span aria-hidden className={`inline-flex flex-none items-center justify-center rounded-full ${size === "lg" ? "h-8 w-8" : "h-5 w-5"}`} style={{ background: `color-mix(in srgb, ${c.color} 20%, transparent)`, color: c.color }}>
+      <Icon className={size === "lg" ? "h-4 w-4" : "h-3 w-3"} strokeWidth={2.5} />
+    </span>
+  );
+}
+
+// ── Arc gauge ───────────────────────────────────────────────────────────────
+
+const ARC_START = 135;
+const ARC_SWEEP = 270;
+const polar = (r: number, deg: number) => {
+  const a = (deg * Math.PI) / 180;
+  return [100 + r * Math.cos(a), 100 + r * Math.sin(a)] as const;
+};
+function arc(r: number, a0: number, a1: number) {
+  const [x0, y0] = polar(r, a0);
+  const [x1, y1] = polar(r, a1);
+  return `M ${x0} ${y0} A ${r} ${r} 0 ${a1 - a0 > 180 ? 1 : 0} 1 ${x1} ${y1}`;
+}
+
+/**
+ * Garmin-style arc: each band a coloured segment, a dot at the value and the
+ * value and band in the middle. The hollow ring is where you were 4 weeks ago.
+ */
+function ArcGauge({ r, value, prev, large = false }: { r: Rating; value: string; prev: Rating | null; large?: boolean }) {
+  const n = r.bands.length;
+  const gap = 3;
+  const seg = ARC_SWEEP / n;
+  const at = (f: number) => ARC_START + ARC_SWEEP * Math.min(1, Math.max(0, f));
+  const [mx, my] = polar(78, at(position(r)));
+  const b = r.bands[r.index];
+  const p = prev ? polar(78, at(position(prev))) : null;
+  return (
+    <svg viewBox="0 0 200 172" className={large ? "mx-auto w-56" : "w-full"} role="img" aria-label={`${value}, ${b.label}`}>
+      {r.bands.map((band, i) => (
+        <path key={i} d={arc(78, ARC_START + i * seg + (i ? gap / 2 : 0), ARC_START + (i + 1) * seg - (i < n - 1 ? gap / 2 : 0))} fill="none" stroke={TONE_COLOR[band.tone]} strokeWidth={large ? 10 : 12} strokeLinecap="round" opacity={i === r.index ? 1 : 0.55} />
+      ))}
+      {p && <circle cx={p[0]} cy={p[1]} r={7} fill="none" stroke="var(--foreground)" strokeWidth={2.5} opacity={0.7} />}
+      <circle cx={mx} cy={my} r={11} fill={TONE_COLOR[b.tone]} stroke="var(--background)" strokeWidth={4} />
+      <text x={100} y={large ? 104 : 106} textAnchor="middle" className="fill-foreground tabular-nums" style={{ fontSize: large ? 46 : 50, fontWeight: 600 }}>
+        {value}
+      </text>
+      <text x={100} y={large ? 132 : 138} textAnchor="middle" style={{ fontSize: (large ? 17 : 20) * (b.label.length > 9 ? 0.75 : 1), fontWeight: 600, fill: TONE_COLOR[b.tone] }}>
+        {b.label}
+      </text>
+    </svg>
+  );
+}
+
+/** Where you were 4 weeks ago (a 7-day average for nightly signals), rated on the same scale, for the gauge's hollow ring. */
+function prevRating(k: BodyKey, data: OverviewData): Rating | null {
+  const c = changeOver(data.body[k], 28, windowOf(k));
+  return c ? rated(rateSignal(k, c.then, data.rating)) : null;
+}
+
+function GaugeTile({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen: (k: BodyKey) => void }) {
+  const c = BODY[k];
+  const s = data.body[k];
+  const raw = ratingOf(k, s, data);
+  const r = rated(raw);
+  const sub = tileSub(k, data);
+  const change = changeText(k, s, 28);
+  return (
+    <button onClick={() => onOpen(k)} aria-haspopup="dialog" aria-label={`${c.label}${s.value !== null ? ` ${c.format(s.value)}` : ""}`} className="rounded-2xl bg-muted p-3 text-left active:opacity-70 flex flex-col">
       <span className="flex items-start gap-1.5">
-        <span aria-hidden className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-full" style={{ background: `color-mix(in srgb, ${c.color} 20%, transparent)`, color: c.color }}>
-          <Icon className="h-3 w-3" strokeWidth={2.5} />
-        </span>
-        <span className="text-[11px] text-muted-foreground leading-tight pt-0.5">
+        <IconDot k={k} />
+        <span className="text-xs text-muted-foreground leading-tight pt-0.5">
           {c.label}
-          {sub && <span className="block text-[9px]">{sub}</span>}
+          {sub && <span className="block text-[10px]">{sub}</span>}
         </span>
       </span>
-      <span className="text-lg font-semibold leading-tight tabular-nums">
+      {r && s.value !== null ? (
+        <span className="mt-1 block px-2">
+          <ArcGauge r={r} value={c.format(s.value)} prev={prevRating(k, data)} />
+        </span>
+      ) : (
+        <span className="flex flex-1 flex-col items-center justify-center py-6 text-center">
+          <span className="text-3xl font-semibold tabular-nums">{s.value !== null ? c.format(s.value) : "–"}</span>
+          <span className="mt-1 text-[11px] text-muted-foreground">{isGap(raw) ? "Tap to compare" : shortNormal(s)}</span>
+        </span>
+      )}
+      <span className="-mt-1 block text-center text-[11px] text-muted-foreground tabular-nums">{change ?? " "}</span>
+    </button>
+  );
+}
+
+// ── Trend tile ──────────────────────────────────────────────────────────────
+
+function Spark({ s, color }: { s: BodySignal; color: string }) {
+  const w = 100;
+  const h = 30;
+  const pts = s.points.slice(-28);
+  if (pts.length < 2) return <div style={{ height: h }} />;
+  const values = pts.map((p) => p.value);
+  const lo = Math.min(...values, ...(s.normal ? [s.normal[0]] : []));
+  const hi = Math.max(...values, ...(s.normal ? [s.normal[1]] : []));
+  const span = hi - lo || 1;
+  const t0 = Date.parse(pts[0].date);
+  const t1 = Date.parse(pts.at(-1)!.date);
+  const x = (d: string) => (t1 === t0 ? w : ((Date.parse(d) - t0) / (t1 - t0)) * w);
+  const y = (v: number) => h - 3 - ((v - lo) / span) * (h - 6);
+  const last = pts.at(-1)!;
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height: h }} aria-hidden>
+      {s.normal && <rect x={0} width={w} y={y(s.normal[1])} height={Math.max(1, y(s.normal[0]) - y(s.normal[1]))} fill={color} opacity={0.18} />}
+      <polyline points={pts.map((p) => `${x(p.date)},${y(p.value)}`).join(" ")} fill="none" stroke={color} strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
+      <circle cx={x(last.date)} cy={y(last.value)} r={2.5} fill={color} vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function TrendTile({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen: (k: BodyKey) => void }) {
+  const c = BODY[k];
+  const s = data.body[k];
+  const r = rated(ratingOf(k, s, data));
+  const sub = tileSub(k, data);
+  return (
+    <button onClick={() => onOpen(k)} aria-haspopup="dialog" aria-label={`${c.label}${s.value !== null ? ` ${c.format(s.value)}` : ""}`} className="rounded-2xl bg-muted p-3 text-left active:opacity-70 flex flex-col gap-1.5">
+      <span className="flex items-start gap-1.5">
+        <IconDot k={k} />
+        <span className="text-xs text-muted-foreground leading-tight pt-0.5">
+          {c.label}
+          {sub && <span className="block text-[10px]">{sub}</span>}
+        </span>
+      </span>
+      <span className="flex items-baseline justify-between gap-2">
+        <span className="text-2xl font-semibold leading-none tabular-nums">
+          {s.value !== null ? c.format(s.value) : "–"}
+          {s.value !== null && c.unit && <span className="text-xs font-normal text-muted-foreground"> {c.unit}</span>}
+        </span>
+        <Chip r={r} s={s} />
+      </span>
+      <Spark s={s} color={c.color} />
+      <span className="text-[10px] text-muted-foreground">{r && s.state && s.state !== "within" ? `${shortNormal(s)} · 4 wk` : "Last 4 weeks, band is your normal"}</span>
+    </button>
+  );
+}
+
+// ── Last night ──────────────────────────────────────────────────────────────
+
+const STAGES = [
+  { key: "deep", label: "Deep", color: "var(--viz-zone-4)", signal: "deepSleep" },
+  { key: "light", label: "Light", color: "var(--viz-zone-2)", signal: null },
+  { key: "rem", label: "REM", color: "var(--viz-sleep-score)", signal: "remSleep" },
+] as const;
+
+const hm = (s: number) => {
+  const m = Math.round(s / 60);
+  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}` : `${m} min`;
+};
+
+function NightCard({ data, onOpen }: { data: OverviewData; onOpen: (k: BodyKey) => void }) {
+  const n = data.night;
+  const sleep = data.body.sleep;
+  const sleepR = rated(ratingOf("sleep", sleep, data));
+  const shares = n ? stageShares(n) : null;
+  const total = n ? n.deepS + n.lightS + n.remS + n.awakeS : 0;
+  return (
+    <section className="rounded-2xl bg-muted p-4 space-y-3" aria-label="Last night">
+      <button onClick={() => onOpen("sleep")} aria-haspopup="dialog" aria-label={`Sleep ${sleep.value !== null ? BODY.sleep.format(sleep.value) : ""} h`} className="flex w-full items-center justify-between gap-2 text-left active:opacity-70">
+        <span className="flex items-center gap-2">
+          <IconDot k="sleep" size="lg" />
+          <span>
+            <span className="block text-xs text-muted-foreground">{n ? `Night to ${formatDateShort(n.date)}` : "Last night"}</span>
+            <span className="text-2xl font-semibold tabular-nums">{sleep.value !== null ? `${BODY.sleep.format(sleep.value)} h` : "–"}</span>
+          </span>
+        </span>
+        <Chip r={sleepR} s={sleep} />
+      </button>
+
+      {n && shares && total > 0 && (
+        <>
+          <div className="flex h-3 overflow-hidden rounded-full" role="img" aria-label={`Deep ${shares.deep} %, light ${shares.light} %, REM ${shares.rem} %, awake ${hm(n.awakeS)}.`}>
+            {STAGES.map((st) => (
+              <span key={st.key} style={{ width: `${(n[`${st.key}S`] / total) * 100}%`, background: st.color }} />
+            ))}
+            <span style={{ width: `${(n.awakeS / total) * 100}%`, background: "var(--viz-warning)" }} />
+          </div>
+          <ul className="space-y-2">
+            {STAGES.map((st) => {
+              const share = shares[st.key];
+              const opt = n.optimal[st.key];
+              const inside = opt ? share >= opt[0] && share <= opt[1] : null;
+              const row = (
+                <>
+                  <span className="flex items-center gap-1.5 text-sm">
+                    <span className="h-2.5 w-2.5 rounded-sm" style={{ background: st.color }} aria-hidden />
+                    {st.label}
+                  </span>
+                  <span className="relative h-2 rounded-full bg-background" aria-hidden>
+                    {opt && <span className="absolute inset-y-0 rounded-full" style={{ left: `${opt[0]}%`, width: `${opt[1] - opt[0]}%`, background: "color-mix(in srgb, var(--viz-good) 35%, transparent)" }} />}
+                    <span className="absolute top-1/2 h-3 w-1 -translate-x-1/2 -translate-y-1/2 rounded-full" style={{ left: `${share}%`, background: inside === false ? "var(--viz-serious)" : "var(--foreground)" }} />
+                  </span>
+                  <span className="text-right text-xs tabular-nums">
+                    {share} % <span className="text-muted-foreground">· {hm(n[`${st.key}S`])}</span>
+                  </span>
+                </>
+              );
+              const cls = "grid w-full grid-cols-[4.5rem_1fr_6.5rem] items-center gap-2 text-left";
+              return (
+                <li key={st.key}>
+                  {st.signal ? (
+                    <button onClick={() => onOpen(st.signal)} aria-haspopup="dialog" aria-label={`${st.label} sleep ${share} %`} className={`${cls} active:opacity-70`}>
+                      {row}
+                    </button>
+                  ) : (
+                    <div className={cls}>{row}</div>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-[10px] text-muted-foreground">Green is Garmin&apos;s optimal share for the night. Awake {hm(n.awakeS)}.</p>
+        </>
+      )}
+
+      <div className="grid grid-cols-3 gap-2">
+        <AwakeStat data={data} onOpen={onOpen} />
+        <MiniStat k="sleepStress" data={data} onOpen={onOpen} />
+        <MiniStat k="spo2" data={data} onOpen={onOpen} />
+      </div>
+    </section>
+  );
+}
+
+function MiniStat({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen: (k: BodyKey) => void }) {
+  const c = BODY[k];
+  const s = data.body[k];
+  const r = rated(ratingOf(k, s, data));
+  return (
+    <button onClick={() => onOpen(k)} aria-haspopup="dialog" aria-label={`${c.label}${s.value !== null ? ` ${c.format(s.value)}` : ""}`} className="rounded-xl bg-background p-2.5 text-left active:opacity-70 space-y-1">
+      <span className="block text-[11px] text-muted-foreground leading-tight">{c.label}</span>
+      <span className="block text-lg font-semibold leading-none tabular-nums">
         {s.value !== null ? c.format(s.value) : "–"}
         {s.value !== null && c.unit && <span className="text-[11px] font-normal text-muted-foreground"> {c.unit}</span>}
       </span>
-      <span className="mt-auto space-y-1">
-        {rated && <RatingBar r={rated} />}
-        <span className="block text-[10px] leading-tight">
-          {band ? (
-            <span className="font-semibold" style={{ color: TONE_COLOR[band.tone] }}>
-              {band.label}
-            </span>
-          ) : (
-            <span className="text-muted-foreground">{s.value === null ? "No recent value" : isGap(r) ? "Tap to compare" : !s.normal ? "Learning your normal" : normalText(s).replace(".", "")}</span>
-          )}
-          {band && s.state && s.state !== "within" && <span className="text-muted-foreground"> · {s.state} your normal</span>}
+      <Chip r={r} s={s} />
+    </button>
+  );
+}
+
+/** Wake-ups as dots, filled up to Garmin's optimal count in green. */
+function AwakeStat({ data, onOpen }: { data: OverviewData; onOpen: (k: BodyKey) => void }) {
+  const s = data.body.awakeCount;
+  const max = data.rating.sleepRanges?.awakeMax ?? null;
+  const r = rated(ratingOf("awakeCount", s, data));
+  const count = s.value ?? 0;
+  return (
+    <button onClick={() => onOpen("awakeCount")} aria-haspopup="dialog" aria-label={`Awake periods ${s.value ?? "none"}`} className="rounded-xl bg-background p-2.5 text-left active:opacity-70 space-y-1">
+      <span className="block text-[11px] text-muted-foreground leading-tight">Awake periods</span>
+      <span className="flex items-center gap-1 h-[18px]" aria-hidden>
+        {s.value === null
+          ? "–"
+          : Array.from({ length: Math.max(count, (max ?? 0) + 1, 1) }, (_, i) => (
+              <span key={i} className="h-2.5 w-2.5 rounded-full" style={i < count ? { background: max !== null && i >= max ? "var(--viz-serious)" : "var(--viz-good)" } : { border: "1.5px solid var(--muted-foreground)", opacity: 0.5 }} />
+            ))}
+      </span>
+      <Chip r={r} s={s} />
+    </button>
+  );
+}
+
+// ── Day to day ──────────────────────────────────────────────────────────────
+
+function StepsCard({ data, onOpen }: { data: OverviewData; onOpen: (k: BodyKey) => void }) {
+  const s = data.body.steps;
+  const r = rated(ratingOf("steps", s, data));
+  const goal = data.stepGoal;
+  const max = Math.max(goal ?? 0, ...data.stepsWeek.map((d) => d.steps ?? 0), 1);
+  const h = 72;
+  return (
+    <button onClick={() => onOpen("steps")} aria-haspopup="dialog" aria-label={`Steps ${s.value !== null ? BODY.steps.format(s.value) : ""} a day`} className="w-full rounded-2xl bg-muted p-4 text-left active:opacity-70 space-y-3">
+      <span className="flex items-center justify-between gap-2">
+        <span className="flex items-center gap-2">
+          <IconDot k="steps" size="lg" />
+          <span>
+            <span className="block text-xs text-muted-foreground">Steps · 7-day average</span>
+            <span className="text-2xl font-semibold tabular-nums">{s.value !== null ? BODY.steps.format(s.value) : "–"}</span>
+          </span>
         </span>
+        <Chip r={r} s={s} />
+      </span>
+      <span className="relative block" style={{ height: h }}>
+        {goal && (
+          <span className="absolute inset-x-0 border-t border-dashed border-muted-foreground/60" style={{ bottom: (goal / max) * h }} aria-hidden>
+            <span className="absolute right-0 -top-4 text-[10px] text-muted-foreground tabular-nums">goal {BODY.steps.format(goal)}</span>
+          </span>
+        )}
+        <span className="absolute inset-0 grid grid-cols-7 items-end gap-1.5" aria-hidden>
+          {data.stepsWeek.map((d) => (
+            <span key={d.date} className="rounded-t-md" style={{ height: d.steps ? Math.max(3, (d.steps / max) * h) : 3, background: d.steps && goal && d.steps >= goal ? "var(--viz-good)" : d.steps ? BODY.steps.color : "var(--border)", opacity: d.steps ? 1 : 0.6 }} />
+          ))}
+        </span>
+      </span>
+      <span className="grid grid-cols-7 gap-1.5 text-center text-[10px] text-muted-foreground" aria-hidden>
+        {data.stepsWeek.map((d) => (
+          <span key={d.date}>{new Date(`${d.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "narrow", timeZone: "UTC" })}</span>
+        ))}
       </span>
     </button>
   );
 }
 
-/** The tile's 90 days, with your normal as a band and the newest value marked. */
-function TrendChart({ s, color }: { s: BodySignal; color: string }) {
-  const w = 300;
-  const h = 96;
-  if (s.points.length < 2) return <p className="text-xs text-muted-foreground">Not enough days for a trend yet.</p>;
-  const values = s.points.map((p) => p.value);
-  const lo = Math.min(...values, ...(s.normal ? [s.normal[0]] : []));
-  const hi = Math.max(...values, ...(s.normal ? [s.normal[1]] : []));
-  const span = hi - lo || 1;
-  const t0 = Date.parse(s.points[0].date);
-  const t1 = Date.parse(s.points.at(-1)!.date);
-  const x = (d: string) => (t1 === t0 ? w : ((Date.parse(d) - t0) / (t1 - t0)) * w);
-  const y = (v: number) => h - 6 - ((v - lo) / span) * (h - 12);
-  const last = s.points.at(-1)!;
+function StatRow({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen: (k: BodyKey) => void }) {
+  const c = BODY[k];
+  const s = data.body[k];
+  const r = rated(ratingOf(k, s, data));
+  const sub = tileSub(k, data);
+  const change = changeText(k, s, 30);
+  return (
+    <button onClick={() => onOpen(k)} aria-haspopup="dialog" aria-label={`${c.label}${s.value !== null ? ` ${c.format(s.value)}` : ""}`} className="flex min-h-[56px] w-full items-center gap-3 px-3 py-2 text-left active:bg-background/50">
+      <IconDot k={k} size="lg" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm">{c.label}</span>
+        <span className="block text-[11px] text-muted-foreground">{sub ?? (change ? "last 30 days" : shortNormal(s))}</span>
+      </span>
+      <span className="text-right">
+        <span className="block text-base font-semibold tabular-nums">
+          {s.value !== null ? c.format(s.value) : "–"}
+          {s.value !== null && c.unit && <span className="text-[11px] font-normal text-muted-foreground"> {c.unit}</span>}
+        </span>
+        <span className="block text-[11px] text-muted-foreground tabular-nums">{r ? <Chip r={r} s={s} /> : change ?? shortNormal(s)}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 flex-none text-muted-foreground" aria-hidden />
+    </button>
+  );
+}
+
+// ── Sheet ───────────────────────────────────────────────────────────────────
+
+/** Resolve a CSS colour variable for the canvas chart, which cannot read var(). */
+function cssColor(v: string): string {
+  const name = v.match(/^var\((--[\w-]+)\)$/)?.[1];
+  return name ? getComputedStyle(document.documentElement).getPropertyValue(name).trim() || v : v;
+}
+
+/** The 90 days with axes; drag across it to read any day in the row above. */
+function SignalChart({ s, k }: { s: BodySignal; k: BodyKey }) {
+  const c = BODY[k];
+  const theme = useVizTheme();
+  const days = useMemo(() => signalDays(s), [s]);
+  const option = useMemo(() => (theme ? signalOption(days, s.normal, cssColor(c.color), theme) : null), [theme, days, s.normal, c.color]);
+  const [idx, setIdx] = useState<number | null>(null);
+  if (days.dates.length < 2) return <p className="text-xs text-muted-foreground">Not enough days for a trend yet.</p>;
+  // With no finger on the chart, the readout shows the newest day.
+  const i = idx ?? days.dates.length - 1;
+  const unit = c.unit && c.unit !== "/day" ? ` ${c.unit}` : "";
+  const v = days.values[i];
+  const m = days.mean7?.[i] ?? null;
   return (
     <div>
-      <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height: h }} role="img" aria-label={`From ${cut(lo)} to ${cut(hi)} over ${s.points.length} days.`}>
-        {s.normal && <rect x={0} width={w} y={y(s.normal[1])} height={Math.max(1, y(s.normal[0]) - y(s.normal[1]))} fill={color} opacity={0.18} />}
-        <polyline points={s.points.map((p) => `${x(p.date)},${y(p.value)}`).join(" ")} fill="none" stroke={color} strokeWidth={2} vectorEffect="non-scaling-stroke" />
-        <circle cx={x(last.date)} cy={y(last.value)} r={3.5} fill={color} vectorEffect="non-scaling-stroke" />
-      </svg>
-      <div className="flex justify-between text-[10px] text-muted-foreground tabular-nums">
-        <span>{formatDateShort(s.points[0].date)}</span>
-        <span>
-          low {cut(Math.min(...values))} · high {cut(Math.max(...values))}
-        </span>
-        <span>{formatDateShort(last.date)}</span>
-      </div>
+      <Readout
+        title={`${formatDateShort(days.dates[i])}${idx === null ? " · drag the chart to read a day" : ""}`}
+        values={[
+          { label: unit.trim() || c.label.toLowerCase(), value: v !== null ? c.format(v) : "–" },
+          ...(days.mean7 ? [{ label: "7-day mean", value: m !== null ? c.format(m) : "–" }] : []),
+        ]}
+      />
+      {option && <EChart option={option} height={170} onIndex={setIdx} ariaLabel={`${c.label} over ${days.dates.length} days. Drag to read a day.`} />}
     </div>
+  );
+}
+
+/** The bands as a legend: name and range, the user's band marked. */
+function BandLegend({ r, unit }: { r: Rating; unit: string }) {
+  const range = (i: number) => {
+    const b = r.bands[i];
+    const from = b.from === null ? null : cut(b.edge ?? b.from);
+    const next = r.bands[i + 1];
+    const to = next ? cut(next.edge ?? next.from!) : null;
+    return from === null ? `under ${to}` : to === null ? `${from}+` : `${from}–${to}`;
+  };
+  return (
+    <ul className="grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+      {r.bands.map((b, i) => (
+        <li key={i} className={`flex items-center gap-1.5 ${i === r.index ? "font-semibold" : "text-muted-foreground"}`}>
+          <span className="h-2.5 w-2.5 flex-none rounded-full" style={{ background: TONE_COLOR[b.tone] }} aria-hidden />
+          <span className="truncate">{b.label}</span>
+          <span className="ml-auto tabular-nums">
+            {range(i)}
+            {unit}
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
 function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClose: () => void }) {
   const c = BODY[k];
   const s = data.body[k];
-  const Icon = c.icon;
-  const r = ratingOf(k, s, data);
-  const rated = r && !isGap(r) ? r : null;
-  const band = rated?.bands[rated.index];
+  const raw = ratingOf(k, s, data);
+  const r = rated(raw);
+  const band = bandOf(r);
+  const ratedOn = k === "weight" ? (data.rating.bodyFat !== null && data.rating.sex ? " %" : "") : k === "hrv" ? " ms" : c.unit === "%" ? " %" : "";
   const nextUnit = k === "weight" ? (data.rating.bodyFat !== null && data.rating.sex ? " % body fat" : " BMI") : k === "steps" ? " steps a day" : c.unit ? ` ${c.unit}` : "";
+  const change = changeText(k, s, 28);
   return (
     <div className="mx-auto w-full max-w-lg rounded-t-3xl bg-card px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-h-[85vh] overflow-y-auto">
       <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-muted" aria-hidden />
       <div className="flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-base font-semibold">
-          <span aria-hidden className="inline-flex h-8 w-8 items-center justify-center rounded-full" style={{ background: `color-mix(in srgb, ${c.color} 20%, transparent)`, color: c.color }}>
-            <Icon className="h-4 w-4" strokeWidth={2.5} />
-          </span>
+          <IconDot k={k} size="lg" />
           {c.label}
         </h2>
         <button onClick={onClose} aria-label="Close" className="flex h-11 w-11 items-center justify-center rounded-full active:bg-muted">
           <X className="h-5 w-5" />
         </button>
       </div>
+      {s.date && (
+        <p className="px-1 text-[11px] text-muted-foreground">
+          {formatDateShort(s.date)}
+          {tileSub(k, data) ? ` · ${tileSub(k, data)}` : ""}
+        </p>
+      )}
 
-      <div className="mt-2 flex items-baseline gap-2">
-        <span className="text-4xl font-semibold tabular-nums">{s.value !== null ? c.format(s.value) : "–"}</span>
-        {s.value !== null && c.unit && <span className="text-sm text-muted-foreground">{c.unit}</span>}
-        {band && (
-          <span className="ml-1 text-base font-semibold" style={{ color: TONE_COLOR[band.tone] }}>
-            {band.label}
-          </span>
-        )}
-      </div>
-      {s.date && <p className="text-[11px] text-muted-foreground">{formatDateShort(s.date)}{tileSub(k, data) ? ` · ${tileSub(k, data)}` : ""}</p>}
-
-      {rated && (
-        <section className="mt-4 rounded-2xl bg-muted p-4 space-y-3" aria-label="How you compare">
-          <RatingBar r={rated} large />
-          <p className="text-sm leading-snug">{rated.compare}</p>
-          {rated.next && (
-            <p className="text-sm text-muted-foreground">
-              <span style={{ color: TONE_COLOR[rated.bands[rated.bands.findIndex((b) => b.label === rated.next!.label)].tone] }} className="font-semibold">
-                {rated.next.label}
+      {r && s.value !== null ? (
+        <section className="mt-3 rounded-2xl bg-muted p-4 space-y-3" aria-label="How you compare">
+          <ArcGauge r={r} value={c.format(s.value)} prev={prevRating(k, data)} large />
+          {change && <p className="text-center text-xs text-muted-foreground tabular-nums">{change}{prevRating(k, data) ? " · the ring is 4 weeks ago" : ""}</p>}
+          <p className="text-sm leading-snug text-center">{r.compare}</p>
+          {r.next && (
+            <p className="text-sm text-muted-foreground text-center">
+              <span style={{ color: TONE_COLOR[r.bands.find((b) => b.label === r.next!.label)!.tone] }} className="font-semibold">
+                {r.next.label}
               </span>{" "}
-              is {cut(rated.next.gap)}
-              {nextUnit} {rated.next.dir === "up" ? "higher" : "lower"}.
+              is {cut(r.next.gap)}
+              {nextUnit} {r.next.dir === "up" ? "higher" : "lower"}.
             </p>
           )}
-          <p className="text-[11px] text-muted-foreground">Scale: {rated.source}.</p>
+          <BandLegend r={r} unit={ratedOn} />
+          <p className="text-[11px] text-muted-foreground">Scale: {r.source}.</p>
         </section>
+      ) : (
+        <div className="mt-2 flex items-baseline gap-2 px-1">
+          <span className="text-4xl font-semibold tabular-nums">{s.value !== null ? c.format(s.value) : "–"}</span>
+          {s.value !== null && c.unit && <span className="text-sm text-muted-foreground">{c.unit}</span>}
+          {band && <span className="ml-1 text-base font-semibold">{band.label}</span>}
+        </div>
       )}
-      {isGap(r) && (
-        <Link href="/more/account" className="mt-4 flex items-center justify-between gap-2 rounded-2xl bg-muted p-4 text-sm active:opacity-70">
-          {NEEDS_TEXT[r.needs]}
+      {isGap(raw) && (
+        <Link href="/more/account" className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-muted p-4 text-sm active:opacity-70">
+          {NEEDS_TEXT[raw.needs]}
           <ChevronRight className="h-4 w-4 flex-none text-muted-foreground" aria-hidden />
         </Link>
       )}
@@ -427,7 +750,7 @@ function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClo
       <section className="mt-3 rounded-2xl bg-muted p-4 space-y-2" aria-label="Against your normal">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Against your normal · 90 days</h3>
         <p className="text-sm">{normalText(s)}</p>
-        <TrendChart s={s} color={c.color} />
+        <SignalChart s={s} k={k} />
         {s.normal && (
           <p className="text-[11px] text-muted-foreground">
             The band is your normal: {c.format(s.normal[0])} to {c.format(s.normal[1])}
@@ -447,23 +770,62 @@ function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClo
   );
 }
 
-/** One group of tiles with its sheet. */
-export function BodySignals({ data, title, keys, note }: { data: OverviewData; title: string; keys: BodyKey[]; note?: string }) {
+// ── The whole block ─────────────────────────────────────────────────────────
+
+function Title({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">{children}</h2>;
+}
+
+export function BodyOverview({ data }: { data: OverviewData }) {
   // The key stays set while the sheet slides out, so it does not empty first.
   const [sheet, setSheet] = useState<{ key: BodyKey; open: boolean } | null>(null);
+  const open = (key: BodyKey) => setSheet({ key, open: true });
   const close = () => setSheet((v) => (v ? { ...v, open: false } : v));
   return (
-    <section aria-label={title} className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">{title}</p>
-      <div className={`grid gap-2 ${keys.length % 3 === 0 ? "grid-cols-3" : "grid-cols-2"}`}>
-        {keys.map((k) => (
-          <BodyTile key={k} k={k} s={data.body[k]} data={data} onOpen={() => setSheet({ key: k, open: true })} />
-        ))}
-      </div>
-      {note && <p className="text-[11px] text-muted-foreground px-1">{note}</p>}
+    <div className="space-y-4">
+      <section aria-label="Fitness" className="space-y-2">
+        <Title>Fitness · how you compare</Title>
+        <div className="grid grid-cols-2 gap-2">
+          <GaugeTile k="vo2max" data={data} onOpen={open} />
+          <GaugeTile k="fitnessAge" data={data} onOpen={open} />
+        </div>
+      </section>
+
+      <section aria-label="Recovery" className="space-y-2">
+        <Title>Recovery</Title>
+        <div className="grid grid-cols-2 gap-2">
+          <GaugeTile k="sleepScore" data={data} onOpen={open} />
+          <GaugeTile k="bodyBattery" data={data} onOpen={open} />
+          <TrendTile k="hrv" data={data} onOpen={open} />
+          <TrendTile k="restingHr" data={data} onOpen={open} />
+          <TrendTile k="respiration" data={data} onOpen={open} />
+          <TrendTile k="sleepHr" data={data} onOpen={open} />
+        </div>
+      </section>
+
+      <section className="space-y-2">
+        <Title>Last night</Title>
+        <NightCard data={data} onOpen={open} />
+      </section>
+
+      <section aria-label="Day to day" className="space-y-2">
+        <Title>Day to day</Title>
+        <StepsCard data={data} onOpen={open} />
+        <div className="rounded-2xl bg-muted divide-y divide-border overflow-hidden">
+          <StatRow k="stress" data={data} onOpen={open} />
+          <StatRow k="sedentary" data={data} onOpen={open} />
+          <StatRow k="weight" data={data} onOpen={open} />
+          <StatRow k="muscleMass" data={data} onOpen={open} />
+        </div>
+      </section>
+
+      <p className="text-[11px] text-muted-foreground px-1">
+        Gauges and coloured labels rate you on a published scale; the hollow ring is where you were 4 weeks ago. Signals without a fair population scale are shown against your own normal. Tap anything for the scale, your trend and what it means.
+      </p>
+
       <BottomSheet open={sheet?.open ?? false} onClose={close}>
         {sheet && <BodySheet k={sheet.key} data={data} onClose={close} />}
       </BottomSheet>
-    </section>
+    </div>
   );
 }

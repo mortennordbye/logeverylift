@@ -586,6 +586,11 @@ export type OverviewData = {
   intensity: IntensityWeek;
   /** What the tiles' population ratings need (analytics/norms.ts). */
   rating: RatingContext;
+  /** The newest night's stages in seconds, with Garmin's optimal share (%) per stage. */
+  night: NightStages | null;
+  /** Steps on each of the last 7 complete days (null for a day with none), and the Garmin step goal. */
+  stepsWeek: { date: string; steps: number | null }[];
+  stepGoal: number | null;
   /** Fitness, fatigue and form for the last 42 days, all sports. */
   pmc: { dates: string[]; ctl: number[]; atl: number[]; tsb: number[]; calibrating: boolean };
   last: (ActivityListRow & { decoupling: ActivityMetrics["decoupling"] }) | null;
@@ -678,6 +683,8 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     chronologicalAge,
     sleepRanges: sleepRanges(latest("sleep")),
   };
+  const stepsByDate = new Map(points("steps", (j) => num(j.totalSteps)).map((p) => [p.date, p.value]));
+  const stepsWeek = Array.from({ length: 7 }, (_, i) => addDays(date, i - 7)).map((d) => ({ date: d, steps: stepsByDate.get(d) ?? null }));
 
   const recent = series.slice(-42);
   const cycle = await getActiveCycle(userId);
@@ -732,6 +739,9 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     hrvStatus: hrvLabel ? { label: hrvLabel, weeklyAvg: num(hrvToday?.weeklyAvg) } : null,
     intensity: intensityWeek(summaries, date, mondayOf(date)),
     rating,
+    night: nightStages(dayRows.findLast((r) => r.kind === "sleep") ?? null),
+    stepsWeek,
+    stepGoal: points("user_summary", (j) => num(j.dailyStepGoal)).at(-1)?.value ?? null,
     pmc: {
       dates: recent.map((m) => m.date),
       ctl: recent.map((m) => r1(m.pmc.total.ctl)),
@@ -780,6 +790,29 @@ function dayToDaySignals(points: PointsOf, date: string) {
       return g !== null ? Math.round(g / 100) / 10 : null;
     }), date, { days: 90 }),
   };
+}
+
+export type NightStages = {
+  date: string;
+  deepS: number;
+  lightS: number;
+  remS: number;
+  awakeS: number;
+  optimal: { deep: [number, number] | null; light: [number, number] | null; rem: [number, number] | null };
+};
+
+function nightStages(row: { date: string; data: unknown } | null): NightStages | null {
+  const j = (row?.data ?? null) as Json | null;
+  if (!row || !j) return null;
+  const [deepS, lightS, remS, awakeS] = [num(j.deepSleepSeconds), num(j.lightSleepSeconds), num(j.remSleepSeconds), num(j.awakeSleepSeconds)];
+  if (deepS === null || lightS === null || remS === null) return null;
+  const range = (key: string): [number, number] | null => {
+    const p = sleepScore(j, key);
+    const a = num(p?.optimalStart);
+    const b = num(p?.optimalEnd);
+    return a !== null && b !== null ? [a, b] : null;
+  };
+  return { date: row.date, deepS, lightS, remS, awakeS: awakeS ?? 0, optimal: { deep: range("deepPercentage"), light: range("lightPercentage"), rem: range("remPercentage") } };
 }
 
 /** Garmin's optimal ranges from the newest night's sleep score parts. */

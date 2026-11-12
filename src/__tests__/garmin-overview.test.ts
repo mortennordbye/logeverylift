@@ -1,5 +1,5 @@
 import { garminView } from "@/components/features/garmin/tabs";
-import { bodySignal, intensityWeek, normalRange, parseFitnessAge, raceStatus, rollingMean, type CycleForRace } from "@/lib/garmin/analytics/overview";
+import { bodySignal, changeOver, intensityWeek, normalRange, parseFitnessAge, raceStatus, rollingMean, stageShares, type CycleForRace } from "@/lib/garmin/analytics/overview";
 import { addDays } from "@/lib/garmin/dates";
 import { describe, expect, it } from "vitest";
 
@@ -144,5 +144,32 @@ describe("bodySignal fresh", () => {
     const s = bodySignal([{ date: addDays(today, -20), value: 50 }], today, { days: 90, fresh: 14 });
     expect(s.points).toHaveLength(1);
     expect(s.value).toBeNull();
+  });
+});
+
+describe("changeOver", () => {
+  const sig = (points: { date: string; value: number }[]) => bodySignal(points, today, { days: 90 });
+
+  it("compares the newest value with the newest point at least `days` back", () => {
+    const s = sig([{ date: addDays(today, -30), value: 50 }, { date: addDays(today, -27), value: 52 }, { date: today, value: 51 }]);
+    expect(changeOver(s, 28)).toEqual({ now: 51, then: 50, delta: 1 });
+  });
+
+  it("compares 7-day means when asked, so one odd night does not swing it", () => {
+    const night = (i: number) => (i === 0 ? 40 : 80);
+    const s = sig([...run(7, (i) => night(i), addDays(today, -28)), ...run(7, () => 82)]);
+    expect(changeOver(s, 28)!.delta).toBe(82 - 80);
+    expect(changeOver(s, 28, 7)!.then).toBeCloseTo((40 + 6 * 80) / 7);
+  });
+
+  it("is null without a point that far back", () => {
+    expect(changeOver(sig(run(10, () => 50)), 28)).toBeNull();
+  });
+});
+
+describe("stageShares", () => {
+  it("is each stage's share of the time asleep, awake left out", () => {
+    expect(stageShares({ deepS: 5100, lightS: 18600, remS: 6300 })).toEqual({ deep: 17, light: 62, rem: 21 });
+    expect(stageShares({ deepS: 0, lightS: 0, remS: 0 })).toEqual({ deep: 0, light: 0, rem: 0 });
   });
 });

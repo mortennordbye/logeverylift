@@ -180,3 +180,31 @@ export function rollingMean(series: Point[], days = 7, min = 4): Point[] {
     return win.length >= min ? [{ date: p.date, value: Math.round(win.reduce((s, q) => s + q.value, 0) / win.length) }] : [];
   });
 }
+
+/**
+ * The change over `days`: from the newest point on or before that many days
+ * back to the tile's value. With `window` > 1, both ends are the mean of the
+ * points in the `window` days up to them, so one odd night does not swing a
+ * nightly signal. Null without points at both ends.
+ */
+export function changeOver(s: BodySignal, days: number, window = 1): { now: number; then: number; delta: number } | null {
+  if (s.value === null || !s.date) return null;
+  const cutoff = addDays(s.date, -days);
+  const meanTo = (end: string) => {
+    const from = addDays(end, -(window - 1));
+    const vs = s.points.filter((p) => p.date >= from && p.date <= end).map((p) => p.value);
+    return vs.length ? vs.reduce((a, b) => a + b, 0) / vs.length : null;
+  };
+  const thenPoint = s.points.findLast((p) => p.date <= cutoff);
+  if (!thenPoint) return null;
+  const now = window > 1 ? meanTo(s.date) : s.value;
+  const then = window > 1 ? meanTo(thenPoint.date) : thenPoint.value;
+  return now === null || then === null ? null : { now, then, delta: now - then };
+}
+
+/** Each stage's share of the time asleep (awake not counted), in whole %. */
+export function stageShares(n: { deepS: number; lightS: number; remS: number }): { deep: number; light: number; rem: number } {
+  const total = n.deepS + n.lightS + n.remS;
+  if (total <= 0) return { deep: 0, light: 0, rem: 0 };
+  return { deep: Math.round((n.deepS / total) * 100), light: Math.round((n.lightS / total) * 100), rem: Math.round((n.remS / total) * 100) };
+}

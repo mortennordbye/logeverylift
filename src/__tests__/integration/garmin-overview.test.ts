@@ -224,18 +224,27 @@ describe("getOverviewData sleep quality and day to day", () => {
     const me = await createUser();
     const other = await createUser();
     const sleep = {
+      deepSleepSeconds: 5100,
+      lightSleepSeconds: 18600,
+      remSleepSeconds: 6300,
+      awakeSleepSeconds: 900,
       avgSleepStress: 19,
       awakeCount: 2,
       averageSpO2Value: 96,
       avgHeartRate: 51,
-      sleepScores: { deepPercentage: { value: 17, optimalStart: 16, optimalEnd: 33 }, remPercentage: { value: 21, optimalStart: 21, optimalEnd: 31 }, awakeCount: { optimalStart: 0, optimalEnd: 1 } },
+      sleepScores: {
+        deepPercentage: { value: 17, optimalStart: 16, optimalEnd: 33 },
+        lightPercentage: { value: 62, optimalStart: 30, optimalEnd: 64 },
+        remPercentage: { value: 21, optimalStart: 21, optimalEnd: 31 },
+        awakeCount: { optimalStart: 0, optimalEnd: 1 },
+      },
     };
     await db.insert(garminDays).values([
       { userId: me.id, calendarDate: "2026-11-11", kind: "sleep", data: sleep },
       ...["2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10"].flatMap((d) => [
         { userId: me.id, calendarDate: d, kind: "steps" as const, data: { totalSteps: 8000 } },
         // Garmin's per-day summary can be empty for a day the steps endpoint has.
-        { userId: me.id, calendarDate: d, kind: "user_summary" as const, data: { totalSteps: null, averageStressLevel: 30, sedentarySeconds: 36000 } },
+        { userId: me.id, calendarDate: d, kind: "user_summary" as const, data: { totalSteps: null, averageStressLevel: 30, sedentarySeconds: 36000, dailyStepGoal: 9000 } },
       ]),
       // Today, still filling up: left out.
       { userId: me.id, calendarDate: "2026-11-11", kind: "steps", data: { totalSteps: 28 } },
@@ -256,5 +265,9 @@ describe("getOverviewData sleep quality and day to day", () => {
     expect(d.body.sedentary.value).toBe(10);
     expect(d.body.muscleMass.value).toBe(37.4);
     expect(d.rating.sleepRanges).toEqual({ deep: [16, 33], rem: [21, 31], awakeMax: 1 });
+    expect(d.stepsWeek.map((x) => x.steps)).toEqual([null, null, null, 8000, 8000, 8000, 8000]);
+    expect(d.stepsWeek.at(-1)?.date).toBe("2026-11-10");
+    expect(d.stepGoal).toBe(9000);
+    expect(d.night).toEqual({ date: "2026-11-11", deepS: 5100, lightS: 18600, remS: 6300, awakeS: 900, optimal: { deep: [16, 33], light: [30, 64], rem: [21, 31] } });
   });
 });
