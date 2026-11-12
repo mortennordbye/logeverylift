@@ -1,0 +1,226 @@
+import { db } from "@/db";
+import { garminActivities, garminConnections, garminDays, garminSyncRuns, users } from "@/db/schema";
+import { and, desc, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
+import { GarminError } from "./client";
+import { addDays } from "./dates";
+import { deleteGarminData } from "./delete-data";
+import { garminToday } from "./today";
+import { metricsDue, runGarminMetricsStep } from "./metrics-job";
+import { syncGarminWeight } from "./weight-sync";
+import {
+  RunLog,
+  fatalTag,
+  fetchActivities,
+  fetchActivityFiles,
+  fetchDayKinds,
+  fetchRangeKinds,
+  finishRun,
+  startRun,
+  syncGarmin,
+  tokenFor,
+} from "./sync";
+
+/**
+ * Background import of everything the quick sync leaves out: per-day data
+ * (all-day heart rate, overnight HRV, SpO2, ...), activity files, and history.
+ *
+ * Started from src/instrumentation.ts. Each tick claims one connection that
+ * has work, with a lease so two app replicas never run the same user, and
+ * does a bounded amount of work for it:
+ *
+ * 0. The recent summaries (syncGarmin), when the last sync is older than RECENT_EVERY_MS.
+ * 1. Today and yesterday's per-day data again, at most every RECENT_EVERY_MS.
+ * 2. Up to FILES_PER_TICK activities still without files, newest first.
+ * 3. One HISTORY_CHUNK_DAYS chunk of history, going back from historyCursor.
+ *
+ * History stops HISTORY_DAYS_USER days back for a normal user, and for an
+ * admin after EMPTY_CHUNKS_TO_STOP chunks in a row with nothing in them.
+ */
+
+export const TICK_MS = 60_000;
+const LEASE_MS = 5 * 60_000;
+const RECENT_EVERY_MS = 30 * 60_000;
+const FILES_PER_TICK = 5;
+export const HISTORY_CHUNK_DAYS = 7;
+export const HISTORY_DAYS_USER = 90;
+const EMPTY_CHUNKS_TO_STOP = 8;
+/** Pause after a 429 when Garmin gives no retryInSeconds. */
+const RATE_LIMIT_PAUSE_MS = 2 * 60_000;
+const KEY_REJECTED_PAUSE_MS = 24 * 3600_000;
+/** Pause after any other failed tick, so one broken connection cannot take every tick. */
+const ERROR_PAUSE_MS = 5 * 60_000;
+
+/** Oldest date history goes back to for this user; null means no limit. */
+export function historyFloor(role: string | null, today: string): string | null {
+  return role === "admin" ? null : addDays(today, -(HISTORY_DAYS_USER - 1));
+}
+
+/** Claim one connection with work to do. Null when there is none. */
+async function claim(now: Date) {
+  const free = and(
+    // A finished tick leaves leaseUntil at its end time, so "at or before now" is free.
+    or(isNull(garminConnections.leaseUntil), lte(garminConnections.leaseUntil, now)),
+    or(isNull(garminConnections.pausedUntil), lt(garminConnections.pausedUntil, now)),
+  );
+  const hasPendingFiles = sql`exists (select 1 from ${garminActivities} a where a.user_id = ${garminConnections.userId} and a.files_fetched_at is null)`;
+  const stale = new Date(now.getTime() - RECENT_EVERY_MS);
+  const recentDue = or(
+    isNull(garminConnections.recentDetailAt),
+    lt(garminConnections.recentDetailAt, stale),
+    isNull(garminConnections.lastSyncedAt),
+    lt(garminConnections.lastSyncedAt, stale),
+  );
+  const [candidate] = await db
+    .select({ id: garminConnections.id })
+    .from(garminConnections)
+    .where(and(free, or(eq(garminConnections.historyDone, false), hasPendingFiles, recentDue, metricsDue)))
+    // A finished tick leaves leaseUntil at its end time, so the user who ran longest ago goes first; never-run (null) first of all.
+    .orderBy(sql`${garminConnections.leaseUntil} asc nulls first`)
+    .limit(1);
+  if (!candidate) return null;
+  // Conditional update: only one replica wins the lease.
+  const [claimed] = await db
+    .update(garminConnections)
+    .set({ leaseUntil: new Date(now.getTime() + LEASE_MS) })
+    .where(and(eq(garminConnections.id, candidate.id), free))
+    .returning();
+  return claimed ?? null;
+}
+
+export type TickResult = { status: "idle" } | { status: "ran"; userId: string; error: string | null };
+
+export async function runGarminWorkerTick(now = new Date()): Promise<TickResult> {
+  // A run still "running" after its lease ran out was cut off by a restart or deploy.
+  await db
+    .update(garminSyncRuns)
+    .set({ status: "error", error: "interrupted", finishedAt: now })
+    .where(and(eq(garminSyncRuns.status, "running"), lt(garminSyncRuns.startedAt, new Date(now.getTime() - LEASE_MS))));
+
+  const conn = await claim(now);
+  if (!conn) return { status: "idle" };
+  const userId = conn.userId;
+  const tickStart = new Date();
+  // The user's local date: in UTC, east of Greenwich would miss today's data for hours after midnight.
+  const today = await garminToday(userId, now);
+  const [user] = await db.select({ role: users.role }).from(users).where(eq(users.id, userId));
+  const floor = historyFloor(user?.role ?? null, today);
+
+  // The chunk this tick imports, if any: HISTORY_CHUNK_DAYS days ending the day before the cursor.
+  const chunkEnd = conn.historyDone ? null : conn.historyCursor ? addDays(conn.historyCursor, -1) : today;
+  const chunkStartRaw = chunkEnd ? addDays(chunkEnd, -(HISTORY_CHUNK_DAYS - 1)) : null;
+  const chunkStart = chunkStartRaw && floor && chunkStartRaw < floor ? floor : chunkStartRaw;
+  const runId = await startRun(userId, "worker", chunkStart ?? today, chunkEnd ?? today);
+  const log = new RunLog();
+  let fatal: string | null = null;
+
+  try {
+    const token = await tokenFor(userId, conn.encryptedKey);
+
+    // Recent summaries (the range endpoints and the activity list), now that no page pulls them on open.
+    if (!conn.lastSyncedAt || now.getTime() - conn.lastSyncedAt.getTime() > RECENT_EVERY_MS) {
+      const sync = await syncGarmin(userId);
+      if (sync.status === "error" && (sync.error.startsWith("rate_limited") || sync.error === "key_rejected")) throw new GarminError(sync.error, sync.retryInSeconds ?? null);
+    }
+
+    if (!conn.recentDetailAt || now.getTime() - conn.recentDetailAt.getTime() > RECENT_EVERY_MS) {
+      for (const date of [addDays(today, -1), today]) await fetchDayKinds(token, userId, date, log, now);
+      await db.update(garminConnections).set({ recentDetailAt: now }).where(eq(garminConnections.id, conn.id));
+    }
+
+    const pending = await db
+      .select({ id: garminActivities.garminActivityId })
+      .from(garminActivities)
+      .where(and(eq(garminActivities.userId, userId), isNull(garminActivities.filesFetchedAt)))
+      .orderBy(desc(garminActivities.startTimeLocal))
+      .limit(FILES_PER_TICK);
+    for (const a of pending) await fetchActivityFiles(token, userId, a.id, log);
+
+    if (chunkStart && chunkEnd && (!floor || chunkEnd >= floor)) {
+      const before = Object.values(log.counts).reduce((a, b) => a + b, 0);
+      await fetchRangeKinds(token, userId, chunkStart, chunkEnd, log, now);
+      await fetchActivities(token, userId, chunkStart, chunkEnd, log, now);
+      for (let d = chunkEnd; d >= chunkStart; d = addDays(d, -1)) await fetchDayKinds(token, userId, d, log, now);
+      const found = Object.values(log.counts).reduce((a, b) => a + b, 0) - before;
+
+      const reachedFloor = floor !== null && chunkStart <= floor;
+      const emptyStreak = found > 0 ? 0 : (conn.historyEmptyChunks ?? 0) + 1;
+      await db
+        .update(garminConnections)
+        .set({
+          historyCursor: chunkStart,
+          historyEmptyChunks: emptyStreak,
+          historyDone: reachedFloor || (floor === null && emptyStreak >= EMPTY_CHUNKS_TO_STOP),
+        })
+        .where(eq(garminConnections.id, conn.id));
+    } else if (!conn.historyDone) {
+      await db.update(garminConnections).set({ historyDone: true }).where(eq(garminConnections.id, conn.id));
+    }
+  } catch (e) {
+    fatal = fatalTag(e, userId, "runGarminWorkerTick");
+    const retry = e instanceof GarminError && e.retryInSeconds !== null ? (e.retryInSeconds + 5) * 1000 : RATE_LIMIT_PAUSE_MS;
+    const pause = fatal.startsWith("rate_limited") ? retry : fatal === "key_rejected" ? KEY_REJECTED_PAUSE_MS : ERROR_PAUSE_MS;
+    if (pause) await db.update(garminConnections).set({ pausedUntil: new Date(Date.now() + pause) }).where(eq(garminConnections.id, conn.id));
+  } finally {
+    await finishRun(runId, userId, now, log, fatal);
+    const [still] = await db.select({ id: garminConnections.id }).from(garminConnections).where(eq(garminConnections.id, conn.id));
+    if (!still) {
+      // Disconnected while this tick ran. Rows it saved after that are orphans; with "delete my data"
+      // nothing from before the tick is left, so finish that delete.
+      await finishDisconnect(userId, tickStart);
+    } else {
+      // Derived metrics read only stored rows, so they run even after a Garmin error.
+      try {
+        await runGarminMetricsStep(userId, now);
+      } catch (e) {
+        console.error("[runGarminWorkerTick] metrics failed", { userId }, e instanceof Error ? e.message : "unknown");
+      }
+      try {
+        await syncGarminWeight(userId);
+      } catch (e) {
+        console.error("[runGarminWorkerTick] weight sync failed", { userId }, e instanceof Error ? e.message : "unknown");
+      }
+      // The lease ends now; its end time orders the next claim (oldest first).
+      await db.update(garminConnections).set({ leaseUntil: new Date() }).where(eq(garminConnections.id, conn.id));
+    }
+  }
+  return { status: "ran", userId, error: fatal };
+}
+
+/**
+ * After a disconnect during a tick: when no Garmin row from before the tick is
+ * left, the user chose "Disconnect and delete Garmin data", and the rows this
+ * tick saved since are deleted too. With a plain disconnect the old rows stay,
+ * and so do this tick's.
+ */
+export async function finishDisconnect(userId: string, tickStart: Date) {
+  const [kept] = await db
+    .select({ one: sql<number>`1` })
+    .from(garminDays)
+    .where(and(eq(garminDays.userId, userId), lt(garminDays.fetchedAt, tickStart)))
+    .limit(1);
+  const [keptActivity] = await db
+    .select({ one: sql<number>`1` })
+    .from(garminActivities)
+    .where(and(eq(garminActivities.userId, userId), lt(garminActivities.fetchedAt, tickStart)))
+    .limit(1);
+  if (!kept && !keptActivity) await deleteGarminData(db, userId);
+}
+
+let running = false;
+
+/** One tick at a time per process; errors are logged, never thrown into the timer. */
+export async function garminWorkerLoop() {
+  if (running) return;
+  running = true;
+  try {
+    // Keep going while there is work, so an import doesn't wait a minute between chunks.
+    for (let i = 0; i < 10; i++) {
+      const r = await runGarminWorkerTick();
+      if (r.status === "idle") break;
+    }
+  } catch (e) {
+    console.error("[garminWorkerLoop] failed", e instanceof Error ? e.message : "unknown");
+  } finally {
+    running = false;
+  }
+}

@@ -65,6 +65,14 @@ export async function register() {
     setInterval(importGyms, 60 * 60 * 1000).unref();
   }
 
+  // Garmin background import: per-day data, activity files and history
+  // (src/lib/garmin/worker.ts). Only where the Garmin feature is enabled.
+  if (env.GARMIN_KEY_ENCRYPTION_KEY) {
+    const { garminWorkerLoop, TICK_MS } = await import("@/lib/garmin/worker");
+    setInterval(() => void garminWorkerLoop(), TICK_MS).unref();
+    console.log(`[garmin] background import checks every ${TICK_MS / 1000}s`);
+  }
+
   const adminEmail = env.ADMIN_EMAIL;
   const adminPassword = env.ADMIN_PASSWORD;
   const adminName = env.ADMIN_NAME;

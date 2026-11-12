@@ -60,6 +60,11 @@ export const trainingCycles = pgTable("training_cycles", {
   adaptationPct: integer("adaptation_pct").default(100).notNull(),
   adaptationNote: text("adaptation_note"),
   startDate: date("start_date"),
+  // The race the cycle builds to (decision O-1 in docs/plans/garmin-insights-design.md).
+  // Null = no race set; the Garmin race views then use the cycle's last day.
+  raceDate: date("race_date"),
+  // "full" = Ironman (3.8 / 180 / 42.2 km), "half" = 70.3 (1.9 / 90 / 21.1 km).
+  raceDistance: text("race_distance", { enum: ["full", "half"] }),
   status: text("status", { enum: ["draft", "active", "completed"] })
     .default("draft")
     .notNull(),

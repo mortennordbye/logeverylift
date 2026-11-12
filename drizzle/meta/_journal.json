@@ -498,6 +498,69 @@
       "when": 1793639952215,
       "tag": "0070_amused_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1794414847055,
+      "tag": "0071_giant_red_shift",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1794416659859,
+      "tag": "0072_complete_black_bird",
+      "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1794418738048,
+      "tag": "0073_lame_franklin_richards",
+      "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1794424056013,
+      "tag": "0074_quick_aqueduct",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1794429836087,
+      "tag": "0075_calm_cable",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1794467559056,
+      "tag": "0076_light_slyde",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1794469631605,
+      "tag": "0077_special_sister_grimm",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1794470530855,
+      "tag": "0078_puzzling_human_torch",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1794470531645,
+      "tag": "0079_curvy_gunslinger",
+      "breakpoints": true
     }
   ]
 }

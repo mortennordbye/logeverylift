@@ -4,6 +4,7 @@ import { authClient } from "@/lib/auth-client";
 import { exportMyData } from "@/lib/actions/account";
 import { setAiConsent } from "@/lib/actions/legal";
 import { updateActivityPrivacy } from "@/lib/actions/friends";
+import { setGarminWeightSync } from "@/lib/actions/garmin";
 import { updateUserProfile } from "@/lib/actions/profile";
 import type { Goal } from "@/lib/utils/goals";
 import { InvitedBadge } from "@/components/features/InvitedBadge";
@@ -33,6 +34,8 @@ interface AccountClientProps {
   invited: boolean;
   profile: UserProfile;
   showActivityToFriends: boolean;
+  /** The Garmin weight sync switch; null hides it (Garmin not connected or not enabled). */
+  garminWeightSync: boolean | null;
   aiConsent: boolean;
   primaryGymName: string | null;
 }
@@ -186,7 +189,8 @@ function NumberRow({
   );
 }
 
-export function AccountClient({ name, email, role, invited, profile: initialProfile, showActivityToFriends: initialActivityPrivacy, aiConsent: initialAiConsent, primaryGymName }: AccountClientProps) {
+export function AccountClient({ name, email, role, invited, profile: initialProfile, showActivityToFriends: initialActivityPrivacy, aiConsent: initialAiConsent, primaryGymName, garminWeightSync: initialWeightSync }: AccountClientProps) {
+  const [weightSync, setWeightSync] = useState(initialWeightSync);
   const [showPasswordSheet, setShowPasswordSheet] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -323,6 +327,15 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
     if (!result.success) setAiConsentState(!next);
   }
 
+  async function handleWeightSyncToggle() {
+    if (weightSync === null) return;
+    const next = !weightSync;
+    setWeightSync(next);
+    const result = await callAction(setGarminWeightSync({ enabled: next }));
+    if (!result.success) setWeightSync(!next);
+    else if (result.data.weightKg !== null) setProfile((p) => ({ ...p, weightKg: result.data.weightKg }));
+  }
+
   async function handleActivityPrivacyToggle() {
     const next = !activityPrivacy;
     setActivityPrivacy(next);
@@ -365,8 +378,8 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
           </div>
         </div>
 
-        {/* Body & Goals */}
-        <div>
+        {/* Body & Goals; Garmin's ratings link here (#body-profile) for gender and year of birth. */}
+        <div id="body-profile" className="scroll-mt-20">
           <SectionLabel>Body &amp; Goals</SectionLabel>
           <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
             <GoalPickerRow
@@ -408,6 +421,17 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
               placeholder="80"
               onChange={(v) => setProfile((p) => ({ ...p, weightKg: v }))}
             />
+            {weightSync !== null && (
+              <button onClick={handleWeightSyncToggle} role="switch" aria-checked={weightSync} className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60">
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium">Sync weight from Garmin</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Each Garmin weigh-in is added to your weight history, and body weight follows the newest entry.</p>
+                </div>
+                <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${weightSync ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                  <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${weightSync ? "translate-x-5" : "translate-x-0.5"}`} />
+                </div>
+              </button>
+            )}
             <div className="px-4 py-3 flex flex-col gap-2">
               <button
                 onClick={handleSaveProfile}

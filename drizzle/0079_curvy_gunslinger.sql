@@ -1,0 +1,1 @@
+ALTER TABLE "garmin_connections" ADD COLUMN "weight_copied" bigint[] DEFAULT '{}'::bigint[] NOT NULL;

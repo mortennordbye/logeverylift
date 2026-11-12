@@ -1,0 +1,1 @@
+ALTER TABLE "garmin_connections" DROP COLUMN "weight_synced_until";

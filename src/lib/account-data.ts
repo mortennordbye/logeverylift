@@ -10,6 +10,15 @@ import {
   exercises,
   feedback,
   friendships,
+  garminActivities,
+  garminActivityFiles,
+  garminActivityMetrics,
+  garminActivityStreams,
+  garminConnections,
+  garminDailyMetrics,
+  garminDays,
+  garminFuelLogs,
+  garminSyncRuns,
   gyms,
   inviteTokens,
   nudges,
@@ -94,6 +103,22 @@ export async function collectUserData(userId: string) {
     exercise_prs: await db.select().from(exercisePrs).where(eq(exercisePrs.userId, userId)),
     exercises: await db.select().from(exercises).where(eq(exercises.userId, userId)),
     exercise_notes: await db.select().from(exerciseNotes).where(eq(exerciseNotes.userId, userId)),
+    garmin_connections: await db
+      .select(columnsWithout(garminConnections, ["encryptedKey"]))
+      .from(garminConnections)
+      .where(eq(garminConnections.userId, userId)),
+    garmin_days: await db.select().from(garminDays).where(eq(garminDays.userId, userId)),
+    garmin_activities: await db.select().from(garminActivities).where(eq(garminActivities.userId, userId)),
+    // The original file's content is in garmin_activity_streams; the ZIP itself isn't JSON.
+    garmin_activity_files: await db
+      .select(columnsWithout(garminActivityFiles, ["zip"]))
+      .from(garminActivityFiles)
+      .where(eq(garminActivityFiles.userId, userId)),
+    garmin_activity_streams: await db.select().from(garminActivityStreams).where(eq(garminActivityStreams.userId, userId)),
+    garmin_activity_metrics: await db.select().from(garminActivityMetrics).where(eq(garminActivityMetrics.userId, userId)),
+    garmin_daily_metrics: await db.select().from(garminDailyMetrics).where(eq(garminDailyMetrics.userId, userId)),
+    garmin_sync_runs: await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, userId)),
+    garmin_fuel_logs: await db.select().from(garminFuelLogs).where(eq(garminFuelLogs.userId, userId)),
     programs: programRows,
     program_exercises: programExerciseRows,
     program_sets: programExerciseIds.length

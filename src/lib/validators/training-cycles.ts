@@ -26,6 +26,8 @@ export const updateTrainingCycleSchema = z.object({
   endAction: endActionEnum.optional(),
   endMessage: z.string().max(500).nullable().optional(),
   status: statusEnum.optional(),
+  raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  raceDistance: z.enum(["full", "half"]).nullable().optional(),
 });
 
 export const upsertCycleSlotSchema = z.object({

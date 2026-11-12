@@ -337,3 +337,27 @@ describe("reanchoredPeaks (PZ-36, PZ-37)", () => {
     expect(reanchoredPeaks(plain, { distanceMeters: 3200, durationSeconds: null }, "distance", 0.8)).toBeNull();
   });
 });
+
+describe("computeAdaptationFactor with wearable signals (plan 2.14)", () => {
+  const calm = { hrvState: "balanced" as const, restingHrFlag: false, sleepDebtH: 1, acwr: 1, ramp: 3 };
+  const strong = { adherence: 1, avgReadiness: 4.5, avgRpe: 6 };
+
+  it("is unchanged by neutral wearable signals", () => {
+    expect(computeAdaptationFactor({ ...strong, wearable: calm })).toEqual(computeAdaptationFactor(strong));
+    expect(computeAdaptationFactor({ adherence: 0.5, avgReadiness: null, avgRpe: null, wearable: calm }).pct).toBe(90);
+  });
+
+  it("eases 12 % when HRV is fatigued, or strained with a resting HR flag", () => {
+    expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, hrvState: "fatigued" } }).pct).toBe(88);
+    expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, hrvState: "strained", restingHrFlag: true } }).pct).toBe(88);
+    // Strained alone is not enough to ease, but it blocks the push.
+    expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, hrvState: "strained" } }).pct).toBe(100);
+  });
+
+  it("eases 8 % for a fast load rise and 5 % for sleep debt, in that order", () => {
+    expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, acwr: 1.31 } }).pct).toBe(92);
+    expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, ramp: 8.5, sleepDebtH: 7 } }).pct).toBe(92);
+    expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, sleepDebtH: 6.5 } }).pct).toBe(95);
+    expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, acwr: 1.3, ramp: 8, sleepDebtH: 6 } }).pct).toBe(105);
+  });
+});

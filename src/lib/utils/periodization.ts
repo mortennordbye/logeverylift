@@ -224,10 +224,26 @@ export type AdaptationSignals = {
   avgReadiness: number | null;
   /** Mean RPE over recent sessions, or null if none logged. */
   avgRpe: number | null;
+  /** Garmin signals, when the user has connected Garmin (plan 2.14). Absent: the rules are exactly the no-wearable ones. */
+  wearable?: WearableSignals;
+};
+
+/** Recovery and load signals from a wearable, for the week's adaptation (docs/plans/garmin-insights-design.md, 2.14). */
+export type WearableSignals = {
+  /** HRV state of the 7-day mean against its band (src/lib/garmin/analytics/recovery.ts). */
+  hrvState: "balanced" | "high" | "strained" | "fatigued" | "unsettled" | "calibrating" | null;
+  /** Resting HR 5 bpm or 2 SD over its 60-day baseline. */
+  restingHrFlag: boolean;
+  /** Sleep debt over two weeks, hours. */
+  sleepDebtH: number | null;
+  /** This week's load against the three before. */
+  acwr: number | null;
+  /** Fitness points gained in the last 7 days. */
+  ramp: number | null;
 };
 
 export type Adaptation = {
-  /** Percent applied to the curve volume (90–105). 100 = no change. */
+  /** Percent applied to the curve volume (88–105; 90–105 without a wearable). 100 = no change. */
   pct: number;
   /** Human reason for the summary; empty when no adjustment. */
   note: string;
@@ -255,6 +271,19 @@ export function meanLoggedRpe(values: Array<number | null>): number | null {
  * it never moves on missing data. Caller must skip it before any history exists.
  */
 export function computeAdaptationFactor(s: AdaptationSignals): Adaptation {
+  // Wearable signals first (plan 2.14): the body's own answer outranks the log.
+  const w = s.wearable;
+  if (w) {
+    if (w.hrvState === "fatigued" || (w.hrvState === "strained" && w.restingHrFlag)) {
+      return { pct: 88, note: "Eased ~12% — HRV has been under your normal range for a week." };
+    }
+    if ((w.acwr != null && w.acwr > 1.3) || (w.ramp != null && w.ramp > 8)) {
+      return { pct: 92, note: "Eased ~8% — load rose too fast." };
+    }
+    if (w.sleepDebtH != null && w.sleepDebtH > 6) {
+      return { pct: 95, note: "Eased ~5% — over 6 h of sleep debt." };
+    }
+  }
   // Behind on the plan — don't pile volume onto a missed week.
   if (s.adherence < 0.6) {
     return { pct: 90, note: "Eased ~10% — under half of last week's sessions were completed." };
@@ -267,7 +296,9 @@ export function computeAdaptationFactor(s: AdaptationSignals): Adaptation {
   if (
     s.adherence >= 0.9 &&
     (s.avgReadiness == null || s.avgReadiness >= 4) &&
-    (s.avgRpe == null || s.avgRpe <= 6)
+    (s.avgRpe == null || s.avgRpe <= 6) &&
+    // With a wearable, the push also needs HRV in or above its normal range.
+    (!w || w.hrvState === "balanced" || w.hrvState === "high")
   ) {
     return { pct: 105, note: "Boosted ~5% — strong, consistent week." };
   }
