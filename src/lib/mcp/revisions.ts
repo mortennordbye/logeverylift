@@ -66,6 +66,7 @@ async function conflictText(userId: string, e: PlanConflictError): Promise<strin
       .from(planRevisions)
       .where(
         and(
+          eq(planRevisions.userId, userId),
           eq(planRevisions.objectType, r.objectType),
           eq(planRevisions.objectId, r.objectId),
           lt(planRevisions.id, r.id),

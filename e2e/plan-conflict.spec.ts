@@ -108,11 +108,16 @@ test("a queued finish replays its sets and the finish, and drops the conflicting
   // flush (with the version the workout started on), then the finish. Seeded
   // directly, because an offline navigation in the browser is not repeatable.
   await page.evaluate(
-    ([sessionId, id, reps]) =>
+    ([programId, sessionId, id, reps]) =>
       localStorage.setItem(
         "pendingMutationQueue",
         JSON.stringify([
-          { id: "flush", kind: "updateProgramSet", payload: { id, targetReps: reps, weightKg: 77.5, baseVersion: 1 }, queuedAt: 1 },
+          {
+            id: "flush",
+            kind: "flushWorkoutPlan",
+            payload: { programId, baseVersion: 1, sets: [{ id, targetReps: reps, weightKg: 77.5 }] },
+            queuedAt: 1,
+          },
           {
             id: "finish",
             kind: "completeWorkoutSession",
@@ -121,12 +126,12 @@ test("a queued finish replays its sets and the finish, and drops the conflicting
           },
         ]),
       ),
-    [active.sessionId, setId, planned.targetReps ?? 8] as const,
+    [active.programId, active.sessionId, setId, planned.targetReps ?? 8] as const,
   );
   await page.evaluate(() => localStorage.removeItem("activeWorkout"));
 
   await page.goto("/");
-  await expect(page.getByText(/One plan change from it was not applied/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByText(/Workout saved\. One plan change from your workout was not applied/)).toBeVisible({ timeout: 20_000 });
   await expect(page.getByText(/dropped/)).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => localStorage.getItem("pendingMutationQueue"))).toBeNull();
   await expectSavedAndKept(page, active, setId);

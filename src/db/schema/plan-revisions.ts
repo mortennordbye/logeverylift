@@ -59,6 +59,8 @@ export const planRevisions = pgTable(
   },
   (t) => [
     index("idx_plan_rev_object").on(t.userId, t.objectType, t.objectId, t.id),
+    // Reads by object alone (the purge's newer-row check, restore lookups).
+    index("idx_plan_rev_object_only").on(t.objectType, t.objectId, t.id),
     index("idx_plan_rev_writer").on(t.userId, t.writer, t.createdAt),
     index("idx_plan_rev_change_set").on(t.userId, t.changeSetId),
   ],

@@ -101,6 +101,9 @@ const setShape = z
 
 type SetInput = z.infer<typeof setShape>;
 
+/** Thrown inside the set-list transaction so a refused list writes nothing. */
+class SetListRefused extends Error {}
+
 /**
  * Rows logged against a set in the user's open sessions move with it when its
  * position changes, the rule reorderProgramSets uses.
@@ -513,66 +516,71 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
             args.sets !== undefined ? await periodizationShare(owner.programId, userId) : 1;
 
           // The slot edits and the set diff in one transaction, as one revision.
-          let setError: string | null = null;
-          const { versions } = await planWrite(ctx, async (w) => {
-            const tx = w.tx;
-            await w.touch({ type: "program", id: owner.programId }, { expectedVersion: args.expectedVersion });
-            if (Object.keys(peUpdates).length > 0) {
-              await tx
-                .update(programExercises)
-                .set(peUpdates)
-                .where(eq(programExercises.id, programExerciseId));
-            }
-            if (args.sets === undefined) return;
-            // Matched by id, then by set number, and updated in place, so ids
-            // stay and logged rows keep their link (docs/plans/revisions.md,
-            // 2.3). The anchors and the role carry over from the matched set,
-            // re-derived the way an edit in the app re-derives them (PZ-36).
-            const old = await tx
-              .select({
-                id: programSets.id,
-                setNumber: programSets.setNumber,
-                distanceMeters: programSets.distanceMeters,
-                durationSeconds: programSets.durationSeconds,
-                peakDistanceMeters: programSets.peakDistanceMeters,
-                peakDurationSeconds: programSets.peakDurationSeconds,
-                sessionRole: programSets.sessionRole,
-              })
-              .from(programSets)
-              .where(and(eq(programSets.programExerciseId, programExerciseId), liveProgramSets));
-            const match = matchSets(old, args.sets);
-            if ("error" in match) {
-              setError = match.error;
-              return;
-            }
-            const oldById = new Map(old.map((o) => [o.id, o]));
-            for (const { id, input: s } of match.updates) {
-              const row = setValues(programExerciseId, s);
-              const prev = oldById.get(id)!;
-              const mode =
-                row.distanceMeters != null ? "distance" : row.durationSeconds != null ? "duration" : null;
-              const peaks = mode ? reanchoredPeaks(prev, row, mode, share) : null;
-              // A role sent in the input wins; without one the old set's is kept.
-              const sessionRole = s.sessionRole !== undefined ? row.sessionRole : prev.sessionRole;
-              await tx
-                .update(programSets)
-                .set({ ...row, ...(peaks ?? {}), sessionRole })
-                .where(eq(programSets.id, id));
-              if (prev.setNumber !== row.setNumber) await moveOpenSessionRows(tx, userId, id, row.setNumber);
-            }
-            if (match.inserts.length > 0) {
-              await tx
-                .insert(programSets)
-                .values(match.inserts.map((s) => setValues(programExerciseId, s)));
-            }
-            if (match.deletes.length > 0) {
-              await tx
-                .update(programSets)
-                .set({ deletedAt: new Date() })
-                .where(inArray(programSets.id, match.deletes));
-            }
-          });
-          if (setError) return fail(setError);
+          let versions = new Map<string, number>();
+          try {
+            ({ versions } = await planWrite(ctx, async (w) => {
+              const tx = w.tx;
+              await w.touch({ type: "program", id: owner.programId }, { expectedVersion: args.expectedVersion });
+              if (Object.keys(peUpdates).length > 0) {
+                await tx
+                  .update(programExercises)
+                  .set(peUpdates)
+                  .where(eq(programExercises.id, programExerciseId));
+              }
+              if (args.sets === undefined) return;
+              // Matched by id, then by set number, and updated in place, so ids
+              // stay and logged rows keep their link (docs/plans/revisions.md,
+              // 2.3). The anchors and the role carry over from the matched set,
+              // re-derived the way an edit in the app re-derives them (PZ-36).
+              const old = await tx
+                .select({
+                  id: programSets.id,
+                  setNumber: programSets.setNumber,
+                  distanceMeters: programSets.distanceMeters,
+                  durationSeconds: programSets.durationSeconds,
+                  peakDistanceMeters: programSets.peakDistanceMeters,
+                  peakDurationSeconds: programSets.peakDurationSeconds,
+                  sessionRole: programSets.sessionRole,
+                })
+                .from(programSets)
+                .where(and(eq(programSets.programExerciseId, programExerciseId), liveProgramSets));
+              const match = matchSets(old, args.sets);
+              if ("error" in match) {
+                // Throw, so the slot edits above roll back with it and no
+                // revision or version step is stored for a refused call.
+                throw new SetListRefused(match.error);
+              }
+              const oldById = new Map(old.map((o) => [o.id, o]));
+              for (const { id, input: s } of match.updates) {
+                const row = setValues(programExerciseId, s);
+                const prev = oldById.get(id)!;
+                const mode =
+                  row.distanceMeters != null ? "distance" : row.durationSeconds != null ? "duration" : null;
+                const peaks = mode ? reanchoredPeaks(prev, row, mode, share) : null;
+                // A role sent in the input wins; without one the old set's is kept.
+                const sessionRole = s.sessionRole !== undefined ? row.sessionRole : prev.sessionRole;
+                await tx
+                  .update(programSets)
+                  .set({ ...row, ...(peaks ?? {}), sessionRole })
+                  .where(eq(programSets.id, id));
+                if (prev.setNumber !== row.setNumber) await moveOpenSessionRows(tx, userId, id, row.setNumber);
+              }
+              if (match.inserts.length > 0) {
+                await tx
+                  .insert(programSets)
+                  .values(match.inserts.map((s) => setValues(programExerciseId, s)));
+              }
+              if (match.deletes.length > 0) {
+                await tx
+                  .update(programSets)
+                  .set({ deletedAt: new Date() })
+                  .where(inArray(programSets.id, match.deletes));
+              }
+            }));
+          } catch (e) {
+            if (e instanceof SetListRefused) return fail(e.message);
+            throw e;
+          }
           return ok({ updated: true, programExerciseId, programVersion: programVersion(versions, owner.programId) });
         }
 

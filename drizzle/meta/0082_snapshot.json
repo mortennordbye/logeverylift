@@ -1,5 +1,5 @@
 {
-  "id": "29b0d741-273b-4788-b6e3-815bde192391",
+  "id": "90a3a56d-abe0-4a09-a236-0ab2d388ee74",
   "prevId": "5368e1ea-87b9-4743-bd78-2957b02ffb6b",
   "version": "7",
   "dialect": "postgresql",
@@ -3636,6 +3636,33 @@
               "asc": true,
               "nulls": "last"
             },
+            {
+              "expression": "object_type",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "object_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "idx_plan_rev_object_only": {
+          "name": "idx_plan_rev_object_only",
+          "columns": [
             {
               "expression": "object_type",
               "isExpression": false,

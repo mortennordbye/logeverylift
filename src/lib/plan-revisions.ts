@@ -47,7 +47,7 @@ import {
   type Row,
 } from "@/lib/utils/plan-revisions";
 import { judgingRuleChanged } from "@/lib/utils/progression";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -227,7 +227,10 @@ export class PlanWriteSession {
       .select({ userId: table.userId, version: table.version, deletedAt: table.deletedAt })
       .from(table)
       .where(eq(table.id, target.id))
-      .for("update");
+      // Not FOR UPDATE: that also blocks the KEY SHARE lock a new
+      // workout_sessions row takes on its program, so starting a workout
+      // would wait for any plan write.
+      .for("no key update");
     if (!row || row.userId !== this.ctx.userId || (row.deletedAt && !opts.allowDeleted)) {
       throw new PlanNotFoundError(target);
     }
@@ -238,7 +241,13 @@ export class PlanWriteSession {
     const [hasRevision] = await this.tx
       .select({ id: planRevisions.id })
       .from(planRevisions)
-      .where(and(eq(planRevisions.objectType, target.type), eq(planRevisions.objectId, target.id)))
+      .where(
+        and(
+          eq(planRevisions.userId, this.ctx.userId),
+          eq(planRevisions.objectType, target.type),
+          eq(planRevisions.objectId, target.id),
+        ),
+      )
       .limit(1);
     if (!hasRevision) {
       // The object predates the revision layer (or is seed data): keep how it
@@ -723,13 +732,20 @@ async function restoreProgramTo(
       await tx
         .select({ id: exercises.id })
         .from(exercises)
-        .where(inArray(exercises.id, targetSnap.exercises.map((e) => Number(e.exerciseId)).concat(-1)))
+        .where(
+          and(
+            inArray(exercises.id, targetSnap.exercises.map((e) => Number(e.exerciseId)).concat(-1)),
+            // A slot may only point at a built-in exercise or one of the
+            // user's own, the rule the MCP add path enforces.
+            or(isNull(exercises.userId), eq(exercises.userId, w.ctx.userId)),
+          ),
+        )
     ).map((e) => e.id),
   );
 
   for (const e of targetSnap.exercises) {
     if (!existingExercises.has(Number(e.exerciseId))) {
-      skipped.push(`${e.exerciseName ?? "An exercise"} no longer exists`);
+      skipped.push(`${e.exerciseName ?? "An exercise"} is no longer available`);
       continue;
     }
     const { sets, exerciseName: _name, ...slotRow } = e;
@@ -825,7 +841,12 @@ async function restoreCycleTo(
       .select({ changeSetId: planRevisions.changeSetId })
       .from(planRevisions)
       .where(
-        and(eq(planRevisions.objectType, "cycle"), eq(planRevisions.objectId, cycleId), eq(planRevisions.action, "delete")),
+        and(
+          eq(planRevisions.userId, w.ctx.userId),
+          eq(planRevisions.objectType, "cycle"),
+          eq(planRevisions.objectId, cycleId),
+          eq(planRevisions.action, "delete"),
+        ),
       )
       .orderBy(desc(planRevisions.id))
       .limit(1);
@@ -836,6 +857,7 @@ async function restoreCycleTo(
         .innerJoin(programs, eq(programs.id, planRevisions.objectId))
         .where(
           and(
+            eq(planRevisions.userId, w.ctx.userId),
             eq(planRevisions.changeSetId, deleteRev.changeSetId),
             eq(planRevisions.objectType, "program"),
             eq(planRevisions.action, "delete"),
@@ -1050,12 +1072,42 @@ export type ChangeSetEntry = {
 
 /** The user's assistant change sets, newest first, with what each changed. */
 export async function listAssistantChangeSets(userId: string, limit = 30): Promise<ChangeSetEntry[]> {
-  const revs = await db
-    .select()
-    .from(planRevisions)
-    .where(and(eq(planRevisions.userId, userId), eq(planRevisions.writer, "assistant"), ne(planRevisions.action, "conflict")))
-    .orderBy(desc(planRevisions.id))
-    .limit(500);
+  // One query: each assistant revision with the snapshot just before it on
+  // the same object (LAG over the user's real revisions), so the feed reads
+  // no row per change.
+  const { rows } = await db.execute<{
+    id: number;
+    object_type: PlanObjectType;
+    object_id: number;
+    action: PlanRevisionAction;
+    reason: string | null;
+    change_set_id: string | null;
+    client_id: string | null;
+    created_at: Date | string;
+    snapshot: PlanSnapshot;
+    prior: PlanSnapshot | null;
+  }>(sql`
+    SELECT * FROM (
+      SELECT id, object_type, object_id, action, writer, reason, change_set_id, client_id, created_at, snapshot,
+             LAG(snapshot) OVER (PARTITION BY object_type, object_id ORDER BY id) AS prior
+      FROM plan_revisions
+      WHERE user_id = ${userId} AND action <> 'conflict'
+    ) r
+    WHERE r.writer = 'assistant'
+    ORDER BY r.id DESC
+    LIMIT 500`);
+  const revs = rows.map((r) => ({
+    id: r.id,
+    objectType: r.object_type,
+    objectId: r.object_id,
+    action: r.action,
+    reason: r.reason,
+    changeSetId: r.change_set_id,
+    clientId: r.client_id,
+    createdAt: new Date(r.created_at),
+    snapshot: r.snapshot,
+    prior: r.prior,
+  }));
   const sets = new Map<string, typeof revs>();
   for (const r of revs) {
     const k = r.changeSetId ?? `rev:${r.id}`;
@@ -1070,22 +1122,9 @@ export async function listAssistantChangeSets(userId: string, limit = 30): Promi
     const chrono = [...items].reverse();
     const objects: ChangeSetEntry["objects"] = [];
     for (const r of chrono) {
-      const [prior] = await db
-        .select({ snapshot: planRevisions.snapshot })
-        .from(planRevisions)
-        .where(
-          and(
-            eq(planRevisions.objectType, r.objectType),
-            eq(planRevisions.objectId, r.objectId),
-            lt(planRevisions.id, r.id),
-            ne(planRevisions.action, "conflict"),
-          ),
-        )
-        .orderBy(desc(planRevisions.id))
-        .limit(1);
-      const snap = r.snapshot as PlanSnapshot;
+      const snap = r.snapshot;
       const name = String(isProgramSnapshot(snap) ? snap.program.name : snap.cycle.name);
-      const changes = r.action === "delete" ? ["Deleted"] : diffSnapshots((prior?.snapshot as PlanSnapshot) ?? null, snap);
+      const changes = r.action === "delete" ? ["Deleted"] : diffSnapshots(r.prior ?? null, snap);
       const existing = objects.find((o) => o.type === r.objectType && o.id === r.objectId);
       if (existing) existing.changes.push(...changes);
       else objects.push({ type: r.objectType, id: r.objectId, name, changes });
@@ -1116,7 +1155,14 @@ export async function listDeleted(userId: string, type: PlanObjectType) {
     const [rev] = await db
       .select({ id: planRevisions.id })
       .from(planRevisions)
-      .where(and(eq(planRevisions.objectType, type), eq(planRevisions.objectId, r.id), eq(planRevisions.action, "delete")))
+      .where(
+        and(
+          eq(planRevisions.userId, userId),
+          eq(planRevisions.objectType, type),
+          eq(planRevisions.objectId, r.id),
+          eq(planRevisions.action, "delete"),
+        ),
+      )
       .orderBy(desc(planRevisions.id))
       .limit(1);
     out.push({ id: r.id, name: r.name, deletedAt: r.deletedAt!, revisionId: rev?.id ?? null });
@@ -1135,30 +1181,34 @@ export async function listDeleted(userId: string, type: PlanObjectType) {
 export async function purgePlanRevisions(now = new Date()) {
   const historyCut = new Date(now.getTime() - REVISION_RETENTION_DAYS * 86_400_000);
   const trashCut = new Date(now.getTime() - DELETED_PLAN_RETENTION_DAYS * 86_400_000);
+  // A newer conflict row is not a newer state: it records a write that was not
+  // applied, so it never makes the last real snapshot "old".
   await db.execute(sql`
     DELETE FROM plan_revisions r
     WHERE r.created_at < ${historyCut}
       AND EXISTS (
         SELECT 1 FROM plan_revisions n
-        WHERE n.object_type = r.object_type AND n.object_id = r.object_id AND n.id > r.id
+        WHERE n.user_id = r.user_id AND n.object_type = r.object_type AND n.object_id = r.object_id
+          AND n.id > r.id AND n.action <> 'conflict'
       )`);
-  // plan-read: includes deleted (the purge reads deleted rows on purpose)
-  const oldCycles = await db.select({ id: trainingCycles.id }).from(trainingCycles).where(lt(trainingCycles.deletedAt, trashCut));
-  if (oldCycles.length) {
-    const ids = oldCycles.map((c) => c.id);
-    // A generated program the user kept must not go with its cycle.
-    await db
-      .update(programs)
-      .set({ createdByCycleId: null })
-      .where(and(inArray(programs.createdByCycleId, ids), isNull(programs.deletedAt)));
-    await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "cycle"), inArray(planRevisions.objectId, ids)));
-    await db.delete(trainingCycles).where(inArray(trainingCycles.id, ids));
-  }
+  // Programs first: deleting a cycle cascades to the programs it generated
+  // (created_by_cycle_id), which would take them out with their revisions
+  // left behind.
   // plan-read: includes deleted (the purge reads deleted rows on purpose)
   const oldPrograms = await db.select({ id: programs.id }).from(programs).where(lt(programs.deletedAt, trashCut));
   if (oldPrograms.length) {
     const ids = oldPrograms.map((p) => p.id);
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "program"), inArray(planRevisions.objectId, ids)));
     await db.delete(programs).where(inArray(programs.id, ids));
+  }
+  // plan-read: includes deleted (the purge reads deleted rows on purpose)
+  const oldCycles = await db.select({ id: trainingCycles.id }).from(trainingCycles).where(lt(trainingCycles.deletedAt, trashCut));
+  if (oldCycles.length) {
+    const ids = oldCycles.map((c) => c.id);
+    // Every program still kept, live or still in the trash, must not go with
+    // its cycle: unhook it first (the old ones are already gone above).
+    await db.update(programs).set({ createdByCycleId: null }).where(inArray(programs.createdByCycleId, ids));
+    await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "cycle"), inArray(planRevisions.objectId, ids)));
+    await db.delete(trainingCycles).where(inArray(trainingCycles.id, ids));
   }
 }
