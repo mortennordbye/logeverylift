@@ -268,11 +268,15 @@ export async function wearableSignals(userId: string, today = new Date()): Promi
       debtS: sql<number | null>`(${garminDailyMetrics.metrics}->>'sleepDebtS')::float8`,
       ramp: sql<number | null>`(${garminDailyMetrics.metrics}->>'ramp')::float8`,
       load: sql<number | null>`(${garminDailyMetrics.metrics}->'pmc'->'total'->>'load')::float8`,
+      // Whether the watch measured anything that day: a daily row exists for every calendar day.
+      measured: sql<boolean>`(${garminDailyMetrics.metrics}->'hrv'->>'ms') is not null or (${garminDailyMetrics.metrics}->>'sleepSeconds') is not null`,
     })
     .from(garminDailyMetrics)
     .where(and(eq(garminDailyMetrics.userId, userId), gte(garminDailyMetrics.day, since.toISOString().slice(0, 10))))
     .orderBy(asc(garminDailyMetrics.day));
-  const last = rows.at(-1);
+  // Freshness from the newest day the watch measured, not the newest row: rows are
+  // built up to today even when the watch has not been worn for days.
+  const last = rows.findLast((r) => r.measured);
   if (!last) return null;
   const ageDays = (Date.parse(today.toISOString().slice(0, 10)) - Date.parse(last.day)) / 86_400_000;
   if (ageDays > WEARABLE_FRESH_DAYS) return null;
@@ -302,7 +306,8 @@ export async function wearableSuggestion(userId: string, now = new Date()): Prom
     where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active")),
     with: { slots: true },
   });
-  if (!cycle?.startDate || cycle.athleteLevel === null) return null;
+  // A missing athlete level is fine: the weekly sync uses the default deload cadence then too.
+  if (!cycle?.startDate) return null;
   const today = new Date(now);
   today.setHours(0, 0, 0, 0);
   const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);

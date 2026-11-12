@@ -24,6 +24,7 @@
  * - garmin_fuel_logs: carbohydrate and fluid the user logged for a session.
  */
 
+import { sql } from "drizzle-orm";
 import { bigint, boolean, customType, date, index, integer, jsonb, pgTable, real, serial, text, timestamp, unique } from "drizzle-orm/pg-core";
 import { GARMIN_DAY_KINDS } from "../../lib/garmin/endpoints";
 import { users } from "./users";
@@ -57,9 +58,10 @@ export const garminConnections = pgTable("garmin_connections", {
   metricsVersion: integer("metrics_version"),
   // Opt-in: copy Garmin weigh-ins into the profile's weight history (src/lib/garmin/weight-sync.ts).
   syncWeight: boolean("sync_weight").default(false).notNull(),
-  // The newest Garmin weigh-in already copied. Only later ones are copied, so a
-  // copy the user deleted is not added back by the next import.
-  weightSyncedUntil: timestamp("weight_synced_until"),
+  // Times (ms) of every Garmin weigh-in already copied. Each is copied once, so a
+  // copy the user deleted is not added back, while older weigh-ins the history
+  // import finds later are still copied.
+  weightCopied: bigint("weight_copied", { mode: "number" }).array().default(sql`'{}'::bigint[]`).notNull(),
 });
 
 export const garminDays = pgTable(

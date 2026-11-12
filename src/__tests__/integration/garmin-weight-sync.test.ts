@@ -67,6 +67,16 @@ describe("setGarminWeightSync", () => {
     expect(await syncGarminWeight(user.id)).toBe(1);
   });
 
+  it("still copies older weigh-ins the history import finds after the sync was turned on", async () => {
+    const user = await garminUser();
+    asUser(user.id);
+    await setGarminWeightSync({ enabled: true });
+    const T0 = T1 - 30 * 86_400_000;
+    await db.insert(garminDays).values({ userId: user.id, calendarDate: "2026-10-12", kind: "weight_entries", data: { items: [{ timestampGMT: T0, weight: 93000 }] } });
+    expect(await syncGarminWeight(user.id)).toBe(1);
+    expect((await entries(user.id)).map((e) => e.kg)).toEqual([93, 91.5, 89.7]);
+  });
+
   it("keeps a newer weight the user typed as the body weight", async () => {
     const user = await garminUser();
     await db.insert(userWeightEntries).values({ id: crypto.randomUUID(), userId: user.id, weightKg: 88, recordedAt: new Date(T2 + 3_600_000) });

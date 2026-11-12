@@ -4,10 +4,8 @@ import { db } from "@/db";
 import {
   garminActivities,
   garminActivityFiles,
-  garminActivityMetrics,
   garminActivityStreams,
   garminConnections,
-  garminDailyMetrics,
   garminDays,
   garminFuelLogs,
   garminSyncRuns,
@@ -20,6 +18,7 @@ import { GARMIN_DAY_KINDS, endpointLabel } from "@/lib/garmin/endpoints";
 import { runGarminMetricsStep } from "@/lib/garmin/metrics-job";
 import { garminWorkerLoop, historyFloor } from "@/lib/garmin/worker";
 import { syncGarminWeight } from "@/lib/garmin/weight-sync";
+import { deleteGarminData } from "@/lib/garmin/delete-data";
 import { encryptSecret } from "@/lib/utils/crypto";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
@@ -40,8 +39,17 @@ export async function refreshGarmin(): Promise<ActionResult<{ syncError: string 
   const auth = await requireSession();
   if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
   try {
+    // Garmin asked us to wait (429, or a rejected key): a refresh must not call it during that pause.
+    const [conn] = await db.select({ pausedUntil: garminConnections.pausedUntil }).from(garminConnections).where(eq(garminConnections.userId, auth.user.id));
+    if (conn?.pausedUntil && conn.pausedUntil > new Date()) {
+      return { success: false, error: `Garmin asked us to wait. Try again after ${conn.pausedUntil.toISOString().slice(11, 16)} UTC.` };
+    }
     const sync = await syncGarmin(auth.user.id, { force: true });
     if (sync.status === "not_connected") return { success: false, error: "Garmin is not connected" };
+    if (sync.status === "error" && sync.error.startsWith("rate_limited")) {
+      const waitS = (sync.retryInSeconds ?? 120) + 5;
+      await db.update(garminConnections).set({ pausedUntil: new Date(Date.now() + waitS * 1000) }).where(eq(garminConnections.userId, auth.user.id));
+    }
     await runGarminMetricsStep(auth.user.id);
     await syncGarminWeight(auth.user.id);
     revalidatePath("/more/garmin");
@@ -128,16 +136,8 @@ export async function disconnectGarmin(data: unknown): Promise<ActionResult> {
   try {
     await db.transaction(async (tx) => {
       await tx.delete(garminConnections).where(eq(garminConnections.userId, userId));
-      if (parsed.data.deleteData) {
-        await tx.delete(garminDays).where(eq(garminDays.userId, userId));
-        await tx.delete(garminDailyMetrics).where(eq(garminDailyMetrics.userId, userId));
-        await tx.delete(garminActivityMetrics).where(eq(garminActivityMetrics.userId, userId));
-        await tx.delete(garminActivityStreams).where(eq(garminActivityStreams.userId, userId));
-        await tx.delete(garminActivityFiles).where(eq(garminActivityFiles.userId, userId));
-        await tx.delete(garminActivities).where(eq(garminActivities.userId, userId));
-        await tx.delete(garminSyncRuns).where(eq(garminSyncRuns.userId, userId));
-        await tx.delete(garminFuelLogs).where(eq(garminFuelLogs.userId, userId));
-      }
+      // A worker tick still importing for this user finishes the delete when it ends (worker.ts).
+      if (parsed.data.deleteData) await deleteGarminData(tx, userId);
     });
     forgetToken(userId);
     revalidatePath("/settings");

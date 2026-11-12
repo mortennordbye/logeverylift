@@ -161,6 +161,16 @@ describe("refreshGarmin", () => {
     expect(await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, me.id))).toHaveLength(2);
   });
 
+  it("does not call Garmin while it has asked us to wait", async () => {
+    const me = await createUser();
+    await connect(me.id);
+    await db.update(garminConnections).set({ pausedUntil: new Date(Date.now() + 60_000) }).where(eq(garminConnections.userId, me.id));
+    const before = fetchMock.mock.calls.length;
+    const result = await refreshGarmin();
+    expect(result.success).toBe(false);
+    expect(fetchMock.mock.calls.length).toBe(before);
+  });
+
   it("treats Garmin's empty 204 answer as no data, not a failure", async () => {
     const me = await createUser();
     await connect(me.id);
@@ -169,7 +179,8 @@ describe("refreshGarmin", () => {
     if (!result.success) throw new Error(result.error);
     expect(result.data.syncError).toBeNull();
     const [run] = await db.select().from(garminSyncRuns).where(eq(garminSyncRuns.userId, me.id)).orderBy(desc(garminSyncRuns.id)).limit(1);
-    expect(run).toMatchObject({ status: "ok", counts: expect.objectContaining({ hrv: 0, sleep: 1, daily: 1, activities: 1 }) });
+    // Counts are rows that changed: the second sync re-fetched the same sleep, daily and activity rows.
+    expect(run).toMatchObject({ status: "ok", counts: expect.objectContaining({ hrv: 0, sleep: 0, daily: 0, activities: 0 }) });
     // HRV saved by the first sync is still there.
     expect((await storedDay(me.id, "hrv"))?.lastNightAvg).toBe(80);
   });

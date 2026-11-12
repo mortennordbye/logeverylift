@@ -24,12 +24,12 @@ const daysAgo = (n: number) => {
   return d;
 };
 
-async function garminDay(daysBack: number, hrvState: string) {
+async function garminDay(daysBack: number, hrvState: string | null, measured = true) {
   await db.insert(garminDailyMetrics).values({
     userId,
     day: toDateStr(daysAgo(daysBack)),
     modelVersion: 2,
-    metrics: { hrv: { state: hrvState }, restingHr: { flag: false }, sleepDebtS: 0, ramp: 2, pmc: { total: { load: 50 } } },
+    metrics: { hrv: { state: hrvState, ms: measured ? 60 : null }, sleepSeconds: measured ? 27000 : null, restingHr: { flag: false }, sleepDebtS: 0, ramp: 2, pmc: { total: { load: 50 } } },
   });
 }
 
@@ -54,6 +54,18 @@ const distance = async () => (await db.select({ d: programSets.distanceMeters })
 const pct = async () => (await db.select({ p: trainingCycles.adaptationPct }).from(trainingCycles).where(eq(trainingCycles.id, cycleId)))[0].p;
 
 describe("wearable suggestion", () => {
+  it("suggests nothing when the watch has not measured anything for days, though daily rows run on to today", async () => {
+    await garminDay(5, "fatigued");
+    for (const d of [4, 3, 2, 1, 0]) await garminDay(d, null, false);
+    expect(await wearableSuggestion(userId)).toBeNull();
+  });
+
+  it("works for a cycle with no athlete level, as the weekly sync does", async () => {
+    await db.update(trainingCycles).set({ athleteLevel: null }).where(eq(trainingCycles.id, cycleId));
+    await garminDay(0, "fatigued");
+    expect(await wearableSuggestion(userId)).not.toBeNull();
+  });
+
   it("leaves the weekly sync alone, suggests easing when HRV is fatigued, and Apply scales this week", async () => {
     await garminDay(0, "fatigued");
     await syncActiveCyclePeriodization();

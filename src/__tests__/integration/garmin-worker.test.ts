@@ -5,7 +5,7 @@ import { addDays } from "@/lib/garmin/dates";
 import { FIT_PARSER_VERSION } from "@/lib/garmin/fit";
 import { ACTIVITY_MODEL_VERSION } from "@/lib/garmin/analytics/activity";
 import { forgetToken } from "@/lib/garmin/sync";
-import { HISTORY_DAYS_USER, runGarminWorkerTick } from "@/lib/garmin/worker";
+import { HISTORY_DAYS_USER, finishDisconnect, runGarminWorkerTick } from "@/lib/garmin/worker";
 import { encryptSecret } from "@/lib/utils/crypto";
 import { and, eq, min } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -115,7 +115,8 @@ describe("runGarminWorkerTick", () => {
     const c = await conn(userId);
     expect(c.historyCursor).toBe(addDays(today, -6));
     expect(c.recentDetailAt).not.toBeNull();
-    expect(c.leaseUntil).toBeNull();
+    // The lease ends at the tick's end; that time orders the next claim.
+    expect(c.leaseUntil!.getTime()).toBeLessThanOrEqual(Date.now());
 
     const hr = await db.select().from(garminDays).where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "heart_rate")));
     expect(hr).toHaveLength(7);
@@ -173,6 +174,25 @@ describe("runGarminWorkerTick", () => {
     const [s] = await db.select({ v: garminActivityStreams.parserVersion }).from(garminActivityStreams).where(eq(garminActivityStreams.userId, userId));
     expect(s.v).toBe(FIT_PARSER_VERSION);
     expect(await runGarminWorkerTick()).toEqual({ status: "idle" });
+  });
+
+  it("marks a stored file the parser cannot read as done instead of retrying it every tick", async () => {
+    const userId = await connect();
+    await runUntilIdle();
+    await db.update(garminActivityStreams).set({ parserVersion: 1 }).where(eq(garminActivityStreams.userId, userId));
+    await db.update(garminActivityFiles).set({ zip: Buffer.from("not a zip") }).where(eq(garminActivityFiles.userId, userId));
+    expect((await runGarminWorkerTick()).status).toBe("ran");
+    const [s] = await db.select({ v: garminActivityStreams.parserVersion }).from(garminActivityStreams).where(eq(garminActivityStreams.userId, userId));
+    expect(s.v).toBe(FIT_PARSER_VERSION);
+    expect(await runGarminWorkerTick()).toEqual({ status: "idle" });
+  });
+
+  it("gives each connected user a turn instead of the same one every tick", async () => {
+    const a = await connect();
+    const b = await connect();
+    const first = await runGarminWorkerTick();
+    const second = await runGarminWorkerTick();
+    expect(first.status === "ran" && second.status === "ran" && new Set([first.userId, second.userId])).toEqual(new Set([a, b]));
   });
 
   it("wakes up for activity metrics from an older model and recomputes them", async () => {
@@ -251,5 +271,26 @@ describe("runGarminWorkerTick", () => {
       expect(await db.select().from(garminActivities).where(eq(garminActivities.userId, id))).toHaveLength(1);
       expect(await db.select().from(garminActivityStreams).where(eq(garminActivityStreams.userId, id))).toHaveLength(1);
     }
+  });
+});
+
+describe("finishDisconnect", () => {
+  it("deletes what a tick saved after a disconnect when the user's older Garmin data was deleted", async () => {
+    const userId = await connect();
+    const tickStart = new Date();
+    await db.insert(garminDays).values({ userId, calendarDate: today, kind: "hrv", data: {}, fetchedAt: new Date(tickStart.getTime() + 1000) });
+    await finishDisconnect(userId, tickStart);
+    expect(await db.select().from(garminDays).where(eq(garminDays.userId, userId))).toHaveLength(0);
+  });
+
+  it("keeps the data after a plain disconnect, when older rows are still there", async () => {
+    const userId = await connect();
+    const tickStart = new Date();
+    await db.insert(garminDays).values([
+      { userId, calendarDate: addDays(today, -1), kind: "hrv", data: {}, fetchedAt: new Date(tickStart.getTime() - 60_000) },
+      { userId, calendarDate: today, kind: "hrv", data: {}, fetchedAt: new Date(tickStart.getTime() + 1000) },
+    ]);
+    await finishDisconnect(userId, tickStart);
+    expect(await db.select().from(garminDays).where(eq(garminDays.userId, userId))).toHaveLength(2);
   });
 });

@@ -13,6 +13,7 @@ import { thresholdHistory, vo2Series } from "@/lib/garmin/analytics/trends";
 import { verdict } from "@/lib/garmin/charts/activity";
 import { addDays } from "@/lib/garmin/dates";
 import {
+  garminToday,
   getActivitiesData,
   getActivityDetail,
   getLoadSeries,
@@ -40,8 +41,9 @@ export function registerGarminTools(server: McpServer, userId: string) {
     },
     async () => {
       try {
-        const [o, volume, series] = await Promise.all([getOverviewData(userId), getVolumeData(userId), getLoadSeries(userId)]);
-        const [session, race] = await Promise.all([getSessionInsights(userId, volume), getRaceProjection(userId, series.series)]);
+        const today = await garminToday(userId);
+        const [o, volume, series] = await Promise.all([getOverviewData(userId, today), getVolumeData(userId, today), getLoadSeries(userId)]);
+        const [session, race] = await Promise.all([getSessionInsights(userId, volume, today), getRaceProjection(userId, series.series, today)]);
         const last = o.pmc.dates.length - 1;
         return ok({
           date: o.date,

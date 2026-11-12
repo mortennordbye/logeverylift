@@ -17,6 +17,7 @@ import { ACTIVITY_MODEL_VERSION, computeActivityMetrics, type ActivityMetrics } 
 import { DAILY_MODEL_VERSION, buildDailyMetrics, type DayInputs, type StrengthSessionInput } from "./analytics/daily";
 import type { Sport } from "./analytics/sport";
 import { isoDate } from "./dates";
+import { garminToday } from "./today";
 import { FIT_PARSER_VERSION, parseFit } from "./fit";
 import { readZipEntry } from "./zip";
 
@@ -48,10 +49,20 @@ async function reparse(userId: string) {
     )
     .where(and(eq(garminActivityStreams.userId, userId), lt(garminActivityStreams.parserVersion, FIT_PARSER_VERSION)))
     .limit(REPARSE_PER_TICK);
+  // A file the new parser cannot read keeps its old parse but is marked done,
+  // so it is not tried again on every tick and does not block the rows after it.
+  const giveUp = (id: number) =>
+    db
+      .update(garminActivityStreams)
+      .set({ parserVersion: FIT_PARSER_VERSION })
+      .where(and(eq(garminActivityStreams.userId, userId), eq(garminActivityStreams.garminActivityId, id)));
   for (const row of stale) {
     try {
       const fit = readZipEntry(row.zip, ".fit");
-      if (!fit) continue;
+      if (!fit) {
+        await giveUp(row.id);
+        continue;
+      }
       const p = parseFit(fit);
       await db
         .update(garminActivityStreams)
@@ -71,6 +82,7 @@ async function reparse(userId: string) {
         .where(and(eq(garminActivityStreams.userId, userId), eq(garminActivityStreams.garminActivityId, row.id)));
     } catch (e) {
       console.error("[garminMetrics] reparse failed", { userId, activityId: row.id }, e instanceof Error ? e.message : "unknown");
+      await giveUp(row.id);
     }
   }
   return stale.length;
@@ -286,7 +298,8 @@ export async function runGarminMetricsStep(userId: string, now = new Date()): Pr
   const upToDate = conn.metricsComputedAt !== null && conn.metricsVersion === DAILY_MODEL_VERSION && activities === 0 && reparsed === 0;
   if (stillPending || upToDate) return { reparsed, activities, days: 0 };
 
-  const days = await buildDaily(userId, isoDate(now));
+  // Up to the user's local today, the date the pages show.
+  const days = await buildDaily(userId, await garminToday(userId, now));
   await db
     .update(garminConnections)
     .set({ metricsComputedAt: now, metricsVersion: DAILY_MODEL_VERSION })

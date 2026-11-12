@@ -547,6 +547,20 @@
       "when": 1794469631605,
       "tag": "0077_special_sister_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1794470530855,
+      "tag": "0078_puzzling_human_torch",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1794470531645,
+      "tag": "0079_curvy_gunslinger",
+      "breakpoints": true
     }
   ]
 }

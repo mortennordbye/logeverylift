@@ -69,15 +69,23 @@ export class RunLog {
   }
 }
 
-async function saveDays(userId: string, kind: GarminDayKind, rows: DayRow[], now: Date) {
-  if (!rows.length) return;
-  await db
+/**
+ * Upserts day rows and returns how many are new or changed. A re-fetched row
+ * with the same data is left alone, so the run counts only real changes and
+ * the derived metrics are rebuilt only when something changed (finishRun).
+ */
+async function saveDays(userId: string, kind: GarminDayKind, rows: DayRow[], now: Date): Promise<number> {
+  if (!rows.length) return 0;
+  const written = await db
     .insert(garminDays)
     .values(rows.map((r) => ({ userId, calendarDate: r.date, kind, data: r.data, fetchedAt: now })))
     .onConflictDoUpdate({
       target: [garminDays.userId, garminDays.calendarDate, garminDays.kind],
       set: { data: sql`excluded.data`, fetchedAt: sql`excluded.fetched_at` },
-    });
+      setWhere: sql`${garminDays.data} is distinct from excluded.data`,
+    })
+    .returning({ id: garminDays.id });
+  return written.length;
 }
 
 /** Errors that must stop a run: the key is gone or Garmin wants us to slow down. */
@@ -101,8 +109,7 @@ export async function fetchRangeKinds(token: string, userId: string, start: stri
       await each(log, ep.kind, async () => {
         const json = await garminGet(token, ep.path(s, e), ep.kind);
         const rows = isEmptyAnswer(json) ? [] : ep.split(json, s, e).filter((r) => r.date >= s && r.date <= e);
-        await saveDays(userId, ep.kind, rows, now);
-        log.add(ep.kind, rows.length);
+        log.add(ep.kind, await saveDays(userId, ep.kind, rows, now));
       });
     }
   }
@@ -115,8 +122,7 @@ export async function fetchDayKinds(token: string, userId: string, date: string,
     await each(log, ep.kind, async () => {
       const json = await garminGet(token, ep.path(date, today), ep.kind);
       if (isEmptyAnswer(json) || ep.empty?.(json)) return;
-      await saveDays(userId, ep.kind, [{ date, data: json }], now);
-      log.add(ep.kind, 1);
+      log.add(ep.kind, await saveDays(userId, ep.kind, [{ date, data: json }], now));
     });
   }
 }
@@ -126,8 +132,7 @@ export async function fetchSnapshots(token: string, userId: string, log: RunLog,
     await each(log, ep.kind, async () => {
       const json = await garminGet(token, ep.path(), ep.kind);
       if (isEmptyAnswer(json)) return;
-      await saveDays(userId, ep.kind, [{ date: isoDate(now), data: json }], now);
-      log.add(ep.kind, 1);
+      log.add(ep.kind, await saveDays(userId, ep.kind, [{ date: isoDate(now), data: json }], now));
     });
   }
 }
@@ -137,7 +142,7 @@ export async function fetchActivities(token: string, userId: string, start: stri
   await each(log, "activities", async () => {
     const list = await fetchActivityList(token, start, end);
     if (!list.length) return;
-    await db
+    const written = await db
       .insert(garminActivities)
       .values(
         list.map((a) => ({
@@ -157,8 +162,11 @@ export async function fetchActivities(token: string, userId: string, start: stri
           data: sql`excluded.data`,
           fetchedAt: sql`excluded.fetched_at`,
         },
-      });
-    log.add("activities", list.length);
+        // Unchanged activities are left alone and not counted (see saveDays).
+        setWhere: sql`${garminActivities.data} is distinct from excluded.data or ${garminActivities.startTimeLocal} is distinct from excluded.start_time_local`,
+      })
+      .returning({ id: garminActivities.id });
+    log.add("activities", written.length);
   });
 }
 
@@ -259,7 +267,8 @@ export function fatalTag(e: unknown, userId: string, where: string): string {
   return "unexpected";
 }
 
-export type SyncResult = { status: "ok" | "skipped" | "not_connected" } | { status: "error"; error: string };
+/** retryInSeconds is Garmin's wait hint after a 429, passed on so the worker's pause can follow it. */
+export type SyncResult = { status: "ok" | "skipped" | "not_connected" } | { status: "error"; error: string; retryInSeconds?: number | null };
 
 /** Recent data the Garmin page needs now: range endpoints, snapshots and the activity list. */
 export async function syncGarmin(userId: string, { force = false } = {}): Promise<SyncResult> {
@@ -286,6 +295,6 @@ export async function syncGarmin(userId: string, { force = false } = {}): Promis
   } catch (e) {
     const tag = fatalTag(e, userId, "syncGarmin");
     await finishRun(runId, userId, now, log, tag);
-    return { status: "error", error: tag };
+    return { status: "error", error: tag, retryInSeconds: e instanceof GarminError ? e.retryInSeconds : null };
   }
 }

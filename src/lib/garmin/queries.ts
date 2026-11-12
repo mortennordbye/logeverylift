@@ -8,7 +8,10 @@ import { bodyBatteryDay, type BodyBatteryDay, type DailyMetrics } from "./analyt
 import { insightsFor, type Insight } from "./analytics/insights";
 import { sessionInsights } from "./analytics/session-insights";
 import type { CorrelationDay } from "./analytics/correlations";
-import { addDays, isoDate, localDate, mondayOf } from "./dates";
+import { addDays, isoDate, mondayOf } from "./dates";
+import { garminToday } from "./today";
+
+export { garminToday };
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
 import { SPORTS, isIndoor, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
@@ -119,21 +122,6 @@ export type TodayData = {
   strip: { date: string; readiness: number | null; load: number }[];
   insights: Insight[];
 };
-
-/**
- * Today's date where the user is, from the time zone in their Garmin profile
- * snapshot; UTC without one. A UTC date runs a day late after local midnight
- * east of Greenwich (race countdown, the Monday week split).
- */
-export async function garminToday(userId: string, now = new Date()): Promise<string> {
-  const [row] = await db
-    .select({ tz: sql<string | null>`${garminDays.data}->>'timeZone'` })
-    .from(garminDays)
-    .where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "profile")))
-    .orderBy(desc(garminDays.calendarDate))
-    .limit(1);
-  return localDate(now, row?.tz ?? null);
-}
 
 /** The newest date with Garmin day data, or today. */
 export async function latestGarminDate(userId: string): Promise<string> {
