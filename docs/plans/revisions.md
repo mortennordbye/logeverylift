@@ -77,7 +77,7 @@ The plan named only the first two paths. All of them change in this package.
 | `progression` | `learnWeightStacks` (`src/lib/weight-stack-learning.ts:33`, write at `:168`) after a session | `program_exercises.weight_stack` |
 | `sync` | `syncPeriodizedTargets` (`src/lib/periodization-sync.ts:183`, set writes at `:244`, cycle write at `:251`). Runs from `syncDueCycle` (`:43`), from `getActiveCycleForUser` during a page render (`src/lib/actions/training-cycles.ts:189-191`), from `getCyclePeriodization` (`:569-570`), and before an MCP set replace (`src/lib/mcp/tools/programs.ts:469-470`) | `distanceMeters`, `durationSeconds` on sets with a peak anchor; `targetHeartRateZone`, `restTimeSeconds` on `work` sets; cycle `lastSyncedWeek`, `adaptationPct`, `adaptationNote` |
 | `sync` | `getActiveCycleForUser` marks a finished block completed (`src/lib/actions/training-cycles.ts:176-180`) | Cycle `status` |
-| `apply` | `applyWearableSuggestion` (`src/lib/periodization-sync.ts:331`) through `applyWearablePlanSuggestion` (`src/lib/actions/training-cycles.ts:1059`) | The same as `sync`, with the suggested percent |
+| `apply` | `applyWearableSuggestion` (`src/lib/periodization-sync.ts:331`) through `applyWearablePlanSuggestion` (`src/lib/actions/training-cycles.ts:1029`) | The same as `sync`, with the suggested percent |
 | none (system) | Demo and fake data in `src/lib/actions/admin.ts` (`:366-446`, `:594-676`, deletes at `:547-552`, `:778-779`), and the scripts in `scripts/` | Seed data; no revisions needed |
 
 The offline queue (1.4) carries one plan write: `updateProgramSet` from the finish flush.

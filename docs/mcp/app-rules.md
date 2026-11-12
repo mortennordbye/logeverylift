@@ -17,7 +17,11 @@ what it describes, that package updates this file and the server instructions in
   either by weekday (one slot per day, 1 = Monday to 7 = Sunday) or a rotation (slots in order,
   one per workout). A slot points at a program, or at nothing for a rest day. A slot marked
   `autoComplete` is a day the user tracks outside the app; it completes itself. A cycle is a
-  draft, active or completed, and only one is active at a time.
+  draft, active or completed, and only one is active at a time. With the endurance features on,
+  a cycle holds a race date and distance, a goal (`build` or `maintain`) and an athlete level.
+  `manage_training_cycle` `start` with a later `startDate` keeps the cycle a draft scheduled to
+  start that day; on that day it becomes active and the old block completes
+  (`startDueScheduledCycle` in `src/lib/plan-revisions.ts`). One cycle is scheduled at a time.
 - **Exercise.** The built-in library plus the user's own custom exercises. An endurance
   exercise has a discipline (swim, bike or run). `search_exercises` finds them;
   `create_exercise` makes a custom one. A custom name must not match a built-in exercise or
@@ -29,6 +33,11 @@ what it describes, that package updates this file and the server instructions in
   active cycle as done (`confirm_session`). They cannot edit or delete sessions.
 - **Profile and body weight.** Name, gender, birth year, height, goals, experience level, and a
   weight history.
+- **Coach memory.** Short entries the assistant keeps between conversations: a `preference`, a
+  `limit` (in the athlete's life: time, travel, equipment), an `observation` or a `decision`,
+  each with a date and an in-use flag. The user sees and edits them in More → Coach memory.
+  Every change is a revision. Injuries and weekly availability go here until the app has its own
+  place for them. A race goes on the cycle, not here.
 - **Settings.** The user's time zone and display units (`get_profile`, `update_profile`), and
   whether the endurance add-on is on (`enduranceEnabled`). The add-on gates the triathlon plan
   and the race on a cycle in the app. Only an admin can turn it on; no tool can set it
@@ -43,8 +52,9 @@ lasts only until that writer runs again.
 |---|---|---|
 | Target reps and weight on strength sets | The progression engine, after each logged session (`src/lib/utils/progression.ts`) | A one-off. The engine moves it again after the next session. To change the trend, change the slot's progression settings. |
 | Distance and duration on sets with a peak anchor | The weekly sync of the active cycle, scaled from the peak by the week's phase (`src/lib/periodization-sync.ts:269-270`) | A set replace stores the new value as the new peak, so the edit changes the peak, not only this week. |
-| Heart rate zone and rest on `work` sets | The weekly sync, by phase (`src/lib/periodization-sync.ts:272-274`) | Overwritten at the next weekly sync. |
-| The cycle's volume factor (`adaptationPct`) | The weekly sync, from adherence, readiness and effort | No tool writes it. |
+| Heart rate zone and rest on `work` sets with a peak anchor | The weekly sync, by phase (`src/lib/periodization-sync.ts:280-282`) | A different value is refused. An omitted value keeps the sync's. Send `sessionRole: null` on the set to take zone and rest over; the sync still scales its distance or duration. |
+| The cycle's volume factor (`adaptationPct`) | The weekly sync, from adherence, readiness and effort; a Garmin suggestion the user applies | `manage_training_cycle` `set_volume` (50-110) sets it for this week and rewrites this week's targets. The next weekly sync computes its own. |
+| A session the assistant logged (`log_session`) | The assistant at the time, then the user | You cannot edit or delete it; the user can. |
 | Everything else in programs and cycles | The user and the assistant | Stays until changed again. |
 
 ## Limits of the app today
@@ -61,9 +71,20 @@ lasts only until that writer runs again.
   `get_training_cycle` or your last write's result. If the user (or another assistant) changed
   it since, the write is refused with what changed; read it again and redo the change.
 - **Deletes can be undone.** Deleted programs and cycles stay restorable for 90 days.
-- **No training limits in code.** Nothing checks a ramp, a long-run cap or hard days per week.
-  Use the endurance training reference (`logeverylift://docs/endurance-training-reference`)
-  and say which rule and evidence label a change rests on.
+- **Two training limits in code** (`src/lib/utils/training-limits.ts`), for users with
+  endurance features on, on assistant plan writes only (the user's own edits are never checked):
+  - `long_run_cap`: no planned run more than 1.10x the longest run in the last 30 days (Study,
+    large cohort). Needs Garmin data; without it the cap is not checked, and the result says so.
+  - `hard_sessions_per_week`: at most 3 interval sessions (a `work` set or zone 4-5 on an
+    endurance set) in a weekday cycle's week (Coach convention; what counts as hard is
+    Inference). Rotation cycles have no fixed week and are not counted.
+
+  A limit blocks only a write that makes things worse. A refused write changes nothing; send it
+  again with `overrideLimits` and `overrideReason` if it still fits, and the revision stores the
+  override for the user to see. A restore you make is never refused, but the result warns.
+  The weekly load ramp, the low-readiness rule and heavy legs within 48 h of a key session are
+  not in code yet: check them against the endurance training reference
+  (`logeverylift://docs/endurance-training-reference`) and name the rule and its evidence label.
 - **One workout slot per day** in a weekday cycle.
 - **No seasons or races above cycles.** A cycle can hold a race date and distance.
 - **Time:** "today", the cycle week, the weekly sync and the date a workout is logged on follow

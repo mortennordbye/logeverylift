@@ -7,6 +7,7 @@
  * It does not hit the database; handlers are registered but not invoked.
  */
 
+import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
@@ -118,6 +119,10 @@ describe("MCP tool registration", () => {
 
   it("registers the exercise tools: search is read, create is write", () => {
     expect(hints(registerExerciseTools)).toEqual({ search_exercises: true, create_exercise: false });
+  });
+
+  it("registers the coach memory tools: get is read, manage is write", () => {
+    expect(hints(registerCoachMemoryTools)).toEqual({ get_coach_memory: true, manage_coach_memory: false });
   });
 
   it("registers the session tools, both write tools", () => {

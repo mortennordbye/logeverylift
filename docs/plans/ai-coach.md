@@ -8,9 +8,10 @@ D1-D6, D15, D18, T2-T5, T9, T10), the research (`docs/research/endurance-trainin
 `CLAUDE.md`, `TESTING.md` and the merged briefs [`mcp-access.md`](mcp-access.md) and
 [`foundations.md`](foundations.md).
 
-Status: brief, 2026-11-12. The owner settled the open questions on 2026-11-12 (section 12). The
+Status: building, 2026-11-12. The owner settled the open questions on 2026-11-12 (section 12).
+Section 13 says where the build differs from this brief. The
 **Findings** describe `main` at ec8ee7d; every `file:line` in them was opened then. Names marked
-*new* do not exist yet. Names from A4 (`withPlanWrite`, `plan_revisions`, `changeSetFor`,
+*new* do not exist yet. Names from A4 (`planWrite`, `plan_revisions`, `changeSetFor`,
 `diffSnapshots`, `list_revisions`, `restore_revision`) are defined in `revisions.md` and do not
 exist on `main` yet.
 
@@ -272,7 +273,7 @@ Inference".
   `planFacts(tx, ...)` reads the planned runs and the week's hard sessions inside the transaction.
 
 **Override flow (D3).**
-1. The tool runs the write inside `withPlanWrite`. Inside the same transaction it reads the plan
+1. The tool runs the write inside `planWrite`. Inside the same transaction it reads the plan
    facts before and after the write and runs the rules.
 2. If a rule is broken and not named in `overrideLimits`, the transaction rolls back. Nothing is
    applied, no revision is written. The result is an error result with JSON: `applied: false`,
@@ -304,7 +305,7 @@ pure module.
   `observation` entries, and C3's interview moves them (decision 4).
 - **Writes.** Server Actions in `src/lib/actions/coach-memory.ts` (*new*) for the app, and the
   MCP tool, both through one plain module `src/lib/coach-memory.ts` (*new*) that takes a
-  resolved user id. Every write goes through `withPlanWrite` with object type `memory`, writer
+  resolved user id. Every write goes through `planWrite` with object type `memory`, writer
   `user` or `assistant`. A soft-deleted entry can be restored from A4's AI changes feed or with
   `restore_revision`.
 - **Not checked by the limits.** Memory is context, not a plan change.
@@ -409,7 +410,7 @@ and fixes this brief in the same PR.
 
 | A4 part (`revisions.md`) | Used for | What this PR adds to it |
 |---|---|---|
-| `withPlanWrite` (2.2) | Every plan write here and every memory write | An optional `limitCheck` in the context, stored in the new `limit_check` column; a way for the callback to roll back with a result (a typed error that `withPlanWrite` catches and returns), so a refused write leaves nothing |
+| `planWrite` (2.2) | Every plan write here and every memory write | An optional `limitCheck` in the context, stored in the new `limit_check` column; a way for the callback to roll back with a result (a typed error that `planWrite` catches and returns), so a refused write leaves nothing |
 | Object types (2.1, T5) | Coach memory | Type `memory`: snapshot `{ "v": 1, "memory": {row} }`, restore (one row, same id), and `diffSnapshots` text ("Memory: 'prefers…' made inactive") |
 | `expectedVersion`, `reason` on MCP writes (2.7, 2.10) | New fields and ops on existing tools, and `manage_coach_memory` | Same rules on the new inputs |
 | `changeSetFor` (2.8) | Every assistant write | Nothing; no explicit argument |
@@ -488,10 +489,10 @@ and the smoke pass in `CLAUDE.md`.
 
 ## 7. Order of work
 
-1. Wait for A4 to merge; rebase on it. Read its merged `withPlanWrite` and adjust section 4.
+1. Wait for A4 to merge; rebase on it. Read its merged `planWrite` and adjust section 4.
 2. Migration and schema; the move of `rebuildPRsFrom` and `insertAutoSessions` to plain modules
    (existing tests green before and after).
-3. Pure limits module with unit tests; server limits module; `withPlanWrite` hook and column.
+3. Pure limits module with unit tests; server limits module; `planWrite` hook and column.
 4. MCP: cycle fields and `set_volume`, owner refusals, limits on the checked tools, then exercises,
    sessions, notes. Integration tests per tool, "today fails" first.
 5. Coach memory: module, actions, tools, screen; tests.
@@ -570,3 +571,34 @@ The owner took every recommendation. The defaults in section 10 are accepted too
    completes the old block then; the cycle list shows "Starts <date>".
 8. **`LEGAL_VERSION` only.** `CONSENT_VERSION` stays: coach memory is free text, the same
    category as the free-text notes the health-data consent already names.
+
+## 13. Where the build differs from the brief
+
+- **A4 shipped `planWrite`, not `withPlanWrite`.** It takes a write context and a callback that
+  touches each object (`w.touch`) and writes on `w.tx`. The limit check rides on the write
+  context (`PlanWriteContext.limitCheck`), which every revision of the write stores in
+  `plan_revisions.limit_check`. A broken limit throws `LimitRefusedError` inside the callback, so
+  the whole transaction rolls back (`withLimits` in `src/lib/training-limits.ts`).
+- **The scheduled start has its own column**, `training_cycles.scheduled_start_date`, not "a
+  draft with a start date": a draft can still hold an old `start_date` (a cycle restored as a
+  draft), and that must never start by itself. `startDueScheduledCycle` starts the due cycle from
+  `getActiveCycleForUser` and `syncDueCycle` with writer `sync`, so the assistant's version stays
+  valid. A restore keeps the field (`CYCLE_KEPT`).
+- **`start` and `set_volume` check the limits before the write**, from the plan as it will run
+  (week 1 at the block's share, or this week at the new percent), because `activateCycle` and the
+  weekly sync run their own transactions. The edit tools check inside the write.
+- **`set_volume` runs the weekly sync with the assistant's write context** (writer `assistant`,
+  its reason, its change set). The version check is made before the sync runs.
+- **Restore warnings (T4) run on a restore of one revision.** A change-set undo over MCP runs no
+  limit check.
+- **`log_session` does not learn weight stacks.** Stack learning reads sets linked to a program
+  slot; assistant-logged sets link to none, so the tool writes no plan data.
+- **Coach memory is a full object type in the revision layer**: snapshot, restore, change-set
+  undo, the assistant feed and the 90-day purge of deleted entries.
+- **`update_profile` with no known field** returned a generic internal error (the database's
+  "No values to set"). Fixed with a test that failed first; it now says "No profile field to
+  update".
+- **No component test for the new screens.** The coach memory screen is covered by
+  `e2e/coach-memory.spec.ts`; the "Starts <date>" label and the override line are plain text in
+  existing lists.
+

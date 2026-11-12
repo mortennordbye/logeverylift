@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import {
+  coachMemory,
   exercises,
   planRevisions,
   programExercises,
@@ -13,6 +14,7 @@ import {
 import { connectionAccess } from "@/lib/mcp/access";
 import { planWrite } from "@/lib/plan-revisions";
 import { READ_ONLY_REFUSAL, scopedServer, type McpAccess } from "@/lib/mcp/scopes";
+import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
@@ -41,7 +43,7 @@ function toolsFor(userId: string, access: McpAccess) {
     registerTool: (name: string, _config: unknown, handler: Handler) => tools.set(name, handler),
   } as unknown as McpServer;
   const server = scopedServer(base, access);
-  for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools, registerExerciseTools, registerSessionTools]) {
+  for (const register of [registerProfileTools, registerProgramTools, registerCycleTools, registerWorkoutTools, registerGarminTools, registerExerciseTools, registerSessionTools, registerCoachMemoryTools]) {
     register(server, userId);
   }
   return tools;
@@ -57,7 +59,8 @@ async function fingerprint(userId: string) {
   const weights = await db.select({ id: userWeightEntries.id }).from(userWeightEntries).where(eq(userWeightEntries.userId, userId));
   const sessions = await db.select({ id: workoutSessions.id }).from(workoutSessions).where(eq(workoutSessions.userId, userId));
   const custom = await db.select({ id: exercises.id }).from(exercises).where(eq(exercises.userId, userId));
-  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length });
+  const memory = await db.select({ id: coachMemory.id }).from(coachMemory).where(eq(coachMemory.userId, userId));
+  return JSON.stringify({ user, progs, slots: slots.length, cycles, cycleSlots: cycleSlots.length, weights: weights.length, sessions: sessions.length, custom: custom.length, memory: memory.length });
 }
 
 let me: string;
@@ -101,6 +104,7 @@ const writeCalls = (): [string, Record<string, unknown>][] => [
   ["create_exercise", { name: "My trail run", category: "cardio", discipline: "run" }],
   ["log_session", { date: toDateStr(new Date()), sets: [{ exerciseId, setNumber: 1, reps: 5, weightKg: 60 }] }],
   ["confirm_session", { date: toDateStr(new Date()), programId }],
+  ["manage_coach_memory", { operation: "add", kind: "preference", text: "Long rides on Saturday", reason: "Test" }],
 ];
 
 const readCalls: [string, Record<string, unknown>][] = [
@@ -120,6 +124,7 @@ const readCalls: [string, Record<string, unknown>][] = [
   ["get_garmin_activity", { id: 1 }],
   ["list_revisions", {}],
   ["search_exercises", { query: "a", limit: 5 }],
+  ["get_coach_memory", {}],
 ];
 
 describe("read only", () => {

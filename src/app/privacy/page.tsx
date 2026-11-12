@@ -36,6 +36,12 @@ export default function PrivacyPage() {
           with who made it (you, an assistant you connected, or the app) and the reason given.
         </li>
         <li>
+          <strong>Coach memory:</strong> short notes that you or an AI assistant you connected keep about your
+          training (preferences, limits in your life, observations and decisions), so the assistant knows your
+          context next time. You see and edit them in More → Coach memory. Only you and your own connected
+          assistant read them.
+        </li>
+        <li>
           <strong>Settings:</strong> your time zone (taken from your browser the first time you open the app, so
           that &quot;today&quot; is your own day), the units you want distances shown in, whether missed-workout
           reminders are on, and whether endurance features are turned on for your account.
@@ -63,7 +69,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
-        Body weight, heart rate, readiness, how you felt and free-text notes can reveal things about your health.
+        Body weight, heart rate, readiness, how you felt and free-text notes, coach memory included, can reveal things about your health.
         We treat all of it as health data under GDPR Article 9 and process it only with your explicit consent, which
         you give when you create your account.
       </p>
@@ -165,11 +171,11 @@ export default function PrivacyPage() {
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
-        on, programs, cycles and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the notes you write on
-        workouts and sets. If Garmin is on for your account, they can also read data from it. With read and change
+        on, programs, cycles, coach memory and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
+        notes you write on workouts and sets. If Garmin is on for your account, they can also read data from it. With read and change
         access they can also change your profile, body weight, time zone, display units, programs and cycles, see and restore earlier
-        versions of your programs and cycles, create custom exercises, and log a workout you did or mark a planned day as done. History
-        shows such a workout as logged by your assistant. That provider&apos;s own privacy
+        versions of your programs and cycles, write coach memory, create custom exercises, and log a workout you did or mark a planned day
+        as done. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More →
         Connected assistants, and it loses access at once.
       </p>
@@ -185,6 +191,10 @@ export default function PrivacyPage() {
         <li>
           Earlier versions of your programs and cycles: one year, but the newest version of each is always kept.
           Programs and cycles you delete can be restored for 90 days, then they are deleted for good.
+        </li>
+        <li>
+          Coach memory: until you delete an entry. A deleted entry can be restored for 90 days, then it is deleted
+          for good.
         </li>
         <li>Login sessions, with IP address and user agent: 30 days after last use.</li>
         <li>Server logs: 7 days.</li>

@@ -27,6 +27,7 @@ import { serverInstructions } from "@/lib/mcp/instructions";
 import { checkRateLimit } from "@/lib/mcp/rate-limit";
 import { loadResourceDocs, registerResources } from "@/lib/mcp/resources";
 import { MCP_SCOPES, scopedServer } from "@/lib/mcp/scopes";
+import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
@@ -111,6 +112,7 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       registerWorkoutTools(server, userId);
       registerSessionTools(server, userId);
       registerExerciseTools(server, userId);
+      registerCoachMemoryTools(server, userId, clientId);
       if (garmin) registerGarminTools(server, userId);
       registerResources(mcpServer, docs);
     },
