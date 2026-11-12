@@ -33,8 +33,10 @@ export function normalRange(values: number[]): [number, number] | null {
 /**
  * One tile's data from a dated series (any order, gaps allowed). `band`
  * overrides the computed normal, for signals that have their own (HRV).
+ * `days` is the history kept for the chart; the newest value counts only
+ * when it is at most `fresh` days old (default: `days`).
  */
-export function bodySignal(series: Point[], today: string, opts: { days?: number; band?: [number, number] | null } = {}): BodySignal {
+export function bodySignal(series: Point[], today: string, opts: { days?: number; fresh?: number; band?: [number, number] | null } = {}): BodySignal {
   const days = opts.days ?? 14;
   const sorted = [...series].filter((p) => Number.isFinite(p.value) && p.date <= today).sort((a, b) => a.date.localeCompare(b.date));
   const newest = sorted.at(-1) ?? null;
@@ -45,7 +47,7 @@ export function bodySignal(series: Point[], today: string, opts: { days?: number
     const base = addDays(newest.date, -28);
     normal = normalRange(sorted.filter((p) => p.date >= base && p.date < newest.date).map((p) => p.value));
   }
-  const value = newest && newest.date >= from ? newest.value : null;
+  const value = newest && newest.date >= addDays(today, -((opts.fresh ?? days) - 1)) ? newest.value : null;
   const state = value === null || !normal ? null : value < normal[0] ? "below" : value > normal[1] ? "above" : "within";
   return { value, date: value === null ? null : newest!.date, points, normal, state };
 }

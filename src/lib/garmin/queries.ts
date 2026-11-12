@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, garminFuelLogs, programExercises, programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, garminFuelLogs, programExercises, programSets, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
@@ -17,6 +17,7 @@ import { efPoints, thresholdHistory, type EfPoint, type TrendActivity } from "./
 import { compareBricks, pacingGuide, taperStart, type BrickComparison, type FuelSession, type PacingGuide, type RunSummary } from "./analytics/race";
 import type { Efforts } from "./analytics/efforts";
 import type { Decoupling } from "./analytics/decoupling";
+import type { RatingContext } from "./analytics/norms";
 import { HRV_STATUS_LABEL, bodySignal, intensityWeek, parseFitnessAge, raceStatus, type BodySignal, type FitnessAge, type IntensityWeek, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
 import {
   RAMP_WINDOW_DAYS,
@@ -564,6 +565,8 @@ export type OverviewData = {
   hrvStatus: { label: string; weeklyAvg: number | null } | null;
   /** Intensity minutes this week against the goal set in Garmin. */
   intensity: IntensityWeek;
+  /** What the tiles' population ratings need (analytics/norms.ts). */
+  rating: RatingContext;
   /** Fitness, fatigue and form for the last 42 days, all sports. */
   pmc: { dates: string[]; ctl: number[]; atl: number[]; tsb: number[]; calibrating: boolean };
   last: (ActivityListRow & { decoupling: ActivityMetrics["decoupling"] }) | null;
@@ -615,13 +618,13 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     });
   const hrvBand: [number, number] | null = today?.hrv.bandLow != null && today.hrv.bandHigh != null ? [today.hrv.bandLow, today.hrv.bandHigh] : null;
   const body: Record<BodyKey, BodySignal> = {
-    sleep: bodySignal(from((m) => (m.sleepSeconds !== null ? m.sleepSeconds / 3600 : null)), date),
-    hrv: bodySignal(from((m) => m.hrv.ms), date, { band: hrvBand }),
-    restingHr: bodySignal(from((m) => m.restingHr.bpm), date),
+    sleep: bodySignal(from((m) => (m.sleepSeconds !== null ? m.sleepSeconds / 3600 : null)), date, { days: 90, fresh: 14 }),
+    hrv: bodySignal(from((m) => m.hrv.ms), date, { band: hrvBand, days: 90, fresh: 14 }),
+    restingHr: bodySignal(from((m) => m.restingHr.bpm), date, { days: 90, fresh: 14 }),
     vo2max: bodySignal([...vo2ByDay].map(([d, v]) => ({ date: d, value: v })), date, { days: 90 }),
-    sleepScore: bodySignal(points("sleep", (j) => num(((j.sleepScores as Json | undefined)?.overall as Json | undefined)?.value)), date),
-    respiration: bodySignal(points("sleep", (j) => num(j.averageRespirationValue)), date),
-    bodyBattery: bodySignal(points("user_summary", (j) => num(j.bodyBatteryAtWakeTime) ?? num(j.bodyBatteryHighestValue)), date),
+    sleepScore: bodySignal(points("sleep", (j) => num(((j.sleepScores as Json | undefined)?.overall as Json | undefined)?.value)), date, { days: 90, fresh: 14 }),
+    respiration: bodySignal(points("sleep", (j) => num(j.averageRespirationValue)), date, { days: 90, fresh: 14 }),
+    bodyBattery: bodySignal(points("user_summary", (j) => num(j.bodyBatteryAtWakeTime) ?? num(j.bodyBatteryHighestValue)), date, { days: 90, fresh: 14 }),
     fitnessAge: bodySignal(points("fitness_age", (j) => parseFitnessAge(j)?.age ?? null), date, { days: 90 }),
     weight: bodySignal(
       points("weight", (j) => {
@@ -636,6 +639,23 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
   const hrvToday = dayRows.find((r) => r.kind === "hrv" && r.date === date)?.data as Json | undefined;
   const hrvLabel = typeof hrvToday?.status === "string" ? (HRV_STATUS_LABEL[hrvToday.status] ?? null) : null;
   const summaries = dayRows.flatMap((r) => (r.kind === "user_summary" ? [{ date: r.date, data: (r.data ?? {}) as Json }] : []));
+
+  // Ratings: sex and age from the profile (age falls back to Garmin's), Garmin's HRV baseline, the newest weigh-in.
+  const [profile] = await db.select({ gender: users.gender, birthYear: users.birthYear }).from(users).where(eq(users.id, userId));
+  const latest = (kind: string) => dayRows.findLast((r) => r.kind === kind)?.data as Json | undefined;
+  const chronologicalAge = num(latest("fitness_age")?.chronologicalAge);
+  const baseline = hrvToday?.baseline as Json | undefined;
+  const [lowUpper, balancedLow, balancedUpper, weeklyAvg] = [num(baseline?.lowUpper), num(baseline?.balancedLow), num(baseline?.balancedUpper), num(hrvToday?.weeklyAvg)];
+  const weigh = latest("weight")?.latestWeight as Json | undefined;
+  const bmi = num(weigh?.bmi);
+  const rating: RatingContext = {
+    sex: profile?.gender === "male" || profile?.gender === "female" ? profile.gender : null,
+    age: profile?.birthYear ? Number(date.slice(0, 4)) - profile.birthYear : chronologicalAge,
+    hrvBaseline: lowUpper !== null && balancedLow !== null && balancedUpper !== null && weeklyAvg !== null ? { lowUpper, balancedLow, balancedUpper, weeklyAvg } : null,
+    bodyFat: num(weigh?.bodyFat),
+    bmi: bmi !== null ? Math.round(bmi * 10) / 10 : null,
+    chronologicalAge,
+  };
 
   const recent = series.slice(-42);
   const cycle = await getActiveCycle(userId);
@@ -689,6 +709,7 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     vo2Sport,
     hrvStatus: hrvLabel ? { label: hrvLabel, weeklyAvg: num(hrvToday?.weeklyAvg) } : null,
     intensity: intensityWeek(summaries, date, mondayOf(date)),
+    rating,
     pmc: {
       dates: recent.map((m) => m.date),
       ctl: recent.map((m) => r1(m.pmc.total.ctl)),

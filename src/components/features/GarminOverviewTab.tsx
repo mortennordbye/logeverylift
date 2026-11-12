@@ -3,23 +3,24 @@
 import { insightHref } from "@/lib/garmin/analytics/insights";
 
 import { Contributors, SEVERITY_COLOR, SEVERITY_ICON, SportBadge } from "@/components/features/garmin/GarminUi";
-import { RACE_LABEL, type BodySignal } from "@/lib/garmin/analytics/overview";
+import { RACE_LABEL } from "@/lib/garmin/analytics/overview";
 import { READINESS_BAND_LABEL } from "@/lib/garmin/analytics/readiness";
 import { durationLabel } from "@/lib/garmin/charts/activity";
 import { formBandLabel } from "@/lib/garmin/charts/load";
 import { SPORT_LABEL } from "@/lib/garmin/charts/theme";
-import type { BodyKey, OverviewData, VolumeData } from "@/lib/garmin/queries";
+import type { OverviewData, VolumeData } from "@/lib/garmin/queries";
 import { byGap } from "@/lib/garmin/analytics/demands";
+import { BodySignals } from "@/components/features/garmin/BodySignals";
 import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
 import { phaseLabel } from "@/lib/utils/periodization";
 import { formatDateShort } from "@/lib/utils/format";
-import { Activity, BatteryMedium, BedDouble, CalendarRange, ChevronRight, Flag, Flame, Gauge, Heart, HeartPulse, Hourglass, Moon, Mountain, Scale, TrendingUp, Wind, type LucideIcon } from "lucide-react";
+import { Activity, CalendarRange, ChevronRight, Flag, Flame, Gauge, Mountain, TrendingUp } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 /**
  * The Garmin Overview tab: the answer for the day first, then nine body
- * signals against your own normal, then the build and the last session.
+ * signals rated on published scales (garmin/BodySignals.tsx), then the build and the last session.
  * Every block opens the tab that holds its detail.
  */
 
@@ -150,90 +151,6 @@ function WeekDots({ strip }: { strip: OverviewData["strip"] }) {
       )}
     </svg>
   );
-}
-
-type BodyConfig = { label: string; unit: string; format: (v: number) => string; href: string; higherIsGood: boolean | null; icon: LucideIcon; color: string };
-
-const BODY: Record<BodyKey, BodyConfig> = {
-  sleep: { label: "Sleep", unit: "h", format: (v) => v.toFixed(1), href: tab("recovery"), higherIsGood: true, icon: Moon, color: "var(--viz-swim)" },
-  sleepScore: { label: "Sleep score", unit: "", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: true, icon: BedDouble, color: "var(--viz-sleep-score)" },
-  hrv: { label: "HRV", unit: "ms", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: true, icon: HeartPulse, color: "var(--viz-run)" },
-  restingHr: { label: "Resting HR", unit: "bpm", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: false, icon: Heart, color: "var(--viz-negative)" },
-  respiration: { label: "Breathing", unit: "/min", format: (v) => v.toFixed(1), href: tab("recovery"), higherIsGood: false, icon: Wind, color: "var(--viz-respiration)" },
-  bodyBattery: { label: "Body battery", unit: "", format: (v) => String(Math.round(v)), href: tab("day"), higherIsGood: true, icon: BatteryMedium, color: "var(--viz-strength)" },
-  vo2max: { label: "VO2 max", unit: "", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: true, icon: Gauge, color: "var(--viz-bike)" },
-  fitnessAge: { label: "Fitness age", unit: "y", format: (v) => String(Math.round(v)), href: tab("trends"), higherIsGood: false, icon: Hourglass, color: "var(--viz-fitness-age)" },
-  weight: { label: "Weight", unit: "kg", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: null, icon: Scale, color: "var(--viz-other)" },
-};
-
-function stateText(s: BodySignal, good: boolean | null) {
-  if (s.value === null) return "No recent value";
-  if (!s.normal) return "Learning your normal";
-  if (s.state === "within") return "In your normal";
-  const word = s.state === "below" ? "Below" : "Above";
-  if (good === null) return `${word} your normal`;
-  return `${word} normal`;
-}
-
-function stateColor(s: BodySignal, good: boolean | null) {
-  if (s.state === null || s.state === "within" || good === null) return "var(--muted-foreground)";
-  const isGood = (s.state === "above") === good;
-  return isGood ? "var(--viz-good)" : "var(--viz-warning)";
-}
-
-/** The tile's line over its window, with your normal as a band. */
-function Spark({ s, color }: { s: BodySignal; color: string }) {
-  const w = 100;
-  const h = 28;
-  if (s.points.length < 2) return <div style={{ height: h }} />;
-  const values = s.points.map((p) => p.value);
-  const lo = Math.min(...values, ...(s.normal ? [s.normal[0]] : []));
-  const hi = Math.max(...values, ...(s.normal ? [s.normal[1]] : []));
-  const span = hi - lo || 1;
-  const t0 = Date.parse(s.points[0].date);
-  const t1 = Date.parse(s.points.at(-1)!.date);
-  const x = (d: string) => (t1 === t0 ? w : ((Date.parse(d) - t0) / (t1 - t0)) * w);
-  const y = (v: number) => h - 2 - ((v - lo) / span) * (h - 4);
-  return (
-    <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="w-full" style={{ height: h }} aria-hidden>
-      {s.normal && <rect x={0} width={w} y={y(s.normal[1])} height={Math.max(1, y(s.normal[0]) - y(s.normal[1]))} fill={color} opacity={0.18} />}
-      <polyline points={s.points.map((p) => `${x(p.date)},${y(p.value)}`).join(" ")} fill="none" stroke={color} strokeWidth={1.75} vectorEffect="non-scaling-stroke" />
-    </svg>
-  );
-}
-
-function BodyTile({ k, s, sub }: { k: BodyKey; s: BodySignal; sub?: string }) {
-  const c = BODY[k];
-  const Icon = c.icon;
-  return (
-    <Link href={c.href} replace scroll={false} className="rounded-xl bg-background p-2.5 active:opacity-70 flex flex-col gap-1 min-h-[104px]">
-      <div className="flex items-start gap-1.5">
-        <span aria-hidden className="inline-flex h-5 w-5 flex-none items-center justify-center rounded-full" style={{ background: `color-mix(in srgb, ${c.color} 20%, transparent)`, color: c.color }}>
-          <Icon className="h-3 w-3" strokeWidth={2.5} />
-        </span>
-        <p className="text-[11px] text-muted-foreground leading-tight pt-0.5">
-          {c.label}
-          {sub && <span className="block text-[9px]">{sub}</span>}
-        </p>
-      </div>
-      <p className="text-lg font-semibold leading-tight tabular-nums">
-        {s.value !== null ? c.format(s.value) : "–"}
-        {s.value !== null && c.unit && <span className="text-[11px] font-normal text-muted-foreground"> {c.unit}</span>}
-      </p>
-      <Spark s={s} color={c.color} />
-      <p className="text-[10px] leading-tight" style={{ color: stateColor(s, c.higherIsGood) }}>
-        {stateText(s, c.higherIsGood)}
-      </p>
-    </Link>
-  );
-}
-
-/** The small line under a tile's name: which VO2 max, Garmin's HRV status. */
-function tileSub(k: BodyKey, data: OverviewData): string | undefined {
-  if (k === "vo2max") return `Garmin, ${data.vo2Sport === "run" ? "running" : "cycling"}`;
-  if (k === "hrv" && data.hrvStatus) return `Garmin: ${data.hrvStatus.label}${data.hrvStatus.weeklyAvg !== null ? ` · 7 d ${Math.round(data.hrvStatus.weeklyAvg)}` : ""}`;
-  if (k === "fitnessAge" && data.body.fitnessAge.value !== null) return "Garmin";
-  return undefined;
 }
 
 /** Intensity minutes this week (moderate + 2 × vigorous) against the goal set in Garmin, a bar per day. */
@@ -370,17 +287,7 @@ export function GarminOverviewTab({ data, volume }: { data: OverviewData; volume
     <div className="space-y-4">
       <RaceStrip data={data} />
       <ReadinessBlock data={data} />
-      <section aria-label="Body signals" className="space-y-2">
-        <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Body · against your normal</p>
-        <div className="grid grid-cols-3 gap-2">
-          {(Object.keys(BODY) as BodyKey[]).map((k) => (
-            <BodyTile key={k} k={k} s={data.body[k]} sub={tileSub(k, data)} />
-          ))}
-        </div>
-        <p className="text-[11px] text-muted-foreground px-1">
-          The band is your normal: mean ± 1 SD of the 28 days before (HRV: its own baseline band). Sleep score, breathing (average while asleep), VO2 max and fitness age are Garmin&apos;s own values; Trends shows the app&apos;s VO2 max estimate next to Garmin&apos;s.
-        </p>
-      </section>
+      <BodySignals data={data} />
       <FitnessBlock data={data} />
       <WeekBlock volume={volume} />
       <IntensityBlock data={data} />

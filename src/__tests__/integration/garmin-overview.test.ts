@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { garminActivities, garminActivityMetrics, garminActivityStreams, garminDays, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { garminActivities, garminActivityMetrics, garminActivityStreams, garminDays, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import type { GarminDayKind } from "@/lib/garmin/endpoints";
 import { getActivityDetail, getOverviewData, getTrendsData, getVolumeData } from "@/lib/garmin/queries";
@@ -192,5 +192,29 @@ describe("Garmin's own numbers", () => {
     expect((await getActivityDetail(me.id, 31))?.stamina).toEqual({ start: 99, end: 70, min: 64 });
     expect((await getActivityDetail(me.id, 32))?.stamina).toBeNull();
     expect(await getActivityDetail((await createUser()).id, 31)).toBeNull();
+  });
+});
+
+describe("getOverviewData rating context", () => {
+  it("takes sex and age from the profile, Garmin's HRV baseline and the newest weigh-in", async () => {
+    const me = await createUser();
+    await db.update(users).set({ gender: "female", birthYear: 1990 }).where(eq(users.id, me.id));
+    await db.insert(garminDays).values([
+      { userId: me.id, calendarDate: "2026-11-11", kind: "hrv", data: { status: "BALANCED", weeklyAvg: 60, baseline: { lowUpper: 45, balancedLow: 50, balancedUpper: 70 } } },
+      { userId: me.id, calendarDate: "2026-11-10", kind: "weight", data: { latestWeight: { weight: 61000, bodyFat: 24.5, bmi: 21.94 } } },
+      { userId: me.id, calendarDate: "2026-11-11", kind: "fitness_age", data: { fitnessAge: 30, chronologicalAge: 99 } },
+    ]);
+
+    const r = (await getOverviewData(me.id, "2026-11-11")).rating;
+    expect(r).toEqual({ sex: "female", age: 36, hrvBaseline: { lowUpper: 45, balancedLow: 50, balancedUpper: 70, weeklyAvg: 60 }, bodyFat: 24.5, bmi: 21.9, chronologicalAge: 99 });
+  });
+
+  it("falls back to Garmin's age and leaves sex unknown for other or no gender", async () => {
+    const me = await createUser();
+    await db.update(users).set({ gender: "prefer_not_to_say" }).where(eq(users.id, me.id));
+    await db.insert(garminDays).values({ userId: me.id, calendarDate: "2026-11-11", kind: "fitness_age", data: { fitnessAge: 18, chronologicalAge: 23 } });
+
+    const r = (await getOverviewData(me.id, "2026-11-11")).rating;
+    expect(r).toMatchObject({ sex: null, age: 23, hrvBaseline: null, bodyFat: null, bmi: null });
   });
 });
