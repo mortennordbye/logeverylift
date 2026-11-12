@@ -20,9 +20,11 @@ type EndAction = "none" | "deload" | "new_cycle" | "rest";
 
 type Props = {
   cycle: TrainingCycle;
+  /** The endurance add-on (src/lib/endurance.ts); gates the race field. */
+  enduranceEnabled: boolean;
 };
 
-export function EditCycleForm({ cycle }: Props) {
+export function EditCycleForm({ cycle, enduranceEnabled }: Props) {
   const router = useRouter();
   const [name, setName] = useState(cycle.name);
   const [durationWeeks, setDurationWeeks] = useState(cycle.durationWeeks);
@@ -117,7 +119,10 @@ export function EditCycleForm({ cycle }: Props) {
         )}
       </div>
 
-      {/* Race: what the Garmin race views count down to */}
+      {/* Race: what the Garmin race views count down to. Part of the endurance
+          add-on; a cycle that already has a race keeps showing it, so no stored
+          value is hidden from its owner. */}
+      {(enduranceEnabled || cycle.raceDate) && (
       <div id="race" className="flex flex-col gap-2 scroll-mt-4">
         <label htmlFor="race-date" className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
           Race <span className="normal-case font-normal">(optional)</span>
@@ -155,6 +160,7 @@ export function EditCycleForm({ cycle }: Props) {
           The Garmin page counts down to this date and checks your training against the race distance.
         </p>
       </div>
+      )}
 
       {/* Schedule type — read-only after creation */}
       <div className="flex flex-col gap-2">

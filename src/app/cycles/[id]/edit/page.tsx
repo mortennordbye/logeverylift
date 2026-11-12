@@ -1,5 +1,6 @@
 import { EditCycleForm } from "@/components/features/EditCycleForm";
 import { getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { requireSession } from "@/lib/utils/session";
 import { ChevronLeftIcon } from "lucide-react";
 import Link from "next/link";
@@ -14,8 +15,11 @@ export default async function EditCyclePage({
   const cycleId = Number(id);
   if (isNaN(cycleId)) notFound();
 
-  await requireSession();
-  const cycleResult = await getTrainingCycleWithSlots(cycleId);
+  const session = await requireSession();
+  const [cycleResult, enduranceEnabled] = await Promise.all([
+    getTrainingCycleWithSlots(cycleId),
+    enduranceEnabledFor(session.user.id),
+  ]);
 
   if (!cycleResult.success) notFound();
 
@@ -39,7 +43,7 @@ export default async function EditCyclePage({
 
       {/* Scrollable content — flex-1 so it fills remaining height, overflow-y-auto does the actual scrolling */}
       <div className="flex-1 overflow-y-auto px-4 pb-nav-safe">
-        <EditCycleForm cycle={cycle} />
+        <EditCycleForm cycle={cycle} enduranceEnabled={enduranceEnabled} />
       </div>
     </div>
   );

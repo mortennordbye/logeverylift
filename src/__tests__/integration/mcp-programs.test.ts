@@ -30,7 +30,7 @@ function toolsFor(userId: string) {
     const tool = tools.get(name)!;
     const parsed = tool.schema.safeParse(args);
     if (!parsed.success) return { isError: true, raw: parsed.error.message };
-    const result = await tool.handler(parsed.data);
+    const result = await tool.handler(parsed.data as Record<string, unknown>);
     return { ...result, raw: result.content[0].text };
   };
 }

@@ -85,9 +85,13 @@ function PastCycleRow({ cycle }: { cycle: TrainingCycle }) {
 
 // ─── main export ──────────────────────────────────────────────────────────────
 
-type Props = { cycles: TrainingCycle[] };
+type Props = {
+  cycles: TrainingCycle[];
+  /** The endurance add-on (src/lib/endurance.ts); gates the triathlon plan entry. */
+  enduranceEnabled: boolean;
+};
 
-export function CyclesListClient({ cycles: initial }: Props) {
+export function CyclesListClient({ cycles: initial, enduranceEnabled }: Props) {
   const router = useRouter();
   const [cycles, setCycles] = useState(initial);
   const [isEditing, setIsEditing] = useState(false);
@@ -391,14 +395,16 @@ export function CyclesListClient({ cycles: initial }: Props) {
               <span className="text-base font-medium">New cycle</span>
               <span className="text-xs text-muted-foreground">Build a custom weekly schedule</span>
             </Link>
-            <Link
-              href="/cycles/triathlon"
-              onClick={() => setShowAddSheet(false)}
-              className="flex flex-col items-center justify-center py-4 active:bg-muted/50 transition-colors"
-            >
-              <span className="text-base font-medium">Triathlon plan</span>
-              <span className="text-xs text-muted-foreground">Swim · bike · run + strength, periodized</span>
-            </Link>
+            {enduranceEnabled && (
+              <Link
+                href="/cycles/triathlon"
+                onClick={() => setShowAddSheet(false)}
+                className="flex flex-col items-center justify-center py-4 active:bg-muted/50 transition-colors"
+              >
+                <span className="text-base font-medium">Triathlon plan</span>
+                <span className="text-xs text-muted-foreground">Swim · bike · run + strength, periodized</span>
+              </Link>
+            )}
           </div>
           <div className="bg-card rounded-2xl overflow-hidden">
             <button
