@@ -60,6 +60,9 @@ describe("MCP tool registration", () => {
         "update_program",
         "delete_program",
         "edit_program_exercise",
+        // The revision tools register with the program tools (docs/plans/revisions.md, 2.10).
+        "list_revisions",
+        "restore_revision",
       ].sort(),
     );
   });

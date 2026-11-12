@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, garminFuelLogs, programExercises, programSets, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
+import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, garminFuelLogs, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
@@ -555,7 +556,7 @@ export async function getActiveCycle(userId: string): Promise<ActiveCycle | null
       raceDistance: trainingCycles.raceDistance,
     })
     .from(trainingCycles)
-    .where(and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active")))
+    .where(and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), liveCycles))
     .orderBy(desc(trainingCycles.createdAt))
     .limit(1);
   return c ?? null;
@@ -937,13 +938,14 @@ export type VolumeData = {
 
 /** Planned endurance sets for one week of a day-of-week cycle (rotation cycles have no fixed week). */
 async function plannedSets(cycleId: number): Promise<PlannedSet[] | null> {
-  const [c] = await db.select({ scheduleType: trainingCycles.scheduleType }).from(trainingCycles).where(eq(trainingCycles.id, cycleId));
+  const [c] = await db.select({ scheduleType: trainingCycles.scheduleType }).from(trainingCycles).where(and(eq(trainingCycles.id, cycleId), liveCycles));
   if (c?.scheduleType !== "day_of_week") return null;
   const rows = await db
     .select({ discipline: exercises.discipline, durationS: programSets.durationSeconds, distanceM: programSets.distanceMeters })
     .from(trainingCycleSlots)
-    .innerJoin(programExercises, eq(programExercises.programId, trainingCycleSlots.programId))
-    .innerJoin(programSets, eq(programSets.programExerciseId, programExercises.id))
+    .innerJoin(programs, and(eq(programs.id, trainingCycleSlots.programId), livePrograms))
+    .innerJoin(programExercises, and(eq(programExercises.programId, trainingCycleSlots.programId), liveProgramExercises))
+    .innerJoin(programSets, and(eq(programSets.programExerciseId, programExercises.id), liveProgramSets))
     .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
     .where(and(eq(trainingCycleSlots.trainingCycleId, cycleId), sql`${trainingCycleSlots.dayOfWeek} is not null`, sql`${exercises.discipline} is not null`));
   return rows.map((r) => ({ discipline: r.discipline as Endurance, durationS: r.durationS, distanceM: r.distanceM }));

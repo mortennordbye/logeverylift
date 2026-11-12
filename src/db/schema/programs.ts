@@ -42,6 +42,14 @@ export const programs = pgTable("programs", {
     { onDelete: "cascade" },
   ),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Soft delete (docs/plans/revisions.md, 2.1): a deleted program keeps its
+  // row, so logged sessions keep their link and a restore brings back the same
+  // ids. Readers hide it with livePrograms (src/lib/plan-live.ts).
+  deletedAt: timestamp("deleted_at"),
+  // Bumped by every revision from the user or an assistant, and by a restore.
+  // An AI write or the workout's finish flush based on an older version is
+  // checked for a conflict instead of applying silently (decision T9).
+  version: integer("version").notNull().default(1),
 });
 
 // -------------------------------------------------------------------
@@ -134,6 +142,8 @@ export const programExercises = pgTable("program_exercises", {
   // bench press used as accessory work in this program. Null = inherit the
   // exercise's default (resolved type = this ?? exercise.exerciseType).
   exerciseType: text("exercise_type", { enum: exerciseTypeEnum }),
+  // Soft delete, as on programs.
+  deletedAt: timestamp("deleted_at"),
 });
 
 // -------------------------------------------------------------------
@@ -186,4 +196,6 @@ export const programSets = pgTable("program_sets", {
   // whose zone/rest the active cycle swaps by phase (base→tempo, build→threshold,
   // peak→VO₂). Null = a steady/warmup/cooldown set that only volume-scales.
   sessionRole: text("session_role"),
+  // Soft delete, as on programs. A logged set keeps pointing at a deleted set.
+  deletedAt: timestamp("deleted_at"),
 });

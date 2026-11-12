@@ -16,6 +16,7 @@ import {
   type PlanProgressionAdvance,
 } from "@/lib/utils/triathlon-plan";
 import { enduranceEnabledFor } from "@/lib/endurance";
+import { planWrite } from "@/lib/plan-revisions";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -103,7 +104,8 @@ export async function generateTriathlonPlan(
       return { success: false, error: "Could not resolve required exercises" };
     }
 
-    const cycleId = await db.transaction(async (tx) => {
+    const { result: cycleId } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+      const tx = w.tx;
       const [cycle] = await tx
         .insert(trainingCycles)
         .values({
@@ -116,6 +118,7 @@ export async function generateTriathlonPlan(
           status: "draft",
         })
         .returning({ id: trainingCycles.id });
+      w.create({ type: "cycle", id: cycle.id });
 
       for (const day of plan.days) {
         // Rest day: a slot with no program.
@@ -133,6 +136,7 @@ export async function generateTriathlonPlan(
           .insert(programs)
           .values({ userId: auth.user.id, name: day.label, createdByCycleId: cycle.id })
           .returning({ id: programs.id });
+        w.create({ type: "program", id: program.id });
 
         let orderIndex = 0;
         for (const ex of day.exercises) {

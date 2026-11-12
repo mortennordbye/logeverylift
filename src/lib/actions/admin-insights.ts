@@ -106,7 +106,9 @@ export async function getAdminInsights(): Promise<ActionResult<AdminInsightsData
         .select({ count: sql<number>`COUNT(*)` })
         .from(workoutSessions)
         .where(eq(workoutSessions.isCompleted, true)),
+      // plan-read: includes deleted (admin totals count every plan made)
       db.select({ count: sql<number>`COUNT(*)` }).from(programs),
+      // plan-read: includes deleted (admin totals count every plan made)
       db.select({ count: sql<number>`COUNT(*)` }).from(trainingCycles),
       db
         .select({ count: sql<number>`COUNT(*)` })
@@ -115,9 +117,11 @@ export async function getAdminInsights(): Promise<ActionResult<AdminInsightsData
 
       // Funnel scalars
       db
+        // plan-read: includes deleted (admin totals count every plan made)
         .select({ count: sql<number>`COUNT(DISTINCT ${programs.userId})` })
         .from(programs),
       db
+        // plan-read: includes deleted (admin totals count every plan made)
         .select({ count: sql<number>`COUNT(DISTINCT ${trainingCycles.userId})` })
         .from(trainingCycles),
       db
@@ -144,6 +148,7 @@ export async function getAdminInsights(): Promise<ActionResult<AdminInsightsData
           lastActiveDate: sql<string | null>`MAX(CASE WHEN ${workoutSessions.isCompleted} = true THEN ${workoutSessions.date} END)`,
         })
         .from(users)
+        // plan-read: includes deleted (admin totals count every plan made)
         .leftJoin(programs, eq(programs.userId, users.id))
         .leftJoin(trainingCycles, eq(trainingCycles.userId, users.id))
         .leftJoin(workoutSessions, eq(workoutSessions.userId, users.id))

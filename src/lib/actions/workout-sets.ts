@@ -25,6 +25,7 @@
  */
 
 import { db } from "@/db";
+import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { exercisePrs, exercises, programExercises, programSets, programs, users, workoutReactions, workoutSessions, workoutSets } from "@/db/schema";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import {
@@ -99,6 +100,7 @@ function workingSetCount(slotIdColumn: string) {
     SELECT COUNT(*)::int FROM "program_sets" wsc
     WHERE wsc."program_exercise_id" = ${sql.raw(slotIdColumn)}
       AND wsc."set_type" = 'working'
+      AND wsc."deleted_at" IS NULL
   )`;
 }
 
@@ -130,6 +132,7 @@ async function resolvePlanSlot(
         setType: programSets.setType,
         prescribedWorkingSets: workingSetCount('"program_sets"."program_exercise_id"'),
       })
+      // plan-read: includes deleted (a set deleted mid-workout keeps the rows logged against it)
       .from(programSets)
       .innerJoin(
         programExercises,
@@ -178,12 +181,15 @@ async function resolvePlanSlot(
       and(
         eq(programSets.programExerciseId, programExercises.id),
         eq(programSets.setNumber, setNumber),
+        // A deleted set at the same position is not this set.
+        liveProgramSets,
       ),
     )
     .where(
       and(
         eq(programExercises.programId, programId),
         eq(programExercises.exerciseId, exerciseId),
+        liveProgramExercises,
       ),
     )
     .orderBy(programExercises.id)
@@ -1453,6 +1459,7 @@ export async function getCompletedSessions(
         exerciseNames: sql<string[]>`COALESCE(ARRAY_AGG(DISTINCT ${exercises.name}) FILTER (WHERE ${exercises.name} IS NOT NULL), ARRAY[]::text[])`,
       })
       .from(workoutSessions)
+      // plan-read: includes deleted (history keeps the name of a deleted program)
       .leftJoin(programs, eq(workoutSessions.programId, programs.id))
       .leftJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
       .leftJoin(exercises, eq(exercises.id, workoutSets.exerciseId))
@@ -1533,6 +1540,7 @@ export async function getSessionDetail(
           programName: programs.name,
         })
         .from(workoutSessions)
+        // plan-read: includes deleted (history keeps the name of a deleted program)
         .leftJoin(programs, eq(workoutSessions.programId, programs.id))
         .where(
           and(
@@ -1695,7 +1703,7 @@ export async function getProgressiveSuggestions(
     const [owned] = await db
       .select({ id: programs.id })
       .from(programs)
-      .where(and(eq(programs.id, programId), eq(programs.userId, userId)))
+      .where(and(eq(programs.id, programId), eq(programs.userId, userId), livePrograms))
       .limit(1);
     if (!owned) {
       return { success: true, data: {} };
@@ -1749,7 +1757,7 @@ export async function getProgressiveSuggestions(
         eq(programSets.programExerciseId, programExercises.id),
       )
       .innerJoin(exercises, eq(programExercises.exerciseId, exercises.id))
-      .where(eq(programExercises.programId, programId));
+      .where(and(eq(programExercises.programId, programId), liveProgramExercises, liveProgramSets));
 
     if (programData.length === 0) {
       return { success: true, data: {} };
@@ -1829,6 +1837,7 @@ export async function getProgressiveSuggestions(
       })
       .from(workoutSets)
       .innerJoin(workoutSessions, eq(workoutSets.sessionId, workoutSessions.id))
+      // plan-read: includes deleted (logged history, and only live slots ask for it)
       .innerJoin(
         programExercises,
         eq(programExercises.id, workoutSets.programExerciseId),

@@ -96,6 +96,7 @@ export function registerWorkoutTools(server: McpServer, userId: string) {
             programName: programs.name,
           })
           .from(workoutSessions)
+          // plan-read: includes deleted (history keeps the name of a deleted program)
           .leftJoin(programs, eq(workoutSessions.programId, programs.id))
           .where(
             and(

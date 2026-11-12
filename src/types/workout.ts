@@ -59,6 +59,12 @@ export type ActionResult<T = undefined> =
       success: false;
       error: string;
       fieldErrors?: Record<string, string[]>;
+      /**
+       * Set when a plan write was not applied because the plan changed since
+       * the write was based on it (docs/plans/revisions.md, 2.7). Final: the
+       * offline queue drops the item without counting it as a failure.
+       */
+      conflict?: { programId: number; revisionId: number };
     };
 
 /**

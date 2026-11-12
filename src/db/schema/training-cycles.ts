@@ -75,6 +75,11 @@ export const trainingCycles = pgTable("training_cycles", {
     .notNull(),
   endMessage: text("end_message"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  // Soft delete and version, as on programs (docs/plans/revisions.md, 2.1).
+  // Slots are not soft deleted: nothing logged points at a slot, and a hidden
+  // slot would block a new one on the same day (uniq_cycle_day).
+  deletedAt: timestamp("deleted_at"),
+  version: integer("version").notNull().default(1),
 }, (t) => [
   index("idx_tc_user_status").on(t.userId, t.status),
 ]);

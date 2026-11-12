@@ -814,6 +814,7 @@ export async function adminPrepareDemoUser(forceReseed = false): Promise<ActionR
     }
 
     // Seed data if empty or force-reseed requested
+    // plan-read: includes deleted (any demo row means the demo is seeded)
     const existingPrograms = await db
       .select({ id: programs.id })
       .from(programs)

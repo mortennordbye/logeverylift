@@ -1,5 +1,7 @@
 import { db } from "@/db";
 import { exercises, programExercises, programs, users, workoutSessions, workoutSets } from "@/db/schema";
+import { liveProgramExercises, livePrograms } from "@/lib/plan-live";
+import { planWrite } from "@/lib/plan-revisions";
 import { parseUserGoals } from "@/lib/utils/goals";
 import { type Equipment, isCustomWeight } from "@/lib/utils/picker-options";
 import { adaptiveIncrementKg, roundToNearest } from "@/lib/utils/progression";
@@ -35,6 +37,7 @@ export async function learnWeightStacks(sessionId: number, userId: string): Prom
     const rows = await db
       .select({
         slotId: programExercises.id,
+        programId: programExercises.programId,
         exerciseId: workoutSets.exerciseId,
         weightStack: programExercises.weightStack,
         overloadIncrementKg: programExercises.overloadIncrementKg,
@@ -60,6 +63,8 @@ export async function learnWeightStacks(sessionId: number, userId: string): Prom
       .innerJoin(exercises, eq(exercises.id, workoutSets.exerciseId))
       .where(
         and(
+          liveProgramExercises,
+          livePrograms,
           eq(workoutSets.sessionId, sessionId),
           eq(workoutSessions.userId, userId),
           eq(programs.userId, userId),
@@ -164,10 +169,12 @@ export async function learnWeightStacks(sessionId: number, userId: string): Prom
       }
       if (next == null || next === first.weightStack) continue;
 
-      await db
-        .update(programExercises)
-        .set({ weightStack: next })
-        .where(eq(programExercises.id, slotId));
+      // Writer "progression": learned from the log, and kept by a restore.
+      const stack = next;
+      await planWrite({ userId, writer: "progression", reason: "Weight stack learned from a session" }, async (w) => {
+        await w.touch({ type: "program", id: first.programId });
+        await w.tx.update(programExercises).set({ weightStack: stack }).where(eq(programExercises.id, slotId));
+      });
     }
   } catch (e) {
     console.error("[learnWeightStacks] failed", { sessionId }, e);

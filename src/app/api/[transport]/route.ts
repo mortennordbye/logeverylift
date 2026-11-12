@@ -93,6 +93,7 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
     throw createInsufficientScopeError(MCP_SCOPES, "This connection has no LogEveryLift access. Connect again.");
   }
   const { access } = connection;
+  const clientId = typeof claims.azp === "string" ? claims.azp : undefined;
 
   // Garmin tools only for accounts allowed to use Garmin (src/lib/garmin/access.ts).
   const [garmin, docs] = await Promise.all([garminAllowedFor(userId), loadResourceDocs()]);
@@ -100,8 +101,10 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
     (mcpServer) => {
       const server = scopedServer(mcpServer, access);
       registerProfileTools(server, userId);
-      registerProgramTools(server, userId);
-      registerCycleTools(server, userId);
+      // The OAuth client tags assistant revisions, so the AI changes feed can
+      // name the assistant and group its writes (docs/plans/revisions.md, 2.8).
+      registerProgramTools(server, userId, clientId);
+      registerCycleTools(server, userId, clientId);
       registerWorkoutTools(server, userId);
       if (garmin) registerGarminTools(server, userId);
       registerResources(mcpServer, docs);

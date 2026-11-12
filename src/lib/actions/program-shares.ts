@@ -1,6 +1,8 @@
 "use server";
 
 import { db } from "@/db";
+import { livePrograms } from "@/lib/plan-live";
+import { planWrite } from "@/lib/plan-revisions";
 import { friendships, programExercises, programSets, programShares, programs } from "@/db/schema";
 import {
   copySharedProgramSchema,
@@ -26,7 +28,7 @@ export async function shareProgram(data: unknown): Promise<ActionResult<void>> {
   try {
     // Verify the program belongs to the current user
     const program = await db.query.programs.findFirst({
-      where: eq(programs.id, programId),
+      where: and(eq(programs.id, programId), livePrograms),
     });
     if (!program) {
       return { success: false, error: "Program not found" };
@@ -91,7 +93,8 @@ export async function getIncomingShares(): Promise<ActionResult<IncomingShare[]>
 
     return {
       success: true,
-      data: rows.map((row) => ({
+      // A share of a program its owner has since deleted is not offered.
+      data: rows.filter((row) => row.program.deletedAt == null).map((row) => ({
         shareId: row.id,
         programId: row.programId,
         programName: row.program.name,
@@ -160,9 +163,11 @@ export async function copySharedProgram(
         program: {
           with: {
             programExercises: {
+              where: (pe, { isNull }) => isNull(pe.deletedAt),
               orderBy: (pe, { asc }) => [asc(pe.orderIndex)],
               with: {
                 programSets: {
+                  where: (ps, { isNull }) => isNull(ps.deletedAt),
                   orderBy: (ps, { asc }) => [asc(ps.setNumber)],
                 },
               },
@@ -178,10 +183,14 @@ export async function copySharedProgram(
     if (share.sharedWithUserId !== me) {
       return { success: false, error: "Not authorised" };
     }
+    if (share.program.deletedAt != null) {
+      return { success: false, error: "Share not found" };
+    }
 
     let newProgramId: number;
 
-    await db.transaction(async (tx) => {
+    await planWrite({ userId: me, writer: "user" }, async (w) => {
+      const tx = w.tx;
       // Copy the program
       const [newProgram] = await tx
         .insert(programs)
@@ -192,6 +201,7 @@ export async function copySharedProgram(
         .returning({ id: programs.id });
 
       newProgramId = newProgram.id;
+      w.create({ type: "program", id: newProgram.id });
 
       // Copy each exercise slot
       for (const pe of share.program.programExercises) {

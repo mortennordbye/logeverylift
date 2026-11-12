@@ -8,6 +8,9 @@
 import { db } from "@/db";
 import { garminDailyMetrics, programExercises, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { userToday } from "@/lib/user-settings";
+import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { planWrite } from "@/lib/plan-revisions";
+import { programs } from "@/db/schema";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import {
   computeAdaptationFactor,
@@ -42,7 +45,7 @@ export const hasPeakAnchor = or(
  */
 export async function syncDueCycle(userId: string): Promise<void> {
   const cycle = await db.query.trainingCycles.findFirst({
-    where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active")),
+    where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), liveCycles),
     with: { slots: true },
   });
   if (!cycle?.startDate) return;
@@ -81,6 +84,7 @@ export async function periodizationShare(programId: number, userId: string): Pro
         eq(trainingCycleSlots.programId, programId),
         eq(trainingCycles.userId, userId),
         eq(trainingCycles.status, "active"),
+        liveCycles,
       ),
     )
     .limit(1);
@@ -180,6 +184,15 @@ async function cycleAdaptationSignals(
  * training_cycles.last_synced_week. No-op (beyond the marker) for cycles with no
  * peak anchors (i.e. non-triathlon cycles).
  */
+/** The live programs a cycle's slots point at. A deleted program reads as an empty slot. */
+async function liveSlotProgramIds(slots: { programId: number | null }[]): Promise<number[]> {
+  const ids = slots.map((s) => s.programId).filter((id): id is number => id != null);
+  if (ids.length === 0) return [];
+  const rows = await db.select({ id: programs.id }).from(programs).where(and(inArray(programs.id, ids), livePrograms));
+  const live = new Set(rows.map((r) => r.id));
+  return ids.filter((id) => live.has(id));
+}
+
 export async function syncPeriodizedTargets(
   cycleId: number,
   userId: string,
@@ -190,10 +203,12 @@ export async function syncPeriodizedTargets(
   athleteLevel: AthleteLevel | null,
   /** Use this nudge instead of computing it (an applied wearable suggestion). */
   adaptationOverride?: Adaptation,
+  /** Who the revisions name: the weekly sync, or an applied wearable suggestion. */
+  writer: "sync" | "apply" = "sync",
 ): Promise<{ pct: number; note: string }> {
-  const programIds = slots
-    .map((s) => s.programId)
-    .filter((id): id is number => id != null);
+  // A slot keeps its program id when the program is deleted; the sync never
+  // writes into a deleted program.
+  const programIds = await liveSlotProgramIds(slots);
 
   const { phase, multiplier } = periodizedLoad(
     currentWeek,
@@ -208,13 +223,26 @@ export async function syncPeriodizedTargets(
   const adaptation = adaptationOverride ?? (await computeCycleAdaptation(userId, programIds, currentWeek));
   const effective = multiplier * (adaptation.pct / 100);
 
+  // One change set per cycle-week, so the history groups a week's rewrite.
+  await planWrite(
+    {
+      userId,
+      writer,
+      reason: writer === "apply" ? `Garmin suggestion applied, week ${currentWeek}` : `Weekly sync, week ${currentWeek}`,
+      changeSetId: `${writer}:${cycleId}:${currentWeek}`,
+    },
+    async (w) => {
+  const tx = w.tx;
+  // Cycle first, then programs: the lock order every plan write uses.
+  await w.touch({ type: "cycle", id: cycleId });
   if (programIds.length > 0) {
-    const peakSets = await db
+    const peakSets = await tx
       .select({
         id: programSets.id,
         peakDistance: programSets.peakDistanceMeters,
         peakDuration: programSets.peakDurationSeconds,
         sessionRole: programSets.sessionRole,
+        programId: programExercises.programId,
       })
       .from(programSets)
       .innerJoin(programExercises, eq(programSets.programExerciseId, programExercises.id))
@@ -222,12 +250,16 @@ export async function syncPeriodizedTargets(
         and(
           inArray(programExercises.programId, programIds),
           hasPeakAnchor,
+          liveProgramExercises,
+          liveProgramSets,
         ),
       );
 
     if (peakSets.length > 0) {
-      await Promise.all(
-        peakSets.map((ps) => {
+      for (const id of [...new Set(peakSets.map((ps) => ps.programId))].sort((a, b) => a - b)) {
+        await w.touch({ type: "program", id });
+      }
+      for (const ps of peakSets) {
           const update: {
             distanceMeters?: number;
             durationSeconds?: number;
@@ -241,13 +273,12 @@ export async function syncPeriodizedTargets(
             update.targetHeartRateZone = recipe.zone;
             update.restTimeSeconds = recipe.restSeconds;
           }
-          return db.update(programSets).set(update).where(eq(programSets.id, ps.id));
-        }),
-      );
+          await tx.update(programSets).set(update).where(eq(programSets.id, ps.id));
+      }
     }
   }
 
-  await db
+  await tx
     .update(trainingCycles)
     .set({
       lastSyncedWeek: currentWeek,
@@ -255,6 +286,8 @@ export async function syncPeriodizedTargets(
       adaptationNote: adaptation.note || null,
     })
     .where(eq(trainingCycles.id, cycleId));
+    },
+  );
   return adaptation;
 }
 
@@ -310,7 +343,7 @@ export type WearableSuggestion = Adaptation & { current: number; cycleId: number
 export async function wearableSuggestion(userId: string, now = new Date()): Promise<WearableSuggestion | null> {
   await syncDueCycle(userId);
   const cycle = await db.query.trainingCycles.findFirst({
-    where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active")),
+    where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), liveCycles),
     with: { slots: true },
   });
   // A missing athlete level is fine: the weekly sync uses the default deload cadence then too.
@@ -318,7 +351,7 @@ export async function wearableSuggestion(userId: string, now = new Date()): Prom
   const today = await userToday(userId, now);
   const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);
   if (isOver) return null;
-  const programIds = cycle.slots.map((s) => s.programId).filter((id): id is number => id != null);
+  const programIds = await liveSlotProgramIds(cycle.slots);
   const signals = await cycleAdaptationSignals(userId, programIds, currentWeek);
   const wearable = await wearableSignals(userId, now);
   if (!signals || !wearable) return null;
@@ -332,13 +365,20 @@ export async function applyWearableSuggestion(userId: string, now = new Date()):
   const suggestion = await wearableSuggestion(userId, now);
   if (!suggestion) return null;
   const cycle = await db.query.trainingCycles.findFirst({
-    where: and(eq(trainingCycles.id, suggestion.cycleId), eq(trainingCycles.userId, userId)),
+    where: and(eq(trainingCycles.id, suggestion.cycleId), eq(trainingCycles.userId, userId), liveCycles),
     with: { slots: true },
   });
   if (!cycle) return null;
-  await syncPeriodizedTargets(cycle.id, userId, cycle.slots, suggestion.week, cycle.durationWeeks, cycle.goal, cycle.athleteLevel, {
-    pct: suggestion.pct,
-    note: suggestion.note,
-  });
+  await syncPeriodizedTargets(
+    cycle.id,
+    userId,
+    cycle.slots,
+    suggestion.week,
+    cycle.durationWeeks,
+    cycle.goal,
+    cycle.athleteLevel,
+    { pct: suggestion.pct, note: suggestion.note },
+    "apply",
+  );
   return suggestion;
 }

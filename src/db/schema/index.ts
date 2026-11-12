@@ -25,6 +25,7 @@ export * from "./friendships";
 export * from "./garmin";
 export * from "./gyms";
 export * from "./nudges";
+export * from "./plan-revisions";
 export * from "./program-shares";
 export * from "./invite-tokens";
 export * from "./exercises";
