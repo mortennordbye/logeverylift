@@ -27,15 +27,33 @@ const DAYS = [
   { value: 7, label: "Sun" },
 ];
 
-export function TriathlonPlanForm() {
+type Level = "novice" | "intermediate" | "advanced";
+
+/**
+ * The triathlon plan form. Its starting level and rest days come from the
+ * athlete profile (docs/plans/athlete-profile.md, 2.7): the days the athlete
+ * cannot train, and their endurance experience. The strength part follows the
+ * profile's strength goal on the server.
+ */
+export function TriathlonPlanForm({
+  initialLevel = "intermediate",
+  initialRestDays = [5, 6],
+  restNote = null,
+  strengthGoal = null,
+}: {
+  initialLevel?: Level;
+  initialRestDays?: number[];
+  restNote?: string | null;
+  strengthGoal?: string | null;
+}) {
   const router = useRouter();
   const [goal, setGoal] = useState<"build" | "maintain">("build");
-  const [level, setLevel] = useState<"novice" | "intermediate" | "advanced">("intermediate");
+  const [level, setLevel] = useState<Level>(initialLevel);
   const [weeks, setWeeks] = useState(12);
-  // Default to two rest days, Fri + Sat. Key long sessions are preserved and
-  // shuffled onto the remaining training days, so resting Sat doesn't cost the
-  // long bike+brick — it relocates, and the long run keeps Sunday.
-  const [restDays, setRestDays] = useState<number[]>([5, 6]);
+  // Key long sessions are preserved and shuffled onto the remaining training
+  // days, so resting Sat doesn't cost the long bike+brick — it relocates, and
+  // the long run keeps Sunday.
+  const [restDays, setRestDays] = useState<number[]>(initialRestDays);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -80,9 +98,9 @@ export function TriathlonPlanForm() {
       <div className="px-4 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">Triathlon plan</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          A weekly swim/bike/run template with two flat, RIR-capped strength days (Workout A &amp; B) to build and keep
-          muscle without taxing your endurance sessions. Endurance volume is periodized across the block. You can edit
-          every session afterward.
+          A weekly swim, bike and run template with strength from your athlete profile
+          {strengthGoal ? ` (${strengthGoal.toLowerCase()})` : ""}. Endurance volume is periodized across the block and
+          planned for a full distance. You can edit every session afterward.
         </p>
       </div>
 
@@ -182,6 +200,7 @@ export function TriathlonPlanForm() {
                   .map((d) => DAYS.find((x) => x.value === d)?.label)
                   .join(", ")}. Pick up to two — your hardest sessions stay, the lightest drop.`}
           </p>
+          {restNote && <p className="text-[11px] text-muted-foreground mt-1">{restNote}</p>}
         </div>
 
         {error && <p className="text-sm text-destructive">{error}</p>}

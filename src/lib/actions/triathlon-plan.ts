@@ -15,6 +15,7 @@ import {
   type PlanExercise,
   type PlanProgressionAdvance,
 } from "@/lib/utils/triathlon-plan";
+import { getAthleteProfile } from "@/lib/athlete-profile";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { planWrite } from "@/lib/plan-revisions";
 import { requireSession } from "@/lib/utils/session";
@@ -52,6 +53,9 @@ const ENSURED_EXERCISES = [
   { name: "Seated Leg Curl", category: "strength", isTimed: false, bodyArea: "lower_body", muscleGroup: "hamstrings", equipment: "machine", movementPattern: "pull", discipline: null, exerciseType: "isolation" },
   { name: "Face Pull", category: "strength", isTimed: false, bodyArea: "upper_body", muscleGroup: "shoulders", equipment: "cable", movementPattern: "pull", discipline: null, exerciseType: "isolation" },
   { name: "Cable Crunch", category: "strength", isTimed: false, bodyArea: "core", muscleGroup: "abs", equipment: "cable", movementPattern: "pull", discipline: null, exerciseType: "isolation" },
+  // Plyometrics for the "get stronger" goal; the seed has both (scripts/seed.ts).
+  { name: "Box Jump", category: "cardio", isTimed: false, bodyArea: "cardio", muscleGroup: "cardio", equipment: "bodyweight", movementPattern: "cardio", discipline: null, exerciseType: null },
+  { name: "Pogo Hops", category: "cardio", isTimed: false, bodyArea: "cardio", muscleGroup: "cardio", equipment: "bodyweight", movementPattern: "cardio", discipline: null, exerciseType: null },
 ] as const;
 
 const ENDURANCE_NAMES = ["Swim", "Bike", "Run"] as const;
@@ -74,7 +78,11 @@ export async function generateTriathlonPlan(
     if (!(await enduranceEnabledFor(auth.user.id))) {
       return { success: false, error: "Endurance features are not on for this account" };
     }
-    const plan = buildTriathlonPlan(parsed.data);
+    // The strength part follows the goal the athlete gave in the intake
+    // interview (docs/plans/athlete-profile.md, 2.7). Read here, not taken from
+    // the form: the profile owns it.
+    const profile = await getAthleteProfile(auth.user.id);
+    const plan = buildTriathlonPlan({ ...parsed.data, strengthGoal: profile?.strengthGoal ?? null });
     const neededNames = planExerciseNames(plan);
 
     // Ensure all referenced exercises exist (idempotent — keeps existing rows).
