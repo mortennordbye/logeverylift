@@ -12,7 +12,7 @@ export type DeletedPlan = { id: number; name: string; deletedOn: string; revisio
  * Deleted programs or cycles, restorable for 90 days (docs/plans/revisions.md,
  * 2.9 and section 9). Hidden when there are none.
  */
-export function RecentlyDeleted({ kind, items }: { kind: "program" | "cycle"; items: DeletedPlan[] }) {
+export function RecentlyDeleted({ kind, items }: { kind: "program" | "cycle" | "season"; items: DeletedPlan[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState<number | null>(null);

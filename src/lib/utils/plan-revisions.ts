@@ -20,13 +20,20 @@ export type MemorySnapshot = { v: 1; memory: Row };
 export type AthleteSnapshot = { v: 1; athlete: Row };
 export type ThresholdSnapshot = { v: 1; threshold: Row };
 export type InjurySnapshot = { v: 1; injury: Row };
+/**
+ * A season with its races, and its phases for the history text
+ * (docs/plans/seasons.md, 2.3). A restore never moves the phases.
+ */
+export type PhaseSnap = { cycleId: number; name: string; phaseOrder: number | null; phaseType: string | null };
+export type SeasonSnapshot = { v: 1; season: Row; races: Row[]; phases: PhaseSnap[] };
 export type PlanSnapshot =
   | ProgramSnapshot
   | CycleSnapshot
   | MemorySnapshot
   | AthleteSnapshot
   | ThresholdSnapshot
-  | InjurySnapshot;
+  | InjurySnapshot
+  | SeasonSnapshot;
 
 export const isProgramSnapshot = (s: PlanSnapshot): s is ProgramSnapshot => "program" in s;
 export const isCycleSnapshot = (s: PlanSnapshot): s is CycleSnapshot => "cycle" in s;
@@ -36,6 +43,7 @@ export const isThresholdSnapshot = (s: PlanSnapshot): s is ThresholdSnapshot => 
 export const isInjurySnapshot = (s: PlanSnapshot): s is InjurySnapshot => "injury" in s;
 
 const INJURY_AREA_TEXT = (area: unknown) => String(area ?? "other").replace("_", " ");
+export const isSeasonSnapshot = (s: PlanSnapshot): s is SeasonSnapshot => "season" in s;
 
 /** The name an object goes by in the history and the AI changes feed. */
 export function snapshotName(s: PlanSnapshot): string {
@@ -47,6 +55,7 @@ export function snapshotName(s: PlanSnapshot): string {
     const side = s.injury.side ? `${s.injury.side} ` : "";
     return `Injury: ${side}${INJURY_AREA_TEXT(s.injury.area)}`;
   }
+  if (isSeasonSnapshot(s)) return String(s.season.name);
   const text = String(s.memory.text);
   return text.length > 40 ? `${text.slice(0, 39)}…` : text;
 }
@@ -205,6 +214,27 @@ const CYCLE_FIELDS: Record<string, string> = {
   endMessage: "end message",
   adaptationPct: "volume adjustment",
   scheduledStartDate: "scheduled start",
+  durationDays: "days",
+  seasonId: "season",
+  phaseOrder: "phase position",
+  phaseType: "phase type",
+};
+
+const SEASON_FIELDS: Record<string, string> = {
+  name: "name",
+  goal: "goal",
+  startDate: "start",
+  endDate: "end",
+  nextGoal: "next goal",
+};
+
+const RACE_FIELDS: Record<string, string> = {
+  name: "name",
+  raceDate: "date",
+  discipline: "kind",
+  distance: "distance",
+  distanceMeters: "metres",
+  priority: "priority",
 };
 
 const MEMORY_FIELDS: Record<string, string> = {
@@ -307,6 +337,33 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!sameValue(prev.deletedAt ?? null, after.injury.deletedAt ?? null)) out.push(after.injury.deletedAt ? "Deleted" : "Restored");
     return out;
   }
+  if (isSeasonSnapshot(after)) {
+    const prev = before && isSeasonSnapshot(before) ? before : null;
+    if (!prev) return [`Created season "${after.season.name}"`];
+    const out = fieldLines("", SEASON_FIELDS, prev.season, after.season);
+    if (!sameValue(prev.season.replanFlaggedAt ?? null, after.season.replanFlaggedAt ?? null)) {
+      out.push(after.season.replanFlaggedAt ? `Flagged for a re-plan: ${after.season.replanReason ?? ""}`.trim() : "Marked as re-planned");
+    }
+    const prevRaces = new Map(prev.races.map((r) => [r.id, r]));
+    const nextIds = new Set(after.races.map((r) => r.id));
+    for (const r of after.races) {
+      const old = prevRaces.get(r.id);
+      if (!old) out.push(`Added ${r.priority} race "${r.name}" on ${r.raceDate}`);
+      else out.push(...fieldLines(`Race "${old.name}": `, RACE_FIELDS, old, r));
+    }
+    for (const r of prev.races) if (!nextIds.has(r.id)) out.push(`Removed race "${r.name}"`);
+    const prevPhases = new Map(prev.phases.map((p) => [p.cycleId, p]));
+    const nextPhaseIds = new Set(after.phases.map((p) => p.cycleId));
+    for (const p of after.phases) {
+      const old = prevPhases.get(p.cycleId);
+      if (!old) out.push(`Phase "${p.name}" added`);
+      else if (old.phaseOrder !== p.phaseOrder || old.phaseType !== p.phaseType) {
+        out.push(`Phase "${p.name}": position ${old.phaseOrder} → ${p.phaseOrder}${old.phaseType !== p.phaseType ? `, type ${old.phaseType ?? "none"} → ${p.phaseType ?? "none"}` : ""}`);
+      }
+    }
+    for (const p of prev.phases) if (!nextPhaseIds.has(p.cycleId)) out.push(`Phase "${p.name}" removed`);
+    return out;
+  }
   if (isMemorySnapshot(after)) {
     const prev = before && isMemorySnapshot(before) ? before : null;
     if (!prev) return [`Added ${after.memory.kind} "${snapshotName(after)}"`];
@@ -376,6 +433,8 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
 export const MEMORY_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt"] as const;
 /** Fields a restore of a one-row object (athlete profile, threshold, injury) never writes back. */
 export const ROW_KEPT = MEMORY_KEPT;
+/** Season fields a restore never writes back (the re-plan flag is recomputed). */
+export const SEASON_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt", "replanFlaggedAt", "replanReason"] as const;
 /** Program fields a restore never writes back. */
 export const PROGRAM_KEPT = ["id", "userId", "createdByCycleId", "createdAt"] as const;
 /** Exercise slot fields a restore never writes back (progressionConfigAt is recomputed). */

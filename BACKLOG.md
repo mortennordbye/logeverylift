@@ -16,6 +16,14 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Being accepted into the Garmin Connect Developer Program and moving from per-user Personal API keys to its OAuth flow. Then: decide whether GPS tracks in `garmin_activity_streams` need their own opt-in (decision G-2 in `docs/plans/garmin-deep-data.md`); follow the `privacy-compliance` checklist (policy text from `docs/privacy/data-inventory.md`, including the AI tools' Garmin metrics, `garmin_fuel_logs`, the population ratings from profile gender and age, and the opt-in weight sync whose copies stay when Garmin data is deleted), bump `LEGAL_VERSION`, raise `CONSENT_VERSION` because these are new health-data categories; then widen `garminAllowed`.
 - **Touchpoints:** `src/lib/garmin/access.ts`, `src/lib/actions/garmin.ts`, `src/lib/garmin/`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`.
 
+### Seasons: limits and Garmin views across phases
+- **What:** Two gaps left by the seasons package (C1, `docs/plans/seasons.md`):
+  - The training limits do not run on the season tools. The chained start of the next phase (writer `sync`) and `manage_season` `resume` start a cycle without the limit check that `manage_training_cycle` `start` runs.
+  - The Garmin race views read the A race from the season, but the fitness projection to race day uses only the active phase's curve. Phases after it are not projected.
+- **Why deferred:** The chained start is a sync write, and T4 (warnings on sync output) is package D2's work. The projection across phases needs the timeline of every later phase and its programs, which belongs with D2's load model.
+- **Unblocked by:** D2: run the limits as warnings on the chained start and as a check on `resume`. Then build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
+- **Touchpoints:** `src/lib/plan-revisions.ts` (`chainSeason`), `src/lib/seasons.ts` (`resumeSeason`), `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
+
 ### Pounds for weights
 - **What:** Show and take weights in lb for users who want it: every weight label and input (set logging, set edit, program edit, history, session detail, metrics, records, friends' feeds), progression steps in lb (5 lb, 2.5 lb) instead of converted kg steps, and plates and bars in lb (45 lb bar, 45/35/25/10/5/2.5 lb plates) in the plate calculator and the weight presets. Storage stays kg.
 - **Why deferred:** The owner chose endurance units only for the foundations PR (A2 in `docs/plans/triathlon-coach-plan.md`, brief `docs/plans/foundations.md`). The owner trains in kg, and lb done well needs lb-native steps and plates, not only a converted label. So there is no `weight_unit` column yet.

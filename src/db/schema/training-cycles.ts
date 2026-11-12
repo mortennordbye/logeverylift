@@ -21,7 +21,12 @@ import {
   unique,
 } from "drizzle-orm/pg-core";
 import { programs } from "./programs";
+import { seasons } from "./seasons";
 import { users } from "./users";
+
+/** Phase types of a cycle inside a season (docs/plans/seasons.md, 2.4). */
+export const PHASE_TYPES = ["general", "base", "build", "peak", "taper", "transition"] as const;
+export type PhaseType = (typeof PHASE_TYPES)[number];
 
 // -------------------------------------------------------------------
 // training_cycles
@@ -85,8 +90,19 @@ export const trainingCycles = pgTable("training_cycles", {
   // from startDate, which a draft can still hold from an earlier run.
   scheduledStartDate: date("scheduled_start_date"),
   version: integer("version").notNull().default(1),
+  // The season this cycle is a phase of (docs/plans/seasons.md, 2.4). A cycle
+  // in a season stores no race of its own: it reads the season's (D8).
+  seasonId: integer("season_id").references(() => seasons.id, { onDelete: "set null" }),
+  // 1-based position in the season; null when the cycle is in no season.
+  phaseOrder: integer("phase_order"),
+  // Picks the cycle's curve. Null = the whole block curve, as before seasons.
+  phaseType: text("phase_type", { enum: PHASE_TYPES }),
+  // Length in days (T8). When set it is the length, and durationWeeks is
+  // ceil(days / 7) so week-based code keeps working. Null = durationWeeks * 7.
+  durationDays: integer("duration_days"),
 }, (t) => [
   index("idx_tc_user_status").on(t.userId, t.status),
+  index("idx_tc_season").on(t.seasonId, t.phaseOrder),
 ]);
 
 // -------------------------------------------------------------------

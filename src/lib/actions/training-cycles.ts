@@ -9,8 +9,7 @@
 import { db } from "@/db";
 import { dismissedMakeups, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users, workoutSessions } from "@/db/schema";
 import {
-  deloadCadenceForLevel,
-  periodizedLoad,
+  cycleLoad,
   phaseLabel,
   phaseLayout,
   type TrainingGoal,
@@ -20,7 +19,7 @@ import { applyWearableSuggestion, hasPeakAnchor, syncDueCycle, syncPeriodizedTar
 import { insertAutoSessions } from "@/lib/auto-sessions";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
-import { OpenWorkoutError, PlanNotFoundError, activateCycle, deleteCycles, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
+import { OpenWorkoutError, PlanNotFoundError, activateCycle, deleteCycles, liveSeasonId, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
@@ -50,6 +49,7 @@ import {
   toDateStr,
 } from "@/lib/utils/cycle-position";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
+import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -174,7 +174,7 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     // Today in the user's zone (src/lib/utils/user-date.ts), not the server's.
     const today = await userToday(userId);
 
-    const { currentWeek, endDate, isOver } = cycleWeek(startDate, cycle.durationWeeks, today);
+    const { currentWeek, endDate, isOver } = cycleWeek(startDate, cycle.durationWeeks, today, cycle.durationDays);
     const endDateStr = toDateStr(endDate);
 
     // Auto-complete once the block is over.
@@ -548,7 +548,7 @@ export async function getCyclePeriodization(
     let adaptationPct = cycle.adaptationPct;
     let adaptationNote = cycle.adaptationNote ?? null;
     if (cycle.status === "active" && cycle.startDate) {
-      const week = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, await userToday(auth.user.id));
+      const week = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, await userToday(auth.user.id), cycle.durationDays);
       currentWeek = week.currentWeek;
       if (!week.isOver && cycle.lastSyncedWeek !== currentWeek) {
         const adaptation = await syncPeriodizedTargets(cycle.id, auth.user.id, cycle.slots, currentWeek, totalWeeks, cycle.goal, cycle.athleteLevel);
@@ -559,10 +559,12 @@ export async function getCyclePeriodization(
       currentWeek = totalWeeks;
     }
 
-    const load = periodizedLoad(currentWeek, totalWeeks, cycle.goal, deloadCadenceForLevel(cycle.athleteLevel));
+    const load = cycleLoad(cycle, currentWeek, totalWeeks);
     const { rampWeeks, peakWeeks } = phaseLayout(totalWeeks);
-    const peakStart = rampWeeks + 1;
-    const taperStart = rampWeeks + peakWeeks + 1;
+    // A typed phase of a season is one phase start to end: no peak or taper
+    // inside it to count down to (docs/plans/seasons.md, 2.5).
+    const peakStart = cycle.phaseType ? 0 : rampWeeks + 1;
+    const taperStart = cycle.phaseType ? 0 : rampWeeks + peakWeeks + 1;
     // Show the *effective* volume — the curve after the no-wearable nudge — so the
     // displayed % matches what's actually prescribed this week.
     const effectiveMultiplier = Math.round(load.multiplier * adaptationPct) / 100;
@@ -695,6 +697,14 @@ export async function updateTrainingCycle(
     // The race on a cycle is part of the endurance add-on (src/lib/endurance.ts).
     // A cycle that already has one keeps it editable, so no stored value is
     // locked away from its owner.
+    // A cycle in a live season stores no race: the season holds it (D8). Its
+    // length belongs to the season too, which re-chains the next phase.
+    if ((await liveSeasonId(db, existing.seasonId)) != null) {
+      if (rest.raceDate != null || rest.raceDistance != null) return { success: false, error: SEASON_CYCLE_RACE };
+      if (rest.durationWeeks !== undefined && rest.durationWeeks !== existing.durationWeeks) {
+        return { success: false, error: SEASON_CYCLE_LENGTH };
+      }
+    }
     const addsRace = (rest.raceDate != null || rest.raceDistance != null) && existing.raceDate == null;
     if (addsRace && !(await enduranceEnabledFor(auth.user.id))) {
       return { success: false, error: "Races are part of the endurance features, which are not on for this account" };
@@ -722,6 +732,8 @@ export async function updateTrainingCycle(
         .set({
           ...rest,
           ...(durationChanged && { lastSyncedWeek: null }),
+          // A length in weeks replaces a length in days (T8).
+          ...(rest.durationWeeks !== undefined && { durationDays: null }),
         } as Partial<typeof trainingCycles.$inferInsert>)
         .where(eq(trainingCycles.id, id))
         .returning();

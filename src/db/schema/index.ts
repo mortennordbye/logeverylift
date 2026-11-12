@@ -32,6 +32,7 @@ export * from "./program-shares";
 export * from "./invite-tokens";
 export * from "./exercises";
 export * from "./programs";
+export * from "./seasons";
 export * from "./training-cycles";
 export * from "./users";
 export * from "./weight-history";

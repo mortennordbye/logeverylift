@@ -18,13 +18,28 @@ what it describes, that package updates this file and the server instructions in
   one per workout). A slot points at a program, or at nothing for a rest day. A slot marked
   `autoComplete` is a day the user tracks outside the app; it completes itself. A cycle is a
   draft, active or completed, and only one is active at a time. With the endurance features on,
-  a cycle holds a race date and distance, a goal (`build` or `maintain`) and an athlete level.
+  a cycle in no season holds a race date and distance, a goal (`build` or `maintain`) and an
+  athlete level. A cycle in a season holds no race: it reads the season's A race.
   `manage_training_cycle` `start` with a later `startDate` keeps the cycle a draft scheduled to
   start that day; on that day it becomes active and the old block completes
   (`startDueScheduledCycle` in `src/lib/plan-revisions.ts`). One cycle is scheduled at a time.
   The app starts a due cycle when the active cycle is read: on page render, and over MCP in
   `list_training_cycles`, `get_training_cycle`, `confirm_session` and `set_volume`, also on a
   read-only connection. That start is the app's own write (writer `sync`), not yours.
+- **Season.** A long goal above cycles, for every user: name, goal, start, end and the next
+  goal (`list_seasons`, `get_season`, `manage_season`). With the endurance features on, a season
+  holds races (`manage_race`): date, discipline, distance and priority A, B or C. Its phases
+  are training cycles in order, each with an optional phase type and a length in weeks or days
+  (`add_phase`, `move_phase`, `set_phase`, `remove_phase`). A phase type picks the cycle's
+  curve: general, base and build ramp from 0.80 to 1.00 of each set's peak with recovery weeks;
+  peak holds 1.00; taper falls from 0.60 to 0.35; transition holds 0.50 and leaves zone and
+  rest alone. A phase with no type runs the cycle's whole block curve. When a phase starts, the
+  next phase is scheduled for the day after it ends (writer `sync`). If the user starts a cycle
+  outside the season, the chain pauses until `resume`. The taper must end on the A race day:
+  `get_season` shows the fit, and `fit_taper` changes the length of the phase before it. A
+  date change of any race, or an A race added, removed or changed in priority, flags the season
+  for a re-plan; the app never moves phases itself. Re-plan, then `clear_replan`. Deleting a
+  season keeps its cycles; they act as cycles with no season until it is restored.
 - **Exercise.** The built-in library plus the user's own custom exercises. An endurance
   exercise has a discipline (swim, bike or run). `search_exercises` finds them;
   `create_exercise` makes a custom one. A custom name must not match a built-in exercise or
@@ -91,7 +106,7 @@ lasts only until that writer runs again.
   history. `expectedVersion` is the program's or cycle's `version` from `get_program`,
   `get_training_cycle` or your last write's result. If the user (or another assistant) changed
   it since, the write is refused with what changed; read it again and redo the change.
-- **Deletes can be undone.** Deleted programs and cycles stay restorable for 90 days.
+- **Deletes can be undone.** Deleted programs, cycles and seasons stay restorable for 90 days.
 - **Two training limits in code** (`src/lib/utils/training-limits.ts`), for users with
   endurance features on, on assistant plan writes only (the user's own edits are never checked):
   - `long_run_cap`: no planned run more than 1.10x the longest run in the last 30 days (Study,
@@ -111,9 +126,8 @@ lasts only until that writer runs again.
   not in code yet: check them against the endurance training reference
   (`logeverylift://docs/endurance-training-reference`) and name the rule and its evidence label.
 - **One workout slot per day** in a weekday cycle.
-- **No seasons or races above cycles.** A cycle can hold a race date and distance.
 - **Time:** "today", the cycle week, the weekly sync and the date a workout is logged on follow
-  the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:52`). With
+  the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:53`). With
   no zone set, they follow the server's clock and the phone's day.
 - **Units:** every value a tool takes or returns is metric (kg, metres, seconds). The user's
   `distanceUnit` (km or mi) and `swimUnit` (m or yd) only change what the app shows; weights

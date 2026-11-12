@@ -34,6 +34,7 @@ import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
+import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { requireMcpAuth } from "@better-auth/mcp";
@@ -112,6 +113,7 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       // name the assistant and group its writes (docs/plans/revisions.md, 2.8).
       registerProgramTools(server, userId, clientId);
       registerCycleTools(server, userId, clientId);
+      registerSeasonTools(server, userId, clientId);
       registerWorkoutTools(server, userId);
       registerSessionTools(server, userId);
       registerExerciseTools(server, userId);

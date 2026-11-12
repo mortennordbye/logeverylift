@@ -1,6 +1,8 @@
 import { EditCycleForm } from "@/components/features/EditCycleForm";
 import { getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
 import { enduranceEnabledFor } from "@/lib/endurance";
+import { db } from "@/db";
+import { liveSeasonId } from "@/lib/plan-revisions";
 import { requireSession } from "@/lib/utils/session";
 import { ChevronLeftIcon } from "lucide-react";
 import Link from "next/link";
@@ -43,7 +45,7 @@ export default async function EditCyclePage({
 
       {/* Scrollable content — flex-1 so it fills remaining height, overflow-y-auto does the actual scrolling */}
       <div className="flex-1 overflow-y-auto px-4 pb-nav-safe">
-        <EditCycleForm cycle={cycle} enduranceEnabled={enduranceEnabled} />
+        <EditCycleForm cycle={cycle} enduranceEnabled={enduranceEnabled} liveSeasonId={await liveSeasonId(db, cycle.seasonId)} />
       </div>
     </div>
   );

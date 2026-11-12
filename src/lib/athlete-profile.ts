@@ -44,9 +44,10 @@ import {
   versionKey,
   type PlanWriteContext,
 } from "@/lib/plan-revisions";
+import { raceForCycle } from "@/lib/seasons";
 import { userToday } from "@/lib/user-settings";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
-import { deloadCadenceForLevel, periodizedLoad, type TrainingPhase } from "@/lib/utils/periodization";
+import { cycleLoad, type TrainingPhase } from "@/lib/utils/periodization";
 import { DELETED_PLAN_RETENTION_DAYS } from "@/lib/utils/plan-revisions";
 import { agreesWithTest, currentThresholds, testInputs, thresholdRangeError, valueFromTest } from "@/lib/utils/thresholds";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
@@ -120,34 +121,56 @@ export async function listDeletedInjuries(userId: string) {
 export type InterviewRace = { date: string | null; distance: "full" | "half" | null; cycleId: number; cycleName: string };
 
 /**
- * The race the interview shows. The only place C3 reads a race: package C1
- * moves the race to the season and wires this function to its race reader
- * (docs/plans/athlete-profile.md, 12). For now, the active cycle's race.
+ * The race the interview shows. The only place C3 reads a race. For a phase
+ * of a season it is the season's A race, through C1's single race reader
+ * (raceForCycle, docs/plans/seasons.md, 2.7); a cycle in no season shows its
+ * own race fields, as before.
  */
 export async function interviewRace(userId: string): Promise<InterviewRace | null> {
   const [cycle] = await db
-    .select({ id: trainingCycles.id, name: trainingCycles.name, raceDate: trainingCycles.raceDate, raceDistance: trainingCycles.raceDistance })
+    .select({
+      id: trainingCycles.id,
+      name: trainingCycles.name,
+      seasonId: trainingCycles.seasonId,
+      raceDate: trainingCycles.raceDate,
+      raceDistance: trainingCycles.raceDistance,
+    })
     .from(trainingCycles)
     .where(and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), isNull(trainingCycles.deletedAt)))
     .limit(1);
-  if (!cycle || (!cycle.raceDate && !cycle.raceDistance)) return null;
+  if (!cycle) return null;
+  if (cycle.seasonId != null) {
+    const race = await raceForCycle(userId, cycle);
+    if (!race) return null;
+    const distance = race.discipline === "triathlon" && (race.distance === "full" || race.distance === "half") ? race.distance : null;
+    return { date: race.raceDate, distance, cycleId: cycle.id, cycleName: cycle.name };
+  }
+  if (!cycle.raceDate && !cycle.raceDistance) return null;
   return { date: cycle.raceDate, distance: cycle.raceDistance, cycleId: cycle.id, cycleName: cycle.name };
 }
 
 /**
  * The phase the active cycle is in this week (base, build, peak, taper or
- * maintain), for the strength default. Null with no active cycle. C1 stores
- * phases as cycles; then the phase comes from there.
+ * maintain, or general prep and transition for a typed phase of a season),
+ * for the strength default. Null with no active cycle. A phase of a season
+ * reads its phase type (cycleLoad, docs/plans/seasons.md, 2.5).
  */
 export async function activeCyclePhase(userId: string): Promise<TrainingPhase | null> {
   const [cycle] = await db
-    .select({ startDate: trainingCycles.startDate, durationWeeks: trainingCycles.durationWeeks, goal: trainingCycles.goal, athleteLevel: trainingCycles.athleteLevel })
+    .select({
+      startDate: trainingCycles.startDate,
+      durationWeeks: trainingCycles.durationWeeks,
+      durationDays: trainingCycles.durationDays,
+      goal: trainingCycles.goal,
+      athleteLevel: trainingCycles.athleteLevel,
+      phaseType: trainingCycles.phaseType,
+    })
     .from(trainingCycles)
     .where(and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), isNull(trainingCycles.deletedAt)))
     .limit(1);
   if (!cycle?.startDate) return null;
-  const { currentWeek } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, await userToday(userId));
-  return periodizedLoad(currentWeek, cycle.durationWeeks, cycle.goal ?? "build", deloadCadenceForLevel(cycle.athleteLevel)).phase;
+  const { currentWeek } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, await userToday(userId), cycle.durationDays);
+  return cycleLoad({ ...cycle, goal: cycle.goal ?? "build" }, currentWeek, cycle.durationWeeks).phase;
 }
 
 /** Active coach memory entries the interview offers to move (kinds limit and observation). */

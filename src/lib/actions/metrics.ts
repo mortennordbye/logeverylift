@@ -1,6 +1,7 @@
 "use server";
 
 import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { db } from "@/db";
 import { liveCycles } from "@/lib/plan-live";
 import { exercisePrs, exercises, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
@@ -195,11 +196,11 @@ function fillWeeklyGaps(rows: WeeklyMetric[], weeks = 8): WeeklyMetric[] {
 /** Returns the ISO date strings for a half-open cycle interval [start, end). */
 function getCycleDateRange(
   startDate: string,
-  durationWeeks: number,
+  lengthDays: number,
 ): { start: string; end: string } {
   const start = new Date(startDate + "T00:00:00");
   const end = new Date(start);
-  end.setDate(end.getDate() + durationWeeks * 7);
+  end.setDate(end.getDate() + lengthDays);
   return {
     start: start.toISOString().split("T")[0],
     end: end.toISOString().split("T")[0],
@@ -1496,6 +1497,7 @@ export async function getMetricsCycles(): Promise<ActionResult<CyclePickerItem[]
         status: trainingCycles.status,
         startDate: trainingCycles.startDate,
         durationWeeks: trainingCycles.durationWeeks,
+        durationDays: trainingCycles.durationDays,
         sessionCount: sql<number>`COUNT(${workoutSessions.id})`,
       })
       .from(trainingCycles)
@@ -1505,7 +1507,7 @@ export async function getMetricsCycles(): Promise<ActionResult<CyclePickerItem[]
           eq(workoutSessions.userId, trainingCycles.userId),
           eq(workoutSessions.isCompleted, true),
           sql`${workoutSessions.date} >= ${trainingCycles.startDate}`,
-          sql`${workoutSessions.date} < ${trainingCycles.startDate}::date + (${trainingCycles.durationWeeks} * 7 * interval '1 day')`,
+          sql`${workoutSessions.date} < ${trainingCycles.startDate}::date + (COALESCE(${trainingCycles.durationDays}, ${trainingCycles.durationWeeks} * 7) * interval '1 day')`,
         ),
       )
       .where(and(eq(trainingCycles.userId, userId), liveCycles))
@@ -1515,6 +1517,7 @@ export async function getMetricsCycles(): Promise<ActionResult<CyclePickerItem[]
         trainingCycles.status,
         trainingCycles.startDate,
         trainingCycles.durationWeeks,
+        trainingCycles.durationDays,
       )
       .orderBy(
         sql`CASE ${trainingCycles.status} WHEN 'active' THEN 0 WHEN 'completed' THEN 1 ELSE 2 END`,
@@ -1527,7 +1530,7 @@ export async function getMetricsCycles(): Promise<ActionResult<CyclePickerItem[]
         const endDate = r.startDate
           ? (() => {
               const d = new Date(r.startDate + "T00:00:00");
-              d.setDate(d.getDate() + r.durationWeeks * 7);
+              d.setDate(d.getDate() + cycleLengthDays(r));
               return d.toISOString().split("T")[0];
             })()
           : null;
@@ -1567,6 +1570,7 @@ export async function getCycleMetrics(
       .select({
         startDate: trainingCycles.startDate,
         durationWeeks: trainingCycles.durationWeeks,
+        durationDays: trainingCycles.durationDays,
       })
       .from(trainingCycles)
       .where(and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId), liveCycles));
@@ -1577,7 +1581,7 @@ export async function getCycleMetrics(
       return { success: true, data: emptyCycleMetrics };
     }
 
-    const { start, end } = getCycleDateRange(cycleRow.startDate, cycleRow.durationWeeks);
+    const { start, end } = getCycleDateRange(cycleRow.startDate, cycleLengthDays(cycleRow));
 
     const [summary, weekly, muscleBalance, moodDistribution, topGains, rpeTrend] =
       await Promise.all([

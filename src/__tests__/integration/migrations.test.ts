@@ -4,6 +4,9 @@ import {
   oauthClients,
   oauthConsents,
   oauthRefreshTokens,
+  planRevisions,
+  seasonRaces,
+  seasons,
   trainingCycles,
   users,
   workoutSets,
@@ -224,5 +227,88 @@ describe("0083: custom exercise names are unique per user", () => {
 
     await expect(createExercise({ name: "Back Squat" })).rejects.toThrow();
     await expect(createExercise({ name: "Trail run", category: "cardio", userId: a.id, isCustom: true })).rejects.toThrow();
+  });
+});
+
+describe("0085: triathlon cycles move into a season", () => {
+  it("makes a season per cycle with a race or from the generator, and leaves the rest alone", async () => {
+    const tri = await createUser();
+    const lifter = await createUser();
+    const [withRace, generated, strength, deleted] = await db
+      .insert(trainingCycles)
+      .values([
+        { userId: tri.id, name: "Half build", durationWeeks: 16, athleteLevel: "novice", startDate: "2027-04-19", raceDate: "2027-08-22", raceDistance: "half", status: "active", version: 3 },
+        { userId: tri.id, name: "Old base", durationWeeks: 8, athleteLevel: "intermediate", status: "completed", startDate: "2026-01-05" },
+        { userId: lifter.id, name: "Strength", durationWeeks: 8 },
+        { userId: tri.id, name: "Gone", durationWeeks: 8, raceDate: "2027-01-01", deletedAt: new Date() },
+      ])
+      .returning();
+
+    await db.execute(sql.raw(statement("0085_seasons.sql", "DO $$")));
+
+    const all = await db.select().from(seasons).orderBy(asc(seasons.id));
+    expect(all.map((s) => [s.userId, s.name, s.startDate, s.endDate])).toEqual([
+      [tri.id, "Half build", "2027-04-19", "2027-08-22"],
+      [tri.id, "Old base", "2026-01-05", "2026-03-01"],
+    ]);
+    expect(await db.select().from(seasonRaces)).toEqual([
+      expect.objectContaining({ seasonId: all[0].id, userId: tri.id, raceDate: "2027-08-22", discipline: "triathlon", distance: "half", priority: "A" }),
+    ]);
+    const rows = new Map((await db.select().from(trainingCycles)).map((c) => [c.id, c]));
+    expect(rows.get(withRace.id)).toMatchObject({
+      seasonId: all[0].id,
+      phaseOrder: 1,
+      phaseType: null,
+      raceDate: null,
+      raceDistance: null,
+      version: 4,
+      status: "active",
+    });
+    expect(rows.get(generated.id)).toMatchObject({ seasonId: all[1].id, phaseOrder: 1, version: 2 });
+    expect(rows.get(strength.id)).toMatchObject({ seasonId: null, version: 1 });
+    expect(rows.get(deleted.id)).toMatchObject({ seasonId: null, raceDate: "2027-01-01" });
+  });
+
+  it("keeps a distance with no date as a race on the season's last day, flagged to check", async () => {
+    const tri = await createUser();
+    const [c] = await db
+      .insert(trainingCycles)
+      .values({ userId: tri.id, name: "Half build", durationWeeks: 4, athleteLevel: "novice", startDate: "2027-04-19", raceDistance: "half" })
+      .returning();
+    await db.execute(sql.raw(statement("0085_seasons.sql", "DO $$")));
+    const [s] = await db.select().from(seasons);
+    expect(s).toMatchObject({ endDate: "2027-05-16", replanReason: expect.stringContaining("date") });
+    expect(s.replanFlaggedAt).not.toBeNull();
+    expect(await db.select({ raceDate: seasonRaces.raceDate, distance: seasonRaces.distance, priority: seasonRaces.priority }).from(seasonRaces)).toEqual([
+      { raceDate: "2027-05-16", distance: "half", priority: "A" },
+    ]);
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, c.id)))[0]).toMatchObject({ raceDistance: null, seasonId: s.id });
+  });
+
+  it("writes a baseline of the moved state, so the history does not blame the next writer", async () => {
+    const tri = await createUser();
+    const [c] = await db
+      .insert(trainingCycles)
+      .values({ userId: tri.id, name: "Half build", durationWeeks: 8, athleteLevel: "novice", raceDate: "2027-08-22", raceDistance: "half" })
+      .returning();
+    await db.insert(planRevisions).values({
+      userId: tri.id,
+      objectType: "cycle",
+      objectId: c.id,
+      version: 1,
+      action: "baseline",
+      writer: "user",
+      snapshot: { v: 1, cycle: { id: c.id, name: "Half build", raceDate: "2027-08-22" }, slots: [] },
+    });
+    await db.execute(sql.raw(statement("0085_seasons.sql", "DO $$")));
+    const [s] = await db.select().from(seasons);
+    const cycleRevs = await db.select().from(planRevisions).where(eq(planRevisions.objectType, "cycle")).orderBy(asc(planRevisions.id));
+    expect(cycleRevs).toHaveLength(2);
+    expect(cycleRevs[1]).toMatchObject({ action: "baseline", writer: "sync", reason: "Moved into a season", version: 2 });
+    expect((cycleRevs[1].snapshot as { cycle: Record<string, unknown> }).cycle).toMatchObject({ seasonId: s.id, raceDate: null, phaseOrder: 1 });
+    const seasonRevs = await db.select().from(planRevisions).where(eq(planRevisions.objectType, "season"));
+    expect(seasonRevs).toEqual([expect.objectContaining({ objectId: s.id, action: "baseline", writer: "sync", reason: "Moved into a season", version: 1 })]);
+    expect((seasonRevs[0].snapshot as { races: unknown[]; phases: unknown[] }).races).toHaveLength(1);
+    expect((seasonRevs[0].snapshot as { phases: unknown[] }).phases).toEqual([{ cycleId: c.id, name: "Half build", phaseOrder: 1, phaseType: null }]);
   });
 });

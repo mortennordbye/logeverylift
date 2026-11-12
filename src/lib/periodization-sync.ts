@@ -14,10 +14,9 @@ import { programs } from "@/db/schema";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import {
   computeAdaptationFactor,
-  deloadCadenceForLevel,
+  cycleLoad,
   intervalPhaseRecipe,
   meanLoggedRpe,
-  periodizedLoad,
   scaledDistance,
   scaledDuration,
   uncoupledAcwr,
@@ -52,7 +51,7 @@ export async function syncDueCycle(userId: string): Promise<void> {
   });
   if (!cycle?.startDate) return;
   const today = await userToday(userId);
-  const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);
+  const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today, cycle.durationDays);
   if (!isOver && cycle.lastSyncedWeek !== currentWeek) {
     await syncPeriodizedTargets(cycle.id, userId, cycle.slots, currentWeek, cycle.durationWeeks, cycle.goal, cycle.athleteLevel);
   }
@@ -78,6 +77,8 @@ export async function periodizationShare(programId: number, userId: string): Pro
       goal: trainingCycles.goal,
       athleteLevel: trainingCycles.athleteLevel,
       adaptationPct: trainingCycles.adaptationPct,
+      phaseType: trainingCycles.phaseType,
+      durationDays: trainingCycles.durationDays,
     })
     .from(trainingCycleSlots)
     .innerJoin(trainingCycles, eq(trainingCycles.id, trainingCycleSlots.trainingCycleId))
@@ -92,13 +93,8 @@ export async function periodizationShare(programId: number, userId: string): Pro
     .limit(1);
   if (!cycle?.startDate) return 1;
   const today = await userToday(userId);
-  const { currentWeek } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);
-  const { multiplier } = periodizedLoad(
-    currentWeek,
-    cycle.durationWeeks,
-    cycle.goal,
-    deloadCadenceForLevel(cycle.athleteLevel),
-  );
+  const { currentWeek } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today, cycle.durationDays);
+  const { multiplier } = cycleLoad(cycle, currentWeek, cycle.durationWeeks);
   const share = multiplier * (cycle.adaptationPct / 100);
   return share > 0 ? share : 1;
 }
@@ -218,11 +214,16 @@ export async function syncPeriodizedTargets(
   // writes into a deleted program.
   const programIds = await liveSlotProgramIds(slots);
 
-  const { phase, multiplier } = periodizedLoad(
+  // The cycle's phase type picks its curve (docs/plans/seasons.md, 2.5); null
+  // is the whole block curve, as before seasons.
+  const [phaseRow] = await db
+    .select({ phaseType: trainingCycles.phaseType })
+    .from(trainingCycles)
+    .where(and(eq(trainingCycles.id, cycleId), liveCycles));
+  const { phase, multiplier } = cycleLoad(
+    { goal, athleteLevel, phaseType: phaseRow?.phaseType ?? null },
     currentWeek,
     durationWeeks,
-    goal,
-    deloadCadenceForLevel(athleteLevel),
   );
   const recipe = intervalPhaseRecipe(phase);
 
@@ -279,7 +280,8 @@ export async function syncPeriodizedTargets(
           if (ps.peakDistance != null) update.distanceMeters = scaledDistance(ps.peakDistance, effective);
           if (ps.peakDuration != null) update.durationSeconds = scaledDuration(ps.peakDuration, effective);
           // Phase-aware: the quality session's hard reps swap zone/recovery by phase.
-          if (ps.sessionRole === "work") {
+          // A transition phase leaves them alone (owner decision 2).
+          if (ps.sessionRole === "work" && phase !== "transition") {
             update.targetHeartRateZone = recipe.zone;
             update.restTimeSeconds = recipe.restSeconds;
           }
@@ -359,7 +361,7 @@ export async function wearableSuggestion(userId: string, now = new Date()): Prom
   // A missing athlete level is fine: the weekly sync uses the default deload cadence then too.
   if (!cycle?.startDate) return null;
   const today = await userToday(userId, now);
-  const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);
+  const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today, cycle.durationDays);
   if (isOver) return null;
   const programIds = await liveSlotProgramIds(cycle.slots);
   const signals = await cycleAdaptationSignals(userId, programIds, currentWeek);

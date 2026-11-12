@@ -7,7 +7,7 @@
  */
 
 import { db } from "@/db";
-import { oauthClients, planRevisions, programSets, programs, trainingCycles, type PlanObjectType } from "@/db/schema";
+import { oauthClients, planRevisions, programSets, programs, seasons, trainingCycles, type PlanObjectType } from "@/db/schema";
 import {
   OpenWorkoutError,
   PlanNotFoundError,
@@ -29,7 +29,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
 const objectSchema = z.object({
-  type: z.enum(["program", "cycle"]),
+  type: z.enum(["program", "cycle", "season"]),
   id: z.number().int().positive(),
 });
 
@@ -60,7 +60,11 @@ function revalidateObject(type: PlanObjectType, id: number) {
     revalidatePath("/more/thresholds");
     return;
   }
-  if (type === "program") {
+  if (type === "season") {
+    revalidatePath("/cycles");
+    revalidatePath(`/seasons/${id}`);
+    revalidatePath(`/seasons/${id}/history`);
+  } else if (type === "program") {
     revalidatePath("/programs");
     revalidatePath(`/programs/${id}`);
     revalidatePath(`/programs/${id}/history`);
@@ -81,13 +85,13 @@ export async function getPlanHistory(data: unknown): Promise<ActionResult<PlanHi
   }
   const { type, id } = parsed.data;
   try {
-    const table = type === "program" ? programs : trainingCycles;
+    const table = type === "program" ? programs : type === "season" ? seasons : trainingCycles;
     const [row] = await db
       // plan-read: includes deleted (a deleted object's history stays readable)
       .select({ name: table.name, version: table.version, deletedAt: table.deletedAt })
       .from(table)
       .where(and(eq(table.id, id), eq(table.userId, auth.user.id)));
-    if (!row) return { success: false, error: type === "program" ? "Program not found" : "Cycle not found" };
+    if (!row) return { success: false, error: type === "program" ? "Program not found" : type === "season" ? "Season not found" : "Cycle not found" };
     const revisions = await listRevisions(auth.user.id, { type, id });
     const names = await clientNames(revisions.map((r) => r.clientId));
     return {
@@ -159,7 +163,7 @@ export async function undoPlanChangeSet(data: unknown): Promise<ActionResult<{ o
   }
 }
 
-const deletedSchema = z.object({ type: z.enum(["program", "cycle"]) });
+const deletedSchema = z.object({ type: z.enum(["program", "cycle", "season"]) });
 
 /** Programs or cycles the caller deleted and can still restore. */
 export async function getDeletedPlans(

@@ -3,6 +3,7 @@
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import { useUserSettings } from "@/contexts/user-settings-context";
+import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { todayIn } from "@/lib/utils/user-date";
 import type { ProgramWithExercises, TrainingCycleWithSlots } from "@/types/workout";
 import { ChevronLeftIcon, ChevronRight, ChevronRightIcon } from "lucide-react";
@@ -70,7 +71,7 @@ function getDayInfo(dateStr: string, cycles: TrainingCycleWithSlots[]): DayInfo 
 
     const [sy, sm, sd] = cycle.startDate.split("-").map(Number);
     const endDate = new Date(sy, sm - 1, sd);
-    endDate.setDate(endDate.getDate() + Number(cycle.durationWeeks) * 7);
+    endDate.setDate(endDate.getDate() + cycleLengthDays(cycle));
     const endStr = toDateStr(endDate);
 
     if (dateStr < cycle.startDate || dateStr >= endStr) continue;
