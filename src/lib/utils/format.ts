@@ -172,14 +172,11 @@ export function loggedSetLabel(
 
 /**
  * Format a distance for an endurance discipline. Swim (meter input) shows
- * meters under 1 km ("750 m"), or yards under a mile ("820 yd"); everything
- * else uses km or mi.
+ * meters under 1 km ("750 m"), or yards at every distance ("2187 yd", as
+ * pools and swim plans count them); everything else uses km or mi.
  */
 export function formatEnduranceDistance(inputUnit: "m" | "km", meters: number, units: Units = DEFAULT_UNITS): string {
-  if (inputUnit === "m" && units.swim === "yd") {
-    if (meters < METERS_PER_MILE) return `${Math.round(meters / METERS_PER_YARD)} yd`;
-    return formatDistanceKm(meters, { ...units, distance: "mi" });
-  }
+  if (inputUnit === "m" && units.swim === "yd") return `${Math.round(meters / METERS_PER_YARD)} yd`;
   if (inputUnit === "m" && meters < 1000) return `${meters} m`;
   return formatDistanceKm(meters, inputUnit === "m" ? { ...units, distance: "km" } : units);
 }

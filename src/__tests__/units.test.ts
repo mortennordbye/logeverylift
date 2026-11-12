@@ -80,11 +80,12 @@ describe("formatting in the user's units", () => {
     expect(formatEndurancePace("per100m", 1500, 1500, imperial)).toBe("1:31 /100yd");
   });
 
-  it("shows swim distance in m or yd, and long swims in km or mi", () => {
+  it("shows swim distance in m (km when long) or in yd at every distance", () => {
     expect(formatEnduranceDistance("m", 750, metric)).toBe("750 m");
     expect(formatEnduranceDistance("m", 1900, metric)).toBe("1.9 km");
     expect(formatEnduranceDistance("m", 457, imperial)).toBe("500 yd");
-    expect(formatEnduranceDistance("m", 3800, imperial)).toBe("2.4 mi");
+    expect(formatEnduranceDistance("m", 2000, imperial)).toBe("2187 yd");
+    expect(formatEnduranceDistance("m", 3800, imperial)).toBe("4156 yd");
     // Swim units do not follow the run distance unit.
     expect(formatEnduranceDistance("m", 750, { distance: "mi", swim: "m" })).toBe("750 m");
     expect(formatEnduranceDistance("m", 1900, { distance: "mi", swim: "m" })).toBe("1.9 km");

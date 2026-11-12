@@ -38,6 +38,14 @@ export function setUserSettings(next: ClientUserSettings) {
   for (const l of listeners) l();
 }
 
+/**
+ * Back to metric with no zone, for when nobody is signed in: the store lives
+ * as long as the tab, so the next account must not see the last one's.
+ */
+export function resetUserSettings() {
+  setUserSettings(INITIAL);
+}
+
 /** The user's settings; metric with no zone until they are loaded. */
 export function useUserSettings(): ClientUserSettings {
   return useSyncExternalStore(subscribe, () => current, () => INITIAL);
