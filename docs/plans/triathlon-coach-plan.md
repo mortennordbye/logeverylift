@@ -144,10 +144,10 @@ parallel once A4 is done.
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| B1 | MCP parity, part 1 | A1, A4 | todo |
+| B1 | MCP parity, part 1 | A1, A4 | building ([`ai-coach.md`](ai-coach.md)) |
 | B2 | MCP scopes, consent and revoke | none | done ([`mcp-access.md`](mcp-access.md)) |
 | B3 | MCP knowledge resources and server instructions | research doc (done) | done ([`mcp-access.md`](mcp-access.md)) |
-| B4 | Coach memory | A4 | todo |
+| B4 | Coach memory | A4 | building ([`ai-coach.md`](ai-coach.md)) |
 
 **B1. MCP parity, part 1.** Cycle fields over MCP (race date and distance, goal, athlete level,
 a future start date), exercise search, create a custom exercise, log or confirm a session, read
@@ -283,7 +283,7 @@ a session relates to a program.
 | ID | Package | Needs | Status |
 |---|---|---|---|
 | D1 | Load without Garmin, swim and run-pace load | C3, C5 | todo |
-| D2 | Training limits engine (warn the AI) | B1, C1, C2, D1 | todo |
+| D2 | Training limits engine (warn the AI) | B1, C1, C2, D1 | todo; part 1 brief ([`ai-coach.md`](ai-coach.md)) |
 | D3 | Strength by phase and heavy-legs placement | C1, C3, D2 | todo |
 | D4 | Readiness-based session suggestions | C2, D2 | todo |
 
@@ -297,10 +297,12 @@ breaks one: refuse with the rule, the numbers and the evidence level; accept a r
 override and a reason; store both in the revision. Sync output and AI restores get the same
 check as warnings (T4). User edits are not checked (D4). The workout schema check (C4) is
 separate and never overridable.
-- Open question for the owner: split D2. With D2 where it is, the weekly AI reviews from
-  December 2026 run with no limits until about May 2027. For Garmin users (the owner), the
-  1.10× long-run cap and hard sessions per week can run on Garmin data in phase B, and D2 then
-  adds the load-based rules. Settle this before the B1 brief.
+- Split (owner, 2026-11-12). Part 1 ships with B1 and B4 in [`ai-coach.md`](ai-coach.md): the
+  1.10× long-run cap (on Garmin data) and hard sessions per week, with the override flow and the
+  stored override on the revision. With no Garmin data the long-run cap is not checked, and the
+  tool result says so. D2 here keeps the rest: the weekly load ramp, no hard session after a
+  low-readiness day, no heavy legs within 48 h of a key session, warnings on sync output (T4),
+  and the limits from data logged in the app (after D1) for users without Garmin.
 
 **D3. Strength by phase and heavy-legs placement (D10, D21).** Strength frequency follows the
 phase as a default the AI can override. The UI shows heavy leg work within 48 h before a key
@@ -358,7 +360,7 @@ race-specific block starts about mid-April 2027.
 
 | Target | Packages | What the owner can do then |
 |---|---|---|
-| End of December 2026 | A1-A4, B1-B4 | Weekly AI reviews on the current model, with revisions and memory. |
+| End of December 2026 | A1-A4, B1-B4, D2 part 1 | Weekly AI reviews on the current model, with revisions, memory and two training limits. |
 | End of February 2027 | C1, C3 | A season with phases and the race; thresholds and the interview. |
 | Mid-April 2027 | C2, C4, C5 | Several sessions a day, structured workouts, planned vs done, at the start of the race-specific block. |
 | End of May 2027 | C6, D1, D2 | In-app player and views; limits that warn the AI. |
