@@ -5,8 +5,9 @@
 What LogEveryLift has and misses for two kinds of user: a normal lifter, and a triathlete who
 trains for a half or full Ironman with an AI coach connected over MCP. The research behind the
 "needs" column is a separate reference on endurance training (periodization, zones, load,
-recovery, strength, nutrition, workout data models, a half-distance addendum). It is not in the
-repo yet.
+recovery, strength, nutrition, workout data models, a half-distance addendum):
+`docs/research/endurance-training-reference.md`. The build plan that follows from this audit is
+`docs/plans/triathlon-coach-plan.md`.
 
 Status words: **has** (works), **partial** (some of it works), **missing**, **out of scope**.
 
@@ -386,3 +387,82 @@ gate it with a per-user add-on switch that only an admin can turn on for now. Ea
 should work without Garmin where it can (logged sessions, RPE load), so it can open to other
 users later by changing who may turn the switch on. Features that are useful to every user
 (revisions, time zone, units, thresholds by hand, MCP scopes, exercise search) ship to everyone.
+
+### Decisions from the battle test (owner, 2026-11-12)
+
+**D16. Dated sessions for all cycles.** D7 applies to every cycle, lifter cycles too. A lifter
+can move one session to another day. Because this changes the core lifter flow, it ships with
+the lifter flows as tests (missed-workout detection, the rotation walker, make-up prompts) and
+an e2e spec.
+
+**D17. When the race date moves, the AI re-plans.** The app does not reshape phases by itself.
+It flags the season ("race date changed, plan not updated"), and the AI re-plans in the next
+conversation. The flag shows in the app and in the MCP status tool.
+
+**D18. One endurance switch.** One per-user switch turns on endurance, triathlon, structured
+workouts, thresholds and the related views. Revisions, the season level, time zone, units and
+MCP scopes are for everyone.
+
+**D19. A missed key session is suggested, not moved.** After a confirmed miss, the app suggests
+a free day; the user taps to move it. The AI over MCP may move it directly (D1).
+
+**D20. A sick period is one entry.** The user logs "sick from X to Y". Planned sessions in
+those days are marked missed by illness, with no "did you do it?" prompt each day. The AI gets
+a return rule from the research (IOC 2022: a short easy test session at 60-70% before hard work
+again). Illness entries are health data (section 9).
+
+**D21. Strength frequency by phase is a default, not a rule.** The AI may keep strength at
+2×/week in race-specific phases (for example to keep muscle) if it gives a reason. The reason
+is stored in the revision.
+
+**D22. Seasons for everyone.** The season level (a long goal above cycles) is for every user, not
+only the endurance add-on. A lifter can create "Bench 120 kg by summer". Endurance fields on a
+season (race distance, triathlon phases) show only with the endurance switch. This replaces
+the part of D15 that kept seasons inside the add-on.
+
+**D23. Clean up empty ghost sessions.** The fix for bug 4 stops new empty sessions. A script
+then removes old ones: it runs first as a dry run that counts and lists them, the owner
+approves, and only then does it delete sessions with no sets. Prod is run only with the
+owner's approval.
+
+### Technical decisions (Claude, 2026-11-12; the owner may override)
+
+**T1. The research lives in the repo** at `docs/research/endurance-training-reference.md`,
+with no personal data. The MCP server serves it as a knowledge resource. It is updated by a new
+research pass, not by hand edits to single numbers.
+
+**T2. Every writer makes revisions, tagged by writer:** `user`, `assistant`, `progression`,
+`sync` (weekly periodization sync), `apply` (wearable suggestion). A restore brings back the
+fields the user and the AI own. Fields owned by the progression engine and the weekly sync
+(section 8) keep their current values, and the sync re-runs for the current week after a
+restore. The restore screen says this.
+
+**T3. One change-set id per AI review.** All writes in one assistant session share a change-set
+id, so the user can restore a whole review in one step as well as one object.
+
+**T4. Limits also check sync output and AI restores.** A weekly-sync rewrite or an AI restore
+that breaks a training limit shows a warning to the user and to the AI. User edits stay
+unchecked (D4).
+
+**T5. Revisions cover all plan data:** seasons, races, cycles, slots, dated sessions,
+programs with exercises and sets, endurance workouts, thresholds and coach memory.
+
+**T6. Restore needs stable ids.** Program sets are updated in place (diff by id), never deleted
+and inserted again. Deletes of plan objects are soft deletes, so a restore can bring the same
+ids back and logged sets keep their link.
+
+**T7. A template edit regenerates only untouched future sessions.** Dated sessions the user or
+the AI moved or changed keep their changes. Past sessions never change.
+
+**T8. A phase is a cycle with its length in days.** A cycle gets an optional length in days
+next to the week count, so a 10-day taper is one cycle. A season holds its cycles in order,
+including general-prep and transition phases.
+
+**T9. Plan writes carry a version.** Each program and cycle has a version number. A queued
+offline write or an AI write that was based on an older version is not applied silently: the
+app keeps the logged data and shows a conflict to the user and the AI.
+
+**T10. Coach memory is for context only.** Facts that have a home (race, thresholds, injuries,
+availability, strength goal) live in their own tables. The intake interview writes those
+tables. Coach memory holds free-text context the AI needs (preferences, life limits,
+observations) with a kind, a date and an active flag.
