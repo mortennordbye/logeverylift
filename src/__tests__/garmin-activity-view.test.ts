@@ -1,4 +1,4 @@
-import { lapRows, lapSpans, paceLabel, pointZones, selectionStats, setRows, streamPanels, verdict } from "@/lib/garmin/charts/activity";
+import { benefitLabel, lapRows, lapSpans, paceLabel, pointZones, selectionStats, setRows, statTiles, streamPanels, verdict } from "@/lib/garmin/charts/activity";
 import type { ActivityMetrics } from "@/lib/garmin/analytics/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
 import { describe, expect, it } from "vitest";
@@ -34,6 +34,7 @@ function detail(over: Partial<ActivityDetail> = {}, metrics: Partial<ActivityMet
     hrZoneFloors: [100, 120, 140, 160, 180],
     matchedSessionId: null,
     fuel: null,
+    stamina: null,
     ...over,
   };
 }
@@ -120,5 +121,41 @@ describe("lapSpans", () => {
     const d = detail({ laps: [{ startTime: "2026-11-04T06:00:00.000Z", totalElapsedTime: 600 }, { startTime: "2026-11-04T06:10:00.000Z", totalElapsedTime: 300 }, {}] });
     expect(lapSpans(d, start)).toEqual([[0, 600], [600, 900], null]);
     expect(lapSpans(d, null)).toEqual([null, null, null]);
+  });
+});
+
+describe("statTiles: Garmin's own numbers", () => {
+  const value = (tiles: { label: string; value: string }[], label: string) => tiles.find((t) => t.label === label)?.value;
+
+  it("shows Garmin load, primary benefit, stamina, body battery and grade-adjusted pace", () => {
+    const tiles = statTiles(
+      detail({
+        summary: { duration: 3600, averageSpeed: 3.2, avgGradeAdjustedSpeed: 3.4, activityTrainingLoad: 61.3, trainingEffectLabel: "LACTATE_THRESHOLD", differenceBodyBattery: -8 },
+        stamina: { start: 99, end: 70, min: 64 },
+      }),
+    );
+    expect(value(tiles, "Garmin load")).toBe("61");
+    expect(value(tiles, "Primary benefit")).toBe("Lactate threshold");
+    expect(value(tiles, "Stamina")).toBe("99 → 70 % · 64 % low");
+    expect(value(tiles, "Body battery")).toBe("-8");
+    expect(value(tiles, "Grade-adjusted pace")).toBe(`${paceLabel(3.4)} /km`);
+  });
+
+  it("leaves out what Garmin did not send, and grade-adjusted pace on a treadmill", () => {
+    const tiles = statTiles(detail({ typeKey: "treadmill_running", summary: { duration: 3600, averageSpeed: 3.2, avgGradeAdjustedSpeed: 3.2 } }));
+    for (const label of ["Garmin load", "Primary benefit", "Stamina", "Body battery", "Grade-adjusted pace"]) expect(value(tiles, label)).toBeUndefined();
+  });
+
+  it("drops the low stamina point when it is the end value", () => {
+    expect(value(statTiles(detail({ stamina: { start: 100, end: 74, min: 74 } })), "Stamina")).toBe("100 → 74 %");
+  });
+});
+
+describe("benefitLabel", () => {
+  it("turns Garmin's keys into words", () => {
+    expect(benefitLabel("AEROBIC_BASE")).toBe("Aerobic base");
+    expect(benefitLabel("VO2MAX")).toBe("VO2 max");
+    expect(benefitLabel("NO_BENEFIT")).toBeNull();
+    expect(benefitLabel(null)).toBeNull();
   });
 });

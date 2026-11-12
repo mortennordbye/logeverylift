@@ -17,7 +17,7 @@ import { efPoints, thresholdHistory, type EfPoint, type TrendActivity } from "./
 import { compareBricks, pacingGuide, taperStart, type BrickComparison, type FuelSession, type PacingGuide, type RunSummary } from "./analytics/race";
 import type { Efforts } from "./analytics/efforts";
 import type { Decoupling } from "./analytics/decoupling";
-import { bodySignal, raceStatus, type BodySignal, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
+import { HRV_STATUS_LABEL, bodySignal, intensityWeek, parseFitnessAge, raceStatus, type BodySignal, type FitnessAge, type IntensityWeek, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
 import {
   RAMP_WINDOW_DAYS,
   demandsChecklist,
@@ -450,13 +450,21 @@ export type ActivityDetail = {
   matchedSessionId: number | null;
   /** Carbohydrate and fluid the user logged for this session. */
   fuel: { carbsG: number | null; fluidMl: number | null } | null;
+  /** Garmin's stamina in % at the start and end, and its lowest point (activity detail summaryDTO). */
+  stamina: { start: number; end: number; min: number | null } | null;
 };
 
 const MAX_POINTS = 3000;
 
 export async function getActivityDetail(userId: string, id: number): Promise<ActivityDetail | null> {
   const [a] = await db
-    .select({ id: garminActivities.garminActivityId, typeKey: garminActivities.activityType, start: garminActivities.startTimeLocal, data: garminActivities.data })
+    .select({
+      id: garminActivities.garminActivityId,
+      typeKey: garminActivities.activityType,
+      start: garminActivities.startTimeLocal,
+      data: garminActivities.data,
+      dto: sql<Json | null>`${garminActivities.detail}->'summaryDTO'`,
+    })
     .from(garminActivities)
     .where(and(eq(garminActivities.userId, userId), eq(garminActivities.garminActivityId, id)));
   if (!a) return null;
@@ -504,7 +512,16 @@ export async function getActivityDetail(userId: string, id: number): Promise<Act
     hrZoneFloors: highs && highs.length >= 6 ? highs.slice(0, 5) : null,
     matchedSessionId,
     fuel: fuel ?? null,
+    stamina: staminaOf(a.dto),
   };
+}
+
+function staminaOf(dto: Json | null): ActivityDetail["stamina"] {
+  const start = num(dto?.beginPotentialStamina);
+  const end = num(dto?.endPotentialStamina);
+  if (start === null || end === null) return null;
+  const min = num(dto?.minAvailableStamina);
+  return { start: Math.round(start), end: Math.round(end), min: min === null ? null : Math.round(min) };
 }
 
 // ── Overview ────────────────────────────────────────────────────────────────
@@ -531,7 +548,7 @@ export async function getActiveCycle(userId: string): Promise<ActiveCycle | null
   return c ?? null;
 }
 
-export type BodyKey = "sleep" | "hrv" | "restingHr" | "vo2max" | "bodyBattery" | "weight";
+export type BodyKey = "sleep" | "sleepScore" | "hrv" | "restingHr" | "respiration" | "bodyBattery" | "vo2max" | "fitnessAge" | "weight";
 
 export type OverviewData = {
   date: string;
@@ -543,6 +560,10 @@ export type OverviewData = {
   body: Record<BodyKey, BodySignal>;
   /** Which of Garmin's two VO2 max values the tile shows. */
   vo2Sport: "run" | "bike";
+  /** Garmin's own HRV status word for the day ("Balanced"), and its 7-day average. */
+  hrvStatus: { label: string; weeklyAvg: number | null } | null;
+  /** Intensity minutes this week against the goal set in Garmin. */
+  intensity: IntensityWeek;
   /** Fitness, fatigue and form for the last 42 days, all sports. */
   pmc: { dates: string[]; ctl: number[]; atl: number[]; tsb: number[]; calibrating: boolean };
   last: (ActivityListRow & { decoupling: ActivityMetrics["decoupling"] }) | null;
@@ -564,7 +585,7 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
   const dayRows = await db
     .select({ date: garminDays.calendarDate, kind: garminDays.kind, data: garminDays.data })
     .from(garminDays)
-    .where(and(eq(garminDays.userId, userId), gte(garminDays.calendarDate, daysAgo(date, 120)), lte(garminDays.calendarDate, date), inArray(garminDays.kind, ["user_summary", "weight"])))
+    .where(and(eq(garminDays.userId, userId), gte(garminDays.calendarDate, daysAgo(date, 120)), lte(garminDays.calendarDate, date), inArray(garminDays.kind, ["user_summary", "weight", "sleep", "fitness_age", "hrv"])))
     .orderBy(asc(garminDays.calendarDate));
   const points = (kind: string, pick: (j: Json) => number | null) =>
     dayRows.flatMap((r) => {
@@ -598,7 +619,10 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     hrv: bodySignal(from((m) => m.hrv.ms), date, { band: hrvBand }),
     restingHr: bodySignal(from((m) => m.restingHr.bpm), date),
     vo2max: bodySignal([...vo2ByDay].map(([d, v]) => ({ date: d, value: v })), date, { days: 90 }),
+    sleepScore: bodySignal(points("sleep", (j) => num(((j.sleepScores as Json | undefined)?.overall as Json | undefined)?.value)), date),
+    respiration: bodySignal(points("sleep", (j) => num(j.averageRespirationValue)), date),
     bodyBattery: bodySignal(points("user_summary", (j) => num(j.bodyBatteryAtWakeTime) ?? num(j.bodyBatteryHighestValue)), date),
+    fitnessAge: bodySignal(points("fitness_age", (j) => parseFitnessAge(j)?.age ?? null), date, { days: 90 }),
     weight: bodySignal(
       points("weight", (j) => {
         const w = num((j.latestWeight as Json | undefined)?.weight);
@@ -608,6 +632,10 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
       { days: 90 },
     ),
   };
+
+  const hrvToday = dayRows.find((r) => r.kind === "hrv" && r.date === date)?.data as Json | undefined;
+  const hrvLabel = typeof hrvToday?.status === "string" ? (HRV_STATUS_LABEL[hrvToday.status] ?? null) : null;
+  const summaries = dayRows.flatMap((r) => (r.kind === "user_summary" ? [{ date: r.date, data: (r.data ?? {}) as Json }] : []));
 
   const recent = series.slice(-42);
   const cycle = await getActiveCycle(userId);
@@ -659,6 +687,8 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     insights: today ? insightsFor(series) : [],
     body,
     vo2Sport,
+    hrvStatus: hrvLabel ? { label: hrvLabel, weeklyAvg: num(hrvToday?.weeklyAvg) } : null,
+    intensity: intensityWeek(summaries, date, mondayOf(date)),
     pmc: {
       dates: recent.map((m) => m.date),
       ctl: recent.map((m) => r1(m.pmc.total.ctl)),
@@ -785,6 +815,8 @@ export type TrendsData = {
    */
   garminVo2: { day: string; value: number; sport: "run" | "bike" }[];
   weight: { day: string; kg: number }[];
+  /** Garmin's newest fitness age and what would lower it, and the age week by week. */
+  fitnessAge: (FitnessAge & { date: string; history: { day: string; age: number }[] }) | null;
 };
 
 export async function getTrendsData(userId: string, today = isoDate(new Date())): Promise<TrendsData> {
@@ -832,9 +864,23 @@ export async function getTrendsData(userId: string, today = isoDate(new Date()))
     .where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "weight")))
     .orderBy(asc(garminDays.calendarDate));
 
+  const ageRows = await db
+    .select({ day: garminDays.calendarDate, data: garminDays.data })
+    .from(garminDays)
+    .where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "fitness_age"), lte(garminDays.calendarDate, today)))
+    .orderBy(asc(garminDays.calendarDate));
+  const ages = ageRows.flatMap((r) => {
+    const f = parseFitnessAge(r.data as Json);
+    return f ? [{ day: r.day, f }] : [];
+  });
+  const newestAge = ages.at(-1);
+
   return {
     today,
     acts,
+    fitnessAge: newestAge
+      ? { ...newestAge.f, date: newestAge.day, history: ages.filter((a, i) => a.day === mondayOf(a.day) || i === ages.length - 1).map((a) => ({ day: a.day, age: a.f.age })) }
+      : null,
     garminVo2: vo2Rows.map((r) => ({ day: r.day, value: r.vo2, sport: r.sport as "run" | "bike" })),
     weight: weightRows.flatMap((r) => (r.kg ? [{ day: r.day, kg: Math.round(r.kg * 10) / 10 }] : [])),
   };

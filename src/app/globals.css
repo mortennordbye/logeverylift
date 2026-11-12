@@ -110,6 +110,10 @@ select {
   --viz-run: #1baf7a;
   --viz-strength: #eda100;
   --viz-other: #e87ba4;
+  /* Body signal tiles that have no sport colour (Overview). */
+  --viz-sleep-score: #7c5ce0;
+  --viz-respiration: #0e9fb5;
+  --viz-fitness-age: #5f9e0f;
   --viz-band-low: #6da7ec;
   --viz-band-mid: #2a78d6;
   --viz-band-high: #104281;
@@ -164,6 +168,9 @@ select {
   --viz-run: #199e70;
   --viz-strength: #c98500;
   --viz-other: #d55181;
+  --viz-sleep-score: #9b84f5;
+  --viz-respiration: #22b8cf;
+  --viz-fitness-age: #84cc16;
   --viz-band-low: #1c5cab;
   --viz-band-mid: #5598e7;
   --viz-band-high: #b7d3f6;

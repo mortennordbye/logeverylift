@@ -29,6 +29,20 @@ export function paceLabel(mps: number | null) {
 
 export type StatTile = { label: string; value: string };
 
+/** A treadmill has no grade, so grade-adjusted pace equals pace there. */
+const isIndoorRun = (typeKey: string) => typeKey === "treadmill_running" || typeKey === "indoor_running";
+
+const BENEFIT_WORDS: Record<string, string> = { VO2MAX: "VO2 max", NO_BENEFIT: "" };
+
+/** Garmin's primary training benefit ("AEROBIC_BASE") as words ("Aerobic base"); null when there is none. */
+export function benefitLabel(v: unknown): string | null {
+  if (typeof v !== "string" || !v) return null;
+  const known = BENEFIT_WORDS[v];
+  if (known !== undefined) return known || null;
+  const words = v.toLowerCase().replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
 export function statTiles(d: ActivityDetail): StatTile[] {
   const s = d.summary;
   const tiles: StatTile[] = [{ label: "Duration", value: durationLabel(num(s.duration)) }];
@@ -36,6 +50,8 @@ export function statTiles(d: ActivityDetail): StatTile[] {
   if (dist) tiles.push({ label: "Distance", value: `${(dist / 1000).toFixed(dist >= 10_000 ? 1 : 2)} km` });
   const speed = num(s.averageSpeed);
   if (speed && d.sport === "run") tiles.push({ label: "Pace", value: `${paceLabel(speed)} /km` });
+  const gap = num(s.avgGradeAdjustedSpeed);
+  if (gap && d.sport === "run" && !isIndoorRun(d.typeKey)) tiles.push({ label: "Grade-adjusted pace", value: `${paceLabel(gap)} /km` });
   if (speed && d.sport === "bike") tiles.push({ label: "Speed", value: `${(speed * 3.6).toFixed(1)} km/h` });
   if (speed && d.sport === "swim") tiles.push({ label: "Pace", value: `${durationLabel(100 / speed)} /100m` });
   if (num(s.averageHR)) tiles.push({ label: "Heart rate", value: `${Math.round(num(s.averageHR)!)} avg · ${Math.round(num(s.maxHR) ?? 0)} max` });
@@ -43,7 +59,14 @@ export function statTiles(d: ActivityDetail): StatTile[] {
   else if (num(s.avgPower)) tiles.push({ label: "Power", value: `${Math.round(num(s.avgPower)!)} W avg` });
   if (num(s.elevationGain)) tiles.push({ label: "Climb", value: `${Math.round(num(s.elevationGain)!)} m` });
   if (d.metrics?.load != null) tiles.push({ label: "Load", value: `${Math.round(d.metrics.load)} (${d.metrics.loadMethod === "power" ? "power" : d.metrics.loadMethod === "trimp" ? "HR" : d.metrics.loadMethod === "srpe" ? "RPE" : d.metrics.loadMethod})` });
+  const garminLoad = num(s.activityTrainingLoad);
+  if (garminLoad !== null) tiles.push({ label: "Garmin load", value: String(Math.round(garminLoad)) });
   if (num(s.aerobicTrainingEffect)) tiles.push({ label: "Training effect", value: `${num(s.aerobicTrainingEffect)!.toFixed(1)} aerobic · ${(num(s.anaerobicTrainingEffect) ?? 0).toFixed(1)} anaerobic` });
+  const benefit = benefitLabel(s.trainingEffectLabel);
+  if (benefit) tiles.push({ label: "Primary benefit", value: benefit });
+  if (d.stamina) tiles.push({ label: "Stamina", value: `${d.stamina.start} → ${d.stamina.end} %${d.stamina.min !== null && d.stamina.min < d.stamina.end ? ` · ${d.stamina.min} % low` : ""}` });
+  const bb = num(s.differenceBodyBattery);
+  if (bb !== null) tiles.push({ label: "Body battery", value: `${bb > 0 ? "+" : ""}${Math.round(bb)}` });
   if (num(s.calories)) tiles.push({ label: "Calories", value: `${Math.round(num(s.calories)!)} kcal` });
   return tiles;
 }

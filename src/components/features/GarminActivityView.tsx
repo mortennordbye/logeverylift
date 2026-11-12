@@ -19,7 +19,7 @@ import {
   zoneSeconds,
 } from "@/lib/garmin/charts/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
-import { ChartLine, ChevronLeft, Droplets, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, Route as RouteIcon, Scale, Timer, TrendingUp, Zap, type LucideIcon } from "lucide-react";
+import { Award, BatteryMedium, ChartLine, ChevronLeft, Droplets, Fuel, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, MountainSnow, Route as RouteIcon, Scale, Timer, TrendingUp, Watch, Zap, type LucideIcon } from "lucide-react";
 
 const STAT_ICON: Record<string, LucideIcon> = {
   Duration: Timer,
@@ -32,6 +32,11 @@ const STAT_ICON: Record<string, LucideIcon> = {
   Load: Dumbbell,
   "Training effect": TrendingUp,
   Calories: Flame,
+  "Grade-adjusted pace": MountainSnow,
+  "Garmin load": Watch,
+  "Primary benefit": Award,
+  Stamina: Fuel,
+  "Body battery": BatteryMedium,
 };
 import Link from "next/link";
 import { useRouter } from "next/navigation";

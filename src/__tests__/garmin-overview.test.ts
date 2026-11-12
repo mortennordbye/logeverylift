@@ -1,5 +1,5 @@
 import { garminView } from "@/components/features/garmin/tabs";
-import { bodySignal, normalRange, raceStatus, type CycleForRace } from "@/lib/garmin/analytics/overview";
+import { bodySignal, intensityWeek, normalRange, parseFitnessAge, raceStatus, type CycleForRace } from "@/lib/garmin/analytics/overview";
 import { addDays } from "@/lib/garmin/dates";
 import { describe, expect, it } from "vitest";
 
@@ -76,5 +76,50 @@ describe("garminView", () => {
     expect(garminView("sleep")).toBe("recovery");
     expect(garminView("data")).toBe("data");
     expect(garminView("activities")).toBe("activities");
+  });
+});
+
+describe("intensityWeek", () => {
+  it("counts vigorous minutes twice, Monday to the given day, against today's goal", () => {
+    const rows = [
+      { date: "2026-11-08", data: { moderateIntensityMinutes: 500 } },
+      { date: "2026-11-09", data: { moderateIntensityMinutes: 20, vigorousIntensityMinutes: 30 } },
+      { date: "2026-11-11", data: { moderateIntensityMinutes: 10, vigorousIntensityMinutes: 5, intensityMinutesGoal: 150 } },
+      { date: "2026-11-12", data: { moderateIntensityMinutes: 99 } },
+    ];
+    const w = intensityWeek(rows, "2026-11-11", "2026-11-09");
+    expect(w.minutes).toBe(20 + 60 + 10 + 10);
+    expect(w.goal).toBe(150);
+    expect(w.days.map((d) => d.date)).toEqual(["2026-11-09", "2026-11-10", "2026-11-11", "2026-11-12", "2026-11-13", "2026-11-14", "2026-11-15"]);
+    expect(w.days[3]).toEqual({ date: "2026-11-12", moderate: 0, vigorous: 0 });
+  });
+
+  it("has no goal when Garmin sent none", () => {
+    expect(intensityWeek([], "2026-11-11", "2026-11-09")).toMatchObject({ minutes: 0, goal: null });
+  });
+});
+
+describe("parseFitnessAge", () => {
+  it("reads the age and orders the parts by Garmin's priority", () => {
+    const f = parseFitnessAge({
+      fitnessAge: 18,
+      chronologicalAge: 23,
+      components: {
+        rhr: { value: 45 },
+        bodyFat: { value: 21.2, priority: 1, targetValue: 13.6, potentialAge: 18 },
+        vigorousDaysAvg: { value: 2.1, priority: 2, targetValue: 3, potentialAge: 19.3 },
+        vigorousMinutesAvg: { value: 126 },
+        unknown: { value: 1 },
+      },
+    })!;
+    expect(f.age).toBe(18);
+    expect(f.chronological).toBe(23);
+    expect(f.parts.map((p) => p.key)).toEqual(["bodyFat", "vigorousDaysAvg", "rhr", "vigorousMinutesAvg"]);
+    expect(f.parts[0]).toEqual({ key: "bodyFat", label: "Body fat", unit: "%", value: 21.2, target: 13.6, potentialAge: 18 });
+  });
+
+  it("is null without an age", () => {
+    expect(parseFitnessAge({ components: {} })).toBeNull();
+    expect(parseFitnessAge(null)).toBeNull();
   });
 });

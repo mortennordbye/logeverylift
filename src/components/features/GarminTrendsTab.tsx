@@ -21,7 +21,7 @@ import {
 } from "@/lib/garmin/charts/trends";
 import type { TrendsData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
-import { Activity, Footprints, Gauge, HeartPulse, Scale, Timer, Wind, Zap } from "lucide-react";
+import { Activity, Footprints, Gauge, HeartPulse, Hourglass, Scale, Timer, Wind, Zap } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -306,6 +306,49 @@ export function GarminTrendsTab({ data }: { data: TrendsData }) {
           <EChart option={opts.weight} height={wkg.length > 1 ? 196 : 130} onIndex={setWAt} ariaLabel={`Weight from ${data.weight.length} weigh-ins.`} />
         </Card>
       )}
+
+      {data.fitnessAge && <FitnessAgeCard age={data.fitnessAge} />}
     </div>
+  );
+}
+
+const ageNumber = (v: number) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+
+/** Garmin's fitness age against your age, a year ago, and what Garmin says would lower it. */
+function FitnessAgeCard({ age }: { age: NonNullable<TrendsData["fitnessAge"]> }) {
+  const yearAgo = age.history.findLast((h) => h.day <= addDays(age.date, -365));
+  const under = age.chronological !== null ? age.chronological - age.age : null;
+  return (
+    <Card icon={Hourglass} title="Fitness age" aside={`Garmin · ${formatDateShort(age.date)}`} note="Garmin's estimate from resting HR, body fat or BMI, and vigorous activity over 6 weeks. A target is the value Garmin says would lower your fitness age.">
+      <p className="text-sm tabular-nums">
+        <b className="text-2xl font-semibold">{ageNumber(age.age)}</b>
+        {age.chronological !== null && (
+          <span className="text-muted-foreground">
+            {" "}
+            · you are {age.chronological}
+            {under !== null && under !== 0 ? `, ${ageNumber(Math.abs(under))} ${under > 0 ? "younger" : "older"}` : ""}
+          </span>
+        )}
+      </p>
+      {yearAgo && <p className="text-[11px] text-muted-foreground">A year ago: {ageNumber(yearAgo.age)}</p>}
+      <ul className="divide-y divide-border">
+        {age.parts.map((p) => (
+          <li key={p.key} className="flex items-center justify-between gap-3 py-2 text-sm">
+            <span>{p.label}</span>
+            <span className="tabular-nums text-right">
+              {ageNumber(p.value)}
+              {p.unit && ` ${p.unit}`}
+              {p.target !== null && (
+                <span className="block text-[11px] text-muted-foreground">
+                  target {ageNumber(p.target)}
+                  {p.unit && ` ${p.unit}`}
+                  {p.potentialAge !== null ? ` → age ${Math.round(p.potentialAge)}` : ""}
+                </span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }

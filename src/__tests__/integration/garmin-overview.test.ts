@@ -1,7 +1,8 @@
 import { db } from "@/db";
 import { garminActivities, garminActivityMetrics, garminActivityStreams, garminDays, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
-import { getOverviewData, getTrendsData, getVolumeData } from "@/lib/garmin/queries";
+import type { GarminDayKind } from "@/lib/garmin/endpoints";
+import { getActivityDetail, getOverviewData, getTrendsData, getVolumeData } from "@/lib/garmin/queries";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import { createExercise, createProgram, createUser } from "./factories";
@@ -127,5 +128,69 @@ describe("getTrendsData", () => {
     expect(t.acts).toEqual([expect.objectContaining({ id: 21, sport: "bike", watchLthr: 168, efforts })]);
     expect(t.garminVo2).toEqual([{ day: "2026-11-01", value: 51, sport: "bike" }]);
     expect(t.weight).toEqual([{ day: "2026-11-02", kg: 80.5 }]);
+  });
+});
+
+describe("Garmin's own numbers", () => {
+  async function days(userId: string, date: string, extra: Partial<Record<GarminDayKind, object>>) {
+    for (const [kind, data] of Object.entries(extra) as [GarminDayKind, object][]) await db.insert(garminDays).values({ userId, calendarDate: date, kind, data });
+  }
+
+  it("Overview reads sleep score, breathing, fitness age, HRV status and intensity minutes for the user only", async () => {
+    const me = await createUser();
+    const other = await createUser();
+    await days(me.id, "2026-11-10", { user_summary: { moderateIntensityMinutes: 30, vigorousIntensityMinutes: 10 } });
+    await days(me.id, "2026-11-11", {
+      sleep: { sleepScores: { overall: { value: 81 } }, averageRespirationValue: 14.5 },
+      fitness_age: { fitnessAge: 18, chronologicalAge: 23 },
+      hrv: { status: "BALANCED", weeklyAvg: 89, lastNightAvg: 75 },
+      user_summary: { moderateIntensityMinutes: 20, vigorousIntensityMinutes: 5, intensityMinutesGoal: 150 },
+    });
+    await days(other.id, "2026-11-11", {
+      sleep: { sleepScores: { overall: { value: 40 } }, averageRespirationValue: 20 },
+      fitness_age: { fitnessAge: 60 },
+      hrv: { status: "LOW", weeklyAvg: 30 },
+      user_summary: { moderateIntensityMinutes: 999, intensityMinutesGoal: 300 },
+    });
+
+    const d = await getOverviewData(me.id, "2026-11-11");
+    expect(d.date).toBe("2026-11-11");
+    expect(d.body.sleepScore.value).toBe(81);
+    expect(d.body.respiration.value).toBe(14.5);
+    expect(d.body.fitnessAge.value).toBe(18);
+    expect(d.hrvStatus).toEqual({ label: "Balanced", weeklyAvg: 89 });
+    expect(d.intensity).toMatchObject({ minutes: 30 + 20 + 20 + 10, goal: 150 });
+  });
+
+  it("Trends reads the newest fitness age with its parts and a year-old value", async () => {
+    const me = await createUser();
+    await days(me.id, "2025-11-03", { fitness_age: { fitnessAge: 21, chronologicalAge: 22 } });
+    await days(me.id, "2026-11-11", { fitness_age: { fitnessAge: 18, chronologicalAge: 23, components: { bodyFat: { value: 21.2, priority: 1, targetValue: 13.6 } } } });
+    await db.insert(garminDays).values({ userId: (await createUser()).id, calendarDate: "2026-11-11", kind: "fitness_age", data: { fitnessAge: 60 } });
+
+    const t = await getTrendsData(me.id, "2026-11-11");
+    expect(t.fitnessAge).toMatchObject({ age: 18, chronological: 23, date: "2026-11-11" });
+    expect(t.fitnessAge?.parts.map((p) => p.key)).toEqual(["bodyFat"]);
+    expect(t.fitnessAge?.history).toEqual([
+      { day: "2025-11-03", age: 21 },
+      { day: "2026-11-11", age: 18 },
+    ]);
+  });
+
+  it("the activity detail reads Garmin's stamina from the stored detail", async () => {
+    const me = await createUser();
+    await db.insert(garminActivities).values({
+      userId: me.id,
+      garminActivityId: 31,
+      startTimeLocal: new Date("2026-11-11T07:00:00Z"),
+      activityType: "running",
+      data: { duration: 1800 },
+      detail: { summaryDTO: { beginPotentialStamina: 99, endPotentialStamina: 70.4, minAvailableStamina: 64 } },
+    });
+    await db.insert(garminActivities).values({ userId: me.id, garminActivityId: 32, startTimeLocal: new Date("2026-11-11T09:00:00Z"), activityType: "running", data: {} });
+
+    expect((await getActivityDetail(me.id, 31))?.stamina).toEqual({ start: 99, end: 70, min: 64 });
+    expect((await getActivityDetail(me.id, 32))?.stamina).toBeNull();
+    expect(await getActivityDetail((await createUser()).id, 31)).toBeNull();
   });
 });

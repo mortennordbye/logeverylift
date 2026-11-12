@@ -13,12 +13,12 @@ import { byGap } from "@/lib/garmin/analytics/demands";
 import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
 import { phaseLabel } from "@/lib/utils/periodization";
 import { formatDateShort } from "@/lib/utils/format";
-import { Activity, BatteryMedium, CalendarRange, ChevronRight, Flag, Gauge, Heart, HeartPulse, Moon, Mountain, Scale, TrendingUp, Wind, type LucideIcon } from "lucide-react";
+import { Activity, BatteryMedium, BedDouble, CalendarRange, ChevronRight, Flag, Flame, Gauge, Heart, HeartPulse, Hourglass, Moon, Mountain, Scale, TrendingUp, Wind, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 /**
- * The Garmin Overview tab: the answer for the day first, then six body
+ * The Garmin Overview tab: the answer for the day first, then nine body
  * signals against your own normal, then the build and the last session.
  * Every block opens the tab that holds its detail.
  */
@@ -156,10 +156,13 @@ type BodyConfig = { label: string; unit: string; format: (v: number) => string; 
 
 const BODY: Record<BodyKey, BodyConfig> = {
   sleep: { label: "Sleep", unit: "h", format: (v) => v.toFixed(1), href: tab("recovery"), higherIsGood: true, icon: Moon, color: "var(--viz-swim)" },
+  sleepScore: { label: "Sleep score", unit: "", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: true, icon: BedDouble, color: "var(--viz-sleep-score)" },
   hrv: { label: "HRV", unit: "ms", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: true, icon: HeartPulse, color: "var(--viz-run)" },
   restingHr: { label: "Resting HR", unit: "bpm", format: (v) => String(Math.round(v)), href: tab("recovery"), higherIsGood: false, icon: Heart, color: "var(--viz-negative)" },
-  vo2max: { label: "VO2 max", unit: "", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: true, icon: Wind, color: "var(--viz-bike)" },
+  respiration: { label: "Breathing", unit: "/min", format: (v) => v.toFixed(1), href: tab("recovery"), higherIsGood: false, icon: Wind, color: "var(--viz-respiration)" },
   bodyBattery: { label: "Body battery", unit: "", format: (v) => String(Math.round(v)), href: tab("day"), higherIsGood: true, icon: BatteryMedium, color: "var(--viz-strength)" },
+  vo2max: { label: "VO2 max", unit: "", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: true, icon: Gauge, color: "var(--viz-bike)" },
+  fitnessAge: { label: "Fitness age", unit: "y", format: (v) => String(Math.round(v)), href: tab("trends"), higherIsGood: false, icon: Hourglass, color: "var(--viz-fitness-age)" },
   weight: { label: "Weight", unit: "kg", format: (v) => v.toFixed(1), href: tab("trends"), higherIsGood: null, icon: Scale, color: "var(--viz-other)" },
 };
 
@@ -199,7 +202,7 @@ function Spark({ s, color }: { s: BodySignal; color: string }) {
   );
 }
 
-function BodyTile({ k, s, vo2Sport }: { k: BodyKey; s: BodySignal; vo2Sport: "run" | "bike" }) {
+function BodyTile({ k, s, sub }: { k: BodyKey; s: BodySignal; sub?: string }) {
   const c = BODY[k];
   const Icon = c.icon;
   return (
@@ -210,7 +213,7 @@ function BodyTile({ k, s, vo2Sport }: { k: BodyKey; s: BodySignal; vo2Sport: "ru
         </span>
         <p className="text-[11px] text-muted-foreground leading-tight pt-0.5">
           {c.label}
-          {k === "vo2max" && <span className="block text-[9px]">Garmin, {vo2Sport === "run" ? "running" : "cycling"}</span>}
+          {sub && <span className="block text-[9px]">{sub}</span>}
         </p>
       </div>
       <p className="text-lg font-semibold leading-tight tabular-nums">
@@ -222,6 +225,52 @@ function BodyTile({ k, s, vo2Sport }: { k: BodyKey; s: BodySignal; vo2Sport: "ru
         {stateText(s, c.higherIsGood)}
       </p>
     </Link>
+  );
+}
+
+/** The small line under a tile's name: which VO2 max, Garmin's HRV status. */
+function tileSub(k: BodyKey, data: OverviewData): string | undefined {
+  if (k === "vo2max") return `Garmin, ${data.vo2Sport === "run" ? "running" : "cycling"}`;
+  if (k === "hrv" && data.hrvStatus) return `Garmin: ${data.hrvStatus.label}${data.hrvStatus.weeklyAvg !== null ? ` · 7 d ${Math.round(data.hrvStatus.weeklyAvg)}` : ""}`;
+  if (k === "fitnessAge" && data.body.fitnessAge.value !== null) return "Garmin";
+  return undefined;
+}
+
+/** Intensity minutes this week (moderate + 2 × vigorous) against the goal set in Garmin, a bar per day. */
+function IntensityBlock({ data }: { data: OverviewData }) {
+  const w = data.intensity;
+  const goal = w.goal;
+  const max = Math.max(1, ...w.days.map((d) => d.moderate + 2 * d.vigorous));
+  return (
+    <Block href={tab("day")} label="Intensity minutes this week">
+      <Heading icon={Flame} title="Intensity minutes" aside={goal ? `goal ${goal}` : "this week"} />
+      <p className="text-sm tabular-nums">
+        <b className="text-2xl font-semibold">{w.minutes}</b>
+        {goal ? <span className="text-muted-foreground"> / {goal} min · {w.minutes >= goal ? "goal met" : `${goal - w.minutes} to go`}</span> : <span className="text-muted-foreground"> min</span>}
+      </p>
+      {goal && (
+        <div className="mt-2 h-2 rounded-full bg-background overflow-hidden" role="img" aria-label={`${w.minutes} of ${goal} intensity minutes`}>
+          <div className="h-full rounded-full" style={{ width: `${Math.min(100, (w.minutes / goal) * 100)}%`, background: w.minutes >= goal ? "var(--viz-good)" : "var(--viz-bike)" }} />
+        </div>
+      )}
+      <div className="mt-3 grid grid-cols-7 gap-1.5 items-end" aria-hidden>
+        {w.days.map((d, i) => (
+          <div key={d.date} className="flex flex-col items-center gap-1">
+            <div className="flex h-10 w-full flex-col justify-end overflow-hidden rounded-sm bg-background">
+              <div style={{ height: `${((2 * d.vigorous) / max) * 100}%`, background: "var(--viz-bike)" }} />
+              <div style={{ height: `${(d.moderate / max) * 100}%`, background: "var(--viz-strength)" }} />
+            </div>
+            <span className="text-[9px] text-muted-foreground">{"MTWTFSS"[i]}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        <span className="inline-block h-2 w-2 rounded-sm align-middle mr-1" style={{ background: "var(--viz-strength)" }} />
+        Moderate
+        <span className="inline-block h-2 w-2 rounded-sm align-middle mx-1 ml-3" style={{ background: "var(--viz-bike)" }} />
+        Vigorous, counts twice
+      </p>
+    </Block>
   );
 }
 
@@ -325,15 +374,16 @@ export function GarminOverviewTab({ data, volume }: { data: OverviewData; volume
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Body · against your normal</p>
         <div className="grid grid-cols-3 gap-2">
           {(Object.keys(BODY) as BodyKey[]).map((k) => (
-            <BodyTile key={k} k={k} s={data.body[k]} vo2Sport={data.vo2Sport} />
+            <BodyTile key={k} k={k} s={data.body[k]} sub={tileSub(k, data)} />
           ))}
         </div>
         <p className="text-[11px] text-muted-foreground px-1">
-          The band is your normal: mean ± 1 SD of the 28 days before (HRV: its own baseline band). VO2 max is Garmin&apos;s value from your watch files; Trends shows the app&apos;s own estimate next to it.
+          The band is your normal: mean ± 1 SD of the 28 days before (HRV: its own baseline band). Sleep score, breathing (average while asleep), VO2 max and fitness age are Garmin&apos;s own values; Trends shows the app&apos;s VO2 max estimate next to Garmin&apos;s.
         </p>
       </section>
       <FitnessBlock data={data} />
       <WeekBlock volume={volume} />
+      <IntensityBlock data={data} />
       <DemandsBlock volume={volume} />
       <LastSession data={data} />
     </div>

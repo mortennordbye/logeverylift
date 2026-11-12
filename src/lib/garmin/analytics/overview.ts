@@ -104,3 +104,63 @@ export function raceStatus(cycle: CycleForRace | null, today: string): RaceStatu
     isDeload: load?.isDeload ?? false,
   };
 }
+
+// ── Garmin's own numbers ────────────────────────────────────────────────────
+
+type Json = Record<string, unknown>;
+const num = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+/** Garmin's HRV status word (hrv daily summary `status`), or null for NONE and unknown words. */
+export const HRV_STATUS_LABEL: Record<string, string> = { BALANCED: "Balanced", UNBALANCED: "Unbalanced", LOW: "Low", POOR: "Poor" };
+
+export type IntensityWeek = {
+  /** Garmin's rule: moderate minutes plus vigorous minutes counted twice. */
+  minutes: number;
+  goal: number | null;
+  /** Monday to Sunday of the week holding `date`; 0 for a day with no summary or still to come. */
+  days: { date: string; moderate: number; vigorous: number }[];
+};
+
+/** Intensity minutes for the Monday-start week of `date`, from daily summaries (user_summary). */
+export function intensityWeek(rows: { date: string; data: Json }[], date: string, monday: string): IntensityWeek {
+  const byDate = new Map(rows.map((r) => [r.date, r.data]));
+  const days = Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(monday, i);
+    const j = d <= date ? byDate.get(d) : undefined;
+    return { date: d, moderate: num(j?.moderateIntensityMinutes) ?? 0, vigorous: num(j?.vigorousIntensityMinutes) ?? 0 };
+  });
+  const goal = num(byDate.get(date)?.intensityMinutesGoal);
+  return { minutes: days.reduce((s, d) => s + d.moderate + 2 * d.vigorous, 0), goal: goal && goal > 0 ? goal : null, days };
+}
+
+export type FitnessAgePart = { key: string; label: string; value: number; unit: string; target: number | null; potentialAge: number | null };
+
+export type FitnessAge = {
+  age: number;
+  chronological: number | null;
+  /** What Garmin says would lower it, most impact first; parts with no target are context. */
+  parts: FitnessAgePart[];
+};
+
+const FITNESS_AGE_PARTS: Record<string, { label: string; unit: string }> = {
+  rhr: { label: "Resting HR", unit: "bpm" },
+  bodyFat: { label: "Body fat", unit: "%" },
+  bmi: { label: "BMI", unit: "" },
+  vigorousDaysAvg: { label: "Vigorous days a week", unit: "" },
+  vigorousMinutesAvg: { label: "Vigorous minutes a week", unit: "min" },
+};
+
+/** Garmin's fitness age answer (fitnessage-service), or null when it has no age. */
+export function parseFitnessAge(j: Json | null | undefined): FitnessAge | null {
+  const age = num(j?.fitnessAge);
+  if (age === null) return null;
+  const comps = (j?.components ?? {}) as Record<string, Json>;
+  const parts = Object.entries(FITNESS_AGE_PARTS).flatMap(([key, meta]) => {
+    const c = comps[key];
+    const value = num(c?.value);
+    if (value === null) return [];
+    return [{ part: { key, ...meta, value, target: num(c.targetValue), potentialAge: num(c.potentialAge) }, priority: num(c.priority) ?? 99 }];
+  });
+  parts.sort((a, b) => a.priority - b.priority);
+  return { age: Math.round(age * 10) / 10, chronological: num(j?.chronologicalAge), parts: parts.map((p) => p.part) };
+}
