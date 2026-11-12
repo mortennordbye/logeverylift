@@ -86,9 +86,9 @@ everything that writes plan data. A1-A3 share one brief and one PR:
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| A1 | Bug fixes and ghost-session cleanup | none | brief |
-| A2 | User time zone and display units | none | brief |
-| A3 | Endurance switch | none | brief |
+| A1 | Bug fixes and ghost-session cleanup | none | building |
+| A2 | User time zone and display units | none | building |
+| A3 | Endurance switch | none | building |
 | A4 | Revisions, stable ids and plan versions | A1 | todo |
 
 **A1. Bug fixes and ghost-session cleanup.** Audit "Bugs found" 1-4 and D23.
@@ -104,9 +104,11 @@ everything that writes plan data. A1-A3 share one brief and one PR:
 
 **A2. User time zone and display units (D14).** A time zone on the user (default from the
 browser), one helper for "today" and week numbers used by the weekly sync and cycle views, and
-a units setting (kg/lb, km/mi, pace per km or mile, swim per 100 m or 100 yd). Storage stays
-metric; only display and input convert. For everyone. Touches dates in workout logging, so it
-is near a critical flow: component tests for the date boundary near midnight.
+a units setting for endurance numbers (km/mi, pace per km or mile, swim per 100 m or 100 yd).
+Weight stays kg for now: the owner moved lb to BACKLOG.md ("Pounds for weights") on
+2026-11-12. Storage stays metric; only display and input convert. For everyone. Touches dates
+in workout logging, so it is near a critical flow: component tests for the date boundary near
+midnight.
 
 **A3. Endurance switch (D15, D18).** A per-user flag, settable only by an admin for now. Moves
 the "Triathlon plan" entry and the race field on the cycle form behind it. Every later

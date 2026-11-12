@@ -5,8 +5,10 @@ branch and one PR (`feat/foundations-a1-a3`), because the owner wants bigger PRs
 has its own section below. Inputs: the audit (`docs/triathlon-coach-audit.md`, "Bugs found",
 sections 8-11 and decisions D14, D15, D18, D23) and `CLAUDE.md`.
 
-Names marked *new* do not exist yet. Every `file:line` below was opened when this brief was
-written (2026-11-12).
+Status: built on `feat/foundations-a1-a3` to the owner's answers (see "Owner decisions" at the
+end). The **Findings** sections describe the code before this PR (main at 0b48b23), and every
+`file:line` in them was opened then; the code has moved since. The **Design** sections describe
+what this PR built.
 
 ## Why
 
@@ -100,10 +102,24 @@ sessions, and both have the same fault:
   - It deletes only with an explicit `--delete` flag, and re-checks "no sets" inside the
     delete statement (`NOT EXISTS`), so a set logged between the dry run and the delete saves
     the session.
-  - Package script `db:cleanup-ghosts`. Add it to the esbuild line in the `Dockerfile`, so the
-    owner can run `node /app/scripts/cleanup-ghost-sessions.js` (dry run) in the prod pod.
+  - The rule lives in `src/lib/ghost-sessions.ts`, so the integration suite runs it against
+    the test database; the script is a thin wrapper.
+  - Package script `db:cleanup-ghosts`. It is on the esbuild line in the `Dockerfile`, so the
+    production image has `/app/scripts/cleanup-ghost-sessions.js`.
   - Never run against prod by an agent. Never run in delete mode against the dev DB by an
-    agent. The integration test runs both modes against the test DB.
+    agent. The integration test runs both modes against the test DB. A dry run on the dev DB
+    found 330 ghosts for one account, with durations of about 1, 10 and 720 hours.
+  - **The owner runs it in prod** after the deploy (owner decision 3), in the app pod:
+
+    ```bash
+    # 1. Dry run: lists the ghosts, deletes nothing.
+    kubectl exec -n <namespace> deploy/<app> -- node /app/scripts/cleanup-ghost-sessions.js
+    # 2. Read the list. If it is right, delete them:
+    kubectl exec -n <namespace> deploy/<app> -- node /app/scripts/cleanup-ghost-sessions.js --delete
+    ```
+
+    Locally against a database of your choice: `pnpm db:cleanup-ghosts` (dry run) and
+    `pnpm db:cleanup-ghosts --delete`, with `DATABASE_URL` and `BETTER_AUTH_SECRET` set.
 
 ### Tests
 
@@ -134,7 +150,7 @@ The MCP integration tests call the registered tool handler with a fake server, t
   (`src/lib/periodization-sync.ts:311-312`), and the adherence window, which also cuts the date
   in UTC with `toISOString` (`src/lib/periodization-sync.ts:124-126`);
 - the cycle views: `getActiveCycleForUser` picks the week and today's slot
-  (`src/lib/actions/training-cycles.ts:167-168`, `:218`), and `startOfToday`
+  (`src/lib/actions/training-cycles.ts:167-168`, `:218`), and a local start-of-today helper
   (`src/lib/actions/training-cycles.ts:137-141`);
 - a cycle start date, in the app (`src/lib/actions/training-cycles.ts:781`, `:826`) and over
   MCP (`src/lib/mcp/tools/cycles.ts:188`);
@@ -167,73 +183,97 @@ written by `setMissedWorkoutsEnabled` (`src/lib/actions/training-cycles.ts:502-5
 
 **Time zone.**
 - Column `user.time_zone`, an IANA name, null until set.
-- Filled once from the browser: a small client component in the root layout sends
-  `Intl.DateTimeFormat().resolvedOptions().timeZone` to *new* `setTimeZone` when the stored
-  value is null. It never overwrites a stored value, so a manual choice sticks.
-- Settings shows the zone with a picker (the browser's `Intl.supportedValuesOf("timeZone")`
-  list). When the device zone differs from the stored one, Settings shows "Your phone is in X.
-  Use it?" with one button. No automatic change on travel.
-- The action validates the name with `Intl.DateTimeFormat` (unknown name fails).
+- Filled once from the browser: `UserSettingsHydrator` sends
+  `Intl.DateTimeFormat().resolvedOptions().timeZone` to `setTimeZone` with `ifUnset`, which
+  writes only while the column is null. A manual choice sticks. An admin viewing as the user
+  never fills it.
+- Settings ("Units and time", `UnitsAndTimeSettings`) has a picker from
+  `Intl.supportedValuesOf("timeZone")`. When the phone's zone differs from the stored one, it
+  shows "Your phone is in X." with a "Use it" button. No automatic change on travel.
+- The validators (`src/lib/validators/user-settings.ts`) check the name with
+  `Intl.DateTimeFormat`, so an unknown name fails, in the app and over MCP.
 
-**One helper for today and weeks.** *New* `src/lib/utils/user-date.ts`, pure:
-- `localDateStr(now, timeZone)`: the `YYYY-MM-DD` date at `now` in the zone. Moves the body of
-  `localDate` here; `src/lib/garmin/dates.ts` re-exports it so Garmin code is unchanged.
-- `todayIn(timeZone, now)`: that date as a local-midnight `Date` (`parseDateStr` of the
-  string), which is the shape `cycleWeek` and the slot logic already take.
-- `mondayOf(dateStr)` and the week's seven dates, for the home strip.
-- A null zone falls back to the process's own zone on the server and the device zone in the
-  browser, so a user who has no zone yet sees no change.
+**One helper for today and weeks.** `src/lib/utils/user-date.ts`, pure:
+- `localDateStr(now, timeZone)`: the `YYYY-MM-DD` date at `now` in the zone.
+- `todayIn(timeZone, now)`: that date as a local-midnight `Date`, the shape `cycleWeek` and
+  the slot logic already take.
+- `weekDatesOf(dateStr)`: Monday to Sunday of the week, for the home strip.
+- A null or unknown zone falls back to the zone of the running code (the server's on the
+  server, the phone's in the browser), so a user who has no zone yet sees no change.
+- Garmin's own `localDate` stays as it is: it falls back to UTC, and the Garmin pages keep
+  `garminToday` for now (BACKLOG.md).
 
-Server reads: *new* `getUserTimeZone(userId)`, wrapped in React `cache` for one read per
-request. The sync, the cycle views, the cycle start, the MCP cycle tool and the home page use
-it.
+Server reads: `getUserSettings(userId)` and `userToday(userId, now)` in
+`src/lib/user-settings.ts`, with React `cache` for one read per request. The weekly sync
+(`syncDueCycle`, `periodizationShare`, `wearableSuggestion`, the adherence window), the
+cycle views (`getActiveCycleForUser`, `getCyclePeriodization`, the duration guard in
+`updateTrainingCycle`), the cycle start (`startTrainingCycle`, `restartTrainingCycle` and MCP
+`manage_training_cycle`) and the home page use them. The home page asks for the week's
+sessions from a day before the user's Monday, since that query filters by start time and the
+user's Monday can begin on the server's Sunday; it then matches sessions by date as before.
 
-**The workout date uses the same zone.** The workout layout passes the stored zone to
-`WorkoutSessionInitializer` and the finish page, which date the session with `localDateStr`
-instead of the device's `toDateString`. Then the session date and the server's "today" always
-agree. With no stored zone, both keep using the device zone, as today.
+**The workout date uses the same zone.** The workout layout reads the stored zone on the
+server and passes it to `WorkoutSessionInitializer`, which dates a new session with
+`localDateStr`. The finish page's fallback reads it from `useUserSettings`. Then the session
+date and the server's "today" agree. With no stored zone, both keep the phone's day, as before.
+The cycle calendar's "today" uses the same zone (`todayIn`).
 
-**Units.**
-- Three columns on `user`: `weight_unit` (`kg` | `lb`, default `kg`), `distance_unit`
-  (`km` | `mi`, default `km`; run pace follows it: per km or per mile; speed km/h or mph),
-  `swim_unit` (`m` | `yd`, default `m`; swim pace per 100 m or per 100 yd).
+**Client settings.** The root layout cannot wait for the session without losing its static
+shell. So `UserSettingsProvider` (`src/contexts/user-settings-context.tsx`) wraps the app,
+starts metric with no zone, and `UserSettingsLoader`, streamed in its own Suspense next to the
+page, fills it through `UserSettingsHydrator`. Components read `useUnits()` or
+`useUserSettings()`. On a cold load a component can render once in metric before the settings
+arrive; the set editor and the new-set view then re-show the distance field in the right unit.
+
+**Units (endurance only, owner decision 2).**
+- Two columns on `user`: `distance_unit` (`km` | `mi`, default `km`; run and ride distance,
+  run pace per km or per mile, ride speed km/h or mph) and `swim_unit` (`m` | `yd`, default
+  `m`; swim distance, swim pace per 100 m or per 100 yd). Weight stays kg only, and there is no
+  `weight_unit` column: lb is a BACKLOG entry ("Pounds for weights"), since lb done well needs
+  lb-native steps and plates, and an unused column would only be one more thing to migrate.
 - Storage stays metric. Server Actions, MCP tools, export and the database take and return
   metric only. MCP stays metric whatever the setting, and the tool descriptions say so.
-- *New* `src/lib/utils/units.ts`, pure: kg↔lb, m↔mi, m↔yd, and the display formatters, which
-  take the units. The existing `format.ts` helpers get an optional units argument with the
-  metric default, so every current caller is unchanged until it passes the units.
-- A *new* `UnitsProvider` context in the root layout gives Client Components the user's units.
-- Input converts at the edge: a weight typed in lb is turned into kg before the Server Action
-  call and rounded to the column's 2 decimals. The field shows 1 decimal in lb, so a stored
-  value shows back as what was typed (225 lb → 102.06 kg → 225.0 lb).
-- Which screens convert in this PR: see open question 2.
+- `src/lib/utils/units.ts`, pure: the `Units` type, `fieldUnit` (the unit a discipline's
+  distance field is in: m becomes yd, km becomes mi), `metersToField` and `fieldToMeters`.
+  Metric stays exactly as before (meters, or meters / 1000). Miles show two decimals and yards
+  whole numbers. `fieldToMeters` takes the stored meters too: a value saved back unchanged
+  keeps them, so 5000 m shown as 3.11 mi does not become 5005 m.
+- The endurance formatters in `src/lib/utils/format.ts` (`formatPace`, `formatSwimPace`,
+  `formatSpeedKmh`, `formatEndurancePace`, `formatDistanceKm`, `formatEnduranceDistance`,
+  `loggedSetLabel`, `buildRunSetSummary`, and the new `distancePresetLabel`) take an optional
+  `units` argument with the metric default, so a caller that passes nothing is unchanged.
+- Screens that convert: the run logger (`LogRunModal`), the set editor and the new-set view
+  (input and pace), the set list and its record badge, the program and workout exercise lists,
+  the cycle calendar, the records feed, session detail, exercise detail, and the cardio and
+  triathlon sections of metrics. Distance presets stay metric distances, shown converted
+  (3.1mi). What still shows metric is listed in BACKLOG.md ("Time zone and units: places still
+  on the server zone or metric").
 
 ### Data model
 
 | Column | Type | Default | Owner (writer) |
 |---|---|---|---|
 | `user.time_zone` | `text`, null | null | the user (Settings, the one-time browser fill, MCP `update_profile`) |
-| `user.weight_unit` | `text` | `'kg'` | the user (Settings, MCP `update_profile`) |
 | `user.distance_unit` | `text` | `'km'` | the user (Settings, MCP `update_profile`) |
 | `user.swim_unit` | `text` | `'m'` | the user (Settings, MCP `update_profile`) |
 
 ### MCP tools
 
-- `get_profile` returns `timeZone`, `weightUnit`, `distanceUnit`, `swimUnit`.
-- `update_profile` accepts the same four (same validation as the Settings action).
-- `manage_training_cycle` `start` uses the user's zone for the start date.
-- All MCP numbers stay metric.
+- `get_profile` (read-only) returns `timeZone`, `distanceUnit` and `swimUnit`.
+- `update_profile` accepts the same three, with the same validators as the Settings actions.
+- `manage_training_cycle` uses the user's zone for a start date and for the duration guard.
+- All MCP numbers stay metric, and both profile tool descriptions say so.
 
 ### Tests
 
 | Layer | Test |
 |---|---|
-| Unit | `user-date`: the date in Oslo, New York and UTC at 22:59, 23:00, 23:30 and 00:30 UTC, across both DST changes, and the null fallback; Monday and week dates at a week boundary |
-| Unit | `units`: each conversion both ways, rounding to the stored precision, the lb round trip for common plate weights, pace per mile and per 100 yd |
-| Component | `WorkoutSessionInitializer` with fake time at 23:30 UTC and zone `Europe/Oslo` sends the next day's date; with zone `America/New_York` the same day; with no zone, the device date (as today). This is the midnight-boundary test the plan asks for. |
-| Component | A set-edit view in lb shows lb and sends kg to the action |
-| Integration | `getActiveCycleForUser` at 23:30 UTC for an Oslo user picks the next day's slot and the right cycle week on a week boundary; `syncDueCycle` runs the new week's sync at Oslo midnight, not UTC midnight; `setTimeZone` and the units action reject bad values; `update_profile` sets them; another user's call cannot change them |
-| e2e | Run the full suite once at the end (the date is in the logging flow) |
+| Unit (`src/__tests__/user-date.test.ts`) | the date in Oslo, New York and UTC at 22:59, 23:00, 23:30 and 00:30 UTC, in summer time and across both clock changes, and the fallback for no zone or an unknown one; Monday to Sunday at week, month and year boundaries |
+| Unit (`src/__tests__/units.test.ts`) | metric field values exactly as before; miles and yards both ways; typed values read back as typed; a value saved back unchanged keeps its meters; pace per mile and per 100 yd, mph, yards for swims; preset labels and run summaries |
+| Component (`src/__tests__/components/session-date-midnight.test.tsx`) | `WorkoutSessionInitializer` at 23:30 UTC dates the session the next day for `Europe/Oslo`, the same day for `America/New_York`, and the phone's day with no zone. This is the midnight-boundary test the plan asks for; the New York case fails on the old code. |
+| Component (`src/__tests__/components/set-edit-units.test.tsx`) | the set editor in miles shows 5 km as 3.11 mi, saves it back unchanged as 5000 m, saves a typed 6.2 mi as 9978 m; metric is unchanged |
+| Integration (`src/__tests__/integration/user-time-zone.test.ts`) | `getActiveCycleForUser` at 23:30 UTC picks Tuesday's slot for an Oslo user and Monday's for a New York user; week 2 starts at the user's own Monday midnight; `startTrainingCycle` dates the start by the user's day; three of these fail on the old code. `setTimeZone` fills once and never over a stored zone; bad zones and units are refused; units change only the caller's row; MCP `update_profile` sets zone and units and cannot set the endurance switch |
+| e2e | The full suite, once, at the end (the date is in the logging flow) |
 
 ---
 
@@ -292,7 +332,7 @@ agree. With no stored zone, both keep using the device zone, as today.
 | Layer | Test |
 |---|---|
 | Integration | `setUserEndurance` as an admin sets the flag; as a normal user it is refused and nothing changes |
-| Integration | `generateTriathlonPlan` with the switch off fails and writes nothing; with it on, it works (existing tests turn the switch on first) |
+| Integration | `generateTriathlonPlan` with the switch off fails and writes nothing; with it on, it works |
 | Component | Cycles list: no "Triathlon plan" entry when off, entry when on. Cycle form: no race field when off and no race; field shown when on or when the cycle has a race |
 | Integration | `get_profile` returns the flag, `update_profile` ignores an `enduranceEnabled` key |
 
@@ -300,31 +340,37 @@ agree. With no stored zone, both keep using the device zone, as today.
 
 ## Migration and rollback
 
-One migration for the PR, `drizzle/0080_*.sql`, from `pnpm db:generate` (create, not rename),
-with the matching `drizzle/meta/` snapshot.
+One migration for the PR, `drizzle/0080_user_settings_endurance.sql`, from `pnpm db:generate`
+(only new columns, so no create-or-rename prompt), with the matching `drizzle/meta/` snapshot,
+plus one hand-written data step (owner decision 1):
 
 ```sql
 ALTER TABLE "user" ADD COLUMN "time_zone" text;
-ALTER TABLE "user" ADD COLUMN "weight_unit" text DEFAULT 'kg' NOT NULL;
 ALTER TABLE "user" ADD COLUMN "distance_unit" text DEFAULT 'km' NOT NULL;
 ALTER TABLE "user" ADD COLUMN "swim_unit" text DEFAULT 'm' NOT NULL;
 ALTER TABLE "user" ADD COLUMN "endurance_enabled" boolean DEFAULT false NOT NULL;
+UPDATE "user" SET "endurance_enabled" = true
+WHERE "role" = 'admin'
+   OR "id" IN (SELECT "user_id" FROM "training_cycles" WHERE "athlete_level" IS NOT NULL);
 ```
 
-Plus the data step from open question 3, if the owner says yes.
+`athlete_level` is written only by the triathlon generator (`generateTriathlonPlan`), so it
+marks the users who already use it. The data step is tested in
+`src/__tests__/integration/migrations.test.ts`.
 
-All five are new columns with defaults, so existing rows and old code keep working.
+All four are new columns with defaults, so existing rows and old code keep working.
 
 **Rollback.** First deploy the previous image (the old code ignores the new columns, so the
 image can roll back without touching the database). Then, only if the columns must go:
 
 ```sql
-ALTER TABLE "user" DROP COLUMN "time_zone", DROP COLUMN "weight_unit",
-  DROP COLUMN "distance_unit", DROP COLUMN "swim_unit", DROP COLUMN "endurance_enabled";
+ALTER TABLE "user" DROP COLUMN "time_zone", DROP COLUMN "distance_unit",
+  DROP COLUMN "swim_unit", DROP COLUMN "endurance_enabled";
 ```
 
 and delete the migration's row from `drizzle.__drizzle_migrations`. Data lost: only the
-users' time zone, unit choices and endurance switches. No training data. The ghost cleanup is
+users' time zone, unit choices and endurance switches (the data step can be run again). No
+training data. The ghost cleanup is
 not part of the migration; sessions it deleted can only come back from a database backup, which
 is why it runs as a dry run first and deletes only on the owner's approval.
 
@@ -341,9 +387,12 @@ is why it runs as a dry run first and deletes only on the owner's approval.
 2. **Health data.** None. The endurance switch says the user trains for endurance; that is not
    health data. No `CONSENT_VERSION` raise.
 3. **Data leaving the server.** The MCP row in the inventory
-   (`docs/privacy/data-inventory.md:53`) adds "time zone, unit settings and which add-ons are
-   on" to what assistants can read. Bump `LEGAL_VERSION` (`src/lib/constants/legal.ts:7`), since
-   what is collected changes, and add one sentence to the policy.
+   (`docs/privacy/data-inventory.md:54`) adds the time zone, display units and whether the
+   endurance add-on is on to what assistants can read. `LEGAL_VERSION`
+   (`src/lib/constants/legal.ts:7`) is bumped to 2026-11-12.2 (the same day as the MCP access-levels change on main, which already
+   shipped 2026-11-12, so users are told a second time), since what is collected changes,
+   and the policy gets a "Settings" item and names the new MCP reads. `CONSENT_VERSION` is
+   unchanged.
 4. **Browser storage.** None new: units come from the server through context.
 5. **Visible to others.** No. Friends do not see the time zone, units or the switch.
 6. **Logs.** The cleanup script prints ids, dates and durations only.
@@ -351,7 +400,7 @@ is why it runs as a dry run first and deletes only on the owner's approval.
 
 ## Field owners
 
-The four settings columns: the user. `endurance_enabled`: an admin. No field in this PR is
+The three settings columns: the user. `endurance_enabled`: an admin. No field in this PR is
 written by the progression engine or the weekly sync. Bug 1 lets MCP write
 `targetHeartRateZone` and `restTimeSeconds`, which the weekly sync owns on `work` sets; this
 PR only says so in the tool description, and B1 settles the owner (audit section 8).
@@ -371,36 +420,43 @@ PR only says so in the tool description, and B1 settles the owner (audit section
   agree.
 - Pace follows the distance unit; swim has its own unit.
 - MCP always speaks metric.
-- Garmin pages keep their own `garminToday` and stay metric in this PR (admin only, the owner
-  is metric). Metrics, friends and admin "this week" calculations keep the server zone. Both go
-  to `BACKLOG.md` as known gaps.
+- The Garmin pages keep `garminToday` and stay metric in this PR (admin only, and the owner
+  is metric). The metrics, friends and admin "this week" sums keep the server zone. Both are
+  in `BACKLOG.md` as known gaps.
 - Not gated by the endurance switch: run logging, endurance sets and existing triathlon cycles.
 
-## Open questions for the owner
+## Owner decisions (2026-11-12)
 
-1. **Who gets the endurance switch at deploy?** Recommended: the migration turns it on for
-   admin accounts and for every user who already has a cycle made by the triathlon generator,
-   so no one loses a feature they use. The alternative is off for all, and the owner turns
-   their own on in the admin page.
-2. **How far does lb and mile go in this PR?** Recommended: every screen a lifter or runner
-   uses (set logging, set edit, program edit, history, session detail, metrics, records, the
-   run logger, friends' feeds), with progression steps and the plate calculator shown converted
-   (a 2.5 kg step shows as 5.5 lb). lb-native steps and plates (5 lb, 45 lb bar) go to
-   `BACKLOG.md`. The smaller option is endurance units only (km/mi, pace, swim) and kg only.
-3. **Run the ghost cleanup in prod?** The script is ready after merge. Recommended: the owner
-   runs the dry run in the prod pod, reads the list, then runs `--delete`. An agent never runs
-   it against prod.
+1. **Who gets the endurance switch at deploy:** admins, and every user who already has a cycle
+   from the triathlon generator. The migration's data step does it.
+2. **Units:** endurance units only in this PR (km/mi, pace per km/mi, swim per 100 m/100 yd).
+   Weight stays kg, with no `weight_unit` column. lb display and input, with lb-native steps
+   and plates, is one BACKLOG entry ("Pounds for weights").
+3. **Ghost cleanup in prod:** the owner runs it, dry run first, then `--delete`, with the
+   commands in the A1 design above. No agent runs it against prod. Tracked in BACKLOG ("Run
+   the ghost-session cleanup in prod") until done.
 
 ## Files
 
-`src/lib/mcp/tools/programs.ts`, `src/lib/mcp/tools/profile.ts`, `src/lib/mcp/tools/cycles.ts`,
+A1: `src/lib/mcp/tools/programs.ts`, `src/lib/validators/workout.ts`,
 `src/lib/utils/triathlon-plan.ts`, `src/lib/actions/workout-sessions.ts`,
-`src/lib/actions/training-cycles.ts`, `src/lib/actions/admin.ts`,
-`src/lib/actions/triathlon-plan.ts`, `src/lib/periodization-sync.ts`, `src/lib/utils/format.ts`,
-`src/lib/garmin/dates.ts`, `src/db/schema/users.ts`, `src/app/page.tsx`,
-`src/app/settings/page.tsx`, `src/app/cycles/triathlon/page.tsx`,
-`src/components/features/WorkoutSessionInitializer.tsx`,
-`src/components/features/CyclesListClient.tsx`, `src/components/features/EditCycleForm.tsx`,
-`src/components/features/AdminUsersClient.tsx`, `src/components/features/SettingsClient.tsx`,
-`scripts/cleanup-ghost-sessions.ts` (*new*), `package.json`, `Dockerfile`,
+`src/lib/ghost-sessions.ts`, `scripts/cleanup-ghost-sessions.ts`, `package.json`, `Dockerfile`.
+
+A2: `src/lib/utils/user-date.ts`, `src/lib/utils/units.ts`, `src/lib/user-settings.ts`,
+`src/lib/validators/user-settings.ts`, `src/lib/actions/user-settings.ts`,
+`src/contexts/user-settings-context.tsx`, `src/components/features/UserSettingsLoader.tsx`,
+`src/components/features/UserSettingsHydrator.tsx`,
+`src/components/features/UnitsAndTimeSettings.tsx`, `src/lib/utils/format.ts`,
+`src/lib/periodization-sync.ts`, `src/lib/actions/training-cycles.ts`,
+`src/lib/mcp/tools/cycles.ts`, `src/lib/mcp/tools/profile.ts`, `src/app/layout.tsx`,
+`src/app/page.tsx`, `src/app/settings/page.tsx`, `src/app/programs/[id]/workout/layout.tsx`,
+`src/app/programs/[id]/workout/finish/page.tsx`, and the endurance screens listed under Units.
+
+A3: `src/lib/endurance.ts`, `src/lib/actions/admin.ts`, `src/lib/actions/triathlon-plan.ts`,
+`src/app/more/admin/users/page.tsx`, `src/components/features/AdminUsersClient.tsx`,
+`src/app/cycles/page.tsx`, `src/app/cycles/triathlon/page.tsx`,
+`src/app/cycles/[id]/edit/page.tsx`, `src/components/features/CyclesListClient.tsx`,
+`src/components/features/EditCycleForm.tsx`.
+
+Shared: `src/db/schema/users.ts`, `drizzle/0080_user_settings_endurance.sql`,
 `docs/privacy/data-inventory.md`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`.

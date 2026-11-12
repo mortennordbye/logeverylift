@@ -59,4 +59,4 @@ brief here before code. Inputs: the audit (`docs/triathlon-coach-audit.md`) and 
 
 | Package | Brief | Status |
 |---|---|---|
-| A1-A3 | [Foundations: bug fixes, time zone and units, endurance switch](foundations.md) | brief |
+| A1-A3 | [Foundations: bug fixes, time zone and units, endurance switch](foundations.md) | building |

@@ -16,6 +16,29 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Being accepted into the Garmin Connect Developer Program and moving from per-user Personal API keys to its OAuth flow. Then: decide whether GPS tracks in `garmin_activity_streams` need their own opt-in (decision G-2 in `docs/plans/garmin-deep-data.md`); follow the `privacy-compliance` checklist (policy text from `docs/privacy/data-inventory.md`, including the AI tools' Garmin metrics, `garmin_fuel_logs`, the population ratings from profile gender and age, and the opt-in weight sync whose copies stay when Garmin data is deleted), bump `LEGAL_VERSION`, raise `CONSENT_VERSION` because these are new health-data categories; then widen `garminAllowed`.
 - **Touchpoints:** `src/lib/garmin/access.ts`, `src/lib/actions/garmin.ts`, `src/lib/garmin/`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`.
 
+### Pounds for weights
+- **What:** Show and take weights in lb for users who want it: every weight label and input (set logging, set edit, program edit, history, session detail, metrics, records, friends' feeds), progression steps in lb (5 lb, 2.5 lb) instead of converted kg steps, and plates and bars in lb (45 lb bar, 45/35/25/10/5/2.5 lb plates) in the plate calculator and the weight presets. Storage stays kg.
+- **Why deferred:** The owner chose endurance units only for the foundations PR (A2 in `docs/plans/triathlon-coach-plan.md`, brief `docs/plans/foundations.md`). The owner trains in kg, and lb done well needs lb-native steps and plates, not only a converted label. So there is no `weight_unit` column yet.
+- **Unblocked by:** A user who asks for lb. Then add `user.weight_unit` (`kg` | `lb`) next to `distanceUnit` in `src/db/schema/users.ts`, add it to `Units` in `src/lib/utils/units.ts`, `setDisplayUnits` and the MCP `update_profile`, convert at the edge like distance (`fieldToMeters` keeps a value saved back unchanged, so do the same for weight against the `decimal(6,2)` column), and give the progression engine and `src/lib/utils/plates.ts` lb step and plate sets.
+- **Touchpoints:** `src/lib/utils/units.ts`, `src/lib/utils/format.ts` (`loggedSetLabel`, `formatVolume`), `src/lib/utils/plates.ts`, `src/lib/utils/picker-options.ts`, `src/components/features/SetEditView.tsx`, `src/components/features/WorkoutSetsList.tsx` (`prBadgeLabel`), `src/components/features/PrFeedList.tsx` (`formatPrValue`).
+
+### Time zone and units: places still on the server zone or metric
+- **What:** The user's time zone and endurance units (`src/lib/utils/user-date.ts`, `src/lib/utils/units.ts`) cover the weekly sync, the cycle views, cycle start dates, the home page, the workout session date, and the endurance screens. These still use the server's zone or metric:
+  - "this week" sums in metrics (`src/lib/actions/metrics.ts:178`, `:210`), friends (`src/lib/actions/friends.ts:642`, `:753`), the AI generation day limit (`src/lib/actions/ai-generate.ts:74`) and the admin demo data (`lastMonday`, `src/lib/actions/admin.ts:35`);
+  - the Garmin pages, which take today from the Garmin profile's zone (`garminToday`, `src/lib/garmin/today.ts:11`) and show metric;
+  - friends' set labels, built on the server in metric (`src/lib/actions/friends.ts:1163`);
+  - progression step labels for distance ("+0.5km", `src/components/features/WorkoutSetsClient.tsx:1439`, and the rule text at `src/lib/utils/progression.ts:1101`);
+  - distance presets stay metric distances shown converted (3.1mi, not 3 mi).
+- **Why deferred:** The foundations brief (`docs/plans/foundations.md`) scoped A2 to the weekly sync, the cycle views and the logging date. The rest affects display only, and every user today is in one zone and metric.
+- **Unblocked by:** A user in another zone or on miles who reports one of these, or the C6 endurance views, which should reuse `todayIn` and `useUnits`. For Garmin, decide whether the user's zone or Garmin's wins (the user's zone should, with Garmin's as the fallback).
+- **Touchpoints:** listed above.
+
+### Run the ghost-session cleanup in prod
+- **What:** Remove old empty "completed" sessions in prod with `scripts/cleanup-ghost-sessions.ts` (decision D23). The fix that stops new ones is in `closeStaleSessions` in `src/lib/actions/workout-sessions.ts`.
+- **Why deferred:** Deleting prod data needs the owner. Agents never run it against prod.
+- **Unblocked by:** The owner, after the foundations PR deploys, runs the dry run in the prod pod (`kubectl exec -n <namespace> deploy/<app> -- node /app/scripts/cleanup-ghost-sessions.js`), reads the list, then runs it again with `--delete`. Then delete this entry.
+- **Touchpoints:** `scripts/cleanup-ghost-sessions.ts`, `src/lib/ghost-sessions.ts`.
+
 ### Norwegian sign-in form on the welcome page
 - **What:** `/welcome?lang=no` translates all of the welcome page's own copy, but the embedded sign-in form (labels, "Sign In" button, "New here? Create account") stays in English, as do `/login` and `/signup`.
 - **Why deferred:** The Norwegian option was asked for on the front page only. `LoginForm` is shared with `/login`, so translating it means adding a language prop or real i18n rather than a page-local dictionary.
