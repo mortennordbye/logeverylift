@@ -1,6 +1,6 @@
 # MCP access: scopes, consent, revoke, instructions and resources
 
-> **Status:** brief. Packages **B2** and **B3** of [`triathlon-coach-plan.md`](triathlon-coach-plan.md).
+> **Status:** building. Packages **B2** and **B3** of [`triathlon-coach-plan.md`](triathlon-coach-plan.md).
 > **Written:** 2026-11-12. One PR, branch `feat/mcp-access-b2-b3`.
 
 Written to be picked up with no conversation history. Read `CLAUDE.md`, `TESTING.md`, the plan
@@ -149,7 +149,7 @@ Two new scopes: `mcp:read` and `mcp:write`.
   > programs and cycles. Changes apply at once.
 
   The illness log line is added by package C5 when the log exists. Notes are named now, ahead
-  of B1, so B1 needs no consent change (see open question 3).
+  of B1, so B1 needs no consent change (owner decision 3).
 
 ### 2.2 Connected assistants screen (B2)
 
@@ -243,9 +243,9 @@ UPDATE "oauth_refresh_token" SET "revoked" = now()
 DELETE FROM "oauth_consent" WHERE NOT ('mcp:read' = ANY("scopes"));
 ```
 
-The last two statements depend on open question 1. All three are idempotent.
+The last two statements follow owner decision 1. All three are idempotent.
 
-**Existing connections after the migration (recommended answer to question 1):** they get no
+**Existing connections after the migration (owner decision 1):** they get no
 scope. Their access tokens fail the consent check (401), their refresh tokens are revoked, and
 the assistant must connect again through the new consent page, where the user picks read only
 or read and change. The owner's own Claude connector needs one reconnect.
@@ -281,7 +281,7 @@ resources and the server instructions.
 2. Policy (`src/app/privacy/page.tsx:160-163`): same facts in plain words; disconnect at any
    time in More → Connected assistants.
 3. Consent page text as in 2.1.
-4. Bump `LEGAL_VERSION` to the merge date. `CONSENT_VERSION`: see open question 2.
+4. Bump `LEGAL_VERSION` to the merge date. `CONSENT_VERSION` stays (owner decision 2).
 5. Export: no new tables; the five OAuth tables are already exported. Delete: unchanged
    (cascade). Logs: the disconnect action and the scope refusal log ids and tags only
    (`[disconnectAssistant]`, `[mcp:scope] refused` with the tool name).
@@ -312,20 +312,17 @@ Not a critical flow in `CLAUDE.md` terms, so no smoke pass. CI runs e2e.
 4. Instructions, rules doc, resources, tracing config; unit tests; e2e extension.
 5. Inventory, policy, `LEGAL_VERSION`; `pnpm verify`.
 
-## 9. Open questions for the owner
+## 9. Owner decisions (2026-11-12)
 
-1. **Existing connections.** Recommended: clear them in the migration, so each assistant
-   reconnects once through the new consent page. Other choices: keep them working as read and
-   change until their refresh token expires, or as read only.
-2. **`CONSENT_VERSION`.** The plan says raise it. The rule in `src/lib/constants/legal.ts` and
-   the privacy skill says a new recipient (notes to an assistant the user connects) is told, not
-   asked, and notes are already a listed health-data category. Raising it sends every user,
-   most of whom never use MCP, through `/consent`. Recommended: bump `LEGAL_VERSION` only; the
-   MCP consent page is the explicit, per-connection consent for notes.
-3. **Name notes now.** Recommended: the consent page and policy name notes in this PR, before
-   B1 makes them readable, so B1 needs no new text or bump.
+1. **Existing connections are cleared.** The migration revokes old refresh tokens and deletes
+   old consents. Each assistant reconnects once through the new consent page.
+2. **`LEGAL_VERSION` only.** `CONSENT_VERSION` stays. A new recipient of data that is already a
+   listed health-data category is told, not asked (rule in `src/lib/constants/legal.ts`); the
+   MCP consent page is the explicit consent for each connection. The plan's B2 text is fixed to
+   match.
+3. **Notes are named now** on the consent page and in the policy, so B1 needs no new text.
 
-## 10. Defaults chosen (change any before code if you disagree)
+## 10. Defaults chosen (accepted by the owner, 2026-11-12)
 
 - Scope names `mcp:read` and `mcp:write`; read and change grants both.
 - Read only is the preselected choice on the consent page.
