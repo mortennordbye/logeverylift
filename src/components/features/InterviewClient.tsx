@@ -67,6 +67,8 @@ export function InterviewClient({
   next: string;
 }) {
   const router = useRouter();
+  // The entries as the interview opened: one the user moves stays on screen, marked as moved.
+  const [offered] = useState(memory);
   const [changeSetId] = useState(() => `interview:${crypto.randomUUID()}`);
   // The memory step only shows when there is something to offer.
   const [steps] = useState<Step[]>(() =>
@@ -238,7 +240,7 @@ export function InterviewClient({
               Your assistant noted these before the app had a place for them. If one is an injury or about your available
               time, enter it in the right step, then tap Moved. Keep life limits such as travel in memory.
             </p>
-            {memory.map((m) => (
+            {offered.map((m) => (
               <div key={m.id} className="rounded-xl bg-card px-4 py-3 space-y-2" data-testid="interview-memory">
                 <p className="text-sm whitespace-pre-wrap">{m.text}</p>
                 <p className="text-xs text-muted-foreground">{m.date}</p>

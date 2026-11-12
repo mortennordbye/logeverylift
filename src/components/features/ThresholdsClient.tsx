@@ -45,7 +45,12 @@ export function ThresholdsClient({
   async function remove(id: number) {
     setError(null);
     const r = await callAction(deleteThresholdValue({ id }));
-    if (!r.success) setError(r.error);
+    if (!r.success) {
+      setError(r.error);
+      return;
+    }
+    // Back to the list, where the current value and Recently deleted show the change.
+    setOpen(null);
     router.refresh();
   }
 

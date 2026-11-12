@@ -606,3 +606,26 @@ The owner took every recommendation, and the defaults in section 9 too.
 `interviewRace(userId)` stays C3's only contact point and reads the active cycle's race fields
 for now. Whichever PR merges second wires it to C1's reader. Both PRs bump `LEGAL_VERSION` and add
 a migration; the hub settles the numbers at merge.
+
+## 13. Where the build differs from the brief
+
+- **The FTP rule is not added to the research doc.** T1 says the research changes only by a new
+  research pass. The code labels FTP = 0.95 x 20-minute power as coach convention and the app's
+  own Garmin rule (`FTP_FACTOR`), in the protocol text the user and the assistant see.
+- **Garmin suggestions** come from the week of the latest Garmin activity, not today, so a gap in
+  syncing still gives the last estimate. Threshold heart rate falls back to the watch's LTHR when
+  no estimate exists for the sport.
+- **Undoing the interview's change set** also undoes the profile's creation when the interview
+  made it. The profile row is then soft deleted and reads as "no profile"; the next write brings
+  the same row back, empty, so the one-profile-per-user index holds.
+- **The interview's change set** is made in the browser when the interview opens
+  (`interview:<uuid>`); every interview Server Action takes it, and the server accepts only that
+  shape.
+- **"Keep in memory"** writes nothing. Only "Moved" writes (the entry goes inactive).
+- **Next sits at the end of each step**, not in a pinned bottom bar: each step's own form owns
+  its save, and the steps are short.
+- **`missingSteps`** leaves out injuries: none is an answer, so there is no unanswered state.
+- **`manage_athlete_profile`** needs no `expectedVersion` for the first write (no profile yet),
+  and refuses without one after that.
+- **No component tests.** The screens are covered by `e2e/athlete-interview.spec.ts` and
+  `e2e/thresholds.spec.ts`; the logic they use is in the pure modules with unit tests.

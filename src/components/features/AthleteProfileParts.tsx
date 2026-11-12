@@ -127,7 +127,7 @@ export function AvailabilityStep({ initial, changeSetId, onSaved, submitLabel = 
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Days you can train</p>
         <div className="grid grid-cols-7 gap-1.5">
           {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-            <button key={d} aria-pressed={days.includes(d)} onClick={() => toggle(d)} className={chip(days.includes(d))}>
+            <button key={d} aria-pressed={days.includes(d)} aria-label={`Train on ${DAY_LABELS[d]}`} onClick={() => toggle(d)} className={chip(days.includes(d))}>
               {DAY_LABELS[d]}
             </button>
           ))}
@@ -144,7 +144,7 @@ export function AvailabilityStep({ initial, changeSetId, onSaved, submitLabel = 
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">Day with the most time</p>
         <div className="grid grid-cols-7 gap-1.5">
           {[1, 2, 3, 4, 5, 6, 7].map((d) => (
-            <button key={d} aria-pressed={longDay === d} onClick={() => setLongDay(longDay === d ? null : d)} className={chip(longDay === d)}>
+            <button key={d} aria-pressed={longDay === d} aria-label={`Long day ${DAY_LABELS[d]}`} onClick={() => setLongDay(longDay === d ? null : d)} className={chip(longDay === d)}>
               {DAY_LABELS[d]}
             </button>
           ))}

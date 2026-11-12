@@ -242,7 +242,7 @@ describe("export and deletion", () => {
     await saveProfile({ strengthGoal: "minimal" });
     await addThresholdValue({ kind: "ftp", value: 250, source: "manual" });
     await addInjuryEntry({ area: "hip", description: "Tight", status: "managed" });
-    const data = (await collectUserData(me)) as Record<string, unknown[]>;
+    const data = await collectUserData(me);
     expect(data.athlete_profiles).toHaveLength(1);
     expect(data.athlete_thresholds).toHaveLength(1);
     expect(data.athlete_injuries).toHaveLength(1);
