@@ -51,10 +51,11 @@ describe("rateSignal", () => {
     expect(label(rate("sleep", 10.5, { age: 40 }))).toBe("Too long");
   });
 
-  it("rates resting HR both ways, with athletic as the best band", () => {
-    expect(label(rate("restingHr", 48))).toBe("Athletic");
+  it("calls 40 to 59 bpm low, not athletic, and rates it no better than normal", () => {
+    expect(label(rate("restingHr", 48))).toBe("Low");
+    expect(rate("restingHr", 48).compare).toContain("Your own normal says more");
     expect(rate("restingHr", 48).next).toBeNull();
-    expect(rate("restingHr", 70).next).toEqual({ label: "Athletic", gap: 10, dir: "down" });
+    expect(rate("restingHr", 70).next).toBeNull();
     expect(label(rate("restingHr", 100))).toBe("Normal");
     expect(label(rate("restingHr", 38))).toBe("Very low");
     expect(rate("restingHr", 70).bands[3].edge).toBe(100);
@@ -70,18 +71,20 @@ describe("rateSignal", () => {
 
   it("rates fitness age against the user's own age, lower being better", () => {
     expect(label(rate("fitnessAge", 18, { chronologicalAge: 23 }))).toBe("Much younger");
+    expect(rate("fitnessAge", 18, { chronologicalAge: 23 }).source).toBe("The app's bands around your age, for Garmin's fitness age");
     expect(rate("fitnessAge", 18, { chronologicalAge: 23 }).compare).toBe("5 years younger than your age, 23.");
     expect(label(rate("fitnessAge", 23, { chronologicalAge: 23 }))).toBe("Your age");
     expect(rate("fitnessAge", 23, { chronologicalAge: 23 }).next?.dir).toBe("down");
     expect(rateSignal("fitnessAge", 30, { ...ctx, age: null })).toEqual({ needs: "age" });
   });
 
-  it("rates weight by body fat when sex is known, else by BMI", () => {
-    expect(label(rate("weight", 89.7, { bodyFat: 20.4 }))).toBe("Average");
-    expect(rate("weight", 89.7, { bodyFat: 20.4 }).next).toEqual({ label: "Fitness", gap: 2.4, dir: "down" });
-    expect(label(rate("weight", 70, { bodyFat: 22, sex: "female" }))).toBe("Fitness");
-    expect(label(rate("weight", 89.7, { sex: null, bodyFat: 20.4, bmi: 25.9 }))).toBe("Overweight");
-    expect(rateSignal("weight", 89.7, { ...ctx, sex: null, bodyFat: 20.4 })).toEqual({ needs: "sex" });
+  it("rates body fat on its own row, and weight by BMI only when the scale gives no body fat", () => {
+    expect(label(rate("bodyFat", 20.4))).toBe("Average");
+    expect(rate("bodyFat", 20.4).next).toEqual({ label: "Fitness", gap: 2.4, dir: "down" });
+    expect(label(rate("bodyFat", 22, { sex: "female" }))).toBe("Fitness");
+    expect(rateSignal("bodyFat", 20.4, { ...ctx, sex: null })).toEqual({ needs: "sex" });
+    expect(rateSignal("weight", 89.7, { ...ctx, bodyFat: 20.4, bmi: 25.9 })).toBeNull();
+    expect(label(rate("weight", 89.7, { bmi: 25.9 }))).toBe("Overweight");
     expect(rateSignal("weight", 89.7, ctx)).toBeNull();
   });
 
@@ -89,6 +92,8 @@ describe("rateSignal", () => {
     expect(label(rate("respiration", 15))).toBe("Normal");
     expect(label(rate("respiration", 20.4))).toBe("Normal");
     expect(label(rate("respiration", 22))).toBe("High");
+    // Under 12 while asleep is common in trained people: low, but not marked down.
+    expect(rate("respiration", 10).bands[rate("respiration", 10).index]).toMatchObject({ label: "Low", tone: "good" });
   });
 
   it("places the marker inside its band", () => {
@@ -124,8 +129,10 @@ describe("rateSignal: sleep quality and day to day", () => {
 
   it("rates blood oxygen and steps", () => {
     expect(label(rate("spo2", 96))).toBe("Normal");
-    expect(label(rate("spo2", 92))).toBe("Low");
-    expect(label(rate("spo2", 88))).toBe("Very low");
+    // 90 to 94 % is inside a wrist sensor's range for healthy sleepers: not marked down.
+    expect(label(rate("spo2", 92))).toBe("Normal");
+    expect(rate("spo2", 92).compare).toContain("wrist sensor");
+    expect(label(rate("spo2", 88))).toBe("Low");
     expect(label(rate("steps", 4999))).toBe("Sedentary");
     expect(label(rate("steps", 10000))).toBe("Active");
     expect(label(rate("steps", 12500))).toBe("Highly active");

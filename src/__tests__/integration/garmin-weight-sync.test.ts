@@ -2,8 +2,9 @@ import { db } from "@/db";
 import { garminConnections, garminDays, users } from "@/db/schema";
 import { userWeightEntries } from "@/db/schema/weight-history";
 import { setGarminWeightSync } from "@/lib/actions/garmin";
+import { deleteWeightEntry } from "@/lib/actions/profile";
 import { syncGarminWeight } from "@/lib/garmin/weight-sync";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { describe, expect, it, vi } from "vitest";
 import { createUser } from "./factories";
 import { asUser } from "./setup";
@@ -46,6 +47,24 @@ describe("setGarminWeightSync", () => {
     // The import runs it again after every sync: nothing is added twice.
     expect(await syncGarminWeight(user.id)).toBe(0);
     expect(await entries(user.id)).toHaveLength(2);
+  });
+
+  it("does not add back a copied weigh-in the user deleted, also after turning the sync off and on", async () => {
+    const user = await garminUser();
+    asUser(user.id);
+    await setGarminWeightSync({ enabled: true });
+    const [old] = await db.select({ id: userWeightEntries.id }).from(userWeightEntries).where(and(eq(userWeightEntries.userId, user.id), eq(userWeightEntries.recordedAt, new Date(T1))));
+    expect((await deleteWeightEntry(old.id)).success).toBe(true);
+
+    expect(await syncGarminWeight(user.id)).toBe(0);
+    await setGarminWeightSync({ enabled: false });
+    await setGarminWeightSync({ enabled: true });
+    expect((await entries(user.id)).map((e) => e.kg)).toEqual([89.7]);
+
+    // A new weigh-in after the copied ones is still added.
+    const T3 = T2 + 86_400_000;
+    await db.insert(garminDays).values({ userId: user.id, calendarDate: "2026-11-13", kind: "weight_entries", data: { items: [{ timestampGMT: T3, weight: 89000 }] } });
+    expect(await syncGarminWeight(user.id)).toBe(1);
   });
 
   it("keeps a newer weight the user typed as the body weight", async () => {

@@ -30,7 +30,7 @@ const STAT_ICON: Record<string, LucideIcon> = {
   "Heart rate": HeartPulse,
   Power: Zap,
   Climb: Mountain,
-  Load: Dumbbell,
+  "App load": Dumbbell,
   "Training effect": TrendingUp,
   Calories: Flame,
   "Grade-adjusted pace": MountainSnow,

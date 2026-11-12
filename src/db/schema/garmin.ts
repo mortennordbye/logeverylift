@@ -57,6 +57,9 @@ export const garminConnections = pgTable("garmin_connections", {
   metricsVersion: integer("metrics_version"),
   // Opt-in: copy Garmin weigh-ins into the profile's weight history (src/lib/garmin/weight-sync.ts).
   syncWeight: boolean("sync_weight").default(false).notNull(),
+  // The newest Garmin weigh-in already copied. Only later ones are copied, so a
+  // copy the user deleted is not added back by the next import.
+  weightSyncedUntil: timestamp("weight_synced_until"),
 });
 
 export const garminDays = pgTable(

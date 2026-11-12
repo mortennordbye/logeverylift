@@ -8,7 +8,7 @@ import { bodyBatteryDay, type BodyBatteryDay, type DailyMetrics } from "./analyt
 import { insightsFor, type Insight } from "./analytics/insights";
 import { sessionInsights } from "./analytics/session-insights";
 import type { CorrelationDay } from "./analytics/correlations";
-import { addDays, isoDate, mondayOf } from "./dates";
+import { addDays, isoDate, localDate, mondayOf } from "./dates";
 import { TRACKS, type PmcPoint, type Track } from "./analytics/pmc";
 import { SPORTS, isIndoor, sportOf, type Sport } from "./analytics/sport";
 import type { LoadSeries } from "./charts/load";
@@ -119,6 +119,21 @@ export type TodayData = {
   strip: { date: string; readiness: number | null; load: number }[];
   insights: Insight[];
 };
+
+/**
+ * Today's date where the user is, from the time zone in their Garmin profile
+ * snapshot; UTC without one. A UTC date runs a day late after local midnight
+ * east of Greenwich (race countdown, the Monday week split).
+ */
+export async function garminToday(userId: string, now = new Date()): Promise<string> {
+  const [row] = await db
+    .select({ tz: sql<string | null>`${garminDays.data}->>'timeZone'` })
+    .from(garminDays)
+    .where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "profile")))
+    .orderBy(desc(garminDays.calendarDate))
+    .limit(1);
+  return localDate(now, row?.tz ?? null);
+}
 
 /** The newest date with Garmin day data, or today. */
 export async function latestGarminDate(userId: string): Promise<string> {
@@ -584,7 +599,8 @@ export type BodyKey =
   | "calories"
   | "altitude"
   | "boneMass"
-  | "bodyWater";
+  | "bodyWater"
+  | "bodyFat";
 
 export type OverviewData = {
   date: string;
@@ -617,18 +633,17 @@ export type OverviewData = {
 
 const daysAgo = (date: string, n: number) => addDays(date, -n);
 
-export async function getOverviewData(userId: string, now = isoDate(new Date())): Promise<OverviewData> {
-  // Body data is shown for the newest Garmin day; the race counts from today.
-  const date = await latestGarminDate(userId);
-  const metricRows = await db
+export async function getOverviewData(userId: string, nowArg?: string): Promise<OverviewData> {
+  // Body data is shown for the newest Garmin day; the race counts from today where the user is.
+  // Reads that do not depend on each other run together.
+  const [now, date] = await Promise.all([nowArg ?? garminToday(userId), latestGarminDate(userId)]);
+  const metricRowsQ = db
     .select({ metrics: garminDailyMetrics.metrics })
     .from(garminDailyMetrics)
     .where(and(eq(garminDailyMetrics.userId, userId), gte(garminDailyMetrics.day, daysAgo(date, 89)), lte(garminDailyMetrics.day, date)))
     .orderBy(asc(garminDailyMetrics.day));
-  const series = metricRows.map((r) => r.metrics as DailyMetrics);
-  const today = series.at(-1)?.date === date ? series.at(-1)! : null;
 
-  const dayRows = await db
+  const dayRowsQ = db
     .select({ date: garminDays.calendarDate, kind: garminDays.kind, data: garminDays.data })
     .from(garminDays)
     .where(and(eq(garminDays.userId, userId), gte(garminDays.calendarDate, daysAgo(date, 120)), lte(garminDays.calendarDate, date), inArray(garminDays.kind, ["user_summary", "weight", "sleep", "fitness_age", "hrv", "steps"])))
@@ -641,7 +656,7 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     });
 
   // Garmin's VO2 max from the watch files (fit.ts, vo2MaxFromMessage), one point per activity day.
-  const vo2Rows = await db
+  const vo2RowsQ = db
     .select({ day: garminActivityMetrics.day, sport: garminActivityMetrics.sport, vo2: sql<number | null>`(${garminActivityStreams.session}->>'garminVo2Max')::float` })
     .from(garminActivityStreams)
     .innerJoin(
@@ -650,6 +665,11 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     )
     .where(and(eq(garminActivityStreams.userId, userId), gte(garminActivityMetrics.day, daysAgo(date, 180)), sql`${garminActivityStreams.session}->>'garminVo2Max' is not null`))
     .orderBy(asc(garminActivityMetrics.day));
+  const profileQ = db.select({ gender: users.gender, birthYear: users.birthYear }).from(users).where(eq(users.id, userId));
+  const [metricRows, dayRows, vo2Rows, [profile], cycle] = await Promise.all([metricRowsQ, dayRowsQ, vo2RowsQ, profileQ, getActiveCycle(userId)]);
+  const series = metricRows.map((r) => r.metrics as DailyMetrics);
+  const today = series.at(-1)?.date === date ? series.at(-1)! : null;
+
   // Running VO2 max when the user runs with a watch that has one; else the cycling one.
   const vo2Sport: "run" | "bike" = vo2Rows.some((r) => r.sport === "run") ? "run" : "bike";
   const vo2ByDay = new Map(vo2Rows.flatMap((r) => (r.vo2 !== null && r.sport === vo2Sport ? [[r.day, r.vo2] as const] : [])));
@@ -686,7 +706,6 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
   const summaries = dayRows.flatMap((r) => (r.kind === "user_summary" ? [{ date: r.date, data: (r.data ?? {}) as Json }] : []));
 
   // Ratings: sex and age from the profile (age falls back to Garmin's), Garmin's HRV baseline, the newest weigh-in.
-  const [profile] = await db.select({ gender: users.gender, birthYear: users.birthYear }).from(users).where(eq(users.id, userId));
   const latest = (kind: string) => dayRows.findLast((r) => r.kind === kind)?.data as Json | undefined;
   const chronologicalAge = num(latest("fitness_age")?.chronologicalAge);
   const baseline = hrvToday?.baseline as Json | undefined;
@@ -706,7 +725,6 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
   const stepsWeek = Array.from({ length: 7 }, (_, i) => addDays(date, i - 7)).map((d) => ({ date: d, steps: stepsByDate.get(d) ?? null }));
 
   const recent = series.slice(-42);
-  const cycle = await getActiveCycle(userId);
   const [lastRow] = await db
     .select({
       id: garminActivities.garminActivityId,
@@ -829,6 +847,7 @@ function dayToDaySignals(points: PointsOf, date: string) {
       return g !== null ? Math.round(g / 100) / 10 : null;
     }), date, { days: 90 }),
     bodyWater: bodySignal(points("weight", (j) => num((j.latestWeight as Json | undefined)?.bodyWater)), date, { days: 90 }),
+    bodyFat: bodySignal(points("weight", (j) => num((j.latestWeight as Json | undefined)?.bodyFat)), date, { days: 90 }),
   };
 }
 
@@ -942,7 +961,8 @@ async function plannedSets(cycleId: number): Promise<PlannedSet[] | null> {
   return rows.map((r) => ({ discipline: r.discipline as Endurance, durationS: r.durationS, distanceM: r.distanceM }));
 }
 
-export async function getVolumeData(userId: string, today = isoDate(new Date())): Promise<VolumeData> {
+export async function getVolumeData(userId: string, todayArg?: string): Promise<VolumeData> {
+  const today = todayArg ?? (await garminToday(userId));
   const from = addDays(mondayOf(today), -51 * 7);
   const rows = await db
     .select({
@@ -995,7 +1015,8 @@ export async function getVolumeData(userId: string, today = isoDate(new Date()))
 }
 
 /** The race and the fitness projection to it, from the Training tab's series. Null without an active cycle. */
-export async function getRaceProjection(userId: string, series: LoadSeries, today = isoDate(new Date())): Promise<{ race: RaceStatus; projection: Projection | null } | null> {
+export async function getRaceProjection(userId: string, series: LoadSeries, todayArg?: string): Promise<{ race: RaceStatus; projection: Projection | null } | null> {
+  const today = todayArg ?? (await garminToday(userId));
   const cycle = await getActiveCycle(userId);
   const race = raceStatus(cycle, today);
   if (!cycle?.startDate || !race) return null;
@@ -1032,7 +1053,8 @@ export type TrendsData = {
   fitnessAge: (FitnessAge & { date: string; history: { day: string; age: number }[] }) | null;
 };
 
-export async function getTrendsData(userId: string, today = isoDate(new Date())): Promise<TrendsData> {
+export async function getTrendsData(userId: string, todayArg?: string): Promise<TrendsData> {
+  const today = todayArg ?? (await garminToday(userId));
   const rows = await db
     .select({
       id: garminActivityMetrics.garminActivityId,
@@ -1121,7 +1143,8 @@ export type RaceData = {
 const streamMean = (key: string) =>
   sql<number | null>`(select avg(v::float8) from jsonb_array_elements_text(${garminActivityStreams.streams}->${key}) v where v <> 'null')`;
 
-export async function getRaceData(userId: string, today = isoDate(new Date())): Promise<RaceData | null> {
+export async function getRaceData(userId: string, todayArg?: string): Promise<RaceData | null> {
+  const today = todayArg ?? (await garminToday(userId));
   const cycle = await getActiveCycle(userId);
   const race = raceStatus(cycle, today);
   if (!cycle?.startDate || !race) return null;
@@ -1213,7 +1236,8 @@ export async function getRaceData(userId: string, today = isoDate(new Date())): 
 // ── Session insights and correlations ───────────────────────────────────────
 
 /** The session, threshold and race insights for today (session-insights.ts). */
-export async function getSessionInsights(userId: string, volume: VolumeData, today = isoDate(new Date())): Promise<Insight[]> {
+export async function getSessionInsights(userId: string, volume: VolumeData, todayArg?: string): Promise<Insight[]> {
+  const today = todayArg ?? (await garminToday(userId));
   const [trends, { series }] = await Promise.all([getTrendsData(userId, today), getLoadSeries(userId)]);
   const rp = await getRaceProjection(userId, series, today);
   const th = thresholdHistory(trends.acts, addDays(today, -6), today).at(-1);

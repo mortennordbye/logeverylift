@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { garminActivities, garminDays } from "@/db/schema";
-import { getActivitiesData, getOverviewData, getTodayData, getTrendsData } from "@/lib/garmin/queries";
+import { garminToday, getActivitiesData, getOverviewData, getTodayData, getTrendsData } from "@/lib/garmin/queries";
 import { describe, expect, it } from "vitest";
 import { createUser } from "./factories";
 
@@ -78,5 +78,17 @@ describe("Garmin's remaining metrics", () => {
     ]);
     expect((await getTrendsData(me.id, "2026-11-11")).fitnessAge?.previous).toBe(19);
     expect((await getTodayData(me.id, "2026-11-11")).bodyBattery?.points.map((p) => p.level)).toEqual([97]);
+  });
+});
+
+describe("garminToday", () => {
+  it("is today in the time zone of the user's Garmin profile, UTC without one", async () => {
+    const me = await createUser();
+    const lateUtc = new Date("2026-11-12T23:30:00Z");
+    expect(await garminToday(me.id, lateUtc)).toBe("2026-11-12");
+    await db.insert(garminDays).values({ userId: me.id, calendarDate: "2026-11-01", kind: "profile", data: { timeZone: "Europe/Oslo" } });
+    expect(await garminToday(me.id, lateUtc)).toBe("2026-11-13");
+    // Another user's zone is never used.
+    expect(await garminToday((await createUser()).id, lateUtc)).toBe("2026-11-12");
   });
 });

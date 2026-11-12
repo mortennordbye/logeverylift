@@ -97,7 +97,7 @@ export function statTiles(d: ActivityDetail): StatTile[] {
     const [lo, hi] = [num(s.minElevation), num(s.maxElevation)];
     tiles.push({ label: "Climb", value: `↑ ${Math.round(num(s.elevationGain)!)} m${loss ? ` · ↓ ${Math.round(loss)} m` : ""}${lo !== null && hi !== null ? ` · ${Math.round(lo)}–${Math.round(hi)} m high` : ""}` });
   }
-  if (d.metrics?.load != null) tiles.push({ label: "Load", value: `${Math.round(d.metrics.load)} (${d.metrics.loadMethod === "power" ? "power" : d.metrics.loadMethod === "trimp" ? "HR" : d.metrics.loadMethod === "srpe" ? "RPE" : d.metrics.loadMethod})` });
+  if (d.metrics?.load != null) tiles.push({ label: "App load", value: `${Math.round(d.metrics.load)} (${d.metrics.loadMethod === "power" ? "power" : d.metrics.loadMethod === "trimp" ? "HR" : d.metrics.loadMethod === "srpe" ? "RPE" : d.metrics.loadMethod})` });
   const garminLoad = num(s.activityTrainingLoad);
   if (garminLoad !== null) tiles.push({ label: "Garmin load", value: String(Math.round(garminLoad)) });
   if (num(s.aerobicTrainingEffect)) tiles.push({ label: "Training effect", value: `${num(s.aerobicTrainingEffect)!.toFixed(1)} aerobic · ${(num(s.anaerobicTrainingEffect) ?? 0).toFixed(1)} anaerobic` });
@@ -107,7 +107,8 @@ export function statTiles(d: ActivityDetail): StatTile[] {
   const bb = num(s.differenceBodyBattery);
   if (bb !== null) tiles.push({ label: "Body battery", value: `${bb > 0 ? "+" : ""}${Math.round(bb)}` });
   const recovery = num(dto.recoveryHeartRate);
-  if (recovery !== null && recovery > 0) tiles.push({ label: "Recovery HR", value: `−${Math.round(recovery)} bpm in 2 min` });
+  // Measured from when the activity stops: after strength work it mostly reflects the last set, so runs and rides only.
+  if (recovery !== null && recovery > 0 && (d.sport === "run" || d.sport === "bike")) tiles.push({ label: "Recovery HR", value: `−${Math.round(recovery)} bpm in 2 min` });
   const breath = pick("avgRespirationRate");
   if (breath) tiles.push({ label: "Breathing", value: `${Math.round(breath)} avg · ${Math.round(pick("maxRespirationRate") ?? breath)} max /min` });
   const [tMin, tMax] = [pick("minTemperature"), pick("maxTemperature")];

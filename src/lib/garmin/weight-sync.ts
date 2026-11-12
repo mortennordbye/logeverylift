@@ -1,8 +1,10 @@
 /**
  * Opt-in (garmin_connections.sync_weight): copy Garmin weigh-ins into the
  * profile's weight history, and set the profile's body weight to the newest
- * entry from either source. A weigh-in is copied once: an entry already at its
- * exact time is not added again, so this runs after every import.
+ * entry from either source. A weigh-in is copied once: only weigh-ins after the
+ * newest one already copied (weight_synced_until) are considered, and none at
+ * the exact time of an existing entry, so this runs after every import and a
+ * copy the user deleted stays deleted.
  */
 
 import { db } from "@/db";
@@ -14,11 +16,15 @@ import { garminWeighIns } from "./weigh-ins";
 
 /** Copies new weigh-ins when the user opted in. Returns how many were added. */
 export async function syncGarminWeight(userId: string): Promise<number> {
-  const [conn] = await db.select({ syncWeight: garminConnections.syncWeight }).from(garminConnections).where(eq(garminConnections.userId, userId));
+  const [conn] = await db
+    .select({ syncWeight: garminConnections.syncWeight, until: garminConnections.weightSyncedUntil })
+    .from(garminConnections)
+    .where(eq(garminConnections.userId, userId));
   if (!conn?.syncWeight) return 0;
 
   const rows = await db.select({ data: garminDays.data }).from(garminDays).where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "weight_entries")));
-  const weighIns = garminWeighIns(rows.map((r) => r.data));
+  const after = conn.until?.getTime() ?? -Infinity;
+  const weighIns = garminWeighIns(rows.map((r) => r.data)).filter((w) => w.at.getTime() > after);
   if (!weighIns.length) return 0;
 
   const have = new Set(
@@ -28,6 +34,7 @@ export async function syncGarminWeight(userId: string): Promise<number> {
   if (fresh.length) {
     await db.insert(userWeightEntries).values(fresh.map((w) => ({ id: crypto.randomUUID(), userId, weightKg: w.kg, recordedAt: w.at })));
   }
+  await db.update(garminConnections).set({ weightSyncedUntil: weighIns.at(-1)!.at }).where(eq(garminConnections.userId, userId));
 
   // The newest entry from either source is the body weight plans and progression use.
   const [newest] = await db

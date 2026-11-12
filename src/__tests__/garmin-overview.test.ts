@@ -1,6 +1,6 @@
 import { garminView } from "@/components/features/garmin/tabs";
 import { bodySignal, changeOver, clockFromMinutes, garminPhrase, intensityWeek, normalRange, parseFitnessAge, raceStatus, rollingMean, stageShares, type CycleForRace } from "@/lib/garmin/analytics/overview";
-import { addDays } from "@/lib/garmin/dates";
+import { addDays, localDate } from "@/lib/garmin/dates";
 import { describe, expect, it } from "vitest";
 
 const today = "2026-11-10";
@@ -190,5 +190,15 @@ describe("clockFromMinutes", () => {
     expect(clockFromMinutes(1320)).toBe("22:00");
     expect(clockFromMinutes(1345)).toBe("22:25");
     expect(clockFromMinutes(-60)).toBe("23:00");
+  });
+});
+
+describe("localDate", () => {
+  it("is the calendar date in the user's zone, so Oslo's 00:30 is already tomorrow", () => {
+    const t = new Date("2026-11-12T23:30:00Z");
+    expect(localDate(t, "Europe/Oslo")).toBe("2026-11-13");
+    expect(localDate(t, "America/New_York")).toBe("2026-11-12");
+    expect(localDate(t, null)).toBe("2026-11-12");
+    expect(localDate(t, "Not/AZone")).toBe("2026-11-12");
   });
 });

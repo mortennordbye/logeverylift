@@ -43,6 +43,7 @@ function data(over: Partial<OverviewData["rating"]> = {}): OverviewData {
     altitude: 97,
     boneMass: 6.3,
     bodyWater: 58.1,
+    bodyFat: 20.4,
   };
   const keys = Object.keys(values) as BodyKey[];
   return {
@@ -99,7 +100,10 @@ describe("BodyOverview", () => {
 
   it("shows trend signals as tiles with a chip, and last night's stages in one card", () => {
     render(<BodyOverview data={data()} />);
-    expect(within(screen.getByRole("button", { name: /^HRV 75/ })).getByText("Balanced")).toBeTruthy();
+    const hrv = screen.getByRole("button", { name: /^HRV 75/ });
+    expect(within(hrv).getByText("Week: Balanced")).toBeTruthy();
+    expect(within(hrv).getByText("Last night: learning your normal")).toBeTruthy();
+    expect(within(screen.getByRole("button", { name: /^Body battery 91/ })).getByText("at wake")).toBeTruthy();
     const night = screen.getByRole("region", { name: "Last night" });
     expect(within(night).getByRole("img", { name: /Deep 17 %, light 62 %, REM 21 %, awake 15 min/ })).toBeTruthy();
     expect(within(night).getByRole("button", { name: "Awake periods 2" })).toBeTruthy();
@@ -149,5 +153,8 @@ describe("BodyOverview: the rest of Garmin's day", () => {
     for (const name of [/^Active time 108/, /^Distance 11\.3/, /^Altitude 97/]) expect(within(day).getByRole("button", { name })).toBeTruthy();
     const body = screen.getByRole("region", { name: "Body composition" });
     for (const name of [/^Weight 89\.7/, /^Muscle mass 37\.4/, /^Bone mass 6\.3/, /^Body water 58\.1/]) expect(within(body).getByRole("button", { name })).toBeTruthy();
+    // Body fat carries the rating, not weight.
+    expect(within(within(body).getByRole("button", { name: /^Body fat 20\.4/ })).getByText("Average")).toBeTruthy();
+    expect(within(within(body).getByRole("button", { name: /^Weight 89\.7/ })).queryByText("Average")).toBeNull();
   });
 });

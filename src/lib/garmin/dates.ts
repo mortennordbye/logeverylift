@@ -25,3 +25,15 @@ export function mondayOf(date: string): string {
   const day = new Date(`${date}T00:00:00Z`).getUTCDay();
   return addDays(date, -((day + 6) % 7));
 }
+
+/** The calendar date at `now` in an IANA time zone ("Europe/Oslo"); UTC for a missing or unknown zone. */
+export function localDate(now: Date, timeZone: string | null): string {
+  if (timeZone) {
+    try {
+      return new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+    } catch {
+      // An unknown zone name: fall through to UTC.
+    }
+  }
+  return isoDate(now);
+}

@@ -540,6 +540,13 @@
       "when": 1794467559056,
       "tag": "0076_light_slyde",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1794469631605,
+      "tag": "0077_special_sister_grimm",
+      "breakpoints": true
     }
   ]
 }

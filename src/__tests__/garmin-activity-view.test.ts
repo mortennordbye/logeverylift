@@ -186,6 +186,12 @@ describe("statTiles: the rest of Garmin's activity summary", () => {
     for (const label of ["How it felt", "Recovery HR", "Workout compliance", "Breathing", "Temperature", "Garmin PR", "Moving time"]) expect(value(tiles, label)).toBeUndefined();
   });
 
+  it("shows recovery HR only for runs and rides: after strength work it reflects the last set", () => {
+    const strength = statTiles(detail({ sport: "strength", typeKey: "strength_training", dto: { recoveryHeartRate: 9 } }));
+    expect(value(strength, "Recovery HR")).toBeUndefined();
+    expect(value(statTiles(detail({ dto: { recoveryHeartRate: 30 } })), "App load")).toBe("60 (HR)");
+  });
+
   it("maps Garmin's feel steps to words", () => {
     expect([0, 25, 50, 75, 100].map(feelLabel)).toEqual(["Very weak", "Weak", "Normal", "Strong", "Very strong"]);
     expect(feelLabel(null)).toBeNull();

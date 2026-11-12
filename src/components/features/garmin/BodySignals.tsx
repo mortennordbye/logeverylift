@@ -116,7 +116,17 @@ const BODY: Record<BodyKey, BodyConfig> = {
     hrefLabel: "Trends",
     icon: Scale,
     color: "var(--viz-other)",
-    about: "Your newest weigh-in. The rating uses body fat when your scale measures it, as weight alone says little about health; else BMI.",
+    about: "Your newest weigh-in. Weight alone says little about health; when your scale measures body fat, that row is rated instead. Without it, weight is rated by BMI.",
+  },
+  bodyFat: {
+    label: "Body fat",
+    unit: "%",
+    format: (v) => v.toFixed(1),
+    href: tab("trends"),
+    hrefLabel: "Trends",
+    icon: Scale,
+    color: "var(--viz-serious)",
+    about: "Your smart scale's estimate of body fat, from electrical impedance. It is a few % off and moves with hydration, so watch the trend across weigh-ins at the same time of day.",
   },
   deepSleep: {
     label: "Deep sleep",
@@ -318,7 +328,7 @@ function tileSub(k: BodyKey, data: OverviewData): string | undefined {
     const high = data.hrvStatus?.nightHigh;
     return `last night${data.rating.hrvBaseline ? ` · 7 d ${data.rating.hrvBaseline.weeklyAvg}` : ""}${high ? ` · high ${high}` : ""}`;
   }
-  if (k === "weight" && data.rating.bodyFat !== null) return `${data.rating.bodyFat} % body fat`;
+  if (k === "bodyBattery") return "at wake";
   if (k === "steps") return "7-day average";
   if (k === "stress" || k === "sedentary" || k === "distance" || k === "activeTime" || k === "altitude") return "last full day";
   if (k === "floors") return data.floorGoal ? `last full day · goal ${data.floorGoal}` : "last full day";
@@ -351,30 +361,37 @@ function shortNormal(s: BodySignal): string {
 const cut = (v: number) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10));
 
 /** Nightly signals change too much night to night; their trend compares 7-day averages. */
-const NIGHTLY = new Set<BodyKey>(["sleepScore", "bodyBattery"]);
-const windowOf = (k: BodyKey) => (NIGHTLY.has(k) ? 7 : 1);
+/**
+ * Signals measured once in a while (VO2 max, fitness age, weigh-ins) or already
+ * a 7-day average (steps) compare single values. Every daily or nightly signal
+ * compares 7-day averages, so one odd day does not swing its trend.
+ */
+const SINGLE = new Set<BodyKey>(["vo2max", "fitnessAge", "weight", "muscleMass", "boneMass", "bodyWater", "bodyFat", "steps"]);
+const windowOf = (k: BodyKey) => (SINGLE.has(k) ? 1 : 7);
 
-/** "↑ 0.4 in 4 wk" (or "7-day avg ↑ 3 in 4 wk"), or null without a value that far back. */
+/** "↑ 0.4 in 4 wk", or for daily signals "7-day avg 85 · ↓ 1 in 4 wk"; null without a value that far back. */
 function changeText(k: BodyKey, s: BodySignal, days: number): string | null {
   const c = changeOver(s, days, windowOf(k));
   if (!c) return null;
   const f = BODY[k].format;
+  const unit = BODY[k].unit && BODY[k].unit !== "/day" ? ` ${BODY[k].unit}` : "";
   const span = days === 28 ? "4 wk" : `${days} d`;
-  const avg = windowOf(k) > 1 ? "7-day avg " : "";
+  const avg = windowOf(k) > 1 ? `7-day avg ${f(c.now)} · ` : "";
   if (f(Math.abs(c.delta)) === f(0)) return `${avg}no change in ${span}`;
-  return `${avg}${c.delta > 0 ? "↑" : "↓"} ${f(Math.abs(c.delta))}${BODY[k].unit && BODY[k].unit !== "/day" ? ` ${BODY[k].unit}` : ""} in ${span}`;
+  return `${avg}${c.delta > 0 ? "↑" : "↓"} ${f(Math.abs(c.delta))}${unit} in ${span}`;
 }
 
-function Chip({ r, s }: { r: Rating | null; s: BodySignal }) {
+function Chip({ r, s, prefix }: { r: Rating | null; s: BodySignal; prefix?: string }) {
   const b = bandOf(r);
   if (b) {
     return (
-      <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none" style={{ background: `color-mix(in srgb, ${TONE_COLOR[b.tone]} 20%, transparent)`, color: TONE_COLOR[b.tone] }}>
+      <span className="inline-flex items-center rounded-full px-1.5 py-0.5 text-[11px] font-semibold leading-none" style={{ background: `color-mix(in srgb, ${TONE_COLOR[b.tone]} 20%, transparent)`, color: TONE_COLOR[b.tone] }}>
+        {prefix}
         {b.label}
       </span>
     );
   }
-  return <span className="text-[10px] text-muted-foreground">{shortNormal(s)}</span>;
+  return <span className="text-[11px] text-muted-foreground">{shortNormal(s)}</span>;
 }
 
 function IconDot({ k, size = "sm" }: { k: BodyKey; size?: "sm" | "lg" }) {
@@ -466,7 +483,7 @@ function GaugeTile({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen
           <IconDot k={k} />
           <span className="text-xs text-muted-foreground leading-tight pt-0.5">
             {c.label}
-            {sub && <span className="block text-[10px]">{sub}</span>}
+            {sub && <span className="block text-[11px]">{sub}</span>}
           </span>
         </span>
         <span className="mt-1 block px-2">
@@ -524,7 +541,7 @@ function TrendTile({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen
         <IconDot k={k} />
         <span className="text-xs text-muted-foreground leading-tight pt-0.5">
           {c.label}
-          {sub && <span className="block text-[10px]">{sub}</span>}
+          {sub && <span className="block text-[11px]">{sub}</span>}
         </span>
       </span>
       <span className="flex items-baseline justify-between gap-2">
@@ -532,10 +549,11 @@ function TrendTile({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen
           {s.value !== null ? c.format(s.value) : "–"}
           {s.value !== null && c.unit && <span className="text-xs font-normal text-muted-foreground"> {c.unit}</span>}
         </span>
-        <Chip r={r} s={s} />
+        {/* HRV is rated on the 7-day average, as Garmin does; the line below is last night. */}
+        <Chip r={r} s={s} prefix={k === "hrv" ? "Week: " : undefined} />
       </span>
       <Spark s={s} color={c.color} />
-      <span className="text-[10px] text-muted-foreground">{r && s.state && s.state !== "within" ? `${shortNormal(s)} · 4 wk` : "Last 4 weeks, band is your normal"}</span>
+      <span className="text-[11px] text-muted-foreground">{k === "hrv" ? `Last night: ${shortNormal(s).toLowerCase()}` : r && s.state && s.state !== "within" ? `${shortNormal(s)} · 4 wk` : "4 weeks, band is your normal"}</span>
     </button>
   );
 }
@@ -640,7 +658,7 @@ function NightCard({ data, onOpen }: { data: OverviewData; onOpen: (k: BodyKey) 
               );
             })}
           </ul>
-          <p className="text-[10px] text-muted-foreground">Green is Garmin&apos;s optimal share for the night. Awake {hm(n.awakeS)}.</p>
+          <p className="text-[11px] text-muted-foreground">Green is Garmin&apos;s optimal share for the night. Awake {hm(n.awakeS)}.</p>
         </>
       )}
 
@@ -671,7 +689,7 @@ function InfoStat({ label, value, tone, note }: { label: string; value: string; 
       <span className="block text-sm font-semibold leading-tight" style={tone ? { color: TONE_COLOR[tone] } : undefined}>
         {value}
       </span>
-      {note && <span className="block text-[10px] text-muted-foreground leading-tight">{note}</span>}
+      {note && <span className="block text-[11px] text-muted-foreground leading-tight">{note}</span>}
     </div>
   );
 }
@@ -688,7 +706,7 @@ function MiniStat({ k, data, onOpen, extra }: { k: BodyKey; data: OverviewData; 
         {s.value !== null && c.unit && <span className="text-[11px] font-normal text-muted-foreground"> {c.unit}</span>}
       </span>
       <Chip r={r} s={s} />
-      {extra && <span className="block text-[10px] text-muted-foreground tabular-nums">{extra}</span>}
+      {extra && <span className="block text-[11px] text-muted-foreground tabular-nums">{extra}</span>}
     </button>
   );
 }
@@ -737,16 +755,16 @@ function StepsCard({ data, onOpen }: { data: OverviewData; onOpen: (k: BodyKey) 
       <span className="relative block" style={{ height: h }}>
         {goal && (
           <span className="absolute inset-x-0 border-t border-dashed border-muted-foreground/60" style={{ bottom: (goal / max) * h }} aria-hidden>
-            <span className="absolute right-0 -top-4 text-[10px] text-muted-foreground tabular-nums">goal {BODY.steps.format(goal)}</span>
+            <span className="absolute right-0 -top-4 text-[11px] text-muted-foreground tabular-nums">goal {BODY.steps.format(goal)}</span>
           </span>
         )}
         <span className="absolute inset-0 grid grid-cols-7 items-end gap-1.5" aria-hidden>
           {data.stepsWeek.map((d) => (
-            <span key={d.date} className="rounded-t-md" style={{ height: d.steps ? Math.max(3, (d.steps / max) * h) : 3, background: d.steps && goal && d.steps >= goal ? "var(--viz-good)" : d.steps ? BODY.steps.color : "var(--border)", opacity: d.steps ? 1 : 0.6 }} />
+            <span key={d.date} className="rounded-t-md" style={{ height: d.steps ? Math.max(3, (d.steps / max) * h) : 3, background: d.steps && goal && d.steps >= goal ? "var(--viz-good)" : d.steps ? "var(--muted-foreground)" : "var(--border)", opacity: d.steps ? (goal && d.steps >= goal ? 1 : 0.55) : 0.6 }} />
           ))}
         </span>
       </span>
-      <span className="grid grid-cols-7 gap-1.5 text-center text-[10px] text-muted-foreground" aria-hidden>
+      <span className="grid grid-cols-7 gap-1.5 text-center text-[11px] text-muted-foreground" aria-hidden>
         {data.stepsWeek.map((d) => (
           <span key={d.date}>{new Date(`${d.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "narrow", timeZone: "UTC" })}</span>
         ))}
@@ -846,8 +864,8 @@ function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClo
   const raw = ratingOf(k, s, data);
   const r = rated(raw);
   const band = bandOf(r);
-  const ratedOn = k === "weight" ? (data.rating.bodyFat !== null && data.rating.sex ? " %" : "") : k === "hrv" ? " ms" : c.unit === "%" ? " %" : "";
-  const nextUnit = k === "weight" ? (data.rating.bodyFat !== null && data.rating.sex ? " % body fat" : " BMI") : k === "steps" ? " steps a day" : c.unit ? ` ${c.unit}` : "";
+  const ratedOn = k === "weight" ? "" : k === "hrv" ? " ms" : c.unit === "%" ? " %" : "";
+  const nextUnit = k === "weight" ? " BMI" : k === "bodyFat" ? " % body fat" : k === "steps" ? " steps a day" : c.unit ? ` ${c.unit}` : "";
   const change = changeText(k, s, 28);
   return (
     <div className="mx-auto w-full max-w-lg rounded-t-3xl bg-card px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-h-[85vh] overflow-y-auto">
@@ -871,7 +889,7 @@ function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClo
       {r && s.value !== null ? (
         <section className="mt-3 rounded-2xl bg-muted p-4 space-y-3" aria-label="How you compare">
           <ArcGauge r={r} value={c.format(s.value)} prev={prevRating(k, data)} large />
-          {change && <p className="text-center text-xs text-muted-foreground tabular-nums">{change}{prevRating(k, data) ? " · the ring is 4 weeks ago" : ""}</p>}
+          {change && <p className="text-center text-xs text-muted-foreground tabular-nums">{change}{prevRating(k, data) ? (windowOf(k) > 1 ? " · the ring is your 7-day average 4 weeks ago" : " · the ring is 4 weeks ago") : ""}</p>}
           <p className="text-sm leading-snug text-center">{r.compare}</p>
           {r.next && (
             <p className="text-sm text-muted-foreground text-center">
@@ -973,14 +991,14 @@ export function BodyOverview({ data }: { data: OverviewData }) {
       <section aria-label="Body composition" className="space-y-2">
         <Title>Body composition</Title>
         <div className="rounded-2xl bg-muted divide-y divide-border overflow-hidden">
-          {(["weight", "muscleMass", "boneMass", "bodyWater"] as const).map((k) => (
+          {(["weight", "bodyFat", "muscleMass", "boneMass", "bodyWater"] as const).map((k) => (
             <StatRow key={k} k={k} data={data} onOpen={open} />
           ))}
         </div>
       </section>
 
       <p className="text-[11px] text-muted-foreground px-1">
-        Gauges and coloured labels rate you on a published scale; the hollow ring is where you were 4 weeks ago. Signals without a fair population scale are shown against your own normal. Tap anything for the scale, your trend and what it means.
+        Tap anything for its scale, your trend and what it means.
       </p>
 
       <BottomSheet open={sheet?.open ?? false} onClose={close}>
