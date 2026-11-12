@@ -89,7 +89,7 @@ everything that writes plan data. A1-A3 share one brief and one PR:
 | A1 | Bug fixes and ghost-session cleanup | none | done |
 | A2 | User time zone and display units | none | done |
 | A3 | Endurance switch | none | done |
-| A4 | Revisions, stable ids and plan versions | A1 | building ([`revisions.md`](revisions.md)) |
+| A4 | Revisions, stable ids and plan versions | A1 | done ([`revisions.md`](revisions.md)) |
 
 **A1. Bug fixes and ghost-session cleanup.** Audit "Bugs found" 1-4 and D23.
 - MCP `edit_program_exercise`: accept every planned-set field the tool description names
@@ -144,10 +144,10 @@ parallel once A4 is done.
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| B1 | MCP parity, part 1 | A1, A4 | building ([`ai-coach.md`](ai-coach.md)) |
+| B1 | MCP parity, part 1 | A1, A4 | done ([`ai-coach.md`](ai-coach.md)) |
 | B2 | MCP scopes, consent and revoke | none | done ([`mcp-access.md`](mcp-access.md)) |
 | B3 | MCP knowledge resources and server instructions | research doc (done) | done ([`mcp-access.md`](mcp-access.md)) |
-| B4 | Coach memory | A4 | building ([`ai-coach.md`](ai-coach.md)) |
+| B4 | Coach memory | A4 | done ([`ai-coach.md`](ai-coach.md)) |
 
 **B1. MCP parity, part 1.** Cycle fields over MCP (race date and distance, goal, athlete level,
 a future start date), exercise search, create a custom exercise, log or confirm a session, read
@@ -193,9 +193,9 @@ the plan and runs alone.
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| C1 | Seasons, races and phases | A2, A3, A4 | todo |
+| C1 | Seasons, races and phases | A2, A3, A4, B1 | building ([`seasons.md`](seasons.md)) |
 | C2 | Session model: several slots a day, dated sessions | A2, A4, C1 | todo |
-| C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | building ([`athlete-profile.md`](athlete-profile.md)) |
+| C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | done ([`athlete-profile.md`](athlete-profile.md)) |
 | C4 | Structured endurance workouts | C2, C3 | todo |
 | C5 | Planned vs done, missed sessions, sick periods | C2, C4 | todo |
 | C6 | Endurance in the app: views and guided player | A2, C3, C4 | todo |
@@ -289,7 +289,7 @@ a session relates to a program.
 | ID | Package | Needs | Status |
 |---|---|---|---|
 | D1 | Load without Garmin, swim and run-pace load | C3, C5 | todo |
-| D2 | Training limits engine (warn the AI) | B1, C1, C2, D1 | todo; part 1 brief ([`ai-coach.md`](ai-coach.md)) |
+| D2 | Training limits engine (warn the AI) | B1, C1, C2, D1 | todo; part 1 done ([`ai-coach.md`](ai-coach.md)) |
 | D3 | Strength by phase and heavy-legs placement | C1, C3, D2 | todo |
 | D4 | Readiness-based session suggestions | C2, D2 | todo |
 
@@ -341,7 +341,7 @@ export, intervals.icu, Garmin's Training API.
 
 The `Needs` column in the tables above decides. This list shows the same edges:
 
-- A1 → A4. A4 feeds B1, B4, C1, C2 and C3.
+- A1 → A4. A4 feeds B1, B4, C1, C2 and C3. B1 → C1 (the scheduled start chains phases).
 - A2 feeds C1, C2 and C6. A3 feeds C1 and C3.
 - C1 → C2. B4 → C3.
 - C2 and C3 → C4. C4 feeds C5, C6 and E1.
