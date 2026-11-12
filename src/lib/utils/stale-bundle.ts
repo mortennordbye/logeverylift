@@ -37,6 +37,40 @@ export const RELOAD_GUARD_MS = 30_000;
 // Long enough to read the "Updating app" toast, and for the queue to write
 // what it holds to localStorage before the page goes.
 export const RELOAD_DELAY_MS = 1_500;
+// The Service Worker update check gets this long. On a stalled network it may
+// never answer, and the page must still reload.
+export const SW_UPDATE_TIMEOUT_MS = 3_000;
+// Stop after this many reloads in a row that reached no Server Action. The
+// count lives in sessionStorage (a number, no personal data) so it survives
+// the reloads it counts; without storage the 30-second guard still applies.
+export const MAX_STALE_RELOADS = 3;
+const RELOAD_COUNT_KEY = "staleBundleReloads";
+
+function reloadCount(): number {
+  try {
+    return Number(sessionStorage.getItem(RELOAD_COUNT_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function setReloadCount(n: number): void {
+  try {
+    if (n > 0) sessionStorage.setItem(RELOAD_COUNT_KEY, String(n));
+    else sessionStorage.removeItem(RELOAD_COUNT_KEY);
+  } catch {
+    // Storage blocked: no count, so no cap beyond the 30-second guard.
+  }
+}
+
+/**
+ * A Server Action reached the server and was recognised, so this bundle is
+ * current. Resets the reload count.
+ */
+export function noteActionReached(): void {
+  if (typeof window === "undefined") return;
+  if (reloadCount() > 0) setReloadCount(0);
+}
 
 let reloadTriggered = false;
 
@@ -51,23 +85,30 @@ function reloadedJustNow(): boolean {
 }
 
 /**
- * Reload the page to get the new bundle. Returns true when a reload is under
- * way, false when it holds off (see RELOAD_GUARD_MS).
+ * Reload the page to get the new bundle. Returns "reloading" when a reload is
+ * under way, "later" when it holds off for now (see RELOAD_GUARD_MS), and
+ * "failed" after MAX_STALE_RELOADS reloads that did not help.
  *
  * The reload is enough on its own: the Service Worker serves page navigations
  * network-first and JS chunks by content-hashed URL, so the new HTML brings
  * new chunk URLs that the old cache can't answer. Asking the worker to update
  * first just swaps the cached shell sooner.
  */
-export function reloadForFreshBundle(): boolean {
-  if (typeof window === "undefined") return false;
-  if (reloadTriggered) return true;
-  if (reloadedJustNow()) return false;
+export function reloadForFreshBundle(): "reloading" | "later" | "failed" {
+  if (typeof window === "undefined") return "later";
+  if (reloadTriggered) return "reloading";
+  const count = reloadCount();
+  if (count >= MAX_STALE_RELOADS) return "failed";
+  if (reloadedJustNow()) return "later";
   reloadTriggered = true;
+  setReloadCount(count + 1);
   void (async () => {
     try {
       const reg = await navigator.serviceWorker?.getRegistration();
-      await reg?.update();
+      await Promise.race([
+        reg?.update(),
+        new Promise((resolve) => setTimeout(resolve, SW_UPDATE_TIMEOUT_MS)),
+      ]);
     } catch {
       // No Service Worker, or the update check failed: the reload still
       // fetches the new page from the network.
@@ -75,7 +116,7 @@ export function reloadForFreshBundle(): boolean {
     await new Promise((resolve) => setTimeout(resolve, RELOAD_DELAY_MS));
     window.location.reload();
   })();
-  return true;
+  return "reloading";
 }
 
 /**
@@ -90,12 +131,22 @@ export function reloadForFreshBundle(): boolean {
  * saved, and surfaced as an unhandled rejection. Routed through here, both
  * cases take the same path, and a stale bundle also triggers the reload that
  * fixes it.
+ *
+ * While that reload is under way the answer is "App updating" at once: the
+ * request was already sent with a stale action ID, and the reload would cut
+ * it off before it settles, leaving the caller waiting on nothing.
  */
 export async function callAction<R extends { success: boolean }>(
   call: Promise<R>,
 ): Promise<R | { success: false; error: string }> {
+  if (isReloadPending()) {
+    call.catch(() => {});
+    return { success: false, error: "App updating" };
+  }
   try {
-    return await call;
+    const result = await call;
+    noteActionReached();
+    return result;
   } catch (err) {
     if (isStaleBundleError(err)) {
       void reloadForFreshBundle();

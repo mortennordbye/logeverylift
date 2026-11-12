@@ -30,11 +30,13 @@ test("a set logged across a deploy is saved once the app has reloaded", async ({
   let stale = true;
   let staleSent = 0;
   let reloaded = false;
-  page.on("request", (r) => {
-    if (r.isNavigationRequest() && r.frame() === page.mainFrame()) {
-      stale = false;
-      reloaded = true;
-    }
+  // framenavigated, not a navigation request: WebKit with a Service Worker in
+  // control may not report the reload's request to the page. Nothing else
+  // navigates the page between the tap and the reload.
+  page.on("framenavigated", (frame) => {
+    if (frame !== page.mainFrame()) return;
+    stale = false;
+    reloaded = true;
   });
   await page.route("**/*", async (route) => {
     const req = route.request();

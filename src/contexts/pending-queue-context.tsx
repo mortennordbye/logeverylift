@@ -6,11 +6,21 @@ import { logWorkoutSet, unlogWorkoutSet } from "@/lib/actions/workout-sets";
 import { completeWorkoutSession } from "@/lib/actions/workout-sessions";
 import { updateProgramSet } from "@/lib/actions/programs";
 import { afterFailedReplay, afterStaleBundle, dueItems, mergeReplayed, nextReplayIn } from "@/lib/utils/pending-queue";
-import { isReloadPending, isStaleBundleError, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
+import { isReloadPending, isStaleBundleError, noteActionReached, reloadForFreshBundle } from "@/lib/utils/stale-bundle";
 
 // Shown when a write hit a stale bundle after a deploy. The write is queued
 // either way, so the user can carry on logging.
 const APP_UPDATING = "Updating app. Your sets are saved on this phone.";
+// Shown, and kept, once reloading has stopped helping (MAX_STALE_RELOADS).
+const UPDATE_FAILED = "App update failed. Your sets are saved on this phone. Close and reopen the app.";
+
+function showStaleToast(
+  showToast: ReturnType<typeof useToast>["showToast"],
+  outcome: ReturnType<typeof reloadForFreshBundle>,
+) {
+  if (outcome === "failed") showToast({ variant: "error", message: UPDATE_FAILED, durationMs: 0 });
+  else showToast({ message: APP_UPDATING, durationMs: 4000 });
+}
 
 /**
  * Offline mutation queue.
@@ -120,7 +130,7 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
 
       const failed: QueuedMutation[] = [];
       const dropped: QueuedMutation[] = [];
-      let staleBundleSeen = false;
+      let staleOutcome: ReturnType<typeof reloadForFreshBundle> | null = null;
       for (const [i, m] of snapshot.entries()) {
         let ok = false;
         try {
@@ -135,16 +145,16 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
                   ? await updateProgramSet(m.payload)
                   : await completeWorkoutSession(m.payload);
           ok = result.success;
+          noteActionReached();
         } catch (err) {
           if (isStaleBundleError(err)) {
             // Every later item hits the same error, so stop here. This item
             // and the rest stay queued without spending an attempt; only a
             // reload with the new action IDs can send them.
-            staleBundleSeen = true;
-            const reloading = reloadForFreshBundle();
+            staleOutcome = reloadForFreshBundle();
             for (const rest of snapshot.slice(i)) {
-              // No reload yet (the page was just reloaded): wait and retry.
-              failed.push(reloading ? rest : afterStaleBundle(rest, Date.now()));
+              // No reload now: wait and retry.
+              failed.push(staleOutcome === "reloading" ? rest : afterStaleBundle(rest, Date.now()));
             }
             break;
           }
@@ -162,7 +172,6 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
       // before a stale-bundle error leave too, so the new page doesn't send
       // them again.
       setQueue((prev) => mergeReplayed(prev, snapshot, failed));
-      if (staleBundleSeen) showToast({ message: APP_UPDATING, durationMs: 4000 });
 
       const succeeded = snapshot.length - failed.length - dropped.length;
       if (succeeded > 0) {
@@ -183,6 +192,8 @@ export function PendingQueueProvider({ children }: { children: React.ReactNode }
               : `${dropped.length} pending changes couldn't be saved and were dropped`,
         });
       }
+      // Last, so it is the toast left on screen.
+      if (staleOutcome) showStaleToast(showToast, staleOutcome);
     } finally {
       replayingRef.current = false;
     }
@@ -267,8 +278,17 @@ export function useWorkoutSetWriter() {
       });
       return { success: true, data: { set: null as never, newPRs: [] } };
     }
+    // A reload for the new bundle is under way: a request sent now carries a
+    // stale action ID, and the reload would cut it off before it could be
+    // queued. Queue it straight away; the new page sends it.
+    if (isReloadPending()) {
+      enqueue({ kind: "logWorkoutSet", payload });
+      showToast({ message: APP_UPDATING, durationMs: 4000 });
+      return { success: false, error: "App updating" };
+    }
     try {
       const r = await logWorkoutSet(payload);
+      noteActionReached();
       if (!r.success) {
         enqueue({ kind: "logWorkoutSet", payload });
         showToast({
@@ -284,8 +304,7 @@ export function useWorkoutSetWriter() {
       // Stale-bundle failures never count as attempts, so it can't be dropped.
       if (isStaleBundleError(err)) {
         enqueue({ kind: "logWorkoutSet", payload });
-        showToast({ message: APP_UPDATING, durationMs: 4000 });
-        void reloadForFreshBundle();
+        showStaleToast(showToast, reloadForFreshBundle());
         return { success: false, error: "App updating" };
       }
       enqueue({ kind: "logWorkoutSet", payload });
@@ -306,8 +325,13 @@ export function useWorkoutSetWriter() {
       enqueue({ kind: "unlogWorkoutSet", payload });
       return;
     }
+    if (isReloadPending()) {
+      enqueue({ kind: "unlogWorkoutSet", payload });
+      return;
+    }
     try {
       const r = await unlogWorkoutSet(payload);
+      noteActionReached();
       if (!r.success) {
         enqueue({ kind: "unlogWorkoutSet", payload });
         showToast({
@@ -319,8 +343,7 @@ export function useWorkoutSetWriter() {
     } catch (err) {
       if (isStaleBundleError(err)) {
         enqueue({ kind: "unlogWorkoutSet", payload });
-        showToast({ message: APP_UPDATING, durationMs: 4000 });
-        void reloadForFreshBundle();
+        showStaleToast(showToast, reloadForFreshBundle());
         return;
       }
       enqueue({ kind: "unlogWorkoutSet", payload });

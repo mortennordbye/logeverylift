@@ -17,16 +17,17 @@ vi.mock("@/lib/actions/workout-sessions", () => ({ completeWorkoutSession: vi.fn
 vi.mock("@/lib/actions/programs", () => ({ updateProgramSet: vi.fn() }));
 
 // jsdom cannot reload, so the reload is faked; detection stays real.
-// `reloadReturns` is what reloadForFreshBundle reports: true when it starts a
-// reload, false when it holds off because the page itself was just reloaded.
+// `reloadReturns` is what reloadForFreshBundle reports: "reloading" when it
+// starts a reload, "later" when it holds off because the page itself was just
+// reloaded, "failed" when it has given up after too many reloads.
 const reloadForFreshBundle = vi.fn();
-let reloadReturns = true;
+let reloadReturns: "reloading" | "later" | "failed" = "reloading";
 let reloadPending = false;
 vi.mock("@/lib/utils/stale-bundle", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/utils/stale-bundle")>()),
   reloadForFreshBundle: () => {
     reloadForFreshBundle();
-    if (reloadReturns) reloadPending = true;
+    if (reloadReturns === "reloading") reloadPending = true;
     return reloadReturns;
   },
   isReloadPending: () => reloadPending,
@@ -38,6 +39,7 @@ const staleError = () =>
     'Server Action "40c1d2e3f4" was not found on the server. \nRead more: https://nextjs.org/docs/messages/failed-to-find-server-action',
   );
 const UPDATING = "Updating app. Your sets are saved on this phone.";
+const UPDATE_FAILED = "App update failed. Your sets are saved on this phone. Close and reopen the app.";
 
 const payload = {
   sessionId: 1,
@@ -76,7 +78,7 @@ beforeEach(() => {
   logWorkoutSet.mockReset();
   unlogWorkoutSet.mockReset();
   reloadForFreshBundle.mockReset();
-  reloadReturns = true;
+  reloadReturns = "reloading";
   reloadPending = false;
 });
 afterEach(() => vi.useRealTimers());
@@ -181,7 +183,7 @@ describe("after a deploy (stale bundle)", () => {
     );
     // The page was just reloaded, so no second reload: the queue must wait
     // and retry on its own instead.
-    reloadReturns = false;
+    reloadReturns = "later";
     logWorkoutSet.mockRejectedValue(staleError());
     mount();
     await flush();
@@ -218,5 +220,40 @@ describe("after a deploy (stale bundle)", () => {
     await flush();
     expect(stored().map((m) => (m as { id?: string }).id)).toEqual(["b"]);
     expect(reloadForFreshBundle).toHaveBeenCalled();
+  });
+});
+
+describe("while a reload for the new bundle is under way", () => {
+  it("queues set writes without sending them, so the reload cannot cut them off", async () => {
+    let writer!: ReturnType<typeof useWorkoutSetWriter>;
+    mount((w) => (writer = w));
+    reloadPending = true;
+    logWorkoutSet.mockResolvedValue(ok);
+    unlogWorkoutSet.mockResolvedValue({ success: true });
+
+    await act(async () => { await writer.logWithRetry(payload); });
+    await act(async () => { await writer.unlogWithRetry({ sessionId: 1, exerciseId: 2, setNumber: 1, programSetId: 3 }); });
+    await flush();
+    expect(logWorkoutSet).not.toHaveBeenCalled();
+    expect(unlogWorkoutSet).not.toHaveBeenCalled();
+    expect(screen.getByTestId("count").textContent).toBe("2");
+  });
+
+  it("tells the user to reopen the app once reloading has failed, and keeps the sets", async () => {
+    localStorage.setItem(
+      "pendingMutationQueue",
+      JSON.stringify([{ id: "a", kind: "logWorkoutSet", payload, queuedAt: 0 }]),
+    );
+    reloadReturns = "failed";
+    logWorkoutSet.mockRejectedValue(staleError());
+    mount();
+    await flush();
+    await flush();
+    expect(screen.getByText(UPDATE_FAILED)).toBeTruthy();
+    // Persistent: still there long after an ordinary toast would have gone.
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000); });
+    expect(screen.getByText(UPDATE_FAILED)).toBeTruthy();
+    expect(screen.getByTestId("count").textContent).toBe("1");
+    expect(stored()[0].attempts ?? 0).toBe(0);
   });
 });
