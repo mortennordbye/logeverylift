@@ -13,7 +13,9 @@ import {
   resolveExerciseType,
   type ExerciseType,
 } from "@/lib/utils/exercise-type";
-import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
+import { distancePresetLabel, formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
+import { fieldToMeters, fieldUnit, metersToField } from "@/lib/utils/units";
 import { type Equipment, isCustomWeight, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
 import { formatPlates } from "@/lib/utils/plates";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
@@ -111,12 +113,14 @@ function SetEditForm({
   const router = useRouter();
   const { logWithRetry } = useWorkoutSetWriter();
   const cfg = disciplineConfig(discipline);
+  const units = useUnits();
+  const unit = fieldUnit(cfg.inputUnit, units);
   // Convert between the editor's distance input (m for swim, km otherwise) and stored meters.
-  const metersToInput = (m: number) => (cfg.inputUnit === "m" ? String(m) : String(m / 1000));
+  const metersToInput = (m: number) => String(metersToField(m, unit));
   const inputToMeters = (val: string): number | null => {
     const n = parseFloat(val);
     if (isNaN(n) || n < 0) return null;
-    return cfg.inputUnit === "m" ? Math.round(n) : Math.round(n * 1000);
+    return fieldToMeters(n, unit, set.distanceMeters);
   };
   const [showRepsPicker, setShowRepsPicker] = useState(false);
   const [showWeightPicker, setShowWeightPicker] = useState(false);
@@ -196,6 +200,12 @@ function SetEditForm({
   const [startDelay, setStartDelay] = useState(override?.startDelaySeconds ?? set.startDelaySeconds ?? 0);
   const [distanceMeters, setDistanceMeters] = useState(set.distanceMeters ?? cfg.defaultDistanceM);
   const [distanceStr, setDistanceStr] = useState(metersToInput(set.distanceMeters ?? cfg.defaultDistanceM));
+  // The units arrive after first render on a cold load; show the field in them.
+  const [unitShown, setUnitShown] = useState(unit);
+  if (unitShown !== unit) {
+    setUnitShown(unit);
+    setDistanceStr(metersToInput(distanceMeters));
+  }
   const [inclinePercent, setInclinePercent] = useState<number | null>(set.inclinePercent ?? null);
   const [inclineStr, setInclineStr] = useState(set.inclinePercent != null ? String(set.inclinePercent) : "");
   const [targetHeartRateZone, setTargetHeartRateZone] = useState<number | null>(set.targetHeartRateZone ?? null);
@@ -495,7 +505,7 @@ function SetEditForm({
                             : "bg-muted text-foreground"
                         }`}
                       >
-                        {cfg.distanceLabels[i]}
+                        {distancePresetLabel(cfg, i, units)}
                       </button>
                     ))}
                   </div>
@@ -503,6 +513,7 @@ function SetEditForm({
                     <input
                       type="text"
                       inputMode="decimal"
+                      aria-label={`Distance in ${unit}`}
                       value={distanceStr}
                       onChange={(e) => {
                         const val = sanitizeDecimalInput(e.target.value);
@@ -519,7 +530,7 @@ function SetEditForm({
                       }}
                       className="flex-1 rounded-xl bg-background border border-border px-4 py-2.5 text-center text-xl font-bold outline-none focus:ring-2 ring-primary"
                     />
-                    <span className="text-sm font-medium text-muted-foreground">{cfg.inputUnit}</span>
+                    <span className="text-sm font-medium text-muted-foreground">{unit}</span>
                   </div>
                 </div>
                 <button
@@ -534,7 +545,7 @@ function SetEditForm({
                 {distanceMeters > 0 && duration > 0 && (
                   <div className="py-3 flex items-center justify-center">
                     <span className="px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold">
-                      {formatEndurancePace(cfg.paceFormatter, duration, distanceMeters)}
+                      {formatEndurancePace(cfg.paceFormatter, duration, distanceMeters, units)}
                     </span>
                   </div>
                 )}

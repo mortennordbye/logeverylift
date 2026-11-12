@@ -4,6 +4,7 @@ import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-sess
 import { buildSetLog } from "@/lib/utils/set-log";
 import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
 import type { Discipline } from "@/lib/utils/discipline";
 import type { ProgramSet } from "@/types/workout";
 import {
@@ -53,6 +54,7 @@ export function WorkoutExerciseList({
   onReorderExercises,
 }: Props) {
   const workoutSession = useWorkoutSession();
+  const units = useUnits();
   // Rendered output only — the toggle handlers below still read
   // workoutSession.overrides directly, since those write to the database.
   const renderedOverrides = useRenderedOverrides();
@@ -183,7 +185,7 @@ export function WorkoutExerciseList({
             isPartial={isExercisePartial(exercise)}
             summary={
               exercise.isRunning
-                ? buildRunSetSummary(exercise.sets, exercise.discipline)
+                ? buildRunSetSummary(exercise.sets, exercise.discipline, units)
                 : buildSetSummary(
                     exercise.sets.map((s) => {
                       const ov = renderedOverrides[s.id];

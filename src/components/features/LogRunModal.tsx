@@ -1,7 +1,9 @@
 "use client";
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
-import { formatEnduranceDistance, formatEndurancePace, sanitizeDecimalInput } from "@/lib/utils/format";
+import { distancePresetLabel, formatEnduranceDistance, formatEndurancePace, sanitizeDecimalInput } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
+import { fieldToMeters, fieldUnit, metersToField } from "@/lib/utils/units";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { useState, useEffect } from "react";
 
@@ -41,11 +43,13 @@ export function LogRunModal({
   totalSets,
 }: Props) {
   const cfg = disciplineConfig(discipline);
-  const metersToInput = (m: number) => (cfg.inputUnit === "m" ? String(m) : String(m / 1000));
+  const units = useUnits();
+  const unit = fieldUnit(cfg.inputUnit, units);
+  const metersToInput = (m: number) => String(metersToField(m, unit));
   const inputToMeters = (val: string): number | null => {
     const n = parseFloat(val);
     if (isNaN(n) || n < 0) return null;
-    return cfg.inputUnit === "m" ? Math.round(n) : Math.round(n * 1000);
+    return fieldToMeters(n, unit, targetDistanceMeters);
   };
   const [distanceMeters, setDistanceMeters] = useState(
     targetDistanceMeters ?? cfg.defaultDistanceM,
@@ -82,11 +86,11 @@ export function LogRunModal({
     setInclineStr(targetInclinePercent != null ? String(targetInclinePercent) : "");
     setHeartRateZone(targetHeartRateZone ?? null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, targetDistanceMeters, targetDurationSeconds, targetInclinePercent, targetHeartRateZone]);
+  }, [open, targetDistanceMeters, targetDurationSeconds, targetInclinePercent, targetHeartRateZone, unit]);
 
   const pace =
     distanceMeters > 0 && durationSeconds > 0
-      ? formatEndurancePace(cfg.paceFormatter, durationSeconds, distanceMeters)
+      ? formatEndurancePace(cfg.paceFormatter, durationSeconds, distanceMeters, units)
       : null;
 
   const title =
@@ -133,7 +137,7 @@ export function LogRunModal({
                       : "bg-muted text-foreground"
                   }`}
                 >
-                  {cfg.distanceLabels[i]}
+                  {distancePresetLabel(cfg, i, units)}
                 </button>
               ))}
             </div>
@@ -158,7 +162,7 @@ export function LogRunModal({
                 }}
                 className="flex-1 rounded-xl bg-background border border-border px-4 py-3 text-center text-2xl font-bold outline-none focus:ring-2 ring-primary"
               />
-              <span className="text-base font-medium text-muted-foreground w-8">{cfg.inputUnit}</span>
+              <span className="text-base font-medium text-muted-foreground w-8">{unit}</span>
             </div>
           </div>
 
@@ -318,8 +322,8 @@ export function LogRunModal({
             className="w-full rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pace
-              ? `${cfg.logVerb} — ${formatEnduranceDistance(cfg.inputUnit, distanceMeters)} at ${pace}`
-              : `${cfg.logVerb} — ${formatEnduranceDistance(cfg.inputUnit, distanceMeters)}`}
+              ? `${cfg.logVerb} — ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)} at ${pace}`
+              : `${cfg.logVerb} — ${formatEnduranceDistance(cfg.inputUnit, distanceMeters, units)}`}
           </button>
         </div>
       </div>

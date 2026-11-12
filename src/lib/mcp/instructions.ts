@@ -4,7 +4,7 @@
  *
  * They describe the app as it is today, never features that are planned: a
  * model told about a feature looks for its tools. When a package adds a
- * feature (the endurance switch, revisions, coach memory, seasons, dated
+ * feature (revisions, coach memory, seasons, dated
  * sessions, training limits), it adds or changes its section here and in
  * docs/mcp/app-rules.md in the same PR, and removes the matching line from
  * "Not in the app yet".
@@ -20,7 +20,8 @@ const SECTIONS = {
 - Programs: exercises with planned sets (reps or a rep range, weight, rest; or duration, distance and heart rate zone).
 - Training cycles: a template that runs programs for some weeks, by weekday (one slot a day) or as a rotation, with a periodization curve and a weekly sync of the active cycle.
 - Workout sessions: what the user logged, set by set. You can read them; you cannot log or edit them.
-- Profile and body weight history.`,
+- Profile and body weight history.
+- Settings in get_profile: the user's time zone, which decides "today", the cycle week and the weekly sync; display units (km or mi, m or yd), which change only what the app shows, since every tool value is metric (kg, metres, seconds); and enduranceEnabled, the endurance add-on (triathlon plan, race on a cycle), which only an admin can turn on.`,
 
   owners: `Who owns which field. The progression engine owns target reps and weight on strength sets: an edit is a one-off until the next session. The weekly sync owns distance and duration on sets with a peak anchor (an edit becomes the new peak) and heart rate zone and rest on "work" sets (overwritten next week). Details: ${RULES.uri}.`,
 
@@ -28,7 +29,7 @@ const SECTIONS = {
 - No undo or revision history. Every write applies at once and is final. Say exactly what you changed.
 - No training limits checked in code. Check changes against ${REFERENCE.uri} yourself and name the rule and its evidence label.
 - One workout slot per day in a weekday cycle. No seasons above cycles.
-- No session notes over MCP. "Today" uses the server's clock, not the user's time zone. All values are metric.`,
+- No session notes over MCP.`,
 
   review: `A weekly review:
 1. Read get_profile, the active cycle (list_training_cycles, get_training_cycle), recent_workouts, weekly_volume and personal_records. If Garmin tools are listed, read get_garmin_status and get_garmin_trends.

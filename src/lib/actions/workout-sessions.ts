@@ -10,8 +10,42 @@ import {
   isSessionResumableSchema,
 } from "@/lib/validators/workout";
 import type { ActionResult, ExportedSessions, WorkoutSession } from "@/types/workout";
-import { and, asc, desc, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
+
+/**
+ * Close the user's open sessions started before `olderThan`, which both
+ * sweeps below call. Each ends at its last logged set, not now, so a
+ * forgotten workout does not last 11 hours; a session with no sets yet ends
+ * at its start, with no duration.
+ *
+ * It never deletes. A session with no sets on the server may still have its
+ * sets in the phone's offline queue (started online, logged offline, app
+ * killed), and the queue replays them after this runs on the home render;
+ * deleting the session would make every replayed set fail its ownership
+ * check and be dropped. Empty sessions are left out of the weekly sync's
+ * adherence instead (cycleAdaptationSignals), and old ones are removed only
+ * by the owner-run scripts/cleanup-ghost-sessions.ts. Returns the ids closed.
+ *
+ * Not exported: every export of a "use server" file is a callable action.
+ */
+async function closeStaleSessions(userId: string, olderThan: Date): Promise<number[]> {
+  const closed = await db
+    .update(workoutSessions)
+    .set({
+      isCompleted: true,
+      endTime: sql`GREATEST(${workoutSessions.startTime}, COALESCE((SELECT MAX(${workoutSets.createdAt}) FROM ${workoutSets} WHERE ${workoutSets.sessionId} = ${workoutSessions.id}), ${workoutSessions.startTime}))`,
+    })
+    .where(
+      and(
+        eq(workoutSessions.userId, userId),
+        eq(workoutSessions.isCompleted, false),
+        lt(workoutSessions.startTime, olderThan),
+      ),
+    )
+    .returning({ id: workoutSessions.id });
+  return closed.map((c) => c.id);
+}
 
 export async function createWorkoutSession(
   data: unknown,
@@ -35,18 +69,8 @@ export async function createWorkoutSession(
     // lingers forever; subsequent `createWorkoutSession` calls compound the
     // mess. Bound to >1h to avoid clobbering a legitimate concurrent start.
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-    const swept = await db
-      .update(workoutSessions)
-      .set({ isCompleted: true, endTime: new Date() })
-      .where(
-        and(
-          eq(workoutSessions.userId, auth.user.id),
-          eq(workoutSessions.isCompleted, false),
-          lt(workoutSessions.startTime, oneHourAgo),
-        ),
-      )
-      .returning({ id: workoutSessions.id });
-    for (const { id } of swept) await learnWeightStacks(id, auth.user.id);
+    const swept = await closeStaleSessions(auth.user.id, oneHourAgo);
+    for (const id of swept) await learnWeightStacks(id, auth.user.id);
 
     const [session] = await db
       .insert(workoutSessions)
@@ -185,7 +209,8 @@ export async function completeWorkoutSession(
  * Failsafe: auto-complete the current user's workout sessions that have been
  * left open (isCompleted=false) for more than 10 hours. A user who forgets to
  * tap "Finish" — or whose tab was evicted mid-workout — would otherwise leave a
- * row open indefinitely. Logged sets are kept; we just close out the session.
+ * row open indefinitely. Logged sets are kept; see closeStaleSessions for how
+ * the session is closed.
  *
  * Called on home-screen load so it runs without needing a new workout to start
  * (the createWorkoutSession sweep only fires on the next start).
@@ -194,18 +219,8 @@ export async function closeStaleOpenSessions(): Promise<void> {
   const auth = await requireSession();
   try {
     const tenHoursAgo = new Date(Date.now() - 10 * 60 * 60 * 1000);
-    const closed = await db
-      .update(workoutSessions)
-      .set({ isCompleted: true, endTime: new Date() })
-      .where(
-        and(
-          eq(workoutSessions.userId, auth.user.id),
-          eq(workoutSessions.isCompleted, false),
-          lt(workoutSessions.startTime, tenHoursAgo),
-        ),
-      )
-      .returning({ id: workoutSessions.id });
-    for (const { id } of closed) await learnWeightStacks(id, auth.user.id);
+    const closed = await closeStaleSessions(auth.user.id, tenHoursAgo);
+    for (const id of closed) await learnWeightStacks(id, auth.user.id);
   } catch (e) {
     console.error("[closeStaleOpenSessions] failed", e);
   }

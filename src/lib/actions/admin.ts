@@ -18,6 +18,7 @@ import { ForbiddenError, requireAdmin, requireSession } from "@/lib/utils/sessio
 import { DEMO_USER_EMAIL, DEMO_USER_NAME } from "@/lib/constants/demo";
 import { rpeFromRir } from "@/lib/utils/rir";
 import { ActionResult } from "@/types/workout";
+import { z } from "zod";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -829,5 +830,37 @@ export async function adminPrepareDemoUser(forceReseed = false): Promise<ActionR
     if (e instanceof ForbiddenError) return { success: false, error: e.message };
     console.error("[adminPrepareDemoUser] failed", e);
     return { success: false, error: "Failed to prepare demo user" };
+  }
+}
+
+const setUserEnduranceSchema = z.object({
+  userId: z.string().min(1),
+  enabled: z.boolean(),
+});
+
+/**
+ * Turn the endurance add-on on or off for a user (src/lib/endurance.ts). Admin
+ * only for now (decision D15). Takes the target user's id because it acts on
+ * another user's account, which requireAdmin covers.
+ */
+export async function setUserEndurance(data: unknown): Promise<ActionResult<null>> {
+  try {
+    await requireAdmin();
+    const parsed = setUserEnduranceSchema.safeParse(data);
+    if (!parsed.success) {
+      return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
+    }
+    const [row] = await db
+      .update(users)
+      .set({ enduranceEnabled: parsed.data.enabled })
+      .where(eq(users.id, parsed.data.userId))
+      .returning({ id: users.id });
+    if (!row) return { success: false, error: "User not found" };
+    revalidatePath("/more/admin/users");
+    return { success: true, data: null };
+  } catch (e) {
+    if (e instanceof ForbiddenError) return { success: false, error: e.message };
+    console.error("[setUserEndurance] failed", e);
+    return { success: false, error: "Failed to update the endurance setting" };
   }
 }

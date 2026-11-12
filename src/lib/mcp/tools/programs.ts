@@ -25,6 +25,7 @@ import {
   type ProgressionAdvance,
 } from "@/lib/utils/progression";
 import { reanchoredPeaks } from "@/lib/utils/periodization";
+import { REP_RANGE_MESSAGE, repRangeIsWellFormed } from "@/lib/validators/workout";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
@@ -61,16 +62,28 @@ const ADVANCE_FOR_LEGACY_MODE: Record<
 };
 
 // Planned-set shape shared by the add/update paths of edit_program_exercise.
-const setShape = z.object({
-  setNumber: z.number().int().positive(),
-  targetReps: z.number().int().positive().nullable().optional(),
-  weightKg: z.number().nonnegative().max(9999).nullable().optional(),
-  durationSeconds: z.number().int().positive().nullable().optional(),
-  distanceMeters: z.number().int().positive().nullable().optional(),
-  inclinePercent: z.number().int().min(0).max(30).nullable().optional(),
-  restTimeSeconds: z.number().int().nonnegative().optional(),
-  setType: z.enum(["working", "warmup"]).optional(),
-});
+// Strict: a key the shape does not know fails the call by name. Zod's default
+// strips it, and the model was told a write worked when part of it was lost.
+// The ranges match the app's own set validators (validators/workout.ts).
+const setShape = z
+  .object({
+    setNumber: z.number().int().positive(),
+    targetReps: z.number().int().positive().nullable().optional(),
+    repRangeMin: z.number().int().positive().max(1000).nullable().optional(),
+    repRangeMax: z.number().int().positive().max(1000).nullable().optional(),
+    targetRir: z.number().int().min(0).max(5).nullable().optional(),
+    weightKg: z.number().nonnegative().max(9999).nullable().optional(),
+    durationSeconds: z.number().int().positive().nullable().optional(),
+    distanceMeters: z.number().int().positive().nullable().optional(),
+    inclinePercent: z.number().int().min(0).max(30).nullable().optional(),
+    targetHeartRateZone: z.number().int().min(1).max(5).nullable().optional(),
+    sessionRole: z.enum(["work"]).nullable().optional(),
+    startDelaySeconds: z.number().int().min(0).max(60).nullable().optional(),
+    restTimeSeconds: z.number().int().nonnegative().optional(),
+    setType: z.enum(["working", "warmup"]).optional(),
+  })
+  .strict()
+  .refine(repRangeIsWellFormed, { message: REP_RANGE_MESSAGE, path: ["repRangeMin"] });
 
 type SetInput = z.infer<typeof setShape>;
 
@@ -79,10 +92,16 @@ function setValues(programExerciseId: number, s: SetInput) {
     programExerciseId,
     setNumber: s.setNumber,
     targetReps: s.targetReps ?? null,
+    repRangeMin: s.repRangeMin ?? null,
+    repRangeMax: s.repRangeMax ?? null,
+    targetRir: s.targetRir ?? null,
     weightKg: s.weightKg != null ? s.weightKg.toString() : null,
     durationSeconds: s.durationSeconds ?? null,
     distanceMeters: s.distanceMeters ?? null,
     inclinePercent: s.inclinePercent ?? null,
+    targetHeartRateZone: s.targetHeartRateZone ?? null,
+    sessionRole: s.sessionRole ?? null,
+    startDelaySeconds: s.startDelaySeconds ?? null,
     restTimeSeconds: s.restTimeSeconds ?? 0,
     setType: s.setType ?? "working",
   };
@@ -228,7 +247,9 @@ export function registerProgramTools(server: McpServer, userId: string) {
         "operation='add': requires programId and exerciseId; optional orderIndex (defaults to end), notes, overloadIncrementKg, overloadIncrementReps, progressionRequiredHits, progressionApplyToPlan, the progression axes (progressionAdvance, progressionScope, progressionRegress, progressionBackoffPct, progressionBackoffAfter, progressionReadiness), and sets[].",
         "progressionAdvance is what moves when the gate is met: 'load' adds weight, 'reps' adds reps at the same weight, 'double' works a rep range (set repRangeMin and repRangeMax on the sets), 'duration' and 'distance' for held or covered targets, 'manual' proposes nothing, 'none' turns progression off. Set targetRir on a set to require reps in reserve before a session counts.",
         "progressionMode is the retired single-axis setting. It is still accepted and mapped onto progressionAdvance, but prefer the axes.",
-        "operation='update': requires programExerciseId; any provided slot fields are updated. If sets[] is provided it REPLACES all existing sets for the slot.",
+        "Each set takes setNumber and optional targetReps, repRangeMin and repRangeMax (both or neither, min <= targetReps <= max), targetRir (0-5), weightKg, durationSeconds, distanceMeters, inclinePercent, targetHeartRateZone (1-5), sessionRole ('work' marks a hard interval rep), startDelaySeconds (0-60, prep time before a timed set), restTimeSeconds and setType. Any other key fails the call. All values are metric.",
+        "In an active training cycle the weekly sync owns targetHeartRateZone and restTimeSeconds on sets with sessionRole 'work' and rewrites them each week from the block phase. On a set with a peak anchor, a new distanceMeters or durationSeconds sets this week's value and the peak is re-derived from it.",
+        "operation='update': requires programExerciseId; any provided slot fields are updated. A new exerciseId must be a built-in exercise or one of the user's own. If sets[] is provided it REPLACES all existing sets for the slot; a set without sessionRole keeps the role of the old set with the same setNumber.",
         "operation='remove': requires programExerciseId.",
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
@@ -383,6 +404,22 @@ export function registerProgramTools(server: McpServer, userId: string) {
             .from(programExercises)
             .where(eq(programExercises.id, programExerciseId));
 
+          // The same check as add: a slot may only point at a built-in
+          // exercise or one of the user's own.
+          if (args.exerciseId !== undefined && args.exerciseId !== current.exerciseId) {
+            const [ex] = await db
+              .select({ id: exercises.id })
+              .from(exercises)
+              .where(
+                and(
+                  eq(exercises.id, args.exerciseId),
+                  or(isNull(exercises.userId), eq(exercises.userId, userId)),
+                ),
+              )
+              .limit(1);
+            if (!ex) return fail("Exercise not found");
+          }
+
           const peUpdates: Record<string, unknown> = {};
           if (args.exerciseId !== undefined) {
             peUpdates.exerciseId = args.exerciseId;
@@ -471,7 +508,9 @@ export function registerProgramTools(server: McpServer, userId: string) {
                     const mode =
                       row.distanceMeters != null ? "distance" : row.durationSeconds != null ? "duration" : null;
                     const peaks = mode ? reanchoredPeaks(prev, row, mode, share) : null;
-                    return peaks ? { ...row, ...peaks, sessionRole: prev.sessionRole } : row;
+                    // A role sent in the input wins; without one the old set's is kept.
+                    const sessionRole = s.sessionRole !== undefined ? row.sessionRole : prev.sessionRole;
+                    return peaks ? { ...row, ...peaks, sessionRole } : { ...row, sessionRole };
                   }),
                 );
               }

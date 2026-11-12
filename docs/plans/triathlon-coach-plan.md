@@ -81,13 +81,14 @@ Status words: `todo`, `brief` (brief written), `building`, `done`.
 ### Phase A: foundations
 
 These have no dependencies on new features. A1-A3 can run in parallel. A4 is the base of
-everything that writes plan data.
+everything that writes plan data. A1-A3 share one brief and one PR:
+[`foundations.md`](foundations.md).
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| A1 | Bug fixes and ghost-session cleanup | none | todo |
-| A2 | User time zone and display units | none | todo |
-| A3 | Endurance switch | none | todo |
+| A1 | Bug fixes and ghost-session cleanup | none | building |
+| A2 | User time zone and display units | none | building |
+| A3 | Endurance switch | none | building |
 | A4 | Revisions, stable ids and plan versions | A1 | todo |
 
 **A1. Bug fixes and ghost-session cleanup.** Audit "Bugs found" 1-4 and D23.
@@ -103,9 +104,11 @@ everything that writes plan data.
 
 **A2. User time zone and display units (D14).** A time zone on the user (default from the
 browser), one helper for "today" and week numbers used by the weekly sync and cycle views, and
-a units setting (kg/lb, km/mi, pace per km or mile, swim per 100 m or 100 yd). Storage stays
-metric; only display and input convert. For everyone. Touches dates in workout logging, so it
-is near a critical flow: component tests for the date boundary near midnight.
+a units setting for endurance numbers (km/mi, pace per km or mile, swim per 100 m or 100 yd).
+Weight stays kg for now: the owner moved lb to BACKLOG.md ("Pounds for weights") on
+2026-11-12. Storage stays metric; only display and input convert. For everyone. Touches dates
+in workout logging, so it is near a critical flow: component tests for the date boundary near
+midnight.
 
 **A3. Endurance switch (D15, D18).** A per-user flag, settable only by an admin for now. Moves
 the "Triathlon plan" entry and the race field on the cycle form behind it. Every later
@@ -115,7 +118,7 @@ endurance package gates on this flag, never on the role.
 writes.
 - Program sets are updated in place, matched by id (diff), never deleted and inserted again.
   This also fixes "safe writes during an open workout" (audit section 7). Two paths delete sets
-  today, and both must change: the MCP set replace (`src/lib/mcp/tools/programs.ts:463`) and
+  today, and both must change: the MCP set replace (`src/lib/mcp/tools/programs.ts:500`) and
   `deleteProgramSet` in the UI (`src/lib/actions/programs.ts:1116`).
 - Soft delete for every plan object (T6): program sets, program exercises, programs and cycles
   now, and seasons, sessions and workouts when they exist. Readers filter out deleted rows.

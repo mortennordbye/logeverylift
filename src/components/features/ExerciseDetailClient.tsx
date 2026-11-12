@@ -6,6 +6,7 @@ import { useToast } from "@/contexts/toast-context";
 import { upsertExerciseNote } from "@/lib/actions/exercises";
 import type { ExerciseHistorySession, ExerciseProgress, PrFeedEntry } from "@/lib/actions/metrics";
 import { formatDateShort, loggedSetLabel, toDateString } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { Exercise } from "@/types/workout";
 import { ChevronLeftIcon, ChevronRight, Trophy } from "lucide-react";
@@ -43,6 +44,7 @@ export function ExerciseDetailClient({
   const [note, setNote] = useState(initialNote ?? "");
   const [savedNote, setSavedNote] = useState(initialNote ?? "");
   const isRun = exercise.category === "cardio";
+  const units = useUnits();
 
   function handleBack() {
     // Opened from the library or a workout: go back there. Opened directly: the library.
@@ -109,7 +111,7 @@ export function ExerciseDetailClient({
                     <p className="text-sm font-medium">{prTypeLabel(pr)}</p>
                     <p className="text-xs text-muted-foreground">{formatDateShort(toDateString(new Date(pr.achievedAt)))}</p>
                   </div>
-                  <span className="text-sm font-semibold tabular-nums">{formatPrValue(pr)}</span>
+                  <span className="text-sm font-semibold tabular-nums">{formatPrValue(pr, units)}</span>
                 </li>
               ))}
             </ul>
@@ -139,7 +141,7 @@ export function ExerciseDetailClient({
                           {set.setType === "warmup" ? "Warm" : `Set ${set.setNumber}`}
                         </span>
                         <span className="flex-1">
-                          {loggedSetLabel(set, isRun)}
+                          {loggedSetLabel(set, isRun, units)}
                           {set.isFailed && (
                             <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase text-destructive bg-destructive/15 rounded-full px-1.5 py-0.5">
                               Failed

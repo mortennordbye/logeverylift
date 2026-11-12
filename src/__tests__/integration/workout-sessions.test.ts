@@ -2,6 +2,7 @@ import { db } from "@/db";
 import { programExercises, programSets, workoutSessions, workoutSets } from "@/db/schema";
 import { reorderProgramExercises, reorderProgramSets } from "@/lib/actions/programs";
 import {
+  closeStaleOpenSessions,
   completeWorkoutSession,
   createWorkoutSession,
   isSessionResumable,
@@ -35,17 +36,103 @@ describe("createWorkoutSession", () => {
   it("closes the caller's sessions left open for over an hour, and nobody else's", async () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
     const stale = await createSession(userId, programId, { startTime: twoHoursAgo });
+    await logSetAt(stale.id, new Date(twoHoursAgo.getTime() + 20 * 60_000));
     const recent = await createSession(userId, programId);
     const othersStale = await createSession(otherUserId, null, { startTime: twoHoursAgo });
 
     const result = await createWorkoutSession({ date: "2026-10-21", programId });
     expect(result.success).toBe(true);
 
-    const byId = async (id: number) =>
-      (await db.select().from(workoutSessions).where(eq(workoutSessions.id, id)))[0];
-    expect((await byId(stale.id)).isCompleted).toBe(true);
-    expect((await byId(recent.id)).isCompleted).toBe(false);
-    expect((await byId(othersStale.id)).isCompleted).toBe(false);
+    expect((await byId(stale.id))?.isCompleted).toBe(true);
+    expect((await byId(recent.id))?.isCompleted).toBe(false);
+    expect((await byId(othersStale.id))?.isCompleted).toBe(false);
+  });
+});
+
+const byId = async (id: number) =>
+  (await db.select().from(workoutSessions).where(eq(workoutSessions.id, id)))[0];
+
+/** A logged set on the first slot, written at `at` (the time a sweep closes by). */
+async function logSetAt(sessionId: number, at: Date, setIndex = 0) {
+  await db.insert(workoutSets).values({
+    sessionId,
+    exerciseId: slots[0].exerciseId,
+    programExerciseId: slots[0].programExerciseId,
+    programSetId: slots[0].setIds[setIndex],
+    setNumber: setIndex + 1,
+    actualReps: 8,
+    weightKg: "80",
+    restTimeSeconds: 90,
+    createdAt: at,
+  });
+}
+
+// Bug 4 in docs/triathlon-coach-audit.md: both sweeps kept empty sessions as
+// completed, and closed every session at "now", so a forgotten workout lasted
+// 11-24 hours.
+describe.each([
+  {
+    sweep: "the home-screen sweep",
+    ageHours: 11,
+    run: () => closeStaleOpenSessions(),
+  },
+  {
+    sweep: "the sweep when a new workout starts",
+    ageHours: 2,
+    run: () => createWorkoutSession({ date: "2026-10-21", programId }),
+  },
+])("$sweep", ({ ageHours, run }) => {
+  const startedAgo = () => new Date(Date.now() - ageHours * 60 * 60 * 1000);
+
+  it("closes a stale open session with no sets, with no duration, and keeps it", async () => {
+    const start = startedAgo();
+    const empty = await createSession(userId, programId, { startTime: start });
+    await run();
+    const row = await byId(empty.id);
+    expect(row?.isCompleted).toBe(true);
+    expect(row?.endTime?.getTime()).toBe(start.getTime());
+  });
+
+  it("lets a set queued offline and replayed after the sweep still land", async () => {
+    // Started online, every set logged offline, app killed, opened again
+    // later: the sweep runs on the home render before the queue replays.
+    const session = await createSession(userId, programId, { startTime: startedAgo() });
+    await run();
+    const replayed = await logWorkoutSet({
+      sessionId: session.id,
+      exerciseId: slots[0].exerciseId,
+      setNumber: 1,
+      programSetId: slots[0].setIds[0],
+      actualReps: 8,
+      weightKg: 80,
+      restTimeSeconds: 90,
+    });
+    expect(replayed.success).toBe(true);
+    expect(await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id))).toHaveLength(1);
+  });
+
+  it("ends a stale session at its last logged set, not now", async () => {
+    const start = startedAgo();
+    const session = await createSession(userId, programId, { startTime: start });
+    await logSetAt(session.id, new Date(start.getTime() + 10 * 60_000), 0);
+    const last = new Date(start.getTime() + 40 * 60_000);
+    await logSetAt(session.id, last, 1);
+    await run();
+    const row = await byId(session.id);
+    expect(row?.isCompleted).toBe(true);
+    expect(row?.endTime?.getTime()).toBe(last.getTime());
+  });
+
+  it("leaves auto sessions and other users' sessions alone", async () => {
+    const auto = await createSession(userId, programId, {
+      startTime: startedAgo(),
+      isCompleted: true,
+      source: "auto",
+    });
+    const others = await createSession(otherUserId, null, { startTime: startedAgo() });
+    await run();
+    expect(await byId(auto.id)).toBeDefined();
+    expect((await byId(others.id))?.isCompleted).toBe(false);
   });
 });
 

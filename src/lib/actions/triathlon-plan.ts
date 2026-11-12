@@ -15,6 +15,7 @@ import {
   type PlanExercise,
   type PlanProgressionAdvance,
 } from "@/lib/utils/triathlon-plan";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
 import { and, eq, inArray, isNull } from "drizzle-orm";
@@ -68,6 +69,10 @@ export async function generateTriathlonPlan(
   }
 
   try {
+    // Part of the endurance add-on; the page hides it, this holds the gate.
+    if (!(await enduranceEnabledFor(auth.user.id))) {
+      return { success: false, error: "Endurance features are not on for this account" };
+    }
     const plan = buildTriathlonPlan(parsed.data);
     const neededNames = planExerciseNames(plan);
 

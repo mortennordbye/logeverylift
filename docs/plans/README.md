@@ -56,3 +56,7 @@ A larger program of work with its own plan: [`triathlon-coach-plan.md`](triathlo
 It splits the work into packages A1-E3 with their dependencies and order. Each package gets a
 brief here before code. Inputs: the audit (`docs/triathlon-coach-audit.md`) and the research
 (`docs/research/endurance-training-reference.md`).
+
+| Package | Brief | Status |
+|---|---|---|
+| A1-A3 | [Foundations: bug fixes, time zone and units, endurance switch](foundations.md) | building |

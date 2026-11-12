@@ -53,7 +53,7 @@ ENV SERWIST_SUPPRESS_TURBOPACK_WARNING=1
 RUN pnpm build
 # Bundled so the runner needs no node_modules of its own: a `pnpm install --prod`
 # still pulls drizzle-kit, vitest and vite in as better-auth's optional peers.
-RUN pnpm exec esbuild scripts/migrate.ts scripts/seed.ts --bundle --platform=node \
+RUN pnpm exec esbuild scripts/migrate.ts scripts/seed.ts scripts/cleanup-ghost-sessions.ts --bundle --platform=node \
     --target=node20 --format=cjs --external:pg-native --outdir=scripts-dist
 
 # ============================================================

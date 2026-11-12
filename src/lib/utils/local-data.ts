@@ -1,3 +1,5 @@
+import { resetUserSettings } from "@/contexts/user-settings-context";
+
 /**
  * Device-wide display preferences, kept when someone signs out. Everything
  * else in localStorage (the active workout, rest timers, the offline queue,
@@ -18,6 +20,7 @@ export function unsyncedChangeCount(): number {
 
 /** Remove the signed-in user's data from this browser: localStorage and the service worker's caches. */
 export async function clearLocalUserData() {
+  resetUserSettings();
   try {
     const kept = DEVICE_PREFERENCES.map((key) => [key, localStorage.getItem(key)] as const);
     localStorage.clear();

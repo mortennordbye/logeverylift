@@ -51,13 +51,13 @@ For everyone, not behind the endurance switch (D18). No change to any lifter flo
 ### Tools
 
 - 22 tools in five modules. Each sets `annotations`; read tools set `readOnlyHint: true`
-  (`src/lib/mcp/tools/cycles.ts:42`, `src/lib/mcp/tools/workouts.ts:29`,
-  `src/lib/mcp/tools/garmin.ts:30`, `src/lib/mcp/tools/programs.ts:109`,
-  `src/lib/mcp/tools/profile.ts:26`). The eight write tools do not
-  (`src/lib/mcp/tools/programs.ts:160`, `src/lib/mcp/tools/programs.ts:183`,
-  `src/lib/mcp/tools/programs.ts:206`, `src/lib/mcp/tools/programs.ts:234`,
-  `src/lib/mcp/tools/cycles.ts:93`, `src/lib/mcp/tools/cycles.ts:231`,
-  `src/lib/mcp/tools/profile.ts:67`, `src/lib/mcp/tools/profile.ts:129`).
+  (`src/lib/mcp/tools/cycles.ts:43`, `src/lib/mcp/tools/workouts.ts:29`,
+  `src/lib/mcp/tools/garmin.ts:30`, `src/lib/mcp/tools/programs.ts:128`,
+  `src/lib/mcp/tools/profile.ts:27`). The eight write tools do not
+  (`src/lib/mcp/tools/programs.ts:179`, `src/lib/mcp/tools/programs.ts:202`,
+  `src/lib/mcp/tools/programs.ts:225`, `src/lib/mcp/tools/programs.ts:255`,
+  `src/lib/mcp/tools/cycles.ts:94`, `src/lib/mcp/tools/cycles.ts:232`,
+  `src/lib/mcp/tools/profile.ts:72`, `src/lib/mcp/tools/profile.ts:137`).
 - Workout tools leave notes out on purpose (`src/lib/mcp/tools/workouts.ts:10-11`). Package B1
   adds note reads (D6). This brief only names notes in the consent and the policy.
 - Tests: a unit test checks registration with a stub server (`src/__tests__/mcp-tools.test.ts`);

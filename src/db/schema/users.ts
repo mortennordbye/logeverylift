@@ -44,6 +44,20 @@ export const users = pgTable("user", {
   // When false, the home screen stops surfacing missed-workout / overdue prompts
   // (the "Missed this week" make-up card and the rotation "X days overdue" badge).
   missedWorkoutsEnabled: boolean("missed_workouts_enabled").notNull().default(true),
+  // IANA zone ("Europe/Oslo") that decides "today", cycle weeks and the date a
+  // workout is logged on. Null until the browser fills it once
+  // (TimeZoneSync); with null the server and the phone use their own zones.
+  // See src/lib/utils/user-date.ts.
+  timeZone: text("time_zone"),
+  // Display units for endurance numbers. Storage stays metric everywhere;
+  // only what the app shows and takes as input converts (src/lib/utils/units.ts).
+  // Run pace and speed follow distanceUnit; swim pace follows swimUnit.
+  distanceUnit: text("distance_unit").$type<"km" | "mi">().notNull().default("km"),
+  swimUnit: text("swim_unit").$type<"m" | "yd">().notNull().default("m"),
+  // The endurance add-on (decisions D15 and D18): the triathlon plan, the race
+  // on a cycle, and every later endurance feature. Only an admin can turn it on
+  // for now (setUserEndurance). Gate on this, never on the role.
+  enduranceEnabled: boolean("endurance_enabled").notNull().default(false),
   // The code in this user's share link (/welcome?ref=...). Whoever signs up
   // through it sends them a friend request. Made on first share.
   friendCode: text("friend_code").unique(),

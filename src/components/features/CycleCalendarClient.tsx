@@ -2,6 +2,8 @@
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
+import { useUserSettings } from "@/contexts/user-settings-context";
+import { todayIn } from "@/lib/utils/user-date";
 import type { ProgramWithExercises, TrainingCycleWithSlots } from "@/types/workout";
 import { ChevronLeftIcon, ChevronRight, ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
@@ -127,7 +129,9 @@ function formatSheetDate(dateStr: string): string {
 }
 
 export function CycleCalendarClient({ cycles, completedDates, programsMap }: Props) {
-  const today = new Date();
+  // Today in the user's zone, the same day the server's cycle views use.
+  const { timeZone, units } = useUserSettings();
+  const today = todayIn(timeZone);
   const [year, setYear] = useState(today.getFullYear());
   const [month, setMonth] = useState(today.getMonth());
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
@@ -336,7 +340,7 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap }: Pro
                     <div className="divide-y divide-border">
                       {sheetProgram.programExercises.map((pe) => {
                         const summary = pe.exercise.category === "cardio"
-                          ? buildRunSetSummary(pe.programSets, pe.exercise.discipline)
+                          ? buildRunSetSummary(pe.programSets, pe.exercise.discipline, units)
                           : buildSetSummary(pe.programSets, pe.exercise.isTimed);
                         return (
                           <div key={pe.id} className="px-4 py-3">

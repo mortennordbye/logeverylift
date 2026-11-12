@@ -35,6 +35,11 @@ export default function PrivacyPage() {
           cycles and any notes you write.
         </li>
         <li>
+          <strong>Settings:</strong> your time zone (taken from your browser the first time you open the app, so
+          that &quot;today&quot; is your own day), the units you want distances shown in, whether missed-workout
+          reminders are on, and whether endurance features are turned on for your account.
+        </li>
+        <li>
           <strong>AI Setup:</strong> the plans you build, the change you ask for and your answers to check-ins.
         </li>
         <li>
@@ -158,10 +163,10 @@ export default function PrivacyPage() {
       </p>
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
-        read only, or read and change. They can read your profile, body weight, programs, cycles and workout
-        history: sets, weights, heart rate zones, effort, how you felt, your readiness and the notes you write on
+        read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
+        on, programs, cycles and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the notes you write on
         workouts and sets. If Garmin is on for your account, they can also read data from it. With read and change
-        access they can also change your profile, body weight, programs and cycles. That provider&apos;s own privacy
+        access they can also change your profile, body weight, time zone, display units, programs and cycles. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More →
         Connected assistants, and it loses access at once.
       </p>

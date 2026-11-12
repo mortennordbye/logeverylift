@@ -17,6 +17,8 @@ import {
   type TrainingPhase,
 } from "@/lib/utils/periodization";
 import { applyWearableSuggestion, hasPeakAnchor, syncDueCycle, syncPeriodizedTargets } from "@/lib/periodization-sync";
+import { enduranceEnabledFor } from "@/lib/endurance";
+import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
   createTrainingCycleSchema,
@@ -134,12 +136,6 @@ export async function syncActiveCyclePeriodization(): Promise<ActionResult<null>
   }
 }
 
-function startOfToday(): Date {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-}
-
 export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleInfo | null>> {
   const auth = await requireSession();
   const userId = auth.user.id;
@@ -164,8 +160,8 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     }
 
     const startDate = parseDateStr(cycle.startDate!);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    // Today in the user's zone (src/lib/utils/user-date.ts), not the server's.
+    const today = await userToday(userId);
 
     const { currentWeek, endDate, isOver } = cycleWeek(startDate, cycle.durationWeeks, today);
     const endDateStr = toDateStr(endDate);
@@ -568,7 +564,7 @@ export async function getCyclePeriodization(
     let adaptationPct = cycle.adaptationPct;
     let adaptationNote = cycle.adaptationNote ?? null;
     if (cycle.status === "active" && cycle.startDate) {
-      const week = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, startOfToday());
+      const week = cycleWeek(parseDateStr(cycle.startDate), totalWeeks, await userToday(auth.user.id));
       currentWeek = week.currentWeek;
       if (!week.isOver && cycle.lastSyncedWeek !== currentWeek) {
         const adaptation = await syncPeriodizedTargets(cycle.id, auth.user.id, cycle.slots, currentWeek, totalWeeks, cycle.goal, cycle.athleteLevel);
@@ -688,9 +684,17 @@ export async function updateTrainingCycle(
     });
     if (!existing) return { success: false, error: "Cycle not found" };
 
+    // The race on a cycle is part of the endurance add-on (src/lib/endurance.ts).
+    // A cycle that already has one keeps it editable, so no stored value is
+    // locked away from its owner.
+    const addsRace = (rest.raceDate != null || rest.raceDistance != null) && existing.raceDate == null;
+    if (addsRace && !(await enduranceEnabledFor(auth.user.id))) {
+      return { success: false, error: "Races are part of the endurance features, which are not on for this account" };
+    }
+
     // Guard: disallow shortening an active cycle past its elapsed time
     if (rest.durationWeeks && existing.status === "active" && existing.startDate) {
-      const { isOver } = cycleWeek(parseDateStr(existing.startDate), rest.durationWeeks, new Date());
+      const { isOver } = cycleWeek(parseDateStr(existing.startDate), rest.durationWeeks, await userToday(auth.user.id));
       if (isOver) {
         return {
           success: false,
@@ -778,7 +782,7 @@ export async function startTrainingCycle(
         ),
       );
 
-    const today = toDateStr(new Date());
+    const today = toDateStr(await userToday(userId));
     const [cycle] = await db
       .update(trainingCycles)
       .set({ status: "active", startDate: today })
@@ -823,7 +827,7 @@ export async function restartTrainingCycle(
         ),
       );
 
-    const today = toDateStr(new Date());
+    const today = toDateStr(await userToday(userId));
     const [cycle] = await db
       .update(trainingCycles)
       .set({ status: "active", startDate: today })

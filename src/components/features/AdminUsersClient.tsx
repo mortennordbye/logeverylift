@@ -1,6 +1,8 @@
 "use client";
 
+import { setUserEndurance } from "@/lib/actions/admin";
 import { authClient } from "@/lib/auth-client";
+import { callAction } from "@/lib/utils/stale-bundle";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { ChevronLeft, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -13,11 +15,28 @@ type User = {
   email: string;
   role: string | null | undefined;
   createdAt: Date;
+  enduranceEnabled: boolean;
 };
 
 export function AdminUsersClient({ users }: { users: User[] }) {
   const router = useRouter();
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  // Shown at once; put back if the server refuses.
+  const [endurance, setEndurance] = useState<Record<string, boolean>>(
+    () => Object.fromEntries(users.map((u) => [u.id, u.enduranceEnabled])),
+  );
+  const [enduranceError, setEnduranceError] = useState<string | null>(null);
+
+  async function handleEndurance(userId: string) {
+    const next = !endurance[userId];
+    setEndurance((e) => ({ ...e, [userId]: next }));
+    setEnduranceError(null);
+    const result = await callAction(setUserEndurance({ userId, enabled: next }));
+    if (!result.success) {
+      setEndurance((e) => ({ ...e, [userId]: !next }));
+      setEnduranceError(result.error);
+    }
+  }
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -89,6 +108,9 @@ export function AdminUsersClient({ users }: { users: User[] }) {
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">Users</h1>
         <p className="text-sm text-muted-foreground mt-1">{users.length} accounts</p>
+        {enduranceError && (
+          <p role="alert" className="text-sm text-destructive mt-2">{enduranceError}</p>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-nav-safe">
@@ -125,6 +147,17 @@ export function AdminUsersClient({ users }: { users: User[] }) {
                       Admin
                     </span>
                   )}
+                  <button
+                    type="button"
+                    aria-pressed={endurance[user.id]}
+                    aria-label={`Endurance features for ${user.name}`}
+                    onClick={() => handleEndurance(user.id)}
+                    className={`shrink-0 rounded-lg px-3 min-h-[44px] text-sm font-medium active:opacity-70 ${
+                      endurance[user.id] ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    Endurance
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleImpersonate(user.id)}

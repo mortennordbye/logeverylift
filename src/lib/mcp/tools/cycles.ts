@@ -8,6 +8,7 @@
 import { db } from "@/db";
 import { programs, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
+import { userToday } from "@/lib/user-settings";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -142,7 +143,7 @@ export function registerCycleTools(server: McpServer, userId: string) {
 
           // Don't let an active cycle be shortened past its elapsed time.
           if (args.durationWeeks && existing.status === "active" && existing.startDate) {
-            const { isOver } = cycleWeek(parseDateStr(existing.startDate), args.durationWeeks, new Date());
+            const { isOver } = cycleWeek(parseDateStr(existing.startDate), args.durationWeeks, await userToday(userId));
             if (isOver) {
               return fail(
                 "New duration would end the cycle immediately — choose a longer duration",
@@ -185,7 +186,7 @@ export function registerCycleTools(server: McpServer, userId: string) {
         const owner = await cycleOwner(startCycleId);
         if (!owner || owner.userId !== userId) return fail("Training cycle not found");
 
-        const today = toDateStr(new Date());
+        const today = toDateStr(await userToday(userId));
         // Deactivate any current active cycle and activate the target in one
         // transaction, so a partial failure can't leave the user with zero (or
         // two) active cycles. The activate is re-scoped to userId as defense.

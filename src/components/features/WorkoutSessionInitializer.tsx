@@ -5,7 +5,7 @@ import { useEffect } from "react";
 import { ACTIVE_WORKOUT_TTL_MS, useWorkoutSession } from "@/contexts/workout-session-context";
 import { createWorkoutSession, isSessionResumable } from "@/lib/actions/workout-sessions";
 import { getActiveSessionCompletedProgramSetIds } from "@/lib/actions/workout-sets";
-import { toDateString } from "@/lib/utils/format";
+import { localDateStr } from "@/lib/utils/user-date";
 
 /**
  * Mounted in the workout layout so every route under /programs/[id]/workout/*
@@ -14,7 +14,14 @@ import { toDateString } from "@/lib/utils/format";
  * inherit a stale session from a different program (or none at all), and
  * `logWorkoutSet` would silently fail when the user tapped a set.
  */
-export function WorkoutSessionInitializer({ programId }: { programId: number }) {
+export function WorkoutSessionInitializer({
+  programId,
+  timeZone,
+}: {
+  programId: number;
+  /** The user's stored zone; null dates the session in the phone's zone. */
+  timeZone: string | null;
+}) {
   const workoutSession = useWorkoutSession();
   const hydrateCompletedSetIds = workoutSession?.hydrateCompletedSetIds;
   const sessionId = workoutSession?.sessionId ?? null;
@@ -97,7 +104,8 @@ export function WorkoutSessionInitializer({ programId }: { programId: number }) 
       // Unreachable server: leave the session unset, and the next mount of the
       // workout layout tries again.
       const result = await createWorkoutSession({
-        date: toDateString(startTime),
+        // The day in the user's zone, the same day the server calls today.
+        date: localDateStr(startTime, timeZone),
         startTime: startTime.toISOString(),
         programId,
         intendedDate,

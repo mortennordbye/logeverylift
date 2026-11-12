@@ -7,6 +7,7 @@ import {
   updateProgram,
 } from "@/lib/actions/programs";
 import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
 import type { Discipline } from "@/lib/utils/discipline";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { ProgramSet } from "@/types/workout";
@@ -88,9 +89,10 @@ function SortableExerciseRow({
     transition,
     isDragging,
   } = useSortable({ id: exercise.id, disabled: !isEditing });
+  const units = useUnits();
 
   const summary = exercise.isRunning
-    ? buildRunSetSummary(exercise.sets, exercise.discipline)
+    ? buildRunSetSummary(exercise.sets, exercise.discipline, units)
     : buildSetSummary(exercise.sets, exercise.isTimed);
 
   return (

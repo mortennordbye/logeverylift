@@ -334,7 +334,7 @@ export type SetType = (typeof SET_TYPES)[number];
  * Applied to both the add and update schemas — the update path is the one a
  * preset picker will use, and it can arrive with one bound already stored.
  */
-const repRangeIsWellFormed = <T extends {
+export const repRangeIsWellFormed = <T extends {
   repRangeMin?: number | null;
   repRangeMax?: number | null;
   targetReps?: number | null;
@@ -350,7 +350,7 @@ const repRangeIsWellFormed = <T extends {
   return v.targetReps == null || (v.targetReps >= min && v.targetReps <= max);
 };
 
-const REP_RANGE_MESSAGE =
+export const REP_RANGE_MESSAGE =
   "A rep range needs both a minimum and a maximum, with min ≤ target ≤ max";
 
 // The three per-set progression values the exercise sheet sets uniformly across

@@ -9,6 +9,8 @@ import { useWorkoutSetWriter } from "@/contexts/pending-queue-context";
 import { useToast } from "@/contexts/toast-context";
 import { useRenderedOverrides, useWorkoutSession } from "@/contexts/workout-session-context";
 import { formatEnduranceDistance, formatEndurancePace, formatTime } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
+import type { Units } from "@/lib/utils/units";
 import { formatPlates } from "@/lib/utils/plates";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { haptics } from "@/lib/utils/haptics";
@@ -66,7 +68,7 @@ const MISS_RIR_OPTIONS: { value: number | null; label: string }[] = [
 ];
 
 /** Short label for the in-workout PR celebration badge. */
-function prBadgeLabel(pr: PRResult): string {
+function prBadgeLabel(pr: PRResult, units: Units): string {
   switch (pr.type) {
     case "weight":
       return `${pr.value}kg`;
@@ -75,10 +77,10 @@ function prBadgeLabel(pr: PRResult): string {
     case "reps_at_weight":
       return `${pr.value} reps`;
     case "distance":
-      return formatEnduranceDistance(disciplineConfig(pr.discipline).inputUnit, pr.value);
+      return formatEnduranceDistance(disciplineConfig(pr.discipline).inputUnit, pr.value, units);
     case "pace":
       return pr.distanceMeters != null
-        ? formatEndurancePace(disciplineConfig(pr.discipline).paceFormatter, pr.value, pr.distanceMeters)
+        ? formatEndurancePace(disciplineConfig(pr.discipline).paceFormatter, pr.value, pr.distanceMeters, units)
         : "PR";
   }
 }
@@ -134,6 +136,7 @@ export function WorkoutSetsList({
   isBarbell = false,
 }: WorkoutSetsListProps) {
   const router = useRouter();
+  const units = useUnits();
   const workoutSession = useWorkoutSession();
   // Rendered output only — toggleSet/confirmRunLog below read
   // workoutSession.overrides directly, because they write to the database.
@@ -594,7 +597,7 @@ export function WorkoutSetsList({
             : [];
           if (beatenPRs.length > 0) {
             const best = beatenPRs[0];
-            const label = prBadgeLabel(best);
+            const label = prBadgeLabel(best, units);
             haptics.success();
             setPrSetIds((prev) => new Set(prev).add(setData.id));
             setPrCelebration({ setId: setData.id, label });
@@ -1728,6 +1731,7 @@ function SortableSetRow({
 
   const router = useRouter();
   const cfg = disciplineConfig(discipline);
+  const units = useUnits();
 
   const setEditHref = isWorkout
     ? `/programs/${programId}/workout/exercises/${programExerciseId}/sets/${set.id}`
@@ -1867,7 +1871,7 @@ function SortableSetRow({
             <div className="flex items-center gap-2">
               {set.distanceMeters ? (
                 <p className="text-lg font-medium" data-testid="set-prescription">
-                  {formatEnduranceDistance(cfg.inputUnit, set.distanceMeters)}
+                  {formatEnduranceDistance(cfg.inputUnit, set.distanceMeters, units)}
                 </p>
               ) : (
                 <p className="text-lg font-medium text-muted-foreground" data-testid="set-prescription">
@@ -1890,7 +1894,7 @@ function SortableSetRow({
               <p className="text-sm text-muted-foreground">
                 {formatTime(set.durationSeconds)}
                 {set.distanceMeters != null && set.distanceMeters > 0 && set.durationSeconds > 0
-                  ? ` · ${formatEndurancePace(cfg.paceFormatter, set.durationSeconds, set.distanceMeters)}`
+                  ? ` · ${formatEndurancePace(cfg.paceFormatter, set.durationSeconds, set.distanceMeters, units)}`
                   : ""}
               </p>
             )}
@@ -1957,7 +1961,7 @@ function SortableSetRow({
           const rises = (to: number, from: number) => (leadsGroup ? sharedChip.rises : to > from);
           const lastValue = isRunning
             ? suggestion.basedOnDistanceMeters != null
-              ? formatEnduranceDistance(cfg.inputUnit, suggestion.basedOnDistanceMeters)
+              ? formatEnduranceDistance(cfg.inputUnit, suggestion.basedOnDistanceMeters, units)
               : ""
             : isTimed
             ? suggestion.basedOnDurationSeconds != null
@@ -2190,7 +2194,7 @@ function SortableSetRow({
                     applied={applied}
                     onApply={() => onApplySuggestion?.(set.id, suggestion.suggestedWeightKg, undefined, undefined, suggestion.suggestedDistanceMeters)}
                   >
-                    {chipPending ? "↑" : "✓"} {formatEnduranceDistance(cfg.inputUnit, suggestion.suggestedDistanceMeters)}
+                    {chipPending ? "↑" : "✓"} {formatEnduranceDistance(cfg.inputUnit, suggestion.suggestedDistanceMeters, units)}
                     {groupSuffix}
                   </SuggestionChip>
                 )}

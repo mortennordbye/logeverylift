@@ -1,4 +1,5 @@
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
+import { DEFAULT_UNITS, METERS_PER_MILE, METERS_PER_YARD, type Units } from "@/lib/utils/units";
 import type { ProgramSet } from "@/types/workout";
 
 /** Normalize a locale decimal separator (comma) to a period. */
@@ -75,33 +76,36 @@ export function restToken(s: ProgramSet): string {
   return formatTime(Number(s.restTimeSeconds));
 }
 
-/**
- * Format pace as "M:SS /km". distanceMeters must be > 0.
- */
-export function formatPace(durationSeconds: number, distanceMeters: number): string {
-  const km = distanceMeters / 1000;
-  const secsPerKm = durationSeconds / km;
-  const m = Math.floor(secsPerKm / 60);
-  const s = Math.round(secsPerKm % 60).toString().padStart(2, "0");
-  return `${m}:${s} /km`;
+function minSec(totalSeconds: number): string {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.round(totalSeconds % 60).toString().padStart(2, "0");
+  return `${m}:${s}`;
 }
 
 /**
- * Format swim pace as "M:SS /100m". distanceMeters must be > 0.
+ * Format pace as "M:SS /km", or "M:SS /mi" in miles. distanceMeters must be > 0.
  */
-export function formatSwimPace(durationSeconds: number, distanceMeters: number): string {
-  const per100 = (durationSeconds / distanceMeters) * 100;
-  const m = Math.floor(per100 / 60);
-  const s = Math.round(per100 % 60).toString().padStart(2, "0");
-  return `${m}:${s} /100m`;
+export function formatPace(durationSeconds: number, distanceMeters: number, units: Units = DEFAULT_UNITS): string {
+  const perUnit = units.distance === "mi" ? METERS_PER_MILE : 1000;
+  return `${minSec(durationSeconds / (distanceMeters / perUnit))} /${units.distance}`;
 }
 
 /**
- * Format average speed as "XX.X km/h". distanceMeters and durationSeconds must be > 0.
+ * Format swim pace as "M:SS /100m", or "M:SS /100yd" in yards. distanceMeters must be > 0.
  */
-export function formatSpeedKmh(durationSeconds: number, distanceMeters: number): string {
-  const kmh = (distanceMeters / 1000) / (durationSeconds / 3600);
-  return `${kmh.toFixed(1)} km/h`;
+export function formatSwimPace(durationSeconds: number, distanceMeters: number, units: Units = DEFAULT_UNITS): string {
+  const per100 = units.swim === "yd" ? 100 * METERS_PER_YARD : 100;
+  return `${minSec((durationSeconds / distanceMeters) * per100)} /100${units.swim}`;
+}
+
+/**
+ * Format average speed as "XX.X km/h", or "XX.X mph" in miles.
+ * distanceMeters and durationSeconds must be > 0.
+ */
+export function formatSpeedKmh(durationSeconds: number, distanceMeters: number, units: Units = DEFAULT_UNITS): string {
+  const perUnit = units.distance === "mi" ? METERS_PER_MILE : 1000;
+  const speed = (distanceMeters / perUnit) / (durationSeconds / 3600);
+  return `${speed.toFixed(1)} ${units.distance === "mi" ? "mph" : "km/h"}`;
 }
 
 /**
@@ -112,27 +116,29 @@ export function formatEndurancePace(
   formatter: "per100m" | "kmh" | "perKm",
   durationSeconds: number,
   distanceMeters: number,
+  units: Units = DEFAULT_UNITS,
 ): string {
   if (distanceMeters <= 0 || durationSeconds <= 0) return "";
   switch (formatter) {
     case "per100m":
-      return formatSwimPace(durationSeconds, distanceMeters);
+      return formatSwimPace(durationSeconds, distanceMeters, units);
     case "kmh":
-      return formatSpeedKmh(durationSeconds, distanceMeters);
+      return formatSpeedKmh(durationSeconds, distanceMeters, units);
     case "perKm":
-      return formatPace(durationSeconds, distanceMeters);
+      return formatPace(durationSeconds, distanceMeters, units);
   }
 }
 
 /**
- * Format a distance in meters as a human-readable km string.
- * < 1km → "0.8 km", whole km → "5 km", fractional → "5.3 km"
+ * Format a distance in meters as a human-readable km (or mi) string.
+ * < 1 → "0.8 km", whole → "5 km", fractional → "5.3 km"
  */
-export function formatDistanceKm(meters: number): string {
-  const km = meters / 1000;
-  if (km < 1) return `${km.toFixed(1)} km`;
-  if (km % 1 === 0) return `${km} km`;
-  return `${km.toFixed(1)} km`;
+export function formatDistanceKm(meters: number, units: Units = DEFAULT_UNITS): string {
+  const unit = units.distance;
+  const v = meters / (unit === "mi" ? METERS_PER_MILE : 1000);
+  if (v < 1) return `${v.toFixed(1)} ${unit}`;
+  if (v % 1 === 0) return `${v} ${unit}`;
+  return `${v.toFixed(1)} ${unit}`;
 }
 
 /**
@@ -143,14 +149,15 @@ export function formatDistanceKm(meters: number): string {
 export function loggedSetLabel(
   set: { distanceMeters: number | null; durationSeconds: number | null; weightKg: unknown; actualReps: number },
   isRun: boolean,
+  units: Units = DEFAULT_UNITS,
 ): string {
   if (isRun) {
     return (
       [
-        set.distanceMeters ? formatDistanceKm(set.distanceMeters) : null,
+        set.distanceMeters ? formatDistanceKm(set.distanceMeters, units) : null,
         set.durationSeconds != null ? formatTime(Number(set.durationSeconds)) : null,
         set.distanceMeters && set.durationSeconds
-          ? formatPace(Number(set.durationSeconds), set.distanceMeters)
+          ? formatPace(Number(set.durationSeconds), set.distanceMeters, units)
           : null,
       ]
         .filter(Boolean)
@@ -165,11 +172,28 @@ export function loggedSetLabel(
 
 /**
  * Format a distance for an endurance discipline. Swim (meter input) shows
- * meters under 1 km ("750 m"), everything else uses km.
+ * meters under 1 km ("750 m"), or yards at every distance ("2187 yd", as
+ * pools and swim plans count them); everything else uses km or mi.
  */
-export function formatEnduranceDistance(inputUnit: "m" | "km", meters: number): string {
+export function formatEnduranceDistance(inputUnit: "m" | "km", meters: number, units: Units = DEFAULT_UNITS): string {
+  if (inputUnit === "m" && units.swim === "yd") return `${Math.round(meters / METERS_PER_YARD)} yd`;
   if (inputUnit === "m" && meters < 1000) return `${meters} m`;
-  return formatDistanceKm(meters);
+  return formatDistanceKm(meters, inputUnit === "m" ? { ...units, distance: "km" } : units);
+}
+
+/**
+ * The label on a distance preset button. Metric keeps the discipline's own
+ * labels ("1.5km"); imperial shows the same preset distance converted
+ * ("1640yd", "3.1mi"). The presets themselves stay metric distances.
+ */
+export function distancePresetLabel(
+  cfg: { inputUnit: "m" | "km"; distancePresetsM: number[]; distanceLabels: string[] },
+  index: number,
+  units: Units = DEFAULT_UNITS,
+): string {
+  const imperial = cfg.inputUnit === "m" ? units.swim === "yd" : units.distance === "mi";
+  if (!imperial) return cfg.distanceLabels[index];
+  return formatEnduranceDistance(cfg.inputUnit, cfg.distancePresetsM[index], units).replace(" ", "");
 }
 
 /**
@@ -179,15 +203,16 @@ export function formatEnduranceDistance(inputUnit: "m" | "km", meters: number): 
 export function buildRunSetSummary(
   sets: ProgramSet[],
   discipline: Discipline | null = null,
+  units: Units = DEFAULT_UNITS,
 ): string {
   if (sets.length === 0) return "";
   const cfg = disciplineConfig(discipline);
   const tokens = sets.map((s) => {
     const parts: string[] = [];
-    if (s.distanceMeters) parts.push(formatEnduranceDistance(cfg.inputUnit, s.distanceMeters));
+    if (s.distanceMeters) parts.push(formatEnduranceDistance(cfg.inputUnit, s.distanceMeters, units));
     if (s.durationSeconds) parts.push(formatTime(s.durationSeconds));
     if (s.distanceMeters && s.durationSeconds) {
-      parts.push(formatEndurancePace(cfg.paceFormatter, s.durationSeconds, s.distanceMeters));
+      parts.push(formatEndurancePace(cfg.paceFormatter, s.durationSeconds, s.distanceMeters, units));
     }
     return parts.join(" · ") || cfg.label;
   });

@@ -23,6 +23,10 @@ what it describes, that package updates this file and the server instructions in
   cannot log or edit them.
 - **Profile and body weight.** Name, gender, birth year, height, goals, experience level, and a
   weight history.
+- **Settings.** The user's time zone and display units (`get_profile`, `update_profile`), and
+  whether the endurance add-on is on (`enduranceEnabled`). The add-on gates the triathlon plan
+  and the race on a cycle in the app. Only an admin can turn it on; no tool can set it
+  (`src/lib/endurance.ts`).
 
 ## Who owns which field
 
@@ -32,8 +36,8 @@ lasts only until that writer runs again.
 | Field | Owner | What an assistant's edit does |
 |---|---|---|
 | Target reps and weight on strength sets | The progression engine, after each logged session (`src/lib/utils/progression.ts`) | A one-off. The engine moves it again after the next session. To change the trend, change the slot's progression settings. |
-| Distance and duration on sets with a peak anchor | The weekly sync of the active cycle, scaled from the peak by the week's phase (`src/lib/periodization-sync.ts:230-231`) | A set replace stores the new value as the new peak, so the edit changes the peak, not only this week. |
-| Heart rate zone and rest on `work` sets | The weekly sync, by phase (`src/lib/periodization-sync.ts:233-236`) | Overwritten at the next weekly sync. |
+| Distance and duration on sets with a peak anchor | The weekly sync of the active cycle, scaled from the peak by the week's phase (`src/lib/periodization-sync.ts:237-238`) | A set replace stores the new value as the new peak, so the edit changes the peak, not only this week. |
+| Heart rate zone and rest on `work` sets | The weekly sync, by phase (`src/lib/periodization-sync.ts:240-243`) | Overwritten at the next weekly sync. |
 | The cycle's volume factor (`adaptationPct`) | The weekly sync, from adherence, readiness and effort | No tool writes it. |
 | Everything else in programs and cycles | The user and the assistant | Stays until changed again. |
 
@@ -46,9 +50,12 @@ lasts only until that writer runs again.
   and say which rule and evidence label a change rests on.
 - **One workout slot per day** in a weekday cycle.
 - **No seasons or races above cycles.** A cycle can hold a race date and distance.
-- **Time:** "today" and the cycle week come from the server's clock
-  (`src/lib/periodization-sync.ts:48-49`), not the user's time zone.
-- **Units:** all values are metric (kg, metres, seconds).
+- **Time:** "today", the cycle week, the weekly sync and the date a workout is logged on follow
+  the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:49`). With
+  no zone set, they follow the server's clock and the phone's day.
+- **Units:** every value a tool takes or returns is metric (kg, metres, seconds). The user's
+  `distanceUnit` (km or mi) and `swimUnit` (m or yd) only change what the app shows; weights
+  are always kg.
 - **No session notes over MCP yet.** Tools leave free-text notes out.
 
 ## Access

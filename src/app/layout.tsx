@@ -3,6 +3,7 @@ import { ImpersonationBanner } from "@/components/features/ImpersonationBanner";
 import { OnboardingTutorialLoader } from "@/components/features/OnboardingTutorialLoader";
 import { PageTransition } from "@/components/features/PageTransition";
 import { StaleWorkoutHealer } from "@/components/features/StaleWorkoutHealer";
+import { UserSettingsLoader } from "@/components/features/UserSettingsLoader";
 import { ViewportFix } from "@/components/features/ViewportFix";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { PendingQueueProvider } from "@/contexts/pending-queue-context";
@@ -112,6 +113,9 @@ export default function RootLayout({
                 </Suspense>
                 <Suspense fallback={null}>
                   <StaleWorkoutHealer />
+                </Suspense>
+                <Suspense fallback={null}>
+                  <UserSettingsLoader />
                 </Suspense>
               </WorkoutSessionProvider>
             </PendingQueueProvider>

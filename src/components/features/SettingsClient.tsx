@@ -1,6 +1,7 @@
 "use client";
 
 import { GarminSettingsRow } from "@/components/features/GarminSettingsRow";
+import { UnitsAndTimeSettings } from "@/components/features/UnitsAndTimeSettings";
 import { useTheme } from "@/components/ui/theme-provider";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { setMissedWorkoutsEnabled } from "@/lib/actions/training-cycles";
@@ -9,7 +10,7 @@ import { requestNotificationPermission } from "@/lib/notifications";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Bell, BookOpen, CheckIcon, ChevronLeft, ChevronRight, Download, Smartphone } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ComponentProps } from "react";
 
 const accentColors = [
   { value: "blue", label: "Blue", color: "#5B8FFF" },
@@ -188,9 +189,11 @@ function ExportHistoryButton() {
 
 export function SettingsClient({
   missedWorkoutsEnabled,
+  unitsAndTime,
   garmin,
 }: {
   missedWorkoutsEnabled: boolean;
+  unitsAndTime: ComponentProps<typeof UnitsAndTimeSettings>;
   /** Null when Garmin is not enabled on this server. */
   garmin: { connected: boolean; lastSyncedAt: string | null } | null;
 }) {
@@ -306,6 +309,16 @@ export function SettingsClient({
               <MissedWorkoutsRow initialEnabled={missedWorkoutsEnabled} />
             </Row>
 
+          </div>
+        </div>
+
+        {/* ── Units and time ─────────────────────────── */}
+        <div>
+          <SectionLabel>Units and time</SectionLabel>
+          <div className="rounded-2xl bg-card overflow-hidden">
+            <Row last>
+              <UnitsAndTimeSettings {...unitsAndTime} />
+            </Row>
           </div>
         </div>
 

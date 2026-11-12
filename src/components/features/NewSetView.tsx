@@ -4,7 +4,9 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useToast } from "@/contexts/toast-context";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { addProgramSet } from "@/lib/actions/programs";
-import { formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
+import { distancePresetLabel, formatEndurancePace, formatTime, sanitizeDecimalInput } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
+import { fieldToMeters, fieldUnit, metersToField } from "@/lib/utils/units";
 import { type Equipment, isCustomWeight, weightOptionsFor, withCustomOption } from "@/lib/utils/picker-options";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
@@ -69,11 +71,13 @@ export function NewSetView({
 }: Props) {
   const router = useRouter();
   const cfg = disciplineConfig(discipline);
-  const metersToInput = (m: number) => (cfg.inputUnit === "m" ? String(m) : String(m / 1000));
+  const units = useUnits();
+  const unit = fieldUnit(cfg.inputUnit, units);
+  const metersToInput = (m: number) => String(metersToField(m, unit));
   const inputToMeters = (val: string): number | null => {
     const n = parseFloat(val);
     if (isNaN(n) || n < 0) return null;
-    return cfg.inputUnit === "m" ? Math.round(n) : Math.round(n * 1000);
+    return fieldToMeters(n, unit, lastSet?.distanceMeters);
   };
   const [showRepsPicker, setShowRepsPicker] = useState(false);
   const [showWeightPicker, setShowWeightPicker] = useState(false);
@@ -101,6 +105,12 @@ export function NewSetView({
   const [duration, setDuration] = useState(initialDuration);
   const [distanceMeters, setDistanceMeters] = useState(lastSet?.distanceMeters ?? cfg.defaultDistanceM);
   const [distanceStr, setDistanceStr] = useState(metersToInput(lastSet?.distanceMeters ?? cfg.defaultDistanceM));
+  // The units arrive after first render on a cold load; show the field in them.
+  const [unitShown, setUnitShown] = useState(unit);
+  if (unitShown !== unit) {
+    setUnitShown(unit);
+    setDistanceStr(metersToInput(distanceMeters));
+  }
   const [inclinePercent, setInclinePercent] = useState<number | null>(lastSet?.inclinePercent ?? null);
   const [inclineStr, setInclineStr] = useState(lastSet?.inclinePercent != null ? String(lastSet.inclinePercent) : "");
   const [targetHeartRateZone, setTargetHeartRateZone] = useState<number | null>(lastSet?.targetHeartRateZone ?? null);
@@ -250,7 +260,7 @@ export function NewSetView({
                             : "bg-muted text-foreground"
                         }`}
                       >
-                        {cfg.distanceLabels[i]}
+                        {distancePresetLabel(cfg, i, units)}
                       </button>
                     ))}
                   </div>
@@ -274,7 +284,7 @@ export function NewSetView({
                       }}
                       className="flex-1 rounded-xl bg-background border border-border px-4 py-2.5 text-center text-xl font-bold outline-none focus:ring-2 ring-primary"
                     />
-                    <span className="text-sm font-medium text-muted-foreground">{cfg.inputUnit}</span>
+                    <span className="text-sm font-medium text-muted-foreground">{unit}</span>
                   </div>
                 </div>
 
@@ -293,7 +303,7 @@ export function NewSetView({
                 {distanceMeters > 0 && duration > 0 && (
                   <div className="py-3 flex items-center justify-center">
                     <span className="px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-semibold">
-                      {formatEndurancePace(cfg.paceFormatter, duration, distanceMeters)}
+                      {formatEndurancePace(cfg.paceFormatter, duration, distanceMeters, units)}
                     </span>
                   </div>
                 )}
