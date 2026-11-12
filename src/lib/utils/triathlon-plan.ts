@@ -9,18 +9,17 @@
  * `manual` progression because the periodization curve, not reactive
  * +increment suggestions, drives the load.
  *
- * Strength is three sessions a week (Lower / Upper-Push / Upper-Pull) built to
- * maintain and build muscle alongside the endurance load, not just support economy.
- * It runs FLAT for the whole block: no set carries a sessionRole, so the weekly
- * cycle sync never re-prescribes strength reps or rest, and rep targets belong to
- * the progression engine alone. The lower-body / posterior-chain compound mains
- * (Squat, RDL, Hip Thrust, Bulgarian Split Squat) carry the economy stimulus at a
- * fixed rep target; the full-body hypertrophy work around them
- * (chest/shoulders/back/arms/calves) runs in fixed 8–12 rep ranges with
- * "weight"/"reps" progressive overload, so the history-based suggestion engine
- * auto-adds load week to week. Plyometric and core work is held constant.
- * The standalone endurance swim is folded onto the Upper-Push day so no swim/bike/run
- * volume is lost when the third strength day is added.
+ * Strength is two full-body sessions a week: Workout A (Squat & Horizontal) on
+ * Monday and Workout B (Hinge & Vertical) on Thursday, built to keep and build
+ * muscle alongside the endurance load. It runs FLAT for the whole block: no set
+ * carries a sessionRole, so the weekly cycle sync never re-prescribes strength
+ * reps or rest, and rep targets belong to the progression engine alone. The
+ * lower-body compound mains (Front Squat, Romanian Deadlift, Bulgarian Split
+ * Squat) carry the economy stimulus; every rep-based lift has a fixed rep target
+ * (8-15 by lift) and `load` progression with no RIR cap, so the suggestion
+ * engine adds weight after two sessions at target. The core hold progresses by
+ * duration. The endurance swim that a third strength day once displaced rides
+ * on Wednesday with the mid bike, so no swim volume is lost.
  */
 
 import type { ExerciseType } from "@/lib/utils/exercise-type";
@@ -161,7 +160,7 @@ export function snapWeeks(weeks: number): number {
  * Build a balanced Triathlon week. The `peakMeters` is the race-prep volume; the
  * stored `distanceMeters` is the week-1 prescription (scaled by the periodization
  * curve) and `peakDistanceMeters` is the anchor the active cycle ramps toward.
- * Two strength days (Mon/Thu) run a flat, RIR-capped hypertrophy/maintenance block
+ * Two strength days (Mon/Thu) run a flat hypertrophy/maintenance block with no RIR cap
  * (Workout A / Workout B); the rest of the week is the polarized endurance schedule.
  */
 export function buildTriathlonPlan({ weeks, restDays, goal = "build", level = "intermediate" }: BuildTriathlonPlanParams): PlanBlueprint {
