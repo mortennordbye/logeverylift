@@ -451,6 +451,15 @@ describe("versions and conflicts", () => {
     if (!r.success) expect(r.conflict).toBeDefined();
   });
 
+  it("a flushed write to a removed set is a conflict even when the version did not move", async () => {
+    // A row removed without a version bump (written outside the layer).
+    await db.update(programSets).set({ deletedAt: new Date() }).where(eq(programSets.id, setIds[0]));
+    const r = await updateProgramSet({ id: setIds[0], weightKg: 81, baseVersion: 1 });
+    expect(r.success).toBe(false);
+    const [set] = await db.select().from(programSets).where(eq(programSets.id, setIds[0]));
+    expect(set.weightKg).toBe("80.00");
+  });
+
   it("a write with no base version (an old cached bundle) applies as before", async () => {
     await updateProgram({ id: programId, name: "Bump" });
     expect((await updateProgramSet({ id: setIds[0], weightKg: 81 })).success).toBe(true);
