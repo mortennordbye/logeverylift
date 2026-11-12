@@ -23,6 +23,10 @@ what it describes, that package updates this file and the server instructions in
   cannot log or edit them.
 - **Profile and body weight.** Name, gender, birth year, height, goals, experience level, and a
   weight history.
+- **Settings.** The user's time zone and display units (`get_profile`, `update_profile`), and
+  whether the endurance add-on is on (`enduranceEnabled`). The add-on gates the triathlon plan
+  and the race on a cycle in the app. Only an admin can turn it on; no tool can set it
+  (`src/lib/endurance.ts`).
 
 ## Who owns which field
 
@@ -46,9 +50,12 @@ lasts only until that writer runs again.
   and say which rule and evidence label a change rests on.
 - **One workout slot per day** in a weekday cycle.
 - **No seasons or races above cycles.** A cycle can hold a race date and distance.
-- **Time:** "today" and the cycle week come from the server's clock
-  (`src/lib/periodization-sync.ts:48-49`), not the user's time zone.
-- **Units:** all values are metric (kg, metres, seconds).
+- **Time:** "today", the cycle week, the weekly sync and the date a workout is logged on follow
+  the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:49`). With
+  no zone set, they follow the server's clock and the phone's day.
+- **Units:** every value a tool takes or returns is metric (kg, metres, seconds). The user's
+  `distanceUnit` (km or mi) and `swimUnit` (m or yd) only change what the app shows; weights
+  are always kg.
 - **No session notes over MCP yet.** Tools leave free-text notes out.
 
 ## Access

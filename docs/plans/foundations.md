@@ -343,9 +343,11 @@ arrive; the set editor and the new-set view then re-show the distance field in t
 
 ## Migration and rollback
 
-One migration for the PR, `drizzle/0080_user_settings_endurance.sql`, from `pnpm db:generate`
+One migration for the PR, `drizzle/0081_user_settings_endurance.sql`, from `pnpm db:generate`
 (only new columns, so no create-or-rename prompt), with the matching `drizzle/meta/` snapshot,
-plus one hand-written data step (owner decision 1):
+plus one hand-written data step (owner decision 1). It comes after main's
+`drizzle/0080_mcp_scopes.sql` (B2), and was generated again on top of that snapshot when this
+branch was rebased.
 
 ```sql
 ALTER TABLE "user" ADD COLUMN "time_zone" text;
@@ -371,7 +373,8 @@ ALTER TABLE "user" DROP COLUMN "time_zone", DROP COLUMN "distance_unit",
   DROP COLUMN "swim_unit", DROP COLUMN "endurance_enabled";
 ```
 
-and delete the migration's row from `drizzle.__drizzle_migrations`. Data lost: only the
+and delete 0081's row (the newest) from `drizzle.__drizzle_migrations`. Leave 0080 (MCP
+scopes) in place; it is independent of these columns. Data lost: only the
 users' time zone, unit choices and endurance switches (the data step can be run again). No
 training data. The ghost cleanup is
 not part of the migration; sessions it deleted can only come back from a database backup, which
@@ -461,5 +464,5 @@ A3: `src/lib/endurance.ts`, `src/lib/actions/admin.ts`, `src/lib/actions/triathl
 `src/app/cycles/[id]/edit/page.tsx`, `src/components/features/CyclesListClient.tsx`,
 `src/components/features/EditCycleForm.tsx`.
 
-Shared: `src/db/schema/users.ts`, `drizzle/0080_user_settings_endurance.sql`,
+Shared: `src/db/schema/users.ts`, `drizzle/0081_user_settings_endurance.sql`,
 `docs/privacy/data-inventory.md`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`.

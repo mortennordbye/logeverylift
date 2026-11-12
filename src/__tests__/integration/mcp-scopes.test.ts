@@ -42,7 +42,7 @@ function toolsFor(userId: string, access: McpAccess) {
 
 /** Everything a write tool here could touch for this user. */
 async function fingerprint(userId: string) {
-  const [user] = await db.select({ name: users.name, weightKg: users.weightKg }).from(users).where(eq(users.id, userId));
+  const [user] = await db.select({ name: users.name, weightKg: users.weightKg, timeZone: users.timeZone, distanceUnit: users.distanceUnit, swimUnit: users.swimUnit, enduranceEnabled: users.enduranceEnabled }).from(users).where(eq(users.id, userId));
   const progs = await db.select({ id: programs.id, name: programs.name }).from(programs).where(eq(programs.userId, userId)).orderBy(asc(programs.id));
   const slots = await db.select({ id: programExercises.id }).from(programExercises).innerJoin(programs, eq(programs.id, programExercises.programId)).where(eq(programs.userId, userId));
   const cycles = await db.select({ id: trainingCycles.id, name: trainingCycles.name }).from(trainingCycles).where(eq(trainingCycles.userId, userId));
@@ -65,7 +65,7 @@ beforeEach(async () => {
 
 /** One call per write tool that changes something when it runs. */
 const writeCalls = (): [string, Record<string, unknown>][] => [
-  ["update_profile", { name: "Changed" }],
+  ["update_profile", { name: "Changed", timeZone: "Europe/Oslo", distanceUnit: "mi", swimUnit: "yd" }],
   ["manage_weight", { operation: "log", weightKg: 81 }],
   ["create_program", { name: "New program" }],
   ["update_program", { programId, name: "Renamed" }],
