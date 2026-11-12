@@ -4,6 +4,8 @@ import type { PrFeedEntry } from "@/lib/actions/metrics";
 import type { ArtThumb } from "@/lib/exercise-art/load";
 import { disciplineConfig } from "@/lib/utils/discipline";
 import { formatEnduranceDistance, formatEndurancePace } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
+import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import { Trophy } from "lucide-react";
 
 const PR_TYPE_LABEL: Record<string, string> = {
@@ -23,7 +25,7 @@ export function prTypeLabel(pr: PrFeedEntry): string {
   return PR_TYPE_LABEL[pr.prType] ?? pr.prType;
 }
 
-export function formatPrValue(pr: PrFeedEntry): string {
+export function formatPrValue(pr: PrFeedEntry, units: Units = DEFAULT_UNITS): string {
   const { prType, value, weightKg } = pr;
   if (prType === "weight") return `${value} kg`;
   if (prType === "estimated_1rm") return `~${Math.round(value)} kg 1RM`;
@@ -33,11 +35,11 @@ export function formatPrValue(pr: PrFeedEntry): string {
   const cfg = disciplineConfig(pr.discipline);
   if (prType === "distance") {
     // value = meters
-    return formatEnduranceDistance(cfg.inputUnit, value);
+    return formatEnduranceDistance(cfg.inputUnit, value, units);
   }
   // pace: value = duration seconds, distanceMeters = the effort's distance
   return pr.distanceMeters != null
-    ? formatEndurancePace(cfg.paceFormatter, value, pr.distanceMeters)
+    ? formatEndurancePace(cfg.paceFormatter, value, pr.distanceMeters, units)
     : "—";
 }
 
@@ -52,6 +54,7 @@ function formatAchievedAt(iso: string): string {
 
 /** The newest PR, with its exercise moving when there is a drawing of it. */
 function LatestPr({ pr, hasArt }: { pr: PrFeedEntry; hasArt: boolean }) {
+  const units = useUnits();
   // Only exercises with a thumb are built-ins with a drawing; a custom one may share a name.
   const spec = useArtSpec(hasArt ? pr.exerciseName : null);
   return (
@@ -63,7 +66,7 @@ function LatestPr({ pr, hasArt }: { pr: PrFeedEntry; hasArt: boolean }) {
       {spec && <ExerciseIllustration key={spec.name} spec={spec} compact />}
       <div>
         <p className="text-lg font-semibold">{pr.exerciseName}</p>
-        <p className="text-2xl font-bold tabular-nums">{formatPrValue(pr)}</p>
+        <p className="text-2xl font-bold tabular-nums">{formatPrValue(pr, units)}</p>
         <p className="text-xs text-muted-foreground">
           {prTypeLabel(pr)} · {formatAchievedAt(pr.achievedAt)}
         </p>
@@ -74,6 +77,7 @@ function LatestPr({ pr, hasArt }: { pr: PrFeedEntry; hasArt: boolean }) {
 
 /** Every PR the user has broken, newest first. The Records tab on Progress. */
 export function PrFeedList({ prs, thumbs = {} }: { prs: PrFeedEntry[]; thumbs?: Record<number, ArtThumb> }) {
+  const units = useUnits();
   if (prs.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center pt-16 gap-4">
@@ -137,7 +141,7 @@ export function PrFeedList({ prs, thumbs = {} }: { prs: PrFeedEntry[]; thumbs?: 
             </div>
             <div className="text-right shrink-0">
               <p className="font-semibold tabular-nums">
-                {formatPrValue(pr)}
+                {formatPrValue(pr, units)}
               </p>
               {!pr.isCurrent && (
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground/70">

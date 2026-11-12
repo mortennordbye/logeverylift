@@ -11,7 +11,9 @@ import { useToast } from "@/contexts/toast-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { WORKOUT_FEELINGS, type WorkoutFeeling } from "@/lib/validators/workout";
-import { formatDateLong, formatDuration, formatTimeOfDay, toDateString } from "@/lib/utils/format";
+import { formatDateLong, formatDuration, formatTimeOfDay } from "@/lib/utils/format";
+import { localDateStr } from "@/lib/utils/user-date";
+import { useUserSettings } from "@/contexts/user-settings-context";
 import { Loader2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, use, useMemo, useState } from "react";
@@ -24,6 +26,7 @@ function FinishContent() {
   const searchParams = useSearchParams();
   const [mountTime] = useState<number>(() => Date.now());
   const workoutSession = useWorkoutSession();
+  const { timeZone } = useUserSettings();
   const { enqueue: enqueuePending } = usePendingQueue();
   const { showToast } = useToast();
 
@@ -103,7 +106,7 @@ function FinishContent() {
     if (sessionId == null) {
       // Fallback if the session wasn't pre-created (e.g. direct navigation).
       const created = await createWorkoutSession({
-        date: toDateString(startTime),
+        date: localDateStr(startTime, timeZone),
         startTime: startTime.toISOString(),
       });
       if (!created.success) {

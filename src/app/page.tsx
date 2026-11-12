@@ -10,7 +10,9 @@ import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/actions/workout-sets";
 import { needsPolicyNotice, needsTermsConsent } from "@/lib/consent";
+import { userToday } from "@/lib/user-settings";
 import { parseDateStr } from "@/lib/utils/cycle-position";
+import { weekDatesOf } from "@/lib/utils/user-date";
 import { requireSession } from "@/lib/utils/session";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -32,18 +34,6 @@ function dowLabel(dateStr: string): string {
   return DAY_LABELS_FULL[dow];
 }
 
-function getThisWeekDates(): string[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const monday = new Date(today);
-  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
-  return Array.from({ length: 7 }, (_, i) => {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    return toDateStr(d);
-  });
-}
-
 export default async function Home() {
   const session = await requireSession();
   // New accounts and anyone behind on the terms accept them first. Asked here,
@@ -53,9 +43,15 @@ export default async function Home() {
   // Failsafe: close out any workout left open for >10h before rendering.
   await closeStaleOpenSessions();
 
-  const monday = new Date();
-  monday.setHours(0, 0, 0, 0);
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
+  // Today and this week in the user's zone (src/lib/utils/user-date.ts).
+  const today = await userToday(session.user.id);
+  const todayStr = toDateStr(today);
+  const weekDates = weekDatesOf(todayStr);
+  // Sessions are matched to the week by their date below. The query filters
+  // by start time, so start a day early: the user's Monday can begin on the
+  // server's Sunday.
+  const monday = parseDateStr(weekDates[0]);
+  monday.setDate(monday.getDate() - 1);
 
   // Fetch cycle first — needed to know today's program before we can fetch insight
   const cycleResult = await getActiveCycleForUser();
@@ -81,8 +77,6 @@ export default async function Home() {
     sessionsResult.success ? sessionsResult.data.map((s) => s.date) : [],
   );
 
-  const todayStr = toDateStr(new Date());
-  const weekDates = getThisWeekDates();
   const completedToday = completedDates.has(todayStr);
   // Today's session written by the cycle for a day tracked outside the app.
   const todayAutoSession =
@@ -96,8 +90,7 @@ export default async function Home() {
 
   // Rotation mode: if missedSlots is non-empty, today's slot is overdue.
   // Use the earliest miss date to compute "days overdue."
-  const todayLocal = new Date();
-  todayLocal.setHours(0, 0, 0, 0);
+  const todayLocal = today;
   const rotationOverdueDays =
     info?.cycle.scheduleType === "rotation" && info.missedSlots.length > 0
       ? Math.max(

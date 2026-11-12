@@ -12,6 +12,7 @@ import { users } from "@/db/schema/users";
 import { userWeightEntries } from "@/db/schema/weight-history";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { GOAL_VALUES, parseUserGoals } from "@/lib/utils/goals";
+import { distanceUnitSchema, swimUnitSchema, timeZoneSchema } from "@/lib/validators/user-settings";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
@@ -21,7 +22,7 @@ export function registerProfileTools(server: McpServer, userId: string) {
     "get_profile",
     {
       description:
-        "Get the current user's profile (name, gender, birth year, height, weight, goals, experience level) and recent weight history.",
+        "Get the current user's profile (name, gender, birth year, height, weight, goals, experience level), their settings, and recent weight history. Settings: timeZone, the IANA zone that decides which day is today for the plan; distanceUnit and swimUnit, the units the app shows; enduranceEnabled, whether the endurance add-on (triathlon plans, race on a cycle) is on, which only an admin can change. Every number this server takes or returns is metric, whatever the display units.",
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -47,6 +48,10 @@ export function registerProfileTools(server: McpServer, userId: string) {
           weightKg: user.weightKg ?? null,
           goals: parseUserGoals(user.goals),
           experienceLevel: user.experienceLevel ?? null,
+          timeZone: user.timeZone ?? null,
+          distanceUnit: user.distanceUnit,
+          swimUnit: user.swimUnit,
+          enduranceEnabled: user.enduranceEnabled,
           weightHistory: weightHistory.map((w) => ({
             id: w.id,
             weightKg: w.weightKg,
@@ -63,7 +68,7 @@ export function registerProfileTools(server: McpServer, userId: string) {
     "update_profile",
     {
       description:
-        "Update the current user's profile fields. Only provided fields change. Pass null to clear an optional field. Changing weight also logs a weight history entry.",
+        "Update the current user's profile fields and settings. Only provided fields change. Pass null to clear an optional field. Changing weight also logs a weight history entry. timeZone is an IANA zone (\"Europe/Oslo\"). distanceUnit ('km' or 'mi') and swimUnit ('m' or 'yd') change only what the app shows; this server always takes and returns metric. The endurance add-on cannot be set here.",
       annotations: { idempotentHint: true, openWorldHint: false },
       inputSchema: {
         name: z.string().trim().min(1).max(100).optional(),
@@ -85,6 +90,9 @@ export function registerProfileTools(server: McpServer, userId: string) {
           .enum(["beginner", "intermediate", "advanced"])
           .nullable()
           .optional(),
+        timeZone: timeZoneSchema.optional(),
+        distanceUnit: distanceUnitSchema.optional(),
+        swimUnit: swimUnitSchema.optional(),
       },
     },
     async ({ goals, ...rest }) => {

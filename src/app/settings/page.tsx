@@ -14,7 +14,13 @@ import { garminAllowed } from "@/lib/garmin/access";
 export default async function SettingsPage() {
   const auth = await requireSession();
   const [pref] = await db
-    .select({ missedWorkoutsEnabled: users.missedWorkoutsEnabled })
+    .select({
+      missedWorkoutsEnabled: users.missedWorkoutsEnabled,
+      timeZone: users.timeZone,
+      distanceUnit: users.distanceUnit,
+      swimUnit: users.swimUnit,
+      enduranceEnabled: users.enduranceEnabled,
+    })
     .from(users)
     .where(eq(users.id, auth.user.id));
   const garminOn = garminAllowed(auth.user.role);
@@ -28,6 +34,12 @@ export default async function SettingsPage() {
   return (
     <SettingsClient
       missedWorkoutsEnabled={pref?.missedWorkoutsEnabled ?? true}
+      unitsAndTime={{
+        timeZone: pref?.timeZone ?? null,
+        distanceUnit: pref?.distanceUnit ?? "km",
+        swimUnit: pref?.swimUnit ?? "m",
+        enduranceEnabled: pref?.enduranceEnabled ?? false,
+      }}
       garmin={
         garminOn
           ? { connected: Boolean(garminConn), lastSyncedAt: garminConn?.lastSyncedAt?.toISOString() ?? null }

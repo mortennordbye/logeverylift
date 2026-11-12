@@ -38,6 +38,7 @@ import { HEAT_FILL } from "@/lib/exercise-art/scene";
 import { weeklyVolumeHeat } from "@/lib/utils/weekly-volume-heat";
 import {
   formatDateShort,
+  formatDistanceKm,
   formatEnduranceDistance,
   formatEndurancePace,
   formatDuration,
@@ -46,6 +47,8 @@ import {
   toDateString,
 } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { useUnits } from "@/contexts/user-settings-context";
+import { METERS_PER_MILE, type Units } from "@/lib/utils/units";
 import { Activity, ChevronLeft, ChevronRight, Plus, TrendingUp, Trash2, Zap } from "lucide-react";
 import Link from "next/link";
 import { useState, useSyncExternalStore, useTransition } from "react";
@@ -651,13 +654,15 @@ function WeightHistorySection({
 
 // ── Cardio Section ─────────────────────────────────────────────────────────
 
-function formatPaceDisplay(secPerKm: number): string {
-  const mins = Math.floor(secPerKm / 60);
-  const secs = Math.round(secPerKm % 60);
-  return `${mins}:${String(secs).padStart(2, "0")} /km`;
+function formatPaceDisplay(secPerKm: number, units: Units): string {
+  const sec = units.distance === "mi" ? secPerKm * (METERS_PER_MILE / 1000) : secPerKm;
+  const mins = Math.floor(sec / 60);
+  const secs = Math.round(sec % 60);
+  return `${mins}:${String(secs).padStart(2, "0")} /${units.distance}`;
 }
 
-function formatDistanceDisplay(meters: number): string {
+function formatDistanceDisplay(meters: number, units: Units): string {
+  if (units.distance === "mi") return meters === 0 ? "0 mi" : formatDistanceKm(meters, units);
   if (meters === 0) return "0 km";
   if (meters < 1000) return `${meters} m`;
   const km = meters / 1000;
@@ -667,6 +672,7 @@ function formatDistanceDisplay(meters: number): string {
 const HR_ZONE_COLORS = ["bg-blue-400", "bg-green-400", "bg-yellow-400", "bg-orange-400", "bg-red-500"];
 
 function CardioSection({ data }: { data: CardioMetrics }) {
+  const units = useUnits();
   const hasAnyData = data.totalSessions > 0;
 
   if (!hasAnyData) {
@@ -679,10 +685,10 @@ function CardioSection({ data }: { data: CardioMetrics }) {
   }
 
   const summaryCards = [
-    { label: "Total distance", value: formatDistanceDisplay(data.totalDistanceM) },
+    { label: "Total distance", value: formatDistanceDisplay(data.totalDistanceM, units) },
     { label: "Cardio sessions", value: String(data.totalSessions) },
-    { label: "Longest run", value: formatDistanceDisplay(data.longestSingleRunM) },
-    { label: "Best pace", value: data.bestPaceSecPerKm ? formatPaceDisplay(data.bestPaceSecPerKm) : "–" },
+    { label: "Longest run", value: formatDistanceDisplay(data.longestSingleRunM, units) },
+    { label: "Best pace", value: data.bestPaceSecPerKm ? formatPaceDisplay(data.bestPaceSecPerKm, units) : "–" },
   ];
 
   // Weekly distance chart
@@ -713,7 +719,7 @@ function CardioSection({ data }: { data: CardioMetrics }) {
       <div className="rounded-2xl bg-muted p-4 space-y-3">
         <div className="flex items-baseline justify-between">
           <SectionLabel>Distance · Last 8 weeks</SectionLabel>
-          <span className="text-xs text-muted-foreground">{formatDistanceDisplay(totalWeeklyDist)}</span>
+          <span className="text-xs text-muted-foreground">{formatDistanceDisplay(totalWeeklyDist, units)}</span>
         </div>
 
         <div className="flex items-end gap-1 h-20">
@@ -746,7 +752,7 @@ function CardioSection({ data }: { data: CardioMetrics }) {
             <div key={week.weekStart} className="flex-1 flex justify-center">
               {week.distanceM > 0 ? (
                 <span className="text-[9px] font-medium text-primary">
-                  {(week.distanceM / 1000).toFixed(1)}
+                  {(week.distanceM / (units.distance === "mi" ? METERS_PER_MILE : 1000)).toFixed(1)}
                 </span>
               ) : (
                 <span className="text-[9px] text-muted-foreground/30">–</span>
@@ -754,7 +760,7 @@ function CardioSection({ data }: { data: CardioMetrics }) {
             </div>
           ))}
         </div>
-        <p className="text-[10px] text-muted-foreground text-center">km per week</p>
+        <p className="text-[10px] text-muted-foreground text-center">{units.distance} per week</p>
       </div>
 
       {/* Pace PRs */}
@@ -774,7 +780,7 @@ function CardioSection({ data }: { data: CardioMetrics }) {
                   <span className="text-sm font-semibold">{pr.label}</span>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium">{formatPaceDisplay(pr.bestPaceSecPerKm)}</div>
+                  <div className="text-sm font-medium">{formatPaceDisplay(pr.bestPaceSecPerKm, units)}</div>
                   <div className="text-xs text-muted-foreground truncate">{pr.exerciseName}</div>
                 </div>
                 <span className="text-xs text-muted-foreground flex-none">
@@ -820,7 +826,7 @@ function CardioSection({ data }: { data: CardioMetrics }) {
                     />
                   </div>
                   <span className="text-xs text-muted-foreground flex-none w-12 text-right">
-                    {formatDistanceDisplay(z.distanceM)}
+                    {formatDistanceDisplay(z.distanceM, units)}
                   </span>
                   <span className="text-xs text-muted-foreground flex-none w-8 text-right">
                     {pct}%
@@ -839,6 +845,7 @@ function CardioSection({ data }: { data: CardioMetrics }) {
 // ── Triathlon Section ───────────────────────────────────────────────────────
 
 function DisciplineCard({ d }: { d: DisciplineMetric }) {
+  const units = useUnits();
   const maxDist = Math.max(...d.weekly.map((w) => w.distanceM), 1);
 
   return (
@@ -848,7 +855,7 @@ function DisciplineCard({ d }: { d: DisciplineMetric }) {
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-xl bg-background/50 p-3 flex flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Distance</span>
-          <span className="text-lg font-bold tabular-nums">{formatEnduranceDistance(d.inputUnit, d.totalDistanceM)}</span>
+          <span className="text-lg font-bold tabular-nums">{formatEnduranceDistance(d.inputUnit, d.totalDistanceM, units)}</span>
         </div>
         <div className="rounded-xl bg-background/50 p-3 flex flex-col gap-1">
           <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Time</span>
@@ -884,7 +891,7 @@ function DisciplineCard({ d }: { d: DisciplineMetric }) {
             <div key={pr.label} className="flex items-center gap-3 px-1 py-2 min-h-[40px]">
               <span className="text-sm font-semibold w-16 flex-none">{pr.label}</span>
               <span className="flex-1 text-sm font-medium">
-                {formatEndurancePace(d.paceFormatter, pr.bestDurationS, pr.bestDistanceM)}
+                {formatEndurancePace(d.paceFormatter, pr.bestDurationS, pr.bestDistanceM, units)}
               </span>
               <span className="text-xs text-muted-foreground flex-none">{formatDateShort(pr.date)}</span>
             </div>

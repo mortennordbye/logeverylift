@@ -4,6 +4,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useToast } from "@/contexts/toast-context";
 import { deleteWorkoutSession, updateLoggedSet, updateWorkoutSession } from "@/lib/actions/workout-sets";
 import { formatDateShort, formatDistanceKm, loggedSetLabel, toDateString } from "@/lib/utils/format";
+import { useUnits } from "@/contexts/user-settings-context";
 import { HONEST_REPS_FROM } from "@/lib/utils/pr-provenance";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { SessionDetail, WorkoutSet } from "@/types/workout";
@@ -39,6 +40,7 @@ const INPUT_CLASS =
   "w-full rounded-xl bg-muted px-3 py-3 text-base outline-none focus:ring-2 focus:ring-primary";
 
 export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
+  const units = useUnits();
   const router = useRouter();
   const { showToast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -156,7 +158,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
           )}
           {totalDistanceM > 0 && (
             <span className="text-sm text-muted-foreground">
-              · {formatDistanceKm(totalDistanceM)} run
+              · {formatDistanceKm(totalDistanceM, units)} run
             </span>
           )}
           {detail.feeling && FEELING_COLORS[detail.feeling] && (
@@ -248,7 +250,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
                         <span className="font-medium flex-1 text-center">
                           {isRun ? (
                             <>
-                              <span>{loggedSetLabel(set, true)}</span>
+                              <span>{loggedSetLabel(set, true, units)}</span>
                               {(set.inclinePercent != null || set.heartRateZone != null) && (
                                 <span className="block text-xs text-muted-foreground mt-0.5">
                                   {[
@@ -259,7 +261,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
                               )}
                             </>
                           ) : (
-                            loggedSetLabel(set, false)
+                            loggedSetLabel(set, false, units)
                           )}
                           {set.isFailed && (
                             <span className="ml-1.5 align-middle text-[10px] font-semibold uppercase text-destructive bg-destructive/15 rounded-full px-1.5 py-0.5">

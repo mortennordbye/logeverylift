@@ -3,10 +3,12 @@ import { ImpersonationBanner } from "@/components/features/ImpersonationBanner";
 import { OnboardingTutorialLoader } from "@/components/features/OnboardingTutorialLoader";
 import { PageTransition } from "@/components/features/PageTransition";
 import { StaleWorkoutHealer } from "@/components/features/StaleWorkoutHealer";
+import { UserSettingsLoader } from "@/components/features/UserSettingsLoader";
 import { ViewportFix } from "@/components/features/ViewportFix";
 import { ThemeProvider } from "@/components/ui/theme-provider";
 import { PendingQueueProvider } from "@/contexts/pending-queue-context";
 import { ToastProvider } from "@/contexts/toast-context";
+import { UserSettingsProvider } from "@/contexts/user-settings-context";
 import { WorkoutSessionProvider } from "@/contexts/workout-session-context";
 import type { Metadata, Viewport } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
@@ -93,6 +95,7 @@ export default function RootLayout({
           <ToastProvider>
             <PendingQueueProvider>
               <WorkoutSessionProvider>
+                <UserSettingsProvider>
                 {/* PageTransition and BottomNav both read usePathname(),
                     which on a dynamic-param route is request data. Under
                     cacheComponents that has to sit inside Suspense or the
@@ -113,6 +116,10 @@ export default function RootLayout({
                 <Suspense fallback={null}>
                   <StaleWorkoutHealer />
                 </Suspense>
+                <Suspense fallback={null}>
+                  <UserSettingsLoader />
+                </Suspense>
+                </UserSettingsProvider>
               </WorkoutSessionProvider>
             </PendingQueueProvider>
           </ToastProvider>

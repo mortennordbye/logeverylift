@@ -7,7 +7,8 @@
 
 import { db } from "@/db";
 import { garminDailyMetrics, programExercises, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
-import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
+import { userToday } from "@/lib/user-settings";
+import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import {
   computeAdaptationFactor,
   deloadCadenceForLevel,
@@ -45,8 +46,7 @@ export async function syncDueCycle(userId: string): Promise<void> {
     with: { slots: true },
   });
   if (!cycle?.startDate) return;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = await userToday(userId);
   const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);
   if (!isOver && cycle.lastSyncedWeek !== currentWeek) {
     await syncPeriodizedTargets(cycle.id, userId, cycle.slots, currentWeek, cycle.durationWeeks, cycle.goal, cycle.athleteLevel);
@@ -85,8 +85,7 @@ export async function periodizationShare(programId: number, userId: string): Pro
     )
     .limit(1);
   if (!cycle?.startDate) return 1;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = await userToday(userId);
   const { currentWeek } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);
   const { multiplier } = periodizedLoad(
     currentWeek,
@@ -121,9 +120,10 @@ async function cycleAdaptationSignals(
 ): Promise<AdaptationSignals | null> {
   if (currentWeek < 2 || programIds.length === 0) return null;
 
-  const since = new Date();
+  // The last 7 days in the user's zone, matching the dates sessions are logged on.
+  const since = await userToday(userId);
   since.setDate(since.getDate() - 7);
-  const sinceStr = since.toISOString().split("T")[0];
+  const sinceStr = toDateStr(since);
 
   const recent = await db
     .select({ id: workoutSessions.id, readiness: workoutSessions.readiness })
@@ -308,8 +308,7 @@ export async function wearableSuggestion(userId: string, now = new Date()): Prom
   });
   // A missing athlete level is fine: the weekly sync uses the default deload cadence then too.
   if (!cycle?.startDate) return null;
-  const today = new Date(now);
-  today.setHours(0, 0, 0, 0);
+  const today = await userToday(userId, now);
   const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today);
   if (isOver) return null;
   const programIds = cycle.slots.map((s) => s.programId).filter((id): id is number => id != null);
