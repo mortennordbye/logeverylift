@@ -533,6 +533,13 @@
       "when": 1794429836087,
       "tag": "0075_calm_cable",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1794467559056,
+      "tag": "0076_light_slyde",
+      "breakpoints": true
     }
   ]
 }

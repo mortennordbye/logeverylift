@@ -1,0 +1,1 @@
+ALTER TABLE "garmin_connections" ADD COLUMN "sync_weight" boolean DEFAULT false NOT NULL;

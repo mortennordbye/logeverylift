@@ -19,6 +19,7 @@ import { forgetToken, rememberToken, syncGarmin } from "@/lib/garmin/sync";
 import { GARMIN_DAY_KINDS, endpointLabel } from "@/lib/garmin/endpoints";
 import { runGarminMetricsStep } from "@/lib/garmin/metrics-job";
 import { garminWorkerLoop, historyFloor } from "@/lib/garmin/worker";
+import { syncGarminWeight } from "@/lib/garmin/weight-sync";
 import { encryptSecret } from "@/lib/utils/crypto";
 import { requireSession } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
@@ -42,11 +43,41 @@ export async function refreshGarmin(): Promise<ActionResult<{ syncError: string 
     const sync = await syncGarmin(auth.user.id, { force: true });
     if (sync.status === "not_connected") return { success: false, error: "Garmin is not connected" };
     await runGarminMetricsStep(auth.user.id);
+    await syncGarminWeight(auth.user.id);
     revalidatePath("/more/garmin");
     return { success: true, data: { syncError: sync.status === "error" ? sync.error : null } };
   } catch (e) {
     console.error("[refreshGarmin] failed", { userId: auth.user.id }, e);
     return { success: false, error: "Failed to refresh from Garmin" };
+  }
+}
+
+const weightSyncSchema = z.object({ enabled: z.boolean() });
+
+/**
+ * Turn the Garmin weight sync on or off. Turning it on copies every Garmin
+ * weigh-in into the weight history at once; the import keeps it current.
+ */
+export async function setGarminWeightSync(data: unknown): Promise<ActionResult<{ added: number; weightKg: number | null }>> {
+  const auth = await requireSession();
+  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
+  const parsed = weightSyncSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    const [conn] = await db
+      .update(garminConnections)
+      .set({ syncWeight: parsed.data.enabled })
+      .where(eq(garminConnections.userId, auth.user.id))
+      .returning({ id: garminConnections.id });
+    if (!conn) return { success: false, error: "Garmin is not connected" };
+    const added = parsed.data.enabled ? await syncGarminWeight(auth.user.id) : 0;
+    const [me] = await db.select({ weightKg: users.weightKg }).from(users).where(eq(users.id, auth.user.id));
+    revalidatePath("/more/account");
+    revalidatePath("/more/metrics");
+    return { success: true, data: { added, weightKg: me?.weightKg ?? null } };
+  } catch (e) {
+    console.error("[setGarminWeightSync] failed", { userId: auth.user.id }, e instanceof Error ? e.message : "unknown");
+    return { success: false, error: "Failed to change the weight sync" };
   }
 }
 

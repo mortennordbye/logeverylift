@@ -90,6 +90,7 @@ export function GarminSettingsRow({
           >
             Disconnect and delete Garmin data
           </button>
+          <p className="text-xs text-muted-foreground">Weights copied into your weight history by &quot;Sync weight from Garmin&quot; stay there; you can delete them under Progress.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-2">

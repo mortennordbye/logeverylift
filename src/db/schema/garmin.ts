@@ -55,6 +55,8 @@ export const garminConnections = pgTable("garmin_connections", {
   // built, and its model version. Cleared to null to force a rebuild.
   metricsComputedAt: timestamp("metrics_computed_at"),
   metricsVersion: integer("metrics_version"),
+  // Opt-in: copy Garmin weigh-ins into the profile's weight history (src/lib/garmin/weight-sync.ts).
+  syncWeight: boolean("sync_weight").default(false).notNull(),
 });
 
 export const garminDays = pgTable(

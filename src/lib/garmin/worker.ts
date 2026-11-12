@@ -4,6 +4,7 @@ import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
 import { GarminError } from "./client";
 import { addDays, isoDate } from "./dates";
 import { metricsDue, runGarminMetricsStep } from "./metrics-job";
+import { syncGarminWeight } from "./weight-sync";
 import {
   RunLog,
   fatalTag,
@@ -158,6 +159,11 @@ export async function runGarminWorkerTick(now = new Date()): Promise<TickResult>
       await runGarminMetricsStep(userId, now);
     } catch (e) {
       console.error("[runGarminWorkerTick] metrics failed", { userId }, e instanceof Error ? e.message : "unknown");
+    }
+    try {
+      await syncGarminWeight(userId);
+    } catch (e) {
+      console.error("[runGarminWorkerTick] weight sync failed", { userId }, e instanceof Error ? e.message : "unknown");
     }
     await db.update(garminConnections).set({ leaseUntil: null }).where(eq(garminConnections.id, conn.id));
   }
