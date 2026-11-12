@@ -140,6 +140,18 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Codebase hygiene (deferred long-term)
 
+### Two open tabs overwrite each other's offline queue
+- **What:** Each tab keeps its own copy of the offline queue in React state and writes the whole queue to localStorage `pendingMutationQueue` on every change. With two tabs or PWA windows open, the last tab to write wins, so a set queued in one tab can be erased by the other tab's write. Each tab also replays its own copy, so a set can be sent twice.
+- **Why deferred:** It was there before the stale-bundle fix and is out of its scope. Logging a workout in two tabs at once is rare.
+- **Unblocked by:** A report of a set lost or doubled with two tabs open, or a wish to make the queue safe across tabs. Then merge with the stored queue by item id on each write and listen for the `storage` event (or use a `BroadcastChannel`), and let only one tab replay at a time (for example with `navigator.locks`).
+- **Touchpoints:** `src/contexts/pending-queue-context.tsx` (the hydrate and persist effects, `replayAll`), `src/lib/utils/pending-queue.ts` (`mergeReplayed`).
+
+### Writes outside the offline queue are not kept across a deploy
+- **What:** After a deploy, only set log and un-log writes (`useWorkoutSetWriter`) are queued and sent again from the new bundle. Every other client write goes through `callAction()`, which detects the stale bundle, returns a failed result ("App updating") and reloads. The caller reverts its change, so nothing is lost silently, but the user has to make that change again after the reload (for example a rest-time edit or a program edit).
+- **Why deferred:** The 2026-11-12 incident was about logged sets. Queueing other writes means giving each one a queue kind and a replay path, which is a larger change than the fix needed.
+- **Unblocked by:** A report of a non-set write lost to a deploy, or a decision to queue more workout writes. Then add the write as a `QueuedMutation` kind and enqueue it on a stale-bundle failure, as `logWithRetry` does.
+- **Touchpoints:** `src/lib/utils/stale-bundle.ts` (`callAction`), `src/contexts/pending-queue-context.tsx` (`QueuedMutation`, `useWorkoutSetWriter`).
+
 ### Remaining findings from the UI layout-shift audit
 - **What:** `docs/ui-polish-audit.md` records 22 findings from a measured pass over the app (layout shift, skeleton fidelity, phone ergonomics). The in-workout cluster is fixed and marked `[x]`; the rest is still open — mainly the non-workout skeleton mismatches (`/exercises` loads an "Add Exercise" skeleton, the dashboard skeleton is a bare header, metrics puts the tab bar in the wrong scroll layer), the three coexisting volume formats, and the activity heatmap opening on the oldest weeks.
 - **Why deferred:** The brief was the in-workout feel. Each remaining item is independent and carries its own measurement and proposed fix, so they can be picked up singly.

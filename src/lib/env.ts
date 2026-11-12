@@ -27,12 +27,6 @@ const envSchema = z.object({
     .regex(/^[A-Z]{2}(,[A-Z]{2})*$/)
     .transform((v) => v.split(","))
     .optional(),
-  // Stable key Next.js uses to hash Server Action IDs. When unset, Next.js
-  // generates a fresh key per build, so cached client bundles can't talk to
-  // freshly-deployed server pods ("Failed to find Server Action" errors).
-  // Set to a stable 32-byte base64 value (`openssl rand -base64 32`) and
-  // never rotate. Required in production; warned-on if missing.
-  NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY: z.string().optional(),
   // 32-byte base64 key (`openssl rand -base64 32`) that encrypts users'
   // Garmin Personal API keys at rest. Also the feature flag: unset hides the
   // Garmin settings row and Progress tab, and the Garmin actions refuse.
@@ -62,8 +56,6 @@ function loadEnv(): Env {
       ADMIN_NAME: process.env.ADMIN_NAME,
       SENTRY_DSN: process.env.SENTRY_DSN,
       GYM_IMPORT_COUNTRIES: process.env.GYM_IMPORT_COUNTRIES,
-      NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY:
-        process.env.NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY,
       GARMIN_KEY_ENCRYPTION_KEY: process.env.GARMIN_KEY_ENCRYPTION_KEY,
     });
   }
@@ -88,18 +80,6 @@ function loadEnv(): Env {
           "Generate a real one with `openssl rand -base64 32` and set it.",
       );
     }
-  }
-
-  if (
-    parsed.data.NODE_ENV === "production" &&
-    !parsed.data.NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY
-  ) {
-    console.warn(
-      "[env] NEXT_PRIVATE_SERVER_ACTIONS_ENCRYPTION_KEY is unset in production. " +
-        "Server Action IDs will be re-randomized every build, causing 'Failed to find Server Action' " +
-        "errors in PWA users with cached bundles. Set a stable 32-byte base64 value " +
-        "(openssl rand -base64 32) and never rotate it.",
-    );
   }
 
   return parsed.data;
