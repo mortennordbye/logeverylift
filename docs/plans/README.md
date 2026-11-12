@@ -65,3 +65,4 @@ brief here before code. Inputs: the audit (`docs/triathlon-coach-audit.md`) and 
 | C1 | [Seasons, races and phases](seasons.md) | done |
 | C2 (the quick workout follows as C2b) | [Session model: several slots a day, dated sessions](sessions.md) | building |
 | C3 | [Athlete profile, thresholds and intake interview](athlete-profile.md) | done |
+| C4, C5 | [Structured workouts, planned vs done, missed sessions and sick periods](workouts-and-compliance.md) | brief |
