@@ -62,5 +62,6 @@ brief here before code. Inputs: the audit (`docs/triathlon-coach-audit.md`) and 
 | A1-A3 | [Foundations: bug fixes, time zone and units, endurance switch](foundations.md) | done |
 | A4 | [Revisions, stable ids and plan versions](revisions.md) | done |
 | B1, B4, D2 part 1 | [AI coach: MCP parity, coach memory, first training limits](ai-coach.md) | done |
-| C1 | [Seasons, races and phases](seasons.md) | building |
+| C1 | [Seasons, races and phases](seasons.md) | done |
+| C2 (the quick workout follows as C2b) | [Session model: several slots a day, dated sessions](sessions.md) | building |
 | C3 | [Athlete profile, thresholds and intake interview](athlete-profile.md) | done |
