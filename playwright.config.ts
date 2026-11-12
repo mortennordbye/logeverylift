@@ -69,6 +69,8 @@ export default defineConfig({
       BETTER_AUTH_SECRET: "e2e-only-auth-secret-never-used-outside-tests",
       NEXT_TELEMETRY_DISABLED: "1",
       E2E_WORKERS: String(WORKERS),
+      // Turns the Garmin section on (for admin accounts), so e2e/garmin.spec.ts can open it. Test-only key.
+      GARMIN_KEY_ENCRYPTION_KEY: Buffer.alloc(32, 9).toString("base64"),
     },
   },
   projects: [

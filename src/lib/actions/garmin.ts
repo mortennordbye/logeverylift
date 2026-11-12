@@ -25,8 +25,9 @@ import type { ActionResult } from "@/types/workout";
 import { and, desc, eq, gte, lt, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { garminAllowed } from "@/lib/garmin/access";
 
-const DISABLED = "Garmin is not enabled on this server";
+const DISABLED = "Garmin is not enabled for this account";
 
 
 const connectSchema = z.object({ apiKey: z.string().trim().min(20).max(1000) });
@@ -37,7 +38,7 @@ const connectSchema = z.object({ apiKey: z.string().trim().min(20).max(1000) });
  */
 export async function refreshGarmin(): Promise<ActionResult<{ syncError: string | null }>> {
   const auth = await requireSession();
-  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
+  if (!garminAllowed(auth.user.role)) return { success: false, error: DISABLED };
   try {
     // Garmin asked us to wait (429, or a rejected key): a refresh must not call it during that pause.
     const [conn] = await db.select({ pausedUntil: garminConnections.pausedUntil }).from(garminConnections).where(eq(garminConnections.userId, auth.user.id));
@@ -68,7 +69,7 @@ const weightSyncSchema = z.object({ enabled: z.boolean() });
  */
 export async function setGarminWeightSync(data: unknown): Promise<ActionResult<{ added: number; weightKg: number | null }>> {
   const auth = await requireSession();
-  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
+  if (!garminAllowed(auth.user.role)) return { success: false, error: DISABLED };
   const parsed = weightSyncSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
   try {
@@ -92,7 +93,7 @@ export async function setGarminWeightSync(data: unknown): Promise<ActionResult<{
 /** Check a Personal API key with Garmin, store it encrypted and run the first sync. */
 export async function connectGarmin(data: unknown): Promise<ActionResult<{ syncError: string | null }>> {
   const auth = await requireSession();
-  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
+  if (!garminAllowed(auth.user.role)) return { success: false, error: DISABLED };
   const parsed = connectSchema.safeParse(data);
   if (!parsed.success) {
     return { success: false, error: "Paste the whole key", fieldErrors: parsed.error.flatten().fieldErrors };
@@ -100,7 +101,8 @@ export async function connectGarmin(data: unknown): Promise<ActionResult<{ syncE
 
   try {
     const token = await exchangeKey(parsed.data.apiKey);
-    const encryptedKey = encryptSecret(parsed.data.apiKey, env.GARMIN_KEY_ENCRYPTION_KEY);
+    // garminAllowed() above returned true, so the key is set.
+    const encryptedKey = encryptSecret(parsed.data.apiKey, env.GARMIN_KEY_ENCRYPTION_KEY!);
     await db
       .insert(garminConnections)
       .values({ userId: auth.user.id, encryptedKey })
@@ -200,7 +202,7 @@ const explorerSchema = z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) 
 /** Everything stored for one date, with import status. Read only: never calls Garmin. */
 export async function getGarminDay(data: unknown): Promise<ActionResult<GarminExplorerDay>> {
   const auth = await requireSession();
-  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
+  if (!garminAllowed(auth.user.role)) return { success: false, error: DISABLED };
   const parsed = explorerSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: "Invalid input" };
   const userId = auth.user.id;
@@ -347,7 +349,7 @@ const activityRawSchema = z.object({ id: z.number().int().positive() });
 /** One activity's stored JSON: summary, detail, planned workout, FIT session, laps, sets, and the first stream points. */
 export async function getGarminActivityRaw(data: unknown): Promise<ActionResult<Record<string, unknown>>> {
   const auth = await requireSession();
-  if (!env.GARMIN_KEY_ENCRYPTION_KEY) return { success: false, error: DISABLED };
+  if (!garminAllowed(auth.user.role)) return { success: false, error: DISABLED };
   const parsed = activityRawSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: "Invalid input" };
   const userId = auth.user.id;

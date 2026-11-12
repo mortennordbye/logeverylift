@@ -35,7 +35,7 @@ const entries = (userId: string) =>
 describe("setGarminWeightSync", () => {
   it("copies every weigh-in once when turned on and sets body weight to the newest", async () => {
     const user = await garminUser();
-    asUser(user.id);
+    asUser(user.id, "admin");
 
     const on = await setGarminWeightSync({ enabled: true });
     expect(on).toEqual({ success: true, data: { added: 2, weightKg: 89.7 } });
@@ -51,7 +51,7 @@ describe("setGarminWeightSync", () => {
 
   it("does not add back a copied weigh-in the user deleted, also after turning the sync off and on", async () => {
     const user = await garminUser();
-    asUser(user.id);
+    asUser(user.id, "admin");
     await setGarminWeightSync({ enabled: true });
     const [old] = await db.select({ id: userWeightEntries.id }).from(userWeightEntries).where(and(eq(userWeightEntries.userId, user.id), eq(userWeightEntries.recordedAt, new Date(T1))));
     expect((await deleteWeightEntry(old.id)).success).toBe(true);
@@ -69,7 +69,7 @@ describe("setGarminWeightSync", () => {
 
   it("still copies older weigh-ins the history import finds after the sync was turned on", async () => {
     const user = await garminUser();
-    asUser(user.id);
+    asUser(user.id, "admin");
     await setGarminWeightSync({ enabled: true });
     const T0 = T1 - 30 * 86_400_000;
     await db.insert(garminDays).values({ userId: user.id, calendarDate: "2026-10-12", kind: "weight_entries", data: { items: [{ timestampGMT: T0, weight: 93000 }] } });
@@ -80,7 +80,7 @@ describe("setGarminWeightSync", () => {
   it("keeps a newer weight the user typed as the body weight", async () => {
     const user = await garminUser();
     await db.insert(userWeightEntries).values({ id: crypto.randomUUID(), userId: user.id, weightKg: 88, recordedAt: new Date(T2 + 3_600_000) });
-    asUser(user.id);
+    asUser(user.id, "admin");
 
     expect((await setGarminWeightSync({ enabled: true })).success).toBe(true);
     const [me] = await db.select({ weightKg: users.weightKg }).from(users).where(eq(users.id, user.id));
@@ -90,19 +90,25 @@ describe("setGarminWeightSync", () => {
   it("copies nothing while off, and refuses a user without Garmin", async () => {
     const user = await garminUser();
     expect(await syncGarminWeight(user.id)).toBe(0);
-    asUser(user.id);
+    asUser(user.id, "admin");
     expect(await setGarminWeightSync({ enabled: false })).toEqual({ success: true, data: { added: 0, weightKg: null } });
     expect(await entries(user.id)).toHaveLength(0);
 
-    asUser((await createUser()).id);
+    asUser((await createUser()).id, "admin");
     expect(await setGarminWeightSync({ enabled: true })).toEqual({ success: false, error: "Garmin is not connected" });
     expect((await setGarminWeightSync({ enabled: "yes" })).success).toBe(false);
+  });
+
+  it("is turned away for an account that is not allowed to use Garmin", async () => {
+    const user = await garminUser();
+    asUser(user.id, "user");
+    expect(await setGarminWeightSync({ enabled: true })).toEqual({ success: false, error: "Garmin is not enabled for this account" });
   });
 
   it("only touches the signed-in user's own connection and history", async () => {
     const owner = await garminUser();
     const other = await garminUser();
-    asUser(owner.id);
+    asUser(owner.id, "admin");
     await setGarminWeightSync({ enabled: true });
 
     const [otherConn] = await db.select({ syncWeight: garminConnections.syncWeight }).from(garminConnections).where(eq(garminConnections.userId, other.id));

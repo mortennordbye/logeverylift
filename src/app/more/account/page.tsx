@@ -4,17 +4,17 @@ import { db } from "@/db";
 import { gyms } from "@/db/schema/gyms";
 import { users } from "@/db/schema/users";
 import { garminConnections } from "@/db/schema";
-import { env } from "@/lib/env";
 import { requireSession } from "@/lib/utils/session";
 import { eq } from "drizzle-orm";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
+import { garminAllowed } from "@/lib/garmin/access";
 
 export default async function AccountPage() {
   const session = await requireSession();
   const user = await db.query.users.findFirst({ where: eq(users.id, session.user.id) });
   // The Garmin weight sync switch shows only to a user with a Garmin connection.
-  const [garmin] = env.GARMIN_KEY_ENCRYPTION_KEY
+  const [garmin] = garminAllowed(session.user.role)
     ? await db.select({ syncWeight: garminConnections.syncWeight }).from(garminConnections).where(eq(garminConnections.userId, session.user.id))
     : [];
   const gym = user?.primaryGymId

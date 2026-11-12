@@ -99,7 +99,7 @@ afterEach(() => {
 });
 
 async function connect(userId: string) {
-  asUser(userId);
+  asUser(userId, "admin");
   forgetToken(userId);
   const result = await connectGarmin({ apiKey: API_KEY });
   if (!result.success) throw new Error(result.error);
@@ -131,7 +131,7 @@ describe("connectGarmin", () => {
 
   it("stores nothing when Garmin rejects the key", async () => {
     const me = await createUser();
-    asUser(me.id);
+    asUser(me.id, "admin");
     garmin.keyOk = false;
     const result = await connectGarmin({ apiKey: API_KEY });
     expect(result.success).toBe(false);
@@ -203,7 +203,7 @@ describe("refreshGarmin", () => {
     const other = await createUser();
     await connect(me.id);
     const before = fetchMock.mock.calls.length;
-    asUser(other.id);
+    asUser(other.id, "admin");
     expect(await refreshGarmin()).toEqual({ success: false, error: "Garmin is not connected" });
     expect(fetchMock.mock.calls.length).toBe(before);
     expect(await db.select().from(garminDays).where(eq(garminDays.userId, other.id))).toEqual([]);
@@ -231,7 +231,7 @@ describe("disconnectGarmin", () => {
     const me = await createUser();
     const other = await createUser();
     await connect(other.id);
-    asUser(me.id);
+    asUser(me.id, "admin");
     await disconnectGarmin({ deleteData: true });
     expect(await db.select().from(garminConnections)).toHaveLength(1);
     expect((await db.select().from(garminDays)).length).toBe(3);
