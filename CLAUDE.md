@@ -238,7 +238,7 @@ So a client that was open across a deploy sends action IDs the new server does n
 - `isStaleBundleError()` (`src/lib/utils/stale-bundle.ts`) detects that error. `callAction()` and the offline queue (`src/contexts/pending-queue-context.tsx`) both use it, for live writes and replays.
 - A set write that hits it goes into the offline queue. A stale-bundle failure never counts as a retry (`afterStaleBundle` in `src/lib/utils/pending-queue.ts`), so the queue never drops a set for it.
 - `reloadForFreshBundle()` asks the Service Worker to update (waiting at most 3 seconds) and reloads the page. The new page replays the queue with the new IDs. While the reload is pending, set writes go straight into the queue and are not sent.
-- No reload loop: a page that a reload opened in the last 30 seconds does not reload again, and the queue retries every 30 seconds instead. After 3 reloads in a row with no Server Action reaching the server (counted in sessionStorage `staleBundleReloads`), it stops reloading.
+- No reload loop: a page that a reload opened in the last 30 seconds does not reload again, and the queue retries every 30 seconds instead. After 3 reloads in a row, each within 5 minutes of the one before, with no Server Action reaching the server (counted in sessionStorage `staleBundleReloads`), it stops reloading.
 - The user sees "Updating app. Your sets are saved on this phone." If reloading has stopped, a toast that stays says "App update failed. Your sets are saved on this phone. Close and reopen the app." The queue keeps its items in both cases.
 
 Covered by `src/__tests__/components/pending-queue.test.tsx` and `e2e/stale-bundle.spec.ts`, which rewrites the action ID on every action POST so the real server answers with its not-found response.

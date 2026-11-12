@@ -40,15 +40,20 @@ export const RELOAD_DELAY_MS = 1_500;
 // The Service Worker update check gets this long. On a stalled network it may
 // never answer, and the page must still reload.
 export const SW_UPDATE_TIMEOUT_MS = 3_000;
-// Stop after this many reloads in a row that reached no Server Action. The
-// count lives in sessionStorage (a number, no personal data) so it survives
-// the reloads it counts; without storage the 30-second guard still applies.
+// Stop after this many reloads in a row that reached no Server Action, each
+// within RELOAD_WINDOW_MS of the one before. The window keeps separate deploys
+// hours apart in a long-lived PWA from adding up. The count and the time of
+// the last reload live in sessionStorage (no personal data) so they survive
+// the reloads they count; without storage the 30-second guard still applies.
 export const MAX_STALE_RELOADS = 3;
+export const RELOAD_WINDOW_MS = 5 * 60_000;
 const RELOAD_COUNT_KEY = "staleBundleReloads";
 
 function reloadCount(): number {
   try {
-    return Number(sessionStorage.getItem(RELOAD_COUNT_KEY)) || 0;
+    const { n, at } = JSON.parse(sessionStorage.getItem(RELOAD_COUNT_KEY) ?? "{}") as { n?: number; at?: number };
+    if (typeof n !== "number" || typeof at !== "number") return 0;
+    return Date.now() - at > RELOAD_WINDOW_MS ? 0 : n;
   } catch {
     return 0;
   }
@@ -56,7 +61,7 @@ function reloadCount(): number {
 
 function setReloadCount(n: number): void {
   try {
-    if (n > 0) sessionStorage.setItem(RELOAD_COUNT_KEY, String(n));
+    if (n > 0) sessionStorage.setItem(RELOAD_COUNT_KEY, JSON.stringify({ n, at: Date.now() }));
     else sessionStorage.removeItem(RELOAD_COUNT_KEY);
   } catch {
     // Storage blocked: no count, so no cap beyond the 30-second guard.

@@ -115,6 +115,20 @@ describe("reloadForFreshBundle", () => {
     expect(page5.reloadForFreshBundle()).toBe("reloading");
   });
 
+  it("does not count reloads from deploys far apart towards the cap", async () => {
+    stubPage();
+    // A PWA left open all day: three deploys hours apart, each reloading the
+    // page with no write in between.
+    for (let i = 0; i < 3; i++) {
+      const { reloadForFreshBundle } = await load();
+      expect(reloadForFreshBundle()).toBe("reloading");
+      await vi.runAllTimersAsync();
+      vi.setSystemTime(Date.now() + 3 * 60 * 60_000);
+    }
+    const page4 = await load();
+    expect(page4.reloadForFreshBundle()).toBe("reloading");
+  });
+
   it("still reloads when session storage is blocked", async () => {
     stubPage({ storage: false });
     const { reloadForFreshBundle, noteActionReached } = await load();
