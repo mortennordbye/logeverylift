@@ -90,11 +90,12 @@ describe("BodyOverview", () => {
     expect(screen.getByRole("button", { name: /^Muscle mass 37\.4/ })).toBeTruthy();
   });
 
-  it("points to Account when a rating needs the user's gender", () => {
+  it("shows a grey gauge and a link to the profile field when a rating needs the user's gender", () => {
     render(<BodyOverview data={data({ sex: null })} />);
     const vo2 = screen.getByRole("button", { name: /^VO2 max/ });
-    expect(within(vo2).getByText("Tap to compare")).toBeTruthy();
+    expect(within(vo2).getByRole("img", { name: "51.0, not rated" })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Want a rating\? Add your gender/ }).getAttribute("href")).toBe("/more/account#body-profile");
     fireEvent.click(vo2);
-    expect(within(screen.getByRole("dialog")).getByRole("link", { name: /Add your gender in Account/ }).getAttribute("href")).toBe("/more/account");
+    expect(within(screen.getByRole("dialog")).getByRole("link", { name: /Add your gender in Account/ }).getAttribute("href")).toBe("/more/account#body-profile");
   });
 });

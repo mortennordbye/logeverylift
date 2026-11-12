@@ -365,8 +365,8 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
           </div>
         </div>
 
-        {/* Body & Goals */}
-        <div>
+        {/* Body & Goals; Garmin's ratings link here (#body-profile) for gender and year of birth. */}
+        <div id="body-profile" className="scroll-mt-20">
           <SectionLabel>Body &amp; Goals</SectionLabel>
           <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
             <GoalPickerRow

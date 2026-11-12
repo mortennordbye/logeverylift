@@ -234,6 +234,12 @@ const NEEDS_TEXT: Record<RatingGap["needs"], string> = {
   age: "Add your year of birth in Account to compare with people your age.",
 };
 
+/** Short form under a tile that cannot be rated yet. */
+const NEEDS_SHORT: Record<RatingGap["needs"], string> = { sex: "Want a rating? Add your gender", age: "Want a rating? Add your year of birth" };
+
+/** Account's Body & Goals section, where gender and year of birth are set. */
+const PROFILE_HREF = "/more/account#body-profile";
+
 
 /** The small line under a signal's name. */
 function tileSub(k: BodyKey, data: OverviewData): string | undefined {
@@ -349,6 +355,21 @@ function ArcGauge({ r, value, prev, large = false }: { r: Rating; value: string;
   );
 }
 
+/** The gauge's shape in grey, for a signal that cannot be rated until the profile says more. */
+function EmptyGauge({ value }: { value: string }) {
+  return (
+    <svg viewBox="0 0 200 172" className="w-full" role="img" aria-label={`${value}, not rated`}>
+      <path d={arc(78, ARC_START, ARC_START + ARC_SWEEP)} fill="none" stroke="var(--muted-foreground)" strokeWidth={12} strokeLinecap="round" opacity={0.3} />
+      <text x={100} y={106} textAnchor="middle" className="fill-foreground tabular-nums" style={{ fontSize: 50, fontWeight: 600 }}>
+        {value}
+      </text>
+      <text x={100} y={138} textAnchor="middle" className="fill-muted-foreground" style={{ fontSize: 18 }}>
+        Not rated
+      </text>
+    </svg>
+  );
+}
+
 /** Where you were 4 weeks ago (a 7-day average for nightly signals), rated on the same scale, for the gauge's hollow ring. */
 function prevRating(k: BodyKey, data: OverviewData): Rating | null {
   const c = changeOver(data.body[k], 28, windowOf(k));
@@ -362,27 +383,33 @@ function GaugeTile({ k, data, onOpen }: { k: BodyKey; data: OverviewData; onOpen
   const r = rated(raw);
   const sub = tileSub(k, data);
   const change = changeText(k, s, 28);
+  const gap = isGap(raw) ? raw : null;
   return (
-    <button onClick={() => onOpen(k)} aria-haspopup="dialog" aria-label={`${c.label}${s.value !== null ? ` ${c.format(s.value)}` : ""}`} className="rounded-2xl bg-muted p-3 text-left active:opacity-70 flex flex-col">
-      <span className="flex items-start gap-1.5">
-        <IconDot k={k} />
-        <span className="text-xs text-muted-foreground leading-tight pt-0.5">
-          {c.label}
-          {sub && <span className="block text-[10px]">{sub}</span>}
+    <div className="rounded-2xl bg-muted flex flex-col overflow-hidden">
+      <button onClick={() => onOpen(k)} aria-haspopup="dialog" aria-label={`${c.label}${s.value !== null ? ` ${c.format(s.value)}` : ""}`} className="flex flex-1 flex-col p-3 text-left active:opacity-70">
+        <span className="flex items-start gap-1.5">
+          <IconDot k={k} />
+          <span className="text-xs text-muted-foreground leading-tight pt-0.5">
+            {c.label}
+            {sub && <span className="block text-[10px]">{sub}</span>}
+          </span>
         </span>
-      </span>
-      {r && s.value !== null ? (
         <span className="mt-1 block px-2">
-          <ArcGauge r={r} value={c.format(s.value)} prev={prevRating(k, data)} />
+          {r && s.value !== null ? (
+            <ArcGauge r={r} value={c.format(s.value)} prev={prevRating(k, data)} />
+          ) : (
+            <EmptyGauge value={s.value !== null ? c.format(s.value) : "–"} />
+          )}
         </span>
-      ) : (
-        <span className="flex flex-1 flex-col items-center justify-center py-6 text-center">
-          <span className="text-3xl font-semibold tabular-nums">{s.value !== null ? c.format(s.value) : "–"}</span>
-          <span className="mt-1 text-[11px] text-muted-foreground">{isGap(raw) ? "Tap to compare" : shortNormal(s)}</span>
-        </span>
+        <span className="-mt-1 block text-center text-[11px] text-muted-foreground tabular-nums">{change ?? (r ? " " : shortNormal(s))}</span>
+      </button>
+      {gap && (
+        <Link href={PROFILE_HREF} className="flex min-h-[44px] items-center justify-center gap-1 border-t border-border/50 px-2 text-center text-[11px] font-medium text-primary active:opacity-60">
+          {NEEDS_SHORT[gap.needs]}
+          <ChevronRight className="h-3.5 w-3.5 flex-none" aria-hidden />
+        </Link>
       )}
-      <span className="-mt-1 block text-center text-[11px] text-muted-foreground tabular-nums">{change ?? " "}</span>
-    </button>
+    </div>
   );
 }
 
@@ -741,7 +768,7 @@ function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClo
         </div>
       )}
       {isGap(raw) && (
-        <Link href="/more/account" className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-muted p-4 text-sm active:opacity-70">
+        <Link href={PROFILE_HREF} onClick={onClose} className="mt-3 flex items-center justify-between gap-2 rounded-2xl bg-muted p-4 text-sm active:opacity-70">
           {NEEDS_TEXT[raw.needs]}
           <ChevronRight className="h-4 w-4 flex-none text-muted-foreground" aria-hidden />
         </Link>
