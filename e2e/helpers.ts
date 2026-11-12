@@ -137,7 +137,7 @@ export async function tapAndSave(
  * unmounts on confirm (`showReadiness && <ReadinessSheet/>`), so "hidden" is a
  * real detach and not an opacity-0 element Playwright would still call visible.
  */
-async function dismissReadinessSheet(page: Page) {
+export async function dismissReadinessSheet(page: Page) {
   // The sheet is triggered by the session going live, a Server Action round
   // trip after hydration, and then slides in 300ms later. Probing for it with
   // isVisible() answered at once (it ignores its timeout), so on a slow runner

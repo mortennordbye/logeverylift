@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { programSets, trainingCycleSlots, trainingCycles, workoutSets } from "@/db/schema";
 import { updateProgramSet } from "@/lib/actions/programs";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -8,10 +8,10 @@ import {
   syncActiveCyclePeriodization,
 } from "@/lib/actions/training-cycles";
 import { scaledDistance } from "@/lib/utils/periodization";
-import { toDateStr } from "@/lib/utils/cycle-position";
+import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
-import { createExercise, createProgram, createUser } from "./factories";
+import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
 
 /**
@@ -199,5 +199,81 @@ describe("MCP edit_program_exercise keeps a periodized set in the block", () => 
   it("re-anchors a changed distance as this week's", async () => {
     await editTool()({ operation: "update", programExerciseId: slotId, sets: [{ setNumber: 1, distanceMeters: 3200 }] });
     expect(await anchors()).toEqual({ peak: 4000, d: 3200 });
+  });
+});
+
+// Characterization test for package C2 (docs/plans/sessions.md, 8.1, C9): the
+// weekly sync's adherence (PZ-26) as it is today. Its assertions must not
+// change when dated sessions arrive; C5 moves adherence on purpose.
+describe("C9: weekly sync adherence counts sessions over program slots", () => {
+  let lifter: string;
+  let week2Cycle: number;
+  let programId: number;
+  const day = (offset: number) => toDateStr(addDays(new Date(), offset));
+
+  beforeEach(async () => {
+    lifter = (await createUser()).id;
+    asUser(lifter);
+    const { program } = await createProgram(lifter, [
+      { exerciseId, sets: [{ targetReps: null, weightKg: "0", distanceMeters: 3000, peakDistanceMeters: 5000 }] },
+    ]);
+    programId = program.id;
+    const [c] = await db
+      .insert(trainingCycles)
+      .values({ userId: lifter, name: "Week 2", durationWeeks: 8, goal: "maintain", status: "active", startDate: day(-8) })
+      .returning();
+    week2Cycle = c.id;
+    // One program on two days: two scheduled sessions a week.
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: week2Cycle, dayOfWeek: 1, programId },
+      { trainingCycleId: week2Cycle, dayOfWeek: 4, programId },
+    ]);
+  });
+
+  /** A completed session `daysAgo` back, with one logged set unless `empty`. */
+  async function logged(daysAgo: number, opts: { empty?: boolean; source?: "app" | "auto" } = {}) {
+    const s = await createSession(lifter, programId, {
+      date: day(-daysAgo),
+      startTime: addDays(new Date(), -daysAgo),
+      isCompleted: true,
+      source: opts.source ?? "app",
+    });
+    if (!opts.empty) {
+      await db.insert(workoutSets).values({ sessionId: s.id, exerciseId, setNumber: 1, actualReps: 1, weightKg: "0", restTimeSeconds: 60 });
+    }
+  }
+
+  const pct = async () => {
+    await syncActiveCyclePeriodization();
+    return (await db.select().from(trainingCycles).where(eq(trainingCycles.id, week2Cycle)))[0].adaptationPct;
+  };
+
+  it("eases 10% with one of two sessions done", async () => {
+    await logged(1);
+    expect(await pct()).toBe(90);
+  });
+
+  it("boosts 5% with both done", async () => {
+    await logged(1);
+    await logged(3);
+    expect(await pct()).toBe(105);
+  });
+
+  it("does not count a session with no sets", async () => {
+    await logged(1);
+    await logged(3, { empty: true });
+    expect(await pct()).toBe(90);
+  });
+
+  it("counts an auto day, which has no sets by design", async () => {
+    await logged(1);
+    await logged(3, { empty: true, source: "auto" });
+    expect(await pct()).toBe(105);
+  });
+
+  it("does not count a session older than 7 days", async () => {
+    await logged(1);
+    await logged(8);
+    expect(await pct()).toBe(90);
   });
 });

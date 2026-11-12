@@ -7,6 +7,8 @@ import { and, eq, isNull } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { mcpTools } from "./mcp-call";
+import { asUser } from "./setup";
+import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 
 /** A day relative to today, on the server's clock (no user time zone is set). */
 const day = (offset: number) => toDateStr(addDays(new Date(), offset));
@@ -131,6 +133,24 @@ describe("confirm_session", () => {
     expect((await call("confirm_session", { date: day(1), programId })).raw).toContain("future");
     expect((await call("confirm_session", { date: day(-11), programId })).raw).toContain("before the cycle started");
     expect(await sessionsOf(me)).toEqual([]);
+  });
+
+  // Characterization test for package C2 (docs/plans/sessions.md, 8.1, C11).
+  it("takes a confirmed day off the missed list, once", async () => {
+    // The last Tuesday before today (the slot's day), within the 7-day window.
+    const back = [1, 2, 3, 4, 5, 6, 7].find((o) => addDays(new Date(), -o).getDay() === 2)!;
+    asUser(me);
+    const missedDates = async () => {
+      const r = await getActiveCycleForUser();
+      if (!r.success) throw new Error(r.error);
+      return r.data!.missedSlots.map((m) => m.date);
+    };
+    expect(await missedDates()).toContain(day(-back));
+    const call = mcpTools(registerSessionTools, me);
+    expect((await call("confirm_session", { date: day(-back), programId })).isError).toBe(false);
+    expect((await call("confirm_session", { date: day(-back), programId })).data).toMatchObject({ already: true });
+    expect(await missedDates()).not.toContain(day(-back));
+    expect((await sessionsOf(me)).filter((s) => s.source === "auto")).toHaveLength(1);
   });
 
   it("does not reach another user's cycle", async () => {
