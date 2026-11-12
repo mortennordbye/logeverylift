@@ -56,7 +56,13 @@ type WorkoutSessionContextValue = {
   programId: number | null;
   startTime: string | null;
   workoutPath: string | null;
-  setActiveWorkout: (programId: number, startTime: string, sessionId?: number) => void;
+  setActiveWorkout: (programId: number, startTime: string, sessionId?: number, planVersion?: number | null) => void;
+  /**
+   * The program's version when the workout started. The finish flush sends it
+   * so the server can tell a plan changed in the meantime (T9). Null for a
+   * workout started before this was stored.
+   */
+  planVersion: number | null;
   clearActiveWorkout: () => void;
   /**
    * False until the mount effect has restored the session, rest timers and
@@ -80,6 +86,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
   const [lastWorkoutPath, setLastWorkoutPath] = useState<string | null>(null);
   const restTimeoutRefs = useRef<Record<number, ReturnType<typeof setTimeout>>>({});
   const [programId, setProgramId] = useState<number | null>(null);
+  const [planVersion, setPlanVersion] = useState<number | null>(null);
   const [startTime, setStartTime] = useState<string | null>(null);
   const [workoutPath, setWorkoutPath] = useState<string | null>(null);
   const [readiness, setReadinessState] = useState<number | null>(null);
@@ -89,10 +96,11 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       try {
-        const { programId: pid, startTime: st, sessionId: sid } = JSON.parse(raw) as {
+        const { programId: pid, startTime: st, sessionId: sid, planVersion: pv } = JSON.parse(raw) as {
           programId: number;
           startTime: string;
           sessionId: number | null;
+          planVersion?: number | null;
         };
         // Discard stale sessions: they would show a wildly incorrect elapsed
         // timer with no way to resume meaningfully.
@@ -108,6 +116,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
           setStartTime(st);
           setWorkoutPath(`/programs/${pid}/workout`);
           if (sid != null) setSessionId(sid);
+          setPlanVersion(pv ?? null);
         }
       } catch {
         localStorage.removeItem(STORAGE_KEY);
@@ -217,9 +226,13 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     });
   };
 
-  const setActiveWorkout = (pid: number, st: string, sid?: number) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ programId: pid, startTime: st, sessionId: sid ?? null }));
+  const setActiveWorkout = (pid: number, st: string, sid?: number, pv?: number | null) => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ programId: pid, startTime: st, sessionId: sid ?? null, planVersion: pv ?? null }),
+    );
     setProgramId(pid);
+    setPlanVersion(pv ?? null);
     setStartTime(st);
     setWorkoutPath(`/programs/${pid}/workout`);
     if (sid != null) setSessionId(sid);
@@ -259,6 +272,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     Object.values(restTimeoutRefs.current).forEach(clearTimeout);
     restTimeoutRefs.current = {};
     setProgramId(null);
+    setPlanVersion(null);
     setStartTime(null);
     setWorkoutPath(null);
     setSessionId(null);
@@ -286,6 +300,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
         lastWorkoutPath,
         updateLastWorkoutPath,
         programId,
+        planVersion,
         startTime,
         workoutPath,
         setActiveWorkout,

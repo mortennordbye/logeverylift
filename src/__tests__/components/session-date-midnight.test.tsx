@@ -46,7 +46,7 @@ afterEach(() => {
 
 async function startedDate(timeZone: string | null): Promise<string> {
   await act(async () => {
-    render(<WorkoutSessionInitializer programId={7} timeZone={timeZone} />);
+    render(<WorkoutSessionInitializer programId={7} timeZone={timeZone} planVersion={null} />);
   });
   expect(createWorkoutSession).toHaveBeenCalledTimes(1);
   return createWorkoutSession.mock.calls[0][0].date;

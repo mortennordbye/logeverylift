@@ -71,6 +71,20 @@ export function mergeReplayed<T extends Retryable>(current: T[], replayed: T[], 
   });
 }
 
+/**
+ * What a replayed write's result means for its queue item. A conflict is
+ * final: the plan changed since the write was based on it, the server kept
+ * the newer plan and recorded the change in the history, so sending it again
+ * can never succeed and must not count towards a drop. Only plan writes from
+ * the finish flush can conflict; logged sets never do
+ * (docs/plans/revisions.md, 2.7).
+ */
+export function replayOutcome(result: { success: boolean; conflict?: unknown }): "done" | "conflict" | "retry" {
+  if (result.success) return "done";
+  if (!result.success && result.conflict) return "conflict";
+  return "retry";
+}
+
 /** "now" if something is due, else ms until the soonest item is, else null. */
 export function nextReplayIn(queue: Retryable[], now: number): "now" | number | null {
   if (queue.length === 0) return null;

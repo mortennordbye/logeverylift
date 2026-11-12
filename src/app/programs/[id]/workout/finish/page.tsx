@@ -6,6 +6,7 @@ import {
 } from "@/lib/actions/workout-sessions";
 import { deleteWorkoutSession } from "@/lib/actions/workout-sets";
 import { updateProgramSet } from "@/lib/actions/programs";
+import { finishFlushPayloads } from "@/lib/utils/finish-flush";
 import { usePendingQueue } from "@/contexts/pending-queue-context";
 import { useToast } from "@/contexts/toast-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
@@ -53,15 +54,9 @@ function FinishContent() {
     const existingSessionId = workoutSession?.sessionId;
     const isOffline = typeof navigator !== "undefined" && navigator.onLine === false;
     // Per-set overrides (weight/reps edited during the workout) are flushed
-    // back to the program template so the next session starts from them.
-    const overrideWrites = Object.entries(workoutSession?.overrides ?? {}).map(
-      ([setId, ov]) => ({
-        id: Number(setId),
-        targetReps: ov.targetReps,
-        weightKg: ov.weightKg,
-        ...(ov.durationSeconds != null ? { durationSeconds: ov.durationSeconds } : {}),
-      }),
-    );
+    // back to the program template so the next session starts from them, with
+    // the version the workout started on (T9).
+    const overrideWrites = finishFlushPayloads(workoutSession?.overrides ?? {}, workoutSession?.planVersion ?? null);
     // The client's end time, not the server's clock at write time: a queued
     // finish that replays hours later must still record when the workout
     // actually ended, or the session's duration is wrong.
@@ -97,7 +92,17 @@ function FinishContent() {
     // starting weights, not this session's data, so it must not block the
     // save. The session write below is the one that matters.
     try {
-      await Promise.all(overrideWrites.map((payload) => updateProgramSet(payload)));
+      const flushed = await Promise.all(overrideWrites.map((payload) => updateProgramSet(payload)));
+      const conflicts = flushed.filter((r) => !r.success && r.conflict).length;
+      if (conflicts > 0) {
+        showToast({
+          durationMs: 8000,
+          message:
+            conflicts === 1
+              ? "One plan change from this workout was not applied, because the plan changed in the meantime. See the program's history."
+              : `${conflicts} plan changes from this workout were not applied, because the plan changed in the meantime. See the program's history.`,
+        });
+      }
     } catch (err) {
       console.error("[finish] override flush failed", err);
     }

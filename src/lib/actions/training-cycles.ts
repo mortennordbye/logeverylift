@@ -344,7 +344,7 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
     return {
       success: true,
       data: {
-        cycle: cycle as unknown as TrainingCycleWithSlots,
+        cycle: { ...cycle, slots } as unknown as TrainingCycleWithSlots,
         todaySlot,
         currentWeek,
         endDate: endDateStr,
