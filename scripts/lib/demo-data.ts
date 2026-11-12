@@ -7,7 +7,7 @@
  * a spec that passes on one random draw and fails on the next is not a test.
  */
 
-import { inArray } from "drizzle-orm";
+import { and, inArray, isNull } from "drizzle-orm";
 import type { NodePgDatabase } from "drizzle-orm/node-postgres";
 import * as schema from "../../src/db/schema";
 import {
@@ -193,7 +193,7 @@ export async function seedDemoData(
   const exerciseRows = await db
     .select({ id: exercises.id, name: exercises.name })
     .from(exercises)
-    .where(inArray(exercises.name, exerciseNames));
+    .where(and(inArray(exercises.name, exerciseNames), isNull(exercises.userId)));
 
   const exerciseIdByName = new Map(exerciseRows.map((e) => [e.name, e.id]));
 

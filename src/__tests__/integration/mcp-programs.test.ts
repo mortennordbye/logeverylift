@@ -167,3 +167,51 @@ describe("edit_program_exercise update with an exerciseId", () => {
     }
   });
 });
+
+describe("edit_program_exercise on a set the weekly sync owns", () => {
+  // A "work" set with a peak anchor: the sync sets its zone and rest by phase.
+  async function workSet() {
+    const run = await createExercise({ category: "cardio", discipline: "run" });
+    const { program, slots } = await createProgram(me, [
+      {
+        exerciseId: run.id,
+        sets: [{ durationSeconds: 300, peakDurationSeconds: 300, sessionRole: "work", targetHeartRateZone: 4, restTimeSeconds: 120, targetReps: null }],
+      },
+    ]);
+    return { programId: program.id, programExerciseId: slots[0].programExerciseId, setId: slots[0].setIds[0] };
+  }
+  const update = (w: Awaited<ReturnType<typeof workSet>>, set: Record<string, unknown>) =>
+    toolsFor(me)("edit_program_exercise", {
+      operation: "update",
+      programExerciseId: w.programExerciseId,
+      sets: [{ id: w.setId, setNumber: 1, durationSeconds: 300, ...set }],
+      reason: "Test",
+      expectedVersion: 1,
+    });
+
+  it("refuses a different zone or rest and changes nothing", async () => {
+    const w = await workSet();
+    const zone = await update(w, { targetHeartRateZone: 3 });
+    expect(zone.isError).toBe(true);
+    expect(zone.raw).toContain("send sessionRole: null");
+    expect((await update(w, { restTimeSeconds: 60 })).isError).toBe(true);
+    const [set] = await setsOf(w.programExerciseId);
+    expect(set).toMatchObject({ targetHeartRateZone: 4, restTimeSeconds: 120, sessionRole: "work" });
+  });
+
+  it("keeps the sync's zone and rest when the set list leaves them out", async () => {
+    const w = await workSet();
+    const result = await update(w, { durationSeconds: 360 });
+    expect(result.isError, result.raw).toBeFalsy();
+    const [set] = await setsOf(w.programExerciseId);
+    expect(set).toMatchObject({ durationSeconds: 360, targetHeartRateZone: 4, restTimeSeconds: 120 });
+  });
+
+  it("applies them once sessionRole null takes the set out of the sync's control", async () => {
+    const w = await workSet();
+    const result = await update(w, { sessionRole: null, targetHeartRateZone: 2, restTimeSeconds: 30 });
+    expect(result.isError, result.raw).toBeFalsy();
+    const [set] = await setsOf(w.programExerciseId);
+    expect(set).toMatchObject({ sessionRole: null, targetHeartRateZone: 2, restTimeSeconds: 30 });
+  });
+});

@@ -77,6 +77,13 @@ export function AssistantsClient({ assistants }: { assistants: Assistant[] }) {
         Assistant changes
         <span className="text-muted-foreground">›</span>
       </Link>
+      <Link
+        href="/more/coach-memory"
+        className="mt-2 flex items-center justify-between rounded-xl bg-card px-4 min-h-[44px] text-sm font-medium active:opacity-60"
+      >
+        Coach memory
+        <span className="text-muted-foreground">›</span>
+      </Link>
 
       <BottomSheet open={confirming !== null} onClose={() => setConfirming(null)} blur>
         <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4">

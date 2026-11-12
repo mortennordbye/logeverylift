@@ -8,6 +8,7 @@ import { LEGAL_VERSION } from "../../src/lib/constants/legal";
 import {
   aiGenerations,
   aiSetupPlans,
+  coachMemory,
   customWeightUsage,
   dismissedMakeups,
   exerciseNotes,
@@ -73,6 +74,7 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(trainingCycles).where(eq(trainingCycles.userId, userId));
     await tx.delete(programs).where(eq(programs.userId, userId));
     await tx.delete(planRevisions).where(eq(planRevisions.userId, userId));
+    await tx.delete(coachMemory).where(eq(coachMemory.userId, userId));
     await tx.delete(aiSetupPlans).where(eq(aiSetupPlans.userId, userId));
     await tx.delete(aiGenerations).where(eq(aiGenerations.userId, userId));
     await tx.delete(customWeightUsage).where(eq(customWeightUsage.userId, userId));

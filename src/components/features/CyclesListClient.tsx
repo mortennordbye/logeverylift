@@ -61,9 +61,15 @@ function DraftCycleRow({ cycle }: { cycle: TrainingCycle }) {
         <span className="text-sm font-medium">{cycle.name}</span>
         <span className="text-xs text-muted-foreground ml-2">· {cycle.durationWeeks} weeks</span>
       </div>
-      <span className="text-xs text-muted-foreground capitalize">
-        {cycle.scheduleType === "day_of_week" ? "Day of week" : "Rotation"}
-      </span>
+      {cycle.scheduledStartDate ? (
+        <span className="text-xs font-medium text-primary" data-testid="scheduled-start">
+          Starts {parseDateStr(cycle.scheduledStartDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+        </span>
+      ) : (
+        <span className="text-xs text-muted-foreground capitalize">
+          {cycle.scheduleType === "day_of_week" ? "Day of week" : "Rotation"}
+        </span>
+      )}
     </Link>
   );
 }

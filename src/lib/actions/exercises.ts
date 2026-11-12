@@ -2,6 +2,7 @@
 
 import { db } from "@/db";
 import { exerciseNotes, exercises, programExercises, programs, workoutSessions, workoutSets } from "@/db/schema";
+import { createCustomExerciseFor } from "@/lib/custom-exercises";
 import { getSystemExercises } from "@/lib/data/exercises";
 import { liveProgramExercises, livePrograms } from "@/lib/plan-live";
 import { requireSession } from "@/lib/utils/session";
@@ -54,43 +55,13 @@ export async function createCustomExercise(
       };
     }
 
-    const { name, category, bodyArea, muscleGroup, equipment, movementPattern, exerciseType } = validation.data;
-
-    // Name must not clash with a system exercise or the user's own custom exercises.
-    const existing = await db.query.exercises.findFirst({
-      where: (ex, { eq, or, isNull, and }) =>
-        and(
-          eq(ex.name, name),
-          or(isNull(ex.userId), eq(ex.userId, auth.user.id)),
-        ),
-    });
-
-    if (existing) {
-      return {
-        success: false,
-        error: "An exercise with this name already exists",
-      };
-    }
-
-    const [exercise] = await db
-      .insert(exercises)
-      .values({
-        name,
-        category,
-        isCustom: true,
-        userId: auth.user.id,
-        bodyArea,
-        muscleGroup,
-        equipment,
-        movementPattern,
-        exerciseType,
-      })
-      .returning();
+    const result = await createCustomExerciseFor(auth.user.id, validation.data);
+    if (!result.success) return result;
 
     // The picker routes render this list server-side. Callers also call
     // router.refresh(), but invalidation should not depend on them doing so.
     revalidatePath("/exercises");
-    return { success: true, data: exercise };
+    return result;
   } catch (error) {
     console.error("[createCustomExercise] failed", error);
     return { success: false, error: "Failed to create exercise. Please try again." };
@@ -183,7 +154,7 @@ export async function updateCustomExercise(
       };
     }
 
-    const { name, category, bodyArea, muscleGroup, equipment, movementPattern, exerciseType } = validation.data;
+    const { name, category, bodyArea, muscleGroup, equipment, movementPattern, exerciseType, discipline, isTimed } = validation.data;
 
     // Verify ownership
     const existing = await db.query.exercises.findFirst({
@@ -210,7 +181,18 @@ export async function updateCustomExercise(
 
     const [updated] = await db
       .update(exercises)
-      .set({ name, category, bodyArea: bodyArea ?? null, muscleGroup: muscleGroup ?? null, equipment: equipment ?? null, movementPattern: movementPattern ?? null, exerciseType: exerciseType ?? null })
+      .set({
+        name,
+        category,
+        bodyArea: bodyArea ?? null,
+        muscleGroup: muscleGroup ?? null,
+        equipment: equipment ?? null,
+        movementPattern: movementPattern ?? null,
+        exerciseType: exerciseType ?? null,
+        // Left as they are when the caller does not send them.
+        ...(discipline !== undefined && { discipline }),
+        ...(isTimed !== undefined && { isTimed }),
+      })
       .where(and(eq(exercises.id, id), eq(exercises.userId, auth.user.id)))
       .returning();
 

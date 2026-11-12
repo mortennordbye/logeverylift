@@ -65,7 +65,9 @@ export const workoutSessions = pgTable("workout_sessions", {
   intendedDate: date("intended_date"),
   // "auto" = written by the app for a cycle day marked autoComplete (tracked
   // outside the app). Such a session has no sets and zero duration.
-  source: text("source", { enum: ["app", "auto"] }).default("app").notNull(),
+  // "assistant" = logged by the user's connected AI assistant (MCP log_session);
+  // otherwise it reads like an "app" session.
+  source: text("source", { enum: ["app", "auto", "assistant"] }).default("app").notNull(),
 }, (t) => [
   index("idx_ws_user_completed_start").on(t.userId, t.isCompleted, t.startTime),
   // At most one auto session per program per day, so concurrent renders of

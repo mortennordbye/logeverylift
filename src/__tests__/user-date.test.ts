@@ -1,5 +1,5 @@
 import { toDateStr } from "@/lib/utils/cycle-position";
-import { isValidTimeZone, localDateStr, todayIn, weekDatesOf } from "@/lib/utils/user-date";
+import { isValidTimeZone, localDateStr, todayIn, weekDatesOf, instantInZone } from "@/lib/utils/user-date";
 import { describe, expect, it } from "vitest";
 
 describe("localDateStr", () => {
@@ -67,3 +67,23 @@ describe("isValidTimeZone", () => {
     expect(isValidTimeZone("Mars/Olympus")).toBe(false);
   });
 });
+
+describe("instantInZone", () => {
+  it("is the clock time on that day in the zone", () => {
+    expect(instantInZone("2026-11-12", 12, 0, "Europe/Oslo").toISOString()).toBe("2026-11-12T11:00:00.000Z");
+    expect(instantInZone("2026-07-01", 12, 0, "Europe/Oslo").toISOString()).toBe("2026-07-01T10:00:00.000Z");
+    expect(instantInZone("2026-11-12", 12, 0, "Pacific/Kiritimati").toISOString()).toBe("2026-11-11T22:00:00.000Z");
+    expect(instantInZone("2026-11-12", 9, 30, "America/New_York").toISOString()).toBe("2026-11-12T14:30:00.000Z");
+  });
+
+  it("settles on the day a zone changes its clock", () => {
+    // Europe/Oslo leaves summer time on 2026-10-25 at 03:00.
+    expect(instantInZone("2026-10-25", 12, 0, "Europe/Oslo").toISOString()).toBe("2026-10-25T11:00:00.000Z");
+    expect(instantInZone("2026-03-29", 12, 0, "Europe/Oslo").toISOString()).toBe("2026-03-29T10:00:00.000Z");
+  });
+
+  it("uses the runtime's zone without one", () => {
+    expect(instantInZone("2026-11-12", 12, 0, null).getTime()).toBe(new Date(2026, 10, 12, 12, 0).getTime());
+  });
+});
+

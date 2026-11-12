@@ -582,6 +582,13 @@
       "when": 1794505557858,
       "tag": "0082_plan_revisions",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1794509483745,
+      "tag": "0083_ai_coach",
+      "breakpoints": true
     }
   ]
 }

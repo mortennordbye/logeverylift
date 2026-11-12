@@ -8,11 +8,30 @@
 import { db } from "@/db";
 import { programs, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
+import { enduranceEnabledFor } from "@/lib/endurance";
+import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
 import { REVISION_RULES, assistantContext, expectedVersionArg, planErrorResult, reasonArg } from "@/lib/mcp/revisions";
 import { liveCycles, livePrograms, liveSlotProgram } from "@/lib/plan-live";
-import { activateCycle, deleteCycles, planWrite, versionKey } from "@/lib/plan-revisions";
+import {
+  activateCycle,
+  deleteCycles,
+  planWrite,
+  scheduleCycle,
+  startDueScheduledCycle,
+  versionKey,
+} from "@/lib/plan-revisions";
+import { syncPeriodizedTargets } from "@/lib/periodization-sync";
+import {
+  LimitRefusedError,
+  NO_FACTS,
+  cycleScope,
+  evaluateLimits,
+  limitContext,
+  planFacts,
+  withLimits,
+} from "@/lib/training-limits";
 import { userToday } from "@/lib/user-settings";
-import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
+import { addDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq } from "drizzle-orm";
@@ -25,6 +44,16 @@ const durationWeeks = z
     message: `Duration must be one of ${CYCLE_DURATION_WEEKS.join(", ")} weeks`,
   });
 const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
+const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+
+/** How far ahead a block can be scheduled to start. */
+export const MAX_SCHEDULE_DAYS = 120;
+/** The range of an assistant's one-week volume change (set_volume). */
+export const SET_VOLUME_MIN = 50;
+export const SET_VOLUME_MAX = 110;
+
+const ENDURANCE_FIELDS_OFF =
+  "Race, goal and athlete level are part of the endurance features, which are not on for this account. Only an admin can turn them on.";
 
 /** Returns the owning userId for a live cycle, or null if not found. */
 async function cycleOwner(cycleId: number) {
@@ -50,6 +79,8 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     },
     async () => {
       try {
+        // A block scheduled for today becomes active on the first read, as in the app.
+        await startDueScheduledCycle(userId);
         const rows = await db
           .select()
           .from(trainingCycles)
@@ -72,6 +103,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     },
     async ({ cycleId }) => {
       try {
+        await startDueScheduledCycle(userId);
         const cycle = await db.query.trainingCycles.findFirst({
           where: and(
             eq(trainingCycles.id, cycleId),
@@ -92,16 +124,20 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     "manage_training_cycle",
     {
       description: [
-        "Create, update, delete, or start a training cycle.",
-        `operation='create': requires name and durationWeeks (${CYCLE_DURATION_WEEKS.join("/")}); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage.`,
-        "operation='update': requires cycleId; any of name, durationWeeks, endAction, endMessage, status ('draft'|'active'|'completed') are applied.",
+        "Create, update, delete, start or schedule a training cycle, or change this week's volume.",
+        `operation='create': requires name and durationWeeks (${CYCLE_DURATION_WEEKS.join("/")}); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage, and the endurance fields below.`,
+        "operation='update': requires cycleId; any of name, durationWeeks, endAction, endMessage, status ('draft'|'active'|'completed'), the endurance fields, and scheduledStartDate: null (cancels a scheduled start) are applied.",
+        "Endurance fields (need the user's endurance features on): raceDate (YYYY-MM-DD) and raceDistance ('full' Ironman or 'half' 70.3), null to clear; goal ('build' ramps endurance volume to a peak then tapers, 'maintain' holds it flat); athleteLevel ('novice' recovers every 3rd week, 'intermediate'/'advanced' every 4th). A new goal or level re-derives this week's targets.",
         "operation='delete': requires cycleId. The cycle and the programs it generated can be restored in the app for 90 days, and with restore_revision.",
-        "operation='start': requires cycleId — marks it active (completing any other active cycle) and sets startDate to today.",
-        `Every operation requires reason; update, delete and start also require expectedVersion (the cycle's version). The result has the new version. ${REVISION_RULES}`,
+        `operation='start': requires cycleId. Without startDate, or with today, it becomes active now (completing any other active cycle). With a later startDate (up to ${MAX_SCHEDULE_DAYS} days ahead) it stays a draft scheduled to start that day; on that day it becomes active and the old block completes. Only one cycle is scheduled at a time.`,
+        `operation='set_volume': requires cycleId (the active cycle) and pct (${SET_VOLUME_MIN}-${SET_VOLUME_MAX}): this week's endurance volume as a percent of the block's curve, the same factor the weekly sync sets from adherence and readiness (adaptationPct). It rewrites this week's distances and durations at once and lasts one week: next week's sync computes its own percent. For a lasting change, edit the peaks with edit_program_exercise.`,
+        `Every operation requires reason; all but create also require expectedVersion (the cycle's version). The result has the new version. ${REVISION_RULES}`,
+        `On start, set_volume, and an update to durationWeeks, goal or athleteLevel of the active or a scheduled cycle: ${LIMITS_TEXT}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
-        operation: z.enum(["create", "update", "delete", "start"]),
+        ...overrideArgs,
+        operation: z.enum(["create", "update", "delete", "start", "set_volume"]),
         cycleId: z.number().int().positive().optional(),
         name: z.string().min(1).max(100).optional(),
         durationWeeks: durationWeeks.optional(),
@@ -109,13 +145,31 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         endAction: endActionEnum.optional(),
         endMessage: z.string().max(500).nullable().optional(),
         status: z.enum(["draft", "active", "completed"]).optional(),
+        raceDate: dateArg.nullable().optional(),
+        raceDistance: z.enum(["full", "half"]).nullable().optional(),
+        goal: z.enum(["build", "maintain"]).optional(),
+        athleteLevel: z.enum(["novice", "intermediate", "advanced"]).nullable().optional(),
+        startDate: dateArg.optional(),
+        scheduledStartDate: z.null().optional(),
+        pct: z.number().int().min(SET_VOLUME_MIN).max(SET_VOLUME_MAX).optional(),
         reason: reasonArg,
         expectedVersion: expectedVersionArg.optional(),
       },
     },
     async (args) => {
       const ctx = assistantContext(userId, clientId, args.reason);
+      const override = overrideFrom(args);
+      if (typeof override === "string") return fail(override);
+      // The endurance fields, as the cycle form gates the race (D18).
+      const endurance: Record<string, unknown> = {};
+      if (args.raceDate !== undefined) endurance.raceDate = args.raceDate;
+      if (args.raceDistance !== undefined) endurance.raceDistance = args.raceDistance;
+      if (args.goal !== undefined) endurance.goal = args.goal;
+      if (args.athleteLevel !== undefined) endurance.athleteLevel = args.athleteLevel;
       try {
+        if (Object.keys(endurance).length > 0 && !(await enduranceEnabledFor(userId))) {
+          return fail(ENDURANCE_FIELDS_OFF);
+        }
         if (args.operation === "create") {
           if (!args.name || args.durationWeeks == null) {
             return fail("name and durationWeeks are required to create a cycle");
@@ -132,6 +186,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
                 scheduleType: args.scheduleType ?? "day_of_week",
                 endAction: args.endAction ?? "none",
                 endMessage: args.endMessage ?? null,
+                ...endurance,
               })
               .returning();
             w.create({ type: "cycle", id: row.id });
@@ -186,17 +241,54 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
           if (args.endAction !== undefined) updates.endAction = args.endAction;
           if (args.endMessage !== undefined) updates.endMessage = args.endMessage;
           if (args.status !== undefined) updates.status = args.status;
+          if (args.scheduledStartDate === null) updates.scheduledStartDate = null;
+          Object.assign(updates, endurance);
+          // A new goal or level changes every week's targets, like a new length.
+          if (
+            (args.goal !== undefined && args.goal !== existing.goal) ||
+            (args.athleteLevel !== undefined && args.athleteLevel !== existing.athleteLevel)
+          ) {
+            updates.lastSyncedWeek = null;
+          }
 
-          await planWrite(ctx, async (w) => {
+          // A new length, goal or level rescales this week's periodized targets
+          // at the next sync (as the app, unchecked), so the limits look at the
+          // week as it will run now (docs/plans/ai-coach.md, 2.4).
+          // A scheduled draft starts later as the app, unchecked, so its first
+          // week is checked the same way, at the old and the new settings.
+          let limits: ReturnType<typeof limitSummary> | undefined;
+          const running = existing.status === "active" && existing.startDate;
+          const scheduled = existing.status === "draft" && existing.scheduledStartDate;
+          if (updates.lastSyncedWeek === null && (running || scheduled)) {
+            const settings = {
+              durationWeeks: args.durationWeeks ?? existing.durationWeeks,
+              goal: args.goal ?? existing.goal,
+              athleteLevel: args.athleteLevel !== undefined ? args.athleteLevel : existing.athleteLevel,
+            };
+            const week = running
+              ? cycleWeek(parseDateStr(existing.startDate!), settings.durationWeeks, await userToday(userId)).currentWeek
+              : 1;
+            const pct = running ? existing.adaptationPct : 100;
+            const lc = await limitContext(userId);
+            const scoped = await cycleScope(cycleId, week, pct, settings);
+            const old = running ? null : await cycleScope(cycleId, 1, 100);
+            const before = lc.endurance && scoped ? await planFacts(db, scoped.scope, old?.share ?? null) : NO_FACTS;
+            const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
+            const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
+            if (blocking.length) throw new LimitRefusedError(blocking);
+            ctx.limitCheck = check;
+            limits = limitSummary(check, unusedOverrides);
+          }
+
+          const { versions } = await planWrite(ctx, async (w) => {
             await w.touch({ type: "cycle", id: cycleId }, { expectedVersion });
             if (Object.keys(updates).length > 0) {
               await w.tx.update(trainingCycles).set(updates).where(eq(trainingCycles.id, cycleId));
             }
           });
           // plan-read: includes deleted (re-reads the row this call just wrote)
-          // plan-read: includes deleted (re-reads the row this call just wrote)
-        const [cycle] = await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId));
-          return ok(cycle);
+          const [cycle] = await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId));
+          return ok({ ...cycle, version: cycleVersion(versions, cycleId) ?? cycle.version, ...(limits && { limits }) });
         }
 
         if (args.operation === "delete") {
@@ -207,15 +299,78 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
           return ok({ deleted: true, cycleId });
         }
 
-        // start: any other active cycle completes, in one transaction.
         const owner = await cycleOwner(cycleId);
         if (!owner || owner.userId !== userId) return fail("Training cycle not found");
-        await activateCycle(ctx, cycleId, expectedVersion);
+        const today = toDateStr(await userToday(userId));
+
+        if (args.operation === "set_volume") {
+          if (args.pct == null) return fail("pct is required for set_volume");
+          // A block scheduled for today becomes the active one first.
+          await startDueScheduledCycle(userId);
+          const pct = args.pct;
+          const cycle = await db.query.trainingCycles.findFirst({
+            where: and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId), liveCycles),
+            with: { slots: { with: { program: true } } },
+          });
+          if (!cycle || cycle.status !== "active" || !cycle.startDate) return fail("set_volume works on the active cycle only");
+          const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, parseDateStr(today));
+          if (isOver) return fail("The cycle is over");
+          const lc = await limitContext(userId);
+          const scoped = await cycleScope(cycleId, currentWeek, pct);
+          const before = lc.endurance && scoped ? await planFacts(db, scoped.scope) : NO_FACTS;
+          const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
+          const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
+          if (blocking.length) throw new LimitRefusedError(blocking);
+          await syncPeriodizedTargets(
+            cycleId,
+            userId,
+            cycle.slots.map(liveSlotProgram),
+            currentWeek,
+            cycle.durationWeeks,
+            cycle.goal,
+            cycle.athleteLevel,
+            { pct, note: `Set by the assistant: ${args.reason}` },
+            { ...ctx, limitCheck: check },
+            expectedVersion,
+          );
+          audit("set_cycle_volume", { userId, cycleId, pct });
+          // plan-read: includes deleted (re-reads the row this call just wrote)
+          const [row] = await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId));
+          return ok({ cycleId, week: currentWeek, adaptationPct: row.adaptationPct, version: row.version, limits: limitSummary(check, unusedOverrides) });
+        }
+
+        // start: now, or scheduled for a later day.
+        const start = args.startDate ?? today;
+        if (start < today) return fail("startDate is in the past");
+        if (start > toDateStr(addDays(parseDateStr(today), MAX_SCHEDULE_DAYS))) {
+          return fail(`startDate is more than ${MAX_SCHEDULE_DAYS} days ahead`);
+        }
+        // The block's first week, as it will run: before, nothing of it is planned.
+        const lc = await limitContext(userId);
+        const scoped = await cycleScope(cycleId, 1);
+        const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
+        const { blocking, check, unusedOverrides } = evaluateLimits(lc, NO_FACTS, after, override);
+        if (blocking.length) throw new LimitRefusedError(blocking);
+        const checked = { ...ctx, limitCheck: check };
+        if (start > today) {
+          const { versions } = await scheduleCycle(checked, cycleId, start, expectedVersion);
+          audit("schedule_training_cycle", { userId, cycleId });
+          return ok({
+            scheduled: true,
+            cycleId,
+            startsOn: start,
+            version: cycleVersion(versions, cycleId),
+            limits: limitSummary(check, unusedOverrides),
+          });
+        }
+        // Any other active cycle completes, in one transaction.
+        await activateCycle(checked, cycleId, expectedVersion);
         audit("start_training_cycle", { userId, cycleId });
         // plan-read: includes deleted (re-reads the row this call just wrote)
         const [cycle] = await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId));
-        return ok(cycle);
+        return ok({ ...cycle, limits: limitSummary(check, unusedOverrides) });
       } catch (e) {
+        if (e instanceof LimitRefusedError) return limitRefusal(e);
         return (await planErrorResult(userId, e)) ?? failInternal("cycles", e);
       }
     },
@@ -229,9 +384,11 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         "operation='upsert': requires trainingCycleId and either dayOfWeek (1=Mon..7=Sun, for day_of_week cycles) or orderIndex (1,2,3.. for rotation cycles); optional label, programId (the program to run; null to clear), notes, autoComplete (true for a day tracked outside the app, which then completes itself; omit to leave unchanged). An existing slot at that day/position is updated, otherwise a new one is created.",
         "operation='remove': requires slotId and cycleId.",
         `Both require reason and expectedVersion (the cycle's version); the result has the new version. ${REVISION_RULES}`,
+        `On upsert: ${LIMITS_TEXT}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
+        ...overrideArgs,
         operation: z.enum(["upsert", "remove"]),
         trainingCycleId: z.number().int().positive().optional(),
         cycleId: z.number().int().positive().optional(),
@@ -248,6 +405,8 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     },
     async (args) => {
       const ctx = assistantContext(userId, clientId, args.reason);
+      const override = overrideFrom(args);
+      if (typeof override === "string") return fail(override);
       try {
         if (args.operation === "upsert") {
           const { trainingCycleId, dayOfWeek, orderIndex } = args;
@@ -297,41 +456,45 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             ...(args.autoComplete !== undefined && { autoComplete: args.autoComplete }),
           };
 
-          const { result: slot, versions } = await planWrite(ctx, async (w) => {
+          const lc = await limitContext(userId);
+          const { result: { result: slot, check, unusedOverrides }, versions } = await planWrite(ctx, async (w) => {
             const tx = w.tx;
             await w.touch({ type: "cycle", id: trainingCycleId }, { expectedVersion: args.expectedVersion });
-            let existingSlot = null;
-            if (effDay !== null) {
-              existingSlot = await tx.query.trainingCycleSlots.findFirst({
-                where: and(
-                  eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
-                  eq(trainingCycleSlots.dayOfWeek, effDay),
-                ),
-              });
-            } else if (effOrder !== null) {
-              existingSlot = await tx.query.trainingCycleSlots.findFirst({
-                where: and(
-                  eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
-                  eq(trainingCycleSlots.orderIndex, effOrder),
-                ),
-              });
-            }
+            // A slot changes the week's sessions, not the programs' runs.
+            return withLimits(w, lc, { programIds: [], cycleIds: [trainingCycleId] }, override, async () => {
+              let existingSlot = null;
+              if (effDay !== null) {
+                existingSlot = await tx.query.trainingCycleSlots.findFirst({
+                  where: and(
+                    eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
+                    eq(trainingCycleSlots.dayOfWeek, effDay),
+                  ),
+                });
+              } else if (effOrder !== null) {
+                existingSlot = await tx.query.trainingCycleSlots.findFirst({
+                  where: and(
+                    eq(trainingCycleSlots.trainingCycleId, trainingCycleId),
+                    eq(trainingCycleSlots.orderIndex, effOrder),
+                  ),
+                });
+              }
 
-            if (existingSlot) {
-              const [updated] = await tx
-                .update(trainingCycleSlots)
-                .set({ ...rest, dayOfWeek: effDay, orderIndex: effOrder })
-                .where(eq(trainingCycleSlots.id, existingSlot.id))
+              if (existingSlot) {
+                const [updated] = await tx
+                  .update(trainingCycleSlots)
+                  .set({ ...rest, dayOfWeek: effDay, orderIndex: effOrder })
+                  .where(eq(trainingCycleSlots.id, existingSlot.id))
+                  .returning();
+                return updated;
+              }
+              const [inserted] = await tx
+                .insert(trainingCycleSlots)
+                .values({ trainingCycleId, dayOfWeek: effDay, orderIndex: effOrder, ...rest })
                 .returning();
-              return updated;
-            }
-            const [inserted] = await tx
-              .insert(trainingCycleSlots)
-              .values({ trainingCycleId, dayOfWeek: effDay, orderIndex: effOrder, ...rest })
-              .returning();
-            return inserted;
+              return inserted;
+            });
           });
-          return ok({ ...slot, cycleVersion: cycleVersion(versions, trainingCycleId) });
+          return ok({ ...slot, cycleVersion: cycleVersion(versions, trainingCycleId), limits: limitSummary(check, unusedOverrides) });
         }
 
         // remove
@@ -357,6 +520,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         audit("remove_cycle_slot", { userId, cycleId, slotId });
         return ok({ removed: true, slotId, cycleVersion: cycleVersion(versions, cycleId) });
       } catch (e) {
+        if (e instanceof LimitRefusedError) return limitRefusal(e);
         return (await planErrorResult(userId, e)) ?? failInternal("cycles", e);
       }
     },

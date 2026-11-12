@@ -79,6 +79,11 @@ export const trainingCycles = pgTable("training_cycles", {
   // Slots are not soft deleted: nothing logged points at a slot, and a hidden
   // slot would block a new one on the same day (uniq_cycle_day).
   deletedAt: timestamp("deleted_at"),
+  // A draft the user or the assistant scheduled to start on this day. On that
+  // day it becomes the active cycle with this start date, and any other active
+  // cycle completes (startDueScheduledCycle). Null = not scheduled. Separate
+  // from startDate, which a draft can still hold from an earlier run.
+  scheduledStartDate: date("scheduled_start_date"),
   version: integer("version").notNull().default(1),
 }, (t) => [
   index("idx_tc_user_status").on(t.userId, t.status),

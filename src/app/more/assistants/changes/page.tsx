@@ -28,6 +28,7 @@ export default async function AssistantChangesPage() {
           clientName: s.clientName,
           when: shortDateTime(s.firstAt, timeZone),
           reasons: s.reasons,
+          overrides: s.overrides,
           objects: s.objects,
         }))}
       />

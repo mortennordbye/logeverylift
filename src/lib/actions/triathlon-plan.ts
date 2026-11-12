@@ -81,7 +81,7 @@ export async function generateTriathlonPlan(
     await db
       .insert(exercises)
       .values(ENSURED_EXERCISES.map((e) => ({ ...e, isCustom: false })))
-      .onConflictDoNothing({ target: exercises.name });
+      .onConflictDoNothing({ target: exercises.name, where: isNull(exercises.userId) });
 
     // Backfill discipline on the canonical endurance rows if a pre-existing row lacked it.
     for (const name of ENDURANCE_NAMES) {
@@ -89,14 +89,15 @@ export async function generateTriathlonPlan(
       await db
         .update(exercises)
         .set({ discipline })
-        .where(and(eq(exercises.name, name), isNull(exercises.discipline)));
+        .where(and(eq(exercises.name, name), isNull(exercises.userId), isNull(exercises.discipline)));
     }
 
     // Resolve names → ids.
     const rows = await db
       .select({ id: exercises.id, name: exercises.name })
       .from(exercises)
-      .where(inArray(exercises.name, neededNames));
+      // System rows only: another user may have a custom exercise of the same name.
+      .where(and(inArray(exercises.name, neededNames), isNull(exercises.userId)));
     const nameToId = new Map(rows.map((r) => [r.name, r.id]));
     const missing = neededNames.filter((n) => !nameToId.has(n));
     if (missing.length > 0) {

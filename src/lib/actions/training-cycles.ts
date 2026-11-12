@@ -17,9 +17,10 @@ import {
   type TrainingPhase,
 } from "@/lib/utils/periodization";
 import { applyWearableSuggestion, hasPeakAnchor, syncDueCycle, syncPeriodizedTargets } from "@/lib/periodization-sync";
+import { insertAutoSessions } from "@/lib/auto-sessions";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
-import { OpenWorkoutError, PlanNotFoundError, activateCycle, deleteCycles, planWrite, type Tx } from "@/lib/plan-revisions";
+import { OpenWorkoutError, PlanNotFoundError, activateCycle, deleteCycles, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
@@ -146,6 +147,9 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
   const auth = await requireSession();
   const userId = auth.user.id;
   try {
+    // A block scheduled to start today (or earlier) becomes the active one
+    // first, completing the old block then (docs/plans/ai-coach.md, decision 7).
+    await startDueScheduledCycle(userId);
     const cycle = await db.query.trainingCycles.findFirst({
       where: and(
         eq(trainingCycles.userId, userId),
@@ -354,36 +358,6 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
   } catch (err) {
     return { success: false, error: String(err) };
   }
-}
-
-/**
- * Write the completed source='auto' sessions for cycle days tracked outside the
- * app. Timed at noon on the day so startTime-keyed counts (weekly goal, streak)
- * and date-keyed ones agree. The uniq_ws_auto_day partial index turns a
- * concurrent duplicate into a no-op.
- */
-async function insertAutoSessions(
-  userId: string,
-  due: { date: string; programId: number }[],
-): Promise<void> {
-  if (due.length === 0) return;
-  await db
-    .insert(workoutSessions)
-    .values(
-      due.map((d) => {
-        const at = new Date(`${d.date}T12:00:00`);
-        return {
-          userId,
-          programId: d.programId,
-          date: d.date,
-          startTime: at,
-          endTime: at,
-          isCompleted: true,
-          source: "auto" as const,
-        };
-      }),
-    )
-    .onConflictDoNothing();
 }
 
 const skipAutoCompletedDaySchema = z.object({

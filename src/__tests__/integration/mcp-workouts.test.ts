@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { exercisePrs, workoutSets } from "@/db/schema";
+import { exerciseNotes, exercisePrs, workoutSets } from "@/db/schema";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -104,16 +104,25 @@ describe("the workout history tools", () => {
     expect(history.raw).toContain("No logged exercise matches");
   });
 
-  it("leaves free-text notes out", async () => {
+  it("returns session, set and exercise notes (decision D6), never another user's", async () => {
     await logSession(me, bench.id, [{ reps: 8, weightKg: "80.00", notes: "shoulder-pain-note" }], {
       notes: "bad-sleep-note",
     });
+    await db.insert(exerciseNotes).values([
+      { userId: me, exerciseId: bench.id, note: "elbows-in-note" },
+      { userId: other, exerciseId: bench.id, note: "others-note" },
+    ]);
     const call = toolsFor(me);
 
-    expect((await call("recent_workouts", { days: 7 })).raw).not.toContain("-note");
-    expect((await call("exercise_history", { exercise: "Bench", sessions: 5 })).raw).not.toContain(
-      "-note",
-    );
+    const recent = (await call("recent_workouts", { days: 7 })).data;
+    expect(recent.workouts[0].notes).toBe("bad-sleep-note");
+    expect(recent.workouts[0].exercises[0].sets[0].notes).toBe("shoulder-pain-note");
+
+    const history = await call("exercise_history", { exercise: "Bench", sessions: 5 });
+    expect(history.data.note).toBe("elbows-in-note");
+    expect(history.data.sessions[0].notes).toBe("bad-sleep-note");
+    expect(history.data.sessions[0].sets[0].notes).toBe("shoulder-pain-note");
+    expect(history.raw).not.toContain("others-note");
   });
 
   it("leaves unfinished workouts out", async () => {

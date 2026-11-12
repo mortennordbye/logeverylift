@@ -206,6 +206,11 @@ export const createExerciseSchema = z.object({
   equipment: z.enum(["barbell", "dumbbell", "machine", "cable", "bodyweight", "kettlebell", "bands", "other"]).optional(),
   movementPattern: z.enum(["push", "pull", "hinge", "squat", "carry", "rotation", "isometric", "cardio"]).optional(),
   exerciseType: z.enum(["compound", "accessory", "isolation", "plyometric", "isometric"]).optional(),
+  // Swim, bike or run for endurance exercises; the form shows it only with the
+  // endurance add-on on. The long-run limit finds runs by it.
+  discipline: z.enum(["swim", "bike", "run"]).nullable().optional(),
+  // Held for time (a plank) rather than counted in reps.
+  isTimed: z.boolean().optional(),
 });
 
 /**

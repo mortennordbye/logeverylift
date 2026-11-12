@@ -18,7 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
-export const PLAN_OBJECT_TYPES = ["program", "cycle"] as const;
+export const PLAN_OBJECT_TYPES = ["program", "cycle", "memory"] as const;
 export const PLAN_REVISION_ACTIONS = ["create", "update", "delete", "restore", "baseline", "conflict"] as const;
 export const PLAN_WRITERS = ["user", "assistant", "progression", "sync", "apply"] as const;
 
@@ -55,6 +55,9 @@ export const planRevisions = pgTable(
     snapshot: jsonb("snapshot").notNull(),
     // A conflict only: the write that was not applied.
     rejected: jsonb("rejected"),
+    // An assistant write the training limits checked: what ran, what passed,
+    // what the assistant went past on purpose and why (docs/plans/ai-coach.md, 2.4).
+    limitCheck: jsonb("limit_check"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [

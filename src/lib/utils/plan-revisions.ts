@@ -12,9 +12,21 @@ export type ExerciseSnap = Row & { exerciseName?: string | null; sets: Row[] };
 export type ProgramSnapshot = { v: 1; program: Row; exercises: ExerciseSnap[] };
 export type SlotSnap = Row & { programName?: string | null };
 export type CycleSnapshot = { v: 1; cycle: Row; slots: SlotSnap[] };
-export type PlanSnapshot = ProgramSnapshot | CycleSnapshot;
+/** A coach memory entry (docs/plans/ai-coach.md, 2.5). */
+export type MemorySnapshot = { v: 1; memory: Row };
+export type PlanSnapshot = ProgramSnapshot | CycleSnapshot | MemorySnapshot;
 
 export const isProgramSnapshot = (s: PlanSnapshot): s is ProgramSnapshot => "program" in s;
+export const isCycleSnapshot = (s: PlanSnapshot): s is CycleSnapshot => "cycle" in s;
+export const isMemorySnapshot = (s: PlanSnapshot): s is MemorySnapshot => "memory" in s;
+
+/** The name an object goes by in the history and the AI changes feed. */
+export function snapshotName(s: PlanSnapshot): string {
+  if (isProgramSnapshot(s)) return String(s.program.name);
+  if (isCycleSnapshot(s)) return String(s.cycle.name);
+  const text = String(s.memory.text);
+  return text.length > 40 ? `${text.slice(0, 39)}…` : text;
+}
 
 // ── Comparing ────────────────────────────────────────────────────────────────
 
@@ -169,6 +181,13 @@ const CYCLE_FIELDS: Record<string, string> = {
   endAction: "end action",
   endMessage: "end message",
   adaptationPct: "volume adjustment",
+  scheduledStartDate: "scheduled start",
+};
+
+const MEMORY_FIELDS: Record<string, string> = {
+  kind: "kind",
+  entryDate: "date",
+  active: "in use",
 };
 
 const DAYS = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -197,6 +216,16 @@ function exerciseLabel(e: ExerciseSnap): string {
  * set 2: weight 60 kg → 62.5 kg"). `before` null means the object was created.
  */
 export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot): string[] {
+  if (isMemorySnapshot(after)) {
+    const prev = before && isMemorySnapshot(before) ? before : null;
+    if (!prev) return [`Added ${after.memory.kind} "${snapshotName(after)}"`];
+    const out = fieldLines("", MEMORY_FIELDS, prev.memory, after.memory);
+    if (!sameValue(prev.memory.text, after.memory.text)) out.push(`Text "${snapshotName(prev)}" → "${snapshotName(after)}"`);
+    if (!sameValue(prev.memory.deletedAt ?? null, after.memory.deletedAt ?? null)) {
+      out.push(after.memory.deletedAt ? "Deleted" : "Restored");
+    }
+    return out;
+  }
   if (isProgramSnapshot(after)) {
     const prev = before && isProgramSnapshot(before) ? before : null;
     if (!prev) return [`Created "${after.program.name}"`];
@@ -226,7 +255,7 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     for (const e of prev.exercises) if (!nextEx.has(e.id)) out.push(`Removed ${exerciseLabel(e)}`);
     return out;
   }
-  const prev = before && !isProgramSnapshot(before) ? before : null;
+  const prev = before && isCycleSnapshot(before) ? before : null;
   if (!prev) return [`Created "${after.cycle.name}"`];
   const out = fieldLines("", CYCLE_FIELDS, prev.cycle, after.cycle);
   const slotKey = (s: SlotSnap) =>
@@ -252,6 +281,8 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
 
 // ── Restore (2.5, 2.6, owner decision 1) ─────────────────────────────────────
 
+/** Memory fields a restore never writes back. */
+export const MEMORY_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt"] as const;
 /** Program fields a restore never writes back. */
 export const PROGRAM_KEPT = ["id", "userId", "createdByCycleId", "createdAt"] as const;
 /** Exercise slot fields a restore never writes back (progressionConfigAt is recomputed). */
@@ -263,6 +294,7 @@ export const CYCLE_KEPT = [
   "createdAt",
   "status",
   "startDate",
+  "scheduledStartDate",
   "lastSyncedWeek",
   "adaptationPct",
   "adaptationNote",

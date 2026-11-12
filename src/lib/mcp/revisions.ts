@@ -11,15 +11,26 @@ import {
   OpenWorkoutError,
   PlanConflictError,
   PlanNotFoundError,
+  PlanStateError,
   listAssistantChangeSets,
   listRevisions,
   restoreChangeSet,
   restoreRevision,
   type PlanWriteContext,
 } from "@/lib/plan-revisions";
+import { limitSummary } from "@/lib/mcp/limits";
+import {
+  NO_FACTS,
+  limitCyclesWith,
+  cycleScope,
+  evaluateLimits,
+  limitContext,
+  planFacts,
+  type LimitScope,
+} from "@/lib/training-limits";
 import { diffSnapshots, type PlanSnapshot } from "@/lib/utils/plan-revisions";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { and, asc, eq, gt, lt, ne, desc } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt, ne, desc, max } from "drizzle-orm";
 import { z } from "zod";
 
 export const reasonArg = z
@@ -84,10 +95,17 @@ async function conflictText(userId: string, e: PlanConflictError): Promise<strin
 /** A tool result for an error from the revision layer, or null for any other error. */
 export async function planErrorResult(userId: string, e: unknown) {
   if (e instanceof PlanConflictError) return fail(await conflictText(userId, e));
-  if (e instanceof PlanNotFoundError) return fail(e.message);
+  if (e instanceof PlanNotFoundError || e instanceof PlanStateError) return fail(e.message);
   if (e instanceof OpenWorkoutError) {
     return fail("The user has a workout in progress on this plan. Try again after it is finished.");
   }
+  return null;
+}
+
+/** The limit scope of a restored program or cycle (T4: restores get warnings, never a block). */
+async function restoreScope(userId: string, type: "program" | "cycle" | "memory", id: number): Promise<LimitScope | null> {
+  if (type === "program") return { programIds: [id], cycleIds: await limitCyclesWith(db, userId, id) };
+  if (type === "cycle") return (await cycleScope(id, 1))?.scope ?? null;
   return null;
 }
 
@@ -96,12 +114,12 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "list_revisions",
     {
       description: [
-        "List the change history of one program or training cycle (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
+        "List the change history of one program, training cycle or coach memory entry (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
         "Without objectType, list your own (assistant) change sets instead: each groups the writes of one review.",
         "Use the revision id or the change-set id with restore_revision.",
       ].join(" "),
       inputSchema: {
-        objectType: z.enum(["program", "cycle"]).optional(),
+        objectType: z.enum(["program", "cycle", "memory"]).optional(),
         objectId: z.number().int().positive().optional(),
       },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -139,6 +157,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
         "Restore a program or training cycle to an earlier revision (revisionId), or undo a whole change set (changeSetId).",
         "A restore keeps all ids and never changes logged workouts. Weekly targets owned by the sync, and weights or reps the progression engine set since, keep their current values; the weekly sync runs again. A restore is itself a revision and can be restored.",
         "Requires a reason. Refused while the user has a workout in progress on the program.",
+        "A restore of one revision runs the training limits as warnings only: it is never refused for them, and the result lists any limit the restored plan breaks.",
       ].join(" "),
       inputSchema: {
         revisionId: z.number().int().positive().optional(),
@@ -151,9 +170,39 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
       const ctx = assistantContext(userId, clientId, reason);
       try {
         if (revisionId != null) {
+          const [rev] = await db
+            .select({ objectType: planRevisions.objectType, objectId: planRevisions.objectId })
+            .from(planRevisions)
+            .where(and(eq(planRevisions.id, revisionId), eq(planRevisions.userId, userId)));
+          if (!rev) return fail("Revision not found");
+          // The limits as warnings (T4): read the plan around the restore.
+          const lc = await limitContext(userId);
+          const scope = lc.endurance ? await restoreScope(userId, rev.objectType, rev.objectId) : null;
+          const before = scope ? await planFacts(db, scope) : NO_FACTS;
+          const [{ last }] = await db.select({ last: max(planRevisions.id) }).from(planRevisions).where(eq(planRevisions.userId, userId));
           const done = await restoreRevision(ctx, revisionId);
           if (!done) return fail("Revision not found");
-          return ok({ restored: true, ...done });
+          if (!scope) return ok({ restored: true, ...done });
+          const after = await planFacts(db, scope);
+          const { blocking, check } = evaluateLimits(lc, before, after, { rules: [], reason: null });
+          check.warnings = blocking;
+          check.passed = check.checked.filter((r) => !blocking.some((b) => b.rule === r));
+          // Stored on the restore's revisions, so the user sees the warning too.
+          await db
+            .update(planRevisions)
+            .set({ limitCheck: check })
+            .where(
+              and(
+                eq(planRevisions.userId, userId),
+                gt(planRevisions.id, last ?? 0),
+                // Only this restore's rows: a restore by this client, not
+                // another assistant's write that landed meanwhile.
+                eq(planRevisions.writer, "assistant"),
+                eq(planRevisions.action, "restore"),
+                clientId ? eq(planRevisions.clientId, clientId) : isNull(planRevisions.clientId),
+              ),
+            );
+          return ok({ restored: true, ...done, limits: limitSummary(check) });
         }
         if (changeSetId) {
           const done = await restoreChangeSet(ctx, changeSetId);

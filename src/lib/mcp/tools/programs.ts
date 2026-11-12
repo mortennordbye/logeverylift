@@ -17,10 +17,12 @@ import {
   reasonArg,
   registerRevisionTools,
 } from "@/lib/mcp/revisions";
+import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
 import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { deletePrograms, planWrite, softDeleteSlot, versionKey, type Tx } from "@/lib/plan-revisions";
 import { matchSets } from "@/lib/utils/plan-revisions";
 import { periodizationShare } from "@/lib/periodization-sync";
+import { LimitRefusedError, limitContext, limitCyclesWith, withLimits, type LimitScope } from "@/lib/training-limits";
 import {
   MAX_BACKOFF_AFTER,
   MAX_BACKOFF_PCT,
@@ -103,6 +105,13 @@ type SetInput = z.infer<typeof setShape>;
 
 /** Thrown inside the set-list transaction so a refused list writes nothing. */
 class SetListRefused extends Error {}
+
+/**
+ * The refusal for a write to zone or rest on a set the weekly sync owns: a
+ * "work" set with a peak anchor (docs/plans/ai-coach.md, 2.2).
+ */
+export const SYNC_OWNED_REFUSAL =
+  "The weekly sync sets targetHeartRateZone and restTimeSeconds on this set from the block phase (it is a 'work' set with a peak anchor). To set them yourself, send sessionRole: null for this set: the sync then leaves its zone and rest alone, and still scales its distance or duration.";
 
 /**
  * Rows logged against a set in the user's open sessions move with it when its
@@ -289,13 +298,15 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
         "progressionAdvance is what moves when the gate is met: 'load' adds weight, 'reps' adds reps at the same weight, 'double' works a rep range (set repRangeMin and repRangeMax on the sets), 'duration' and 'distance' for held or covered targets, 'manual' proposes nothing, 'none' turns progression off. Set targetRir on a set to require reps in reserve before a session counts.",
         "progressionMode is the retired single-axis setting. It is still accepted and mapped onto progressionAdvance, but prefer the axes.",
         "Each set takes setNumber and optional targetReps, repRangeMin and repRangeMax (both or neither, min <= targetReps <= max), targetRir (0-5), weightKg, durationSeconds, distanceMeters, inclinePercent, targetHeartRateZone (1-5), sessionRole ('work' marks a hard interval rep), startDelaySeconds (0-60, prep time before a timed set), restTimeSeconds and setType. Any other key fails the call. All values are metric.",
-        "In an active training cycle the weekly sync owns targetHeartRateZone and restTimeSeconds on sets with sessionRole 'work' and rewrites them each week from the block phase. On a set with a peak anchor, a new distanceMeters or durationSeconds sets this week's value and the peak is re-derived from it.",
+        "Field owners: target reps and weight belong to the progression engine; an edit is a one-off until the next logged session (change the progression settings to change the trend). On a set with a peak anchor, distance or duration is this week's value and the peak is re-derived from it. targetHeartRateZone and restTimeSeconds on a 'work' set with a peak anchor belong to the weekly sync: a different value is refused, and an omitted one keeps the sync's value; send sessionRole: null on that set to take them over. To make a whole week lighter or harder, use manage_training_cycle operation='set_volume', not set edits.",
         "operation='update': requires programExerciseId; any provided slot fields are updated. A new exerciseId must be a built-in exercise or one of the user's own. If sets[] is provided it becomes the slot's full set list: an entry with id updates that set, an entry without id updates the set at the same setNumber, other entries are added, and stored sets that no entry names are removed. Set ids never change, so logged workouts keep their link. A set without sessionRole keeps the role it had.",
         "operation='remove': requires programExerciseId.",
         `Every operation requires reason and expectedVersion (the program's version). The result has the program's new version. ${REVISION_RULES}`,
+        `On add and update: ${LIMITS_TEXT}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
+        ...overrideArgs,
         operation: z.enum(["add", "update", "remove"]),
         programId: z.number().int().positive().optional(),
         programExerciseId: z.number().int().positive().optional(),
@@ -353,6 +364,14 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
     },
     async (args) => {
       const ctx = assistantContext(userId, clientId, args.reason);
+      const override = overrideFrom(args);
+      if (typeof override === "string") return fail(override);
+      // The limits' scope for a write to this program: its runs, and the
+      // week of the active (or scheduled) cycle that holds it.
+      const scopeFor = async (programId: number): Promise<LimitScope> => ({
+        programIds: [programId],
+        cycleIds: await limitCyclesWith(db, userId, programId),
+      });
       try {
         if (args.operation === "add") {
           const { programId, exerciseId } = args;
@@ -375,62 +394,65 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
 
           // Insert the slot and its sets atomically — a failed sets insert must
           // not leave a slot with no sets.
-          const { result: pe, versions } = await planWrite(ctx, async (w) => {
+          const [lc, scope] = await Promise.all([limitContext(userId), scopeFor(programId)]);
+          const { result: { result: pe, check, unusedOverrides }, versions } = await planWrite(ctx, async (w) => {
             const tx = w.tx;
             await w.touch({ type: "program", id: programId }, { expectedVersion: args.expectedVersion });
-            let orderIndex = args.orderIndex;
-            if (orderIndex === undefined) {
-              const existing = await tx
-                .select({ id: programExercises.id })
-                .from(programExercises)
-                .where(and(eq(programExercises.programId, programId), liveProgramExercises));
-              orderIndex = existing.length;
-            }
-            const [inserted] = await tx
-              .insert(programExercises)
-              .values({
-                programId,
-                exerciseId,
-                orderIndex,
-                notes: args.notes ?? null,
-                progressionMode: args.progressionMode ?? "manual",
-                // The axis wins when both are given; the mode is the fallback
-                // for an agent working from the older tool description.
-                progressionAdvance:
-                  args.progressionAdvance ??
-                  ADVANCE_FOR_LEGACY_MODE[args.progressionMode ?? "manual"],
-                ...(args.progressionScope != null
-                  ? { progressionScope: args.progressionScope }
-                  : {}),
-                ...(args.progressionRegress != null
-                  ? { progressionRegress: args.progressionRegress }
-                  : {}),
-                ...(args.progressionBackoffPct != null
-                  ? { progressionBackoffPct: args.progressionBackoffPct }
-                  : {}),
-                ...(args.progressionBackoffAfter != null
-                  ? { progressionBackoffAfter: args.progressionBackoffAfter }
-                  : {}),
-                ...(args.progressionReadiness != null
-                  ? { progressionReadiness: args.progressionReadiness }
-                  : {}),
-                overloadIncrementKg:
-                  args.overloadIncrementKg != null
-                    ? args.overloadIncrementKg.toString()
-                    : null,
-                overloadIncrementReps: args.overloadIncrementReps ?? 0,
-                progressionRequiredHits: args.progressionRequiredHits ?? null,
-                progressionApplyToPlan: args.progressionApplyToPlan ?? false,
-              })
-              .returning();
-            if (args.sets && args.sets.length > 0) {
-              await tx
-                .insert(programSets)
-                .values(args.sets.map((s) => setValues(inserted.id, s)));
-            }
-            return inserted;
+            return withLimits(w, lc, scope, override, async () => {
+              let orderIndex = args.orderIndex;
+              if (orderIndex === undefined) {
+                const existing = await tx
+                  .select({ id: programExercises.id })
+                  .from(programExercises)
+                  .where(and(eq(programExercises.programId, programId), liveProgramExercises));
+                orderIndex = existing.length;
+              }
+              const [inserted] = await tx
+                .insert(programExercises)
+                .values({
+                  programId,
+                  exerciseId,
+                  orderIndex,
+                  notes: args.notes ?? null,
+                  progressionMode: args.progressionMode ?? "manual",
+                  // The axis wins when both are given; the mode is the fallback
+                  // for an agent working from the older tool description.
+                  progressionAdvance:
+                    args.progressionAdvance ??
+                    ADVANCE_FOR_LEGACY_MODE[args.progressionMode ?? "manual"],
+                  ...(args.progressionScope != null
+                    ? { progressionScope: args.progressionScope }
+                    : {}),
+                  ...(args.progressionRegress != null
+                    ? { progressionRegress: args.progressionRegress }
+                    : {}),
+                  ...(args.progressionBackoffPct != null
+                    ? { progressionBackoffPct: args.progressionBackoffPct }
+                    : {}),
+                  ...(args.progressionBackoffAfter != null
+                    ? { progressionBackoffAfter: args.progressionBackoffAfter }
+                    : {}),
+                  ...(args.progressionReadiness != null
+                    ? { progressionReadiness: args.progressionReadiness }
+                    : {}),
+                  overloadIncrementKg:
+                    args.overloadIncrementKg != null
+                      ? args.overloadIncrementKg.toString()
+                      : null,
+                  overloadIncrementReps: args.overloadIncrementReps ?? 0,
+                  progressionRequiredHits: args.progressionRequiredHits ?? null,
+                  progressionApplyToPlan: args.progressionApplyToPlan ?? false,
+                })
+                .returning();
+              if (args.sets && args.sets.length > 0) {
+                await tx
+                  .insert(programSets)
+                  .values(args.sets.map((s) => setValues(inserted.id, s)));
+              }
+              return inserted;
+            });
           });
-          return ok({ ...pe, programVersion: programVersion(versions, programId) });
+          return ok({ ...pe, programVersion: programVersion(versions, programId), limits: limitSummary(check, unusedOverrides) });
         }
 
         if (args.operation === "update") {
@@ -516,72 +538,94 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
             args.sets !== undefined ? await periodizationShare(owner.programId, userId) : 1;
 
           // The slot edits and the set diff in one transaction, as one revision.
+          const [lc, scope] = await Promise.all([limitContext(userId), scopeFor(owner.programId)]);
           let versions = new Map<string, number>();
+          let limits: ReturnType<typeof limitSummary> | null = null;
           try {
             ({ versions } = await planWrite(ctx, async (w) => {
               const tx = w.tx;
               await w.touch({ type: "program", id: owner.programId }, { expectedVersion: args.expectedVersion });
-              if (Object.keys(peUpdates).length > 0) {
-                await tx
-                  .update(programExercises)
-                  .set(peUpdates)
-                  .where(eq(programExercises.id, programExerciseId));
-              }
-              if (args.sets === undefined) return;
-              // Matched by id, then by set number, and updated in place, so ids
-              // stay and logged rows keep their link (docs/plans/revisions.md,
-              // 2.3). The anchors and the role carry over from the matched set,
-              // re-derived the way an edit in the app re-derives them (PZ-36).
-              const old = await tx
-                .select({
-                  id: programSets.id,
-                  setNumber: programSets.setNumber,
-                  distanceMeters: programSets.distanceMeters,
-                  durationSeconds: programSets.durationSeconds,
-                  peakDistanceMeters: programSets.peakDistanceMeters,
-                  peakDurationSeconds: programSets.peakDurationSeconds,
-                  sessionRole: programSets.sessionRole,
-                })
-                .from(programSets)
-                .where(and(eq(programSets.programExerciseId, programExerciseId), liveProgramSets));
-              const match = matchSets(old, args.sets);
-              if ("error" in match) {
-                // Throw, so the slot edits above roll back with it and no
-                // revision or version step is stored for a refused call.
-                throw new SetListRefused(match.error);
-              }
-              const oldById = new Map(old.map((o) => [o.id, o]));
-              for (const { id, input: s } of match.updates) {
-                const row = setValues(programExerciseId, s);
-                const prev = oldById.get(id)!;
-                const mode =
-                  row.distanceMeters != null ? "distance" : row.durationSeconds != null ? "duration" : null;
-                const peaks = mode ? reanchoredPeaks(prev, row, mode, share) : null;
-                // A role sent in the input wins; without one the old set's is kept.
-                const sessionRole = s.sessionRole !== undefined ? row.sessionRole : prev.sessionRole;
-                await tx
-                  .update(programSets)
-                  .set({ ...row, ...(peaks ?? {}), sessionRole })
-                  .where(eq(programSets.id, id));
-                if (prev.setNumber !== row.setNumber) await moveOpenSessionRows(tx, userId, id, row.setNumber);
-              }
-              if (match.inserts.length > 0) {
-                await tx
-                  .insert(programSets)
-                  .values(match.inserts.map((s) => setValues(programExerciseId, s)));
-              }
-              if (match.deletes.length > 0) {
-                await tx
-                  .update(programSets)
-                  .set({ deletedAt: new Date() })
-                  .where(inArray(programSets.id, match.deletes));
-              }
+              const { check, unusedOverrides } = await withLimits(w, lc, scope, override, async () => {
+                if (Object.keys(peUpdates).length > 0) {
+                  await tx
+                    .update(programExercises)
+                    .set(peUpdates)
+                    .where(eq(programExercises.id, programExerciseId));
+                }
+                if (args.sets === undefined) return;
+                // Matched by id, then by set number, and updated in place, so ids
+                // stay and logged rows keep their link (docs/plans/revisions.md,
+                // 2.3). The anchors and the role carry over from the matched set,
+                // re-derived the way an edit in the app re-derives them (PZ-36).
+                const old = await tx
+                  .select({
+                    id: programSets.id,
+                    setNumber: programSets.setNumber,
+                    distanceMeters: programSets.distanceMeters,
+                    durationSeconds: programSets.durationSeconds,
+                    peakDistanceMeters: programSets.peakDistanceMeters,
+                    peakDurationSeconds: programSets.peakDurationSeconds,
+                    sessionRole: programSets.sessionRole,
+                    targetHeartRateZone: programSets.targetHeartRateZone,
+                    restTimeSeconds: programSets.restTimeSeconds,
+                  })
+                  .from(programSets)
+                  .where(and(eq(programSets.programExerciseId, programExerciseId), liveProgramSets));
+                const match = matchSets(old, args.sets);
+                if ("error" in match) {
+                  // Throw, so the slot edits above roll back with it and no
+                  // revision or version step is stored for a refused call.
+                  throw new SetListRefused(match.error);
+                }
+                const oldById = new Map(old.map((o) => [o.id, o]));
+                for (const { id, input: s } of match.updates) {
+                  const row = setValues(programExerciseId, s);
+                  const prev = oldById.get(id)!;
+                  const mode =
+                    row.distanceMeters != null ? "distance" : row.durationSeconds != null ? "duration" : null;
+                  const peaks = mode ? reanchoredPeaks(prev, row, mode, share) : null;
+                  // A role sent in the input wins; without one the old set's is kept.
+                  const sessionRole = s.sessionRole !== undefined ? row.sessionRole : prev.sessionRole;
+                  // Zone and rest on a "work" set with a peak anchor are the
+                  // weekly sync's (docs/plans/ai-coach.md, 2.2): a different value
+                  // is refused, an omitted one keeps the sync's.
+                  const syncOwned =
+                    sessionRole === "work" && (prev.peakDistanceMeters != null || prev.peakDurationSeconds != null);
+                  if (syncOwned) {
+                    if (
+                      (s.targetHeartRateZone !== undefined && s.targetHeartRateZone !== prev.targetHeartRateZone) ||
+                      (s.restTimeSeconds !== undefined && s.restTimeSeconds !== prev.restTimeSeconds)
+                    ) {
+                      throw new SetListRefused(`Set ${s.setNumber}: ${SYNC_OWNED_REFUSAL}`);
+                    }
+                    row.targetHeartRateZone = prev.targetHeartRateZone;
+                    row.restTimeSeconds = prev.restTimeSeconds;
+                  }
+                  await tx
+                    .update(programSets)
+                    .set({ ...row, ...(peaks ?? {}), sessionRole })
+                    .where(eq(programSets.id, id));
+                  if (prev.setNumber !== row.setNumber) await moveOpenSessionRows(tx, userId, id, row.setNumber);
+                }
+                if (match.inserts.length > 0) {
+                  await tx
+                    .insert(programSets)
+                    .values(match.inserts.map((s) => setValues(programExerciseId, s)));
+                }
+                if (match.deletes.length > 0) {
+                  await tx
+                    .update(programSets)
+                    .set({ deletedAt: new Date() })
+                    .where(inArray(programSets.id, match.deletes));
+                }
+              });
+              limits = limitSummary(check, unusedOverrides);
             }));
           } catch (e) {
             if (e instanceof SetListRefused) return fail(e.message);
             throw e;
           }
-          return ok({ updated: true, programExerciseId, programVersion: programVersion(versions, owner.programId) });
+          return ok({ updated: true, programExerciseId, programVersion: programVersion(versions, owner.programId), limits });
         }
 
         // remove
@@ -599,6 +643,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
         audit("remove_program_exercise", { userId, programExerciseId });
         return ok({ removed: true, programExerciseId, programVersion: programVersion(versions, owner.programId) });
       } catch (e) {
+        if (e instanceof LimitRefusedError) return limitRefusal(e);
         return (await planErrorResult(userId, e)) ?? failInternal("programs", e);
       }
     },

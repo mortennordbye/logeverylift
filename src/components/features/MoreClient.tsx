@@ -4,7 +4,7 @@ import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { shareApp } from "@/lib/utils/share";
-import { Activity, BarChart2, Bot, CalendarDays, ChevronRight, Clock, FileText, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
+import { Activity, BarChart2, Bot, BookMarked, CalendarDays, ChevronRight, Clock, FileText, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -94,6 +94,12 @@ const groups: { title: string; items: MoreItem[] }[] = [
         href: "/more/assistants",
         icon: Bot,
         description: "AI assistants with access to your data",
+      },
+      {
+        label: "Coach memory",
+        href: "/more/coach-memory",
+        icon: BookMarked,
+        description: "What your assistant keeps between conversations",
       },
       {
         label: "Feedback",

@@ -213,3 +213,16 @@ describe("0081: the endurance switch starts on for those who use it", () => {
     expect(on.get(lifter.id)).toBe(false);
   });
 });
+
+describe("0083: custom exercise names are unique per user", () => {
+  it("lets two users share a custom name, and keeps system names and each user's names unique", async () => {
+    const a = await createUser();
+    const b = await createUser();
+    await createExercise({ name: "Back Squat" });
+    await createExercise({ name: "Trail run", category: "cardio", userId: a.id, isCustom: true });
+    await createExercise({ name: "Trail run", category: "cardio", userId: b.id, isCustom: true });
+
+    await expect(createExercise({ name: "Back Squat" })).rejects.toThrow();
+    await expect(createExercise({ name: "Trail run", category: "cardio", userId: a.id, isCustom: true })).rejects.toThrow();
+  });
+});

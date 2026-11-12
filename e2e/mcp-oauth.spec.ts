@@ -141,6 +141,14 @@ test("an MCP client connects through consent and calls a tool with its token", a
   const write = await rpc("tools/call", { name: "update_profile", arguments: { name: "Changed by assistant" } });
   expect(write.body.result.isError).toBe(true);
   expect(write.body.result.content[0].text).toContain("This connection is read-only");
+  // The AI coach tools are listed, and a write among them refuses here too.
+  for (const name of ["search_exercises", "log_session", "get_coach_memory", "manage_coach_memory"]) expect(tools.text).toContain(name);
+  const memory = await rpc("tools/call", {
+    name: "manage_coach_memory",
+    arguments: { operation: "add", kind: "preference", text: "Long rides on Saturday", reason: "e2e" },
+  });
+  expect(memory.body.result.isError).toBe(true);
+  expect(memory.body.result.content[0].text).toContain("This connection is read-only");
 
   // The server instructions and both resources, read from the production build.
   const init = await rpc("initialize", {

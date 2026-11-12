@@ -13,7 +13,15 @@ export type ChangeSetCard = {
   /** When the change set started, formatted in the user's zone. */
   when: string;
   reasons: string[];
-  objects: { type: "program" | "cycle"; id: number; name: string; changes: string[] }[];
+  /** Training limits the assistant went past on purpose, with its reason. */
+  overrides: string[];
+  objects: { type: "program" | "cycle" | "memory"; id: number; name: string; changes: string[] }[];
+};
+
+const HREF: Record<ChangeSetCard["objects"][number]["type"], (id: number) => string> = {
+  program: (id) => `/programs/${id}/history`,
+  cycle: (id) => `/cycles/${id}/history`,
+  memory: () => "/more/coach-memory",
 };
 
 /**
@@ -45,8 +53,8 @@ export function AssistantChangesClient({ sets }: { sets: ChangeSetCard[] }) {
   return (
     <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-3">
       <p className="text-sm text-muted-foreground">
-        Changes your assistants made to your programs and cycles, grouped by conversation. Logged workouts never
-        change.
+        Changes your assistants made to your programs, cycles and coach memory, grouped by conversation. Logged
+        workouts never change.
       </p>
       {notice && (
         <p className="text-sm" role="status">
@@ -80,10 +88,15 @@ export function AssistantChangesClient({ sets }: { sets: ChangeSetCard[] }) {
                 “{r}”
               </p>
             ))}
+            {s.overrides.map((line, i) => (
+              <p key={i} className="text-sm text-amber-700 dark:text-amber-400" data-testid="limit-override">
+                {line}
+              </p>
+            ))}
             {s.objects.map((o) => (
               <div key={`${o.type}:${o.id}`} className="text-sm">
                 <Link
-                  href={`/${o.type === "program" ? "programs" : "cycles"}/${o.id}/history`}
+                  href={HREF[o.type](o.id)}
                   className="font-medium text-primary active:opacity-60"
                 >
                   {o.name}
