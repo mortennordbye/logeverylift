@@ -55,7 +55,8 @@ const lineOf = (text: string, index: number) => text.slice(0, index).split("\n")
 describe("plan writes go through the revision layer", () => {
   it("has no write to a plan table outside a plan-write transaction", () => {
     const problems: string[] = [];
-    const WRITE = /\.(insert|update|delete)\(\s*(programs|programExercises|programSets|trainingCycles|trainingCycleSlots)\s*\)/g;
+    const WRITE =
+      /\.(insert|update|delete)\(\s*(programs|programExercises|programSets|trainingCycles|trainingCycleSlots|coachMemory|athleteProfiles|athleteThresholds|athleteInjuries)\s*\)/g;
     for (const { path, rel } of files) {
       if (WRITE_ALLOWED.has(rel)) continue;
       const text = readFileSync(path, "utf8");
@@ -76,12 +77,19 @@ describe("plan reads hide soft-deleted rows", () => {
     programExercises: /liveProgramExercises|programExercises\.deletedAt|plan-read: includes deleted/,
     programSets: /liveProgramSets|programSets\.deletedAt|plan-read: includes deleted/,
     trainingCycles: /liveCycles|trainingCycles\.deletedAt|plan-read: includes deleted/,
+    coachMemory: /coachMemory\.deletedAt|plan-read: includes deleted/,
+    athleteProfiles: /athleteProfiles\.deletedAt|plan-read: includes deleted/,
+    athleteThresholds: /athleteThresholds\.deletedAt|plan-read: includes deleted/,
+    athleteInjuries: /athleteInjuries\.deletedAt|plan-read: includes deleted/,
   };
 
   it("filters every read of programs, slots, sets and cycles", () => {
     const problems: string[] = [];
-    const READ =
-      /\.from\(\s*(programs|programExercises|programSets|trainingCycles)\s*\)|Join\(\s*(programs|programExercises|programSets|trainingCycles)\s*,|query\.(programs|programExercises|programSets|trainingCycles)\.find(?:First|Many)/g;
+    const TABLES = "programs|programExercises|programSets|trainingCycles|coachMemory|athleteProfiles|athleteThresholds|athleteInjuries";
+    const READ = new RegExp(
+      `\\.from\\(\\s*(${TABLES})\\s*\\)|Join\\(\\s*(${TABLES})\\s*,|query\\.(${TABLES})\\.find(?:First|Many)`,
+      "g",
+    );
     for (const { path, rel } of files) {
       const text = readFileSync(path, "utf8");
       for (const m of text.matchAll(READ)) {

@@ -1,0 +1,525 @@
+{
+  "cycleName": "Triathlon Build · Intermediate — 16 wk",
+  "durationWeeks": 16,
+  "goal": "build",
+  "level": "intermediate",
+  "days": [
+    {
+      "dayOfWeek": 1,
+      "label": "Workout A — Squat & Horizontal",
+      "exercises": [
+        {
+          "name": "Front Squat",
+          "progressionAdvance": "load",
+          "exerciseType": "compound",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 2.5,
+          "sets": [
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "warmup"
+            },
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Dumbbell Bench Press",
+          "progressionAdvance": "load",
+          "exerciseType": "compound",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 2.5,
+          "sets": [
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "warmup"
+            },
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Pendlay Row",
+          "progressionAdvance": "load",
+          "exerciseType": "compound",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 2.5,
+          "sets": [
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Bulgarian Split Squat",
+          "progressionAdvance": "load",
+          "exerciseType": "compound",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 1.25,
+          "sets": [
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "working"
+            },
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Seated Calf Raise",
+          "progressionAdvance": "load",
+          "exerciseType": "isolation",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 1.25,
+          "sets": [
+            {
+              "targetReps": 15,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "working"
+            },
+            {
+              "targetReps": 15,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Pallof Hold",
+          "progressionAdvance": "duration",
+          "exerciseType": "isometric",
+          "overloadIncrementReps": 0,
+          "sets": [
+            {
+              "durationSeconds": 30,
+              "startDelaySeconds": 5,
+              "weightKg": 0,
+              "restTimeSeconds": 60,
+              "setType": "working"
+            },
+            {
+              "durationSeconds": 30,
+              "startDelaySeconds": 5,
+              "weightKg": 0,
+              "restTimeSeconds": 60,
+              "setType": "working"
+            }
+          ]
+        }
+      ],
+      "autoComplete": false
+    },
+    {
+      "dayOfWeek": 2,
+      "label": "Run — Threshold Intervals",
+      "exercises": [
+        {
+          "name": "Run",
+          "progressionAdvance": "manual",
+          "overloadIncrementReps": 0,
+          "sets": [
+            {
+              "distanceMeters": 1000,
+              "peakDistanceMeters": 1600,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 90
+            },
+            {
+              "distanceMeters": 800,
+              "peakDistanceMeters": 1300,
+              "targetHeartRateZone": 4,
+              "sessionRole": "work",
+              "restTimeSeconds": 120
+            },
+            {
+              "distanceMeters": 800,
+              "peakDistanceMeters": 1300,
+              "targetHeartRateZone": 4,
+              "sessionRole": "work",
+              "restTimeSeconds": 120
+            },
+            {
+              "distanceMeters": 800,
+              "peakDistanceMeters": 1300,
+              "targetHeartRateZone": 4,
+              "sessionRole": "work",
+              "restTimeSeconds": 120
+            },
+            {
+              "distanceMeters": 800,
+              "peakDistanceMeters": 1300,
+              "targetHeartRateZone": 4,
+              "sessionRole": "work",
+              "restTimeSeconds": 120
+            },
+            {
+              "distanceMeters": 700,
+              "peakDistanceMeters": 1200,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 0
+            }
+          ]
+        }
+      ],
+      "autoComplete": true
+    },
+    {
+      "dayOfWeek": 3,
+      "label": "Bike — Endurance + Swim",
+      "exercises": [
+        {
+          "name": "Bike",
+          "progressionAdvance": "manual",
+          "overloadIncrementReps": 0,
+          "sets": [
+            {
+              "distanceMeters": 30000,
+              "peakDistanceMeters": 50000,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 0
+            }
+          ]
+        },
+        {
+          "name": "Swim",
+          "progressionAdvance": "manual",
+          "overloadIncrementReps": 0,
+          "sets": [
+            {
+              "distanceMeters": 300,
+              "peakDistanceMeters": 500,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 30
+            },
+            {
+              "distanceMeters": 400,
+              "peakDistanceMeters": 600,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 20
+            },
+            {
+              "distanceMeters": 400,
+              "peakDistanceMeters": 600,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 20
+            },
+            {
+              "distanceMeters": 400,
+              "peakDistanceMeters": 600,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 20
+            },
+            {
+              "distanceMeters": 400,
+              "peakDistanceMeters": 600,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 20
+            },
+            {
+              "distanceMeters": 400,
+              "peakDistanceMeters": 600,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 20
+            },
+            {
+              "distanceMeters": 300,
+              "peakDistanceMeters": 500,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 0
+            }
+          ]
+        }
+      ],
+      "autoComplete": true
+    },
+    {
+      "dayOfWeek": 4,
+      "label": "Workout B — Hinge & Vertical",
+      "exercises": [
+        {
+          "name": "Romanian Deadlift",
+          "progressionAdvance": "load",
+          "exerciseType": "compound",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 2.5,
+          "sets": [
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "warmup"
+            },
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Pull-up",
+          "progressionAdvance": "load",
+          "exerciseType": "compound",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 2.5,
+          "sets": [
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 8,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Dumbbell Shoulder Press",
+          "progressionAdvance": "load",
+          "exerciseType": "compound",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 2.5,
+          "sets": [
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            },
+            {
+              "targetReps": 10,
+              "weightKg": 0,
+              "restTimeSeconds": 150,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Seated Leg Curl",
+          "progressionAdvance": "load",
+          "exerciseType": "isolation",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 1.25,
+          "sets": [
+            {
+              "targetReps": 12,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "working"
+            },
+            {
+              "targetReps": 12,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Face Pull",
+          "progressionAdvance": "load",
+          "exerciseType": "isolation",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 1.25,
+          "sets": [
+            {
+              "targetReps": 15,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "working"
+            },
+            {
+              "targetReps": 15,
+              "weightKg": 0,
+              "restTimeSeconds": 90,
+              "setType": "working"
+            }
+          ]
+        },
+        {
+          "name": "Cable Crunch",
+          "progressionAdvance": "load",
+          "exerciseType": "isolation",
+          "overloadIncrementReps": 0,
+          "overloadIncrementKg": 1.25,
+          "sets": [
+            {
+              "targetReps": 15,
+              "weightKg": 0,
+              "restTimeSeconds": 120,
+              "setType": "working"
+            },
+            {
+              "targetReps": 15,
+              "weightKg": 0,
+              "restTimeSeconds": 120,
+              "setType": "working"
+            }
+          ]
+        }
+      ],
+      "autoComplete": false
+    },
+    {
+      "dayOfWeek": 5,
+      "label": "Recovery Swim",
+      "exercises": [
+        {
+          "name": "Swim",
+          "progressionAdvance": "manual",
+          "overloadIncrementReps": 0,
+          "sets": [
+            {
+              "distanceMeters": 1200,
+              "peakDistanceMeters": 2000,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 0
+            }
+          ]
+        }
+      ],
+      "autoComplete": true
+    },
+    {
+      "dayOfWeek": 6,
+      "label": "Long Run",
+      "exercises": [
+        {
+          "name": "Run",
+          "progressionAdvance": "manual",
+          "overloadIncrementReps": 0,
+          "sets": [
+            {
+              "distanceMeters": 15600,
+              "peakDistanceMeters": 26000,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 0
+            }
+          ]
+        }
+      ],
+      "autoComplete": true
+    },
+    {
+      "dayOfWeek": 7,
+      "label": "Long Bike + Brick Run",
+      "exercises": [
+        {
+          "name": "Bike",
+          "progressionAdvance": "manual",
+          "overloadIncrementReps": 0,
+          "sets": [
+            {
+              "distanceMeters": 78000,
+              "peakDistanceMeters": 130000,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 0
+            }
+          ]
+        },
+        {
+          "name": "Run",
+          "progressionAdvance": "manual",
+          "overloadIncrementReps": 0,
+          "sets": [
+            {
+              "distanceMeters": 2400,
+              "peakDistanceMeters": 4000,
+              "targetHeartRateZone": 2,
+              "restTimeSeconds": 0
+            }
+          ]
+        }
+      ],
+      "autoComplete": true
+    }
+  ]
+}

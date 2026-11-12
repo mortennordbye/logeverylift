@@ -17,3 +17,13 @@ export function signInRedirect(data: unknown, from: string | null): string | nul
   const raw = from ?? "/";
   return raw.startsWith("/") && !raw.startsWith("//") && !raw.startsWith("/\\") ? raw : "/";
 }
+
+/**
+ * An in-app path to go to next, or the fallback. Only a plain path of
+ * letters, digits, "/" and "-" passes, and never one that starts with "//",
+ * which a browser reads as another host ("//3627732462" is an IP address).
+ */
+export function localPath(raw: string | null | undefined, fallback: string): string {
+  if (!raw || !/^\/[a-z0-9/-]*$/i.test(raw) || raw.startsWith("//")) return fallback;
+  return raw;
+}

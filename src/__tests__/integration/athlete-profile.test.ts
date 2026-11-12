@@ -18,6 +18,7 @@ import {
 } from "@/lib/actions/athlete-profile";
 import { garminSuggestions, interviewRace } from "@/lib/athlete-profile";
 import { addCoachMemory } from "@/lib/coach-memory";
+import { restorePlanRevision, undoPlanChangeSet } from "@/lib/actions/plan-revisions";
 import { THRESHOLDS_PER_KIND_MAX, listRevisions, purgePlanRevisions, restoreChangeSet } from "@/lib/plan-revisions";
 import { and, asc, eq } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -73,7 +74,7 @@ describe("thresholds", () => {
     asUser(me);
     expect((await addThresholdValue({ kind: "ftp", value: 900, source: "manual" })).success).toBe(false);
     expect((await addThresholdValue({ kind: "ftp", value: 250, source: "test" })).success).toBe(false);
-    const bad = await addThresholdValue({ kind: "ftp", value: 300, source: "test", protocol: "bike_30min", testData: { avgPowerBest20: 260 } });
+    const bad = await addThresholdValue({ kind: "ftp", value: 300, source: "test", protocol: "ftp_20min", testData: { avgPower20: 260 } });
     expect(bad.success).toBe(false);
     expect(!bad.success && bad.error).toContain("does not match");
     expect(await db.select().from(athleteThresholds)).toHaveLength(0);
@@ -233,6 +234,65 @@ describe("the interview", () => {
       .values({ userId: me, name: "Base", durationWeeks: 8, status: "active", startDate: "2026-11-02", raceDate: "2027-08-15", raceDistance: "half" })
       .returning();
     expect(await interviewRace(me)).toEqual({ date: "2027-08-15", distance: "half", cycleId: c.id, cycleName: "Base" });
+  });
+});
+
+describe("review fixes", () => {
+  it("a second interview undo keeps the profile cleared", async () => {
+    asUser(me);
+    const first = `interview:${randomUUID()}`;
+    await saveProfile({ strengthGoal: "stronger", changeSetId: first });
+    await restoreChangeSet({ userId: me, writer: "user" }, first);
+    const second = `interview:${randomUUID()}`;
+    expect((await saveProfile({ hoursPerWeek: 6, changeSetId: second })).success).toBe(true);
+    await restoreChangeSet({ userId: me, writer: "user" }, second);
+    const data = await getAthleteData();
+    expect(data.success && data.data?.profile).toBeNull();
+    const [row] = await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, me));
+    expect(row.deletedAt).not.toBeNull();
+  });
+
+  it("stores only the protocol's own test inputs", async () => {
+    asUser(me);
+    const r = await addThresholdValue({
+      kind: "swim_css",
+      source: "test",
+      protocol: "css_400_200",
+      testData: { t400Seconds: 400, t200Seconds: 190, extra: 1, more: 2 },
+    });
+    if (!r.success) throw new Error(r.error);
+    const [row] = await db.select().from(athleteThresholds).where(eq(athleteThresholds.id, r.data.id));
+    expect(row.testData).toEqual({ t400Seconds: 400, t200Seconds: 190 });
+    const [rev] = await revisionsOf("threshold", r.data.id);
+    expect((rev.snapshot as { threshold: { testData: unknown } }).threshold.testData).toEqual({ t400Seconds: 400, t200Seconds: 190 });
+  });
+
+  it("refuses a date that does not exist, and a date after today", async () => {
+    asUser(me);
+    expect((await addThresholdValue({ kind: "ftp", value: 250, source: "manual", measuredOn: "2026-02-30" })).success).toBe(false);
+    const future = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    const ahead = await addThresholdValue({ kind: "ftp", value: 250, source: "manual", measuredOn: future });
+    expect(!ahead.success && ahead.error).toContain("after today");
+    const ok = await addThresholdValue({ kind: "ftp", value: 250, source: "manual", measuredOn: "2026-01-05" });
+    if (!ok.success) throw new Error(ok.error);
+    expect((await updateThresholdValue({ id: ok.data.id, measuredOn: future })).success).toBe(false);
+    expect(await db.select().from(athleteThresholds)).toHaveLength(1);
+  });
+
+  it("restore and undo of an injury need the endurance switch, and say why", async () => {
+    asUser(me);
+    const changeSetId = `interview:${randomUUID()}`;
+    const i = await addInjuryEntry({ area: "knee", description: "Sore", status: "active", changeSetId });
+    if (!i.success) throw new Error(i.error);
+    await updateInjuryEntry({ id: i.data.id, status: "past" });
+    await db.update(users).set({ enduranceEnabled: false }).where(eq(users.id, me));
+    const [created] = await revisionsOf("injury", i.data.id);
+    const restored = await restorePlanRevision({ revisionId: created.id });
+    expect(!restored.success && restored.error).toContain("Endurance features are not on");
+    const undone = await undoPlanChangeSet({ changeSetId });
+    expect(!undone.success && undone.error).toContain("Endurance features are not on");
+    const [row] = await db.select().from(athleteInjuries).where(eq(athleteInjuries.id, i.data.id));
+    expect(row).toMatchObject({ status: "past", deletedAt: null });
   });
 });
 

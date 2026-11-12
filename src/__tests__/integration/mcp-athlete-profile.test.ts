@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { athleteInjuries, athleteProfiles, athleteThresholds, coachMemory, planRevisions, trainingCycles } from "@/db/schema";
+import { athleteInjuries, athleteProfiles, athleteThresholds, coachMemory, planRevisions, trainingCycles, users } from "@/db/schema";
 import { addCoachMemory } from "@/lib/coach-memory";
 import { registerAthletePrompts, registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
 import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
@@ -68,7 +68,7 @@ describe("thresholds", () => {
     const css = await call("manage_thresholds", { operation: "add", kind: "swim_css", source: "test", protocol: "css_400_200", testData: { t400Seconds: 400, t200Seconds: 190 }, reason: "Pool test" });
     expect(css.isError, css.raw).toBe(false);
     expect((await call("get_athlete_profile")).data.thresholds.swim_css.paceSecondsPer100m).toBe(105);
-    const bad = await call("manage_thresholds", { operation: "add", kind: "ftp", watts: 300, source: "test", protocol: "bike_30min", testData: { avgPowerBest20: 260 }, reason: "x" });
+    const bad = await call("manage_thresholds", { operation: "add", kind: "ftp", watts: 300, source: "test", protocol: "ftp_20min", testData: { avgPower20: 260 }, reason: "x" });
     expect(bad.isError).toBe(true);
     expect(bad.raw).toContain("does not match");
   });
@@ -99,6 +99,36 @@ describe("thresholds", () => {
     expect((await call("get_athlete_profile", { history: true })).data.history).toEqual([]);
     const [row] = await db.select().from(athleteThresholds).where(eq(athleteThresholds.id, theirs.data.id));
     expect(row).toMatchObject({ value: 250, deletedAt: null });
+  });
+});
+
+describe("review fixes", () => {
+  it("warns when threshold HR is not below max HR, in the write and the read", async () => {
+    const call = tools(me);
+    await call("manage_thresholds", { operation: "add", kind: "max_hr", bpm: 185, source: "manual", reason: "x" });
+    const r = await call("manage_thresholds", { operation: "add", kind: "lthr_run", bpm: 188, source: "manual", reason: "x" });
+    expect(r.isError, r.raw).toBe(false);
+    expect(r.data.warnings).toEqual(["Threshold HR, run 188 bpm is not below Max HR 185 bpm. Check both values."]);
+    expect((await call("get_athlete_profile")).data.warnings).toHaveLength(1);
+  });
+
+  it("refuses a future date over MCP", async () => {
+    const future = new Date(Date.now() + 3 * 86_400_000).toISOString().slice(0, 10);
+    const r = await tools(me)("manage_thresholds", { operation: "add", kind: "ftp", watts: 250, source: "manual", measuredOn: future, reason: "x" });
+    expect(r.isError).toBe(true);
+  });
+
+  it("list_revisions and restore_revision refuse an injury with the endurance switch off", async () => {
+    const added = await tools(me)("manage_injuries", { operation: "add", area: "hip", description: "Tight", status: "active", reason: "x" });
+    await db.update(users).set({ enduranceEnabled: false }).where(eq(users.id, me));
+    const rev = mcpTools((s, u) => registerRevisionTools(s, u, CLIENT), me);
+    const list = await rev("list_revisions", { objectType: "injury", objectId: added.data.id });
+    expect(list.isError).toBe(true);
+    expect(list.raw).toContain("Endurance features are not on");
+    const [first] = await revs("injury", added.data.id);
+    const restored = await rev("restore_revision", { revisionId: first.id, reason: "x" });
+    expect(restored.isError).toBe(true);
+    expect(restored.raw).toContain("Endurance features are not on");
   });
 });
 

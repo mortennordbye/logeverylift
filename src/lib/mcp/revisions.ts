@@ -7,7 +7,9 @@
 import { db } from "@/db";
 import { PLAN_OBJECT_TYPES, planRevisions, type PlanObjectType } from "@/db/schema";
 import { fail, failInternal, ok } from "@/lib/mcp/result";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import {
+  ENDURANCE_OFF,
   OpenWorkoutError,
   PlanConflictError,
   PlanNotFoundError,
@@ -128,6 +130,8 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
       try {
         if (objectType) {
           if (objectId == null) return fail("objectId is required with objectType");
+          // The athlete profile and injuries belong to the endurance add-on (D18).
+          if ((objectType === "athlete" || objectType === "injury") && !(await enduranceEnabledFor(userId))) return fail(ENDURANCE_OFF);
           const revisions = await listRevisions(userId, { type: objectType, id: objectId });
           if (revisions.length === 0) return fail("No history for that object");
           return ok(

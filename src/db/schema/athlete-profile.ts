@@ -30,7 +30,7 @@ export type ThresholdKind = (typeof THRESHOLD_KINDS)[number];
 export const THRESHOLD_SOURCES = ["manual", "test", "garmin"] as const;
 export type ThresholdSource = (typeof THRESHOLD_SOURCES)[number];
 
-export const THRESHOLD_PROTOCOLS = ["run_30min", "bike_30min", "css_400_200", "swim_t1000"] as const;
+export const THRESHOLD_PROTOCOLS = ["run_30min", "bike_30min", "ftp_20min", "css_400_200", "swim_t1000"] as const;
 export type ThresholdProtocol = (typeof THRESHOLD_PROTOCOLS)[number];
 
 export const INJURY_AREAS = [

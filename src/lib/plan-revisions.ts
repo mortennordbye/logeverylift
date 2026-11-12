@@ -58,7 +58,9 @@ import {
   type ProgramSnapshot,
   type Row,
 } from "@/lib/utils/plan-revisions";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { judgingRuleChanged } from "@/lib/utils/progression";
+import { THRESHOLDS_PER_KIND_MAX } from "@/lib/utils/thresholds";
 import { limitOverrideLine } from "@/lib/utils/training-limits";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
@@ -1096,9 +1098,10 @@ async function restoreMemoryTo(
   return [];
 }
 
-/** Live thresholds per kind, and live injuries, a user may keep (docs/plans/athlete-profile.md, 2.1). */
-export const THRESHOLDS_PER_KIND_MAX = 100;
+/** Live thresholds per kind (one definition, in the pure module), and live injuries, a user may keep. */
+export { THRESHOLDS_PER_KIND_MAX };
 export const INJURIES_MAX = 50;
+export const ENDURANCE_OFF = "Endurance features are not on for this account";
 
 /**
  * Refuse a new live threshold of a kind, or injury, past the cap. Takes a
@@ -1137,6 +1140,8 @@ async function restoreRowTo(
   values: Row,
   targetRevisionId: number,
 ): Promise<string[]> {
+  // The athlete profile and injuries belong to the endurance add-on (D18); thresholds are for everyone.
+  if (type !== "threshold" && !(await enduranceEnabledFor(w.ctx.userId))) throw new PlanStateError(ENDURANCE_OFF);
   await w.touch({ type, id }, { allowDeleted: true, action: "restore", restoredFromId: targetRevisionId });
   const table = ROW_TABLES[type];
   const [row] = await w.tx.select({ deletedAt: table.deletedAt }).from(table).where(eq(table.id, id));
@@ -1202,9 +1207,26 @@ async function ownedRevision(userId: string, revisionId: number) {
 export async function restoreRevision(ctx: PlanWriteContext, revisionId: number): Promise<RestoreOutcome | null> {
   const rev = await ownedRevision(ctx.userId, revisionId);
   if (!rev) return null;
-  const { result } = await planWrite(ctx, (w) => restoreInSession(w, rev));
+  const { result } = await planWrite(ctx, async (w) => {
+    // The cap lock before the row lock, the order restoreChangeSet uses.
+    const capLock =
+      rev.objectType === "memory"
+        ? `coach_memory:${ctx.userId}`
+        : rev.objectType === "threshold" || rev.objectType === "injury"
+          ? `athlete_${rev.objectType}:${ctx.userId}`
+          : null;
+    if (capLock) await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${capLock}))`);
+    return restoreInSession(w, rev);
+  });
   await resyncAfterRestore(ctx.userId, [{ type: rev.objectType, id: rev.objectId }]);
   return { objectType: rev.objectType, objectId: rev.objectId, skipped: result };
+}
+
+/** Whether an object an undo would delete is still live (the set may have deleted it itself). */
+async function liveForUndo(w: PlanWriteSession, target: PlanTarget): Promise<boolean> {
+  const table = tableOf(target.type);
+  const [row] = await w.tx.select({ deletedAt: table.deletedAt }).from(table).where(eq(table.id, target.id));
+  return row != null && row.deletedAt == null;
 }
 
 /**
@@ -1243,37 +1265,50 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
         await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_${type}:${ctx.userId}`}))`);
       }
     }
+    // The athlete profile and injuries belong to the endurance add-on (D18).
+    if (firsts.some((f) => f.objectType === "athlete" || f.objectType === "injury") && !(await enduranceEnabledFor(ctx.userId))) {
+      throw new PlanStateError(ENDURANCE_OFF);
+    }
     const skipped: string[] = [];
     for (const first of firsts) {
       const target = { type: first.objectType, id: first.objectId };
-      if (first.action === "create") {
+      const [prior] =
+        first.action === "create"
+          ? []
+          : await w.tx
+              .select()
+              .from(planRevisions)
+              .where(
+                and(
+                  eq(planRevisions.objectType, target.type),
+                  eq(planRevisions.objectId, target.id),
+                  lt(planRevisions.id, first.id),
+                  ne(planRevisions.action, "conflict"),
+                ),
+              )
+              .orderBy(desc(planRevisions.id))
+              .limit(1);
+      // The object did not exist, or was deleted, before the set's first
+      // change: undoing the set deletes it (again), never restores the state
+      // before that delete.
+      if (first.action === "create" || prior?.action === "delete") {
         if (target.type === "program") {
           if (await openWorkoutOn(w.tx, ctx.userId, [target.id])) throw new OpenWorkoutError();
+          if (!(await liveForUndo(w, target))) continue;
           await w.touch(target, { action: "delete" });
           await softDeleteProgram(w.tx, target.id);
         } else if (isRowType(target.type)) {
+          if (!(await liveForUndo(w, target))) continue;
           await w.touch(target, { action: "delete" });
           const table = ROW_TABLES[target.type];
           await w.tx.update(table).set({ deletedAt: new Date() }).where(eq(table.id, target.id));
         } else {
+          if (!(await liveForUndo(w, target))) continue;
           await w.touch(target, { action: "delete" });
           await w.tx.update(trainingCycles).set({ deletedAt: new Date() }).where(eq(trainingCycles.id, target.id));
         }
         continue;
       }
-      const [prior] = await w.tx
-        .select()
-        .from(planRevisions)
-        .where(
-          and(
-            eq(planRevisions.objectType, target.type),
-            eq(planRevisions.objectId, target.id),
-            lt(planRevisions.id, first.id),
-            ne(planRevisions.action, "conflict"),
-          ),
-        )
-        .orderBy(desc(planRevisions.id))
-        .limit(1);
       if (prior) skipped.push(...(await restoreInSession(w, prior)));
     }
     return skipped;

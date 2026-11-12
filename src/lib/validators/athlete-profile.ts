@@ -16,7 +16,14 @@ import {
 } from "@/db/schema/athlete-profile";
 import { z } from "zod";
 
-export const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
+/** A real calendar day as YYYY-MM-DD: "2026-02-30" is refused. */
+export const dateStr = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+  .refine((s) => {
+    const d = new Date(`${s}T00:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+  }, "Not a real date");
 export const dayOfWeek = z.number().int().min(1).max(7);
 
 export const profileFields = {
@@ -29,7 +36,9 @@ export const profileFields = {
 };
 
 /** Test inputs: seconds, bpm, watts or meters, all positive numbers. */
-export const testData = z.record(z.string().max(40), z.number().positive().max(100_000));
+export const testData = z
+  .record(z.string().max(40), z.number().positive().max(100_000))
+  .refine((o) => Object.keys(o).length <= 10, "At most 10 test inputs");
 
 export const thresholdFields = {
   kind: z.enum(THRESHOLD_KINDS),

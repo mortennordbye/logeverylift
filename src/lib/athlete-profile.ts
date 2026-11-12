@@ -34,6 +34,7 @@ import { changeCoachMemory } from "@/lib/coach-memory";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import {
+  ENDURANCE_OFF,
   PlanConflictError,
   PlanNotFoundError,
   PlanStateError,
@@ -47,7 +48,7 @@ import { userToday } from "@/lib/user-settings";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { deloadCadenceForLevel, periodizedLoad, type TrainingPhase } from "@/lib/utils/periodization";
 import { DELETED_PLAN_RETENTION_DAYS } from "@/lib/utils/plan-revisions";
-import { agreesWithTest, currentThresholds, thresholdRangeError, valueFromTest } from "@/lib/utils/thresholds";
+import { agreesWithTest, currentThresholds, testInputs, thresholdRangeError, valueFromTest } from "@/lib/utils/thresholds";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 export type AthleteProfile = typeof athleteProfiles.$inferSelect;
@@ -60,7 +61,6 @@ export const THRESHOLD_NOTES_MAX = 500;
 /** The reason on a coach memory entry the interview moved to the profile. */
 export const MOVED_REASON = "Moved to the athlete profile by the intake interview";
 
-const ENDURANCE_OFF = "Endurance features are not on for this account";
 
 async function requireEndurance(userId: string) {
   if (!(await enduranceEnabledFor(userId))) throw new PlanStateError(ENDURANCE_OFF);
@@ -254,7 +254,11 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
   const { result, versions } = await planWrite(ctx, async (w) => {
     // One profile per user: two first writes must not both insert.
     await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_profile:${ctx.userId}`}))`);
-    const [existing] = await w.tx.select().from(athleteProfiles).where(eq(athleteProfiles.userId, ctx.userId));
+    const [existing] = await w.tx
+      // plan-read: includes deleted (a profile cleared by an undo comes back, so the one-per-user index holds)
+      .select()
+      .from(athleteProfiles)
+      .where(eq(athleteProfiles.userId, ctx.userId));
     if (!existing) {
       if (expectedVersion !== undefined && expectedVersion !== 1) {
         throw new PlanStateError("No athlete profile yet: leave out expectedVersion for the first write");
@@ -329,10 +333,16 @@ export function resolveThresholdValue(input: Pick<ThresholdInput, "kind" | "valu
   return value;
 }
 
+/** A threshold's date may not be after today in the user's zone: a future row would stay current. */
+async function assertNotFuture(userId: string, measuredOn: string) {
+  if (measuredOn > toDateStr(await userToday(userId))) throw new PlanStateError("The date is after today");
+}
+
 export async function addThreshold(ctx: PlanWriteContext, input: ThresholdInput) {
   const value = resolveThresholdValue(input);
   if (input.source === "test" && !input.protocol) throw new PlanStateError("A field test needs its protocol");
   const measuredOn = input.measuredOn ?? toDateStr(await userToday(ctx.userId));
+  await assertNotFuture(ctx.userId, measuredOn);
   const { result, versions } = await planWrite(ctx, async (w) => {
     await assertAthleteRoom(w.tx, ctx.userId, "threshold", input.kind);
     const [row] = await w.tx
@@ -344,7 +354,8 @@ export async function addThreshold(ctx: PlanWriteContext, input: ThresholdInput)
         measuredOn,
         source: input.source,
         protocol: input.protocol ?? null,
-        testData: input.protocol ? (input.testData ?? null) : null,
+        // Only the test's own inputs; anything else the caller sent is not kept.
+        testData: input.protocol && input.testData ? testInputs(input.kind, input.protocol, input.testData) : null,
         notes: input.notes ?? null,
       })
       .returning();
@@ -358,6 +369,7 @@ export type ThresholdChange = Partial<Omit<ThresholdInput, "kind">>;
 
 /** Update or soft delete one threshold. Throws PlanNotFoundError, PlanConflictError or PlanStateError. */
 export async function changeThreshold(ctx: PlanWriteContext, id: number, change: ThresholdChange | "delete", expectedVersion?: number) {
+  if (change !== "delete" && change.measuredOn) await assertNotFuture(ctx.userId, change.measuredOn);
   const { result, versions } = await planWrite(ctx, async (w) => {
     if (change === "delete") {
       await w.touch({ type: "threshold", id }, { action: "delete", expectedVersion });
@@ -365,7 +377,11 @@ export async function changeThreshold(ctx: PlanWriteContext, id: number, change:
       return null;
     }
     await w.touch({ type: "threshold", id }, { expectedVersion });
-    const [cur] = await w.tx.select().from(athleteThresholds).where(eq(athleteThresholds.id, id));
+    const [cur] = await w.tx
+      // plan-read: includes deleted (touch above refused a deleted row)
+      .select()
+      .from(athleteThresholds)
+      .where(eq(athleteThresholds.id, id));
     const protocol = change.protocol !== undefined ? change.protocol : cur.protocol;
     const testData = change.testData !== undefined ? change.testData : (cur.testData as Record<string, unknown> | null);
     const set: Partial<typeof athleteThresholds.$inferInsert> = { updatedAt: new Date() };
@@ -377,7 +393,7 @@ export async function changeThreshold(ctx: PlanWriteContext, id: number, change:
         testData,
       });
       set.protocol = protocol ?? null;
-      set.testData = protocol ? (testData ?? null) : null;
+      set.testData = protocol && testData ? testInputs(cur.kind, protocol, testData) : null;
     }
     if (change.measuredOn !== undefined) set.measuredOn = change.measuredOn;
     if (change.source !== undefined) set.source = change.source;

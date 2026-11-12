@@ -1,5 +1,6 @@
 import {
   agreesWithTest,
+  thresholdWarnings,
   currentThresholds,
   formatThreshold,
   isStale,
@@ -29,8 +30,13 @@ describe("field tests", () => {
     expect("value" in r && formatThreshold("swim_css", r.value)).toBe("1:50 /100m");
   });
 
-  it("FTP is 0.95 x the best 20 minutes, rounded", () => {
-    expect(valueFromTest("ftp", "bike_30min", { avgPowerBest20: 280 })).toEqual({ value: 266 });
+  it("FTP from the 20-minute test is 0.95 x its average power, rounded", () => {
+    expect(valueFromTest("ftp", "ftp_20min", { avgPower20: 280 })).toEqual({ value: 266 });
+  });
+
+  it("FTP from the 30-minute test is its average power, no factor", () => {
+    expect(valueFromTest("ftp", "bike_30min", { avgPower30: 270.4 })).toEqual({ value: 270 });
+    expect(protocolsFor("ftp").map((p) => p.protocol)).toEqual(["ftp_20min", "bike_30min"]);
   });
 
   it("LTHR and pace from the 30-minute run", () => {
@@ -43,7 +49,7 @@ describe("field tests", () => {
     expect(valueFromTest("swim_css", "css_400_200", { t400Seconds: 190, t200Seconds: 400 })).toHaveProperty("error");
     expect(valueFromTest("swim_css", "css_400_200", { t400Seconds: 400 })).toHaveProperty("error");
     expect(valueFromTest("swim_css", "css_400_200", { t400Seconds: 0, t200Seconds: 0 })).toHaveProperty("error");
-    expect(valueFromTest("ftp", "run_30min", { avgPowerBest20: 280 })).toHaveProperty("error");
+    expect(valueFromTest("ftp", "run_30min", { avgPower30: 280 })).toHaveProperty("error");
     expect(valueFromTest("lthr_bike", "bike_30min", {})).toHaveProperty("error");
   });
 
@@ -116,5 +122,17 @@ describe("current value and staleness", () => {
     expect(weeksSince("2026-09-17", "2026-11-12")).toBe(8);
     expect(isStale("2026-09-17", "2026-11-12")).toBe(true);
     expect(isStale("2026-09-18", "2026-11-12")).toBe(false);
+  });
+});
+
+describe("warnings", () => {
+  const row = (kind: "lthr_run" | "lthr_bike" | "max_hr", value: number) => ({ kind, value });
+
+  it("threshold HR at or above max HR is a warning, not a block", () => {
+    expect(thresholdWarnings({ lthr_run: row("lthr_run", 186), max_hr: row("max_hr", 185) })).toEqual([
+      "Threshold HR, run 186 bpm is not below Max HR 185 bpm. Check both values.",
+    ]);
+    expect(thresholdWarnings({ lthr_bike: row("lthr_bike", 160), max_hr: row("max_hr", 185) })).toEqual([]);
+    expect(thresholdWarnings({ lthr_run: row("lthr_run", 186) })).toEqual([]);
   });
 });

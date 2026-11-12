@@ -141,102 +141,124 @@ export type ProtocolSpec = {
   evidence: string;
 };
 
-/**
- * The field test for each kind that has one. Max HR has none: the research
- * gives no protocol, so it is typed in or taken from the watch.
- */
-export const PROTOCOLS: Partial<Record<ThresholdKind, ProtocolSpec>> = {
-  // Friel's 30-minute test: mean HR of the last 20 minutes approximates LTHR
-  // (docs/research/endurance-training-reference.md:96, Study for the method).
-  lthr_run: {
-    protocol: "run_30min",
-    name: "30-minute run test",
-    steps: [
-      "Warm up for 15 minutes, easy.",
-      "Run 30 minutes alone, as hard as you can hold for the whole time. No race, no partner.",
-      "Press lap at 10 minutes, so your watch shows the last 20 minutes on their own.",
-      "Enter the average heart rate of the last 20 minutes.",
-    ],
-    inputs: [{ key: "avgHrLast20", label: "Average HR, last 20 min", kind: "bpm" }],
-    evidence: "Friel 30-minute test (research line 96)",
-  },
-  // The same test. The research gives HR only; pace from the last 20 minutes is Inference.
-  run_threshold_pace: {
-    protocol: "run_30min",
-    name: "30-minute run test",
-    steps: [
-      "Warm up for 15 minutes, easy.",
-      "Run 30 minutes alone, as hard as you can hold for the whole time, on a flat route or a track.",
-      "Press lap at 10 minutes, so your watch shows the last 20 minutes on their own.",
-      "Enter the distance of the last 20 minutes.",
-    ],
-    inputs: [{ key: "distanceLast20Meters", label: "Distance, last 20 min", kind: "meters" }],
-    evidence: "Friel 30-minute test (research line 96); pace from it is Inference",
-  },
-  lthr_bike: {
-    protocol: "bike_30min",
-    name: "30-minute ride test",
-    steps: [
-      "Warm up for 15 minutes, easy.",
-      "Ride 30 minutes alone, as hard as you can hold for the whole time. A trainer or a flat road.",
-      "Press lap at 10 minutes, so your device shows the last 20 minutes on their own.",
-      "Enter the average heart rate of the last 20 minutes.",
-    ],
-    inputs: [{ key: "avgHrLast20", label: "Average HR, last 20 min", kind: "bpm" }],
-    evidence: "Friel 30-minute test (research line 96)",
-  },
-  // FTP = 0.95 x best 20-minute power: coach convention, the app's Garmin rule (FTP_FACTOR).
-  ftp: {
-    protocol: "bike_30min",
-    name: "30-minute ride test",
-    steps: [
-      "Warm up for 15 minutes, easy, with three short hard efforts.",
-      "Ride 30 minutes alone, as hard as you can hold for the whole time, with a power meter or smart trainer.",
-      "Enter the average power of your best 20 minutes. FTP is 95% of it.",
-    ],
-    inputs: [{ key: "avgPowerBest20", label: "Average power, best 20 min", kind: "watts" }],
-    evidence: "20-minute power x 0.95 (Coach convention, research section on thresholds)",
-  },
-  // CSS = (400 - 200) / (T400 - T200) (research line 92, Coach convention plus study).
-  swim_css: {
-    protocol: "css_400_200",
-    name: "400 m and 200 m swim test",
-    steps: [
-      "Warm up for 10-15 minutes.",
-      "Swim 400 m as fast as you can hold. Note the time.",
-      "Rest fully, 5-10 minutes easy.",
-      "Swim 200 m as fast as you can. Note the time.",
-    ],
-    inputs: [
-      { key: "t400Seconds", label: "400 m time", kind: "seconds" },
-      { key: "t200Seconds", label: "200 m time", kind: "seconds" },
-    ],
-    evidence: "Critical swim speed from 400/200 m (research line 92)",
-  },
-};
+const run30 = (key: string, label: string, kind: ProtocolInput["kind"], last: string): ProtocolSpec => ({
+  protocol: "run_30min",
+  name: "30-minute run test",
+  steps: [
+    "Warm up for 15 minutes, easy.",
+    "Run 30 minutes alone, as hard as you can hold for the whole time, on a flat route or a track. No race, no partner.",
+    "Press lap at 10 minutes, so your watch shows the last 20 minutes on their own.",
+    last,
+  ],
+  inputs: [{ key, label, kind }],
+  evidence:
+    key === "avgHrLast20" ? "Friel 30-minute test (research line 96)" : "Friel 30-minute test (research line 96); pace from it is Inference",
+});
 
-/** The other swim test: Friel's T-time from a 1000 m time trial (research line 92). */
-export const SWIM_T1000: ProtocolSpec = {
-  protocol: "swim_t1000",
-  name: "1000 m swim test",
-  steps: ["Warm up for 10-15 minutes.", "Swim 1000 m as fast as you can hold. Note the time."],
-  inputs: [{ key: "t1000Seconds", label: "1000 m time", kind: "seconds" }],
-  evidence: "Friel T-time from 1000 m (research line 92)",
+const bike30 = (key: string, label: string, kind: ProtocolInput["kind"], last: string, evidence: string): ProtocolSpec => ({
+  protocol: "bike_30min",
+  name: "30-minute ride test",
+  steps: [
+    "Warm up for 15 minutes, easy.",
+    "Ride 30 minutes alone, as hard as you can hold for the whole time. A trainer or a flat road.",
+    "Press lap at 10 minutes, so your device shows the last 20 minutes on their own.",
+    last,
+  ],
+  inputs: [{ key, label, kind }],
+  evidence,
+});
+
+/**
+ * The field tests for each kind, the usual one first. Max HR has none: the
+ * research gives no protocol, so it is typed in or taken from the watch.
+ *
+ * Sources: Friel's 30-minute test, mean HR of the last 20 minutes as LTHR
+ * (docs/research/endurance-training-reference.md:96, Study for the method).
+ * The FTP rules are coach convention and not in the research doc, which only
+ * changes by a research pass (T1); the hub chose them on 2026-11-12
+ * (docs/plans/athlete-profile.md, 12):
+ * - 20-minute all-out test: FTP = 0.95 x its average power (Coggan's test, as
+ *   published by TrainingPeaks; the same factor as the Garmin estimate,
+ *   FTP_FACTOR).
+ * - 30-minute all-out test: FTP = the average power of the whole 30 minutes,
+ *   no factor (Friel, "Quick guide to setting zones", TrainingPeaks).
+ */
+export const PROTOCOLS: Partial<Record<ThresholdKind, ProtocolSpec[]>> = {
+  lthr_run: [run30("avgHrLast20", "Average HR, last 20 min", "bpm", "Enter the average heart rate of the last 20 minutes.")],
+  run_threshold_pace: [run30("distanceLast20Meters", "Distance, last 20 min", "meters", "Enter the distance of the last 20 minutes.")],
+  lthr_bike: [
+    bike30("avgHrLast20", "Average HR, last 20 min", "bpm", "Enter the average heart rate of the last 20 minutes.", "Friel 30-minute test (research line 96)"),
+  ],
+  ftp: [
+    {
+      protocol: "ftp_20min",
+      name: "20-minute ride test",
+      steps: [
+        "Warm up for 15-20 minutes, easy, with three short hard efforts.",
+        "Ride 20 minutes alone, as hard as you can hold for the whole time, with a power meter or smart trainer.",
+        "Enter the average power of the 20 minutes. FTP is 95% of it.",
+      ],
+      inputs: [{ key: "avgPower20", label: "Average power, 20 min", kind: "watts" }],
+      evidence: "20-minute test, FTP = 0.95 x average power (Coach convention)",
+    },
+    bike30(
+      "avgPower30",
+      "Average power, 30 min",
+      "watts",
+      "Enter the average power of the whole 30 minutes. That is your FTP.",
+      "Friel 30-minute test, FTP = average power (Coach convention)",
+    ),
+  ],
+  // CSS = (400 - 200) / (T400 - T200), or Friel's T-time from 1000 m (research line 92).
+  swim_css: [
+    {
+      protocol: "css_400_200",
+      name: "400 m and 200 m swim test",
+      steps: [
+        "Warm up for 10-15 minutes.",
+        "Swim 400 m as fast as you can hold. Note the time.",
+        "Rest fully, 5-10 minutes easy.",
+        "Swim 200 m as fast as you can. Note the time.",
+      ],
+      inputs: [
+        { key: "t400Seconds", label: "400 m time", kind: "seconds" },
+        { key: "t200Seconds", label: "200 m time", kind: "seconds" },
+      ],
+      evidence: "Critical swim speed from 400/200 m (research line 92)",
+    },
+    {
+      protocol: "swim_t1000",
+      name: "1000 m swim test",
+      steps: ["Warm up for 10-15 minutes.", "Swim 1000 m as fast as you can hold. Note the time."],
+      inputs: [{ key: "t1000Seconds", label: "1000 m time", kind: "seconds" }],
+      evidence: "Friel T-time from 1000 m (research line 92)",
+    },
+  ],
 };
 
 export function protocolsFor(kind: ThresholdKind): ProtocolSpec[] {
-  const main = PROTOCOLS[kind];
-  if (!main) return [];
-  return kind === "swim_css" ? [main, SWIM_T1000] : [main];
+  return PROTOCOLS[kind] ?? [];
 }
 
 /** Which protocols can set which kind. */
 export const PROTOCOL_KINDS: Record<ThresholdProtocol, ThresholdKind[]> = {
   run_30min: ["lthr_run", "run_threshold_pace"],
   bike_30min: ["lthr_bike", "ftp"],
+  ftp_20min: ["ftp"],
   css_400_200: ["swim_css"],
   swim_t1000: ["swim_css"],
 };
+
+/** Only the inputs the test for this kind takes, so nothing else is stored. */
+export function testInputs(kind: ThresholdKind, protocol: ThresholdProtocol, data: Record<string, unknown>): Record<string, number> {
+  const spec = protocolsFor(kind).find((p) => p.protocol === protocol);
+  const out: Record<string, number> = {};
+  for (const i of spec?.inputs ?? []) {
+    const v = data[i.key];
+    if (typeof v === "number" && Number.isFinite(v)) out[i.key] = v;
+  }
+  return out;
+}
 
 const pos = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
@@ -262,15 +284,20 @@ export function valueFromTest(
     if (!t) return { error: "Enter the 1000 m time" };
     return { value: 1000 / t };
   }
+  if (protocol === "ftp_20min") {
+    const p = pos(data.avgPower20);
+    if (!p) return { error: "Enter the average power of the 20 minutes" };
+    return { value: Math.round(p * FTP_FACTOR) };
+  }
   if (kind === "run_threshold_pace") {
     const d = pos(data.distanceLast20Meters);
     if (!d) return { error: "Enter the distance of the last 20 minutes" };
     return { value: d / 1200 };
   }
   if (kind === "ftp") {
-    const p = pos(data.avgPowerBest20);
-    if (!p) return { error: "Enter the average power of the best 20 minutes" };
-    return { value: Math.round(p * FTP_FACTOR) };
+    const p = pos(data.avgPower30);
+    if (!p) return { error: "Enter the average power of the 30 minutes" };
+    return { value: Math.round(p) };
   }
   const hr = pos(data.avgHrLast20);
   if (!hr) return { error: "Enter the average heart rate of the last 20 minutes" };
@@ -280,6 +307,25 @@ export function valueFromTest(
 /** Whether a given value agrees with the one a test gives (within 1%). */
 export function agreesWithTest(given: number, fromTest: number): boolean {
   return Math.abs(given - fromTest) <= Math.max(0.01 * fromTest, 1e-6);
+}
+
+// ── Warnings ─────────────────────────────────────────────────────────────────
+
+/**
+ * Checks that warn but never block (docs/plans/athlete-profile.md, 2.3):
+ * threshold heart rate sits below max heart rate.
+ */
+export function thresholdWarnings(current: Partial<Record<ThresholdKind, { value: number }>>): string[] {
+  const max = current.max_hr?.value;
+  if (max == null) return [];
+  const out: string[] = [];
+  for (const kind of ["lthr_run", "lthr_bike"] as const) {
+    const v = current[kind]?.value;
+    if (v != null && v >= max) {
+      out.push(`${THRESHOLD_LABEL[kind]} ${Math.round(v)} bpm is not below ${THRESHOLD_LABEL.max_hr} ${Math.round(max)} bpm. Check both values.`);
+    }
+  }
+  return out;
 }
 
 // ── Current value and staleness ──────────────────────────────────────────────

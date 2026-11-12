@@ -31,7 +31,7 @@ import { REVISION_RULES, assistantContext, expectedVersionArg, planErrorResult, 
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { strengthDefault, strengthTable } from "@/lib/utils/strength-goal";
-import { THRESHOLD_MEASURE, currentThresholds, isStale, minSec, protocolsFor, weeksSince } from "@/lib/utils/thresholds";
+import { THRESHOLD_MEASURE, currentThresholds, isStale, minSec, protocolsFor, thresholdWarnings, weeksSince } from "@/lib/utils/thresholds";
 import { dateStr, dayOfWeek, testData } from "@/lib/validators/athlete-profile";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -75,6 +75,12 @@ function valueFor(
 
 const PROTOCOL_TEXT = THRESHOLD_KINDS.flatMap((k) => protocolsFor(k).map((p) => `${k} by ${p.protocol} (testData: ${p.inputs.map((i) => i.key).join(", ")})`));
 
+/** The warnings on the stored thresholds after a write (they never block it). */
+async function warningsFor(userId: string) {
+  const warnings = thresholdWarnings(currentThresholds(await listThresholds(userId)));
+  return warnings.length ? { warnings } : {};
+}
+
 export const INTERVIEW_STEPS = [
   "1. Race: read it from get_athlete_profile (race). If none is set, ask the user and set it on the cycle with manage_training_cycle.",
   "2. Experience: novice, intermediate or advanced in endurance sport (manage_athlete_profile enduranceLevel).",
@@ -107,9 +113,11 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
         const current = currentThresholds(rows);
         const thresholds = Object.fromEntries(THRESHOLD_KINDS.map((k) => [k, current[k] ? thresholdOut(current[k], today) : null]));
         const suggestions = await garminSuggestions(userId, rows);
+        const warnings = thresholdWarnings(current);
         const base = {
           endurance,
           thresholds,
+          ...(warnings.length ? { warnings } : {}),
           ...(history ? { history: rows.map((r) => thresholdOut(r, today)) } : {}),
           ...(suggestions.length ? { garminSuggestions: suggestions } : {}),
         };
@@ -214,7 +222,7 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
             testData: args.testData,
             notes: args.notes,
           });
-          return ok({ added: true, id: threshold.id, value: threshold.value, version });
+          return ok({ added: true, id: threshold.id, value: threshold.value, version, ...(await warningsFor(userId)) });
         }
         if (args.id == null) return fail(`id is required to ${args.operation} a threshold`);
         if (args.expectedVersion == null) return fail(`expectedVersion is required to ${args.operation} a threshold. Read it with get_athlete_profile (history true).`);
@@ -235,7 +243,7 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
           { value, measuredOn: args.measuredOn, source: args.source, protocol: args.protocol, testData: args.testData, notes: args.notes },
           args.expectedVersion,
         );
-        return ok({ updated: true, id: args.id, version });
+        return ok({ updated: true, id: args.id, version, ...(await warningsFor(userId)) });
       } catch (e) {
         return (await planErrorResult(userId, e)) ?? failInternal("athlete_profile", e);
       }

@@ -222,7 +222,8 @@ Pure rules in `src/lib/utils/thresholds.ts` (*new*), unit tested, each citing th
 | `lthr_run` | bpm | `run_30min`: 30 min solo all-out run after a warm-up | Mean HR of the last 20 min | Research line 96 (Friel) |
 | `run_threshold_pace` | m/s | Same test | Mean pace of the last 20 min: distance of the last 20 min / 1200 s | Inference: the research gives HR only |
 | `lthr_bike` | bpm | `bike_30min`: 30 min solo all-out ride | Mean HR of the last 20 min | Research line 96 |
-| `ftp` | W | Same test, with a power meter | 0.95 x mean power of the best 20 min | Coach convention; the app's Garmin rule uses the same factor. Not in the research doc: the build adds it there with a source, or labels it as the app's rule |
+| `ftp` | W | `ftp_20min`: 20 min all-out ride with a power meter | 0.95 x mean power of the 20 min | Coach convention (the app's Garmin rule uses the same factor). Not in the research doc (T1) |
+| `ftp` | W | `bike_30min`: the 30 min ride test, with a power meter | Mean power of the whole 30 min, no factor (Friel) | Coach convention. Not in the research doc (T1) |
 | `swim_css` | m/s | `css_400_200`: 400 m then 200 m all-out, full rest between | 200 / (T400 - T200) | Research line 92 |
 | `swim_css` | m/s | `swim_t1000`: 1000 m time trial | 1000 / T1000 (Friel T-time) | Research line 92 |
 | `max_hr` | bpm | none | Entered by hand or taken from the watch's max | No protocol in the research; the app says so |
@@ -601,6 +602,12 @@ The owner took every recommendation, and the defaults in section 9 too.
 4. **The D21 refuse-and-override check moves to D3.** C3 ships the default rule, its MCP read,
    the instructions and the generator's use of it. The plan text says so.
 
+5. **FTP field tests (decided by the hub on 2026-11-12, owner may change):** the 0.95 factor belongs
+   to a 20-minute all-out test, so FTP has two tests: `ftp_20min` (FTP = 0.95 x the 20-minute
+   average power) and the 30-minute ride test (FTP = the average power of the whole 30 minutes,
+   no factor, Friel). Both are coach convention, with the source in the code comments; the
+   research doc is not edited (T1).
+
 **Contact with C1** (hub, 2026-11-12): C1 moves the race to the season and adds one race reader in
 `src/lib/seasons.ts` (the season's A race, or the cycle's own race for a cycle with no season).
 `interviewRace(userId)` stays C3's only contact point and reads the active cycle's race fields
@@ -629,3 +636,13 @@ a migration; the hub settles the numbers at merge.
   and refuses without one after that.
 - **No component tests.** The screens are covered by `e2e/athlete-interview.spec.ts` and
   `e2e/thresholds.spec.ts`; the logic they use is in the pure modules with unit tests.
+- **Review fixes (2026-11-12).** The interview's next page accepts only a plain in-app path, never
+  one that starts with "//" (`localPath`). Undoing a change set whose object was deleted before
+  the set's first change deletes it again instead of bringing back the state before that delete,
+  so a second interview undo keeps the profile cleared. Only the test's own inputs are stored in
+  `test_data`. Dates must be real days, and a threshold date may not be after today. Threshold
+  HR at or above max HR is a warning on the Thresholds page and in the MCP results, never a
+  block. Restoring or undoing the athlete profile or an injury, and listing their revisions over
+  MCP, need the endurance switch. The plan-write guard test now covers coach memory and the
+  three athlete tables. A restore of one revision takes the cap lock before the row lock, as a
+  change-set undo does.

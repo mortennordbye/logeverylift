@@ -1,5 +1,6 @@
 import { InterviewClient } from "@/components/features/InterviewClient";
 import { getAthleteData } from "@/lib/actions/athlete-profile";
+import { localPath } from "@/lib/utils/sign-in-redirect";
 import { redirect } from "next/navigation";
 
 /** The intake interview (docs/plans/athlete-profile.md, 2.6), behind the endurance switch (D18). */
@@ -10,7 +11,7 @@ export default async function InterviewPage({ searchParams }: { searchParams: Pr
   const data = result.data;
   const { next } = await searchParams;
   // Only paths inside the app, never another site.
-  const back = next && /^\/[a-z0-9/-]*$/i.test(next) ? next : "/more/athlete";
+  const back = localPath(next, "/more/athlete");
   return (
     <InterviewClient
       race={data.race}

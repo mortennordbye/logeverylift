@@ -45,7 +45,7 @@ what it describes, that package updates this file and the server instructions in
   (bpm), threshold run pace and swim CSS (stored as m/s; tools also give and take seconds per km
   or per 100 m). One row per value with its date and source (`manual`, `test`, `garmin`), so the
   rows are the history; the latest date is current, and a value older than 8 weeks is stale.
-  A field test (`run_30min`, `bike_30min`, `css_400_200`, `swim_t1000`) sends its inputs, and the
+  A field test (`run_30min`, `bike_30min`, `ftp_20min`, `css_400_200`, `swim_t1000`) sends its inputs, and the
   app computes the value. Garmin estimates show as suggestions for accounts with Garmin; they
   are stored only when taken. `get_athlete_profile`, `manage_thresholds`.
 - **Athlete profile** (endurance features only). Endurance experience, available days, hours

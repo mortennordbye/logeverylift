@@ -17,6 +17,7 @@ import { ThresholdEditor, type SuggestionView } from "@/components/features/Thre
 import type { ThresholdView } from "@/components/features/ThresholdsClient";
 import { THRESHOLD_KINDS, type ThresholdKind } from "@/db/schema/athlete-profile";
 import { finishInterview, moveMemoryToProfile } from "@/lib/actions/athlete-profile";
+import { localPath } from "@/lib/utils/sign-in-redirect";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { STRENGTH_GOAL_LABEL } from "@/lib/utils/strength-goal";
 import { THRESHOLD_LABEL, currentThresholds, formatThreshold } from "@/lib/utils/thresholds";
@@ -113,7 +114,7 @@ export function InterviewClient({
       setError(r.error);
       return;
     }
-    router.push(next);
+    router.push(localPath(next, "/more/athlete"));
     router.refresh();
   }
 

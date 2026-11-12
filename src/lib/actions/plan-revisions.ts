@@ -11,6 +11,7 @@ import { oauthClients, planRevisions, programSets, programs, trainingCycles, typ
 import {
   OpenWorkoutError,
   PlanNotFoundError,
+  PlanStateError,
   listAssistantChangeSets,
   listDeleted,
   listRevisions,
@@ -121,7 +122,9 @@ export async function restorePlanRevision(
     revalidateObject(done.objectType, done.objectId);
     return { success: true, data: done };
   } catch (e) {
-    if (e instanceof OpenWorkoutError || e instanceof PlanNotFoundError) return { success: false, error: e.message };
+    if (e instanceof OpenWorkoutError || e instanceof PlanNotFoundError || e instanceof PlanStateError) {
+      return { success: false, error: e.message };
+    }
     console.error("[restorePlanRevision] failed", { revisionId: parsed.data.revisionId }, e);
     return { success: false, error: "Failed to restore" };
   }
@@ -148,7 +151,9 @@ export async function undoPlanChangeSet(data: unknown): Promise<ActionResult<{ o
     revalidatePath("/");
     return { success: true, data: done };
   } catch (e) {
-    if (e instanceof OpenWorkoutError || e instanceof PlanNotFoundError) return { success: false, error: e.message };
+    if (e instanceof OpenWorkoutError || e instanceof PlanNotFoundError || e instanceof PlanStateError) {
+      return { success: false, error: e.message };
+    }
     console.error("[undoPlanChangeSet] failed", e);
     return { success: false, error: "Failed to undo the changes" };
   }

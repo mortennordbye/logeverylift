@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import PLAN_BEFORE_C3 from "./fixtures/triathlon-plan-16w-main.json";
 import {
   buildTriathlonPlan,
   planDefaultsFromProfile,
@@ -327,10 +328,11 @@ describe("buildTriathlonPlan by strength goal (docs/plans/athlete-profile.md, 2.
   const strengthDays = (plan: ReturnType<typeof buildTriathlonPlan>) =>
     plan.days.filter((d) => d.exercises.some((e) => e.name === "Front Squat" || e.name === "Romanian Deadlift"));
 
-  it("keep muscle and no goal give today's plan", () => {
-    const today = buildTriathlonPlan({ weeks: 16 });
-    expect(buildTriathlonPlan({ weeks: 16, strengthGoal: "keep_muscle" })).toEqual(today);
-    expect(buildTriathlonPlan({ weeks: 16, strengthGoal: null })).toEqual(today);
+  it("keep muscle and no goal give the plan main built before strength goals", () => {
+    // Pinned: the output of buildTriathlonPlan({ weeks: 16 }) on main before C3 (2bdac35).
+    expect(buildTriathlonPlan({ weeks: 16, strengthGoal: "keep_muscle" })).toEqual(PLAN_BEFORE_C3);
+    expect(buildTriathlonPlan({ weeks: 16, strengthGoal: null })).toEqual(PLAN_BEFORE_C3);
+    expect(buildTriathlonPlan({ weeks: 16 })).toEqual(PLAN_BEFORE_C3);
   });
 
   it("stronger: heavy 4 x 5 main leg lifts with plyometrics first, two days", () => {

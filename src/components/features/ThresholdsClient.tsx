@@ -5,7 +5,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { THRESHOLD_KINDS, type ThresholdKind, type ThresholdSource } from "@/db/schema/athlete-profile";
 import { deleteThresholdValue, restoreThresholdValue } from "@/lib/actions/athlete-profile";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { THRESHOLD_LABEL, currentThresholds, formatThreshold, isStale, weeksSince } from "@/lib/utils/thresholds";
+import { THRESHOLD_LABEL, currentThresholds, formatThreshold, isStale, thresholdWarnings, weeksSince } from "@/lib/utils/thresholds";
 import type { Units } from "@/lib/utils/units";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -62,6 +62,7 @@ export function ThresholdsClient({
   }
 
   const history = open ? rows.filter((r) => r.kind === open) : [];
+  const warnings = thresholdWarnings(current);
 
   return (
     <div className="flex-1 overflow-y-auto px-4 pb-8 space-y-4">
@@ -98,6 +99,12 @@ export function ThresholdsClient({
           );
         })}
       </div>
+
+      {warnings.map((w) => (
+        <p key={w} className="text-sm text-amber-600 dark:text-amber-400" data-testid="threshold-warning">
+          {w}
+        </p>
+      ))}
 
       {deleted.length > 0 && (
         <details className="space-y-2">
