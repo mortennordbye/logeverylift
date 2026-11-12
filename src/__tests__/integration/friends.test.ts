@@ -1,6 +1,7 @@
 import { db } from "@/db";
-import { friendships, nudges, users, workoutReactions, workoutSessions, workoutSets } from "@/db/schema";
+import { athleteInjuries, athleteProfiles, athleteThresholds, friendships, nudges, users, workoutReactions, workoutSessions, workoutSets } from "@/db/schema";
 import {
+  getFriendProfile,
   getFriendSessionDetail,
   getFriendsReadTime,
   getFriendsBadgeCount,
@@ -197,6 +198,23 @@ describe("getFriendSessionDetail", () => {
     expect(json).not.toContain("knee hurt");
     expect(json).not.toContain("felt heavy");
     expect(json).not.toMatch(/"(rir|rpe|readiness|notes|heartRateZone)"/);
+  });
+
+  it("never carries the friend's thresholds, athlete profile or injuries (docs/plans/athlete-profile.md, 4)", async () => {
+    const session = await friendSession();
+    const [owner] = await db.select({ userId: workoutSessions.userId }).from(workoutSessions).where(eq(workoutSessions.id, session.id));
+    await db.insert(athleteThresholds).values({ userId: owner.userId, kind: "ftp", value: 287, measuredOn: "2026-11-01", source: "manual" });
+    await db.insert(athleteProfiles).values({ userId: owner.userId, strengthGoal: "stronger", hoursPerWeek: 11 });
+    await db.insert(athleteInjuries).values({ userId: owner.userId, area: "knee", description: "Sore knee cap", status: "active" });
+    const detail = await getFriendSessionDetail({ sessionId: session.id });
+    const profile = await getFriendProfile(owner.userId);
+    for (const r of [detail, profile]) {
+      if (!r.success) throw new Error(r.error);
+      const json = JSON.stringify(r.data);
+      expect(json).not.toContain("287");
+      expect(json).not.toContain("Sore knee cap");
+      expect(json).not.toMatch(/"(ftp|strengthGoal|hoursPerWeek|injur\w*|threshold\w*)"/i);
+    }
   });
 
   it("refuses someone who is not a friend", async () => {

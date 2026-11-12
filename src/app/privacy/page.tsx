@@ -42,6 +42,15 @@ export default function PrivacyPage() {
           assistant read them.
         </li>
         <li>
+          <strong>Thresholds:</strong> values you enter or get from a field test, such as your FTP, threshold heart
+          rate, maximum heart rate, threshold run pace and swim pace, each with its date, so you keep a history.
+        </li>
+        <li>
+          <strong>Athlete profile, if endurance features are on:</strong> the days and hours you can train, your
+          endurance experience, your strength goal, and injuries or physical limits you enter (where, what happens,
+          what to avoid, and whether it still hurts). Each change is kept as a version you can restore.
+        </li>
+        <li>
           <strong>Settings:</strong> your time zone (taken from your browser the first time you open the app, so
           that &quot;today&quot; is your own day), the units you want distances shown in, whether missed-workout
           reminders are on, and whether endurance features are turned on for your account.
@@ -69,7 +78,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
-        Body weight, heart rate, readiness, how you felt and free-text notes, coach memory included, can reveal things about your health.
+        Body weight, heart rate, readiness, how you felt, thresholds, injuries and free-text notes, coach memory included, can reveal things about your health.
         We treat all of it as health data under GDPR Article 9 and process it only with your explicit consent, which
         you give when you create your account.
       </p>
@@ -151,7 +160,7 @@ export default function PrivacyPage() {
         programs you share with them. Unless you turn off &quot;Show workout activity to friends&quot; in Account,
         they also see your completed workouts: the program, date, duration, how you felt, each exercise with its sets
         (weight, reps, time, distance), your personal records, streak and weekly volume. Your notes, effort ratings,
-        heart rate zones and readiness are never shown to them.
+        heart rate zones, readiness, thresholds, athlete profile and injuries are never shown to them.
       </p>
       <p>
         <strong>Gym map:</strong> if you pick a primary gym, everyone on LogEveryLift can see your name and avatar
@@ -171,10 +180,10 @@ export default function PrivacyPage() {
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
-        on, programs, cycles, coach memory and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
+        on, programs, cycles, coach memory, thresholds, the athlete profile with injuries, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
         access they can also change your profile, body weight, time zone, display units, programs and cycles, see and restore earlier
-        versions of your programs and cycles, write coach memory, create custom exercises, and log a workout you did or mark a planned day
+        versions of your programs and cycles, write coach memory, thresholds, the athlete profile and injuries, create custom exercises, and log a workout you did or mark a planned day
         as done. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More →
         Connected assistants, and it loses access at once.
@@ -195,6 +204,10 @@ export default function PrivacyPage() {
         <li>
           Coach memory: until you delete an entry. A deleted entry can be restored for 90 days, then it is deleted
           for good.
+        </li>
+        <li>
+          Thresholds, the athlete profile and injuries: until you delete them or your account. A deleted threshold
+          or injury can be restored for 90 days, then it is deleted for good.
         </li>
         <li>Login sessions, with IP address and user agent: 30 days after last use.</li>
         <li>Server logs: 7 days.</li>

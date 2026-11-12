@@ -1,5 +1,6 @@
 import { db } from "@/db";
-import { athleteInjuries, athleteProfiles, athleteThresholds, coachMemory, planRevisions, trainingCycles } from "@/db/schema";
+import { athleteInjuries, athleteProfiles, athleteThresholds, coachMemory, planRevisions, trainingCycles, users } from "@/db/schema";
+import { collectUserData } from "@/lib/account-data";
 import {
   addInjuryEntry,
   addThresholdValue,
@@ -232,6 +233,23 @@ describe("the interview", () => {
       .values({ userId: me, name: "Base", durationWeeks: 8, status: "active", startDate: "2026-11-02", raceDate: "2027-08-15", raceDistance: "half" })
       .returning();
     expect(await interviewRace(me)).toEqual({ date: "2027-08-15", distance: "half", cycleId: c.id, cycleName: "Base" });
+  });
+});
+
+describe("export and deletion", () => {
+  it("the export holds all three tables, and deleting the user removes them", async () => {
+    asUser(me);
+    await saveProfile({ strengthGoal: "minimal" });
+    await addThresholdValue({ kind: "ftp", value: 250, source: "manual" });
+    await addInjuryEntry({ area: "hip", description: "Tight", status: "managed" });
+    const data = (await collectUserData(me)) as Record<string, unknown[]>;
+    expect(data.athlete_profiles).toHaveLength(1);
+    expect(data.athlete_thresholds).toHaveLength(1);
+    expect(data.athlete_injuries).toHaveLength(1);
+    await db.delete(users).where(eq(users.id, me));
+    expect(await db.select().from(athleteProfiles)).toHaveLength(0);
+    expect(await db.select().from(athleteThresholds)).toHaveLength(0);
+    expect(await db.select().from(athleteInjuries)).toHaveLength(0);
   });
 });
 
