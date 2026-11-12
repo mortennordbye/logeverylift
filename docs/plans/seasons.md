@@ -395,8 +395,8 @@ group gets the new tools.
 
 ## 3. Migration and rollback
 
-One migration (`drizzle/0084_seasons.sql` if nothing lands first; the hub renumbers if C3
-merges first), from `pnpm db:generate` (create, not rename), SQL and `drizzle/meta/` committed
+One migration (`drizzle/0085_seasons.sql`, after C3's `drizzle/0084_athlete_profile.sql`; regenerated on the
+rebase after C3 merged), from `pnpm db:generate` (create, not rename), SQL and `drizzle/meta/` committed
 together:
 
 - `CREATE TABLE seasons`, `CREATE TABLE season_races` with FKs and indexes.
@@ -456,7 +456,7 @@ phase types, day lengths and the re-plan flags.
      DROP COLUMN phase_type, DROP COLUMN duration_days;
    DROP TABLE season_races;
    DROP TABLE seasons;
-   DELETE FROM drizzle.__drizzle_migrations WHERE hash = '<hash of 0084>';
+   DELETE FROM drizzle.__drizzle_migrations WHERE hash = '<hash of 0085>';
    ```
 
 ## 4. Privacy steps (`privacy-compliance` skill)
@@ -580,7 +580,7 @@ New: `src/db/schema/seasons.ts`, `src/lib/utils/seasons.ts`, `src/lib/seasons.ts
 `src/lib/actions/seasons.ts`, `src/lib/validators/seasons.ts`, `src/lib/mcp/tools/seasons.ts`,
 `src/app/seasons/` (list redirect, `[id]`, `new`, `[id]/edit`, `[id]/history`), season
 components in `src/components/features/`, `e2e/seasons.spec.ts`, the tests in section 5,
-`drizzle/0084_seasons.sql`.
+`drizzle/0085_seasons.sql`.
 
 Changed: `src/db/schema/training-cycles.ts`, `src/db/schema/plan-revisions.ts`,
 `src/lib/plan-revisions.ts`, `src/lib/utils/plan-revisions.ts`, `src/lib/plan-live.ts`,

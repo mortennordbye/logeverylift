@@ -230,7 +230,7 @@ describe("0083: custom exercise names are unique per user", () => {
   });
 });
 
-describe("0084: triathlon cycles move into a season", () => {
+describe("0085: triathlon cycles move into a season", () => {
   it("makes a season per cycle with a race or from the generator, and leaves the rest alone", async () => {
     const tri = await createUser();
     const lifter = await createUser();
@@ -244,7 +244,7 @@ describe("0084: triathlon cycles move into a season", () => {
       ])
       .returning();
 
-    await db.execute(sql.raw(statement("0084_seasons.sql", "DO $$")));
+    await db.execute(sql.raw(statement("0085_seasons.sql", "DO $$")));
 
     const all = await db.select().from(seasons).orderBy(asc(seasons.id));
     expect(all.map((s) => [s.userId, s.name, s.startDate, s.endDate])).toEqual([
@@ -275,7 +275,7 @@ describe("0084: triathlon cycles move into a season", () => {
       .insert(trainingCycles)
       .values({ userId: tri.id, name: "Half build", durationWeeks: 4, athleteLevel: "novice", startDate: "2027-04-19", raceDistance: "half" })
       .returning();
-    await db.execute(sql.raw(statement("0084_seasons.sql", "DO $$")));
+    await db.execute(sql.raw(statement("0085_seasons.sql", "DO $$")));
     const [s] = await db.select().from(seasons);
     expect(s).toMatchObject({ endDate: "2027-05-16", replanReason: expect.stringContaining("date") });
     expect(s.replanFlaggedAt).not.toBeNull();
@@ -300,7 +300,7 @@ describe("0084: triathlon cycles move into a season", () => {
       writer: "user",
       snapshot: { v: 1, cycle: { id: c.id, name: "Half build", raceDate: "2027-08-22" }, slots: [] },
     });
-    await db.execute(sql.raw(statement("0084_seasons.sql", "DO $$")));
+    await db.execute(sql.raw(statement("0085_seasons.sql", "DO $$")));
     const [s] = await db.select().from(seasons);
     const cycleRevs = await db.select().from(planRevisions).where(eq(planRevisions.objectType, "cycle")).orderBy(asc(planRevisions.id));
     expect(cycleRevs).toHaveLength(2);

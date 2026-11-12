@@ -13,6 +13,7 @@ import {
 import { getActiveCycleForUser, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
+import { interviewRace } from "@/lib/athlete-profile";
 import { purgePlanRevisions } from "@/lib/plan-revisions";
 import { resumeSeason, seasonlessCycles } from "@/lib/seasons";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
@@ -55,6 +56,16 @@ async function cycle(userId: string, extra: Partial<typeof trainingCycles.$infer
   return c.id;
 }
 const race = { name: "Half", raceDate: "2027-08-22", discipline: "triathlon" as const, distance: "half" as const, priority: "A" as const };
+
+describe("the intake interview reads the season's race (C3 contact)", () => {
+  it("shows the season's A race for an active phase cycle", async () => {
+    const id = await season();
+    await addRaceAction({ seasonId: id, ...race });
+    const c = await phase(id, { name: "Base", durationWeeks: 6 });
+    await startTrainingCycle(c);
+    expect(await interviewRace(me)).toEqual({ date: "2027-08-22", distance: "half", cycleId: c, cycleName: "Base" });
+  });
+});
 
 describe("a race moved while the season was deleted (re-review 1)", () => {
   it("goes back to the season as its A race date, and the season is flagged", async () => {
