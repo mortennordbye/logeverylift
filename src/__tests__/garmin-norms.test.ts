@@ -1,7 +1,7 @@
 import { isGap, rateSignal, vo2Rating, type Rating, type RatingContext } from "@/lib/garmin/analytics/norms";
 import { describe, expect, it } from "vitest";
 
-const ctx: RatingContext = { sex: "male", age: 23, hrvBaseline: null, bodyFat: null, bmi: null, chronologicalAge: null };
+const ctx: RatingContext = { sex: "male", age: 23, hrvBaseline: null, bodyFat: null, bmi: null, chronologicalAge: null, sleepRanges: null };
 const rate = (key: Parameters<typeof rateSignal>[0], v: number, over: Partial<RatingContext> = {}) => rateSignal(key, v, { ...ctx, ...over }) as Rating;
 const label = (r: Rating) => r.bands[r.index].label;
 
@@ -95,5 +95,43 @@ describe("rateSignal", () => {
     expect(rate("sleepScore", 85).within).toBeCloseTo(0.5);
     expect(rate("bodyBattery", 100).within).toBeGreaterThan(0.9);
     expect(rate("restingHr", 30).within).toBe(0.5);
+  });
+});
+
+describe("rateSignal: sleep quality and day to day", () => {
+  const sleepRanges = { deep: [16, 33] as [number, number], rem: [21, 31] as [number, number], awakeMax: 1 };
+
+  it("rates deep and REM share on Garmin's range for the night, the top value inside it", () => {
+    expect(label(rate("deepSleep", 17, { sleepRanges }))).toBe("Optimal");
+    expect(label(rate("deepSleep", 33, { sleepRanges }))).toBe("Optimal");
+    expect(label(rate("deepSleep", 34, { sleepRanges }))).toBe("Above optimal");
+    expect(label(rate("remSleep", 18, { sleepRanges }))).toBe("Below optimal");
+    expect(rate("remSleep", 18, { sleepRanges }).next).toEqual({ label: "Optimal", gap: 3, dir: "up" });
+    expect(rate("deepSleep", 34, { sleepRanges }).bands[2].edge).toBe(33);
+    expect(rateSignal("deepSleep", 17, ctx)).toBeNull();
+  });
+
+  it("rates awake periods against Garmin's optimal count", () => {
+    expect(label(rate("awakeCount", 1, { sleepRanges }))).toBe("Optimal");
+    expect(label(rate("awakeCount", 2, { sleepRanges }))).toBe("More than optimal");
+  });
+
+  it("uses Garmin's stress bands for sleep and day stress", () => {
+    expect(label(rate("sleepStress", 19))).toBe("Rest");
+    expect(label(rate("stress", 26))).toBe("Low");
+    expect(label(rate("stress", 76))).toBe("High");
+  });
+
+  it("rates blood oxygen and steps", () => {
+    expect(label(rate("spo2", 96))).toBe("Normal");
+    expect(label(rate("spo2", 92))).toBe("Low");
+    expect(label(rate("spo2", 88))).toBe("Very low");
+    expect(label(rate("steps", 4999))).toBe("Sedentary");
+    expect(label(rate("steps", 10000))).toBe("Active");
+    expect(label(rate("steps", 12500))).toBe("Highly active");
+  });
+
+  it("has no population scale for sleeping HR, sitting time and muscle mass", () => {
+    for (const key of ["sleepHr", "sedentary", "muscleMass"] as const) expect(rateSignal(key, 50, ctx)).toBeNull();
   });
 });

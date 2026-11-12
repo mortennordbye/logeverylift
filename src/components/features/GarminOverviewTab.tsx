@@ -10,7 +10,7 @@ import { formBandLabel } from "@/lib/garmin/charts/load";
 import { SPORT_LABEL } from "@/lib/garmin/charts/theme";
 import type { OverviewData, VolumeData } from "@/lib/garmin/queries";
 import { byGap } from "@/lib/garmin/analytics/demands";
-import { BodySignals } from "@/components/features/garmin/BodySignals";
+import { BodySignals, SIGNAL_GROUPS } from "@/components/features/garmin/BodySignals";
 import { DemandsList, WeekAgainstPlan, demandsTitle } from "@/components/features/garmin/Volume";
 import { phaseLabel } from "@/lib/utils/periodization";
 import { formatDateShort } from "@/lib/utils/format";
@@ -287,7 +287,15 @@ export function GarminOverviewTab({ data, volume }: { data: OverviewData; volume
     <div className="space-y-4">
       <RaceStrip data={data} />
       <ReadinessBlock data={data} />
-      <BodySignals data={data} />
+      {SIGNAL_GROUPS.map((g, i) => (
+        <BodySignals
+          key={g.title}
+          data={data}
+          title={g.title}
+          keys={g.keys}
+          note={i === 0 ? "Each bar rates you on a published scale, like Garmin's VO2 max rating. A tile with no bar is judged only against your own normal. Tap a tile for the scale, your trend and what it means." : undefined}
+        />
+      ))}
       <FitnessBlock data={data} />
       <WeekBlock volume={volume} />
       <IntensityBlock data={data} />

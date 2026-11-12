@@ -5,7 +5,7 @@ import type { BodySignal } from "@/lib/garmin/analytics/overview";
 import { isGap, rateSignal, type Rating, type RatingGap, type Tone } from "@/lib/garmin/analytics/norms";
 import type { BodyKey, OverviewData } from "@/lib/garmin/queries";
 import { formatDateShort } from "@/lib/utils/format";
-import { BatteryMedium, BedDouble, ChevronRight, Gauge, Heart, HeartPulse, Hourglass, Moon, Scale, Wind, X, type LucideIcon } from "lucide-react";
+import { Activity, Armchair, BatteryMedium, BedDouble, BedSingle, BicepsFlexed, Brain, ChevronRight, Droplet, Eye, Footprints, Gauge, Heart, HeartPulse, Hourglass, Moon, MoonStar, Scale, Sunrise, Wind, X, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -111,7 +111,114 @@ const BODY: Record<BodyKey, BodyConfig> = {
     color: "var(--viz-other)",
     about: "Your newest weigh-in. The rating uses body fat when your scale measures it, as weight alone says little about health; else BMI.",
   },
+  deepSleep: {
+    label: "Deep sleep",
+    unit: "%",
+    format: (v) => String(Math.round(v)),
+    href: tab("recovery"),
+    hrefLabel: "Recovery",
+    icon: MoonStar,
+    color: "var(--viz-zone-3)",
+    about: "Share of the night in deep sleep, when the body does most of its physical repair. Garmin sets an optimal range for each night.",
+  },
+  remSleep: {
+    label: "REM sleep",
+    unit: "%",
+    format: (v) => String(Math.round(v)),
+    href: tab("recovery"),
+    hrefLabel: "Recovery",
+    icon: Eye,
+    color: "var(--viz-sleep-score)",
+    about: "Share of the night in REM sleep, which matters most for memory and learning, skills included. Garmin sets an optimal range for each night.",
+  },
+  sleepStress: {
+    label: "Sleep stress",
+    unit: "",
+    format: (v) => String(Math.round(v)),
+    href: tab("recovery"),
+    hrefLabel: "Recovery",
+    icon: Activity,
+    color: "var(--viz-serious)",
+    about: "Garmin's stress level, from heart rate variability, averaged while you slept. Late hard sessions, alcohol, illness and a late meal often raise it.",
+  },
+  awakeCount: {
+    label: "Awake periods",
+    unit: "",
+    format: (v) => String(Math.round(v)),
+    href: tab("recovery"),
+    hrefLabel: "Recovery",
+    icon: Sunrise,
+    color: "var(--viz-strength)",
+    about: "How many times you woke in the night, as your watch saw it. Short wake-ups are normal; many of them break up deep and REM sleep.",
+  },
+  spo2: {
+    label: "Blood oxygen",
+    unit: "%",
+    format: (v) => String(Math.round(v)),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Droplet,
+    color: "var(--viz-negative)",
+    about: "Average blood oxygen while asleep, from your watch's pulse oximeter. It reads less exactly than a medical oximeter; a value that stays low is a reason to ask a doctor.",
+  },
+  sleepHr: {
+    label: "Sleeping HR",
+    unit: "bpm",
+    format: (v) => String(Math.round(v)),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: BedSingle,
+    color: "var(--viz-other)",
+    about: "Average heart rate while asleep. It is compared only with your own normal: a night well above it often follows hard training, alcohol, heat or illness.",
+  },
+  steps: {
+    label: "Steps",
+    unit: "/day",
+    format: (v) => Math.round(v).toLocaleString("en-GB"),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Footprints,
+    color: "var(--viz-run)",
+    about: "Steps a day, averaged over the last 7 complete days. Daily movement outside training adds to recovery and health, not only to fitness.",
+  },
+  stress: {
+    label: "Day stress",
+    unit: "",
+    format: (v) => String(Math.round(v)),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Brain,
+    color: "var(--viz-serious)",
+    about: "Garmin's average stress level for your last complete day, from heart rate variability while you were not exercising.",
+  },
+  sedentary: {
+    label: "Sitting time",
+    unit: "h",
+    format: (v) => v.toFixed(1),
+    href: tab("day"),
+    hrefLabel: "Day",
+    icon: Armchair,
+    color: "var(--viz-zone-2)",
+    about: "Hours your watch counted as sedentary on your last complete day, sleep not included. Long unbroken sitting is a health risk of its own, even for people who train.",
+  },
+  muscleMass: {
+    label: "Muscle mass",
+    unit: "kg",
+    format: (v) => v.toFixed(1),
+    href: tab("trends"),
+    hrefLabel: "Trends",
+    icon: BicepsFlexed,
+    color: "var(--viz-fitness-age)",
+    about: "Skeletal muscle from your smart scale. A scale estimates it from electrical impedance, so watch the trend over weeks, not single readings.",
+  },
 };
+
+/** The Overview's three groups of tiles. */
+export const SIGNAL_GROUPS: { title: string; keys: BodyKey[] }[] = [
+  { title: "Body · how you compare", keys: ["sleep", "sleepScore", "hrv", "restingHr", "respiration", "bodyBattery", "vo2max", "fitnessAge", "weight"] },
+  { title: "Sleep quality · last night", keys: ["deepSleep", "remSleep", "sleepStress", "awakeCount", "spo2", "sleepHr"] },
+  { title: "Day to day", keys: ["steps", "stress", "sedentary", "muscleMass"] },
+];
 
 const TONE_COLOR: Record<Tone, string> = {
   poor: "var(--viz-critical)",
@@ -132,6 +239,8 @@ function tileSub(k: BodyKey, data: OverviewData): string | undefined {
   if (k === "vo2max") return `Garmin, ${data.vo2Sport === "run" ? "running" : "cycling"}`;
   if (k === "hrv") return data.rating.hrvBaseline ? `last night · 7 d ${data.rating.hrvBaseline.weeklyAvg}` : "last night";
   if (k === "weight" && data.rating.bodyFat !== null) return `${data.rating.bodyFat} % body fat`;
+  if (k === "steps") return "7-day average";
+  if (k === "stress" || k === "sedentary") return "last full day";
   return undefined;
 }
 
@@ -217,7 +326,7 @@ function BodyTile({ k, s, data, onOpen }: { k: BodyKey; s: BodySignal; data: Ove
               {band.label}
             </span>
           ) : (
-            <span className="text-muted-foreground">{s.value === null ? "No recent value" : isGap(r) ? "Tap to compare" : normalText(s).replace(".", "")}</span>
+            <span className="text-muted-foreground">{s.value === null ? "No recent value" : isGap(r) ? "Tap to compare" : !s.normal ? "Learning your normal" : normalText(s).replace(".", "")}</span>
           )}
           {band && s.state && s.state !== "within" && <span className="text-muted-foreground"> · {s.state} your normal</span>}
         </span>
@@ -265,7 +374,7 @@ function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClo
   const r = ratingOf(k, s, data);
   const rated = r && !isGap(r) ? r : null;
   const band = rated?.bands[rated.index];
-  const nextUnit = k === "weight" ? (data.rating.bodyFat !== null && data.rating.sex ? " % body fat" : " BMI") : c.unit ? ` ${c.unit}` : "";
+  const nextUnit = k === "weight" ? (data.rating.bodyFat !== null && data.rating.sex ? " % body fat" : " BMI") : k === "steps" ? " steps a day" : c.unit ? ` ${c.unit}` : "";
   return (
     <div className="mx-auto w-full max-w-lg rounded-t-3xl bg-card px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+1.5rem)] max-h-[85vh] overflow-y-auto">
       <div className="mx-auto mb-2 h-1 w-10 rounded-full bg-muted" aria-hidden />
@@ -321,7 +430,7 @@ function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClo
         <TrendChart s={s} color={c.color} />
         {s.normal && (
           <p className="text-[11px] text-muted-foreground">
-            The band is your normal: {cut(s.normal[0])} to {cut(s.normal[1])}
+            The band is your normal: {c.format(s.normal[0])} to {c.format(s.normal[1])}
             {c.unit ? ` ${c.unit}` : ""}
             {k === "hrv" ? " (Garmin's baseline)" : ", the mean ± 1 SD of the 4 weeks before"}.
           </p>
@@ -338,19 +447,20 @@ function BodySheet({ k, data, onClose }: { k: BodyKey; data: OverviewData; onClo
   );
 }
 
-export function BodySignals({ data }: { data: OverviewData }) {
+/** One group of tiles with its sheet. */
+export function BodySignals({ data, title, keys, note }: { data: OverviewData; title: string; keys: BodyKey[]; note?: string }) {
   // The key stays set while the sheet slides out, so it does not empty first.
   const [sheet, setSheet] = useState<{ key: BodyKey; open: boolean } | null>(null);
   const close = () => setSheet((v) => (v ? { ...v, open: false } : v));
   return (
-    <section aria-label="Body signals" className="space-y-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">Body · how you compare</p>
-      <div className="grid grid-cols-3 gap-2">
-        {(Object.keys(BODY) as BodyKey[]).map((k) => (
+    <section aria-label={title} className="space-y-2">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground px-1">{title}</p>
+      <div className={`grid gap-2 ${keys.length % 3 === 0 ? "grid-cols-3" : "grid-cols-2"}`}>
+        {keys.map((k) => (
           <BodyTile key={k} k={k} s={data.body[k]} data={data} onOpen={() => setSheet({ key: k, open: true })} />
         ))}
       </div>
-      <p className="text-[11px] text-muted-foreground px-1">Each bar rates you on a published scale, like Garmin&apos;s VO2 max rating. Tap a tile for the scale, your trend and what it means.</p>
+      {note && <p className="text-[11px] text-muted-foreground px-1">{note}</p>}
       <BottomSheet open={sheet?.open ?? false} onClose={close}>
         {sheet && <BodySheet k={sheet.key} data={data} onClose={close} />}
       </BottomSheet>

@@ -166,3 +166,17 @@ export function parseFitnessAge(j: Json | null | undefined): FitnessAge | null {
   parts.sort((a, b) => a.priority - b.priority);
   return { age: Math.round(age * 10) / 10, chronological: num(j?.chronologicalAge), parts: parts.map((p) => p.part) };
 }
+
+/**
+ * The mean of each point's `days` calendar days (it and the days before), for
+ * points with at least `min` values in that window. Steps are judged on a week,
+ * as one lazy day says little.
+ */
+export function rollingMean(series: Point[], days = 7, min = 4): Point[] {
+  const sorted = [...series].sort((a, b) => a.date.localeCompare(b.date));
+  return sorted.flatMap((p) => {
+    const from = addDays(p.date, -(days - 1));
+    const win = sorted.filter((q) => q.date >= from && q.date <= p.date);
+    return win.length >= min ? [{ date: p.date, value: Math.round(win.reduce((s, q) => s + q.value, 0) / win.length) }] : [];
+  });
+}

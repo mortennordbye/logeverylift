@@ -206,7 +206,7 @@ describe("getOverviewData rating context", () => {
     ]);
 
     const r = (await getOverviewData(me.id, "2026-11-11")).rating;
-    expect(r).toEqual({ sex: "female", age: 36, hrvBaseline: { lowUpper: 45, balancedLow: 50, balancedUpper: 70, weeklyAvg: 60 }, bodyFat: 24.5, bmi: 21.9, chronologicalAge: 99 });
+    expect(r).toEqual({ sex: "female", age: 36, hrvBaseline: { lowUpper: 45, balancedLow: 50, balancedUpper: 70, weeklyAvg: 60 }, bodyFat: 24.5, bmi: 21.9, chronologicalAge: 99, sleepRanges: null });
   });
 
   it("falls back to Garmin's age and leaves sex unknown for other or no gender", async () => {
@@ -216,5 +216,45 @@ describe("getOverviewData rating context", () => {
 
     const r = (await getOverviewData(me.id, "2026-11-11")).rating;
     expect(r).toMatchObject({ sex: null, age: 23, hrvBaseline: null, bodyFat: null, bmi: null });
+  });
+});
+
+describe("getOverviewData sleep quality and day to day", () => {
+  it("reads the night's sleep parts, complete days only for steps and stress, and scale muscle mass", async () => {
+    const me = await createUser();
+    const other = await createUser();
+    const sleep = {
+      avgSleepStress: 19,
+      awakeCount: 2,
+      averageSpO2Value: 96,
+      avgHeartRate: 51,
+      sleepScores: { deepPercentage: { value: 17, optimalStart: 16, optimalEnd: 33 }, remPercentage: { value: 21, optimalStart: 21, optimalEnd: 31 }, awakeCount: { optimalStart: 0, optimalEnd: 1 } },
+    };
+    await db.insert(garminDays).values([
+      { userId: me.id, calendarDate: "2026-11-11", kind: "sleep", data: sleep },
+      ...["2026-11-07", "2026-11-08", "2026-11-09", "2026-11-10"].flatMap((d) => [
+        { userId: me.id, calendarDate: d, kind: "steps" as const, data: { totalSteps: 8000 } },
+        // Garmin's per-day summary can be empty for a day the steps endpoint has.
+        { userId: me.id, calendarDate: d, kind: "user_summary" as const, data: { totalSteps: null, averageStressLevel: 30, sedentarySeconds: 36000 } },
+      ]),
+      // Today, still filling up: left out.
+      { userId: me.id, calendarDate: "2026-11-11", kind: "steps", data: { totalSteps: 28 } },
+      { userId: me.id, calendarDate: "2026-11-11", kind: "user_summary", data: { totalSteps: 28, averageStressLevel: 90, sedentarySeconds: 600 } },
+      { userId: me.id, calendarDate: "2026-11-09", kind: "weight", data: { latestWeight: { weight: 89700, muscleMass: 37439 } } },
+      { userId: other.id, calendarDate: "2026-11-11", kind: "sleep", data: { ...sleep, avgSleepStress: 80 } },
+    ]);
+
+    const d = await getOverviewData(me.id, "2026-11-11");
+    expect(d.body.deepSleep.value).toBe(17);
+    expect(d.body.remSleep.value).toBe(21);
+    expect(d.body.sleepStress.value).toBe(19);
+    expect(d.body.awakeCount.value).toBe(2);
+    expect(d.body.spo2.value).toBe(96);
+    expect(d.body.sleepHr.value).toBe(51);
+    expect(d.body.steps).toMatchObject({ value: 8000, date: "2026-11-10" });
+    expect(d.body.stress).toMatchObject({ value: 30, date: "2026-11-10" });
+    expect(d.body.sedentary.value).toBe(10);
+    expect(d.body.muscleMass.value).toBe(37.4);
+    expect(d.rating.sleepRanges).toEqual({ deep: [16, 33], rem: [21, 31], awakeMax: 1 });
   });
 });

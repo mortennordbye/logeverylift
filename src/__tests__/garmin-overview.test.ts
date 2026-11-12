@@ -1,5 +1,5 @@
 import { garminView } from "@/components/features/garmin/tabs";
-import { bodySignal, intensityWeek, normalRange, parseFitnessAge, raceStatus, type CycleForRace } from "@/lib/garmin/analytics/overview";
+import { bodySignal, intensityWeek, normalRange, parseFitnessAge, raceStatus, rollingMean, type CycleForRace } from "@/lib/garmin/analytics/overview";
 import { addDays } from "@/lib/garmin/dates";
 import { describe, expect, it } from "vitest";
 
@@ -121,5 +121,28 @@ describe("parseFitnessAge", () => {
   it("is null without an age", () => {
     expect(parseFitnessAge({ components: {} })).toBeNull();
     expect(parseFitnessAge(null)).toBeNull();
+  });
+});
+
+describe("rollingMean", () => {
+  it("averages each day with the 6 before it, once 4 days are in the window", () => {
+    const series = run(5, (i) => (i + 1) * 1000);
+    expect(rollingMean(series)).toEqual([
+      { date: addDays(today, -1), value: 2500 },
+      { date: today, value: 3000 },
+    ]);
+  });
+
+  it("drops days outside the 7-day window", () => {
+    const series = [{ date: addDays(today, -10), value: 99999 }, ...run(4, () => 8000)];
+    expect(rollingMean(series).at(-1)).toEqual({ date: today, value: 8000 });
+  });
+});
+
+describe("bodySignal fresh", () => {
+  it("keeps 90 days of history but shows no value older than `fresh` days", () => {
+    const s = bodySignal([{ date: addDays(today, -20), value: 50 }], today, { days: 90, fresh: 14 });
+    expect(s.points).toHaveLength(1);
+    expect(s.value).toBeNull();
   });
 });

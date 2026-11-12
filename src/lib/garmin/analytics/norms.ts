@@ -13,6 +13,12 @@
  * - Breathing: 12 to 20 breaths a minute at rest for adults.
  * - Body fat: the American Council on Exercise categories; BMI: WHO.
  * - Fitness age: against the user's own age.
+ * - Deep and REM sleep share, wake-ups: Garmin's optimal range for that night
+ *   (sleep score parts); sleep and day stress: Garmin's 0 to 100 stress bands.
+ * - Blood oxygen asleep: 95 % or more is normal, below 90 % is low.
+ * - Steps: Tudor-Locke step-defined activity categories (7-day average).
+ * - Sleeping HR, sitting time and muscle mass have no fair population scale;
+ *   they are judged only against the user's own normal.
  */
 
 import type { BodyKey } from "../queries";
@@ -53,6 +59,8 @@ export type RatingContext = {
   bodyFat: number | null;
   bmi: number | null;
   chronologicalAge: number | null;
+  /** Garmin's optimal deep and REM share (%) and most wake-ups for the newest night. */
+  sleepRanges: { deep: [number, number] | null; rem: [number, number] | null; awakeMax: number | null } | null;
 };
 
 const TONE_RANK: Record<Tone, number> = { poor: 0, fair: 1, ok: 2, good: 3, excellent: 4, superior: 5 };
@@ -139,6 +147,15 @@ const BODY_FAT: Record<"male" | "female", Band[]> = {
   female: bands([14, 21, 25, 32], ["Essential", "Athletes", "Fitness", "Average", "Obese"], ["fair", "excellent", "good", "ok", "poor"]),
 };
 
+const STRESS = bands([26, 51, 76], ["Rest", "Low", "Medium", "High"], ["excellent", "good", "fair", "poor"]);
+const SPO2 = bands([90, 95], ["Very low", "Low", "Normal"], ["poor", "fair", "good"]);
+const STEPS = bands([5000, 7500, 10000, 12500], ["Sedentary", "Low active", "Somewhat active", "Active", "Highly active"], ["poor", "fair", "ok", "good", "excellent"]);
+
+/** Garmin's optimal share of a sleep stage: under it, inside it, over it. */
+function stageBands([lo, hi]: [number, number]): Band[] {
+  return bands([lo, hi + 1], ["Below optimal", "Optimal", "Above optimal"], ["fair", "good", "ok"], { 1: hi });
+}
+
 /** One minute, so a band's upper hour is still inside it (9 h is recommended). */
 const MIN_H = 1 / 60;
 
@@ -202,6 +219,30 @@ export function rateSignal(key: BodyKey, v: number, ctx: RatingContext): Rating 
       const diff = Math.round(own - v);
       return place(bs, v, () => (diff === 0 ? `The same as your age, ${own}.` : `${Math.abs(diff)} years ${diff > 0 ? "younger" : "older"} than your age, ${own}.`), "Garmin's fitness age against your age", 3);
     }
+    case "deepSleep":
+    case "remSleep": {
+      const range = key === "deepSleep" ? ctx.sleepRanges?.deep : ctx.sleepRanges?.rem;
+      if (!range) return null;
+      const stage = key === "deepSleep" ? "deep" : "REM";
+      return place(stageBands(range), v, (b) => `${b.label} for ${stage} sleep: Garmin's range for your night is ${range[0]} to ${range[1]} %.`, "Garmin's sleep score optimal range", 5);
+    }
+    case "awakeCount": {
+      const max = ctx.sleepRanges?.awakeMax;
+      if (max === null || max === undefined) return null;
+      const bs = bands([max + 1], ["Optimal", "More than optimal"], ["good", "fair"], { 0: max });
+      return place(bs, v, (b) => `${b.label}: Garmin counts ${max} or fewer awake periods in a night as optimal.`, "Garmin's sleep score optimal range", 3);
+    }
+    case "sleepStress":
+    case "stress":
+      return place(STRESS, v, (b) => `${b.label} stress on Garmin's 0 to 100 scale${key === "sleepStress" ? ", averaged while asleep" : ", averaged over the day"}.`, "Garmin's stress levels", 25);
+    case "spo2":
+      return place(SPO2, v, (b) => (b.label === "Normal" ? "In the 95 to 100 % normal while asleep." : `${b.label}: 95 to 100 % is normal while asleep. A wrist reading is not a medical test; ask a doctor if it stays low.`), "Common clinical range", 5);
+    case "steps":
+      return place(STEPS, v, (b) => `${b.label}: a 7-day average of ${Math.round(v).toLocaleString("en-GB")} steps a day.`, "Tudor-Locke step-defined activity categories", 2500);
+    case "sleepHr":
+    case "sedentary":
+    case "muscleMass":
+      return null;
     case "weight": {
       if (ctx.bodyFat !== null && ctx.sex) {
         return place(BODY_FAT[ctx.sex], ctx.bodyFat, (b) => `Body fat ${ctx.bodyFat} %: ${b.label.toLowerCase()} for ${ctx.sex === "male" ? "men" : "women"}.`, "American Council on Exercise body fat categories", 4);

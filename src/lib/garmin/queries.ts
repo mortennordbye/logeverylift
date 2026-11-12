@@ -18,7 +18,7 @@ import { compareBricks, pacingGuide, taperStart, type BrickComparison, type Fuel
 import type { Efforts } from "./analytics/efforts";
 import type { Decoupling } from "./analytics/decoupling";
 import type { RatingContext } from "./analytics/norms";
-import { HRV_STATUS_LABEL, bodySignal, intensityWeek, parseFitnessAge, raceStatus, type BodySignal, type FitnessAge, type IntensityWeek, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
+import { HRV_STATUS_LABEL, bodySignal, rollingMean, intensityWeek, parseFitnessAge, raceStatus, type BodySignal, type FitnessAge, type IntensityWeek, type CycleForRace, type RaceDistance, type RaceStatus } from "./analytics/overview";
 import {
   RAMP_WINDOW_DAYS,
   demandsChecklist,
@@ -549,7 +549,26 @@ export async function getActiveCycle(userId: string): Promise<ActiveCycle | null
   return c ?? null;
 }
 
-export type BodyKey = "sleep" | "sleepScore" | "hrv" | "restingHr" | "respiration" | "bodyBattery" | "vo2max" | "fitnessAge" | "weight";
+export type BodyKey =
+  | "sleep"
+  | "sleepScore"
+  | "hrv"
+  | "restingHr"
+  | "respiration"
+  | "bodyBattery"
+  | "vo2max"
+  | "fitnessAge"
+  | "weight"
+  | "deepSleep"
+  | "remSleep"
+  | "sleepStress"
+  | "awakeCount"
+  | "spo2"
+  | "sleepHr"
+  | "steps"
+  | "stress"
+  | "sedentary"
+  | "muscleMass";
 
 export type OverviewData = {
   date: string;
@@ -588,7 +607,7 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
   const dayRows = await db
     .select({ date: garminDays.calendarDate, kind: garminDays.kind, data: garminDays.data })
     .from(garminDays)
-    .where(and(eq(garminDays.userId, userId), gte(garminDays.calendarDate, daysAgo(date, 120)), lte(garminDays.calendarDate, date), inArray(garminDays.kind, ["user_summary", "weight", "sleep", "fitness_age", "hrv"])))
+    .where(and(eq(garminDays.userId, userId), gte(garminDays.calendarDate, daysAgo(date, 120)), lte(garminDays.calendarDate, date), inArray(garminDays.kind, ["user_summary", "weight", "sleep", "fitness_age", "hrv", "steps"])))
     .orderBy(asc(garminDays.calendarDate));
   const points = (kind: string, pick: (j: Json) => number | null) =>
     dayRows.flatMap((r) => {
@@ -634,6 +653,8 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
       date,
       { days: 90 },
     ),
+    ...sleepQualitySignals(points, date),
+    ...dayToDaySignals(points, date),
   };
 
   const hrvToday = dayRows.find((r) => r.kind === "hrv" && r.date === date)?.data as Json | undefined;
@@ -655,6 +676,7 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     bodyFat: num(weigh?.bodyFat),
     bmi: bmi !== null ? Math.round(bmi * 10) / 10 : null,
     chronologicalAge,
+    sleepRanges: sleepRanges(latest("sleep")),
   };
 
   const recent = series.slice(-42);
@@ -719,6 +741,57 @@ export async function getOverviewData(userId: string, now = isoDate(new Date()))
     },
     last,
   };
+}
+
+type PointsOf = (kind: string, pick: (j: Json) => number | null) => { date: string; value: number }[];
+const sleepScore = (j: Json, key: string) => ((j.sleepScores as Json | undefined)?.[key] ?? undefined) as Json | undefined;
+
+/** Garmin's sleep summary per night: stage shares, stress, wake-ups, SpO2 and heart rate while asleep. */
+function sleepQualitySignals(points: PointsOf, date: string) {
+  const opts = { days: 90, fresh: 14 };
+  return {
+    deepSleep: bodySignal(points("sleep", (j) => num(sleepScore(j, "deepPercentage")?.value)), date, opts),
+    remSleep: bodySignal(points("sleep", (j) => num(sleepScore(j, "remPercentage")?.value)), date, opts),
+    sleepStress: bodySignal(points("sleep", (j) => num(j.avgSleepStress)), date, opts),
+    awakeCount: bodySignal(points("sleep", (j) => num(j.awakeCount)), date, opts),
+    spo2: bodySignal(points("sleep", (j) => num(j.averageSpO2Value)), date, opts),
+    sleepHr: bodySignal(points("sleep", (j) => num(j.avgHeartRate)), date, opts),
+  };
+}
+
+/**
+ * Daily summary signals from complete days only: the newest Garmin day is
+ * usually today, still filling up. Steps are a 7-day average, from the steps
+ * range endpoint: Garmin's per-day summary sometimes comes back empty for a
+ * day the steps endpoint has.
+ */
+function dayToDaySignals(points: PointsOf, date: string) {
+  const done = (ps: { date: string; value: number }[]) => ps.filter((p) => p.date < date);
+  const opts = { days: 90, fresh: 14 };
+  return {
+    steps: bodySignal(rollingMean(done(points("steps", (j) => num(j.totalSteps)))), date, opts),
+    stress: bodySignal(done(points("user_summary", (j) => {
+      const v = num(j.averageStressLevel);
+      return v !== null && v >= 0 ? v : null;
+    })), date, opts),
+    sedentary: bodySignal(done(points("user_summary", (j) => (num(j.sedentarySeconds) !== null ? Math.round((num(j.sedentarySeconds)! / 3600) * 10) / 10 : null))), date, opts),
+    muscleMass: bodySignal(points("weight", (j) => {
+      const g = num((j.latestWeight as Json | undefined)?.muscleMass);
+      return g !== null ? Math.round(g / 100) / 10 : null;
+    }), date, { days: 90 }),
+  };
+}
+
+/** Garmin's optimal ranges from the newest night's sleep score parts. */
+function sleepRanges(j: Json | undefined): RatingContext["sleepRanges"] {
+  if (!j) return null;
+  const range = (key: string): [number, number] | null => {
+    const p = sleepScore(j, key);
+    const a = num(p?.optimalStart);
+    const b = num(p?.optimalEnd);
+    return a !== null && b !== null ? [a, b] : null;
+  };
+  return { deep: range("deepPercentage"), rem: range("remPercentage"), awakeMax: range("awakeCount")?.[1] ?? null };
 }
 
 // ── Volume, race demands and the plan ───────────────────────────────────────
