@@ -8,7 +8,8 @@ T7), `CLAUDE.md`, `TESTING.md`, the draft brief [`quick-workout-and-swap.md`](qu
 [`revisions.md`](revisions.md) and [`ai-coach.md`](ai-coach.md). C1's brief is `seasons.md` on
 the C1 branch.
 
-Status: brief, 2026-11-12. Waiting for C1 to merge and for the hub's decisions on section 14.
+Status: brief, 2026-11-12. The hub decided the open questions (section 14, "Decisions"). The
+characterization tests (8.1) are on the branch. The model change waits for C1 to merge.
 The **Findings** describe `main` at 2bdac35 (after PR #224); every `file:line` in them was opened
 then. Names marked *new* do not exist yet.
 
@@ -553,7 +554,7 @@ Nothing else merges while C2 is in review (plan section 4).
 ## 12. Order of work
 
 1. Characterization tests (8.1) on `main`, green, own commit. Stop here if one fails on `main`:
-   that is a bug to report, not to fix silently.
+   that is a bug to report, not to fix silently. Done in commit 9083dac.
 2. Migration and schema; existing tests green.
 3. Pure module: generation, regeneration, matcher, rotation projection, with unit tests.
 4. Layer: object type `planned_session`, snapshot, restore, purge, guards; the regeneration hook
@@ -617,6 +618,29 @@ The owner is away; the hub decides. Each recommendation is the safest choice for
 17. **Limits on rotation cycles from the projection?** Recommend: no, still "not checked".
 18. **Backfill.** Recommend: lazy, on the first read of an active or scheduled cycle; drafts and
     completed cycles get no rows.
+
+### Decisions
+
+Decided by the hub on 2026-11-12, owner may change. The hub took every recommendation above.
+
+1. Weekday sessions exist for the whole block, made at start or schedule.
+2. Rotation dates are a projection on read; only skip and change overrides are stored; no move.
+3. Several slots a day on weekday cycles only.
+4. At most 3 slots a day.
+5. "Add another session on this day" for everyone, inside the editor's day sheet only.
+6. Move and Skip in the calendar day sheet and over MCP; home and "Missed this week" unchanged.
+7. Move from today to the block end; never to a past date; a done session cannot move.
+8. Any logged session on the day clears a planned session (matcher step 3), as today.
+9. "Change alone" covers program, label, notes and order.
+10. The quick workout ships as a second PR (C2b) after C2.
+11. Weekly sync adherence stays as it is in C2; C5 moves it.
+12. A make-up keeps clearing both its own day and the day it makes up.
+13. `dismissed_makeups` stays and is written when a whole day is skipped; dropped a release later.
+14. Rotation days in the calendar stay as they are in C2.
+15. On a start on another day or an unschedule, touched sessions inside the block stay; others go, with a count.
+16. Garmin planned hours read the dated sessions.
+17. The hard-sessions limit stays "not checked" on rotation cycles.
+18. The backfill is lazy, on the first read of an active or scheduled cycle.
 
 ## 15. Defaults chosen
 
