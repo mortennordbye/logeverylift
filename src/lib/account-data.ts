@@ -5,6 +5,7 @@ import {
   aiSetupPlans,
   customWeightUsage,
   dismissedMakeups,
+  coachMemory,
   exerciseNotes,
   exercisePrs,
   exercises,
@@ -135,6 +136,7 @@ export async function collectUserData(userId: string) {
       : [],
     // The change history of the user's programs and cycles (docs/plans/revisions.md, 6).
     plan_revisions: await db.select().from(planRevisions).where(eq(planRevisions.userId, userId)),
+    coach_memory: await db.select().from(coachMemory).where(eq(coachMemory.userId, userId)),
     ai_setup_plans: await db.select().from(aiSetupPlans).where(eq(aiSetupPlans.userId, userId)),
     ai_generations: await db.select().from(aiGenerations).where(eq(aiGenerations.userId, userId)),
     custom_weight_usage: await db.select().from(customWeightUsage).where(eq(customWeightUsage.userId, userId)),

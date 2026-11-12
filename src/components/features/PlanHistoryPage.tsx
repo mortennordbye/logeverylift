@@ -1,4 +1,5 @@
 import { PlanHistoryClient } from "@/components/features/PlanHistoryClient";
+import { limitOverrideLine } from "@/lib/utils/training-limits";
 import { getPlanHistory } from "@/lib/actions/plan-revisions";
 import { getUserSettings } from "@/lib/user-settings";
 import { shortDateTime } from "@/lib/utils/user-date";
@@ -45,6 +46,7 @@ export async function PlanHistoryPage({ type, id }: { type: "program" | "cycle";
           reason: r.reason,
           when: shortDateTime(r.createdAt, timeZone),
           changes: r.changes,
+          override: limitOverrideLine(r.limitCheck),
         }))}
       />
     </div>

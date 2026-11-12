@@ -200,3 +200,28 @@ export function remainingAfterOverride(broken: BrokenLimit[], override: readonly
 export function overrideLine(overridden: Pick<BrokenLimit, "message">[], reason: string): string {
   return `Went past a training limit: ${overridden.map((o) => o.message).join(" ")} Assistant's reason: ${reason}`;
 }
+
+// ── What a revision stores ──────────────────────────────────────────────────
+
+/** Why a limit did not run on a write. */
+export type LimitNotChecked = { rule: LimitRule; why: string };
+
+/** Stored on each revision of an assistant write the limits looked at (plan_revisions.limit_check). */
+export type LimitCheck = {
+  v: 1;
+  checked: LimitRule[];
+  notChecked: LimitNotChecked[];
+  passed: LimitRule[];
+  overridden: BrokenLimit[];
+  overrideReason: string | null;
+  /** Restores only: limits a restore broke, which never block it (T4). */
+  warnings: BrokenLimit[];
+};
+
+/** The user-facing line for a stored limit check, or null when the assistant went past none. */
+export function limitOverrideLine(stored: unknown): string | null {
+  const c = stored as Partial<LimitCheck> | null;
+  if (!c?.overridden?.length) return null;
+  return overrideLine(c.overridden, c.overrideReason ?? "none given");
+}
+

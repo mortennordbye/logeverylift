@@ -13,6 +13,7 @@
 
 import { db } from "@/db";
 import {
+  coachMemory,
   exercises,
   planRevisions,
   programExercises,
@@ -34,19 +35,24 @@ import {
   canonical,
   changeSetFor,
   diffSnapshots,
+  isMemorySnapshot,
   isProgramSnapshot,
+  MEMORY_KEPT,
   queuedWriteConflicts,
   OTHER_WRITERS,
   restoredSetValues,
   sameSnapshot,
   sameValue,
   setChangesSince,
+  snapshotName,
   type CycleSnapshot,
+  type MemorySnapshot,
   type PlanSnapshot,
   type ProgramSnapshot,
   type Row,
 } from "@/lib/utils/plan-revisions";
 import { judgingRuleChanged } from "@/lib/utils/progression";
+import { limitOverrideLine } from "@/lib/utils/training-limits";
 import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
@@ -59,6 +65,12 @@ export type PlanWriteContext = {
   reason?: string | null;
   changeSetId?: string | null;
   clientId?: string | null;
+  /**
+   * What the training limits found on an assistant write, stored on each of
+   * its revisions (docs/plans/ai-coach.md, 2.4). Set before or during the
+   * write; read when the revisions are stored.
+   */
+  limitCheck?: unknown;
 };
 
 export type PlanTarget = { type: PlanObjectType; id: number };
@@ -79,7 +91,9 @@ export class PlanConflictError extends Error {
 /** The object is missing, deleted, or not the caller's. */
 export class PlanNotFoundError extends Error {
   constructor(readonly target: PlanTarget) {
-    super(target.type === "program" ? "Program not found" : "Training cycle not found");
+    super(
+      target.type === "program" ? "Program not found" : target.type === "cycle" ? "Training cycle not found" : "Memory entry not found",
+    );
   }
 }
 
@@ -95,6 +109,9 @@ const bumps = (writer: PlanWriter, action: PlanRevisionAction) =>
   writer === "user" || writer === "assistant" || action === "restore";
 
 const key = (t: PlanTarget) => `${t.type}:${t.id}`;
+
+/** The table that holds an object's row, with its owner, version and soft delete. */
+const tableOf = (type: PlanObjectType) => (type === "program" ? programs : type === "cycle" ? trainingCycles : coachMemory);
 
 function stripRow<T extends Record<string, unknown>>(row: T, omit: string[]): Row {
   const out: Record<string, unknown> = {};
@@ -153,8 +170,13 @@ export async function snapshotCycle(ex: Executor, cycleId: number): Promise<Cycl
   };
 }
 
+export async function snapshotMemory(ex: Executor, memoryId: number): Promise<MemorySnapshot> {
+  const [row] = await ex.select().from(coachMemory).where(eq(coachMemory.id, memoryId));
+  return { v: 1, memory: stripRow(row, ["version", "updatedAt"]) };
+}
+
 const snapshotOf = (ex: Executor, t: PlanTarget): Promise<PlanSnapshot> =>
-  t.type === "program" ? snapshotProgram(ex, t.id) : snapshotCycle(ex, t.id);
+  t.type === "program" ? snapshotProgram(ex, t.id) : t.type === "cycle" ? snapshotCycle(ex, t.id) : snapshotMemory(ex, t.id);
 
 // ── The write session ────────────────────────────────────────────────────────
 
@@ -222,7 +244,7 @@ export class PlanWriteSession {
       if (opts.restoredFromId) seen.restoredFromId = opts.restoredFromId;
       return seen.version;
     }
-    const table = target.type === "program" ? programs : trainingCycles;
+    const table = tableOf(target.type);
     const [row] = await this.tx
       .select({ userId: table.userId, version: table.version, deletedAt: table.deletedAt })
       .from(table)
@@ -314,7 +336,7 @@ export class PlanWriteSession {
       }
       const version = bumps(this.ctx.writer, t.action) ? t.version + 1 : t.version;
       if (version !== t.version) {
-        const table = t.target.type === "program" ? programs : trainingCycles;
+        const table = tableOf(t.target.type);
         await this.tx.update(table).set({ version }).where(eq(table.id, t.target.id));
       }
       await this.insertRevision(t.target, version, t.action, after, t.restoredFromId);
@@ -348,6 +370,7 @@ export class PlanWriteSession {
       clientId: this.ctx.clientId ?? null,
       restoredFromId,
       snapshot,
+      limitCheck: this.ctx.limitCheck ?? null,
     });
   }
 }
@@ -890,9 +913,27 @@ async function restoreCycleTo(
   return skipped;
 }
 
+/** Restore a coach memory entry: its fields come back, and a deleted one is live again. */
+async function restoreMemoryTo(
+  w: PlanWriteSession,
+  memoryId: number,
+  targetSnap: MemorySnapshot,
+  targetRevisionId: number,
+): Promise<string[]> {
+  await w.touch({ type: "memory", id: memoryId }, { allowDeleted: true, action: "restore", restoredFromId: targetRevisionId });
+  const values: Record<string, unknown> = { ...targetSnap.memory };
+  for (const k of MEMORY_KEPT) delete values[k];
+  await w.tx
+    .update(coachMemory)
+    .set({ ...(values as Partial<typeof coachMemory.$inferInsert>), deletedAt: null, updatedAt: new Date() })
+    .where(eq(coachMemory.id, memoryId));
+  return [];
+}
+
 /** Restore one object to a revision (the restore is itself a revision). */
 async function restoreInSession(w: PlanWriteSession, rev: typeof planRevisions.$inferSelect): Promise<string[]> {
   const snap = rev.snapshot as PlanSnapshot;
+  if (isMemorySnapshot(snap)) return restoreMemoryTo(w, rev.objectId, snap, rev.id);
   return isProgramSnapshot(snap)
     ? restoreProgramTo(w, rev.objectId, snap, rev.id)
     : restoreCycleTo(w, rev.objectId, snap, rev.id);
@@ -957,9 +998,11 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
     const k = `${r.objectType}:${r.objectId}`;
     if (!firstByObject.has(k)) firstByObject.set(k, r);
   }
-  // Cycles first, then programs: the lock order every write uses.
+  // Cycles first, then programs: the lock order every write uses. Memory
+  // entries last; nothing else locks them.
+  const order: Record<PlanObjectType, number> = { cycle: 0, program: 1, memory: 2 };
   const firsts = [...firstByObject.values()].sort((a, b) =>
-    a.objectType === b.objectType ? a.objectId - b.objectId : a.objectType === "cycle" ? -1 : 1,
+    a.objectType === b.objectType ? a.objectId - b.objectId : order[a.objectType] - order[b.objectType],
   );
   const targets = firsts.map((r) => ({ type: r.objectType, id: r.objectId }));
   const { result } = await planWrite(ctx, async (w) => {
@@ -971,6 +1014,9 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
           if (await openWorkoutOn(w.tx, ctx.userId, [target.id])) throw new OpenWorkoutError();
           await w.touch(target, { action: "delete" });
           await softDeleteProgram(w.tx, target.id);
+        } else if (target.type === "memory") {
+          await w.touch(target, { action: "delete" });
+          await w.tx.update(coachMemory).set({ deletedAt: new Date() }).where(eq(coachMemory.id, target.id));
         } else {
           await w.touch(target, { action: "delete" });
           await w.tx.update(trainingCycles).set({ deletedAt: new Date() }).where(eq(trainingCycles.id, target.id));
@@ -1011,6 +1057,8 @@ export type RevisionEntry = {
   createdAt: Date;
   changes: string[];
   rejected: unknown;
+  /** What the training limits found on an assistant write (docs/plans/ai-coach.md, 2.4). */
+  limitCheck: unknown;
 };
 
 const HISTORY_LIMIT = 200;
@@ -1069,6 +1117,8 @@ export type ChangeSetEntry = {
   lastAt: Date;
   reasons: string[];
   objects: { type: PlanObjectType; id: number; name: string; changes: string[] }[];
+  /** Lines for the training limits the assistant went past on purpose. */
+  overrides: string[];
 };
 
 /** The user's assistant change sets, newest first, with what each changed. */
@@ -1087,9 +1137,10 @@ export async function listAssistantChangeSets(userId: string, limit = 30): Promi
     created_at: Date | string;
     snapshot: PlanSnapshot;
     prior: PlanSnapshot | null;
+    limit_check: unknown;
   }>(sql`
     SELECT * FROM (
-      SELECT id, object_type, object_id, action, writer, reason, change_set_id, client_id, created_at, snapshot,
+      SELECT id, object_type, object_id, action, writer, reason, change_set_id, client_id, created_at, snapshot, limit_check,
              LAG(snapshot) OVER (PARTITION BY object_type, object_id ORDER BY id) AS prior
       FROM plan_revisions
       WHERE user_id = ${userId} AND action <> 'conflict'
@@ -1108,6 +1159,7 @@ export async function listAssistantChangeSets(userId: string, limit = 30): Promi
     createdAt: new Date(r.created_at),
     snapshot: r.snapshot,
     prior: r.prior,
+    limitCheck: r.limit_check,
   }));
   const sets = new Map<string, typeof revs>();
   for (const r of revs) {
@@ -1124,7 +1176,7 @@ export async function listAssistantChangeSets(userId: string, limit = 30): Promi
     const objects: ChangeSetEntry["objects"] = [];
     for (const r of chrono) {
       const snap = r.snapshot;
-      const name = String(isProgramSnapshot(snap) ? snap.program.name : snap.cycle.name);
+      const name = snapshotName(snap);
       const changes = r.action === "delete" ? ["Deleted"] : diffSnapshots(r.prior ?? null, snap);
       const existing = objects.find((o) => o.type === r.objectType && o.id === r.objectId);
       if (existing) existing.changes.push(...changes);
@@ -1137,6 +1189,7 @@ export async function listAssistantChangeSets(userId: string, limit = 30): Promi
       lastAt: chrono[chrono.length - 1].createdAt,
       reasons: [...new Set(chrono.map((r) => r.reason).filter((r): r is string => !!r))],
       objects,
+      overrides: [...new Set(chrono.map((r) => limitOverrideLine(r.limitCheck)).filter((l): l is string => !!l))],
     });
   }
   return out;
@@ -1201,6 +1254,12 @@ export async function purgePlanRevisions(now = new Date()) {
     const ids = oldPrograms.map((p) => p.id);
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "program"), inArray(planRevisions.objectId, ids)));
     await db.delete(programs).where(inArray(programs.id, ids));
+  }
+  const oldMemory = await db.select({ id: coachMemory.id }).from(coachMemory).where(lt(coachMemory.deletedAt, trashCut));
+  if (oldMemory.length) {
+    const ids = oldMemory.map((m) => m.id);
+    await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "memory"), inArray(planRevisions.objectId, ids)));
+    await db.delete(coachMemory).where(inArray(coachMemory.id, ids));
   }
   // plan-read: includes deleted (the purge reads deleted rows on purpose)
   const oldCycles = await db.select({ id: trainingCycles.id }).from(trainingCycles).where(lt(trainingCycles.deletedAt, trashCut));

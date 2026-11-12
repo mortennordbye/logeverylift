@@ -16,6 +16,8 @@ export type HistoryRow = {
   /** When, already formatted in the user's zone (shortDateTime). */
   when: string;
   changes: string[];
+  /** A training limit the assistant went past on purpose, with its reason (docs/plans/ai-coach.md, 2.4). */
+  override?: string | null;
 };
 
 const AUTOMATIC = new Set<HistoryRow["writer"]>(["progression", "sync", "apply"]);
@@ -127,6 +129,11 @@ export function PlanHistoryClient({ kind, rows }: { kind: "program" | "cycle"; r
         )}
       </div>
       {row.reason && row.writer === "assistant" && <p className="text-sm italic text-muted-foreground">“{row.reason}”</p>}
+      {row.override && (
+        <p className="text-sm text-amber-700 dark:text-amber-400" data-testid="limit-override">
+          {row.override}
+        </p>
+      )}
       <ul className="text-sm space-y-0.5">
         {row.changes.slice(0, 8).map((c, i) => (
           <li key={i}>{c}</li>

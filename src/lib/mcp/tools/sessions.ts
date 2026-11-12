@@ -18,6 +18,7 @@ import {
   workoutSets,
 } from "@/db/schema";
 import { insertAutoSessions } from "@/lib/auto-sessions";
+import { liveCycles, livePrograms, liveSlotProgram } from "@/lib/plan-live";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { userToday } from "@/lib/user-settings";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
@@ -97,7 +98,7 @@ export function registerSessionTools(server: McpServer, userId: string) {
           const [prog] = await db
             .select({ id: programs.id })
             .from(programs)
-            .where(and(eq(programs.id, args.programId), eq(programs.userId, userId)));
+            .where(and(eq(programs.id, args.programId), eq(programs.userId, userId), livePrograms));
           if (!prog) return fail("Program not found");
           const [dup] = await db
             .select({ id: workoutSessions.id })
@@ -201,11 +202,13 @@ export function registerSessionTools(server: McpServer, userId: string) {
     async ({ date, programId }) => {
       try {
         const cycle = await db.query.trainingCycles.findFirst({
-          where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active")),
-          with: { slots: { where: eq(trainingCycleSlots.programId, programId) } },
+          where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), liveCycles),
+          with: { slots: { where: eq(trainingCycleSlots.programId, programId), with: { program: true } } },
         });
         if (!cycle?.startDate) return fail("No active training cycle");
-        if (cycle.slots.length === 0) return fail("That program is not in the active cycle");
+        if (!cycle.slots.map(liveSlotProgram).some((s) => s.programId === programId)) {
+          return fail("That program is not in the active cycle");
+        }
         if (date > toDateStr(await userToday(userId))) return fail("date is in the future");
         if (date < cycle.startDate) return fail(`date is before the cycle started (${cycle.startDate})`);
 

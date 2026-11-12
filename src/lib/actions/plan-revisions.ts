@@ -7,7 +7,7 @@
  */
 
 import { db } from "@/db";
-import { oauthClients, planRevisions, programSets, programs, trainingCycles } from "@/db/schema";
+import { oauthClients, planRevisions, programSets, programs, trainingCycles, type PlanObjectType } from "@/db/schema";
 import {
   OpenWorkoutError,
   PlanNotFoundError,
@@ -49,7 +49,11 @@ async function clientNames(ids: (string | null)[]): Promise<Map<string, string>>
   return new Map(rows.map((r) => [r.clientId, r.name ?? "An assistant"]));
 }
 
-function revalidateObject(type: "program" | "cycle", id: number) {
+function revalidateObject(type: PlanObjectType, id: number) {
+  if (type === "memory") {
+    revalidatePath("/more/coach-memory");
+    return;
+  }
   if (type === "program") {
     revalidatePath("/programs");
     revalidatePath(`/programs/${id}`);
@@ -100,7 +104,7 @@ const revisionSchema = z.object({ revisionId: z.number().int().positive() });
 /** Restore a program or cycle to one of its revisions. */
 export async function restorePlanRevision(
   data: unknown,
-): Promise<ActionResult<{ objectType: "program" | "cycle"; objectId: number; skipped: string[] }>> {
+): Promise<ActionResult<{ objectType: PlanObjectType; objectId: number; skipped: string[] }>> {
   const auth = await requireSession();
   const parsed = revisionSchema.safeParse(data);
   if (!parsed.success) {
@@ -133,6 +137,7 @@ export async function undoPlanChangeSet(data: unknown): Promise<ActionResult<{ o
     revalidatePath("/programs");
     revalidatePath("/cycles");
     revalidatePath("/more/assistants/changes");
+    revalidatePath("/more/coach-memory");
     revalidatePath("/");
     return { success: true, data: done };
   } catch (e) {
