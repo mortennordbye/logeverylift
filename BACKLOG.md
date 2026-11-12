@@ -34,7 +34,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** listed above.
 
 ### Run the ghost-session cleanup in prod
-- **What:** Remove old empty "completed" sessions in prod with `scripts/cleanup-ghost-sessions.ts` (decision D23). The fix that stops new ones is in `closeStaleSessions` in `src/lib/actions/workout-sessions.ts`.
+- **What:** Remove old empty "completed" sessions in prod with `scripts/cleanup-ghost-sessions.ts` (decision D23): completed sessions with no sets, notes or feeling, older than 7 days. The app no longer gives them a false duration (`closeStaleSessions` in `src/lib/actions/workout-sessions.ts`) and the weekly sync ignores them, but it does not delete them.
 - **Why deferred:** Deleting prod data needs the owner. Agents never run it against prod.
 - **Unblocked by:** The owner, after the foundations PR deploys, runs the dry run in the prod pod (`kubectl exec -n <namespace> deploy/<app> -- node /app/scripts/cleanup-ghost-sessions.js`), reads the list, then runs it again with `--delete`. Then delete this entry.
 - **Touchpoints:** `scripts/cleanup-ghost-sessions.ts`, `src/lib/ghost-sessions.ts`.

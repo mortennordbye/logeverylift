@@ -28,7 +28,8 @@ async function withActivity(userId: string, id: number, day: string, vo2: number
 
 describe("updateTrainingCycle race fields", () => {
   it("saves a race date and distance, and clears them", async () => {
-    const user = await createUser();
+    // Races are part of the endurance add-on (src/lib/endurance.ts).
+    const user = await createUser({ enduranceEnabled: true });
     asUser(user.id);
     const [c] = await db.insert(trainingCycles).values({ userId: user.id, name: "IM", durationWeeks: 24 }).returning();
 

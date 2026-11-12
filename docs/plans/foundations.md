@@ -85,23 +85,32 @@ sessions, and both have the same fault:
 - **Bug 3.** Rewrite the three comments to match the code. Comment only.
 - **Bug 4.** One shared server helper, *new* `closeStaleSessions(userId, olderThan)`, in
   `src/lib/actions/workout-sessions.ts` as a non-exported function (an export of a
-  `"use server"` file is a callable action). Both sweeps call it. In one transaction it:
-  1. deletes stale open `app` sessions that have no `workout_sets` rows;
-  2. closes the rest with `endTime` = the latest `workout_sets.created_at` of the session
-     (never earlier than `startTime`);
-  3. returns the closed ids, so `learnWeightStacks` still runs for them.
-  A deleted session is safe for a client that still holds its id: `isSessionResumable` returns
-  `false` and the client starts a new session.
+  `"use server"` file is a callable action). Both sweeps call it. It closes every stale open
+  session with `endTime` = the latest `workout_sets.created_at` of the session, never earlier
+  than `startTime`; a session with no sets yet ends at its start, with no duration. It returns
+  the closed ids, so `learnWeightStacks` still runs for them.
+  - **It never deletes** (changed after review). A session with no sets on the server may still
+    have its sets in the phone's offline queue: started online, logged offline, app killed,
+    opened again more than 10 hours later. The home render runs the sweep before the queue
+    replays, and a deleted session made every replayed `logWorkoutSet` fail its ownership
+    check, so the whole workout was lost. A closed session takes the replayed sets.
+  - Instead, the weekly sync's adherence counts only sessions with at least one set, or with
+    `source = 'auto'` (days the cycle completes itself have no sets by design).
 - **Ghost cleanup script (D23).** *New* `scripts/cleanup-ghost-sessions.ts`, modelled on
-  `scripts/cleanup-orphaned-cycle-programs.ts`.
-  - A ghost is: `is_completed = true`, `source = 'app'`, no `workout_sets` rows, and no notes
-    and no feeling (a user who finished an empty session on purpose and wrote something keeps
-    it).
+  `scripts/cleanup-orphaned-cycle-programs.ts`. The only code that deletes empty sessions.
+  - A ghost is: `is_completed = true`, `source = 'app'`, no `workout_sets` rows, no notes, no
+    feeling (a user who finished an empty session on purpose and wrote something keeps it),
+    and started more than 7 days ago (`GHOST_MIN_AGE_DAYS`), long past any offline queue.
   - Dry run is the default: it prints the count per user and one line per session (id, user
     id, date, duration in hours). No names, no emails, no notes in the output.
-  - It deletes only with an explicit `--delete` flag, and re-checks "no sets" inside the
-    delete statement (`NOT EXISTS`), so a set logged between the dry run and the delete saves
-    the session.
+  - It deletes only with an explicit `--delete` flag. In one transaction it locks the
+    candidates (`SELECT ... FOR UPDATE`) and then deletes them in a second statement that
+    checks "no sets" again. A single `DELETE ... WHERE NOT EXISTS` is not safe under READ
+    COMMITTED: its subquery reads a snapshot from before a set that commits at the same moment,
+    and the delete cascades that set away (the review proved it in psql, and the integration
+    test reproduces it). With the lock, an insert into `workout_sets` waits for the share lock
+    its foreign key takes on the session row, so a set committed before the lock is seen and
+    keeps its session.
   - The rule lives in `src/lib/ghost-sessions.ts`, so the integration suite runs it against
     the test database; the script is a thin wrapper.
   - Package script `db:cleanup-ghosts`. It is on the esbuild line in the `Dockerfile`, so the
@@ -130,8 +139,9 @@ Every bug test is written first and seen failing on the unfixed code.
 | 1 | Integration (*new* `src/__tests__/integration/mcp-programs.test.ts`) | `update` with `sets` holding each of the six fields stores each value; an unknown set key fails and changes nothing; `sessionRole` from input wins over the old row's |
 | 2 | Integration (same file) | `update` with another user's custom exercise fails and the slot keeps its exercise; a system exercise and the user's own custom exercise both work |
 | 3 | none | Comment only. The generator's behaviour is already covered by `src/__tests__/triathlon-plan.test.ts`. |
-| 4 | Integration (`src/__tests__/integration/workout-sessions.test.ts`) | an empty session 11 h old is deleted by the home sweep; a session with sets gets `endTime` = its last set; an `auto` session is untouched; another user's open session is untouched; the same three cases for the 1 h sweep in `createWorkoutSession` |
-| Script | Integration | dry run lists ghosts and deletes nothing; delete mode removes only ghosts, keeps sessions with sets, notes, feeling or `source = 'auto'` |
+| 4 | Integration (`src/__tests__/integration/workout-sessions.test.ts`) | an empty session 11 h old is closed with no duration and kept; a set queued offline and replayed after the sweep still lands; a session with sets gets `endTime` = its last set; an `auto` session and another user's open session are untouched; the same cases for the 1 h sweep in `createWorkoutSession` |
+| 4, adherence | Integration (`src/__tests__/integration/wearable-suggestion.test.ts`) | a completed session with no sets does not count as done in the weekly sync; an `auto` day still does |
+| Script | Integration (`src/__tests__/integration/ghost-sessions.test.ts`) | dry run lists ghosts and deletes nothing; delete mode removes only ghosts, keeps sessions with sets, notes, feeling or `source = 'auto'`; empty sessions from the last 7 days are left; a set that commits while the delete runs keeps its session (fails with a single `DELETE ... NOT EXISTS`) |
 
 The MCP integration tests call the registered tool handler with a fake server, the way
 `src/__tests__/integration/mcp-workouts.test.ts` does.
@@ -227,6 +237,9 @@ provider around the page in the root layout made every page render twice in the 
 `cacheComponents`, which the e2e suite caught (strict-mode "resolved to 2 elements" in ten
 specs). On a cold load a component can render once in metric before the settings
 arrive; the set editor and the new-set view then re-show the distance field in the right unit.
+The store lives as long as the tab, so it resets to metric with no zone when the loader finds
+nobody signed in and on sign-out (`clearLocalUserData`); the next account in the tab never sees
+the last one's settings.
 
 **Units (endurance only, owner decision 2).**
 - Two columns on `user`: `distance_unit` (`km` | `mi`, default `km`; run and ride distance,
@@ -311,7 +324,10 @@ arrive; the set editor and the new-set view then re-show the distance field in t
   - `/cycles/triathlon` (it redirects to `/cycles` when off);
   - `generateTriathlonPlan` (it refuses when off, so the gate holds on the server);
   - the race field on the cycle form. A cycle that already has a race date still shows it, so
-    no stored value is hidden from its owner.
+    no stored value is hidden from its owner;
+  - adding a race on the server: `updateTrainingCycle` refuses a race date or distance for a
+    cycle that has none while the switch is off. A race the cycle already has stays editable,
+    so no existing user is broken. MCP `manage_training_cycle` takes no race fields today.
 - Not gated: running and other endurance sets in programs, the run logger, and existing
   triathlon cycles, which keep running and syncing. Lifters run too, and D18's "endurance"
   means the add-on features, not cardio logging.
@@ -336,6 +352,7 @@ arrive; the set editor and the new-set view then re-show the distance field in t
 |---|---|
 | Integration | `setUserEndurance` as an admin sets the flag; as a normal user it is refused and nothing changes |
 | Integration | `generateTriathlonPlan` with the switch off fails and writes nothing; with it on, it works |
+| Integration | `updateTrainingCycle` refuses to add a race with the switch off; the rest of the form still saves; a race the cycle already has stays editable; with the switch on, a race can be added |
 | Component | Cycles list: no "Triathlon plan" entry when off, entry when on. Cycle form: no race field when off and no race; field shown when on or when the cycle has a race |
 | Integration | `get_profile` returns the flag, `update_profile` ignores an `enduranceEnabled` key |
 
@@ -416,10 +433,12 @@ PR only says so in the tool description, and B1 settles the owner (audit section
 - One branch, one migration for all three packages (the owner asked for one PR).
 - Bug 1: accept the six fields and also fail loudly on any other unknown set key. Peak anchors
   stay derived.
-- Bug 4: stale open sessions with no sets are deleted, not closed. The readiness answer of an
-  abandoned session goes with it.
-- Ghost script: dry run by default, `--delete` to delete; also keeps empty sessions that have
-  notes or a feeling; bundled into the image so the owner can run it in the prod pod.
+- Bug 4: the sweeps close empty sessions with no duration and never delete; adherence ignores
+  sessions with no sets (changed after review, see the A1 design).
+- Ghost script: dry run by default, `--delete` to delete; only sessions older than 7 days; also
+  keeps empty sessions that have notes or a feeling; bundled into the image so the owner can run
+  it in the prod pod.
+- Swims in yards stay in yards at every distance (2000 m shows 2187 yd, not 1.2 mi).
 - Time zone: filled once from the browser, never changed automatically; Settings offers the
   device zone when it differs.
 - The workout date follows the stored time zone, so the session date and the server's today

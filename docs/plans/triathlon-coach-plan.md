@@ -118,7 +118,7 @@ endurance package gates on this flag, never on the role.
 writes.
 - Program sets are updated in place, matched by id (diff), never deleted and inserted again.
   This also fixes "safe writes during an open workout" (audit section 7). Two paths delete sets
-  today, and both must change: the MCP set replace (`src/lib/mcp/tools/programs.ts:463`) and
+  today, and both must change: the MCP set replace (`src/lib/mcp/tools/programs.ts:500`) and
   `deleteProgramSet` in the UI (`src/lib/actions/programs.ts:1116`).
 - Soft delete for every plan object (T6): program sets, program exercises, programs and cycles
   now, and seasons, sessions and workouts when they exist. Readers filter out deleted rows.
