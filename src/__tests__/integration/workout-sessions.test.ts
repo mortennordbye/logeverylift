@@ -84,10 +84,31 @@ describe.each([
 ])("$sweep", ({ ageHours, run }) => {
   const startedAgo = () => new Date(Date.now() - ageHours * 60 * 60 * 1000);
 
-  it("deletes a stale open session with no sets", async () => {
-    const empty = await createSession(userId, programId, { startTime: startedAgo() });
+  it("closes a stale open session with no sets, with no duration, and keeps it", async () => {
+    const start = startedAgo();
+    const empty = await createSession(userId, programId, { startTime: start });
     await run();
-    expect(await byId(empty.id)).toBeUndefined();
+    const row = await byId(empty.id);
+    expect(row?.isCompleted).toBe(true);
+    expect(row?.endTime?.getTime()).toBe(start.getTime());
+  });
+
+  it("lets a set queued offline and replayed after the sweep still land", async () => {
+    // Started online, every set logged offline, app killed, opened again
+    // later: the sweep runs on the home render before the queue replays.
+    const session = await createSession(userId, programId, { startTime: startedAgo() });
+    await run();
+    const replayed = await logWorkoutSet({
+      sessionId: session.id,
+      exerciseId: slots[0].exerciseId,
+      setNumber: 1,
+      programSetId: slots[0].setIds[0],
+      actualReps: 8,
+      weightKg: 80,
+      restTimeSeconds: 90,
+    });
+    expect(replayed.success).toBe(true);
+    expect(await db.select().from(workoutSets).where(eq(workoutSets.sessionId, session.id))).toHaveLength(1);
   });
 
   it("ends a stale session at its last logged set, not now", async () => {

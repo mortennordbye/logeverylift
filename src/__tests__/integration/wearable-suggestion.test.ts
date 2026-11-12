@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { garminDailyMetrics, programSets, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { garminDailyMetrics, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { applyWearablePlanSuggestion, syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
 import { wearableSuggestion } from "@/lib/periodization-sync";
 import { toDateStr } from "@/lib/utils/cycle-position";
@@ -46,8 +46,31 @@ beforeEach(async () => {
     .returning();
   cycleId = c.id;
   await db.insert(trainingCycleSlots).values({ trainingCycleId: cycleId, programId: program.id, orderIndex: 0 });
-  // One completed session in the last week: full adherence, no readiness or RPE logged, so the plain nudge pushes to 105.
-  await createSession(userId, program.id, { isCompleted: true, date: toDateStr(daysAgo(1)) });
+  // One completed session with a logged set in the last week: full adherence, no readiness or RPE logged, so the plain nudge pushes to 105.
+  const done = await createSession(userId, program.id, { isCompleted: true, date: toDateStr(daysAgo(1)) });
+  await db.insert(workoutSets).values({ sessionId: done.id, exerciseId: run.id, setNumber: 1, actualReps: 0, weightKg: "0", distanceMeters: 10000, restTimeSeconds: 0 });
+  doneSessionId = done.id;
+  programId = program.id;
+});
+
+let doneSessionId: number;
+let programId: number;
+
+describe("adherence", () => {
+  it("does not count a completed session with no sets as done", async () => {
+    // A workout screen opened and left, closed by the stale sweep.
+    await db.delete(workoutSessions).where(eq(workoutSessions.id, doneSessionId));
+    await createSession(userId, programId, { isCompleted: true, date: toDateStr(daysAgo(1)) });
+    await syncActiveCyclePeriodization();
+    expect(await pct()).toBeLessThan(100);
+  });
+
+  it("still counts a day the cycle completed itself (an auto session has no sets)", async () => {
+    await db.delete(workoutSessions).where(eq(workoutSessions.id, doneSessionId));
+    await createSession(userId, programId, { isCompleted: true, source: "auto", date: toDateStr(daysAgo(1)) });
+    await syncActiveCyclePeriodization();
+    expect(await pct()).toBe(105);
+  });
 });
 
 const distance = async () => (await db.select({ d: programSets.distanceMeters }).from(programSets).where(eq(programSets.id, setId)))[0].d;

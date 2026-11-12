@@ -15,39 +15,36 @@ import { revalidatePath } from "next/cache";
 
 /**
  * Close the user's open sessions started before `olderThan`, which both
- * sweeps below call. A session with no logged sets is deleted: the workout
- * screen creates a session as soon as it opens, so an empty one is a workout
- * that never happened, and kept as completed it counted as done in the weekly
- * sync's adherence. The rest end at their last logged set, not now, so a
- * forgotten workout does not last 11 hours. Returns the ids it closed.
+ * sweeps below call. Each ends at its last logged set, not now, so a
+ * forgotten workout does not last 11 hours; a session with no sets yet ends
+ * at its start, with no duration.
+ *
+ * It never deletes. A session with no sets on the server may still have its
+ * sets in the phone's offline queue (started online, logged offline, app
+ * killed), and the queue replays them after this runs on the home render;
+ * deleting the session would make every replayed set fail its ownership
+ * check and be dropped. Empty sessions are left out of the weekly sync's
+ * adherence instead (cycleAdaptationSignals), and old ones are removed only
+ * by the owner-run scripts/cleanup-ghost-sessions.ts. Returns the ids closed.
  *
  * Not exported: every export of a "use server" file is a callable action.
  */
 async function closeStaleSessions(userId: string, olderThan: Date): Promise<number[]> {
-  const stale = and(
-    eq(workoutSessions.userId, userId),
-    eq(workoutSessions.isCompleted, false),
-    lt(workoutSessions.startTime, olderThan),
-  );
-  return db.transaction(async (tx) => {
-    await tx
-      .delete(workoutSessions)
-      .where(
-        and(
-          stale,
-          sql`NOT EXISTS (SELECT 1 FROM ${workoutSets} WHERE ${workoutSets.sessionId} = ${workoutSessions.id})`,
-        ),
-      );
-    const closed = await tx
-      .update(workoutSessions)
-      .set({
-        isCompleted: true,
-        endTime: sql`GREATEST(${workoutSessions.startTime}, COALESCE((SELECT MAX(${workoutSets.createdAt}) FROM ${workoutSets} WHERE ${workoutSets.sessionId} = ${workoutSessions.id}), ${workoutSessions.startTime}))`,
-      })
-      .where(stale)
-      .returning({ id: workoutSessions.id });
-    return closed.map((c) => c.id);
-  });
+  const closed = await db
+    .update(workoutSessions)
+    .set({
+      isCompleted: true,
+      endTime: sql`GREATEST(${workoutSessions.startTime}, COALESCE((SELECT MAX(${workoutSets.createdAt}) FROM ${workoutSets} WHERE ${workoutSets.sessionId} = ${workoutSessions.id}), ${workoutSessions.startTime}))`,
+    })
+    .where(
+      and(
+        eq(workoutSessions.userId, userId),
+        eq(workoutSessions.isCompleted, false),
+        lt(workoutSessions.startTime, olderThan),
+      ),
+    )
+    .returning({ id: workoutSessions.id });
+  return closed.map((c) => c.id);
 }
 
 export async function createWorkoutSession(
@@ -213,7 +210,7 @@ export async function completeWorkoutSession(
  * left open (isCompleted=false) for more than 10 hours. A user who forgets to
  * tap "Finish" — or whose tab was evicted mid-workout — would otherwise leave a
  * row open indefinitely. Logged sets are kept; see closeStaleSessions for how
- * the session is closed or, with no sets, deleted.
+ * the session is closed.
  *
  * Called on home-screen load so it runs without needing a new workout to start
  * (the createWorkoutSession sweep only fires on the next start).

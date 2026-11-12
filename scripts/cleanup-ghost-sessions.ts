@@ -1,7 +1,9 @@
 /**
  * Remove ghost sessions: completed workouts with no logged sets, no notes and
- * no feeling (decision D23, docs/triathlon-coach-audit.md). The rule lives in
- * src/lib/ghost-sessions.ts.
+ * no feeling, started more than 7 days ago (decision D23,
+ * docs/triathlon-coach-audit.md). The rule lives in src/lib/ghost-sessions.ts.
+ * This is the only code that deletes empty sessions; the app's stale sweeps
+ * only close them.
  *
  * A dry run by default: it lists the ghosts and deletes nothing. Only
  * `--delete` deletes. Output holds session ids, user ids, dates and durations,

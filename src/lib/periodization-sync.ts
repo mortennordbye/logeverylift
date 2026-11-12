@@ -134,6 +134,13 @@ async function cycleAdaptationSignals(
         eq(workoutSessions.isCompleted, true),
         inArray(workoutSessions.programId, programIds),
         gte(workoutSessions.date, sinceStr),
+        // A session with no sets is a workout screen opened and left, closed
+        // by the stale sweep; it was not done. A day the cycle completed
+        // itself (source 'auto') has no sets by design and counts.
+        or(
+          eq(workoutSessions.source, "auto"),
+          sql`EXISTS (SELECT 1 FROM ${workoutSets} WHERE ${workoutSets.sessionId} = ${workoutSessions.id})`,
+        ),
       ),
     );
 
