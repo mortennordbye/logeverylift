@@ -81,13 +81,14 @@ Status words: `todo`, `brief` (brief written), `building`, `done`.
 ### Phase A: foundations
 
 These have no dependencies on new features. A1-A3 can run in parallel. A4 is the base of
-everything that writes plan data.
+everything that writes plan data. A1-A3 share one brief and one PR:
+[`foundations.md`](foundations.md).
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| A1 | Bug fixes and ghost-session cleanup | none | todo |
-| A2 | User time zone and display units | none | todo |
-| A3 | Endurance switch | none | todo |
+| A1 | Bug fixes and ghost-session cleanup | none | brief |
+| A2 | User time zone and display units | none | brief |
+| A3 | Endurance switch | none | brief |
 | A4 | Revisions, stable ids and plan versions | A1 | todo |
 
 **A1. Bug fixes and ghost-session cleanup.** Audit "Bugs found" 1-4 and D23.
