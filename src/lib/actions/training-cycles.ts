@@ -20,7 +20,7 @@ import { applyWearableSuggestion, hasPeakAnchor, syncDueCycle, syncPeriodizedTar
 import { insertAutoSessions } from "@/lib/auto-sessions";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
-import { OpenWorkoutError, PlanNotFoundError, activateCycle, deleteCycles, planWrite, type Tx } from "@/lib/plan-revisions";
+import { OpenWorkoutError, PlanNotFoundError, activateCycle, deleteCycles, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
@@ -147,6 +147,9 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
   const auth = await requireSession();
   const userId = auth.user.id;
   try {
+    // A block scheduled to start today (or earlier) becomes the active one
+    // first, completing the old block then (docs/plans/ai-coach.md, decision 7).
+    await startDueScheduledCycle(userId);
     const cycle = await db.query.trainingCycles.findFirst({
       where: and(
         eq(trainingCycles.userId, userId),

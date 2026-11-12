@@ -53,7 +53,7 @@ import {
 } from "@/lib/utils/plan-revisions";
 import { judgingRuleChanged } from "@/lib/utils/progression";
 import { limitOverrideLine } from "@/lib/utils/training-limits";
-import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 
 export type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -96,6 +96,9 @@ export class PlanNotFoundError extends Error {
     );
   }
 }
+
+/** A write the object's current state does not allow; the message says why. */
+export class PlanStateError extends Error {}
 
 /** A plan change that would disturb a workout in progress. */
 export class OpenWorkoutError extends Error {
@@ -527,10 +530,12 @@ export async function activateCycle(
   ctx: PlanWriteContext,
   cycleId: number,
   expectedVersion?: number,
+  /** The block's first day; today when omitted. A scheduled start passes its own day. */
+  startDate?: string,
 ) {
   const { toDateStr } = await import("@/lib/utils/cycle-position");
   const { userToday } = await import("@/lib/user-settings");
-  const today = toDateStr(await userToday(ctx.userId));
+  const today = startDate ?? toDateStr(await userToday(ctx.userId));
   const { result } = await planWrite(ctx, async (w) => {
     const active = await w.tx
       .select({ id: trainingCycles.id })
@@ -544,12 +549,77 @@ export async function activateCycle(
     }
     const [cycle] = await w.tx
       .update(trainingCycles)
-      .set({ status: "active", startDate: today })
+      .set({ status: "active", startDate: today, scheduledStartDate: null })
       .where(eq(trainingCycles.id, cycleId))
       .returning();
     return cycle;
   });
   return result;
+}
+
+/**
+ * Schedule a draft cycle to start on a later day (docs/plans/ai-coach.md,
+ * owner decision 7). It stays a draft until then; only one cycle is
+ * scheduled at a time, so scheduling one clears any other.
+ */
+export async function scheduleCycle(ctx: PlanWriteContext, cycleId: number, day: string | null, expectedVersion?: number) {
+  return planWrite(ctx, async (w) => {
+    const others = day
+      ? await w.tx
+          .select({ id: trainingCycles.id })
+          .from(trainingCycles)
+          .where(
+            and(
+              eq(trainingCycles.userId, ctx.userId),
+              isNotNull(trainingCycles.scheduledStartDate),
+              isNull(trainingCycles.deletedAt),
+              ne(trainingCycles.id, cycleId),
+            ),
+          )
+      : [];
+    const ids = [...new Set([...others.map((c) => c.id), cycleId])].sort((a, b) => a - b);
+    for (const id of ids) await w.touch({ type: "cycle", id }, id === cycleId ? { expectedVersion } : {});
+    if (others.length) {
+      await w.tx
+        .update(trainingCycles)
+        .set({ scheduledStartDate: null })
+        .where(inArray(trainingCycles.id, others.map((c) => c.id)));
+    }
+    const [row] = await w.tx
+      .select({ status: trainingCycles.status })
+      .from(trainingCycles)
+      .where(eq(trainingCycles.id, cycleId));
+    if (day && row.status === "active") throw new PlanStateError("This cycle is already active.");
+    await w.tx.update(trainingCycles).set({ scheduledStartDate: day }).where(eq(trainingCycles.id, cycleId));
+  });
+}
+
+/**
+ * Start the user's scheduled cycle once its day has come: it becomes active
+ * with that day as its start, and any other active cycle completes. Called
+ * where the app reads the active cycle. One indexed read when nothing is due.
+ */
+export async function startDueScheduledCycle(userId: string): Promise<boolean> {
+  const { toDateStr } = await import("@/lib/utils/cycle-position");
+  const { userToday } = await import("@/lib/user-settings");
+  const today = toDateStr(await userToday(userId));
+  const [due] = await db
+    .select({ id: trainingCycles.id, day: trainingCycles.scheduledStartDate })
+    .from(trainingCycles)
+    .where(
+      and(
+        eq(trainingCycles.userId, userId),
+        eq(trainingCycles.status, "draft"),
+        isNull(trainingCycles.deletedAt),
+        isNotNull(trainingCycles.scheduledStartDate),
+        lte(trainingCycles.scheduledStartDate, today),
+      ),
+    )
+    .orderBy(desc(trainingCycles.scheduledStartDate))
+    .limit(1);
+  if (!due?.day) return false;
+  await activateCycle({ userId, writer: "sync", reason: "Scheduled start" }, due.id, undefined, due.day);
+  return true;
 }
 
 // ── Queued and flushed set writes (2.7) ──────────────────────────────────────

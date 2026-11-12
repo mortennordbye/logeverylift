@@ -20,6 +20,8 @@ import { describe, expect, it, vi } from "vitest";
 // The tool modules import `@/db`, which validates DB env vars at import time.
 // Registration never touches the database, so stub the client out.
 vi.mock("@/db", () => ({ db: {} }));
+// The limits read Garmin access, whose module validates env vars at import time.
+vi.mock("@/lib/garmin/access", () => ({ garminAllowedFor: async () => false, garminAllowed: () => false }));
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false };
 

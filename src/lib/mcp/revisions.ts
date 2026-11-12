@@ -11,6 +11,7 @@ import {
   OpenWorkoutError,
   PlanConflictError,
   PlanNotFoundError,
+  PlanStateError,
   listAssistantChangeSets,
   listRevisions,
   restoreChangeSet,
@@ -84,7 +85,7 @@ async function conflictText(userId: string, e: PlanConflictError): Promise<strin
 /** A tool result for an error from the revision layer, or null for any other error. */
 export async function planErrorResult(userId: string, e: unknown) {
   if (e instanceof PlanConflictError) return fail(await conflictText(userId, e));
-  if (e instanceof PlanNotFoundError) return fail(e.message);
+  if (e instanceof PlanNotFoundError || e instanceof PlanStateError) return fail(e.message);
   if (e instanceof OpenWorkoutError) {
     return fail("The user has a workout in progress on this plan. Try again after it is finished.");
   }

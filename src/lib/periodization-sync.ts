@@ -9,7 +9,7 @@ import { db } from "@/db";
 import { garminDailyMetrics, programExercises, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { userToday } from "@/lib/user-settings";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
-import { planWrite } from "@/lib/plan-revisions";
+import { planWrite, startDueScheduledCycle, type PlanWriteContext } from "@/lib/plan-revisions";
 import { programs } from "@/db/schema";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import {
@@ -44,6 +44,8 @@ export const hasPeakAnchor = or(
  * completes it), or when the week is already synced, which is one indexed read.
  */
 export async function syncDueCycle(userId: string): Promise<void> {
+  // A block scheduled to start today (or earlier) starts first.
+  await startDueScheduledCycle(userId);
   const cycle = await db.query.trainingCycles.findFirst({
     where: and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), liveCycles),
     with: { slots: true },
@@ -203,8 +205,12 @@ export async function syncPeriodizedTargets(
   athleteLevel: AthleteLevel | null,
   /** Use this nudge instead of computing it (an applied wearable suggestion). */
   adaptationOverride?: Adaptation,
-  /** Who the revisions name: the weekly sync, or an applied wearable suggestion. */
-  writer: "sync" | "apply" = "sync",
+  /**
+   * Who the revisions name: the weekly sync, an applied wearable suggestion,
+   * or an assistant's volume change (set_volume, docs/plans/ai-coach.md, 2.2),
+   * which passes its whole write context.
+   */
+  writer: "sync" | "apply" | PlanWriteContext = "sync",
 ): Promise<{ pct: number; note: string }> {
   // A slot keeps its program id when the program is deleted; the sync never
   // writes into a deleted program.
@@ -225,12 +231,14 @@ export async function syncPeriodizedTargets(
 
   // One change set per cycle-week, so the history groups a week's rewrite.
   await planWrite(
-    {
-      userId,
-      writer,
-      reason: writer === "apply" ? `Garmin suggestion applied, week ${currentWeek}` : `Weekly sync, week ${currentWeek}`,
-      changeSetId: `${writer}:${cycleId}:${currentWeek}`,
-    },
+    typeof writer === "object"
+      ? writer
+      : {
+          userId,
+          writer,
+          reason: writer === "apply" ? `Garmin suggestion applied, week ${currentWeek}` : `Weekly sync, week ${currentWeek}`,
+          changeSetId: `${writer}:${cycleId}:${currentWeek}`,
+        },
     async (w) => {
   const tx = w.tx;
   // Cycle first, then programs: the lock order every plan write uses.
