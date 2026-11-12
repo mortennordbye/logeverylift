@@ -11,7 +11,8 @@ Written 2026-11-12. Read this file first, then the two inputs:
 - **The audit:** [`docs/triathlon-coach-audit.md`](../triathlon-coach-audit.md). What the app has
   and misses, the bugs found, and the owner's decisions **D1-D23** and technical decisions
   **T1-T10** at the end. When this plan and a decision disagree, the decision wins; fix this
-  plan.
+  plan. A D decision wins over a T decision, except where the T decision says it replaces part
+  of a D decision (T10 replaces where D10 stores the interview answers).
 - **The research:** [`docs/research/endurance-training-reference.md`](../research/endurance-training-reference.md).
   The training rules (periodization, zones, load, recovery, strength, nutrition, workout data
   models), each with an evidence label. Every training rule in code cites it.
@@ -113,8 +114,11 @@ endurance package gates on this flag, never on the role.
 **A4. Revisions, stable ids and plan versions (D2, T2, T3, T5, T6, T9).** The base of all plan
 writes.
 - Program sets are updated in place, matched by id (diff), never deleted and inserted again.
-  This also fixes "safe writes during an open workout" (audit section 7).
-- Soft delete for programs and cycles (and later seasons, sessions, workouts).
+  This also fixes "safe writes during an open workout" (audit section 7). Two paths delete sets
+  today, and both must change: the MCP set replace (`src/lib/mcp/tools/programs.ts:463`) and
+  `deleteProgramSet` in the UI (`src/lib/actions/programs.ts:1116`).
+- Soft delete for every plan object (T6): program sets, program exercises, programs and cycles
+  now, and seasons, sessions and workouts when they exist. Readers filter out deleted rows.
 - A revision store: object type and id, a full snapshot, writer (`user`, `assistant`,
   `progression`, `sync`, `apply`), reason, change-set id, time.
 - Restore: whole object, keeps ids, never touches logged data, leaves engine- and sync-owned
@@ -123,6 +127,8 @@ writes.
   instead of applying silently (T9). This covers the offline queue and AI writes.
 - UI: a revisions list per program and cycle with restore, and a feed of AI changes (writer
   `assistant`), grouped by change set.
+- Privacy (D2): revisions are user data. Add them to export and delete, and add a retention
+  rule for them to the data inventory.
 - Lifter risk: high (set writes are used in the workout). Needs component tests and the e2e
   suite.
 - Unlocks: everything in phases B to E.
@@ -135,7 +141,7 @@ parallel once A4 is done.
 | ID | Package | Needs | Status |
 |---|---|---|---|
 | B1 | MCP parity, part 1 | A1, A4 | todo |
-| B2 | MCP scopes, consent and revoke | none (A4 for the revoke feed) | todo |
+| B2 | MCP scopes, consent and revoke | none | todo |
 | B3 | MCP knowledge resources and server instructions | research doc (done) | todo |
 | B4 | Coach memory | A4 | todo |
 
@@ -144,6 +150,13 @@ a future start date), exercise search, create a custom exercise, log or confirm 
 session notes (D6), list and restore revisions (A4), change-set id per AI session (T3), and the
 optimistic version check (T9) on every write. Integration tests for every existing and new MCP
 write tool.
+- Field owners for the existing conflicts (audit section 8). After A1, MCP can set
+  `targetHeartRateZone` and rest on `work` sets, but the weekly sync overwrites them the next
+  week. The brief decides for each field in that table who owns it, including how an AI volume
+  change goes through `adaptation_pct`, and writes it into the tool descriptions.
+- Open question for the brief: what one "AI session" is for the change-set id. The MCP handler
+  is stateless (`src/app/api/[transport]/route.ts:59-68`), so the id needs a rule, for example
+  an explicit change-set argument from the model, or the token plus a time window.
 
 **B2. MCP scopes, consent and revoke (D5, D6).** Read-only and read-write scopes on the consent
 page. Consent text names workout history, notes, the illness log (when it exists) and Garmin
@@ -154,7 +167,10 @@ for MCP, policy text, `LEGAL_VERSION` and `CONSENT_VERSION` bumps.
 app's model (seasons, cycles, programs, dated sessions, who owns which field, revisions, limits,
 the endurance switch) and how a weekly review should go. MCP resources: the research reference,
 the app's rules, and later the workout step syntax (from C4). Each resource is versioned with
-the doc it comes from.
+the doc it comes from. The production image does not contain `docs/`: it copies only the
+standalone build, `public`, `drizzle` and `scripts-dist` (`Dockerfile:73-78`). So the brief
+must bundle the docs into the build or copy them into the image, with a test that reads each
+resource from a production build.
 
 **B4. Coach memory (T10).** A per-user table of context entries: kind (preference, limit,
 observation, decision), text, date, active flag. Read and write over MCP and in a simple screen.
@@ -184,6 +200,9 @@ the plan and runs alone.
   transition, and an optional length in days (T8).
 - Taper placed from the A race date, not from block length.
 - When a race date changes, flag the season for the AI to re-plan (D17); no automatic reshape.
+  The flag shows on the season in the app and in the season read tool over MCP. D17 says "the
+  MCP status tool", but no general status tool exists (only `get_garmin_status`), so the season
+  read tool carries it.
 - Migration: existing triathlon cycles move into a season. Rollback note required.
 - MCP tools for all of it. Lifter risk: low (new tables; cycles without a season unchanged).
 
@@ -200,6 +219,8 @@ a session relates to a program.
   index for the new model, with the current lifter behaviour as tests first.
 - Lifter risk: high. Critical flow. Component tests, integration tests and e2e specs, plus the
   smoke pass in `CLAUDE.md`.
+- The brief may ship the quick-workout part as a second PR after the dated-session model, so
+  the riskiest change is reviewed alone.
 
 **C3. Athlete profile, thresholds and intake interview (D10, D12, D21).**
 - Thresholds with history: FTP, threshold HR (bike, run), threshold run pace, swim CSS, max HR.
@@ -210,7 +231,11 @@ a session relates to a program.
 - The intake interview, in the app and over MCP, writes these tables (not coach memory).
 - Strength part of a plan follows the strength goal; frequency by phase is a default the AI can
   override with a reason (D21).
-- Behind the endurance switch (D18). Health data: privacy checklist.
+- The existing generator (`src/lib/utils/triathlon-plan.ts`) builds a fixed plan. The brief
+  decides whether to change it to use the interview answers and the season, or to retire it
+  because the AI builds plans from parts.
+- Behind the endurance switch (D18). Health data: privacy checklist. Thresholds and HR never
+  show to friends (audit section 9).
 
 **C4. Structured endurance workouts (D9).**
 - A step tree in JSON, checked with one Zod schema used by the app, MCP and export: step types
@@ -225,12 +250,15 @@ a session relates to a program.
 **C5. Planned vs done, missed sessions, sick periods (D11, D19, D20).**
 - Match a dated session to a Garmin activity (admins) or to a session logged in the app.
 - If nothing matches, ask "did you do it?" (confirm with time, distance, RPE, or mark missed).
-- A confirmed missed key session gets a suggested free day; the user taps (D19).
+- A confirmed missed easy session is skipped (D11). A confirmed missed key session gets a
+  suggested free day in the same week, never next to another hard day; the user taps (D19).
 - A sick period is one entry; sessions inside it are marked missed by illness; the AI gets the
   return rule (D20).
 - Compliance per session and a consistency number (share of weeks above 80% done, from the
   research).
-- MCP: read the state, confirm, move, log sickness. Health data: privacy checklist.
+- MCP: read the state, confirm, move, log sickness. Health data: privacy checklist. The illness
+  log is a new kind of health data: add it to the consent text and the policy, and bump
+  `LEGAL_VERSION` and `CONSENT_VERSION` again. Illness never shows to friends.
 
 **C6. Endurance in the app (audit section 3b).**
 - Today and week views with steps, totals per sport, and targets in the user's own numbers and
@@ -260,10 +288,14 @@ breaks one: refuse with the rule, the numbers and the evidence level; accept a r
 override and a reason; store both in the revision. Sync output and AI restores get the same
 check as warnings (T4). User edits are not checked (D4). The workout schema check (C4) is
 separate and never overridable.
+- Open question for the owner: split D2. With D2 where it is, the weekly AI reviews from
+  December 2026 run with no limits until about May 2027. For Garmin users (the owner), the
+  1.10× long-run cap and hard sessions per week can run on Garmin data in phase B, and D2 then
+  adds the load-based rules. Settle this before the B1 brief.
 
 **D3. Strength by phase and heavy-legs placement (D10, D21).** Strength frequency follows the
-phase as a default the AI can override. A check that flags heavy leg work within 48 h before a
-key session.
+phase as a default the AI can override. The UI shows heavy leg work within 48 h before a key
+session, using the rule from D2; D3 does not write a second rule.
 
 **D4. Readiness-based suggestions.** When readiness flags (HRV and resting HR both off), suggest
 swapping today's hard session for an easy one; the user taps. The AI sees the same suggestion.
@@ -287,15 +319,16 @@ export, intervals.icu, Garmin's Training API.
 
 ## 4. What needs what
 
-```
-A1 ──► A4 ──┬──► B1 ──────────────────────────┐
-            ├──► B4 ──► C3 ──┬──► C4 ──┬──► C5 ──► D1 ──► D2 ──┬──► D3
-A2 ──┐      │                │         │                    ├──► D4
-A3 ──┼──────┴──► C1 ──► C2 ──┘         ├──► C6               │
-     │                                 └──► E1 ──► E2         │
-     └─ (A2, A3 feed C1, C2, C3, C6)        B1, C1, C2 ───────┘
-B2, B3: independent; B3 adds the step syntax after C4.
-```
+The `Needs` column in the tables above decides. This list shows the same edges:
+
+- A1 → A4. A4 feeds B1, B4, C1, C2 and C3.
+- A2 feeds C1, C2 and C6. A3 feeds C1 and C3.
+- C1 → C2. B4 → C3.
+- C2 and C3 → C4. C4 feeds C5, C6 and E1.
+- C3 and C5 → D1. B1, C1, C2 and D1 → D2.
+- D2 feeds D3 (with C1, C3) and D4 (with C2).
+- C1 and E1 → E2.
+- B2, B3: independent; B3 adds the step syntax after C4.
 
 Why this order:
 - **A4 first among the large items.** Every later package writes plan data. If revisions come
