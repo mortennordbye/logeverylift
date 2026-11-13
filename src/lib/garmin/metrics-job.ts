@@ -14,7 +14,8 @@ import {
 } from "@/db/schema";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { ACTIVITY_MODEL_VERSION, computeActivityMetrics, type ActivityMetrics } from "./analytics/activity";
-import { DAILY_MODEL_VERSION, buildDailyMetrics, type DayInputs, type StrengthSessionInput } from "./analytics/daily";
+import { DAILY_MODEL_VERSION, buildDailyMetrics, type AppEnduranceInput, type DayInputs, type StrengthSessionInput } from "./analytics/daily";
+import { appSessionLoads } from "@/lib/training-load";
 import type { Sport } from "./analytics/sport";
 import { isoDate } from "./dates";
 import { garminToday } from "./today";
@@ -251,6 +252,9 @@ async function buildDaily(userId: string, today: string) {
     .from(garminDays)
     .where(and(eq(garminDays.userId, userId), inArray(garminDays.kind, ["hrv", "sleep", "daily", "heart_rate"])));
   const sessions = await strengthSessions(userId);
+  const appEndurance: AppEnduranceInput[] = (await appSessionLoads(userId, null, today))
+    .filter((s): s is typeof s & { sport: "swim" | "bike" | "run" } => s.sport === "swim" || s.sport === "bike" || s.sport === "run")
+    .map((s) => ({ sessionId: s.id, day: s.date, sport: s.sport, durationS: s.durationS, load: s.load, method: s.method === "strength_srpe" ? "srpe" : s.method }));
   const feelRows = await db
     .select({ day: workoutSessions.date, feel: sql<number>`avg(${workoutSessions.readiness})::float` })
     .from(workoutSessions)
@@ -270,6 +274,7 @@ async function buildDaily(userId: string, today: string) {
       return { garminActivityId: a.id, day: a.day, sport: a.sport as Sport, load: m.load, loadMethod: m.loadMethod, startMs: m.startMs, endMs: m.endMs, bands: m.bands };
     }),
     strengthSessions: sessions,
+    appEndurance,
     days: withFeel(dayInputs(dayRows), feelByDay),
   });
 

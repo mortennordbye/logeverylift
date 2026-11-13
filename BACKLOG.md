@@ -36,7 +36,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### Step editor for structured workouts
 - **What:** A screen to build and change a structured workout step by step (steps, repeats, end conditions, targets). Today only a connected assistant creates and changes workouts (`manage_workout`, `manage_planned_session` `set_workout`); the app's library (`/more/workouts`) lists, duplicates, renames, deletes and restores them.
 - **Why deferred:** Decision 2 in `docs/plans/workouts-and-compliance.md` (section 18): C4 and C5 built the schema, the library, planned vs done and sick periods on the server; the views, the editor and the guided player belong to package C6.
-- **Unblocked by:** Package C6. Build the editor on the schema check in `src/lib/utils/workout-steps.ts` (`parseWorkout`), so the app and MCP refuse the same workouts, and list the library with `listWorkouts`.
+- **Unblocked by:** The follow-up PR C6b (decision 2 in `docs/plans/endurance-app.md`, section 17: the player and load ship first, reviewed alone). Build the editor on the schema check in `src/lib/utils/workout-steps.ts` (`parseWorkout`), so the app and MCP refuse the same workouts, and list the library with `listWorkouts`.
 - **Touchpoints:** `src/lib/utils/workout-steps.ts`, `src/lib/workouts.ts`, `src/lib/actions/workouts-compliance.ts` (`manageWorkout`), `docs/mcp/workout-steps.md`.
 
 ### Brick, library and Garmin controls in the app
@@ -45,11 +45,65 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Package C6, or an owner request. Sick periods also need a read of deleted rows (a `deleted` option on `listIllness`).
 - **Touchpoints:** `src/components/features/CycleCalendarClient.tsx`, `src/components/features/SessionAnswers.tsx`, `src/components/features/AthleteProfileClient.tsx`, `src/lib/illness.ts` (`listIllness`), `src/lib/validators/planned-sessions.ts` (`plannedSessionOpSchema`), `src/lib/actions/workouts-compliance.ts`.
 
-### Today's card for workout sessions
-- **What:** A dated session that runs a structured workout, not a program, does not show on the home screen's today card or the week strip yet.
-- **Why deferred:** The views are package C6's work. C4 and C5 kept a lifter's screens unchanged and built the data, the rules and the MCP tools first.
-- **Unblocked by:** Package C6 views. Show workout sessions next to program sessions on the today card and the week strip, with the workout's summary (`describeWorkout`).
-- **Touchpoints:** `src/app/page.tsx`, `src/components/features/TodaySessionsList.tsx`, `src/lib/home-week.ts`, `src/lib/utils/workout-steps.ts` (`describeWorkout`).
+### Home week strip for workout sessions
+- **What:** A dated session that runs a structured workout, not a program, does not count on the home screen's week strip. Package C6 added the "Endurance today" card on home and the week view (`/week`), which show them; the strip still reads C2's program-only home read.
+- **Why deferred:** The strip is part of the lifter's home card, which C6 kept unchanged (`docs/plans/endurance-app.md`, 4.1). The week view covers the endurance user.
+- **Unblocked by:** An owner request. Count workout sessions in `homeWeekPlanned` for endurance users only, and keep the lifter characterization tests green.
+- **Touchpoints:** `src/app/page.tsx`, `src/lib/home-week.ts`, `src/components/features/guided/EnduranceTodayCard.tsx`.
+
+### Guided player: start offline from a cold app
+- **What:** The guided player needs its page opened online once: one server render loads the workout, the targets and the units. After that it runs, and keeps its result, offline. A phone with no network that opens the app cold cannot start a session.
+- **Why deferred:** Decision 7 in `docs/plans/endurance-app.md` (section 17). Caching the page and its data for offline start needs a service worker strategy for these routes and a test that runs offline.
+- **Unblocked by:** A real need (a pool with no signal). Then precache today's `/planned/[id]/play` and `/pool` when the home card renders, or keep the player's data in the saved run.
+- **Touchpoints:** `src/app/sw.ts`, `src/app/planned/[id]/play/page.tsx`, `src/components/features/guided/useGuidedPlayer.ts`.
+
+### Guided player: spoken cues
+- **What:** The player cues each step with beeps, a screen flash and a screen-reader line. A voice that reads the next step and its target ("Work, 10 minutes, 220 to 233 watts") would help when the phone is out of sight.
+- **Why deferred:** Decision 5 in `docs/plans/endurance-app.md`: not in version 1. `speechSynthesis` behaves differently on iOS (it needs a gesture and can stop in the background).
+- **Unblocked by:** An owner request and a device check on iOS.
+- **Touchpoints:** `src/lib/audio-cues.ts`, `src/components/features/guided/useGuidedPlayer.ts`.
+
+### Load: pace and CSS load for Garmin runs and swims
+- **What:** Sessions logged in the app get run pace load and swim load from CSS (`src/lib/utils/training-load.ts`). Garmin activities still use power, heart rate or Garmin's own TSS (`src/lib/garmin/analytics/activity.ts`), though the Garmin design (2.2) planned pace and CSS load for them too.
+- **Why deferred:** Decision 14 in `docs/plans/endurance-app.md`: the owner's Garmin loads keep their method in the C6/D1 PR.
+- **Unblocked by:** An owner yes. Then add `run_pace` and `swim_css` to `computeActivityMetrics` with the user's thresholds, bump `ACTIVITY_MODEL_VERSION`, and check the first real swim file (pool lengths).
+- **Touchpoints:** `src/lib/garmin/analytics/activity.ts`, `src/lib/utils/training-load.ts`, `src/lib/garmin/metrics-job.ts`.
+
+### Load: research pass on session RPE, run pace and swim load
+- **What:** The three load models of package D1 (minutes × RPE × 0.22, run pace with IF², swim with IF³ from CSS) are labelled Inference: the research reference has no section on them.
+- **Why deferred:** Decision 20 in `docs/plans/endurance-app.md`. T1 says the reference changes by a research pass, not by hand edits.
+- **Unblocked by:** A research pass that adds session-RPE load (Foster), rTSS and swim load with their evidence; then update the labels in `LOAD_EVIDENCE` and the week view's info.
+- **Touchpoints:** `docs/research/endurance-training-reference.md`, `src/lib/utils/training-load.ts`, `src/lib/mcp/tools/endurance-app.ts` (`LOAD_EVIDENCE`), `src/app/week/page.tsx`.
+
+### Load: assistant-logged strength sessions in the Garmin series
+- **What:** The Garmin worker counts strength load only from sessions with `source` `app`; strength sessions an assistant logged (`log_session`) do not count. App endurance sessions from both sources now count (decision 15 in `docs/plans/endurance-app.md`), and the app series without Garmin counts both.
+- **Why deferred:** The C6/D1 PR changes no strength number for the owner.
+- **Unblocked by:** An owner yes. Then add `assistant` to the source filter in `strengthSessions` and bump `DAILY_MODEL_VERSION`.
+- **Touchpoints:** `src/lib/garmin/metrics-job.ts` (`strengthSessions`).
+
+### Per-sport split of mixed app sessions in the Garmin series
+- **What:** In the Garmin series, an app session with strength sets counts whole as strength (wall time × session RPE), as in model v2, even when it also holds a run or a ride, such as a warm-up run in a gym session. The app series for users without Garmin splits such a session by sport (the endurance sets by their own method, strength on the rest of the time).
+- **Why deferred:** Review fix 1 in `docs/plans/endurance-app.md` (section 19): adding the endurance sets on top double counted the warm-up, and splitting would change the owner's stored strength numbers. Leaving them out keeps the series as in v2.
+- **Unblocked by:** An owner yes. Then give the strength path the wall time minus the endurance sets' time, as `appSessionLoads` does, add those sets as app endurance entries, and bump `DAILY_MODEL_VERSION`.
+- **Touchpoints:** `src/lib/garmin/analytics/daily.ts` (`buildDailyMetrics`), `src/lib/garmin/metrics-job.ts` (`strengthSessions`), `src/lib/training-load.ts` (`appSessionLoads`).
+
+### Load: the Garmin series waits for the next sync after an app log
+- **What:** For a Garmin user, an endurance session logged in the app (a guided run, "Yes, I did it") reaches fitness and fatigue only when the Garmin worker rebuilds the daily series, which happens after new Garmin data arrives. Users without Garmin see it at once.
+- **Why deferred:** Rebuilding the series from a Server Action would put Garmin work on the logging path.
+- **Unblocked by:** The owner noticing the delay. Then mark the series stale (`garmin_connections.metrics_version` to null) when an app endurance session is saved, so the next worker run rebuilds it.
+- **Touchpoints:** `src/lib/step-results.ts`, `src/lib/session-answers.ts` (`confirmDone`), `src/lib/garmin/metrics-job.ts`.
+
+### Run logger: RPE starts at 6
+- **What:** The run logger offers RPE 6 to 10 only (`RPE_OPTIONS` in `src/components/features/LogRunModal.tsx`), so an easy run logs at least 6 and its session-RPE load reads high. The guided player's results screen offers 1 to 10.
+- **Why deferred:** Decision 11 in `docs/plans/endurance-app.md`: the logger is part of the set logging flow, a critical flow. Runs with a threshold pace use pace load instead.
+- **Unblocked by:** An owner yes, with the logging e2e specs.
+- **Touchpoints:** `src/components/features/LogRunModal.tsx`.
+
+### Garmin laps as step results
+- **What:** A structured session done outdoors with a watch gets step results only by hand or from the assistant. The Garmin file's laps could fill them.
+- **Why deferred:** Out of scope of the C6/D1 PR (`docs/plans/endurance-app.md`, section 0); laps rarely match steps one to one.
+- **Unblocked by:** An owner request. Map laps to play steps by order and duration, and write them with `saveStepResults` as source `assistant` or a new `garmin`.
+- **Touchpoints:** `src/lib/step-results.ts`, `src/lib/garmin/fit.ts`, `src/lib/utils/step-results.ts`.
 
 ### Pounds for weights
 - **What:** Show and take weights in lb for users who want it: every weight label and input (set logging, set edit, program edit, history, session detail, metrics, records, friends' feeds), progression steps in lb (5 lb, 2.5 lb) instead of converted kg steps, and plates and bars in lb (45 lb bar, 45/35/25/10/5/2.5 lb plates) in the plate calculator and the weight presets. Storage stays kg.
@@ -144,6 +198,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### iOS backgrounding — residual gaps after the resume-hardening pass
 - **What:** A Jun 2026 pass made the rest/exercise timers and completed-set toggles re-sync on resume (visibilitychange + pageshow + focus; rest timers rebuild from `restTimerEnds`, completed sets re-pull from the server). Two gaps remain: (1) the **exercise (timed-set) countdown** isn't persisted, so a *cold* eviction mid-timed-set loses it entirely (only warm resume recovers it); (2) **unsaved SetEditView edits** (typed but not Saved) live only in React state and are lost on eviction — only Saved overrides persist to localStorage.
 - **Why deferred:** (1) timed sets are short and rarely span a long background; persisting `endsAt` to the context/localStorage is extra surface for an edge case. (2) auto-persisting drafts on each keystroke is a bigger change; the explicit Save is the documented contract.
+- **Note:** The guided player (package C6) does not have gap (1): it saves its run under `guidedWorkout` on every event and resumes it after a cold eviction (`src/components/features/guided/useGuidedPlayer.ts`).
 - **Unblocked by:** A real iOS device repro showing either gap bites in practice. Then: persist the exercise timer's `endsAt` alongside `restTimerEnds` and rehydrate on mount; and/or debounce-persist SetEditView field state to a draft key cleared on Save/navigation.
 - **Touchpoints:** `src/components/features/WorkoutSetsList.tsx` (exercise timer state + resync effects), `src/contexts/workout-session-context.tsx` (persistence keys), `src/components/features/SetEditView.tsx` (draft state).
 

@@ -196,9 +196,9 @@ the plan and runs alone.
 | C1 | Seasons, races and phases | A2, A3, A4, B1 | done ([`seasons.md`](seasons.md)) |
 | C2 | Session model: several slots a day, dated sessions | A2, A4, C1 | building ([`sessions.md`](sessions.md)) |
 | C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | done ([`athlete-profile.md`](athlete-profile.md)) |
-| C4 | Structured endurance workouts | C2, C3 | building ([`workouts-and-compliance.md`](workouts-and-compliance.md)) |
-| C5 | Planned vs done, missed sessions, sick periods | C2, C4 | building ([`workouts-and-compliance.md`](workouts-and-compliance.md)) |
-| C6 | Endurance in the app: views and guided player | A2, C3, C4 | todo |
+| C4 | Structured endurance workouts | C2, C3 | done ([`workouts-and-compliance.md`](workouts-and-compliance.md)) |
+| C5 | Planned vs done, missed sessions, sick periods | C2, C4 | done ([`workouts-and-compliance.md`](workouts-and-compliance.md)) |
+| C6 | Endurance in the app: views and guided player | A2, C3, C4 | done ([`endurance-app.md`](endurance-app.md); the step editor follows as C6b) |
 
 **C1. Seasons, races and phases (D8, D17, D22, T8).**
 - A season for every user: name, goal, start, end, next goal.
@@ -285,7 +285,8 @@ a session relates to a program.
   units.
 - A guided player for indoor sessions: step timer, current and next target, sound cue at each
   step change (iOS ignores vibration), pause, skip, extend, screen kept awake. Reuse the
-  existing timer code with care: it is a critical flow.
+  existing timer code with care: it is a critical flow. (Built beside the timers, reusing their
+  pattern, not their code, so the critical flow does not change: `endurance-app.md`, 3.1.)
 - A pool view (large text, send-off times).
 - Per-step results after the session (planned vs done, RPE, notes).
 
@@ -293,7 +294,7 @@ a session relates to a program.
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| D1 | Load without Garmin, swim and run-pace load | C3, C5 | todo |
+| D1 | Load without Garmin, swim and run-pace load | C3, C5 | done ([`endurance-app.md`](endurance-app.md)) |
 | D2 | Training limits engine (warn the AI) | B1, C1, C2, D1 | todo; part 1 done ([`ai-coach.md`](ai-coach.md)) |
 | D3 | Strength by phase and heavy-legs placement | C1, C3, D2 | todo |
 | D4 | Readiness-based session suggestions | C2, D2 | todo |

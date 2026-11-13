@@ -94,6 +94,23 @@ what it describes, that package updates this file and the server instructions in
   (`countsInWeek`, `src/lib/utils/session-compliance.ts:87`). Consistency is the share of
   complete weeks over the last 12 full weeks, with this week shown apart. `get_compliance` is
   for every user.
+- **Step results** (endurance features only). A done session with a workout can hold the result
+  of each step: status (`done`, `partial`, `skipped`, `not_done`), active time, distance, one
+  measured value in the target's unit, RPE and a note. They come from the guided player in the
+  app, the user typing them, or `log_step_results`. Step keys are the step id, plus `#n` for round
+  n of a repeat (`s3#2`). `get_step_results` gives planned against done per step, resolved with
+  the thresholds of that day. They are logged data: no revision, no restore. `log_step_results`
+  logs the session first when it is not logged yet, as `confirm_planned_session` does.
+- **Training load** (endurance features only). One scale: 100 = one hour at threshold.
+  `get_training_load` gives load per day and sport, fitness (42-day), fatigue (7-day) and form,
+  and the weekly ramp. With Garmin data it reads the Garmin series, which also holds the app
+  sessions Garmin did not record; without, it computes from sessions logged in the app: a run
+  with a threshold pace gets `hours x (speed / threshold speed)^2 x 100`, a swim with CSS
+  `hours x (speed / CSS)^3 x 100`, anything else `minutes x RPE x 0.22`, strength as before. The
+  two series are never added; on a pair (same sport and day, closest duration) Garmin wins. A
+  session with no RPE and no threshold has no load and is listed, never guessed. These three
+  models are Inference: say so when you use them. `list_planned_sessions` and `get_workout` add
+  a planned load estimate from the targets; compliance stays on duration, then distance.
 - **Sick period** (endurance features only). One entry per period: a first day, a last day or
   none while still sick, an optional IOC severity (mild, moderate, severe) and the user's notes
   (`manage_illness`; `get_athlete_profile` lists the open one and those of the last 90 days).
