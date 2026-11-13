@@ -256,6 +256,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Codebase hygiene (deferred long-term)
 
+### Deploy during the day without disturbing an active workout
+- **What:** Find a way to ship to prod during the day without any effect on users who are in the middle of a workout. Today the rule is "do not merge while someone trains": before each merge the operator checks prod for open workout sessions with a set in the last 30 minutes and waits. On 2026-11-13 a merge waited more than an hour for another user to finish. Every deploy changes all Server Action IDs (`CLAUDE.md`, "Server Action stability across deploys"), so an open app must reload once; the client keeps queued sets through that reload (`src/lib/utils/stale-bundle.ts`), but a reload mid-set, a lost rest timer, or a slow pod switch still disturbs the lifter.
+- **Why deferred:** The owner asked to look at this later (2026-11-13). The current wait rule is safe, just slow.
+- **Unblocked by:** Pick an approach and test it. Options to look at: keep the old pod serving old action IDs until its clients reload (version skew support, e.g. Next.js `deploymentId` / skew protection, or two ReplicaSets during a drain window); a stable action-ID salt without putting the key in the public image (build the key into a private image, or inject the salt at build from a CI secret into a private registry); delay the client reload until the workout screen is idle (no timer running, no open set edit); and show a "new version ready" banner on the workout screen instead of a forced reload. Measure with the e2e stale-bundle spec plus a deploy during a running e2e workout.
+- **Touchpoints:** `src/lib/utils/stale-bundle.ts`, `src/contexts/pending-queue-context.tsx`, `next.config.ts`, `Dockerfile`, `.github/workflows/ci.yml`, the ArgoCD/Kargo rollout config, and the open-workout check the hub runs before merging (`deploys-break-open-workouts` memory).
+
 ### Two open tabs overwrite each other's offline queue
 - **What:** Each tab keeps its own copy of the offline queue in React state and writes the whole queue to localStorage `pendingMutationQueue` on every change. With two tabs or PWA windows open, the last tab to write wins, so a set queued in one tab can be erased by the other tab's write. Each tab also replays its own copy, so a set can be sent twice.
 - **Why deferred:** It was there before the stale-bundle fix and is out of its scope. Logging a workout in two tabs at once is rare.
