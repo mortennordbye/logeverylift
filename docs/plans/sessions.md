@@ -643,6 +643,11 @@ Decided by the hub on 2026-11-12, owner may change. The hub took every recommend
 16. Garmin planned hours read the dated sessions.
 17. The hard-sessions limit stays "not checked" on rotation cycles.
 18. The backfill is lazy, on the first read of an active or scheduled cycle.
+19. Decided by the hub on 2026-11-13 after review, owner may change: untouched, not-done
+    sessions in the current calendar week (the user's zone), past days of this week included,
+    follow template edits exactly as before C2. Done sessions, touched ones (moved, changed,
+    skipped, added) and sessions before this week never change. This replaces "from today on"
+    in 3.4 and T7's reading of "future" for this week.
 
 ## 15. Defaults chosen
 
@@ -715,9 +720,10 @@ Changed: `src/db/schema/training-cycles.ts`, `src/db/schema/workout-sessions.ts`
   `?planned=<id>`.
 - **New workout page:** unchanged. Its card reads `todaySlot`, which is the first session not
   yet done.
-- **Training limits on template writes** still count the template's week (now with several
-  slots a day, each counted). The calendar week of dated sessions is counted for session
-  writes (`move`, `change`, `add`, `unskip`), where sessions can leave their template day.
+- **Training limits** count the dated calendar week for session writes (`move`, `change`,
+  `add`, `unskip`, `reset`) and, since the review (section 20), for slot and program writes on a
+  cycle that has dated sessions. A cycle without dated sessions yet, and a start, a scheduled
+  start, `set_volume` or a restore of a cycle, are still counted on the template's week.
 - **Rotation overrides** are written over MCP only; the app has no rotation skip button yet, and
   the rotation calendar stays as it was (decision 14).
 - **Decline with a date and no session** (an app bundle from before C2) skips every session
@@ -729,3 +735,41 @@ Changed: `src/db/schema/training-cycles.ts`, `src/db/schema/workout-sessions.ts`
   shows. The e2e spec found this: a block completed early kept its old dates and hid the new one.
 - **`findDayOfWeekMissed`** is no longer called by the app. It stays for the characterization
   tests and for the property test that the matcher misses exactly what it missed.
+
+## 20. Review fixes (2026-11-13)
+
+Three reviews of the build. Each fix came with a test that failed first, in
+`src/__tests__/integration/planned-sessions-review.test.ts` unless named otherwise.
+
+- **"I skipped it" on today** keeps today's program on the card; a skipped session is neither
+  done nor missed (`weekdayToday`).
+- **Mid-week template edits** follow decision 19: this week's untouched past days are rewritten
+  and missing ones made (`regenerationPlan` takes `editableFrom`, the Monday).
+- **The home week strip** reads the dated week through `homeWeekPlanned`, which logs and falls
+  back to the template when the read fails; a declined day keeps its dot (`weekDayMarks`; unit
+  test `src/__tests__/home-week.test.ts`).
+- **"I skipped it"** skips the session, deletes the auto row and writes the dismissal in one
+  transaction (`skipAutoDay`).
+- **Dismissals** apply whenever a past session is made, in any cycle.
+- **A workout links** to a dated session only on that session's day.
+- **A restore of a session** goes through `checkSessionRestore`: no logged, started or past
+  session; no past day; inside the block; not onto a template day another session holds; at most
+  three a day. `restore_revision` warns on the session's weeks.
+- **Rotation overrides** store the slot they fall on; a new start or a template change drops the
+  ones that no longer fit. A rotation change needs a position still to come in the block and,
+  once stored, its version.
+- **Regeneration** never removes a session a workout was started for, leaves the template day of
+  a moved session that left the block empty, and keeps every day at three sessions or fewer; the
+  cap counts live, not-skipped sessions of the cycle, the same in `dayCount`.
+- **Reset** checks the slot's weekday, the block and the cap, and runs the limits.
+- **Limits on template writes** count the dated calendar week, after regeneration inside the same
+  transaction, for a cycle that has dated sessions; one without them keeps the template's week.
+- **`log_session`** refuses a planned session of another day. **`confirm_session`** by id works
+  for changed and added sessions and on a day with the program twice.
+- **`change`** refuses a taken position and a past session. An add locks the cycle row.
+- **The purge** deletes a purged cycle's session revisions.
+- **`get_training_cycle`** returns `touchedFutureSessions`; `edit_cycle_slot` returns
+  `sessionsRegenerated`.
+- **`upsertCycleSlot`** returns "Failed to save the slot", not the internal error.
+- **The matcher's tests** now cover several sessions a day and links (unit,
+  `src/__tests__/planned-sessions.test.ts`).

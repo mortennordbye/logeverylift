@@ -11,7 +11,8 @@ import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/actions/workout-sets";
 import { needsPolicyNotice, needsTermsConsent } from "@/lib/consent";
-import { listPlanned } from "@/lib/planned-sessions";
+import { homeWeekPlanned } from "@/lib/home-week";
+import { weekDayMarks } from "@/lib/utils/planned-sessions";
 import { userToday } from "@/lib/user-settings";
 import { parseDateStr } from "@/lib/utils/cycle-position";
 import { weekDatesOf } from "@/lib/utils/user-date";
@@ -115,13 +116,14 @@ export default async function Home() {
 
   // This week's dated sessions, so a moved session shows on its new day and a
   // day with several shows how many. Outside the block the template shows, as before.
+  // A failed read falls back to the template's week (review 5).
   const weekPlanned =
     info?.cycle.scheduleType === "day_of_week"
-      ? (await listPlanned(session.user.id, weekDates[0], weekDates[6], info.cycle.id)).filter((p) => p.status !== "skipped")
+      ? await homeWeekPlanned(session.user.id, weekDates[0], weekDates[6], info.cycle.id)
       : [];
   const blockStart = info?.cycle.startDate ?? "";
   const blockEnd = info?.endDate ?? "";
-  const plannedOn = (date: string) => weekPlanned.filter((p) => p.date === date);
+  const plannedOn = (date: string) => (weekPlanned ? weekPlanned.filter((p) => p.date === date) : null);
 
   const slotByDay =
     info?.cycle.scheduleType === "day_of_week"
@@ -276,8 +278,7 @@ export default async function Home() {
                 {weekDates.map((dateStr, i) => {
                   const slot = slotByDay[i + 1];
                   const inBlock = dateStr >= blockStart && dateStr < blockEnd;
-                  const planned = plannedOn(dateStr);
-                  const hasProgram = inBlock ? planned.length > 0 : !!slot?.program;
+                  const { hasProgram, count } = weekDayMarks({ planned: plannedOn(dateStr), inBlock, templateHasProgram: !!slot?.program });
                   const isToday = dateStr === todayStr;
                   const isPast = dateStr < todayStr;
                   const isCompleted = completedDates.has(dateStr);
@@ -296,9 +297,9 @@ export default async function Home() {
                             <path d="M2.5 7l3 3 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                           </svg>
                         )}
-                        {!isCompleted && inBlock && planned.length > 1 && (
-                          <span className="text-[10px] font-bold text-primary" aria-label={`${planned.length} sessions`}>
-                            {planned.length}
+                        {!isCompleted && count > 1 && (
+                          <span className="text-[10px] font-bold text-primary" aria-label={`${count} sessions`}>
+                            {count}
                           </span>
                         )}
                       </div>

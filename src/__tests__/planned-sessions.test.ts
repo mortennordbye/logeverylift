@@ -276,3 +276,107 @@ describe("planned session revisions", () => {
     expect(diffSnapshots(null, snap({}))).toEqual(["Added Squat day on 2026-11-04"]);
   });
 });
+
+describe("review fixes (docs/plans/sessions.md, section 20)", () => {
+  const block = { start: "2026-10-26", end: "2026-11-23" };
+  const today = "2026-11-05"; // Thursday; this week starts Mon 2 Nov
+
+  it("2-4. this week's past days follow the template; earlier weeks do not", () => {
+    const plan = regenerationPlan({
+      existing: [row(1, 7, "2026-11-04"), row(2, 7, "2026-10-28")],
+      generated: [gen(7, "2026-11-04", 99), gen(7, "2026-10-28", 99), gen(8, "2026-11-03", 99), gen(8, "2026-10-27", 99)],
+      today,
+      block,
+      includePast: false,
+      editableFrom: "2026-11-02",
+    });
+    expect(plan.update).toEqual([{ id: 1, fields: { programId: 99 } }]);
+    expect(plan.insert.map((g) => g.date)).toEqual(["2026-11-03"]);
+    expect(plan.remove).toEqual([]);
+  });
+
+  it("13. a touched session that leaves the block does not come back on its template day", () => {
+    const plan = regenerationPlan({
+      existing: [row(1, 7, "2026-11-12", { touched: true, date: "2026-11-30" })],
+      generated: [gen(7, "2026-11-12")],
+      today,
+      block,
+      includePast: false,
+    });
+    expect(plan).toEqual({ update: [], insert: [], remove: [1] });
+  });
+
+  it("15. no day gets a fourth session; skipped ones keep no place", () => {
+    const added = (id: number, skipped = false) => row(id, 0, "2026-11-09", { slotId: null, templateDate: null, skipped });
+    const full = regenerationPlan({ existing: [added(1), added(2), added(3)], generated: [gen(7, "2026-11-09")], today, block, includePast: false });
+    expect(full.insert).toEqual([]);
+    const freed = regenerationPlan({ existing: [added(1), added(2), added(3, true)], generated: [gen(7, "2026-11-09")], today, block, includePast: false });
+    expect(freed.insert.map((g) => g.date)).toEqual(["2026-11-09"]);
+  });
+
+  it("19. a session a workout was started for is never removed", () => {
+    const plan = regenerationPlan({ existing: [row(1, 7, "2026-11-12", { linked: true })], generated: [], today, block, includePast: false });
+    expect(plan.remove).toEqual([]);
+    expect(regenerationPlan({ existing: [row(1, 7, "2026-11-12", { linked: true })], generated: [], today, block: null, includePast: false }).remove).toEqual([]);
+  });
+
+  describe("18. the matcher with several sessions a day and links", () => {
+    const p = (id: number, date: string, programId: number, position: number) => ({ id, date, position, programId });
+    const s = (id: number, date: string, programId: number | null, plannedSessionId: number | null = null) => ({
+      id,
+      date,
+      programId,
+      intendedDate: null,
+      plannedSessionId,
+    });
+
+    it("a workout of an unrelated program marks only the first session done", () => {
+      const m = matchPlanned([p(1, "2026-11-04", 10, 1), p(2, "2026-11-04", 20, 2)], [s(100, "2026-11-04", 99)]);
+      expect([...m.keys()]).toEqual([1]);
+      expect(m.get(1)?.step).toBe(3);
+    });
+
+    it("a link wins over a same-program workout on a day with the program twice", () => {
+      const m = matchPlanned(
+        [p(1, "2026-11-04", 10, 1), p(2, "2026-11-04", 10, 2)],
+        [s(100, "2026-11-04", 10, 2), s(101, "2026-11-04", 10)],
+      );
+      expect(m.get(2)).toEqual({ sessionId: 100, step: 1 });
+      expect(m.get(1)).toEqual({ sessionId: 101, step: 2 });
+    });
+
+    it("on random days with up to three sessions, each workout is used once a day, links hold, and programs come first", () => {
+      let seed = 11;
+      const rand = () => {
+        seed = (seed * 1103515245 + 12345) % 2 ** 31;
+        return seed / 2 ** 31;
+      };
+      for (let round = 0; round < 300; round++) {
+        const date = "2026-11-04";
+        const planned = Array.from({ length: 1 + Math.floor(rand() * 3) }, (_, i) => p(i + 1, date, 10 + Math.floor(rand() * 3), i + 1));
+        const sessions = Array.from({ length: Math.floor(rand() * 4) }, (_, i) =>
+          s(100 + i, date, rand() < 0.2 ? null : 10 + Math.floor(rand() * 4), rand() < 0.3 ? planned[Math.floor(rand() * planned.length)].id : null),
+        );
+        const m = matchPlanned(planned, sessions);
+        const used = [...m.values()].map((x) => x.sessionId);
+        expect(new Set(used).size).toBe(used.length);
+        for (const ws of sessions) {
+          // A linked workout always marks its own session, if no earlier link took it.
+          if (ws.plannedSessionId != null && sessions.find((x) => x.plannedSessionId === ws.plannedSessionId)?.id === ws.id) {
+            expect(m.get(ws.plannedSessionId)).toEqual({ sessionId: ws.id, step: 1 });
+          }
+        }
+        // A session left without a workout means no workout that day was free.
+        const free = sessions.filter((x) => !used.includes(x.id));
+        if (planned.some((x) => !m.has(x.id))) expect(free).toEqual([]);
+        // A program match is never lost to a fallback on the same day.
+        for (const pl of planned) {
+          const got = m.get(pl.id);
+          if (got?.step === 3) {
+            expect(free.some((x) => x.programId === pl.programId)).toBe(false);
+          }
+        }
+      }
+    });
+  });
+});

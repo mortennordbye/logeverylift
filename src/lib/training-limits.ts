@@ -149,6 +149,42 @@ export async function programRuns(
   return out;
 }
 
+/**
+ * The week a cycle write is checked on: for a weekday cycle with dated
+ * sessions, the calendar week those sessions fill (this week, or the first
+ * week of a block that starts later; docs/plans/sessions.md, 6 and review 21),
+ * so moved and added sessions count; before it has dated sessions, the
+ * template's week.
+ */
+/** The weekday cycles among these that have dated sessions. */
+async function datedCycles(ex: Executor, cycleIds: number[]): Promise<Set<number>> {
+  if (cycleIds.length === 0) return new Set();
+  const rows = await ex
+    .select({ id: trainingCycles.id })
+    .from(trainingCycles)
+    .where(and(inArray(trainingCycles.id, cycleIds), liveCycles, eq(trainingCycles.scheduleType, "day_of_week"), isNotNull(trainingCycles.sessionsGeneratedAt)));
+  return new Set(rows.map((r) => r.id));
+}
+
+async function cycleWeek(ex: Executor, cycleId: number): Promise<WeekSession[] | null> {
+  const [c] = await ex
+    .select({
+      userId: trainingCycles.userId,
+      scheduleType: trainingCycles.scheduleType,
+      generated: trainingCycles.sessionsGeneratedAt,
+      status: trainingCycles.status,
+      startDate: trainingCycles.startDate,
+      scheduledStartDate: trainingCycles.scheduledStartDate,
+    })
+    .from(trainingCycles)
+    .where(and(eq(trainingCycles.id, cycleId), liveCycles));
+  if (!c || c.scheduleType !== "day_of_week" || c.generated == null) return cycleWeekSessions(ex, cycleId);
+  const { mondayOf } = await import("@/lib/utils/planned-sessions");
+  const today = toDateStr(await userToday(c.userId));
+  const start = c.status === "active" ? c.startDate : c.scheduledStartDate;
+  return calendarWeekSessions(ex, c.userId, mondayOf(start && start > today ? start : today), cycleId);
+}
+
 /** A weekday cycle's week of sessions, or null for a rotation cycle (no fixed week). */
 export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<WeekSession[] | null> {
   const [cycle] = await ex
@@ -222,7 +258,7 @@ async function hardPrograms(ex: Executor, programIds: number[]): Promise<Map<num
  * cycles (docs/plans/sessions.md, 6): a moved session counts in the week it
  * lands in, a skipped one does not, and several on one day count each.
  */
-export async function calendarWeekSessions(ex: Executor, userId: string, monday: string): Promise<WeekSession[]> {
+export async function calendarWeekSessions(ex: Executor, userId: string, monday: string, cycleId?: number): Promise<WeekSession[]> {
   const { addDaysStr, dowOf } = await import("@/lib/utils/planned-sessions");
   const rows = await ex
     .select({ date: plannedSessions.date, programId: plannedSessions.programId })
@@ -235,6 +271,7 @@ export async function calendarWeekSessions(ex: Executor, userId: string, monday:
         eq(plannedSessions.status, "planned"),
         gte(plannedSessions.date, monday),
         lte(plannedSessions.date, addDaysStr(monday, 6)),
+        cycleId != null ? eq(plannedSessions.cycleId, cycleId) : undefined,
       ),
     );
   const hard = await hardPrograms(ex, rows.map((r) => r.programId).filter((id): id is number => id != null));
@@ -277,9 +314,15 @@ export type PlanFacts = {
   weeks: Map<number, WeekSession[] | null>;
 };
 
-export async function planFacts(ex: Executor, scope: LimitScope, share: number | null = null): Promise<PlanFacts> {
+export async function planFacts(
+  ex: Executor,
+  scope: LimitScope,
+  share: number | null = null,
+  /** Cycles checked on their dated calendar week; the rest on the template's week. */
+  dated: ReadonlySet<number> = new Set(),
+): Promise<PlanFacts> {
   const weeks = new Map<number, WeekSession[] | null>();
-  for (const id of scope.cycleIds) weeks.set(id, await cycleWeekSessions(ex, id));
+  for (const id of scope.cycleIds) weeks.set(id, dated.has(id) ? await cycleWeek(ex, id) : await cycleWeekSessions(ex, id));
   // Calendar weeks get keys below zero, apart from the cycle ids.
   for (const [i, monday] of (scope.sessionWeeks?.mondays ?? []).entries()) {
     weeks.set(-(i + 1), await calendarWeekSessions(ex, scope.sessionWeeks!.userId, monday));
@@ -373,9 +416,15 @@ export async function withLimits<T>(
   override: LimitOverride,
   write: () => Promise<T>,
 ): Promise<{ result: T; check: LimitCheck; unusedOverrides: LimitRule[] }> {
-  const before = lc.endurance ? await planFacts(w.tx, scope) : NO_FACTS;
+  // A cycle that has dated sessions is checked on them, before and after
+  // (review 21); one that has none yet, on its template's week.
+  const dated = lc.endurance ? await datedCycles(w.tx, scope.cycleIds) : new Set<number>();
+  const before = lc.endurance ? await planFacts(w.tx, scope, null, dated) : NO_FACTS;
   const result = await write();
-  const after = lc.endurance ? await planFacts(w.tx, scope) : NO_FACTS;
+  // The dated sessions follow a template change before the plan is read
+  // again, in the same transaction.
+  if (dated.size) await w.regenerateSessions();
+  const after = lc.endurance ? await planFacts(w.tx, scope, null, dated) : NO_FACTS;
   const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
   if (blocking.length) throw new LimitRefusedError(blocking);
   w.ctx.limitCheck = check;

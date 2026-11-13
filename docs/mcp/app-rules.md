@@ -44,12 +44,12 @@ what it describes, that package updates this file and the server instructions in
 - **Dated session.** A weekday cycle makes one dated session per program slot for the whole
   block, when it starts or is scheduled (`list_planned_sessions`). Each can be moved (from today
   to the block's last day), skipped, changed (program, label, notes, order) or added by hand
-  (`manage_planned_session`); a day holds at most three. A slot change rewrites only the sessions
-  from today on that nobody changed; changed ones and past ones stay. Done and missed are never
+  (`manage_planned_session`); a day holds at most three. A slot change rewrites the sessions nobody
+  changed from this week's Monday on; done ones, changed ones and earlier weeks stay. Done and missed are never
   stored: a session is done when a workout is logged for it, or, failing that, a workout of its
   program that day, or any workout that day. A rotation cycle has no fixed dates, since a missed
-  session repeats the next day: its sessions are worked out from the walk, and one can only be
-  skipped or given another program, by `rotationPosition`.
+  session repeats the next day: its sessions are worked out from the walk, and one still to come
+  can only be skipped, unskipped or given another program, by `rotationPosition`.
 - **Exercise.** The built-in library plus the user's own custom exercises. An endurance
   exercise has a discipline (swim, bike or run). `search_exercises` finds them;
   `create_exercise` makes a custom one. A custom name must not match a built-in exercise or

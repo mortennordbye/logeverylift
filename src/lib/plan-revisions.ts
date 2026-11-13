@@ -304,7 +304,9 @@ export class PlanWriteSession {
   private touched = new Map<string, Touched>();
   private created: PlanTarget[] = [];
   private changeSet: string | null = null;
-  private regenerated = new Set<number>();
+  private regenerated = new Map<number, string>();
+  /** Dated sessions each cycle's regeneration made, changed or removed in this write. */
+  readonly regenerationCounts = new Map<number, number>();
   /** Seasons whose phases a restore moved: settled before the write ends (settleSeason). */
   readonly seasonsToSettle = new Set<number>();
 
@@ -438,22 +440,30 @@ export class PlanWriteSession {
    * this write created, or whose template it changed, is regenerated in the
    * same transaction (docs/plans/sessions.md, 3.4), so no writer can forget.
    */
-  private async regenerateSessions() {
+  async regenerateSessions(): Promise<Map<number, number>> {
     const { regenerateCycleSessions, cycleTemplateKey } = await import("@/lib/planned-sessions");
     for (const t of this.touched.values()) {
-      if (t.target.type !== "cycle" || t.action === "delete" || this.regenerated.has(t.target.id)) continue;
+      if (t.target.type !== "cycle" || t.action === "delete") continue;
       const before = t.before as CycleSnapshot;
       const after = await snapshotCycle(this.tx, t.target.id);
-      if (cycleTemplateKey(before) === cycleTemplateKey(after)) continue;
-      this.regenerated.add(t.target.id);
-      const moved = before.cycle.startDate !== after.cycle.startDate || before.cycle.scheduledStartDate !== after.cycle.scheduledStartDate;
-      await regenerateCycleSessions(this.tx, this.ctx.userId, t.target.id, { includePast: moved });
+      const key = cycleTemplateKey(after);
+      // Once per template state: the limits run it inside the write, and
+      // finish runs it again only if the write changed the template since.
+      if ((this.regenerated.get(t.target.id) ?? cycleTemplateKey(before)) === key) continue;
+      const moved =
+        (before.cycle.startDate !== after.cycle.startDate || before.cycle.scheduledStartDate !== after.cycle.scheduledStartDate) &&
+        !this.regenerated.has(t.target.id);
+      this.regenerated.set(t.target.id, key);
+      const r = await regenerateCycleSessions(this.tx, this.ctx.userId, t.target.id, { includePast: moved });
+      this.regenerationCounts.set(t.target.id, (this.regenerationCounts.get(t.target.id) ?? 0) + r.inserted + r.updated + r.removed);
     }
     for (const target of this.created) {
       if (target.type !== "cycle" || this.regenerated.has(target.id)) continue;
-      this.regenerated.add(target.id);
-      await regenerateCycleSessions(this.tx, this.ctx.userId, target.id);
+      this.regenerated.set(target.id, cycleTemplateKey(await snapshotCycle(this.tx, target.id)));
+      const r = await regenerateCycleSessions(this.tx, this.ctx.userId, target.id);
+      this.regenerationCounts.set(target.id, r.inserted);
     }
+    return this.regenerationCounts;
   }
 
   /** Store a revision for every object that changed, and bump versions. */
@@ -1588,20 +1598,12 @@ async function restorePlannedSessionTo(
 ): Promise<string[]> {
   await w.touch({ type: "planned_session", id }, { allowDeleted: true, action: "restore", restoredFromId: targetRevisionId });
   const [row] = await w.tx.select().from(plannedSessions).where(eq(plannedSessions.id, id));
-  const [linked] = await w.tx
-    .select({ id: workoutSessions.id })
-    .from(workoutSessions)
-    .where(and(eq(workoutSessions.plannedSessionId, id), eq(workoutSessions.isCompleted, true)))
-    .limit(1);
-  if (linked) throw new PlanStateError("This session is logged; past sessions do not change.");
-  const { userToday } = await import("@/lib/user-settings");
-  const { toDateStr } = await import("@/lib/utils/cycle-position");
-  const today = toDateStr(await userToday(w.ctx.userId));
   const values: Record<string, unknown> = { ...targetSnap.session };
   for (const k of PLANNED_SESSION_KEPT) delete values[k];
-  if (row.date != null && row.date < today && values.date !== row.date) {
-    throw new PlanStateError("This session's day has passed; past sessions do not change.");
-  }
+  // The same rules as a change in the app: no logged or past session, no
+  // past day, inside the block, three a day at most (review 10, 11, 16).
+  const { checkSessionRestore } = await import("@/lib/planned-sessions");
+  await checkSessionRestore(w.tx, w.ctx.userId, row, values);
   if (typeof values.touchedAt === "string") values.touchedAt = new Date(values.touchedAt);
   await w.tx
     .update(plannedSessions)
@@ -2091,6 +2093,13 @@ export async function purgePlanRevisions(now = new Date()) {
     // its cycle: unhook it first (the old ones are already gone above).
     await db.update(programs).set({ createdByCycleId: null }).where(inArray(programs.createdByCycleId, ids));
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "cycle"), inArray(planRevisions.objectId, ids)));
+    // The cycle's dated sessions go with it (FK cascade); so do their revisions (review 17).
+    await db.delete(planRevisions).where(
+      and(
+        eq(planRevisions.objectType, "planned_session"),
+        inArray(planRevisions.objectId, db.select({ id: plannedSessions.id }).from(plannedSessions).where(inArray(plannedSessions.cycleId, ids))),
+      ),
+    );
     await db.delete(trainingCycles).where(inArray(trainingCycles.id, ids));
   }
   // Planned sessions a user or an assistant removed, unless a workout was

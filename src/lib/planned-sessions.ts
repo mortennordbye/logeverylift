@@ -26,6 +26,7 @@ import {
   MAX_SLOTS_PER_DAY,
   addDaysStr,
   daySlotProblem,
+  dowOf,
   generateWeekday,
   mondayOf,
   matchPlanned,
@@ -132,6 +133,17 @@ export async function regenerateCycleSessions(
   const dates = existingRows.map((r) => r.date).filter((d): d is string => d != null && d <= today);
   const sessions = dates.length ? await completedFor(tx, userId, dates.reduce((a, b) => (a < b ? a : b)), today, existingRows.map((r) => r.id)) : [];
   const done = doneIds(existingRows.filter((r) => r.date != null && r.date <= today), sessions);
+  // A workout started for a session, finished or not, keeps it (review 19).
+  const linked = new Set(
+    existingRows.length
+      ? (
+          await tx
+            .select({ id: workoutSessions.plannedSessionId })
+            .from(workoutSessions)
+            .where(inArray(workoutSessions.plannedSessionId, existingRows.map((r) => r.id)))
+        ).map((r) => r.id)
+      : [],
+  );
   const existing: ExistingRow[] = existingRows.map((r) => ({
     id: r.id,
     slotId: r.slotId,
@@ -144,12 +156,36 @@ export async function regenerateCycleSessions(
     autoComplete: r.autoComplete,
     touched: r.touchedAt != null,
     done: done.has(r.id) || (r.date != null && r.date < today && r.status === "skipped"),
+    linked: linked.has(r.id),
+    skipped: r.status === "skipped",
   }));
-  const generated = block ? generateWeekday(block.start, cycleLengthDays(cycle), await templateSlots(tx, cycleId)) : [];
+  const slots = await templateSlots(tx, cycleId);
+  const generated = block ? generateWeekday(block.start, cycleLengthDays(cycle), slots) : [];
   const includePast = opts.includePast || opts.backfill || cycle.sessionsGeneratedAt == null;
-  const plan = regenerationPlan({ existing, generated, today, block, includePast });
+  // This week's past days follow a template edit too (hub decision, section 20).
+  const plan = regenerationPlan({ existing, generated, today, block, includePast, editableFrom: mondayOf(today) });
 
   const now = new Date();
+  // Rotation overrides belong to a walk: a new start drops them all, and a
+  // template change drops those whose position no longer holds their slot
+  // (review 12).
+  const overrides = await tx
+    .select({ id: plannedSessions.id, slotId: plannedSessions.slotId, position: plannedSessions.rotationPosition })
+    .from(plannedSessions)
+    .where(and(eq(plannedSessions.cycleId, cycleId), isNotNull(plannedSessions.rotationPosition), livePlannedSessions));
+  if (overrides.length) {
+    const order = slots.filter((s) => s.orderIndex != null).sort((a, b) => a.orderIndex! - b.orderIndex!);
+    const stale = overrides.filter(
+      (o) =>
+        opts.includePast ||
+        cycle.scheduleType !== "rotation" ||
+        order.length === 0 ||
+        order[o.position! % order.length].id !== o.slotId,
+    );
+    if (stale.length) {
+      await tx.update(plannedSessions).set({ deletedAt: now, updatedAt: now }).where(inArray(plannedSessions.id, stale.map((o) => o.id)));
+    }
+  }
   if (plan.remove.length) {
     await tx.update(plannedSessions).set({ deletedAt: now, updatedAt: now }).where(inArray(plannedSessions.id, plan.remove));
   }
@@ -157,11 +193,10 @@ export async function regenerateCycleSessions(
     await tx.update(plannedSessions).set({ ...u.fields, updatedAt: now }).where(eq(plannedSessions.id, u.id));
   }
   if (plan.insert.length) {
-    const dismissed = opts.backfill
-      ? new Set(
-          (await tx.select({ date: dismissedMakeups.date }).from(dismissedMakeups).where(eq(dismissedMakeups.userId, userId))).map((d) => d.date),
-        )
-      : new Set<string>();
+    // A day the user declined before is declined in any cycle, as before C2 (review 8).
+    const dismissed = new Set(
+      (await tx.select({ date: dismissedMakeups.date }).from(dismissedMakeups).where(eq(dismissedMakeups.userId, userId))).map((d) => d.date),
+    );
     await tx
       .insert(plannedSessions)
       .values(
@@ -391,9 +426,13 @@ export async function weekdayToday(params: {
   const back = new Date(today);
   back.setDate(back.getDate() - 7);
   const from = toDateStr(back < params.startDate ? params.startDate : back);
-  const rows = (await plannedRowsInRange(db, userId, from, todayStr, cycleId))
+  const allRows = (await plannedRowsInRange(db, userId, from, todayStr, cycleId))
     // A session whose program was deleted reads as a rest day, as its slot does.
-    .filter((r) => r.row.status === "planned" && r.row.programId != null && r.programDeletedAt == null);
+    .filter((r) => r.row.programId != null && r.programDeletedAt == null);
+  const rows = allRows.filter((r) => r.row.status === "planned");
+  // Skipped today ("I skipped it"): still today's program on the card, as
+  // before C2, but neither done nor missed (review 1).
+  const skippedToday = allRows.filter((r) => r.row.status === "skipped" && r.row.date === todayStr);
   const loadSessions = () =>
     db
       .select({
@@ -423,7 +462,7 @@ export async function weekdayToday(params: {
     match = matchPlanned(forMatch, sessions);
   }
 
-  const programIds = [...new Set(rows.map((r) => r.row.programId).filter((id): id is number => id != null))];
+  const programIds = [...new Set(allRows.map((r) => r.row.programId).filter((id): id is number => id != null))];
   const programRows = programIds.length ? await db.select().from(programs).where(and(inArray(programs.id, programIds), livePrograms)) : [];
   const programById = new Map(programRows.map((p) => [p.id, p]));
   const slotById = new Map(slots.map((s) => [s.id, s]));
@@ -453,11 +492,14 @@ export async function weekdayToday(params: {
       const s = m ? sessions.find((x) => x.id === m.sessionId) : undefined;
       return { plannedSessionId: row.id, slot: slotFor(row), done: m != null, autoSessionId: s?.source === "auto" ? s.id : null };
     });
-  // Today's slot: the first session not done, else the first; on a day with
-  // no session, the template's rest slot (a session moved away leaves none).
+  // Today's slot: the first session not done, else the first, else a skipped
+  // one; on a day with no session, the template's rest slot (a session moved
+  // away leaves none).
   const dow = today.getDay() === 0 ? 7 : today.getDay();
   const restSlot = slots.find((s) => s.dayOfWeek === dow && s.programId == null) ?? null;
-  const todaySlot = (todaySessions.find((t) => !t.done) ?? todaySessions[0])?.slot ?? (todaySessions.length ? null : restSlot);
+  const todaySlot =
+    (todaySessions.find((t) => !t.done) ?? todaySessions[0])?.slot ??
+    (skippedToday.length ? slotFor(skippedToday[0].row) : restSlot);
 
   const missedSlots: MissedSlot[] = missedEnabled
     ? rows
@@ -465,6 +507,24 @@ export async function weekdayToday(params: {
         .map(({ row }) => ({ date: row.date!, slot: slotFor(row), plannedSessionId: row.id }))
     : [];
   return { todaySlot, todaySessions, missedSlots };
+}
+
+/** Dated sessions of a cycle from today on that were moved, skipped, changed or added. */
+export async function countTouchedFuture(userId: string, cycleId: number): Promise<number> {
+  const today = toDateStr(await userToday(userId));
+  const [{ n }] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(plannedSessions)
+    .where(
+      and(
+        eq(plannedSessions.cycleId, cycleId),
+        eq(plannedSessions.userId, userId),
+        livePlannedSessions,
+        isNotNull(plannedSessions.touchedAt),
+        gte(plannedSessions.date, today),
+      ),
+    );
+  return n;
 }
 
 // ── Template slots (3.1) ─────────────────────────────────────────────────────
@@ -566,6 +626,52 @@ async function liveRow(tx: Tx, userId: string, id: number) {
   return row;
 }
 
+/**
+ * Whether a restore may write `values` back onto a dated session (review 10,
+ * 11, 16): never onto a session that is logged, started or past; never to a
+ * past day or outside the block; never onto a template day another session
+ * already holds; and never as a fourth session of a day. Throws why not.
+ */
+export async function checkSessionRestore(tx: Tx, userId: string, row: PlannedRow, values: Record<string, unknown>): Promise<void> {
+  const today = toDateStr(await userToday(userId));
+  const refuse = (why: string) => {
+    throw new SessionInputError(why);
+  };
+  const [linked] = await tx.select({ id: workoutSessions.id }).from(workoutSessions).where(eq(workoutSessions.plannedSessionId, row.id)).limit(1);
+  if (linked || (await isDone(tx, userId, row, today))) refuse("This session is logged; past sessions do not change.");
+  if (row.rotationPosition != null) return;
+  if (row.date != null && row.date < today) refuse("This session's day has passed; past sessions do not change.");
+  const date = typeof values.date === "string" ? values.date : row.date;
+  if (date == null || date < today) refuse("This version is on a day that has passed; past sessions do not change.");
+  const [cycle] = await tx.select().from(trainingCycles).where(and(eq(trainingCycles.id, row.cycleId), isNull(trainingCycles.deletedAt)));
+  const block = cycle ? cycleBlock(cycle) : null;
+  if (!block) refuse("This cycle has no dates any more.");
+  if (date! < block!.start || date! >= block!.end) refuse(`That day is not in the block, ${block!.start} to ${addDaysStr(block!.end, -1)}.`);
+  if (row.deletedAt && row.templateDate != null) {
+    const [holder] = await tx
+      .select({ id: plannedSessions.id })
+      .from(plannedSessions)
+      .where(
+        and(
+          eq(plannedSessions.cycleId, row.cycleId),
+          eq(plannedSessions.slotId, row.slotId ?? -1),
+          eq(plannedSessions.templateDate, row.templateDate),
+          livePlannedSessions,
+        ),
+      )
+      .limit(1);
+    if (holder) refuse("Another session holds its template day now.");
+  }
+  if ((values.status ?? row.status) === "planned" && (await dayCount(tx, row.cycleId, date!, row.id)) >= MAX_SLOTS_PER_DAY) refuse(FULL_DAY);
+}
+
+/** Whether one dated session is done (matched to a completed workout). */
+export async function isPlannedDone(userId: string, id: number): Promise<boolean> {
+  const [row] = await db.select().from(plannedSessions).where(and(eq(plannedSessions.id, id), eq(plannedSessions.userId, userId), livePlannedSessions));
+  if (!row) return false;
+  return db.transaction(async (tx) => isDone(tx, userId, row, toDateStr(await userToday(userId))));
+}
+
 async function isDone(tx: Tx, userId: string, row: PlannedRow, today: string): Promise<boolean> {
   if (row.date == null || row.date > today || row.status !== "planned") return false;
   const sameDay = await tx
@@ -576,21 +682,27 @@ async function isDone(tx: Tx, userId: string, row: PlannedRow, today: string): P
   return doneIds(sameDay, sessions).has(row.id);
 }
 
-async function dayCount(tx: Tx, userId: string, date: string, excludeId?: number): Promise<number> {
+/**
+ * Sessions of one cycle on one day that count toward the cap of three: live
+ * and not skipped (review 15), the same rule regeneration keeps.
+ */
+async function dayCount(tx: Tx, cycleId: number, date: string, excludeId?: number): Promise<number> {
   const [{ n }] = await tx
     .select({ n: sql<number>`count(*)::int` })
     .from(plannedSessions)
-    .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), isNull(trainingCycles.deletedAt)))
     .where(
       and(
-        eq(plannedSessions.userId, userId),
+        eq(plannedSessions.cycleId, cycleId),
         eq(plannedSessions.date, date),
+        eq(plannedSessions.status, "planned"),
         livePlannedSessions,
         excludeId != null ? ne(plannedSessions.id, excludeId) : undefined,
       ),
     );
   return n;
 }
+
+const FULL_DAY = `A day holds at most ${MAX_SLOTS_PER_DAY} sessions.`;
 
 /**
  * One change to one planned session, as the user or the assistant (5, 6).
@@ -624,11 +736,13 @@ async function sessionScope(tx: Tx, userId: string, input: SessionOp): Promise<L
     programIds.push(input.programId);
   } else {
     const [row] = await tx
-      .select({ date: plannedSessions.date })
+      .select({ date: plannedSessions.date, templateDate: plannedSessions.templateDate })
       .from(plannedSessions)
       .where(and(eq(plannedSessions.id, input.id), eq(plannedSessions.userId, userId), livePlannedSessions));
     if (row?.date) mondays.add(mondayOf(row.date));
     if (input.op === "move") mondays.add(mondayOf(input.date));
+    // A reset puts the session back on its template day (review 20).
+    if (input.op === "reset" && row?.templateDate) mondays.add(mondayOf(row.templateDate));
     if (input.op === "change" && input.programId != null) programIds.push(input.programId);
   }
   return { programIds, cycleIds: [], sessionWeeks: { userId, mondays: [...mondays].sort() } };
@@ -648,16 +762,16 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     if (!block) throw new SessionInputError("This cycle has no dates yet: start or schedule it first.");
     checkDate(input.date, today, block);
     await ownedProgram(tx, ctx.userId, input.programId);
-    if ((await dayCount(tx, ctx.userId, input.date)) >= MAX_SLOTS_PER_DAY) {
-      throw new SessionInputError(`A day holds at most ${MAX_SLOTS_PER_DAY} sessions.`);
-    }
+    // Two adds to one day at once must not both pass the cap (review 25).
+    await lockCycleRows(tx, [cycle.id]);
+    if ((await dayCount(tx, cycle.id, input.date)) >= MAX_SLOTS_PER_DAY) throw new SessionInputError(FULL_DAY);
     const [row] = await tx
       .insert(plannedSessions)
       .values({
         userId: ctx.userId,
         cycleId: cycle.id,
         date: input.date,
-        position: input.position ?? (await dayCount(tx, ctx.userId, input.date)) + 1,
+        position: input.position ?? (await dayCount(tx, cycle.id, input.date)) + 1,
         programId: input.programId,
         label: input.label ?? null,
         notes: input.notes ?? null,
@@ -678,10 +792,10 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     case "move": {
       if (!block) throw new SessionInputError("This cycle has no dates any more.");
       checkDate(input.date, today, block);
-      if (input.date !== row.date && (await dayCount(tx, ctx.userId, input.date, row.id)) >= MAX_SLOTS_PER_DAY) {
-        throw new SessionInputError(`A day holds at most ${MAX_SLOTS_PER_DAY} sessions.`);
+      if (input.date !== row.date && (await dayCount(tx, row.cycleId, input.date, row.id)) >= MAX_SLOTS_PER_DAY) {
+        throw new SessionInputError(FULL_DAY);
       }
-      set = { date: input.date, position: input.position ?? (input.date === row.date ? row.position : (await dayCount(tx, ctx.userId, input.date, row.id)) + 1) };
+      set = { date: input.date, position: input.position ?? (input.date === row.date ? row.position : (await dayCount(tx, row.cycleId, input.date, row.id)) + 1) };
       break;
     }
     case "skip":
@@ -689,10 +803,30 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
       break;
     case "unskip":
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be planned again; add one on a coming day instead.");
+      if (row.date != null && (await dayCount(tx, row.cycleId, row.date, row.id)) >= MAX_SLOTS_PER_DAY) throw new SessionInputError(FULL_DAY);
       set = { status: "planned", skipReason: null };
       break;
-    case "change":
+    case "change": {
+      // Past sessions never change (review 25); move a missed one forward instead.
+      if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
       if (input.programId != null) await ownedProgram(tx, ctx.userId, input.programId);
+      if (input.position !== undefined && row.date != null && input.position !== row.position) {
+        const [taken] = await tx
+          .select({ id: plannedSessions.id })
+          .from(plannedSessions)
+          .where(
+            and(
+              eq(plannedSessions.cycleId, row.cycleId),
+              eq(plannedSessions.date, row.date),
+              eq(plannedSessions.position, input.position),
+              eq(plannedSessions.status, "planned"),
+              livePlannedSessions,
+              ne(plannedSessions.id, row.id),
+            ),
+          )
+          .limit(1);
+        if (taken) throw new SessionInputError(`Position ${input.position} is taken on ${row.date}; move that session first.`);
+      }
       set = {
         ...(input.programId != null && { programId: input.programId }),
         ...(input.label !== undefined && { label: input.label }),
@@ -700,11 +834,21 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
         ...(input.position !== undefined && { position: input.position }),
       };
       break;
+    }
     case "reset": {
       if (row.slotId == null || row.templateDate == null) throw new SessionInputError("This session was added by hand; remove it instead.");
       const [slot] = await tx.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.id, row.slotId));
-      if (!slot || slot.trainingCycleId !== row.cycleId) throw new SessionInputError("Its day is not in the template any more.");
+      // The slot must still sit on that weekday, and the day still be in the block (review 14).
+      if (!slot || slot.trainingCycleId !== row.cycleId || slot.dayOfWeek !== dowOf(row.templateDate)) {
+        throw new SessionInputError("Its day is not in the template any more.");
+      }
       if (row.templateDate < today) throw new SessionInputError("A past session cannot be reset.");
+      if (!block || row.templateDate < block.start || row.templateDate >= block.end) {
+        throw new SessionInputError("Its template day is not in the block any more.");
+      }
+      if (row.templateDate !== row.date && (await dayCount(tx, row.cycleId, row.templateDate, row.id)) >= MAX_SLOTS_PER_DAY) {
+        throw new SessionInputError(FULL_DAY);
+      }
       set = {
         date: row.templateDate,
         position: slot.daySlot,
@@ -750,11 +894,37 @@ export async function applyRotationOp(
       .from(trainingCycles)
       .where(and(eq(trainingCycles.id, input.cycleId), eq(trainingCycles.userId, ctx.userId), isNull(trainingCycles.deletedAt)));
     if (!cycle) throw new PlanNotFoundError({ type: "cycle", id: input.cycleId });
-    if (cycle.scheduleType !== "rotation" || cycle.status !== "active") throw new SessionInputError("This is not an active rotation cycle.");
+    if (cycle.scheduleType !== "rotation" || cycle.status !== "active" || !cycle.startDate) {
+      throw new SessionInputError("This is not an active rotation cycle.");
+    }
     const [existing] = await tx
       .select()
       .from(plannedSessions)
       .where(and(eq(plannedSessions.cycleId, cycle.id), eq(plannedSessions.rotationPosition, input.rotationPosition), livePlannedSessions));
+    // Where the position falls in this block's walk (review 22): a position
+    // past the block, or one whose day has passed, cannot be changed.
+    const slots = await templateSlots(tx, cycle.id);
+    const done = await tx
+      .select({ date: workoutSessions.date })
+      .from(workoutSessions)
+      .where(and(eq(workoutSessions.userId, ctx.userId), eq(workoutSessions.isCompleted, true), gte(workoutSessions.date, cycle.startDate)));
+    const { skipped } = await rotationOverrides(tx, cycle.id);
+    const today = await userToday(ctx.userId);
+    const walk = projectRotation(
+      parseDateStr(cycle.startDate),
+      slots.map((s) => ({ id: s.id, dayOfWeek: null, orderIndex: s.orderIndex ?? null, programId: s.programId })),
+      done.map((d) => d.date).sort(),
+      today,
+      parseDateStr(addDaysStr(cycle.startDate, cycleLengthDays(cycle) - 1)),
+      skipped,
+    );
+    const due = walk.filter((d) => d.position === input.rotationPosition);
+    const day = due[due.length - 1];
+    if (!day) throw new SessionInputError("That position is not in this block's walk; read list_planned_sessions for the positions.");
+    if (day.date < toDateStr(today)) throw new SessionInputError("That session's day has passed; past sessions do not change.");
+    if (existing && input.expectedVersion == null) {
+      throw new SessionInputError("This position has a stored change: send expectedVersion, the version from list_planned_sessions.");
+    }
     const now = new Date();
     if (input.op === "change" && input.programId != null) await ownedProgram(tx, ctx.userId, input.programId);
     if (!existing) {
@@ -765,6 +935,8 @@ export async function applyRotationOp(
           userId: ctx.userId,
           cycleId: cycle.id,
           rotationPosition: input.rotationPosition,
+          // The slot the position falls on now: a template change that moves it drops the override.
+          slotId: day.slotId,
           programId: input.op === "change" ? (input.programId ?? null) : null,
           status: input.op === "skip" ? "skipped" : "planned",
           skipReason: input.op === "skip" ? (input.reason ?? null) : null,
@@ -833,43 +1005,53 @@ export async function declineDay(ctx: PlanWriteContext, date: string, plannedSes
  * it (hub decision 13): the app before C2 reads it, so a rollback still hides
  * the day, and rotation auto days still read it.
  */
-export async function dismissIfDayClear(userId: string, date: string): Promise<void> {
-  const left = await db
+export async function dismissIfDayClear(userId: string, date: string, ex: Executor = db): Promise<void> {
+  const left = await ex
     .select({ id: plannedSessions.id })
     .from(plannedSessions)
     .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), isNull(trainingCycles.deletedAt)))
     .where(and(eq(plannedSessions.userId, userId), eq(plannedSessions.date, date), eq(plannedSessions.status, "planned"), livePlannedSessions))
     .limit(1);
   if (left.length === 0) {
-    await db.insert(dismissedMakeups).values({ userId, date }).onConflictDoNothing();
+    await ex.insert(dismissedMakeups).values({ userId, date }).onConflictDoNothing();
   }
 }
 
-/** Skip the planned session an auto day belonged to ("I skipped it"). */
-export async function skipForAutoDay(ctx: PlanWriteContext, session: { plannedSessionId: number | null; programId: number | null; date: string }) {
-  const rows = await db
-    .select({ id: plannedSessions.id })
-    .from(plannedSessions)
-    .where(
-      and(
-        eq(plannedSessions.userId, ctx.userId),
-        livePlannedSessions,
-        eq(plannedSessions.status, "planned"),
-        session.plannedSessionId != null
-          ? eq(plannedSessions.id, session.plannedSessionId)
-          : and(eq(plannedSessions.date, session.date), session.programId != null ? eq(plannedSessions.programId, session.programId) : sql`false`),
-      ),
-    );
-  if (!rows.length) return;
+/**
+ * "I skipped it" on an auto day, in one transaction: the planned session the
+ * auto row stood for is skipped first, then the auto row is deleted, then the
+ * old dismissal row is written when the day is clear (review 6). Nothing
+ * changes if any step fails.
+ */
+export async function skipAutoDay(
+  ctx: PlanWriteContext,
+  session: { id: number; plannedSessionId: number | null; programId: number | null; date: string },
+): Promise<void> {
   await planWrite(ctx, async (w) => {
+    const rows = await w.tx
+      .select({ id: plannedSessions.id })
+      .from(plannedSessions)
+      .where(
+        and(
+          eq(plannedSessions.userId, ctx.userId),
+          livePlannedSessions,
+          eq(plannedSessions.status, "planned"),
+          session.plannedSessionId != null
+            ? eq(plannedSessions.id, session.plannedSessionId)
+            : and(eq(plannedSessions.date, session.date), session.programId != null ? eq(plannedSessions.programId, session.programId) : sql`false`),
+        ),
+      )
+      .orderBy(asc(plannedSessions.id));
     for (const r of rows) {
       await w.touch({ type: "planned_session", id: r.id });
       await w.tx.update(plannedSessions).set({ status: "skipped", touchedAt: new Date(), updatedAt: new Date() }).where(eq(plannedSessions.id, r.id));
     }
+    await w.tx.delete(workoutSessions).where(and(eq(workoutSessions.id, session.id), eq(workoutSessions.userId, ctx.userId)));
+    await dismissIfDayClear(ctx.userId, session.date, w.tx);
   });
 }
 
-/** A planned session the user may start a workout for: theirs, live, and for this program. */
+/** A planned session the user may start a workout for: theirs, live, today, and for this program. */
 export async function startablePlannedId(userId: string, plannedSessionId: number | undefined, programId: number | undefined): Promise<number | null> {
   if (plannedSessionId == null || programId == null) return null;
   const [row] = await db
@@ -881,6 +1063,9 @@ export async function startablePlannedId(userId: string, plannedSessionId: numbe
         eq(plannedSessions.id, plannedSessionId),
         eq(plannedSessions.userId, userId),
         eq(plannedSessions.programId, programId),
+        // Only a session of today in the user's zone (review 9). Any other is
+        // matched the old way, by program and date.
+        eq(plannedSessions.date, toDateStr(await userToday(userId))),
         livePlannedSessions,
       ),
     );

@@ -26,7 +26,7 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
     {
       description: [
         `The planned sessions of a date range (from and to, YYYY-MM-DD, at most ${PLANNED_RANGE_MAX_DAYS} days), for the active cycle and a cycle scheduled to start; cycleId to read one cycle.`,
-        "A weekday cycle makes one dated session per program slot for the whole block, and a day can hold up to three (position 1-3). Each can be moved, skipped or changed alone; a template edit rewrites only sessions from today on that nobody changed (touched: false). Past sessions never change.",
+        "A weekday cycle makes one dated session per program slot for the whole block, and a day can hold up to three (position 1-3). Each can be moved, skipped or changed alone; a template edit rewrites the sessions nobody changed (touched: false) from this week's Monday on. Done sessions, changed ones and earlier weeks never change.",
         "A rotation cycle has no fixed dates: its sessions are worked out from the walk (a missed session repeats the next day), so they have rotationPosition and an id only when you or the user stored a skip or a change for that position.",
         "Each entry: id, cycleId, date, position, programId, programName, label, notes, status (planned; done with loggedSessionId; missed = a past day not done; skipped with skipReason), autoComplete (a day tracked outside the app), touched, templateDate, version.",
       ].join(" "),
@@ -50,12 +50,12 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
     {
       description: [
         "Change one dated session of the user's plan.",
-        "Weekday cycles, by id: operation='move' (date, optional position 1-3: a day from today to the last day of the block; never a past day), 'skip' (optional skipReason), 'unskip' (a skipped session from today on), 'change' (any of programId, label, notes, position), 'reset' (back to what the template says), 'remove' (only a session added by hand; skip a template session instead).",
+        "Weekday cycles, by id: operation='move' (date, optional position 1-3: a day from today to the last day of the block; never a past day), 'skip' (optional skipReason), 'unskip' (a skipped session from today on), 'change' (any of programId, label, notes, position), 'reset' (back to what the template says, on its template day), 'remove' (only a session added by hand; skip a template session instead).",
         "operation='add': cycleId, date, programId, optional position, label, notes: an extra session on a day of a weekday cycle. A day holds at most three sessions.",
-        "Rotation cycles, by cycleId and rotationPosition (from list_planned_sessions): 'skip', 'unskip' and 'change' (programId). A rotation session cannot be moved: one that is not done moves to the next day by itself.",
-        "A session that is logged, or a day that has passed, does not change.",
+        "Rotation cycles, by cycleId and rotationPosition (from list_planned_sessions): 'skip', 'unskip' and 'change' (programId), only for a position still to come in this block. A rotation session cannot be moved: one that is not done moves to the next day by itself.",
+        "A session that is logged, or a day that has passed, does not change: a past session can only be skipped (declined), or moved forward if it was missed.",
         `Every operation requires reason; all but add, and the first change to a rotation position, require expectedVersion (the session's version). ${REVISION_RULES}`,
-        `On move, change, add and unskip: ${LIMITS_TEXT} Hard sessions are counted in each Monday-to-Sunday week the change touches.`,
+        `On move, change, add, unskip and reset: ${LIMITS_TEXT} Hard sessions are counted in each Monday-to-Sunday week the change touches.`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
@@ -105,7 +105,7 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
           if (args.operation === "move" && args.date == null) return fail("move requires date");
         }
         const lc = await limitContext(userId);
-        const checked = ["move", "change", "add", "unskip"].includes(args.operation);
+        const checked = ["move", "change", "add", "unskip", "reset"].includes(args.operation);
         const input =
           args.operation === "add"
             ? { op: "add" as const, cycleId: args.cycleId!, date: args.date!, programId: args.programId!, position: args.position, label: args.label, notes: args.notes }

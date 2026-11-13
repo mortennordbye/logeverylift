@@ -17,7 +17,7 @@ import {
 } from "@/lib/utils/periodization";
 import { applyWearableSuggestion, hasPeakAnchor, syncDueCycle, syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { insertAutoSessions } from "@/lib/auto-sessions";
-import { declineDay, dismissIfDayClear, removeSlotInTx, rotationOverrides, skipForAutoDay, upsertSlotInTx, weekdayToday } from "@/lib/planned-sessions";
+import { declineDay, removeSlotInTx, rotationOverrides, skipAutoDay, upsertSlotInTx, weekdayToday } from "@/lib/planned-sessions";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
 import { OpenWorkoutError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
@@ -345,18 +345,10 @@ export async function skipAutoCompletedDay(
       return { success: false, error: "Only automatic days can be skipped" };
     }
 
-    await db
-      .delete(workoutSessions)
-      .where(
-        and(
-          eq(workoutSessions.id, parsed.data.sessionId),
-          eq(workoutSessions.userId, auth.user.id),
-        ),
-      );
-    // The planned session it stood for is skipped (docs/plans/sessions.md, 4.4),
-    // so it is neither written again nor missed.
-    await skipForAutoDay({ userId: auth.user.id, writer: "user" }, existing);
-    await dismissIfDayClear(auth.user.id, existing.date);
+    // The planned session it stood for is skipped and the auto row deleted in
+    // one transaction (docs/plans/sessions.md, 4.4), so it is neither written
+    // again nor missed.
+    await skipAutoDay({ userId: auth.user.id, writer: "user" }, { id: parsed.data.sessionId, ...existing });
     revalidatePath("/");
     revalidatePath("/history");
     return { success: true, data: null };
@@ -823,7 +815,8 @@ export async function upsertCycleSlot(
     return { success: true, data: done.result as TrainingCycleSlot };
   } catch (err) {
     if (err instanceof PlanStateError) return { success: false, error: err.message };
-    return { success: false, error: String(err) };
+    console.error("[upsertCycleSlot] failed", err);
+    return { success: false, error: "Failed to save the slot" };
   }
 }
 

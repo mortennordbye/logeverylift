@@ -43,6 +43,22 @@ export function daySlotProblem(params: {
   return null;
 }
 
+/**
+ * One day of the home week strip (review 7): a day with dated sessions has a
+ * program dot even when they were declined, as the template's day had before;
+ * the count shows only sessions still to do or done. Outside the block, or
+ * when the dated sessions could not be read, the template decides.
+ */
+export function weekDayMarks(params: {
+  planned: { status: string }[] | null;
+  inBlock: boolean;
+  templateHasProgram: boolean;
+}): { hasProgram: boolean; count: number } {
+  const { planned, inBlock, templateHasProgram } = params;
+  if (!inBlock || planned == null) return { hasProgram: templateHasProgram, count: 0 };
+  return { hasProgram: planned.length > 0, count: planned.filter((p) => p.status !== "skipped").length };
+}
+
 export type GeneratedSession = {
   slotId: number;
   templateDate: string;
@@ -116,6 +132,10 @@ export type ExistingRow = {
   touched: boolean;
   /** Matched to a completed workout (4.1). */
   done: boolean;
+  /** A workout was started for it, done or not: it is never removed. */
+  linked?: boolean;
+  /** Skipped: it keeps no place in the day's count of three. */
+  skipped?: boolean;
 };
 
 export type RegenerationPlan = {
@@ -129,11 +149,16 @@ export const templateKey = (slotId: number | null, templateDate: string | null) 
 /**
  * The T7 rules (3.4). `block` is the block's days [start, end), or null when
  * the cycle has no dates any more (an unscheduled draft, or a completed one
- * from `today` on). Past and done rows never change. Touched and added rows
- * keep their changes, unless the block no longer holds their date. Untouched
- * future rows follow the template, matched by (slot, template date), so a
- * kept row keeps its id. Missing past rows are made only when `includePast`
- * (the first generation, or a new start date).
+ * from `today` on). Done rows, rows a workout was started for, and rows
+ * before `editableFrom` never change. Touched and added rows keep their
+ * changes, unless the block no longer holds their date; then they go, and
+ * their template day is not filled again. Untouched rows from `editableFrom`
+ * on follow the template, matched by (slot, template date), so a kept row
+ * keeps its id. `editableFrom` is the Monday of the current week (hub
+ * decision, docs/plans/sessions.md, section 20): this week's past days
+ * follow a template edit, as they did before dated sessions. Missing earlier
+ * rows are made only when `includePast` (the first generation, or a new start
+ * date). No day gets more than three sessions that are not skipped.
  */
 export function regenerationPlan(params: {
   existing: ExistingRow[];
@@ -141,33 +166,47 @@ export function regenerationPlan(params: {
   today: string;
   block: { start: string; end: string } | null;
   includePast: boolean;
+  editableFrom?: string;
 }): RegenerationPlan {
   const { existing, generated, today, block, includePast } = params;
+  const editableFrom = params.editableFrom && params.editableFrom < today ? params.editableFrom : today;
+  const fixed = (r: ExistingRow) => r.done || r.linked === true;
   if (block == null) {
     // No dates any more: the sessions from today on go; the past stays.
-    return { update: [], insert: [], remove: existing.filter((r) => !r.done && (r.date == null || r.date >= today)).map((r) => r.id) };
+    return { update: [], insert: [], remove: existing.filter((r) => !fixed(r) && (r.date == null || r.date >= today)).map((r) => r.id) };
   }
   const inBlock = (d: string | null) => d != null && block != null && d >= block.start && d < block.end;
   const gen = new Map(generated.map((g) => [templateKey(g.slotId, g.templateDate), g]));
   const plan: RegenerationPlan = { update: [], insert: [], remove: [] };
   const kept = new Set<string>();
+  /** Sessions per day that keep a place in the cap: not skipped, not removed. */
+  const perDay = new Map<string, number>();
+  const count = (date: string | null) => {
+    if (date) perDay.set(date, (perDay.get(date) ?? 0) + 1);
+  };
 
   for (const r of existing) {
-    if (r.done) {
+    if (fixed(r)) {
       kept.add(templateKey(r.slotId, r.templateDate));
+      if (!r.skipped) count(r.date);
       continue;
     }
     const past = r.date != null && r.date < today;
     if (r.touched || r.templateDate == null) {
       // A changed or added session stays while its date is in the block; a
-      // past one stays for the history.
-      if (inBlock(r.date) || (past && block != null && r.date! >= block.start)) kept.add(templateKey(r.slotId, r.templateDate));
-      else plan.remove.push(r.id);
+      // past one stays for the history. One that goes leaves its template day
+      // empty: the user moved it away from that day.
+      kept.add(templateKey(r.slotId, r.templateDate));
+      if (inBlock(r.date) || (past && r.date! >= block.start)) {
+        if (!r.skipped) count(r.date);
+      } else plan.remove.push(r.id);
       continue;
     }
-    if (past) {
-      if (block != null && r.date! >= block.start) kept.add(templateKey(r.slotId, r.templateDate));
-      else plan.remove.push(r.id);
+    if (r.date != null && r.date < editableFrom) {
+      if (r.date! >= block.start) {
+        kept.add(templateKey(r.slotId, r.templateDate));
+        if (!r.skipped) count(r.date);
+      } else plan.remove.push(r.id);
       continue;
     }
     const g = gen.get(templateKey(r.slotId, r.templateDate));
@@ -176,6 +215,7 @@ export function regenerationPlan(params: {
       continue;
     }
     kept.add(templateKey(r.slotId, r.templateDate));
+    if (!r.skipped) count(g.date);
     const fields: Partial<GeneratedSession> = {};
     if (r.date !== g.date) fields.date = g.date;
     if (r.position !== g.position) fields.position = g.position;
@@ -189,7 +229,9 @@ export function regenerationPlan(params: {
   for (const [k, g] of gen) {
     if (kept.has(k)) continue;
     if (!inBlock(g.date)) continue;
-    if (g.date < today && !includePast) continue;
+    if (g.date < editableFrom && !includePast) continue;
+    if ((perDay.get(g.date) ?? 0) >= MAX_SLOTS_PER_DAY) continue;
+    count(g.date);
     plan.insert.push(g);
   }
   return plan;

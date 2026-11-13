@@ -184,7 +184,7 @@ describe("the day's slot rules", () => {
 });
 
 describe("regeneration (T7)", () => {
-  it("a slot change rewrites untouched sessions from today on; past, touched and done ones stay", async () => {
+  it("a slot change rewrites untouched sessions from this week's Monday on; touched and done ones stay", async () => {
     const id = await cycle();
     await active();
     const before = await rows(id);
@@ -193,7 +193,8 @@ describe("regeneration (T7)", () => {
     // Monday's program changes to strength.
     expect((await upsertCycleSlot({ trainingCycleId: id, dayOfWeek: 1, programId: strength })).success).toBe(true);
     const after = await rows(id);
-    expect(after.find((r) => r.date === "2026-11-02")?.programId).toBe(lift); // past
+    // This week's missed Monday follows the template, as before C2 (hub decision, section 20).
+    expect(after.find((r) => r.date === "2026-11-02")?.programId).toBe(strength);
     expect(after.find((r) => r.id === moved.id)).toMatchObject({ date: "2026-11-10", programId: lift }); // touched
     expect(after.find((r) => r.date === "2026-11-16")?.programId).toBe(strength); // untouched future
     expect(after.find((r) => r.date === "2026-11-16")?.id).toBe(before.find((r) => r.date === "2026-11-16")!.id); // same id

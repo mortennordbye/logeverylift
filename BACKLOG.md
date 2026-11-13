@@ -33,12 +33,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** One release of C2 in prod without a rollback (then a migration drops the table and `dismissIfDayClear` goes); and an owner choice on rotation days in the calendar.
 - **Touchpoints:** `src/lib/planned-sessions.ts` (`dismissIfDayClear`, `listPlanned`, `applyRotationOp`), `src/components/features/CycleCalendarClient.tsx` (`getDayInfo`), `src/db/schema/dismissed-makeups.ts`.
 
-### Weekly streak is off by a day near midnight
-- **What:** `computeStreakWeeks` finds this week's Monday from the local clock but formats it with `toISOString`, which is UTC. In a zone ahead of UTC, in the first hour after midnight, the Monday string is the Sunday before, so the streak reads 0. The integration test "adds up volume and sessions per week" (`src/__tests__/integration/mcp-workouts.test.ts`) fails then, on `main` too.
-- **Why deferred:** Found while building C2; not part of its scope.
-- **Unblocked by:** Nothing. Write a test with a fixed clock at 00:30 in Europe/Oslo that fails, then format the Monday from local parts (`toDateStr` in `src/lib/utils/cycle-position.ts`).
-- **Touchpoints:** `src/lib/utils/training-streak.ts` (`computeStreakWeeks`), `src/lib/mcp/tools/workouts.ts` (`summary_stats`).
-
 ### Pounds for weights
 - **What:** Show and take weights in lb for users who want it: every weight label and input (set logging, set edit, program edit, history, session detail, metrics, records, friends' feeds), progression steps in lb (5 lb, 2.5 lb) instead of converted kg steps, and plates and bars in lb (45 lb bar, 45/35/25/10/5/2.5 lb plates) in the plate calculator and the weight presets. Storage stays kg.
 - **Why deferred:** The owner chose endurance units only for the foundations PR (A2 in `docs/plans/triathlon-coach-plan.md`, brief `docs/plans/foundations.md`). The owner trains in kg, and lb done well needs lb-native steps and plates, not only a converted label. So there is no `weight_unit` column yet.

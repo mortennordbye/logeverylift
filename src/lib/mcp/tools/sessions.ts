@@ -92,7 +92,7 @@ async function findDuplicate(tx: Tx, userId: string, date: string, programId: nu
 /** A dated session of the user, live, in a live weekday cycle. */
 async function ownPlanned(userId: string, id: number) {
   const [row] = await db
-    .select({ id: plannedSessions.id, date: plannedSessions.date, programId: plannedSessions.programId, status: plannedSessions.status })
+    .select({ id: plannedSessions.id, cycleId: plannedSessions.cycleId, date: plannedSessions.date, programId: plannedSessions.programId, status: plannedSessions.status })
     .from(plannedSessions)
     .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), liveCycles))
     .where(and(eq(plannedSessions.id, id), eq(plannedSessions.userId, userId), livePlannedSessions, isNotNull(plannedSessions.date)));
@@ -153,6 +153,8 @@ export function registerSessionTools(server: McpServer, userId: string) {
           const planned = await ownPlanned(userId, args.plannedSessionId);
           if (!planned) return fail("Planned session not found");
           if (args.programId != null && planned.programId !== args.programId) return fail("That planned session is for another program");
+          // Only on its own day (review 23): a session done another day is logged without it.
+          if (planned.date !== args.date) return fail(`That planned session is on ${planned.date}, not ${args.date}; log it without plannedSessionId`);
           args.programId = planned.programId ?? undefined;
           plannedSessionId = planned.id;
         }
@@ -265,6 +267,7 @@ export function registerSessionTools(server: McpServer, userId: string) {
     async (args) => {
       try {
         let plannedSessionId: number | null = null;
+        let plannedCycleId: number | null = null;
         if (args.plannedSessionId != null) {
           const planned = await ownPlanned(userId, args.plannedSessionId);
           if (!planned?.programId) return fail("Planned session not found");
@@ -274,6 +277,7 @@ export function registerSessionTools(server: McpServer, userId: string) {
           args.date = planned.date!;
           args.programId = planned.programId;
           plannedSessionId = planned.id;
+          plannedCycleId = planned.cycleId;
         }
         if (args.date == null || args.programId == null) return fail("Send date and programId, or plannedSessionId");
         const date = args.date;
@@ -285,11 +289,22 @@ export function registerSessionTools(server: McpServer, userId: string) {
           with: { slots: { where: eq(trainingCycleSlots.programId, programId), with: { program: true } } },
         });
         if (!cycle?.startDate) return fail("No active training cycle");
-        if (!cycle.slots.map(liveSlotProgram).some((s) => s.programId === programId)) {
-          return fail("That program is not in the active cycle");
+        // A dated session may run a program outside the template (changed or
+        // added, review 25); it must belong to the active cycle.
+        if (plannedSessionId != null ? plannedCycleId !== cycle.id : !cycle.slots.map(liveSlotProgram).some((s) => s.programId === programId)) {
+          return fail(plannedSessionId != null ? "That planned session is not in the active cycle" : "That program is not in the active cycle");
         }
         if (date > toDateStr(await userToday(userId))) return fail("date is in the future");
         if (date < cycle.startDate) return fail(`date is before the cycle started (${cycle.startDate})`);
+
+        // By id: that one session is done or not; a day can hold the program twice.
+        if (plannedSessionId != null) {
+          const { isPlannedDone } = await import("@/lib/planned-sessions");
+          if (await isPlannedDone(userId, plannedSessionId)) return ok({ confirmed: true, date, programId, plannedSessionId, already: true });
+          await insertAutoSessions(userId, [{ date, programId, plannedSessionId }]);
+          audit("confirm_session", { userId, programId });
+          return ok({ confirmed: true, date, programId, plannedSessionId, already: false });
+        }
 
         const [logged] = await db
           .select({ id: workoutSessions.id })

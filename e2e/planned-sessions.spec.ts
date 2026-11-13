@@ -122,7 +122,9 @@ test("move one session and skip the other from the calendar", async ({ page }, t
     { objectId: second.id, action: "update", writer: "user" },
   ]);
 
-  // Today has nothing left to do.
+  // The moved one is gone from today; the skipped one is still today's
+  // program on the card, as "I skipped it" leaves it (review 1).
   await page.goto("/");
-  await expect(page.getByText("No program today")).toBeVisible();
+  await expect(page.getByText("2 sessions today")).toBeHidden();
+  await expect(page.getByRole("link", { name: "Start Today's Workout" })).toHaveAttribute("href", `/programs/${s.second.id}/workout`);
 });
