@@ -1564,12 +1564,9 @@ async function restoreRowTo(
 ): Promise<string[]> {
   // The athlete profile and injuries belong to the endurance add-on (D18); thresholds are for everyone.
   if (type !== "threshold" && !(await enduranceEnabledFor(w.ctx.userId))) throw new PlanStateError(ENDURANCE_OFF);
-  // A library workout's sessions follow it (review 7): the cycles using it are locked first, in A4's order.
-  const { cyclesUsingWorkout, regenerateUsers } = type === "workout" ? await import("@/lib/workouts") : { cyclesUsingWorkout: null, regenerateUsers: null };
-  if (cyclesUsingWorkout) {
-    const ids = await cyclesUsingWorkout(w.ctx.userId, id, w.tx);
-    if (ids.length) await lockCycleRows(w.tx, ids);
-  }
+  // A library workout's sessions follow it (review 7). lockForRestore already
+  // locked the cycles using it, before this row.
+  const regenerateUsers = type === "workout" ? (await import("@/lib/workouts")).regenerateUsers : null;
   await w.touch({ type, id }, { allowDeleted: true, action: "restore", restoredFromId: targetRevisionId });
   const table = ROW_TABLES[type];
   const [row] = await w.tx.select({ deletedAt: table.deletedAt }).from(table).where(eq(table.id, id));
@@ -1678,6 +1675,14 @@ async function lockForRestore(w: PlanWriteSession, revs: (typeof planRevisions.$
   const cycleIds: number[] = [];
   for (const r of revs) {
     if (r.objectType === "season") seasonIds.push(r.objectId);
+    // A restored library workout rewrites the sessions of the cycles using it:
+    // they are locked here with the others, in id order, before any object row.
+    // The order everywhere: the per-user cap lock, then cycles, then the workout row.
+    if (r.objectType === "workout") {
+      const { cyclesUsingWorkout } = await import("@/lib/workouts");
+      cycleIds.push(...(await cyclesUsingWorkout(w.ctx.userId, r.objectId, w.tx)));
+      continue;
+    }
     if (r.objectType !== "cycle") continue;
     cycleIds.push(r.objectId);
     const snap = r.snapshot as PlanSnapshot;

@@ -144,6 +144,23 @@ describe("review 2 and 3: the long-run cap and hard sessions see workouts", () =
   });
 });
 
+describe("re-review 1: a library edit checks only cycles whose sessions follow it", () => {
+  it("an unscheduled draft or a completed cycle using the workout does not block the edit", async () => {
+    const hard = await program(bikeEx, [{ durationSeconds: 300, sessionRole: "work", targetReps: null }]);
+    const w = (await lib()("manage_workout", { operation: "create", workout: runWorkout("Sunday run", 1800), reason: "x" })).data;
+    for (const status of ["draft", "completed"] as const) {
+      const [c] = await db.insert(trainingCycles).values({ userId: me, name: status, durationWeeks: 4, status, startDate: status === "completed" ? "2026-09-01" : null }).returning();
+      await db.insert(trainingCycleSlots).values([
+        ...[1, 3, 5].map((d) => ({ trainingCycleId: c.id, dayOfWeek: d, programId: hard })),
+        { trainingCycleId: c.id, dayOfWeek: 7, workoutId: w.workoutId },
+      ]);
+    }
+    const r = await lib()("manage_workout", { operation: "update", workoutId: w.workoutId, workout: hardRun, reason: "Harder", expectedVersion: w.version });
+    expect(r.isError, r.raw).toBe(false);
+    expect(r.data.sessionsRegenerated).toBe(0);
+  });
+});
+
 describe("review 4: a brick does not move a done leg", () => {
   it("refuses to move the first leg when the second is logged", async () => {
     const c = await cycle(me, []);

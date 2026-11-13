@@ -18,7 +18,7 @@ import type { LimitCheck, LimitRule } from "@/lib/utils/training-limits";
 import { regenerateCycleSessions, WorkoutSchemaError } from "@/lib/planned-sessions";
 import { getUserSettings } from "@/lib/user-settings";
 import { describeWorkout, estimateWorkout, parseWorkout, type Workout, type WorkoutEstimate } from "@/lib/utils/workout-steps";
-import { and, asc, eq, ilike, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, ilike, isNotNull, isNull, or } from "drizzle-orm";
 
 export type LibraryWorkout = {
   id: number;
@@ -94,13 +94,8 @@ function checked(input: unknown): Workout {
  * the library. Returns how many sessions changed.
  */
 export async function regenerateUsers(tx: Tx, userId: string, workoutId: number): Promise<number> {
-  const cycles = await tx
-    .selectDistinct({ id: trainingCycles.id })
-    .from(trainingCycles)
-    .innerJoin(trainingCycleSlots, eq(trainingCycleSlots.trainingCycleId, trainingCycles.id))
-    .where(and(eq(trainingCycles.userId, userId), isNull(trainingCycles.deletedAt), eq(trainingCycleSlots.workoutId, workoutId), eq(trainingCycles.scheduleType, "day_of_week")));
-  if (!cycles.length) return 0;
-  const ids = cycles.map((c) => c.id).sort((a, b) => a - b);
+  const ids = await cyclesUsingWorkout(userId, workoutId, tx);
+  if (!ids.length) return 0;
   await lockCycleRows(tx, ids);
   let changed = 0;
   for (const id of ids) {
@@ -110,13 +105,26 @@ export async function regenerateUsers(tx: Tx, userId: string, workoutId: number)
   return changed;
 }
 
-/** Ids of the cycles a library workout is used by (to lock before the workout row). */
+/**
+ * Ids of the cycles whose dated sessions follow this library workout, in id
+ * order: live weekday cycles that are active or scheduled to start. Completed,
+ * unscheduled draft and rotation cycles have no sessions to follow it, so they
+ * are neither locked nor limit-checked (review).
+ */
 export async function cyclesUsingWorkout(userId: string, workoutId: number, ex: typeof db | Tx = db): Promise<number[]> {
   const rows = await ex
     .selectDistinct({ id: trainingCycles.id })
     .from(trainingCycles)
     .innerJoin(trainingCycleSlots, eq(trainingCycleSlots.trainingCycleId, trainingCycles.id))
-    .where(and(eq(trainingCycles.userId, userId), isNull(trainingCycles.deletedAt), eq(trainingCycleSlots.workoutId, workoutId)));
+    .where(
+      and(
+        eq(trainingCycles.userId, userId),
+        isNull(trainingCycles.deletedAt),
+        eq(trainingCycles.scheduleType, "day_of_week"),
+        or(eq(trainingCycles.status, "active"), and(eq(trainingCycles.status, "draft"), isNotNull(trainingCycles.scheduledStartDate))),
+        eq(trainingCycleSlots.workoutId, workoutId),
+      ),
+    );
   return rows.map((r) => r.id).sort((a, b) => a - b);
 }
 

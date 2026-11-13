@@ -1059,3 +1059,15 @@ Two independent reviews of the build. Each code fix came with a test that failed
 16. **Bricks could chain.** One level only: a session that leads a brick cannot become a second leg.
 17. The comment at the top of `src/lib/workouts.ts` now matches C2 decision 19.
 18. A permanent test refuses another user's ids for workouts, bricks, picks and sick periods.
+
+Re-review (2026-11-13):
+
+- **A library edit locked and checked every cycle using the workout.** It now takes only live
+  weekday cycles that are active or scheduled, the same cycles whose sessions follow it. Test
+  "an unscheduled draft or a completed cycle using the workout does not block the edit".
+- **A strength program with a warm-up run lost its workout to the day's run session.** In the
+  second pass a session without a sport goes first and takes a workout of its own program. Unit
+  test "a workout of the strength session's own program clears it, warm-up run or not
+  (re-review 2)".
+- **One lock order:** the per-user cap lock, then the cycles in id order, then the workout row. A
+  workout restore now locks its cycles in `lockForRestore`, with the other cycles of the restore.

@@ -36,8 +36,8 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### Step editor for structured workouts
 - **What:** A screen to build and change a structured workout step by step (steps, repeats, end conditions, targets). Today only a connected assistant creates and changes workouts (`manage_workout`, `manage_planned_session` `set_workout`); the app's library (`/more/workouts`) lists, duplicates, renames, deletes and restores them.
 - **Why deferred:** Decision 2 in `docs/plans/workouts-and-compliance.md` (section 18): C4 and C5 built the schema, the library, planned vs done and sick periods on the server; the views, the editor and the guided player belong to package C6.
-- **Unblocked by:** Package C6. Build the editor on the schema check in `src/lib/utils/workout-steps.ts` (`parseWorkout`), so the app and MCP refuse the same workouts, and list the library from `getWorkouts`.
-- **Touchpoints:** `src/lib/utils/workout-steps.ts`, `src/lib/workouts.ts`, `src/lib/actions/workouts-compliance.ts` (`getWorkouts`, `manageWorkout`), `docs/mcp/workout-steps.md`.
+- **Unblocked by:** Package C6. Build the editor on the schema check in `src/lib/utils/workout-steps.ts` (`parseWorkout`), so the app and MCP refuse the same workouts, and list the library with `listWorkouts`.
+- **Touchpoints:** `src/lib/utils/workout-steps.ts`, `src/lib/workouts.ts`, `src/lib/actions/workouts-compliance.ts` (`manageWorkout`), `docs/mcp/workout-steps.md`.
 
 ### Brick, library and Garmin controls in the app
 - **What:** Three controls from section 7 of `docs/plans/workouts-and-compliance.md` that the app does not show yet: "Update from library" and "Link as brick" in the calendar day sheet; the list of the day's Garmin activities in the "Yes" sheet for admins (6.5); and Recently deleted with Restore for sick periods. The server has all of them (`applySessionOp` ops `update_from_library`, `link_brick`, `unlink_brick`, `pick`; `restoreDeletedAthleteRow` for a sick period), and the assistant can use them over MCP. The app's Server Action and validator accept none of them yet: add each op to `plannedSessionOpSchema` with its control.

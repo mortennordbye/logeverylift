@@ -200,6 +200,12 @@ describe("matchEndurance", () => {
     expect(both.get(2)).toEqual({ sessionId: 10, step: 3 });
   });
 
+  it("a workout of the strength session's own program clears it, warm-up run or not (re-review 2)", () => {
+    const m = matchEndurance([lift(1, 5, "2026-11-03", 1), run(2, "2026-11-03", 2)], [done(10, ["run"], { programId: 5 })]);
+    expect(m.get(1)).toEqual({ sessionId: 10, step: 2 });
+    expect(m.has(2)).toBe(false);
+  });
+
   it("a link wins, and only on its own session", () => {
     const m = matchEndurance([run(1), run(2, "2026-11-03", 2)], [done(10, ["run"], { plannedSessionId: 2 })]);
     expect(m.get(2)).toEqual({ sessionId: 10, step: 1 });

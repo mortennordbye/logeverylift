@@ -306,8 +306,10 @@ export type MatchCompleted = {
  * so a brick logged as one workout clears both legs. A workout that cleared a
  * session without a sport is used for the day, as in C2. A workout used by a
  * session with a sport, or with a discipline that a still open session of
- * that sport needs, never clears a session without a sport: sessions with a
- * sport are matched first in each pass.
+ * that sport needs, never clears a session without a sport: in the third pass
+ * sessions with a sport are matched first. In the second pass a session
+ * without a sport goes first and takes a workout of its own program, whatever
+ * its sets (a strength program with a warm-up run is still that program).
  */
 export function matchEndurance(planned: MatchPlanned[], sessions: MatchCompleted[]): Map<number, { sessionId: number; step: 1 | 2 | 3 }> {
   const out = new Map<number, { sessionId: number; step: 1 | 2 | 3 }>();
@@ -326,11 +328,12 @@ export function matchEndurance(planned: MatchPlanned[], sessions: MatchCompleted
   };
   /** Sports with a session still open on a date. */
   const openSports = (date: string) => new Set(planned.filter((q) => q.date === date && q.sport && !out.has(q.id)).map((q) => q.sport!));
-  const free = (s: MatchCompleted, p: MatchPlanned) => {
+  const free = (s: MatchCompleted, p: MatchPlanned, ownProgram: boolean) => {
     const day = `${s.id}|${p.date}`;
     if (usedDay.has(day)) return false;
     if (p.sport) return !usedSport.has(`${day}|${p.sport}`);
     if (usedAnySport.has(day)) return false;
+    if (ownProgram) return true;
     const open = openSports(p.date);
     return ![...s.disciplines].some((d) => open.has(d));
   };
@@ -344,14 +347,17 @@ export function matchEndurance(planned: MatchPlanned[], sessions: MatchCompleted
   const byDate = new Map<string, MatchPlanned[]>();
   for (const p of planned) byDate.set(p.date, [...(byDate.get(p.date) ?? []), p]);
   for (const [date, list] of byDate) {
-    // Sessions with a sport first, then by position.
-    const ordered = [...list].sort((a, b) => (a.sport ? 0 : 1) - (b.sport ? 0 : 1) || a.position - b.position || a.id - b.id);
+    const byPosition = [...list].sort((a, b) => a.position - b.position || a.id - b.id);
     const candidates = (onDate.get(date) ?? []).slice().sort((a, b) => a.id - b.id);
     for (const step of [2, 3] as const) {
+      // Pass 2: sessions without a sport first (their own program); pass 3: sessions with a sport first.
+      const ordered = [...byPosition].sort((a, b) => (step === 2 ? (a.sport ? 1 : 0) - (b.sport ? 1 : 0) : (a.sport ? 0 : 1) - (b.sport ? 0 : 1)));
       for (const p of ordered) {
         if (out.has(p.id)) continue;
-        const s = candidates.find(
-          (c) => free(c, p) && (step === 2 ? c.programId != null && c.programId === p.programId : p.sport == null || c.disciplines.has(p.sport)),
+        const s = candidates.find((c) =>
+          step === 2
+            ? c.programId != null && c.programId === p.programId && free(c, p, true)
+            : free(c, p, false) && (p.sport == null || c.disciplines.has(p.sport)),
         );
         if (s) {
           out.set(p.id, { sessionId: s.id, step });
