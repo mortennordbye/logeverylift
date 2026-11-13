@@ -29,11 +29,11 @@ describe("editReducer", () => {
     expect(run(s, { type: "moveDown", id: "cycle" })).toBe(s);
   });
 
-  it("the title stays first: no widget moves above it, and it does not move", () => {
+  it("the title stays first: it does not move, and no widget moves above it", () => {
     const s = start();
     expect(run(s, { type: "moveUp", id: "today" })).toBe(s);
-    expect(run(s, { type: "move", id: "cycle", overId: "title" })).toBe(s);
-    expect(run(s, { type: "move", id: "title", overId: "cycle" })).toBe(s);
+    expect(run(s, { type: "moveTo", id: "title", index: 1 })).toBe(s);
+    expect(run(s, { type: "moveDown", id: "title" })).toBe(s);
   });
 
   it("moves skip hidden widgets", () => {
@@ -41,9 +41,13 @@ describe("editReducer", () => {
     expect(order(run(s, { type: "moveUp", id: "cycle" }))).toEqual(["cycle", "today"]);
   });
 
-  it("move puts the widget where the other one was (drag)", () => {
-    expect(order(run(start(), { type: "move", id: "cycle", overId: "today" }))).toEqual(["cycle", "today", "week"]);
-    expect(order(run(start(), { type: "move", id: "today", overId: "cycle" }))).toEqual(["week", "cycle", "today"]);
+  it("moveTo drops a dragged widget at a place in the grid", () => {
+    expect(order(run(start(), { type: "moveTo", id: "cycle", index: 0 }))).toEqual(["cycle", "today", "week"]);
+    expect(order(run(start(), { type: "moveTo", id: "today", index: 2 }))).toEqual(["week", "cycle", "today"]);
+    const s = start();
+    expect(run(s, { type: "moveTo", id: "today", index: 0 })).toBe(s);
+    expect(run(s, { type: "moveTo", id: "today", index: 9 })).toBe(s);
+    expect(run(s, { type: "moveTo", id: "recentPrs", index: 0 })).toBe(s);
   });
 
   it("resize to an allowed size changes it; a size the widget does not offer is refused", () => {
@@ -55,14 +59,6 @@ describe("editReducer", () => {
   it("hide refuses a critical widget", () => {
     const s = start();
     expect(run(s, { type: "hide", id: "today" })).toBe(s);
-  });
-
-  it("show puts a hidden widget back at its old place and size", () => {
-    const s = run(start(), { type: "resize", id: "week", size: "m" }, { type: "hide", id: "week" });
-    expect(order(s)).toEqual(["today", "cycle"]);
-    const back = run(s, { type: "show", id: "week" });
-    expect(order(back)).toEqual(["today", "week", "cycle"]);
-    expect(find(back, "week").size).toBe("m");
   });
 
   it("add puts a hidden widget last at its default size", () => {

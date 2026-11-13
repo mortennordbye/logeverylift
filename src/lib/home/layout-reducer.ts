@@ -1,9 +1,8 @@
 /**
  * Edit-mode state for the home layout (docs/home-widgets-audit.md, 6.9). Pure,
  * for `useReducer`. `items` holds every available widget, visible and hidden,
- * in order: hiding a widget keeps its place and size, so showing it again puts
- * it back where it was. Every change that does something pushes the previous
- * items on the undo stack; a refused change returns the same state.
+ * in order. Every change that does something pushes the previous items on the
+ * undo stack; a refused change returns the same state.
  */
 
 import type { ResolvedItem } from "@/lib/home/layout";
@@ -13,12 +12,12 @@ import type { WidgetSize } from "@/lib/home/widgets/types";
 export type EditState = { items: ResolvedItem[]; past: ResolvedItem[][] };
 
 export type EditAction =
-  | { type: "move"; id: WidgetId; overId: WidgetId }
+  /** Drop a dragged widget at `index` among the movable widgets. */
+  | { type: "moveTo"; id: WidgetId; index: number }
   | { type: "moveUp"; id: WidgetId }
   | { type: "moveDown"; id: WidgetId }
   | { type: "resize"; id: WidgetId; size: WidgetSize }
   | { type: "hide"; id: WidgetId }
-  | { type: "show"; id: WidgetId }
   | { type: "add"; id: WidgetId }
   | { type: "reset"; items: ResolvedItem[] }
   | { type: "undo" }
@@ -27,11 +26,6 @@ export type EditAction =
 
 export function initEdit(items: ResolvedItem[]): EditState {
   return { items, past: [] };
-}
-
-/** The visible widgets, the header included, in order. */
-export function visibleItems(items: ResolvedItem[]): ResolvedItem[] {
-  return items.filter((i) => !i.hidden);
 }
 
 function commit(state: EditState, items: ResolvedItem[]): EditState {
@@ -51,12 +45,11 @@ export function movableItems(items: ResolvedItem[]): ResolvedItem[] {
   return items.filter((i) => !i.hidden && widgetDef(i.id).kind === "widget");
 }
 
-/** Swap with the previous (-1) or next (+1) visible widget. */
-function step(state: EditState, id: WidgetId, dir: -1 | 1): EditState {
-  const visible = movableItems(state.items);
-  const v = visible.findIndex((i) => i.id === id);
-  const target = visible[v + dir];
-  if (v < 0 || !target) return state;
+/** Move `id` to the place of the movable widget now at `index`. */
+function moveToIndex(state: EditState, id: WidgetId, index: number): EditState {
+  const movable = movableItems(state.items);
+  const target = movable[index];
+  if (!target || target.id === id || !movable.some((i) => i.id === id)) return state;
   const from = state.items.findIndex((i) => i.id === id);
   const to = state.items.findIndex((i) => i.id === target.id);
   return commit(state, moveIndex(state.items, from, to));
@@ -71,18 +64,14 @@ function update(state: EditState, id: WidgetId, patch: Partial<ResolvedItem>): E
 
 export function editReducer(state: EditState, action: EditAction): EditState {
   const current = "id" in action ? state.items.find((i) => i.id === action.id) : undefined;
+  const position = "id" in action ? movableItems(state.items).findIndex((i) => i.id === action.id) : -1;
   switch (action.type) {
-    case "move": {
-      const from = state.items.findIndex((i) => i.id === action.id);
-      const to = state.items.findIndex((i) => i.id === action.overId);
-      if (from < 0 || to < 0 || from === to) return state;
-      if (widgetDef(action.id).kind !== "widget" || widgetDef(action.overId).kind !== "widget") return state;
-      return commit(state, moveIndex(state.items, from, to));
-    }
+    case "moveTo":
+      return moveToIndex(state, action.id, action.index);
     case "moveUp":
-      return step(state, action.id, -1);
+      return position > 0 ? moveToIndex(state, action.id, position - 1) : state;
     case "moveDown":
-      return step(state, action.id, 1);
+      return position >= 0 ? moveToIndex(state, action.id, position + 1) : state;
     case "resize": {
       if (!current || current.size === action.size) return state;
       if (!(widgetDef(action.id).sizes as readonly string[]).includes(action.size)) return state;
@@ -91,9 +80,6 @@ export function editReducer(state: EditState, action: EditAction): EditState {
     case "hide":
       if (!current || current.hidden || widgetDef(action.id).critical) return state;
       return update(state, action.id, { hidden: true });
-    case "show":
-      if (!current || !current.hidden) return state;
-      return update(state, action.id, { hidden: false });
     case "add": {
       if (!current || !current.hidden) return state;
       const rest = state.items.filter((i) => i.id !== action.id);
