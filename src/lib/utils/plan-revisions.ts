@@ -23,6 +23,8 @@ export type InjurySnapshot = { v: 1; injury: Row };
 /** A library workout and a sick period (docs/plans/workouts-and-compliance.md, 4.5). */
 export type WorkoutSnapshot = { v: 1; workout: Row };
 export type IllnessSnapshot = { v: 1; illness: Row };
+/** The inputs of one race-day plan (docs/plans/nutrition-and-race-day.md, 3). */
+export type RacePlanSnapshot = { v: 1; race_plan: Row };
 /**
  * A season with its races, and its phases for the history text
  * (docs/plans/seasons.md, 2.3). A restore never moves the phases.
@@ -41,6 +43,7 @@ export type PlanSnapshot =
   | InjurySnapshot
   | WorkoutSnapshot
   | IllnessSnapshot
+  | RacePlanSnapshot
   | SeasonSnapshot;
 
 export const isProgramSnapshot = (s: PlanSnapshot): s is ProgramSnapshot => "program" in s;
@@ -51,6 +54,7 @@ export const isThresholdSnapshot = (s: PlanSnapshot): s is ThresholdSnapshot => 
 export const isInjurySnapshot = (s: PlanSnapshot): s is InjurySnapshot => "injury" in s;
 export const isWorkoutSnapshot = (s: PlanSnapshot): s is WorkoutSnapshot => "workout" in s && !("session" in s);
 export const isIllnessSnapshot = (s: PlanSnapshot): s is IllnessSnapshot => "illness" in s;
+export const isRacePlanSnapshot = (s: PlanSnapshot): s is RacePlanSnapshot => "race_plan" in s;
 
 const illnessDates = (r: Row) => `${r.startedOn} to ${r.endedOn ?? "now"}`;
 
@@ -77,6 +81,7 @@ export function snapshotName(s: PlanSnapshot): string {
   if (isSeasonSnapshot(s)) return String(s.season.name);
   if (isWorkoutSnapshot(s)) return `Workout: ${String(s.workout.name)}`;
   if (isIllnessSnapshot(s)) return `Sick period from ${String(s.illness.startedOn)}`;
+  if (isRacePlanSnapshot(s)) return "Race plan";
   const text = String(s.memory.text);
   return text.length > 40 ? `${text.slice(0, 39)}…` : text;
 }
@@ -411,6 +416,19 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!sameValue(prev.deletedAt ?? null, a.deletedAt ?? null)) out.push(a.deletedAt ? "Deleted" : "Restored");
     return out;
   }
+  if (isRacePlanSnapshot(after)) {
+    const prev = before && isRacePlanSnapshot(before) ? before.race_plan : null;
+    const a = after.race_plan;
+    if (!prev) return ["Created the race plan"];
+    const out: string[] = [];
+    const was = (prev.plan ?? {}) as Record<string, unknown>;
+    const now = (a.plan ?? {}) as Record<string, unknown>;
+    for (const k of [...new Set([...Object.keys(was), ...Object.keys(now)])].sort()) {
+      if (!sameValue(was[k] ?? null, now[k] ?? null)) out.push(`${k} ${was[k] ?? "not set"} → ${now[k] ?? "not set"}`);
+    }
+    if (!sameValue(prev.deletedAt ?? null, a.deletedAt ?? null)) out.push(a.deletedAt ? "Deleted" : "Restored");
+    return out;
+  }
   if (isSeasonSnapshot(after)) {
     const prev = before && isSeasonSnapshot(before) ? before : null;
     if (!prev) return [`Created season "${after.season.name}"`];
@@ -521,7 +539,8 @@ export const PLANNED_SESSION_KEPT = [
 /** Memory fields a restore never writes back. */
 export const MEMORY_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt"] as const;
 /** Fields a restore of a one-row object (athlete profile, threshold, injury) never writes back. */
-export const ROW_KEPT = MEMORY_KEPT;
+/** `orphanedAt` (race plans) follows the race, never a revision. */
+export const ROW_KEPT = [...MEMORY_KEPT, "orphanedAt"] as const;
 /** Season fields a restore never writes back (the re-plan flag is recomputed). */
 export const SEASON_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt", "replanFlaggedAt", "replanReason"] as const;
 /** Program fields a restore never writes back. */

@@ -161,14 +161,14 @@ export function SeasonDetailClient(p: Props) {
           <p className={SECTION}>Races</p>
           <div className="flex flex-col divide-y divide-border rounded-2xl bg-card overflow-hidden">
             {p.races.map((r) => (
+              <div key={r.id} className="flex items-center">
               <button
-                key={r.id}
                 type="button"
                 disabled={!p.enduranceEnabled}
                 onClick={() =>
                   setRace({ id: r.id, name: r.name, raceDate: r.raceDate, discipline: r.discipline, distance: r.distance, km: r.distanceMeters ? String(r.distanceMeters / 1000) : "", priority: r.priority })
                 }
-                className="flex items-center justify-between gap-3 px-4 py-3 min-h-[44px] text-left active:bg-muted/50"
+                className="flex flex-1 min-w-0 items-center justify-between gap-3 px-4 py-3 min-h-[44px] text-left active:bg-muted/50"
               >
                 <div className="min-w-0">
                   <p className="font-medium truncate">{r.name}</p>
@@ -178,6 +178,13 @@ export function SeasonDetailClient(p: Props) {
                 </div>
                 <span className="text-xs font-semibold rounded-full bg-muted px-2 py-0.5 shrink-0">{r.priority}</span>
               </button>
+              {/* The race-day plan (docs/plans/nutrition-and-race-day.md, 6): half and full for now. */}
+              {p.enduranceEnabled && r.discipline === "triathlon" && (r.distance === "half" || r.distance === "full") && (
+                <Link href={`/races/${r.id}/plan`} className="flex items-center px-4 min-h-[44px] text-sm font-medium text-primary active:opacity-60 shrink-0">
+                  Race plan
+                </Link>
+              )}
+              </div>
             ))}
             {p.enduranceEnabled && (
               <button

@@ -1,4 +1,5 @@
 import { compareBricks, pacingGuide, sweatModel, taperStart, type FuelSession } from "@/lib/garmin/analytics/race";
+import { bikeGuide, runGuide } from "@/lib/utils/race-plan";
 import { describe, expect, it } from "vitest";
 
 describe("taperStart", () => {
@@ -10,15 +11,32 @@ describe("taperStart", () => {
 
 describe("pacingGuide", () => {
   it("gives a lower intensity for a full distance than for a 70.3", () => {
-    const base = { ftp: 200, cs: 4, lthrBike: 160, lthrRun: 170 };
-    const full = pacingGuide({ distance: "full", ...base });
-    const half = pacingGuide({ distance: "half", ...base });
-    expect(full.bikeWatts).toEqual([136, 150]);
-    expect(half.bikeWatts).toEqual([150, 164]);
+    const base = { ftp: 200, cs: 4, lthrBike: 160, lthrRun: 170, firstTimer: false };
+    const full = pacingGuide({ distance: "full", bikeHours: 6, ...base });
+    const half = pacingGuide({ distance: "half", bikeHours: 2.5, ...base });
+    expect(full.bikeWatts).toEqual([130, 140]);
+    expect(half.bikeWatts).toEqual([164, 168]);
     expect(full.runSpeed![1]).toBeCloseTo(3.4);
     expect(full.bikeHrCeiling).toBe(136);
     expect(full.runHrCeiling).toBe(145);
-    expect(pacingGuide({ distance: "full", ftp: null, cs: null, lthrBike: null, lthrRun: null })).toEqual({ bikeWatts: null, bikeHrCeiling: null, runSpeed: null, runHrCeiling: null });
+    expect(pacingGuide({ distance: "full", bikeHours: 6, firstTimer: false, ftp: null, cs: null, lthrBike: null, lthrRun: null })).toEqual({
+      bikeWatts: null,
+      bikeHrCeiling: null,
+      runSpeed: null,
+      runHrCeiling: null,
+    });
+  });
+
+  it("is the race plan's rule: the same watts and ceilings for the same bike time and level", () => {
+    for (const [distance, hours, firstTimer] of [["full", 7, true], ["full", 8, false], ["half", 3, true], ["half", 2.5, false]] as const) {
+      const g = pacingGuide({ distance, bikeHours: hours, firstTimer, ftp: 240, cs: 4, lthrBike: 160, lthrRun: 170 });
+      const b = bikeGuide(distance, hours, 240, 160, firstTimer);
+      const r = runGuide(distance, 4, 170);
+      expect(g.bikeWatts).toEqual(b.watts);
+      expect(g.bikeHrCeiling).toBe(b.hrCeiling);
+      expect(g.runHrCeiling).toBe(r.hrCeiling);
+      expect(g.runSpeed).toEqual(r.speed);
+    }
   });
 });
 

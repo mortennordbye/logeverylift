@@ -7,7 +7,6 @@ import {
   garminActivityStreams,
   garminConnections,
   garminDays,
-  garminFuelLogs,
   garminSyncRuns,
   users,
 } from "@/db/schema";
@@ -387,42 +386,5 @@ export async function getGarminActivityRaw(data: unknown): Promise<ActionResult<
   } catch (e) {
     console.error("[getGarminActivityRaw] failed", { userId }, e);
     return { success: false, error: "Failed to load activity" };
-  }
-}
-
-const saveFuelLogSchema = z.object({
-  activityId: z.number().int().positive(),
-  carbsG: z.number().int().min(0).max(2000).nullable(),
-  fluidMl: z.number().int().min(0).max(20000).nullable(),
-});
-
-/** Carbohydrate and fluid taken during one of the user's own Garmin sessions. Both null clears the log. */
-export async function saveFuelLog(data: unknown): Promise<ActionResult<{ carbsG: number | null; fluidMl: number | null }>> {
-  const auth = await requireSession();
-  const parsed = saveFuelLogSchema.safeParse(data);
-  if (!parsed.success) {
-    return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
-  }
-  const { activityId, carbsG, fluidMl } = parsed.data;
-  try {
-    const [owned] = await db
-      .select({ id: garminActivities.id })
-      .from(garminActivities)
-      .where(and(eq(garminActivities.userId, auth.user.id), eq(garminActivities.garminActivityId, activityId)));
-    if (!owned) return { success: false, error: "Activity not found" };
-    if (carbsG === null && fluidMl === null) {
-      await db.delete(garminFuelLogs).where(and(eq(garminFuelLogs.userId, auth.user.id), eq(garminFuelLogs.garminActivityId, activityId)));
-    } else {
-      await db
-        .insert(garminFuelLogs)
-        .values({ userId: auth.user.id, garminActivityId: activityId, carbsG, fluidMl })
-        .onConflictDoUpdate({ target: [garminFuelLogs.userId, garminFuelLogs.garminActivityId], set: { carbsG, fluidMl, updatedAt: new Date() } });
-    }
-    revalidatePath(`/more/garmin/activity/${activityId}`);
-    revalidatePath("/more/garmin/race");
-    return { success: true, data: { carbsG, fluidMl } };
-  } catch (e) {
-    console.error("[saveFuelLog] failed", { activityId }, e instanceof Error ? e.message : "unknown");
-    return { success: false, error: "Failed to save" };
   }
 }

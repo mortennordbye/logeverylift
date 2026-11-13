@@ -101,6 +101,16 @@ what it describes, that package updates this file and the server instructions in
   n of a repeat (`s3#2`). `get_step_results` gives planned against done per step, resolved with
   the thresholds of that day. They are logged data: no revision, no restore. `log_step_results`
   logs the session first when it is not logged yet, as `confirm_planned_session` does.
+- **Fueling and race plans** (endurance features only). A fuel log belongs to one completed
+  session logged in the app (`workoutSessionId`) or one Garmin activity: carbohydrate, fluid,
+  sodium, caffeine, the products used and a GI score (0 = no gut symptoms, 10 = worst). Gut
+  training counts logs of 90 minutes or more with a GI score under 4; the race target is 80 % of
+  the highest, never above 120 g/h (above 90 only after more than one tolerated session there). Fluid is 50-80 % of the measured sweat rate, never above it; sodium stays inside
+  300-1,000 mg/h. A race plan stores only its inputs (start time, leg and transition times, swim
+  offset, fuel interval, caffeine, race temperature); the timeline, pacing and fuel schedule are
+  worked out on read. Fuel logs, products and sweat tests are logged data (no revision); a race
+  plan change is a revision (`race_plan`). Every number carries its evidence label and the line
+  that it is not medical advice: pass both on.
 - **Training load** (endurance features only). One scale: 100 = one hour at threshold.
   `get_training_load` gives load per day and sport, fitness (42-day), fatigue (7-day) and form,
   and the weekly ramp. With Garmin data it reads the Garmin series, which also holds the app

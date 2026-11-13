@@ -31,6 +31,15 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** One release of C2 in prod without a rollback (then a migration drops the table and `dismissIfDayClear` goes); and an owner choice on rotation days in the calendar.
 - **Touchpoints:** `src/lib/planned-sessions.ts` (`dismissIfDayClear`, `listPlanned`, `applyRotationOp`), `src/components/features/CycleCalendarClient.tsx` (`getDayInfo`), `src/db/schema/dismissed-makeups.ts`.
 
+### Nutrition and race plans: what E1 and E2 left for later
+- **What:** Three gaps left by the nutrition and race-day package (E1, E2, `docs/plans/nutrition-and-race-day.md`):
+  - Drop the `garmin_fuel_logs` table. Migration 0089 copied its rows into `fuel_logs`; nothing reads or writes it now, and it is kept one release only so a rollback loses no Garmin fuel log.
+  - Race plans for olympic and sprint triathlons, and for run and ride races (decision 6). The rules and the timeline cover half and full only; `racePlan` refuses other distances.
+  - A research pass on run pacing off the bike and on race swim pacing. The research reference has neither, so the run guide pace (80-85 % full, 85-90 % half of threshold speed) and the swim offset (CSS + 5 s/100 m) are labelled Inference (decisions 3 and 4).
+- **Why deferred:** The drop must wait one release for rollback. Other distances and new pacing rules need research the reference does not hold yet; the owner's race is a half.
+- **Unblocked by:** One release after E1 ships, a migration that drops `garmin_fuel_logs` (and its schema, export entry and delete line). For distances and pacing: a new research pass (T1) with evidence labels, then extend `LEG_METERS`, `BIKE_IF`, `BIKE_TSS_CAP` and `RUN_SPEED_SHARE`.
+- **Touchpoints:** `src/db/schema/garmin.ts` (`garminFuelLogs`), `src/lib/account-data.ts`, `src/lib/garmin/delete-data.ts`, `src/lib/utils/race-plan.ts`, `src/lib/race-plans.ts`, `docs/research/endurance-training-reference.md`.
+
 ### Step editor for structured workouts
 - **What:** A screen to build and change a structured workout step by step (steps, repeats, end conditions, targets). Today only a connected assistant creates and changes workouts (`manage_workout`, `manage_planned_session` `set_workout`); the app's library (`/more/workouts`) lists, duplicates, renames, deletes and restores them.
 - **Why deferred:** Decision 2 in `docs/plans/workouts-and-compliance.md` (section 18): C4 and C5 built the schema, the library, planned vs done and sick periods on the server; the views, the editor and the guided player belong to package C6.
@@ -246,6 +255,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 
 ## Codebase hygiene (deferred long-term)
+
+### Deploy during the day without disturbing an active workout
+- **What:** Find a way to ship to prod during the day without any effect on users who are in the middle of a workout. Today the rule is "do not merge while someone trains": before each merge the operator checks prod for open workout sessions with a set in the last 30 minutes and waits. On 2026-11-13 a merge waited more than an hour for another user to finish. Every deploy changes all Server Action IDs (`CLAUDE.md`, "Server Action stability across deploys"), so an open app must reload once; the client keeps queued sets through that reload (`src/lib/utils/stale-bundle.ts`), but a reload mid-set, a lost rest timer, or a slow pod switch still disturbs the lifter.
+- **Why deferred:** The owner asked to look at this later (2026-11-13). The current wait rule is safe, just slow.
+- **Unblocked by:** Pick an approach and test it. Options to look at: keep the old pod serving old action IDs until its clients reload (version skew support, e.g. Next.js `deploymentId` / skew protection, or two ReplicaSets during a drain window); a stable action-ID salt without putting the key in the public image (build the key into a private image, or inject the salt at build from a CI secret into a private registry); delay the client reload until the workout screen is idle (no timer running, no open set edit); and show a "new version ready" banner on the workout screen instead of a forced reload. Measure with the e2e stale-bundle spec plus a deploy during a running e2e workout.
+- **Touchpoints:** `src/lib/utils/stale-bundle.ts`, `src/contexts/pending-queue-context.tsx`, `next.config.ts`, `Dockerfile`, `.github/workflows/ci.yml`, the ArgoCD/Kargo rollout config, and the open-workout check the hub runs before merging (`deploys-break-open-workouts` memory).
 
 ### Two open tabs overwrite each other's offline queue
 - **What:** Each tab keeps its own copy of the offline queue in React state and writes the whole queue to localStorage `pendingMutationQueue` on every change. With two tabs or PWA windows open, the last tab to write wins, so a set queued in one tab can be erased by the other tab's write. Each tab also replays its own copy, so a set can be sent twice.

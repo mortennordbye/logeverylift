@@ -32,7 +32,10 @@ test("a user on an old consent version gets a clean consent page and returns hom
   page.on("console", (m) => {
     // Linux WebKit (CI) reports the app-wide viewport meta's `interactive-widget` key as a console
     // error on every page. It is not about this page, so it does not count.
-    if (m.type() === "error" && !m.text().includes('"interactive-widget" not recognized')) errors.push(m.text());
+    // WebKit also reports a Next.js route prefetch (`?_rsc=`) that a navigation cuts off as an
+    // "access control checks" error; the page.goto("/") below cuts off the consent page's own.
+    const abortedPrefetch = m.text().includes("?_rsc=") && m.text().includes("due to access control checks");
+    if (m.type() === "error" && !abortedPrefetch && !m.text().includes('"interactive-widget" not recognized')) errors.push(m.text());
   });
   page.on("pageerror", (e) => errors.push(e.message));
   const email = e2eUser(testInfo.parallelIndex).email;

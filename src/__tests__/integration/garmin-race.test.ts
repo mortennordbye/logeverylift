@@ -1,6 +1,6 @@
 import { db } from "@/db";
-import { garminActivities, garminFuelLogs, trainingCycles } from "@/db/schema";
-import { saveFuelLog } from "@/lib/actions/garmin";
+import { fuelLogs, garminActivities, trainingCycles } from "@/db/schema";
+import { saveFuelLogAction } from "@/lib/actions/nutrition";
 import { getActivityDetail, getRaceData } from "@/lib/garmin/queries";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
@@ -21,20 +21,20 @@ async function longRide(userId: string, id: number) {
   });
 }
 
-describe("saveFuelLog", () => {
+describe("saveFuelLogAction on a Garmin activity", () => {
   it("saves, updates and clears the log for the user's own session", async () => {
     const me = await createUser();
     await longRide(me.id, 31);
     asUser(me.id);
 
-    expect((await saveFuelLog({ activityId: 31, carbsG: 180, fluidMl: 1500 })).success).toBe(true);
-    expect((await saveFuelLog({ activityId: 31, carbsG: 200, fluidMl: 1500 })).success).toBe(true);
-    let rows = await db.select().from(garminFuelLogs).where(eq(garminFuelLogs.userId, me.id));
-    expect(rows).toEqual([expect.objectContaining({ garminActivityId: 31, carbsG: 200, fluidMl: 1500 })]);
-    expect((await getActivityDetail(me.id, 31))?.fuel).toEqual({ carbsG: 200, fluidMl: 1500 });
+    expect((await saveFuelLogAction({ garminActivityId: 31, carbsG: 180, fluidMl: 1500 })).success).toBe(true);
+    expect((await saveFuelLogAction({ garminActivityId: 31, carbsG: 200, fluidMl: 1500 })).success).toBe(true);
+    let rows = await db.select().from(fuelLogs).where(eq(fuelLogs.userId, me.id));
+    expect(rows).toEqual([expect.objectContaining({ garminActivityId: 31, carbsG: 200, fluidMl: 1500, durationS: 10800 })]);
+    expect((await getActivityDetail(me.id, 31))?.fuel).toMatchObject({ carbsG: 200, fluidMl: 1500, sodiumMg: null, giScore: null });
 
-    await saveFuelLog({ activityId: 31, carbsG: null, fluidMl: null });
-    rows = await db.select().from(garminFuelLogs).where(eq(garminFuelLogs.userId, me.id));
+    await saveFuelLogAction({ garminActivityId: 31, carbsG: null, fluidMl: null });
+    rows = await db.select().from(fuelLogs).where(eq(fuelLogs.userId, me.id));
     expect(rows).toEqual([]);
   });
 
@@ -42,10 +42,10 @@ describe("saveFuelLog", () => {
     const owner = await createUser();
     await longRide(owner.id, 32);
     asUser((await createUser()).id);
-    expect(await saveFuelLog({ activityId: 32, carbsG: 100, fluidMl: null })).toEqual({ success: false, error: "Activity not found" });
+    expect(await saveFuelLogAction({ garminActivityId: 32, carbsG: 100, fluidMl: null })).toEqual({ success: false, error: "Activity not found" });
     asUser(owner.id);
-    expect((await saveFuelLog({ activityId: 32, carbsG: -5, fluidMl: null })).success).toBe(false);
-    expect(await db.select().from(garminFuelLogs).where(eq(garminFuelLogs.userId, owner.id))).toEqual([]);
+    expect((await saveFuelLogAction({ garminActivityId: 32, carbsG: -5, fluidMl: null })).success).toBe(false);
+    expect(await db.select().from(fuelLogs).where(eq(fuelLogs.userId, owner.id))).toEqual([]);
   });
 });
 
@@ -56,7 +56,7 @@ describe("getRaceData", () => {
 
     await longRide(me.id, 33);
     asUser(me.id);
-    await saveFuelLog({ activityId: 33, carbsG: 210, fluidMl: 1800 });
+    await saveFuelLogAction({ garminActivityId: 33, carbsG: 210, fluidMl: 1800 });
     await db.insert(trainingCycles).values({ userId: me.id, name: "IM", durationWeeks: 24, status: "active", startDate: "2026-09-07", raceDate: "2027-02-21", raceDistance: "full" });
 
     const r = (await getRaceData(me.id))!;

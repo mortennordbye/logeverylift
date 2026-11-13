@@ -15,7 +15,7 @@ export type ChangeSetCard = {
   reasons: string[];
   /** Training limits the assistant went past on purpose, with its reason. */
   overrides: string[];
-  objects: { type: "program" | "cycle" | "memory" | "athlete" | "threshold" | "injury" | "season" | "planned_session" | "workout" | "illness"; id: number; name: string; changes: string[] }[];
+  objects: { type: "program" | "cycle" | "memory" | "athlete" | "threshold" | "injury" | "season" | "planned_session" | "workout" | "illness" | "race_plan"; id: number; name: string; changes: string[] }[];
 };
 
 const HREF: Record<ChangeSetCard["objects"][number]["type"], (id: number) => string> = {
@@ -29,6 +29,7 @@ const HREF: Record<ChangeSetCard["objects"][number]["type"], (id: number) => str
   planned_session: () => "/more/calendar",
   workout: () => "/more/workouts",
   illness: () => "/more/athlete",
+  race_plan: () => "/more/nutrition",
 };
 
 /**

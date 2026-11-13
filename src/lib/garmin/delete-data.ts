@@ -12,10 +12,11 @@ import {
   garminActivityStreams,
   garminDailyMetrics,
   garminDays,
+  fuelLogs,
   garminFuelLogs,
   garminSyncRuns,
 } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, eq, isNotNull } from "drizzle-orm";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -28,4 +29,6 @@ export async function deleteGarminData(tx: Tx | typeof db, userId: string) {
   await tx.delete(garminActivities).where(eq(garminActivities.userId, userId));
   await tx.delete(garminSyncRuns).where(eq(garminSyncRuns.userId, userId));
   await tx.delete(garminFuelLogs).where(eq(garminFuelLogs.userId, userId));
+  // Fuel logs on Garmin activities go with them; logs on app sessions stay.
+  await tx.delete(fuelLogs).where(and(eq(fuelLogs.userId, userId), isNotNull(fuelLogs.garminActivityId)));
 }

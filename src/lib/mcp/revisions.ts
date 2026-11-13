@@ -199,14 +199,14 @@ async function restoreWithWarnings<T extends object>(
 }
 
 /** Object types of the endurance add-on: listed and restored only with the switch on (D18). */
-const ENDURANCE_TYPES = new Set<string>(["athlete", "injury", "workout", "illness"]);
+const ENDURANCE_TYPES = new Set<string>(["athlete", "injury", "workout", "illness", "race_plan"]);
 
 export function registerRevisionTools(server: McpServer, userId: string, clientId?: string) {
   server.registerTool(
     "list_revisions",
     {
       description: [
-        "List the change history of one program, training cycle, season, dated session (planned_session), coach memory entry, the athlete profile (athlete), a threshold value, an injury, a library workout (workout) or a sick period (illness) (objectType and objectId; the last four need endurance features on), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
+        "List the change history of one program, training cycle, season, dated session (planned_session), coach memory entry, the athlete profile (athlete), a threshold value, an injury, a library workout (workout), a sick period (illness) or a race-day plan (race_plan) (objectType and objectId; the last five need endurance features on), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
         "Without objectType, list your own (assistant) change sets instead: each groups the writes of one review.",
         "Use the revision id or the change-set id with restore_revision.",
       ].join(" "),
