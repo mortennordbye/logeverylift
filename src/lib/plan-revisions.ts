@@ -19,6 +19,7 @@ import {
   coachMemory,
   exercises,
   illnessPeriods,
+  racePlans,
   planRevisions,
   plannedSessions,
   programExercises,
@@ -66,6 +67,7 @@ import {
   isAthleteSnapshot,
   isInjurySnapshot,
   isIllnessSnapshot,
+  isRacePlanSnapshot,
   isThresholdSnapshot,
   isWorkoutSnapshot,
   type ProgramSnapshot,
@@ -123,6 +125,7 @@ const NOT_FOUND: Record<PlanObjectType, string> = {
   planned_session: "Planned session not found",
   workout: "Workout not found",
   illness: "Sick period not found",
+  race_plan: "Race plan not found",
 };
 
 /** The object is missing, deleted, or not the caller's. */
@@ -156,6 +159,7 @@ const ROW_TABLES = {
   injury: athleteInjuries,
   workout: workouts,
   illness: illnessPeriods,
+  race_plan: racePlans,
 } as const;
 type RowType = keyof typeof ROW_TABLES;
 const isRowType = (type: PlanObjectType): type is RowType => type in ROW_TABLES;
@@ -1584,7 +1588,7 @@ async function restoreRowTo(
   const set: Record<string, unknown> = { ...values };
   for (const k of ROW_KEPT) delete set[k];
   // Bringing a deleted row back adds one live row: the cap applies.
-  if (row?.deletedAt && type !== "athlete") await assertAthleteRoom(w.tx, w.ctx.userId, type, String(set.kind ?? ""));
+  if (row?.deletedAt && type !== "athlete" && type !== "race_plan") await assertAthleteRoom(w.tx, w.ctx.userId, type, String(set.kind ?? ""));
   // Sick periods never overlap (docs/plans/workouts-and-compliance.md, 4.4).
   if (type === "illness") await assertNoIllnessOverlap(w.tx, w.ctx.userId, String(set.startedOn), (set.endedOn as string | null) ?? null, id);
   // jsonb gives timestamps back as strings.
@@ -1729,6 +1733,7 @@ async function restoreInSession(w: PlanWriteSession, rev: typeof planRevisions.$
   if (isInjurySnapshot(snap)) return restoreRowTo(w, "injury", rev.objectId, snap.injury, rev.id);
   if (isWorkoutSnapshot(snap)) return restoreRowTo(w, "workout", rev.objectId, snap.workout, rev.id);
   if (isIllnessSnapshot(snap)) return restoreRowTo(w, "illness", rev.objectId, snap.illness, rev.id);
+  if (isRacePlanSnapshot(snap)) return restoreRowTo(w, "race_plan", rev.objectId, snap.race_plan, rev.id);
   if (isSeasonSnapshot(snap)) return restoreSeasonTo(w, rev.objectId, snap, rev.id);
   if (isPlannedSessionSnapshot(snap)) return restorePlannedSessionTo(w, rev.objectId, snap, rev.id);
   return isProgramSnapshot(snap)
@@ -1816,7 +1821,7 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
   }
   // Cycles first, then programs: the lock order every write uses. Memory
   // entries last; nothing else locks them.
-  const order: Record<PlanObjectType, number> = { season: -1, cycle: 0, program: 1, memory: 2, athlete: 3, threshold: 4, injury: 5, illness: 6, workout: 7, planned_session: 8 };
+  const order: Record<PlanObjectType, number> = { season: -1, cycle: 0, program: 1, memory: 2, athlete: 3, threshold: 4, injury: 5, illness: 6, workout: 7, planned_session: 8, race_plan: 9 };
   const firsts = [...firstByObject.values()].sort((a, b) =>
     a.objectType === b.objectType ? a.objectId - b.objectId : order[a.objectType] - order[b.objectType],
   );
@@ -1838,7 +1843,7 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
     // The athlete profile and injuries belong to the endurance add-on (D18).
     // With it off, they stay as they are and the rest of the set undoes.
     let todo = firsts;
-    const gated = firsts.filter((f) => f.objectType === "athlete" || f.objectType === "injury" || f.objectType === "workout" || f.objectType === "illness");
+    const gated = firsts.filter((f) => f.objectType === "athlete" || f.objectType === "injury" || f.objectType === "workout" || f.objectType === "illness" || f.objectType === "race_plan");
     if (gated.length && !(await enduranceEnabledFor(ctx.userId))) {
       todo = firsts.filter((f) => !gated.includes(f));
       skipped.push("Your athlete profile and injuries were not changed: endurance features are off for this account");
@@ -2151,7 +2156,7 @@ export async function purgePlanRevisions(now = new Date()) {
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "memory"), inArray(planRevisions.objectId, ids)));
     await db.delete(coachMemory).where(inArray(coachMemory.id, ids));
   }
-  for (const type of ["athlete", "threshold", "injury", "workout", "illness"] as const) {
+  for (const type of ["athlete", "threshold", "injury", "workout", "illness", "race_plan"] as const) {
     const table = ROW_TABLES[type];
     const old = await db.select({ id: table.id }).from(table).where(lt(table.deletedAt, trashCut));
     if (!old.length) continue;

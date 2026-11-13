@@ -43,6 +43,7 @@ export * from "./workout-sets";
 export * from "./workouts";
 export * from "./illness";
 export * from "./step-results";
+export * from "./nutrition";
 
 // Relations for Drizzle relational queries
 export * from "./relations";

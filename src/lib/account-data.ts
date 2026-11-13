@@ -50,6 +50,10 @@ import {
   workoutReactions,
   workoutSessions,
   workoutSets,
+  fuelLogs,
+  fuelProducts,
+  sweatTests,
+  racePlans,
 } from "@/db/schema";
 import { eq, getTableColumns, inArray, lt, or, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
@@ -156,6 +160,12 @@ export async function collectUserData(userId: string) {
     illness_periods: await db.select().from(illnessPeriods).where(eq(illnessPeriods.userId, userId)),
     // Per-step results of structured sessions (docs/plans/endurance-app.md, 9).
     workout_step_results: await db.select().from(workoutStepResults).where(eq(workoutStepResults.userId, userId)),
+    // Fuel logs, products, sweat tests and race plans (docs/plans/nutrition-and-race-day.md, 7).
+    fuel_logs: await db.select().from(fuelLogs).where(eq(fuelLogs.userId, userId)),
+    fuel_products: await db.select().from(fuelProducts).where(eq(fuelProducts.userId, userId)),
+    sweat_tests: await db.select().from(sweatTests).where(eq(sweatTests.userId, userId)),
+    // plan-read: includes deleted (the export holds all of the user's data)
+    race_plans: await db.select().from(racePlans).where(eq(racePlans.userId, userId)),
     // Seasons and their races (docs/plans/seasons.md, 4), deleted ones too.
     // plan-read: includes deleted (the export holds all of the user's data)
     seasons: await db.select().from(seasons).where(eq(seasons.userId, userId)),

@@ -137,7 +137,7 @@ export function GarminRaceView({ data }: { data: RaceData | null }) {
         <Card
           icon={Bike}
           title="Pacing guide"
-          note={`A guide from your thresholds, not a prediction. Bike at ${data.volume.distance === "full" ? "68 to 75" : "75 to 82"} % of FTP, run at ${data.volume.distance === "full" ? "80 to 85" : "85 to 90"} % of critical speed, and keep heart rate under the top of your low band (85 % of LTHR${data.lthrSource === "watch" ? ", from the watch's LTHR" : data.lthrSource === "estimate" ? ", from your recent hard efforts" : ""}). Without a power meter outdoors, the bike runs on the heart-rate ceiling.`}
+          note={`A guide from your thresholds, not a prediction. Bike at ${data.volume.distance === "full" ? "65 to 75" : "75 to 85"} % of FTP, run at ${data.volume.distance === "full" ? "80 to 85" : "85 to 90"} % of critical speed, and keep heart rate under the top of your low band (85 % of LTHR${data.lthrSource === "watch" ? ", from the watch's LTHR" : data.lthrSource === "estimate" ? ", from your recent hard efforts" : ""}). Without a power meter outdoors, the bike runs on the heart-rate ceiling.`}
         >
           <table className="w-full text-sm tabular-nums">
             <tbody>

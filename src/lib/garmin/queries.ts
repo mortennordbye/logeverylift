@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { liveCycles, livePlannedSessions, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
-import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, garminFuelLogs, plannedSessions, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
+import { exercises, garminActivities, garminActivityMetrics, garminActivityStreams, garminConnections, garminDailyMetrics, garminDays, fuelLogs, plannedSessions, programExercises, programSets, programs, trainingCycleSlots, trainingCycles, users } from "@/db/schema";
 import { and, asc, desc, eq, gte, inArray, lt, lte, sql } from "drizzle-orm";
 import type { ActivityMetrics } from "./analytics/activity";
 import { sessionZoneMessage } from "./analytics/thresholds";
@@ -460,8 +460,8 @@ export type ActivityDetail = {
   sets: Json[];
   hrZoneFloors: number[] | null;
   matchedSessionId: number | null;
-  /** Carbohydrate and fluid the user logged for this session. */
-  fuel: { carbsG: number | null; fluidMl: number | null } | null;
+  /** What the user logged taking in during this session (fuel_logs). */
+  fuel: { carbsG: number | null; fluidMl: number | null; sodiumMg: number | null; caffeineMg: number | null; giScore: number | null; items: unknown; notes: string | null } | null;
   /** Garmin's stamina in % at the start and end, and its lowest point (activity detail summaryDTO). */
   stamina: { start: number; end: number; min: number | null } | null;
   /** Garmin's activity detail summary (summaryDTO): feel, RPE, recovery HR, compliance, temperature. */
@@ -505,9 +505,9 @@ export async function getActivityDetail(userId: string, id: number): Promise<Act
   }
 
   const [fuel] = await db
-    .select({ carbsG: garminFuelLogs.carbsG, fluidMl: garminFuelLogs.fluidMl })
-    .from(garminFuelLogs)
-    .where(and(eq(garminFuelLogs.userId, userId), eq(garminFuelLogs.garminActivityId, id)));
+    .select({ carbsG: fuelLogs.carbsG, fluidMl: fuelLogs.fluidMl, sodiumMg: fuelLogs.sodiumMg, caffeineMg: fuelLogs.caffeineMg, giScore: fuelLogs.giScore, items: fuelLogs.items, notes: fuelLogs.notes })
+    .from(fuelLogs)
+    .where(and(eq(fuelLogs.userId, userId), eq(fuelLogs.garminActivityId, id)));
 
   const zone = sessionZoneMessage(s?.timeInZone);
   const highs = Array.isArray(zone?.hrZoneHighBoundary) ? (zone!.hrZoneHighBoundary as number[]) : null;
@@ -1215,15 +1215,15 @@ export async function getRaceData(userId: string, todayArg?: string): Promise<Ra
       data: garminActivities.data,
       // The FIT stream when it has temperature, else Garmin's summary average.
       temperature: sql<number | null>`coalesce(${streamMean("temperature")}, (${garminActivities.detail}->'summaryDTO'->>'averageTemperature')::float8)`,
-      carbsG: garminFuelLogs.carbsG,
-      fluidMl: garminFuelLogs.fluidMl,
+      carbsG: fuelLogs.carbsG,
+      fluidMl: fuelLogs.fluidMl,
     })
     .from(garminActivities)
     .leftJoin(
       garminActivityStreams,
       and(eq(garminActivityStreams.userId, garminActivities.userId), eq(garminActivityStreams.garminActivityId, garminActivities.garminActivityId)),
     )
-    .leftJoin(garminFuelLogs, and(eq(garminFuelLogs.userId, garminActivities.userId), eq(garminFuelLogs.garminActivityId, garminActivities.garminActivityId)))
+    .leftJoin(fuelLogs, and(eq(fuelLogs.userId, garminActivities.userId), eq(fuelLogs.garminActivityId, garminActivities.garminActivityId)))
     .where(
       and(
         eq(garminActivities.userId, userId),

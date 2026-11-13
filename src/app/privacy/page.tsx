@@ -55,6 +55,15 @@ export default function PrivacyPage() {
           Each change is kept as a version you can restore.
         </li>
         <li>
+          <strong>Fueling and race plans, if endurance features are on:</strong> what you took in during a session
+          (carbohydrate, fluid, sodium, caffeine and the products you used), a score for gut symptoms after it and
+          your notes; your own fuel products; sweat-rate tests (your weight before and after, what you drank and
+          passed, the temperature, and a sweat sodium value if you have one); and the inputs of a race-day plan
+          (start time, expected leg and transition times, fuel interval). Targets, pacing and the fuel schedule are
+          calculated when shown, not stored. Only you and your own connected assistant read them; they are never
+          sent to AI Setup. Each change to a race plan is kept as a version you can restore.
+        </li>
+        <li>
           <strong>Coach memory:</strong> short notes that you or an AI assistant you connected keep about your
           training (preferences, limits in your life, observations and decisions), so the assistant knows your
           context next time. You see and edit them in More → Coach memory. Only you and your own connected
@@ -97,7 +106,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
-        Body weight, heart rate, readiness, how you felt, thresholds, injuries, sick periods and free-text notes, coach memory and reasons for a missed session included, can reveal things about your health.
+        Body weight, heart rate, readiness, how you felt, thresholds, injuries, sick periods, gut symptoms, sweat tests and free-text notes, coach memory and reasons for a missed session included, can reveal things about your health.
         We treat all of it as health data under GDPR Article 9 and process it only with your explicit consent, which
         you give when you create your account.
       </p>
@@ -180,6 +189,7 @@ export default function PrivacyPage() {
         they also see your completed workouts: the program, date, duration, how you felt, each exercise with its sets
         (weight, reps, time, distance), your personal records, streak and weekly volume. Your notes, effort ratings,
         heart rate zones, readiness, thresholds, athlete profile, injuries, sick periods, missed sessions, step results,
+        fuel logs, sweat tests, race plans,
         training load and how well you follow your plan are never shown to them. A planned session you mark as done shows to them as any other completed
         workout.
       </p>
@@ -201,10 +211,10 @@ export default function PrivacyPage() {
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
-        on, programs, cycles and their dated sessions with planned versus done, structured workouts with step results and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
+        on, programs, cycles and their dated sessions with planned versus done, structured workouts with step results and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
         access they can also change your profile, body weight, time zone, display units, programs, cycles, dated sessions, structured workouts, seasons and races, see and restore earlier
-        versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, create custom exercises, log a workout you did and its step results, mark a planned day
+        versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, log fuel, sweat tests and fuel products, change race plans, create custom exercises, log a workout you did and its step results, mark a planned day
         or session as done, and mark a planned session as missed. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More →
         Connected assistants, and it loses access at once.
@@ -233,6 +243,10 @@ export default function PrivacyPage() {
         <li>
           Structured workouts and sick periods: until you delete them or your account. A deleted workout or sick
           period can be restored for 90 days, then it is deleted for good.
+        </li>
+        <li>
+          Fuel logs, fuel products, sweat tests and race plans: until you delete them or your account. Fuel logs on
+          Garmin sessions also go when you delete your Garmin data.
         </li>
         <li>Login sessions, with IP address and user agent: 30 days after last use.</li>
         <li>Server logs: 7 days.</li>

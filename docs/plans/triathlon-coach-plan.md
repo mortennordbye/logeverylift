@@ -330,8 +330,8 @@ swapping today's hard session for an easy one; the user taps. The AI sees the sa
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| E1 | Nutrition targets and gut training | C4 | brief ([`nutrition-and-race-day.md`](nutrition-and-race-day.md)) |
-| E2 | Race-day plan | C1, E1 | brief ([`nutrition-and-race-day.md`](nutrition-and-race-day.md)) |
+| E1 | Nutrition targets and gut training | C4 | done ([`nutrition-and-race-day.md`](nutrition-and-race-day.md)) |
+| E2 | Race-day plan | C1, E1 | done ([`nutrition-and-race-day.md`](nutrition-and-race-day.md)) |
 | E3 | Workouts to the watch | C4, owner decision D13 | parked |
 
 **E1. Nutrition.** Carbs-per-hour target by session length, gut-training progress, sodium and

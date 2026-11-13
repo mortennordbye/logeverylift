@@ -4,7 +4,7 @@
  * it changes: the home screen then tells each user once that the policy was
  * updated (user.policySeenVersion). Wording fixes need no bump.
  */
-export const LEGAL_VERSION = "2026-11-13.2";
+export const LEGAL_VERSION = "2026-11-13.3";
 
 /**
  * The oldest accepted version that still counts. The home screen sends anyone
@@ -13,8 +13,8 @@ export const LEGAL_VERSION = "2026-11-13.2";
  * data, a new purpose, or new obligations in the terms. A new recipient alone
  * is told, not asked.
  */
-// Raised for sick periods, a new kind of health data (docs/plans/workouts-and-compliance.md, 10).
-export const CONSENT_VERSION = "2026-11-13.1";
+// Raised for gut symptoms (GI scores) and sweat tests, a new kind of health data (docs/plans/nutrition-and-race-day.md, 7).
+export const CONSENT_VERSION = "2026-11-13.3";
 
 /** Whether version a ("YYYY-MM-DD" or "YYYY-MM-DD.N") is older than b. */
 export function legalVersionBefore(a: string, b: string): boolean {

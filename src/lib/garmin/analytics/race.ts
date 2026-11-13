@@ -6,6 +6,7 @@
  */
 
 import { phaseLayout } from "@/lib/utils/periodization";
+import { BIKE_IF, HR_CEILING_SHARE, RUN_SPEED_SHARE } from "@/lib/utils/race-plan";
 import { addDays } from "../dates";
 import type { RaceDistance } from "./overview";
 
@@ -16,16 +17,16 @@ export function taperStart(startDate: string, durationWeeks: number): string {
 }
 
 /**
- * Race intensity as a share of threshold. Bike: share of FTP (plan 2.13:
- * 68 to 75 % for a full; 75 to 82 % for a 70.3). Run: share of critical speed
- * (about 80 to 85 % full, 85 to 90 % 70.3). Heart-rate ceiling: the top of the
- * low band, 85 % of LTHR (zones.ts), the same for both.
+ * Race intensity as a share of threshold: one rule with the race-day plan
+ * (src/lib/utils/race-plan.ts; docs/plans/nutrition-and-race-day.md, 2.5).
+ * Bike: the general IF band for the distance. Run: share of critical speed
+ * (inference). Heart-rate ceiling: 85 % of LTHR, the same for both.
  */
 export const PACING: Record<RaceDistance, { bike: [number, number]; run: [number, number] }> = {
-  full: { bike: [0.68, 0.75], run: [0.8, 0.85] },
-  half: { bike: [0.75, 0.82], run: [0.85, 0.9] },
+  full: { bike: BIKE_IF.full.general, run: RUN_SPEED_SHARE.full },
+  half: { bike: BIKE_IF.half.general, run: RUN_SPEED_SHARE.half },
 };
-export const HR_CEILING_SHARE = 0.85;
+export { HR_CEILING_SHARE };
 /** Under this durability (2.7) the bike guide takes the lower end. */
 export const LOW_DURABILITY = 0.9;
 

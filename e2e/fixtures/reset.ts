@@ -18,6 +18,8 @@ import {
   exercisePrs,
   exercises,
   friendships,
+  fuelLogs,
+  fuelProducts,
   garminConnections,
   garminDailyMetrics,
   illnessPeriods,
@@ -25,6 +27,7 @@ import {
   planRevisions,
   programs,
   seasons,
+  sweatTests,
   trainingCycles,
   users,
   userWeightEntries,
@@ -95,6 +98,10 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.execute(sql`SELECT id FROM programs WHERE user_id = ${userId} ORDER BY id FOR UPDATE`);
     // Sessions first: their sets reference program slots.
     await tx.delete(workoutSessions).where(eq(workoutSessions.userId, userId));
+    // Fuel logs on app sessions go with them; these are the rest (docs/plans/nutrition-and-race-day.md).
+    await tx.delete(fuelLogs).where(eq(fuelLogs.userId, userId));
+    await tx.delete(fuelProducts).where(eq(fuelProducts.userId, userId));
+    await tx.delete(sweatTests).where(eq(sweatTests.userId, userId));
     await tx.delete(exercisePrs).where(eq(exercisePrs.userId, userId));
     await tx.delete(trainingCycles).where(eq(trainingCycles.userId, userId));
     // Races go with their seasons (cascade).

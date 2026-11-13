@@ -13,8 +13,8 @@ describe("pacingGuide", () => {
     const base = { ftp: 200, cs: 4, lthrBike: 160, lthrRun: 170 };
     const full = pacingGuide({ distance: "full", ...base });
     const half = pacingGuide({ distance: "half", ...base });
-    expect(full.bikeWatts).toEqual([136, 150]);
-    expect(half.bikeWatts).toEqual([150, 164]);
+    expect(full.bikeWatts).toEqual([130, 150]);
+    expect(half.bikeWatts).toEqual([150, 170]);
     expect(full.runSpeed![1]).toBeCloseTo(3.4);
     expect(full.bikeHrCeiling).toBe(136);
     expect(full.runHrCeiling).toBe(145);

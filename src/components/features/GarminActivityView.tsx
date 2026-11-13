@@ -50,7 +50,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSwipe } from "./garmin/use-swipe";
 import { useMemo, useState } from "react";
-import { saveFuelLog } from "@/lib/actions/garmin";
+import { saveFuelLogAction } from "@/lib/actions/nutrition";
+import { FuelForm } from "@/components/features/nutrition/FuelForm";
 import { callAction } from "@/lib/utils/stale-bundle";
 
 
@@ -79,58 +80,28 @@ type Span = [number, number];
 /** Sessions this long or longer get the fuel and fluid log. */
 const FUEL_MIN_S = 3600;
 
-/** Carbohydrate and fluid taken during the session, for the race page's fluid plan. */
+/** What the user took in during the session, for gut training and the race page's fluid plan. */
 function FuelCard({ d }: { d: ActivityDetail }) {
   const router = useRouter();
-  const [carbs, setCarbs] = useState(d.fuel?.carbsG != null ? String(d.fuel.carbsG) : "");
-  const [fluid, setFluid] = useState(d.fuel?.fluidMl != null ? String(d.fuel.fluidMl) : "");
-  const [state, setState] = useState<"idle" | "saving" | "saved" | string>("idle");
   const sweat = typeof d.summary.waterEstimated === "number" ? d.summary.waterEstimated : null;
-  const parse = (v: string) => (v.trim() === "" ? null : Math.round(Number(v)));
-  const bad = [carbs, fluid].some((v) => v.trim() !== "" && !(Number(v) >= 0));
-
-  async function save() {
-    setState("saving");
-    const r = await callAction(saveFuelLog({ activityId: d.id, carbsG: parse(carbs), fluidMl: parse(fluid) }));
-    setState(r.success ? "saved" : r.error);
-    if (r.success) router.refresh();
-  }
-
-  const field = (id: string, label: string, unit: string, value: string, set: (v: string) => void) => (
-    <label htmlFor={id} className="flex-1 space-y-1">
-      <span className="text-[11px] text-muted-foreground">{label}</span>
-      <span className="flex items-center gap-1 rounded-xl bg-background px-3">
-        <input
-          id={id}
-          inputMode="numeric"
-          value={value}
-          onChange={(e) => {
-            set(e.target.value);
-            setState("idle");
-          }}
-          className="h-11 w-full bg-transparent text-base outline-none tabular-nums"
-          placeholder="0"
-        />
-        <span className="text-xs text-muted-foreground">{unit}</span>
-      </span>
-    </label>
-  );
-
   return (
     <Card
       icon={Droplets}
       title="Fuel and fluid"
       aside={sweat ? `sweat loss about ${(sweat / 1000).toFixed(1)} l` : undefined}
-      note="What you took in during the session. The race page turns this and Garmin's sweat estimate into a fluid plan by temperature."
+      note="What you took in during the session. The race page turns this and Garmin's sweat estimate into a fluid plan by temperature; a gut score feeds gut training."
     >
-      <div id="fuel" className="flex gap-2 scroll-mt-4">
-        {field("fuel-carbs", "Carbohydrate", "g", carbs, setCarbs)}
-        {field("fuel-fluid", "Fluid", "ml", fluid, setFluid)}
+      <div id="fuel" className="scroll-mt-4">
+        <FuelForm
+          idPrefix="fuel"
+          initial={d.fuel}
+          onSave={async (v) => {
+            const r = await callAction(saveFuelLogAction({ garminActivityId: d.id, ...v }));
+            if (r.success) router.refresh();
+            return r;
+          }}
+        />
       </div>
-      <button onClick={save} disabled={bad || state === "saving"} className="h-11 w-full rounded-xl bg-foreground text-background text-sm font-semibold disabled:opacity-40 active:opacity-70">
-        {state === "saving" ? "Saving…" : state === "saved" ? "Saved" : "Save"}
-      </button>
-      {state !== "idle" && state !== "saving" && state !== "saved" && <p className="text-xs text-destructive">{state}</p>}
     </Card>
   );
 }

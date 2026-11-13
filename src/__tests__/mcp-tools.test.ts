@@ -20,6 +20,7 @@ import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { registerComplianceTools, registerWorkoutLibraryTools } from "@/lib/mcp/tools/workouts-compliance";
 import { registerEnduranceAppTools } from "@/lib/mcp/tools/endurance-app";
+import { registerNutritionTools } from "@/lib/mcp/tools/nutrition";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -170,5 +171,16 @@ describe("MCP tool registration", () => {
 
   it("registers the training load and step result tools: two reads, one write", () => {
     expect(hints(registerEnduranceAppTools)).toEqual({ get_training_load: true, get_step_results: true, log_step_results: false });
+  });
+
+  it("registers the nutrition and race plan tools: two reads, four writes", () => {
+    expect(hints(registerNutritionTools)).toEqual({
+      get_nutrition: true,
+      log_fuel: false,
+      manage_sweat_tests: false,
+      manage_fuel_products: false,
+      get_race_plan: true,
+      update_race_plan: false,
+    });
   });
 });

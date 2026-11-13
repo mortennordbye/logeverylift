@@ -30,7 +30,9 @@ the bike race target table, and the half-distance appendix). E3 (watch delivery)
   (`src/db/schema/garmin.ts:218-230`) stores `carbs_g` and `fluid_ml` per
   `garmin_activity_id`, no sodium, no products, no GI score. Migration
   `drizzle/0075_calm_cable.sql`.
-- The only writer is `saveFuelLog` (`src/lib/actions/garmin.ts:400`), Garmin-gated. The card
+- The only writer was a Garmin Server Action in `src/lib/actions/garmin.ts` that checked only
+  that the activity was the user's. E1 removed it; `saveFuelLogAction` in
+  `src/lib/actions/nutrition.ts` replaces it. The card
   shows on the activity page for sessions of an hour or more (`FUEL_MIN_S`,
   `src/components/features/GarminActivityView.tsx:80`).
 - Garmin data delete removes fuel logs (`src/lib/garmin/delete-data.ts:30`); export includes
@@ -103,13 +105,14 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
 ### 2.5 Pacing per leg (`legPacing` *new*)
 
 - Bike: IF_target = sqrt(TSS_cap / (100 x bike hours)) (Coach convention; the rearrangement is
-  inference). TSS_cap: full 250-300, half 170-180. Clamp: full 0.60-0.75 general, 0.65-0.70
+  inference). TSS_cap: full 250-300, half 170-180. Clamp: full 0.65-0.75 general, 0.65-0.70
   first-timer; half 0.75-0.85 general, 0.70-0.75 first-timer. "First-timer" = athlete profile
   `enduranceLevel` novice, or no level. Watts = IF x FTP. Bike hours come from the leg time
   (2.6); the plan iterates once (speed at the IF band is not known, so the user's bike time
   is the input). A guide, never a finish prediction.
 - Run: the research gives no run-off-the-bike pace share. The plan shows an HR ceiling at
-  89 % of run LTHR (top of Friel run zone 2; Inference) and, when a run threshold pace exists,
+  85 % of run LTHR (the app's low-band top, under the research's VT1 estimate of about 89 %;
+  Inference) and, when a run threshold pace exists,
   a guide pace band at 80-85 % (full) or 85-90 % (half) of threshold speed, labelled
   "Inference; not in the research reference". The same numbers the Garmin race page uses
   today, now in one shared rule (decision 3).
@@ -285,3 +288,21 @@ recommendations; the owner may change them.
 8. **Sweat sodium concentration.** Optional lab value only, clamped as in 2.4.
 9. **Above 90 g/h.** Shown only after a proved tolerance above 90, with the "no clear gain"
    line.
+
+## 13. Where the build differs from the brief
+
+- **HR ceiling 85 %, not 89 %, of LTHR.** The Garmin race page already used 85 % (the top of the
+  app's low band), and one shared rule must give one number. 85 % is the safer of the two.
+- **Full-distance general bike band 0.65-0.75,** not 0.60-0.75: the low end follows the
+  first-timer advice (0.65), and nothing in the research supports riding a full below it on
+  purpose. The top 0.75 is the TSS-cap formula at about 5.3 h.
+- **The Garmin race page changed numbers** (decision 3): bike half 75-82 % became 75-85 % and
+  full 68-75 % became 65-75 % of FTP (`PACING` in `src/lib/garmin/analytics/race.ts` now reads
+  `BIKE_IF` and `RUN_SPEED_SHARE` from `src/lib/utils/race-plan.ts`).
+- **The Garmin fuel card** uses the shared fuel form (sodium, caffeine, GI score, notes; no
+  products, since products need the endurance switch). It still needs only the activity to be
+  the user's, as before.
+- **The run guide pace** shows only with a run threshold pace; the leg time then comes from the
+  middle of the guide band. Without it the run leg uses the assumed 6:30/km.
+- **Plan corrections:** `docs/plans/garmin-insights-design.md` names the old bands; a note there
+  points to this brief. E1 and E2 are `done` in the plan and the README.

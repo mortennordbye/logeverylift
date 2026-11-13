@@ -32,6 +32,7 @@ import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerEnduranceAppTools } from "@/lib/mcp/tools/endurance-app";
 import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
+import { registerNutritionTools } from "@/lib/mcp/tools/nutrition";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
@@ -127,6 +128,8 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       if (endurance) registerWorkoutLibraryTools(server, userId, clientId);
       // Training load and step results (docs/plans/endurance-app.md, 7).
       if (endurance) registerEnduranceAppTools(server, userId);
+      // Fuel, sweat tests and race-day plans (docs/plans/nutrition-and-race-day.md, 8).
+      if (endurance) registerNutritionTools(server, userId, clientId, { garmin });
       registerComplianceTools(server, userId);
       if (garmin) registerGarminTools(server, userId);
       registerResources(mcpServer, docs);
