@@ -4,7 +4,7 @@
  * it changes: the home screen then tells each user once that the policy was
  * updated (user.policySeenVersion). Wording fixes need no bump.
  */
-export const LEGAL_VERSION = "2026-11-13.3";
+export const LEGAL_VERSION = "2026-11-13.4";
 
 /**
  * The oldest accepted version that still counts. The home screen sends anyone

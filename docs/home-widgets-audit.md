@@ -870,6 +870,10 @@ Two review passes on 2026-11-13. Each finding was checked against the code first
 
 Where the build differs from sections 6 and 7, and why. The code is the reference.
 
+- **Migration** is `drizzle/0090_home_layout.sql` (0089 went to the nutrition plans).
+- **Policy version.** The policy's Settings line and its MCP paragraph now name the home
+  layout, so `LEGAL_VERSION` moved to `2026-11-13.4` (users are told once). `CONSENT_VERSION`
+  stays: the layout is not health data and adds no purpose.
 - **Readiness swap notice.** Main gained `ReadinessSwapCard` (package D4) after this audit.
   It is a notice, id `readinessSwap`, in slot `afterTraining` before `didYouDoIt`, where the
   old page rendered it (`src/lib/home/notices.ts`).
