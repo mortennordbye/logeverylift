@@ -6,7 +6,7 @@
  */
 
 import { db } from "@/db";
-import { programs, trainingCycles } from "@/db/schema";
+import { programs, trainingCycles, workouts } from "@/db/schema";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
@@ -38,7 +38,7 @@ import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
 import { addDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
 
 const durationWeeks = z
@@ -406,6 +406,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
       description: [
         "Upsert or remove a slot in a training cycle.",
         "operation='upsert': requires trainingCycleId and either dayOfWeek (1=Mon..7=Sun, for day_of_week cycles) or orderIndex (1,2,3.. for rotation cycles); optional daySlot (1-3, the session's order in the day on a weekday cycle: a day can hold up to three sessions, for example strength in the morning and a run in the evening; default 1; a rest day is the only slot of its day), label, programId (the program to run; null to clear), notes, autoComplete (true for a day tracked outside the app, which then completes itself; omit to leave unchanged). An existing slot at that day/position is updated, otherwise a new one is created.",
+        "With endurance features on, weekday cycles only: workoutId (a library workout from list_workouts, instead of a program; each dated session gets its own copy), priority (key, support or optional; null = derived), brickWithNext (true when the next slot of the day is the run off this ride).",
         "operation='remove': requires slotId and cycleId. The day's other sessions keep their order.",
         "A slot change rewrites the dated sessions nobody moved or changed, from this week's Monday on (list_planned_sessions); done ones, changed ones and earlier ones stay. The result's sessionsRegenerated says how many were made, changed or removed, and sessionsKeptOutByCap lists days left out because they already hold three sessions.",
         `Both require reason and expectedVersion (the cycle's version); the result has the new version. ${REVISION_RULES}`,
@@ -425,6 +426,9 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         programId: z.number().int().positive().nullable().optional(),
         notes: z.string().max(500).nullable().optional(),
         autoComplete: z.boolean().optional(),
+        workoutId: z.number().int().positive().nullable().optional(),
+        priority: z.enum(["key", "support", "optional"]).nullable().optional(),
+        brickWithNext: z.boolean().optional(),
         reason: reasonArg,
         expectedVersion: expectedVersionArg,
       },
@@ -475,11 +479,24 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             if (!prog || prog.userId !== userId) return fail("Program not found");
           }
 
+          const workoutArgs = args.workoutId !== undefined || args.priority !== undefined || args.brickWithNext !== undefined;
+          if (workoutArgs && !(await enduranceEnabledFor(userId))) return fail("Endurance features are not on for this account");
+          if (args.workoutId != null) {
+            if (args.programId != null) return fail("Send programId or workoutId, not both");
+            const [wk] = await db
+              .select({ id: workouts.id })
+              .from(workouts)
+              .where(and(eq(workouts.id, args.workoutId), eq(workouts.userId, userId), isNull(workouts.deletedAt)));
+            if (!wk) return fail("Workout not found");
+          }
           const rest = {
             label: args.label ?? null,
-            programId: args.programId ?? null,
+            programId: args.workoutId != null ? null : (args.programId ?? null),
             notes: args.notes ?? null,
             ...(args.autoComplete !== undefined && { autoComplete: args.autoComplete }),
+            ...(args.workoutId !== undefined && { workoutId: args.workoutId }),
+            ...(args.priority !== undefined && { priority: args.priority }),
+            ...(args.brickWithNext !== undefined && { brickWithNext: args.brickWithNext }),
           };
 
           const lc = await limitContext(userId);

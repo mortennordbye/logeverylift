@@ -24,6 +24,7 @@ import {
   programs,
   trainingCycleSlots,
   trainingCycles,
+  workouts,
 } from "@/db/schema";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { garminAllowedFor } from "@/lib/garmin/access";
@@ -52,6 +53,23 @@ import {
 import { and, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 
 type Executor = typeof db | Tx;
+
+/**
+ * A dated session runs a program or its own workout (docs/plans/workouts-and-compliance.md,
+ * 4.2). A workout session is hard by isHardWorkout, as a program session is by
+ * isHardSession; the user's current thresholds resolve absolute targets.
+ */
+async function workoutWeekSession(ex: Executor, userId: string) {
+  const { athleteThresholds } = await import("@/db/schema");
+  const { currentThresholds } = await import("@/lib/utils/thresholds");
+  const { isHardWorkout, parseWorkout } = await import("@/lib/utils/workout-steps");
+  const rows = await ex.select().from(athleteThresholds).where(and(eq(athleteThresholds.userId, userId), isNull(athleteThresholds.deletedAt)));
+  const values = Object.fromEntries(Object.entries(currentThresholds(rows)).map(([k, r]) => [k, r!.value]));
+  return (json: unknown): boolean => {
+    const p = parseWorkout(json);
+    return p.ok ? isHardWorkout(p.workout, values) : false;
+  };
+}
 
 /** What a user's limits can run on, read once per tool call. */
 export type LimitContext = {
@@ -181,7 +199,7 @@ async function datedCycleWeeks(ex: Executor, cycleId: number): Promise<{ thisMon
   const last = addDaysStr(block.end, -1);
   for (let m = first; m <= last; m = addDaysStr(m, 7)) byWeek.set(m, []);
   const rows = await ex
-    .select({ date: plannedSessions.date, programId: plannedSessions.programId })
+    .select({ date: plannedSessions.date, programId: plannedSessions.programId, workout: plannedSessions.workout })
     .from(plannedSessions)
     .where(
       and(
@@ -193,9 +211,10 @@ async function datedCycleWeeks(ex: Executor, cycleId: number): Promise<{ thisMon
       ),
     );
   const hard = await hardPrograms(ex, rows.map((r) => r.programId).filter((id): id is number => id != null));
+  const hardWorkout = rows.some((r) => r.workout != null) ? await workoutWeekSession(ex, c.userId) : null;
   for (const r of rows) {
-    if (r.programId == null) continue;
-    byWeek.get(mondayOf(r.date!))?.push({ dayOfWeek: dowOf(r.date!), hard: hard.get(r.programId) ?? false });
+    if (r.programId != null) byWeek.get(mondayOf(r.date!))?.push({ dayOfWeek: dowOf(r.date!), hard: hard.get(r.programId) ?? false });
+    else if (r.workout != null) byWeek.get(mondayOf(r.date!))?.push({ dayOfWeek: dowOf(r.date!), hard: hardWorkout!(r.workout) });
   }
   return { thisMonday, byWeek };
 }
@@ -213,14 +232,18 @@ async function datedCycles(ex: Executor, cycleIds: number[]): Promise<Set<number
 /** A weekday cycle's week of sessions, or null for a rotation cycle (no fixed week). */
 export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<WeekSession[] | null> {
   const [cycle] = await ex
-    .select({ scheduleType: trainingCycles.scheduleType })
+    .select({ scheduleType: trainingCycles.scheduleType, userId: trainingCycles.userId })
     .from(trainingCycles)
     .where(and(eq(trainingCycles.id, cycleId), liveCycles));
   if (!cycle || cycle.scheduleType !== "day_of_week") return null;
   const slots = await ex
-    .select({ dayOfWeek: trainingCycleSlots.dayOfWeek, programId: trainingCycleSlots.programId })
+    .select({ dayOfWeek: trainingCycleSlots.dayOfWeek, programId: trainingCycleSlots.programId, workout: workouts.workout })
     .from(trainingCycleSlots)
+    // plan-read: includes deleted (a deleted library workout reads as a rest day, as generation does)
+    .leftJoin(workouts, and(eq(workouts.id, trainingCycleSlots.workoutId), isNull(workouts.deletedAt)))
     .where(eq(trainingCycleSlots.trainingCycleId, cycleId));
+  // A slot with a library workout counts like a program slot (review 3).
+  const hardWorkout = slots.some((s) => s.programId == null && s.workout != null) ? await workoutWeekSession(ex, cycle.userId) : null;
   const programIds = [...new Set(slots.map((s) => s.programId).filter((id): id is number => id != null))];
   const sets = programIds.length
     ? await ex
@@ -237,11 +260,11 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
         .where(and(inArray(programs.id, programIds), livePrograms, liveProgramExercises, liveProgramSets))
     : [];
   return slots
-    .filter((s) => s.dayOfWeek != null && s.programId != null)
+    .filter((s) => s.dayOfWeek != null && (s.programId != null || s.workout != null))
     .map((s) => ({
       dayOfWeek: s.dayOfWeek!,
       // A slot on a deleted program has no live sets, so it is not hard.
-      hard: isHardSession(
+      hard: s.programId == null ? hardWorkout!(s.workout) : isHardSession(
         sets
           .filter((x) => x.programId === s.programId)
           .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone })),
@@ -250,7 +273,7 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
 }
 
 /** Whether each program is a hard session (an interval endurance set), by id. */
-async function hardPrograms(ex: Executor, programIds: number[]): Promise<Map<number, boolean>> {
+export async function hardPrograms(ex: Executor, programIds: number[]): Promise<Map<number, boolean>> {
   const ids = [...new Set(programIds)];
   const sets = ids.length
     ? await ex
@@ -286,7 +309,7 @@ async function hardPrograms(ex: Executor, programIds: number[]): Promise<Map<num
 export async function calendarWeekSessions(ex: Executor, userId: string, monday: string, cycleId?: number): Promise<WeekSession[]> {
   const { addDaysStr, dowOf } = await import("@/lib/utils/planned-sessions");
   const rows = await ex
-    .select({ date: plannedSessions.date, programId: plannedSessions.programId })
+    .select({ date: plannedSessions.date, programId: plannedSessions.programId, workout: plannedSessions.workout })
     .from(plannedSessions)
     .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), isNull(trainingCycles.deletedAt)))
     .where(
@@ -300,9 +323,10 @@ export async function calendarWeekSessions(ex: Executor, userId: string, monday:
       ),
     );
   const hard = await hardPrograms(ex, rows.map((r) => r.programId).filter((id): id is number => id != null));
+  const hardWorkout = rows.some((r) => r.workout != null) ? await workoutWeekSession(ex, userId) : null;
   return rows
-    .filter((r) => r.programId != null)
-    .map((r) => ({ dayOfWeek: dowOf(r.date!), hard: hard.get(r.programId!) ?? false }));
+    .filter((r) => r.programId != null || r.workout != null)
+    .map((r) => ({ dayOfWeek: dowOf(r.date!), hard: r.programId != null ? (hard.get(r.programId) ?? false) : hardWorkout!(r.workout) }));
 }
 
 /**
@@ -331,7 +355,12 @@ export async function limitCyclesWith(ex: Executor, userId: string, programId: n
  * whose week it can change, and, for a change to dated sessions, the calendar
  * weeks (their Mondays) it moves sessions in or out of.
  */
-export type LimitScope = { programIds: number[]; cycleIds: number[]; sessionWeeks?: { userId: string; mondays: string[] } };
+export type LimitScope = {
+  programIds: number[];
+  cycleIds: number[];
+  /** `sessionIds`: dated sessions whose own workout's run the long-run cap reads (docs/plans/workouts-and-compliance.md, 8). */
+  sessionWeeks?: { userId: string; mondays: string[]; sessionIds?: number[] };
+};
 
 export type PlanFacts = {
   runs: Map<number, { label: string; run: PlannedRun }>;
@@ -374,7 +403,33 @@ export async function planFacts(
     weeks.set(`s:${monday}`, await calendarWeekSessions(ex, sessionUser!, monday));
     if (monday !== thisMonday) labels.set(`s:${monday}`, monday);
   }
-  return { runs: await programRuns(ex, scope.programIds, share), weeks, labels };
+  const runs = await programRuns(ex, scope.programIds, share);
+  // The runs of the cycles' library workout slots (review 3), keyed apart from programs and sessions.
+  if (scope.cycleIds.length) {
+    const { estimateWorkout, parseWorkout } = await import("@/lib/utils/workout-steps");
+    const slotWorkouts = await ex
+      .selectDistinct({ id: workouts.id, workout: workouts.workout })
+      .from(trainingCycleSlots)
+      .innerJoin(workouts, and(eq(workouts.id, trainingCycleSlots.workoutId), isNull(workouts.deletedAt)))
+      .where(and(inArray(trainingCycleSlots.trainingCycleId, scope.cycleIds), isNull(trainingCycleSlots.programId)));
+    for (const w of slotWorkouts) {
+      const p = parseWorkout(w.workout);
+      if (!p.ok || p.workout.sport !== "run") continue;
+      const est = estimateWorkout(p.workout);
+      runs.set(-1_000_000_000 - w.id, { label: `Run "${p.workout.name}"`, run: { durationS: est.durationSeconds, distanceM: est.distanceMeters } });
+    }
+  }
+  // A dated session's own workout run, keyed by minus its id so it never meets a program id.
+  for (const id of scope.sessionWeeks?.sessionIds ?? []) {
+    const [row] = await ex.select({ workout: plannedSessions.workout, label: plannedSessions.label }).from(plannedSessions).where(and(eq(plannedSessions.id, id), livePlannedSessions));
+    if (row?.workout == null) continue;
+    const { estimateWorkout, parseWorkout } = await import("@/lib/utils/workout-steps");
+    const p = parseWorkout(row.workout);
+    if (!p.ok || p.workout.sport !== "run") continue;
+    const est = estimateWorkout(p.workout);
+    runs.set(-id, { label: `Run "${p.workout.name}"`, run: { durationS: est.durationSeconds, distanceM: est.distanceMeters } });
+  }
+  return { runs, weeks, labels };
 }
 
 export const NO_FACTS: PlanFacts = { runs: new Map(), weeks: new Map() };

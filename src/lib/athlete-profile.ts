@@ -15,6 +15,8 @@
 import { db } from "@/db";
 import {
   athleteInjuries,
+  illnessPeriods,
+  workouts,
   athleteProfiles,
   athleteThresholds,
   coachMemory,
@@ -488,10 +490,11 @@ export async function changeInjury(ctx: PlanWriteContext, id: number, change: Pa
 // ── Restore and the memory move ──────────────────────────────────────────────
 
 /** Bring a deleted threshold or injury back from the revision of its delete. Null when there is none. */
-export async function restoreDeletedAthleteRow(ctx: PlanWriteContext, type: "threshold" | "injury", id: number) {
-  if (type === "injury") await requireEndurance(ctx.userId);
+/** Also for a library workout and a sick period (docs/plans/workouts-and-compliance.md, 4.5), which need the endurance switch. */
+export async function restoreDeletedAthleteRow(ctx: PlanWriteContext, type: "threshold" | "injury" | "workout" | "illness", id: number) {
+  if (type !== "threshold") await requireEndurance(ctx.userId);
   const since = new Date(Date.now() - DELETED_PLAN_RETENTION_DAYS * 86_400_000);
-  const table = type === "threshold" ? athleteThresholds : athleteInjuries;
+  const table = type === "threshold" ? athleteThresholds : type === "injury" ? athleteInjuries : type === "workout" ? workouts : illnessPeriods;
   const [row] = await db
     .select({ deletedAt: table.deletedAt })
     .from(table)

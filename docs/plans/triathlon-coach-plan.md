@@ -196,8 +196,8 @@ the plan and runs alone.
 | C1 | Seasons, races and phases | A2, A3, A4, B1 | done ([`seasons.md`](seasons.md)) |
 | C2 | Session model: several slots a day, dated sessions | A2, A4, C1 | building ([`sessions.md`](sessions.md)) |
 | C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | done ([`athlete-profile.md`](athlete-profile.md)) |
-| C4 | Structured endurance workouts | C2, C3 | todo |
-| C5 | Planned vs done, missed sessions, sick periods | C2, C4 | todo |
+| C4 | Structured endurance workouts | C2, C3 | building ([`workouts-and-compliance.md`](workouts-and-compliance.md)) |
+| C5 | Planned vs done, missed sessions, sick periods | C2, C4 | building ([`workouts-and-compliance.md`](workouts-and-compliance.md)) |
 | C6 | Endurance in the app: views and guided player | A2, C3, C4 | todo |
 
 **C1. Seasons, races and phases (D8, D17, D22, T8).**
@@ -260,17 +260,20 @@ a session relates to a program.
   targets (power, HR, pace, cadence) as a share of a threshold anchor or an absolute range.
 - Swim: pool length, sets with send-off times, CSS-based targets. Bricks as linked sessions.
 - A workout library of reusable sessions.
-- How a structured workout attaches to a dated session or a program slot.
+- How a structured workout attaches to a dated session or a weekday slot of the cycle template
+  (not a program exercise).
 - MCP: create and edit workouts, with the step syntax as a resource (B3).
 - Delivery to the watch is open (D13); the model must allow FIT export later.
 
 **C5. Planned vs done, missed sessions, sick periods (D11, D19, D20).**
 - Match a dated session to a Garmin activity (admins) or to a session logged in the app.
 - If nothing matches, ask "did you do it?" (confirm with time, distance, RPE, or mark missed).
+  The prompt and the strict matching by sport apply with the endurance switch on; lifters keep
+  C2's rules.
 - A confirmed missed easy session is skipped (D11). A confirmed missed key session gets a
   suggested free day in the same week, never next to another hard day; the user taps (D19).
-- A sick period is one entry; sessions inside it are marked missed by illness; the AI gets the
-  return rule (D20).
+- A sick period is one entry; sessions inside it read as missed by illness (derived from the
+  periods, not stored; the only new stored status is `missed`); the AI gets the return rule (D20).
 - Compliance per session and a consistency number (share of weeks above 80% done, from the
   research).
 - MCP: read the state, confirm, move, log sickness. Health data: privacy checklist. The illness

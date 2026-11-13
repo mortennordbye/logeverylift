@@ -36,6 +36,7 @@ import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
 import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
+import { registerComplianceTools, registerWorkoutLibraryTools } from "@/lib/mcp/tools/workouts-compliance";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import { requireMcpAuth } from "@better-auth/mcp";
@@ -121,6 +122,9 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       registerExerciseTools(server, userId);
       registerCoachMemoryTools(server, userId, clientId);
       registerAthleteProfileTools(server, userId, clientId, { endurance });
+      // Structured workouts, answers and sick periods only with the endurance switch on (D18).
+      if (endurance) registerWorkoutLibraryTools(server, userId, clientId);
+      registerComplianceTools(server, userId);
       if (garmin) registerGarminTools(server, userId);
       registerResources(mcpServer, docs);
       // On the raw server: a prompt only returns text, and its writes go through the scoped tools.

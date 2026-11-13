@@ -217,6 +217,20 @@ export function dayLabel(day: string): string {
   return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
+const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * `YYYY-MM-DD` as "Thu 14 Nov", by the calendar (no time zone). Written by
+ * hand, not with Intl: engines format these options differently (Linux WebKit
+ * gives "Thu, 14 Nov"), and client components render it on the server and in
+ * the browser, which must agree for hydration.
+ */
+export function shortDay(day: string): string {
+  const d = new Date(`${day}T00:00:00Z`);
+  return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}`;
+}
+
 /** A phase length in words: "10 days" or "6 weeks". */
 export function lengthLabel(p: { durationWeeks: number; durationDays: number | null }): string {
   if (p.durationDays != null) return `${p.durationDays} day${p.durationDays === 1 ? "" : "s"}`;

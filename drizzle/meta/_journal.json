@@ -610,6 +610,13 @@
       "when": 1794524152594,
       "tag": "0086_planned_sessions",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1794553482974,
+      "tag": "0087_workouts_compliance",
+      "breakpoints": true
     }
   ]
 }

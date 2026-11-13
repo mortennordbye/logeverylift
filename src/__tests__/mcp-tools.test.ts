@@ -18,6 +18,7 @@ import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
 import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
+import { registerComplianceTools, registerWorkoutLibraryTools } from "@/lib/mcp/tools/workouts-compliance";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { describe, expect, it, vi } from "vitest";
 
@@ -153,5 +154,16 @@ describe("MCP tool registration", () => {
 
   it("registers the session tools, both write tools", () => {
     expect(hints(registerSessionTools)).toEqual({ log_session: false, confirm_session: false });
+  });
+
+  it("registers the workout, answer and sick-period tools (endurance only), and compliance for everyone", () => {
+    expect(hints(registerWorkoutLibraryTools)).toEqual({
+      list_workouts: true,
+      get_workout: true,
+      manage_workout: false,
+      confirm_planned_session: false,
+      manage_illness: false,
+    });
+    expect(hints(registerComplianceTools)).toEqual({ get_compliance: true });
   });
 });

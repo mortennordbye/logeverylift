@@ -33,6 +33,24 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** One release of C2 in prod without a rollback (then a migration drops the table and `dismissIfDayClear` goes); and an owner choice on rotation days in the calendar.
 - **Touchpoints:** `src/lib/planned-sessions.ts` (`dismissIfDayClear`, `listPlanned`, `applyRotationOp`), `src/components/features/CycleCalendarClient.tsx` (`getDayInfo`), `src/db/schema/dismissed-makeups.ts`.
 
+### Step editor for structured workouts
+- **What:** A screen to build and change a structured workout step by step (steps, repeats, end conditions, targets). Today only a connected assistant creates and changes workouts (`manage_workout`, `manage_planned_session` `set_workout`); the app's library (`/more/workouts`) lists, duplicates, renames, deletes and restores them.
+- **Why deferred:** Decision 2 in `docs/plans/workouts-and-compliance.md` (section 18): C4 and C5 built the schema, the library, planned vs done and sick periods on the server; the views, the editor and the guided player belong to package C6.
+- **Unblocked by:** Package C6. Build the editor on the schema check in `src/lib/utils/workout-steps.ts` (`parseWorkout`), so the app and MCP refuse the same workouts, and list the library with `listWorkouts`.
+- **Touchpoints:** `src/lib/utils/workout-steps.ts`, `src/lib/workouts.ts`, `src/lib/actions/workouts-compliance.ts` (`manageWorkout`), `docs/mcp/workout-steps.md`.
+
+### Brick, library and Garmin controls in the app
+- **What:** Three controls from section 7 of `docs/plans/workouts-and-compliance.md` that the app does not show yet: "Update from library" and "Link as brick" in the calendar day sheet; the list of the day's Garmin activities in the "Yes" sheet for admins (6.5); and Recently deleted with Restore for sick periods. The server has all of them (`applySessionOp` ops `update_from_library`, `link_brick`, `unlink_brick`, `pick`; `restoreDeletedAthleteRow` for a sick period), and the assistant can use them over MCP. The app's Server Action and validator accept none of them yet: add each op to `plannedSessionOpSchema` with its control.
+- **Why deferred:** The C4/C5 build kept the app UI to the answers, the sick periods and the library list; these are less used and fit the C6 views.
+- **Unblocked by:** Package C6, or an owner request. Sick periods also need a read of deleted rows (a `deleted` option on `listIllness`).
+- **Touchpoints:** `src/components/features/CycleCalendarClient.tsx`, `src/components/features/SessionAnswers.tsx`, `src/components/features/AthleteProfileClient.tsx`, `src/lib/illness.ts` (`listIllness`), `src/lib/validators/planned-sessions.ts` (`plannedSessionOpSchema`), `src/lib/actions/workouts-compliance.ts`.
+
+### Today's card for workout sessions
+- **What:** A dated session that runs a structured workout, not a program, does not show on the home screen's today card or the week strip yet.
+- **Why deferred:** The views are package C6's work. C4 and C5 kept a lifter's screens unchanged and built the data, the rules and the MCP tools first.
+- **Unblocked by:** Package C6 views. Show workout sessions next to program sessions on the today card and the week strip, with the workout's summary (`describeWorkout`).
+- **Touchpoints:** `src/app/page.tsx`, `src/components/features/TodaySessionsList.tsx`, `src/lib/home-week.ts`, `src/lib/utils/workout-steps.ts` (`describeWorkout`).
+
 ### Pounds for weights
 - **What:** Show and take weights in lb for users who want it: every weight label and input (set logging, set edit, program edit, history, session detail, metrics, records, friends' feeds), progression steps in lb (5 lb, 2.5 lb) instead of converted kg steps, and plates and bars in lb (45 lb bar, 45/35/25/10/5/2.5 lb plates) in the plate calculator and the weight presets. Storage stays kg.
 - **Why deferred:** The owner chose endurance units only for the foundations PR (A2 in `docs/plans/triathlon-coach-plan.md`, brief `docs/plans/foundations.md`). The owner trains in kg, and lb done well needs lb-native steps and plates, not only a converted label. So there is no `weight_unit` column yet.
@@ -78,7 +96,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### Retire the triathlon plan generator after C4
 - **What:** Remove the fixed triathlon plan generator (the "Triathlon plan" page and its action) once the assistant builds endurance plans from structured workouts and seasons.
 - **Why deferred:** It is still the only way to make an endurance plan in the app. Package C3 changed it lightly (the intake interview first, prefill from the profile, strength by goal) and decided with the owner on 2026-11-12 to retire it later (`docs/plans/athlete-profile.md`, 2.7 and 12). It plans a full distance from fixed volumes and ignores hours per week, the longest day, the race distance and thresholds.
-- **Unblocked by:** Package C4 (structured endurance workouts) merged, with C1's seasons, so the assistant builds a plan from parts. Then ask the owner before removing it, delete the page, form, action and blueprint with their tests, and drop the cycles-list entry.
+- **Unblocked by:** Package C4 (structured endurance workouts) is built, with C1's seasons, so the assistant can build a plan from parts (`docs/plans/workouts-and-compliance.md`). It still needs the owner's yes. Then delete the page, form, action and blueprint with their tests, and drop the cycles-list entry.
 - **Touchpoints:** `src/lib/utils/triathlon-plan.ts`, `src/lib/actions/triathlon-plan.ts`, `src/components/features/TriathlonPlanForm.tsx`, `src/app/cycles/triathlon/page.tsx`, `src/components/features/CyclesListClient.tsx` (the "Triathlon plan" entry), `src/__tests__/triathlon-plan.test.ts`.
 
 ### Training-limit warnings on a change-set undo over MCP
@@ -94,7 +112,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/components/features/ProgramAddExerciseWrapper.tsx`, `src/components/features/ExercisesClient.tsx`, `src/app/programs/[id]/page.tsx`.
 
 ### Sport-specific endurance fields (pool length, bike power/cadence, swim stroke)
-- **What:** The set editor captures distance/duration/incline/HR-zone only. Triathletes often want pool length, swim stroke, or bike power/cadence. The schema has no columns for these.
+- **What:** The set editor captures distance/duration/incline/HR-zone only. Triathletes often want pool length, swim stroke, or bike power/cadence. Planned structured workouts now hold a pool length, a stroke per step and cadence targets (`poolLengthM`, `stroke`, `cadence` in `src/lib/utils/workout-steps.ts`), but logged sets have no columns for them.
 - **Why deferred:** Not needed to log and track the three disciplines; add when a concrete need appears.
 - **Unblocked by:** A request for one of these specific metrics.
 - **Touchpoints:** `src/db/schema/workout-sets.ts`, `src/components/features/SetEditView.tsx`, `src/components/features/LogRunModal.tsx`.

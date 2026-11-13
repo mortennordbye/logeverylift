@@ -215,7 +215,7 @@ New table `planned_sessions` (*new*):
 | `program_id` | integer, null, FK `programs`, set null | The program to run. A deleted program reads as no program, as `liveSlotProgram` does for slots |
 | `label`, `notes` | text, null | Copied from the slot; can be changed alone |
 | `auto_complete` | boolean, not null, default false | Copied from the slot |
-| `status` | text enum `planned`, `skipped` | Done and missed are derived (4.1). C5 adds `missed_illness` |
+| `status` | text enum `planned`, `skipped` | Done and missed are derived (4.1). C5 adds `missed` (a confirmed miss); illness is derived from the sick periods, not stored |
 | `skip_reason` | text, null, max 200 | |
 | `touched_at` | timestamp, null | Set by any user or assistant change. Null = untouched, so regeneration may rewrite it |
 | `version` | integer, not null, default 1 | T9 |

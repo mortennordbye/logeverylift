@@ -1,5 +1,7 @@
 import { AiCheckinCard } from "@/components/features/AiCheckinCard";
 import { DeclineMakeupButton } from "@/components/features/DeclineMakeupButton";
+import { DidYouDoItCard, IllnessBanner } from "@/components/features/DidYouDoIt";
+import { answerSession } from "@/components/features/answer-session";
 import { PolicyUpdateNotice } from "@/components/features/PolicyUpdateNotice";
 import { SharePromptLoader } from "@/components/features/SharePromptLoader";
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
@@ -11,6 +13,9 @@ import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { getCompletedSessions, getWorkoutInsight, getWorkoutStats } from "@/lib/actions/workout-sets";
 import { needsPolicyNotice, needsTermsConsent } from "@/lib/consent";
+import { enduranceEnabledFor } from "@/lib/endurance";
+import { listIllness } from "@/lib/illness";
+import { homeEndurance } from "@/lib/session-answers";
 import { homeWeekPlanned } from "@/lib/home-week";
 import { weekDayMarks } from "@/lib/utils/planned-sessions";
 import { userToday } from "@/lib/user-settings";
@@ -35,6 +40,32 @@ function dowLabel(dateStr: string): string {
   const jsDay = date.getDay();
   const dow = jsDay === 0 ? 6 : jsDay - 1; // 0=Mon … 6=Sun
   return DAY_LABELS_FULL[dow];
+}
+
+/**
+ * The endurance part of home (docs/plans/workouts-and-compliance.md, 7): null
+ * for a lifter, so their home renders nothing new. A failed read hides it.
+ */
+async function enduranceHome(userId: string) {
+  if (!(await enduranceEnabledFor(userId))) return null;
+  try {
+    const home = await homeEndurance(userId);
+    const info = home.returnInfo;
+    const sick = info?.phase === "sick" ? ((await listIllness(userId)).find((p) => p.id === info.periodId) ?? null) : null;
+    return {
+      unconfirmed: home.unconfirmed.map(answerSession),
+      missedKey: home.missedKey.map((m) => ({
+        session: answerSession(m.session),
+        moveTo: m.suggestion.date,
+        reason: m.suggestion.date === null ? m.suggestion.reason : null,
+      })),
+      sick: sick ? { id: sick.id, startedOn: sick.startedOn } : null,
+      returning: info?.phase === "returning" ? info.rule : null,
+    };
+  } catch (e) {
+    console.error("[Home] endurance_read_failed", { error: e instanceof Error ? e.name : "unknown" });
+    return null;
+  }
 }
 
 export default async function Home() {
@@ -62,7 +93,7 @@ export default async function Home() {
   const todayProgram = info?.todaySlot?.program ?? null;
 
   // Batch remaining queries in parallel, including insight now that we know todayProgram
-  const [statsResult, sessionsResult, insight, checkinResult, policyNotice] = await Promise.all([
+  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, endurance] = await Promise.all([
     getWorkoutStats(),
     getCompletedSessions(monday),
     todayProgram
@@ -70,6 +101,7 @@ export default async function Home() {
       : Promise.resolve(undefined),
     getPendingCheckin(),
     needsPolicyNotice(session),
+    enduranceHome(session.user.id),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
 
@@ -156,6 +188,8 @@ export default async function Home() {
 
         {checkin && <AiCheckinCard id={checkin.id} cycleName={checkin.cycleName} />}
 
+        {endurance && <IllnessBanner sick={endurance.sick} returning={endurance.returning} today={todayStr} />}
+
         {/* ── Today card ─────────────────────────────────── */}
         {info ? (
           <div className={`rounded-2xl p-4 shrink-0 ${completedToday ? "bg-emerald-500/10" : "bg-muted"}`}>
@@ -235,6 +269,9 @@ export default async function Home() {
             )}
           </div>
         ) : null}
+
+        {/* ── Did you do these? (endurance switch only) ── */}
+        {endurance && <DidYouDoItCard unconfirmed={endurance.unconfirmed} missedKey={endurance.missedKey} today={todayStr} />}
 
         {/* ── Missed this week (day-of-week mode) ───────── */}
         {dowMissed.length > 0 && (

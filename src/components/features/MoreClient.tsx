@@ -4,7 +4,7 @@ import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { shareApp } from "@/lib/utils/share";
-import { Activity, BarChart2, Bot, BookMarked, CalendarDays, ChevronRight, Clock, FileText, Gauge, HeartPulse, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
+import { Activity, BarChart2, Bot, BookMarked, CalendarDays, ChevronRight, ClipboardList, Clock, FileText, Gauge, HeartPulse, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -140,6 +140,14 @@ const athleteItem: MoreItem = {
   description: "Availability, injuries, strength goal and the interview",
 };
 
+// After the athlete profile, with the endurance switch on (docs/plans/workouts-and-compliance.md, 7).
+const workoutsItem: MoreItem = {
+  label: "Workouts",
+  href: "/more/workouts",
+  icon: ClipboardList,
+  description: "Your swim, bike and run workouts",
+};
+
 const adminItem: MoreItem = {
   label: "Admin Tools",
   href: "/more/admin",
@@ -231,7 +239,7 @@ export function MoreClient({
           }
           if (showAthlete && group.title === "Training") {
             const at = items.findIndex((i) => i.label === "Thresholds") + 1;
-            items = [...items.slice(0, at), athleteItem, ...items.slice(at)];
+            items = [...items.slice(0, at), athleteItem, workoutsItem, ...items.slice(at)];
           }
           return (
             <section key={group.title} className="pt-6">
