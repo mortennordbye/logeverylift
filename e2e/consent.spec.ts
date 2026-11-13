@@ -46,7 +46,7 @@ test("a user on an old consent version gets a clean consent page and returns hom
   await page.goto("/");
   await page.waitForURL((url) => url.pathname === "/consent");
   await expect(page.getByRole("heading", { name: "Updated terms" })).toBeVisible();
-  await expect(page.getByText(/injuries/)).toBeVisible();
+  await expect(page.getByText(/injuries, sick periods/)).toBeVisible();
   expect(errors, "while the consent page loaded").toEqual([]);
   await page.getByRole("checkbox", { name: /I accept the terms of use/ }).check();
   await page.getByRole("checkbox", { name: /I consent to LogEveryLift storing/ }).check();

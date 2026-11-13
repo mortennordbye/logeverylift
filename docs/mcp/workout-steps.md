@@ -148,6 +148,22 @@ parent. The two workouts:
 
 With threshold pace 4:00 per km, the run target is 4:27-4:42 per km.
 
+## Where a workout goes
+
+A workout runs only as part of a dated session or a weekday slot. A session runs a program or a
+workout, never both, and holds its own copy of the workout.
+
+- **A dated session:** `manage_planned_session` `set_workout` with `workout` (the JSON) or
+  `workoutId` (a library workout), or `add` with `workout` or `workoutId` instead of `programId`.
+- **A weekday slot:** `edit_cycle_slot` with `workoutId`. Each dated session of that slot gets
+  its own copy. Rotation cycles take no workouts.
+- **A brick:** two sessions on one day, the run after the ride. `manage_planned_session`
+  `link_brick` with `brickParentId` (the ride), or `add` with `brickParentId`. On a slot,
+  `brickWithNext` links the next slot of the day.
+- **A library edit** (`manage_workout` `update` or `delete`) reaches only the untouched sessions
+  from this week's Monday on. Done sessions, sessions with their own changes and earlier weeks
+  keep their copy. `update_from_library` copies the library workout again onto one session.
+
 ## Common errors
 
 Each block below is a wrong example (marked `json wrong`). The test checks that the app refuses

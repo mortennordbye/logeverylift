@@ -40,7 +40,8 @@ const SECTIONS = {
   revisions: `Revisions. Every change to a program, cycle, season, dated session or coach memory entry, by you, the user or the app, is a revision the user can see and restore in the app; list_revisions and restore_revision do the same for you. Every write takes a reason (shown to the user) and expectedVersion, the version you read with get_program, get_training_cycle, get_season or list_planned_sessions or got back from your last write. A write based on an older version is refused with what changed since: read again and redo it. Your writes within 30 minutes form one change set the user can undo in one step. A restore never changes logged workouts. There is no undo button for you to promise beyond that.`,
 
   missing: `Not in the app yet, so do not look for it or promise it:
-- Strength frequency by phase is a default only; no code refuses another count yet.`,
+- Strength frequency by phase is a default only; no code refuses another count yet.
+- The app has no step editor for workouts and no guided player yet: create and change workouts with manage_workout and manage_planned_session.`,
 
   review: `A weekly review:
 1. Read get_coach_memory first, then list_seasons (a season flagged for a re-plan comes first: re-plan its phases with the user), get_athlete_profile and get_profile, the active cycle (list_training_cycles, get_training_cycle), the planned sessions of the last and the coming weeks (list_planned_sessions), recent_workouts, weekly_volume and personal_records. If Garmin tools are listed, read get_garmin_status and get_garmin_trends.

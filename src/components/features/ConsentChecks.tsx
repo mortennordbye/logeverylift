@@ -36,7 +36,7 @@ export function ConsentChecks({ value, onChange }: { value: ConsentState; onChan
         />
         <span>
           I consent to LogEveryLift storing my training and body data, such as body weight, heart rate zones,
-          readiness, injuries and notes, which can say something about my health.
+          readiness, injuries, sick periods and notes, which can say something about my health.
         </span>
       </label>
     </div>

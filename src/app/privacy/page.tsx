@@ -38,6 +38,20 @@ export default function PrivacyPage() {
           as a version you can restore, with who made it (you, an assistant you connected, or the app) and the reason given.
         </li>
         <li>
+          <strong>Structured workouts and planned versus done, if endurance features are on:</strong> your library of
+          swim, bike and run workouts (steps, repeats and targets), and for each dated session the workout it runs, its
+          priority, whether it is part of a brick, whether you did it or missed it, an optional reason for a miss in
+          your own words, and the Garmin activity you or your assistant picked for it. From this the app works out how
+          much of each session you did and how many weeks you followed your plan. Each change is kept as a version you
+          can restore.
+        </li>
+        <li>
+          <strong>Sick periods, if endurance features are on:</strong> the days you were sick, how bad it was (mild,
+          moderate or severe) and your notes. Sessions on those days count as missed because of illness, and the app
+          gives the rule for a safe return to training. It never changes your plan by itself. Only you and your own connected assistant read them; they are never sent to AI Setup.
+          Each change is kept as a version you can restore.
+        </li>
+        <li>
           <strong>Coach memory:</strong> short notes that you or an AI assistant you connected keep about your
           training (preferences, limits in your life, observations and decisions), so the assistant knows your
           context next time. You see and edit them in More → Coach memory. Only you and your own connected
@@ -80,7 +94,7 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
-        Body weight, heart rate, readiness, how you felt, thresholds, injuries and free-text notes, coach memory included, can reveal things about your health.
+        Body weight, heart rate, readiness, how you felt, thresholds, injuries, sick periods and free-text notes, coach memory and reasons for a missed session included, can reveal things about your health.
         We treat all of it as health data under GDPR Article 9 and process it only with your explicit consent, which
         you give when you create your account.
       </p>
@@ -162,7 +176,9 @@ export default function PrivacyPage() {
         programs you share with them. Unless you turn off &quot;Show workout activity to friends&quot; in Account,
         they also see your completed workouts: the program, date, duration, how you felt, each exercise with its sets
         (weight, reps, time, distance), your personal records, streak and weekly volume. Your notes, effort ratings,
-        heart rate zones, readiness, thresholds, athlete profile and injuries are never shown to them.
+        heart rate zones, readiness, thresholds, athlete profile, injuries, sick periods, missed sessions and how well you
+        follow your plan are never shown to them. A planned session you mark as done shows to them as any other completed
+        workout.
       </p>
       <p>
         <strong>Gym map:</strong> if you pick a primary gym, everyone on LogEveryLift can see your name and avatar
@@ -182,11 +198,11 @@ export default function PrivacyPage() {
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
         read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
-        on, programs, cycles and their dated sessions, seasons and their races, coach memory, thresholds, the athlete profile with injuries, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
+        on, programs, cycles and their dated sessions with planned versus done, structured workouts, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
-        access they can also change your profile, body weight, time zone, display units, programs, cycles, dated sessions, seasons and races, see and restore earlier
-        versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile and injuries, create custom exercises, and log a workout you did or mark a planned day
-        as done. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
+        access they can also change your profile, body weight, time zone, display units, programs, cycles, dated sessions, structured workouts, seasons and races, see and restore earlier
+        versions of your programs, cycles and seasons, write coach memory, thresholds, the athlete profile, injuries and sick periods, create custom exercises, log a workout you did, mark a planned day
+        or session as done, and mark a planned session as missed. History shows such a workout as logged by your assistant. That provider&apos;s own privacy
         policy applies to what it does with the data. You can disconnect an assistant at any time in More →
         Connected assistants, and it loses access at once.
       </p>
@@ -210,6 +226,10 @@ export default function PrivacyPage() {
         <li>
           Thresholds, the athlete profile and injuries: until you delete them or your account. A deleted threshold
           or injury can be restored for 90 days, then it is deleted for good.
+        </li>
+        <li>
+          Structured workouts and sick periods: until you delete them or your account. A deleted workout or sick
+          period can be restored for 90 days, then it is deleted for good.
         </li>
         <li>Login sessions, with IP address and user agent: 30 days after last use.</li>
         <li>Server logs: 7 days.</li>

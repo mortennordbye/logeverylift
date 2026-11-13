@@ -12,12 +12,10 @@ are skipped, not stacked"), `CLAUDE.md`, `TESTING.md`, and the merged briefs
 parallel on `feat/sessions-c2`; its brief is `docs/plans/sessions.md` on that branch. This brief
 builds on C2's model. Section 12 lists what depends on C2's final code.
 
-Status: brief, 2026-11-12. The hub decided the open questions on 2026-11-13 (section 18,
-"Decisions"). The pure modules that do not depend on C2 are built (section 13, step 0). The rest
-waits for C2 on `main`. The findings describe `main` at
-7ca6da4 (after PR #227); every `file:line` in them was opened then. Names marked *new* do not
-exist yet. Names from C2 (`planned_sessions`, the matcher, `manage_planned_session`) exist only on
-the C2 branch.
+Status: building, 2026-11-13. The hub decided the open questions on 2026-11-13 (section 18,
+"Decisions"). C2 merged in PR #229 and this branch is rebased on it; section 19 says where the
+build differs from this brief. The findings describe `main` at 7ca6da4 (after PR #227); every
+`file:line` in them was opened then.
 
 ## 0. Goal
 
@@ -148,7 +146,7 @@ D2 rules after part 1.
 - Friends see completed workouts through `getFriendSessionDetail`
   (`src/lib/actions/friends.ts:1096`), never notes, heart rate zones, thresholds or injuries.
 
-### 1.9 What C2 brings (from its brief, not yet on `main`)
+### 1.9 What C2 brings (written from its brief; merged in PR #229)
 
 - A table of dated planned sessions, one row per session, with date, position in the day,
   program, label, notes, auto flag, a status (planned or skipped), a "touched" time, a version

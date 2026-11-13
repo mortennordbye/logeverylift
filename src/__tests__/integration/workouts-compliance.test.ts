@@ -399,6 +399,52 @@ describe("compliance, confirm_session and the slot tool", () => {
   });
 });
 
+describe("the remaining session operations", () => {
+  it("over MCP: get_workout resolves a session's targets; clear_workout, update_from_library, set_priority, link and unlink a brick", async () => {
+    const run = await runProgram();
+    const w = (await lib()("manage_workout", { operation: "create", workout: intervals, reason: "x" })).data;
+    const cycleId = await cycle(me, [{ dayOfWeek: 6, programId: run }, { dayOfWeek: 7, programId: run }]);
+    const [sat, sun] = (await sessionsOf(cycleId)).filter((r) => r.date! >= "2026-11-07");
+    let v = (await planned()("manage_planned_session", { operation: "set_workout", id: sat.id, workoutId: w.workoutId, reason: "x", expectedVersion: sat.version })).data.version;
+    const got = await lib()("get_workout", { plannedSessionId: sat.id });
+    expect(got.isError, got.raw).toBe(false);
+    expect(got.data.missingAnchors).toEqual(["lthr_run"]);
+    expect(got.data.resolvedSteps[1].steps[0].resolved.text).toContain("no lthr_run set");
+
+    await lib()("manage_workout", { operation: "update", workoutId: w.workoutId, name: "5 × 4 min", reason: "x", expectedVersion: w.version });
+    const upd = await planned()("manage_planned_session", { operation: "update_from_library", id: sat.id, reason: "x", expectedVersion: v });
+    expect(upd.data.session.workout.name).toBe("5 × 4 min");
+    v = upd.data.version;
+    const pri = await planned()("manage_planned_session", { operation: "set_priority", id: sat.id, priority: "key", reason: "Key day", expectedVersion: v });
+    expect(pri.data.session.priority).toBe("key");
+    v = pri.data.version;
+    const cleared = await planned()("manage_planned_session", { operation: "clear_workout", id: sat.id, programId: run, reason: "Back to the plan", expectedVersion: v });
+    expect(cleared.data.session).toMatchObject({ workout: null, programId: run });
+
+    const wrongDay = await planned()("manage_planned_session", { operation: "link_brick", id: sun.id, brickParentId: sat.id, reason: "x", expectedVersion: sun.version });
+    expect(wrongDay).toMatchObject({ isError: true, raw: "Error: A brick's sessions are on the same day of the same cycle." });
+    const second = await planned()("manage_planned_session", { operation: "add", cycleId, date: "2026-11-07", programId: run, reason: "Run off the bike" });
+    const linked = await planned()("manage_planned_session", { operation: "link_brick", id: second.data.session.id, brickParentId: sat.id, reason: "Brick", expectedVersion: second.data.version });
+    expect(linked.data.session.brickParentId).toBe(sat.id);
+    const unlinked = await planned()("manage_planned_session", { operation: "unlink_brick", id: second.data.session.id, reason: "No brick", expectedVersion: linked.data.version });
+    expect(unlinked.data.session.brickParentId).toBeNull();
+  });
+
+  it("from the app: use a library workout and link a brick; the database refuses a program and a workout together", async () => {
+    const run = await runProgram();
+    const w = (await lib()("manage_workout", { operation: "create", workout: easyRun(), reason: "x" })).data;
+    const cycleId = await cycle(me, [{ dayOfWeek: 6, programId: run }]);
+    const [sat] = (await sessionsOf(cycleId)).filter((r) => r.date === "2026-11-07");
+    expect(await updatePlannedSession({ op: "set_workout", id: sat.id, workoutId: w.workoutId })).toMatchObject({ success: true });
+    expect(await updatePlannedSession({ op: "set_workout", id: sat.id, workoutId: 999999 })).toMatchObject({ success: false, error: "Workout not found" });
+    const [row] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, sat.id));
+    expect(row).toMatchObject({ programId: null, workoutId: w.workoutId });
+    const [rev] = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "planned_session"), eq(planRevisions.objectId, sat.id), eq(planRevisions.writer, "user")));
+    expect(rev).toBeDefined();
+    await expect(db.update(plannedSessions).set({ programId: run }).where(eq(plannedSessions.id, sat.id))).rejects.toThrow();
+  });
+});
+
 describe("the weekly sync's adherence", () => {
   it("reads dated sessions for an endurance user: misses ease the block; plan skips leave the count", async () => {
     const run = (await createProgram(me, [{ exerciseId: runEx, sets: [{ durationSeconds: 1800, peakDurationSeconds: 3600, targetReps: null, weightKg: null }] }])).program.id;
