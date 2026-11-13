@@ -17,7 +17,9 @@ import {
   garminActivities,
   garminActivityMetrics,
   garminConnections,
+  plannedSessions,
   programExercises,
+  users,
   programSets,
   programs,
   trainingCycleSlots,
@@ -26,7 +28,7 @@ import {
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import { isIndoor, sportOf } from "@/lib/garmin/analytics/sport";
-import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
+import { liveCycles, livePlannedSessions, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import type { PlanWriteSession, Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
@@ -47,7 +49,7 @@ import {
   type RunHistory,
   type WeekSession,
 } from "@/lib/utils/training-limits";
-import { and, eq, gte, inArray, isNotNull, or } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
 
 type Executor = typeof db | Tx;
 
@@ -148,6 +150,66 @@ export async function programRuns(
   return out;
 }
 
+/** The Monday of today's week in the user's zone. */
+async function mondayToday(ex: Executor, userId: string): Promise<string> {
+  const { mondayOf } = await import("@/lib/utils/planned-sessions");
+  return mondayOf(await todayOn(ex, userId));
+}
+
+/** Today (YYYY-MM-DD) in the user's zone, read on this connection (as userToday does). */
+async function todayOn(ex: Executor, userId: string): Promise<string> {
+  const { localDateStr } = await import("@/lib/utils/user-date");
+  const [u] = await ex.select({ timeZone: users.timeZone }).from(users).where(eq(users.id, userId));
+  return localDateStr(new Date(), u?.timeZone ?? null);
+}
+
+/**
+ * A cycle's dated sessions grouped by calendar week, from this week (or the
+ * block's first week, if it starts later) to the block's last week. Weeks with
+ * no session are there too, empty, so a write that fills one is seen.
+ */
+async function datedCycleWeeks(ex: Executor, cycleId: number): Promise<{ thisMonday: string; byWeek: Map<string, WeekSession[]> }> {
+  const { addDaysStr, dowOf, mondayOf } = await import("@/lib/utils/planned-sessions");
+  const { cycleBlock } = await import("@/lib/planned-sessions");
+  const [c] = await ex.select().from(trainingCycles).where(and(eq(trainingCycles.id, cycleId), liveCycles));
+  const byWeek = new Map<string, WeekSession[]>();
+  const today = c ? await todayOn(ex, c.userId) : toDateStr(new Date());
+  const thisMonday = mondayOf(today);
+  const block = c ? cycleBlock(c) : null;
+  if (!c || !block) return { thisMonday, byWeek };
+  const first = mondayOf(block.start > today ? block.start : today);
+  const last = addDaysStr(block.end, -1);
+  for (let m = first; m <= last; m = addDaysStr(m, 7)) byWeek.set(m, []);
+  const rows = await ex
+    .select({ date: plannedSessions.date, programId: plannedSessions.programId })
+    .from(plannedSessions)
+    .where(
+      and(
+        eq(plannedSessions.cycleId, cycleId),
+        livePlannedSessions,
+        eq(plannedSessions.status, "planned"),
+        gte(plannedSessions.date, first),
+        lte(plannedSessions.date, last),
+      ),
+    );
+  const hard = await hardPrograms(ex, rows.map((r) => r.programId).filter((id): id is number => id != null));
+  for (const r of rows) {
+    if (r.programId == null) continue;
+    byWeek.get(mondayOf(r.date!))?.push({ dayOfWeek: dowOf(r.date!), hard: hard.get(r.programId) ?? false });
+  }
+  return { thisMonday, byWeek };
+}
+
+/** The weekday cycles among these that have dated sessions. */
+async function datedCycles(ex: Executor, cycleIds: number[]): Promise<Set<number>> {
+  if (cycleIds.length === 0) return new Set();
+  const rows = await ex
+    .select({ id: trainingCycles.id })
+    .from(trainingCycles)
+    .where(and(inArray(trainingCycles.id, cycleIds), liveCycles, eq(trainingCycles.scheduleType, "day_of_week"), isNotNull(trainingCycles.sessionsGeneratedAt)));
+  return new Set(rows.map((r) => r.id));
+}
+
 /** A weekday cycle's week of sessions, or null for a rotation cycle (no fixed week). */
 export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<WeekSession[] | null> {
   const [cycle] = await ex
@@ -187,6 +249,62 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
     }));
 }
 
+/** Whether each program is a hard session (an interval endurance set), by id. */
+async function hardPrograms(ex: Executor, programIds: number[]): Promise<Map<number, boolean>> {
+  const ids = [...new Set(programIds)];
+  const sets = ids.length
+    ? await ex
+        .select({
+          programId: programs.id,
+          discipline: exercises.discipline,
+          sessionRole: programSets.sessionRole,
+          targetHeartRateZone: programSets.targetHeartRateZone,
+        })
+        .from(programs)
+        .innerJoin(programExercises, eq(programExercises.programId, programs.id))
+        .innerJoin(programSets, eq(programSets.programExerciseId, programExercises.id))
+        .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+        .where(and(inArray(programs.id, ids), livePrograms, liveProgramExercises, liveProgramSets))
+    : [];
+  return new Map(
+    ids.map((id) => [
+      id,
+      isHardSession(
+        sets
+          .filter((x) => x.programId === id)
+          .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone })),
+      ),
+    ]),
+  );
+}
+
+/**
+ * One calendar week (Monday to Sunday) of a user's dated sessions on weekday
+ * cycles (docs/plans/sessions.md, 6): a moved session counts in the week it
+ * lands in, a skipped one does not, and several on one day count each.
+ */
+export async function calendarWeekSessions(ex: Executor, userId: string, monday: string, cycleId?: number): Promise<WeekSession[]> {
+  const { addDaysStr, dowOf } = await import("@/lib/utils/planned-sessions");
+  const rows = await ex
+    .select({ date: plannedSessions.date, programId: plannedSessions.programId })
+    .from(plannedSessions)
+    .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), isNull(trainingCycles.deletedAt)))
+    .where(
+      and(
+        eq(plannedSessions.userId, userId),
+        livePlannedSessions,
+        eq(plannedSessions.status, "planned"),
+        gte(plannedSessions.date, monday),
+        lte(plannedSessions.date, addDaysStr(monday, 6)),
+        cycleId != null ? eq(plannedSessions.cycleId, cycleId) : undefined,
+      ),
+    );
+  const hard = await hardPrograms(ex, rows.map((r) => r.programId).filter((id): id is number => id != null));
+  return rows
+    .filter((r) => r.programId != null)
+    .map((r) => ({ dayOfWeek: dowOf(r.date!), hard: hard.get(r.programId!) ?? false }));
+}
+
 /**
  * The cycles whose week a change to this program changes: the active cycle,
  * and a draft scheduled to start, which becomes active on its day without
@@ -208,19 +326,55 @@ export async function limitCyclesWith(ex: Executor, userId: string, programId: n
   return rows.map((r) => r.id).sort((a, b) => a - b);
 }
 
-/** What a write is about: the programs whose runs it can change and the cycles whose week it can change. */
-export type LimitScope = { programIds: number[]; cycleIds: number[] };
+/**
+ * What a write is about: the programs whose runs it can change, the cycles
+ * whose week it can change, and, for a change to dated sessions, the calendar
+ * weeks (their Mondays) it moves sessions in or out of.
+ */
+export type LimitScope = { programIds: number[]; cycleIds: number[]; sessionWeeks?: { userId: string; mondays: string[] } };
 
 export type PlanFacts = {
   runs: Map<number, { label: string; run: PlannedRun }>;
-  /** Each cycle's week; null for a rotation cycle (no fixed week). */
-  weeks: Map<number, WeekSession[] | null>;
+  /**
+   * The weeks checked, by key: `c:<cycle>` for a cycle's template week (null
+   * for a rotation cycle, which has no fixed week), `c:<cycle>:<monday>` for
+   * each calendar week of a cycle's dated sessions, `s:<monday>` for a week a
+   * session change touches.
+   */
+  weeks: Map<string, WeekSession[] | null>;
+  /** The Monday of a key's calendar week, when it is not this week: the message names it. */
+  labels?: Map<string, string>;
 };
 
-export async function planFacts(ex: Executor, scope: LimitScope, share: number | null = null): Promise<PlanFacts> {
-  const weeks = new Map<number, WeekSession[] | null>();
-  for (const id of scope.cycleIds) weeks.set(id, await cycleWeekSessions(ex, id));
-  return { runs: await programRuns(ex, scope.programIds, share), weeks };
+export async function planFacts(
+  ex: Executor,
+  scope: LimitScope,
+  share: number | null = null,
+  /** Cycles checked on their dated calendar week; the rest on the template's week. */
+  dated: ReadonlySet<number> = new Set(),
+): Promise<PlanFacts> {
+  const weeks = new Map<string, WeekSession[] | null>();
+  const labels = new Map<string, string>();
+  for (const id of scope.cycleIds) {
+    if (!dated.has(id)) {
+      weeks.set(`c:${id}`, await cycleWeekSessions(ex, id));
+      continue;
+    }
+    // Every calendar week from this Monday to the block's end (review, round 3):
+    // a template change rewrites them all, so any of them can get worse.
+    const { thisMonday, byWeek } = await datedCycleWeeks(ex, id);
+    for (const [monday, week] of byWeek) {
+      weeks.set(`c:${id}:${monday}`, week);
+      if (monday !== thisMonday) labels.set(`c:${id}:${monday}`, monday);
+    }
+  }
+  const sessionUser = scope.sessionWeeks?.userId;
+  const thisMonday = sessionUser ? await mondayToday(ex, sessionUser) : null;
+  for (const monday of scope.sessionWeeks?.mondays ?? []) {
+    weeks.set(`s:${monday}`, await calendarWeekSessions(ex, sessionUser!, monday));
+    if (monday !== thisMonday) labels.set(`s:${monday}`, monday);
+  }
+  return { runs: await programRuns(ex, scope.programIds, share), weeks, labels };
 }
 
 export const NO_FACTS: PlanFacts = { runs: new Map(), weeks: new Map() };
@@ -255,14 +409,22 @@ export function evaluateLimits(
     } else {
       notChecked.push({ rule: "long_run_cap", why: lc.runsWhy ?? NO_GARMIN });
     }
-    const weeks = [...after.weeks].filter((e): e is [number, WeekSession[]] => e[1] != null);
+    const weeks = [...after.weeks].filter((e): e is [string, WeekSession[]] => e[1] != null);
     if (weeks.length) {
       checked.push("hard_sessions_per_week");
       const hits = weeks
-        .map(([id, week]) => hardSessionsPerWeek(before.weeks.get(id) ?? [], week))
+        .map(([key, week]) => {
+          const hit = hardSessionsPerWeek(before.weeks.get(key) ?? [], week);
+          const monday = after.labels?.get(key);
+          return hit && monday ? { ...hit, message: hit.message.replace("This week", `The week of ${monday}`), numbers: { ...hit.numbers, week: monday } } : hit;
+        })
         .filter((h): h is BrokenLimit => h != null);
       // One result per rule, so one override covers it.
-      if (hits.length) broken.push({ ...hits[0], message: hits.map((h) => h.message).join(" "), numbers: hits.length > 1 ? { cycles: hits.map((h) => h.numbers) } : hits[0].numbers });
+      if (hits.length) {
+        const shown = hits.slice(0, 3).map((h) => h.message);
+        if (hits.length > 3) shown.push(`And ${hits.length - 3} more weeks.`);
+        broken.push({ ...hits[0], message: shown.join(" "), numbers: hits.length > 1 ? { weeks: hits.map((h) => h.numbers) } : hits[0].numbers });
+      }
     } else {
       notChecked.push({
         rule: "hard_sessions_per_week",
@@ -309,9 +471,15 @@ export async function withLimits<T>(
   override: LimitOverride,
   write: () => Promise<T>,
 ): Promise<{ result: T; check: LimitCheck; unusedOverrides: LimitRule[] }> {
-  const before = lc.endurance ? await planFacts(w.tx, scope) : NO_FACTS;
+  // A cycle that has dated sessions is checked on them, before and after
+  // (review 21); one that has none yet, on its template's week.
+  const dated = lc.endurance ? await datedCycles(w.tx, scope.cycleIds) : new Set<number>();
+  const before = lc.endurance ? await planFacts(w.tx, scope, null, dated) : NO_FACTS;
   const result = await write();
-  const after = lc.endurance ? await planFacts(w.tx, scope) : NO_FACTS;
+  // The dated sessions follow a template change before the plan is read
+  // again, in the same transaction.
+  if (dated.size) await w.regenerateSessions();
+  const after = lc.endurance ? await planFacts(w.tx, scope, null, dated) : NO_FACTS;
   const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
   if (blocking.length) throw new LimitRefusedError(blocking);
   w.ctx.limitCheck = check;

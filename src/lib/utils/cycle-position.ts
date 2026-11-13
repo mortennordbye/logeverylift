@@ -110,12 +110,17 @@ export type RotationWalkResult = {
  * Only one session per day is consumed — extra sessions on the same day are ignored.
  *
  * The walk stops at `today` (today itself is not consumed — it is "what's next").
+ *
+ * `skippedPositions` are walk positions the user or the assistant skipped
+ * (docs/plans/sessions.md, 4.3): such a position uses its day as if it were
+ * done, so the rotation moves on without a missed day.
  */
 export function walkRotation(
   startDate: Date,
   slots: SlotLike[],
   completedSessionDates: string[],
   today: Date,
+  skippedPositions: ReadonlySet<number> = new Set(),
 ): RotationWalkResult {
   if (slots.length === 0) {
     return { position: 0, missed: [] };
@@ -149,7 +154,10 @@ export function walkRotation(
     } else {
       // Active slot: needs a completed session on (or before) this day.
       const available = unconsumedByDate.get(dateStr) ?? 0;
-      if (available > 0) {
+      if (skippedPositions.has(position)) {
+        position += 1;
+        dayCursor = addDays(dayCursor, 1);
+      } else if (available > 0) {
         unconsumedByDate.set(dateStr, available - 1);
         position += 1;
         dayCursor = addDays(dayCursor, 1);
@@ -174,26 +182,85 @@ export function resolveRotation(
   slots: SlotLike[],
   completedSessionDates: string[],
   today: Date,
+  skippedPositions: ReadonlySet<number> = new Set(),
 ): {
   todaySlotId: number | null;
+  /** The walk position of today's slot (rotation overrides are keyed by it). */
+  todayPosition: number;
   missed: { date: string; slotIndex: number; slotId: number }[];
 } {
   if (slots.length === 0) {
-    return { todaySlotId: null, missed: [] };
+    return { todaySlotId: null, todayPosition: 0, missed: [] };
   }
   const sortedSlots = [...slots].sort(
     (a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0),
   );
-  const { position, missed } = walkRotation(startDate, slots, completedSessionDates, today);
+  const { position, missed } = walkRotation(startDate, slots, completedSessionDates, today, skippedPositions);
   const todaySlot = sortedSlots[position % sortedSlots.length];
   return {
     todaySlotId: todaySlot?.id ?? null,
+    todayPosition: position,
     missed: missed.map((m) => ({
       date: m.date,
       slotIndex: m.slotIndex,
       slotId: sortedSlots[m.slotIndex].id,
     })),
   };
+}
+
+export type RotationDay = {
+  date: string;
+  /** The walk position on this day; overrides are keyed by it. */
+  position: number;
+  slotId: number;
+  programId: number;
+  status: "done" | "missed" | "skipped" | "planned";
+};
+
+/**
+ * A rotation cycle's sessions as dates (docs/plans/sessions.md, 2 and 3.4):
+ * the walk for past days (done, missed, or skipped), and from today on the
+ * walk as it will run if each session is done on its day. Rest days have no
+ * entry. Computed on read; a rotation stores only its overrides.
+ */
+export function projectRotation(
+  startDate: Date,
+  slots: SlotLike[],
+  completedSessionDates: string[],
+  today: Date,
+  until: Date,
+  skippedPositions: ReadonlySet<number> = new Set(),
+): RotationDay[] {
+  if (slots.length === 0) return [];
+  const sortedSlots = [...slots].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+  const unconsumed = new Map<string, number>();
+  for (const d of completedSessionDates) unconsumed.set(d, (unconsumed.get(d) ?? 0) + 1);
+  const out: RotationDay[] = [];
+  const end = startOfDay(today).getTime();
+  let position = 0;
+  for (let day = startOfDay(startDate); day.getTime() <= startOfDay(until).getTime(); day = addDays(day, 1)) {
+    const slot = sortedSlots[position % sortedSlots.length];
+    const date = toDateStr(day);
+    if (slot.programId === null) {
+      position += 1;
+      continue;
+    }
+    const entry = { date, position, slotId: slot.id, programId: slot.programId };
+    if (skippedPositions.has(position)) {
+      out.push({ ...entry, status: "skipped" });
+      position += 1;
+    } else if (day.getTime() >= end) {
+      out.push({ ...entry, status: "planned" });
+      position += 1;
+    } else if ((unconsumed.get(date) ?? 0) > 0) {
+      unconsumed.set(date, unconsumed.get(date)! - 1);
+      out.push({ ...entry, status: "done" });
+      position += 1;
+    } else {
+      out.push({ ...entry, status: "missed" });
+    }
+  }
+  return out;
 }
 
 type AutoSlotLike = SlotLike & { autoComplete: boolean };

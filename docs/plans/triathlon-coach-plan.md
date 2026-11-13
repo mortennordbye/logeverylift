@@ -193,8 +193,8 @@ the plan and runs alone.
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| C1 | Seasons, races and phases | A2, A3, A4, B1 | building ([`seasons.md`](seasons.md)) |
-| C2 | Session model: several slots a day, dated sessions | A2, A4, C1 | todo |
+| C1 | Seasons, races and phases | A2, A3, A4, B1 | done ([`seasons.md`](seasons.md)) |
+| C2 | Session model: several slots a day, dated sessions | A2, A4, C1 | building ([`sessions.md`](sessions.md)) |
 | C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | done ([`athlete-profile.md`](athlete-profile.md)) |
 | C4 | Structured endurance workouts | C2, C3 | todo |
 | C5 | Planned vs done, missed sessions, sick periods | C2, C4 | todo |
@@ -220,6 +220,8 @@ the plan and runs alone.
 a session relates to a program.
 - A cycle day can hold several slots (for example strength and a run).
 - The cycle template creates dated planned sessions for every cycle, lifter cycles too (D16).
+  A rotation cycle has no fixed dates, so its sessions are worked out from the walk on read and
+  only a skip or a changed program is stored ([`sessions.md`](sessions.md), decision 2).
   Each can be moved, skipped or changed alone. A template edit regenerates only untouched future
   sessions (T7). Past sessions never change.
 - The brief must settle with the owner: how far ahead dated sessions exist, and how rotation

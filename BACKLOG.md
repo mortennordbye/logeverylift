@@ -24,6 +24,15 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** D2: run the limits as warnings on the chained start and as a check on `resume`. Then build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
 - **Touchpoints:** `src/lib/plan-revisions.ts` (`chainSeason`), `src/lib/seasons.ts` (`resumeSeason`), `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
 
+### Dated sessions: what C2 left for later
+- **What:** Three gaps left by the session model (C2, `docs/plans/sessions.md`):
+  - `dismissed_makeups` is still written when a whole day is declined, so an app from before C2 keeps hiding the day after a rollback (hub decision 13). Reads use the session's status only. Drop the writes and the table one release after C2.
+  - The calendar shows no program on a rotation cycle's days (hub decision 14), though `listPlanned` can work them out.
+  - A rotation session can be skipped or changed over MCP only; the app has no button for it.
+- **Why deferred:** The first is a rollback safety net for one release. The other two were left out to keep the rotation lifter's screens unchanged in C2.
+- **Unblocked by:** One release of C2 in prod without a rollback (then a migration drops the table and `dismissIfDayClear` goes); and an owner choice on rotation days in the calendar.
+- **Touchpoints:** `src/lib/planned-sessions.ts` (`dismissIfDayClear`, `listPlanned`, `applyRotationOp`), `src/components/features/CycleCalendarClient.tsx` (`getDayInfo`), `src/db/schema/dismissed-makeups.ts`.
+
 ### Pounds for weights
 - **What:** Show and take weights in lb for users who want it: every weight label and input (set logging, set edit, program edit, history, session detail, metrics, records, friends' feeds), progression steps in lb (5 lb, 2.5 lb) instead of converted kg steps, and plates and bars in lb (45 lb bar, 45/35/25/10/5/2.5 lb plates) in the plate calculator and the weight presets. Storage stays kg.
 - **Why deferred:** The owner chose endurance units only for the foundations PR (A2 in `docs/plans/triathlon-coach-plan.md`, brief `docs/plans/foundations.md`). The owner trains in kg, and lb done well needs lb-native steps and plates, not only a converted label. So there is no `weight_unit` column yet.

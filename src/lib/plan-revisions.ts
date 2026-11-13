@@ -19,6 +19,7 @@ import {
   coachMemory,
   exercises,
   planRevisions,
+  plannedSessions,
   programExercises,
   programSets,
   programs,
@@ -44,6 +45,9 @@ import {
   isCycleSnapshot,
   isProgramSnapshot,
   isSeasonSnapshot,
+  isPlannedSessionSnapshot,
+  PLANNED_SESSION_KEPT,
+  type PlannedSessionSnapshot,
   MEMORY_KEPT,
   ROW_KEPT,
   SEASON_KEPT,
@@ -112,6 +116,7 @@ const NOT_FOUND: Record<PlanObjectType, string> = {
   threshold: "Threshold not found",
   injury: "Injury not found",
   season: "Season not found",
+  planned_session: "Planned session not found",
 };
 
 /** The object is missing, deleted, or not the caller's. */
@@ -149,7 +154,15 @@ const isRowType = (type: PlanObjectType): type is RowType => type in ROW_TABLES;
 
 /** The table that holds an object's row, with its owner, version and soft delete. */
 const tableOf = (type: PlanObjectType) =>
-  type === "program" ? programs : type === "cycle" ? trainingCycles : type === "season" ? seasons : ROW_TABLES[type as RowType];
+  type === "program"
+    ? programs
+    : type === "cycle"
+      ? trainingCycles
+      : type === "season"
+        ? seasons
+        : type === "planned_session"
+          ? plannedSessions
+          : ROW_TABLES[type as RowType];
 
 function stripRow<T extends Record<string, unknown>>(row: T, omit: string[]): Row {
   const out: Record<string, unknown> = {};
@@ -203,7 +216,8 @@ export async function snapshotCycle(ex: Executor, cycleId: number): Promise<Cycl
     .orderBy(asc(trainingCycleSlots.dayOfWeek), asc(trainingCycleSlots.orderIndex), asc(trainingCycleSlots.id));
   return {
     v: 1,
-    cycle: stripRow(cycle, ["version", "deletedAt"]),
+    // sessionsGeneratedAt belongs to the session layer, not to the template.
+    cycle: stripRow(cycle, ["version", "deletedAt", "sessionsGeneratedAt"]),
     slots: slots.map(({ slot, programName }) => ({ ...stripRow(slot, []), programName })) as CycleSnapshot["slots"],
   };
 }
@@ -240,8 +254,21 @@ export async function snapshotSeason(ex: Executor, seasonId: number): Promise<Se
   };
 }
 
+/** One planned session (docs/plans/sessions.md, 7), with its program's name for the history. */
+export async function snapshotPlannedSession(ex: Executor, id: number): Promise<PlannedSessionSnapshot> {
+  const [row] = await ex
+    .select({ row: plannedSessions, programName: programs.name })
+    .from(plannedSessions)
+    // plan-read: includes deleted (the history names a deleted program too)
+    .leftJoin(programs, eq(programs.id, plannedSessions.programId))
+    .where(eq(plannedSessions.id, id));
+  return { v: 1, session: stripRow(row.row, ["version", "updatedAt"]), programName: row.programName ?? null };
+}
+
 const snapshotOf = (ex: Executor, t: PlanTarget): Promise<PlanSnapshot> =>
-  t.type === "program"
+  t.type === "planned_session"
+    ? snapshotPlannedSession(ex, t.id)
+    : t.type === "program"
     ? snapshotProgram(ex, t.id)
     : t.type === "cycle"
       ? snapshotCycle(ex, t.id)
@@ -277,6 +304,11 @@ export class PlanWriteSession {
   private touched = new Map<string, Touched>();
   private created: PlanTarget[] = [];
   private changeSet: string | null = null;
+  private regenerated = new Map<number, string>();
+  /** Dated sessions each cycle's regeneration made, changed or removed in this write. */
+  readonly regenerationCounts = new Map<number, number>();
+  /** Template days each cycle's regeneration left out for the cap of three. */
+  readonly regenerationCapped = new Map<number, string[]>();
   /** Seasons whose phases a restore moved: settled before the write ends (settleSeason). */
   readonly seasonsToSettle = new Set<number>();
 
@@ -405,8 +437,41 @@ export class PlanWriteSession {
     return rev.id;
   }
 
+  /**
+   * Keep each cycle's dated sessions in line with its template: every cycle
+   * this write created, or whose template it changed, is regenerated in the
+   * same transaction (docs/plans/sessions.md, 3.4), so no writer can forget.
+   */
+  async regenerateSessions(): Promise<Map<number, number>> {
+    const { regenerateCycleSessions, cycleTemplateKey } = await import("@/lib/planned-sessions");
+    for (const t of this.touched.values()) {
+      if (t.target.type !== "cycle" || t.action === "delete") continue;
+      const before = t.before as CycleSnapshot;
+      const after = await snapshotCycle(this.tx, t.target.id);
+      const key = cycleTemplateKey(after);
+      // Once per template state: the limits run it inside the write, and
+      // finish runs it again only if the write changed the template since.
+      if ((this.regenerated.get(t.target.id) ?? cycleTemplateKey(before)) === key) continue;
+      const moved =
+        (before.cycle.startDate !== after.cycle.startDate || before.cycle.scheduledStartDate !== after.cycle.scheduledStartDate) &&
+        !this.regenerated.has(t.target.id);
+      this.regenerated.set(t.target.id, key);
+      const r = await regenerateCycleSessions(this.tx, this.ctx.userId, t.target.id, { includePast: moved });
+      this.regenerationCounts.set(t.target.id, (this.regenerationCounts.get(t.target.id) ?? 0) + r.inserted + r.updated + r.removed);
+      this.regenerationCapped.set(t.target.id, [...(this.regenerationCapped.get(t.target.id) ?? []), ...r.keptOutByCap]);
+    }
+    for (const target of this.created) {
+      if (target.type !== "cycle" || this.regenerated.has(target.id)) continue;
+      this.regenerated.set(target.id, cycleTemplateKey(await snapshotCycle(this.tx, target.id)));
+      const r = await regenerateCycleSessions(this.tx, this.ctx.userId, target.id);
+      this.regenerationCounts.set(target.id, r.inserted);
+    }
+    return this.regenerationCounts;
+  }
+
   /** Store a revision for every object that changed, and bump versions. */
   async finish(): Promise<Map<string, number>> {
+    await this.regenerateSessions();
     const versions = new Map<string, number>();
     for (const t of this.touched.values()) {
       const after = t.action === "delete" ? t.before : await snapshotOf(this.tx, t.target);
@@ -1524,6 +1589,33 @@ async function restoreSeasonTo(
 }
 
 /**
+ * Restore one planned session: its date, order, program, notes and status
+ * come back (docs/plans/sessions.md, 7). A session a workout was logged for
+ * does not change: past sessions never change (T7).
+ */
+async function restorePlannedSessionTo(
+  w: PlanWriteSession,
+  id: number,
+  targetSnap: PlannedSessionSnapshot,
+  targetRevisionId: number,
+): Promise<string[]> {
+  await w.touch({ type: "planned_session", id }, { allowDeleted: true, action: "restore", restoredFromId: targetRevisionId });
+  const [row] = await w.tx.select().from(plannedSessions).where(eq(plannedSessions.id, id));
+  const values: Record<string, unknown> = { ...targetSnap.session };
+  for (const k of PLANNED_SESSION_KEPT) delete values[k];
+  // The same rules as a change in the app: no logged or past session, no
+  // past day, inside the block, three a day at most (review 10, 11, 16).
+  const { checkSessionRestore } = await import("@/lib/planned-sessions");
+  await checkSessionRestore(w.tx, w.ctx.userId, row, values);
+  if (typeof values.touchedAt === "string") values.touchedAt = new Date(values.touchedAt);
+  await w.tx
+    .update(plannedSessions)
+    .set({ ...(values as Partial<typeof plannedSessions.$inferInsert>), deletedAt: null, updatedAt: new Date() })
+    .where(eq(plannedSessions.id, id));
+  return [];
+}
+
+/**
  * Take a restore's season and cycle locks in the order every season write
  * uses (lockSeasonsThenCycles): each season the restored cycles are in now or
  * were in at the revisions, and each restored season, then the cycles.
@@ -1567,6 +1659,7 @@ async function restoreInSession(w: PlanWriteSession, rev: typeof planRevisions.$
   if (isThresholdSnapshot(snap)) return restoreRowTo(w, "threshold", rev.objectId, snap.threshold, rev.id);
   if (isInjurySnapshot(snap)) return restoreRowTo(w, "injury", rev.objectId, snap.injury, rev.id);
   if (isSeasonSnapshot(snap)) return restoreSeasonTo(w, rev.objectId, snap, rev.id);
+  if (isPlannedSessionSnapshot(snap)) return restorePlannedSessionTo(w, rev.objectId, snap, rev.id);
   return isProgramSnapshot(snap)
     ? restoreProgramTo(w, rev.objectId, snap, rev.id)
     : restoreCycleTo(w, rev.objectId, snap, rev.id);
@@ -1652,7 +1745,7 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
   }
   // Cycles first, then programs: the lock order every write uses. Memory
   // entries last; nothing else locks them.
-  const order: Record<PlanObjectType, number> = { season: -1, cycle: 0, program: 1, memory: 2, athlete: 3, threshold: 4, injury: 5 };
+  const order: Record<PlanObjectType, number> = { season: -1, cycle: 0, program: 1, memory: 2, athlete: 3, threshold: 4, injury: 5, planned_session: 6 };
   const firsts = [...firstByObject.values()].sort((a, b) =>
     a.objectType === b.objectType ? a.objectId - b.objectId : order[a.objectType] - order[b.objectType],
   );
@@ -1711,6 +1804,10 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
           await w.touch(target, { action: "delete" });
           const table = ROW_TABLES[target.type];
           await w.tx.update(table).set({ deletedAt: new Date() }).where(eq(table.id, target.id));
+        } else if (target.type === "planned_session") {
+          if (!(await liveForUndo(w, target))) continue;
+          await w.touch(target, { action: "delete" });
+          await w.tx.update(plannedSessions).set({ deletedAt: new Date() }).where(eq(plannedSessions.id, target.id));
         } else if (target.type === "season") {
           if (!(await liveForUndo(w, target))) continue;
           await w.touch(target, { action: "delete" });
@@ -1789,6 +1886,35 @@ export async function listRevisions(userId: string, target: PlanTarget): Promise
   // The extra row was read only to diff the oldest shown one against.
   if (rows.length > HISTORY_LIMIT) out.shift();
   return out.reverse();
+}
+
+/**
+ * The revisions of a cycle's dated sessions, newest first, each change
+ * prefixed with the session it is about (docs/plans/sessions.md, 5): the
+ * cycle's history page lists them with the template's own.
+ */
+export async function listCycleSessionRevisions(userId: string, cycleId: number): Promise<RevisionEntry[]> {
+  const ids = await db
+    .selectDistinct({ id: planRevisions.objectId })
+    .from(planRevisions)
+    .innerJoin(plannedSessions, eq(plannedSessions.id, planRevisions.objectId))
+    .where(
+      and(
+        eq(planRevisions.userId, userId),
+        eq(planRevisions.objectType, "planned_session"),
+        eq(plannedSessions.cycleId, cycleId),
+      ),
+    );
+  const out: RevisionEntry[] = [];
+  for (const { id } of ids) {
+    for (const r of await listRevisions(userId, { type: "planned_session", id })) {
+      if (r.action === "baseline") continue;
+      const [rev] = await db.select({ snapshot: planRevisions.snapshot }).from(planRevisions).where(eq(planRevisions.id, r.id));
+      const name = snapshotName(rev.snapshot as PlanSnapshot);
+      out.push({ ...r, changes: r.changes.map((c) => (c.startsWith("Added") || c.startsWith("Skipped ") ? c : `${name}: ${c}`)) });
+    }
+  }
+  return out.sort((a, b) => b.id - a.id);
 }
 
 function conflictLines(rejected: unknown): string[] {
@@ -1970,7 +2096,31 @@ export async function purgePlanRevisions(now = new Date()) {
     // its cycle: unhook it first (the old ones are already gone above).
     await db.update(programs).set({ createdByCycleId: null }).where(inArray(programs.createdByCycleId, ids));
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "cycle"), inArray(planRevisions.objectId, ids)));
+    // The cycle's dated sessions go with it (FK cascade); so do their revisions (review 17).
+    await db.delete(planRevisions).where(
+      and(
+        eq(planRevisions.objectType, "planned_session"),
+        inArray(planRevisions.objectId, db.select({ id: plannedSessions.id }).from(plannedSessions).where(inArray(plannedSessions.cycleId, ids))),
+      ),
+    );
     await db.delete(trainingCycles).where(inArray(trainingCycles.id, ids));
+  }
+  // Planned sessions a user or an assistant removed, unless a workout was
+  // started for one (the link would be lost).
+  const oldSessions = await db
+    // plan-read: includes deleted (the purge reads deleted rows on purpose)
+    .select({ id: plannedSessions.id })
+    .from(plannedSessions)
+    .where(
+      and(
+        lt(plannedSessions.deletedAt, trashCut),
+        sql`NOT EXISTS (SELECT 1 FROM ${workoutSessions} WHERE ${workoutSessions.plannedSessionId} = ${plannedSessions.id})`,
+      ),
+    );
+  if (oldSessions.length) {
+    const ids = oldSessions.map((s) => s.id);
+    await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "planned_session"), inArray(planRevisions.objectId, ids)));
+    await db.delete(plannedSessions).where(inArray(plannedSessions.id, ids));
   }
   // Seasons last: their cycles stay (season_id goes null with the FK) and their
   // races go with them (cascade).

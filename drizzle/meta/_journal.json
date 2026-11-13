@@ -603,6 +603,13 @@
       "when": 1794522522865,
       "tag": "0085_seasons",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1794524152594,
+      "tag": "0086_planned_sessions",
+      "breakpoints": true
     }
   ]
 }

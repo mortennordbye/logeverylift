@@ -10,7 +10,8 @@ import {
   isSessionResumableSchema,
 } from "@/lib/validators/workout";
 import type { ActionResult, ExportedSessions, WorkoutSession } from "@/types/workout";
-import { and, asc, desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
+import { startablePlannedId } from "@/lib/planned-sessions";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -63,6 +64,7 @@ export async function createWorkoutSession(
 
   try {
     const { date, startTime, notes, programId, intendedDate } = validation.data;
+    const plannedSessionId = await startablePlannedId(auth.user.id, validation.data.plannedSessionId, programId);
 
     // Sweep orphaned open sessions for this user. Without this, a user who
     // closes the tab mid-workout leaves a `isCompleted=false` row that
@@ -81,6 +83,7 @@ export async function createWorkoutSession(
         notes,
         programId,
         intendedDate,
+        plannedSessionId,
         isCompleted: false,
       })
       .returning();
@@ -177,16 +180,21 @@ export async function completeWorkoutSession(
       .returning();
 
     // Logging a day the cycle already auto-completed replaces the auto row, so
-    // the day isn't counted twice.
-    if (session.programId != null) {
+    // the day isn't counted twice: the auto row of this program and day, and
+    // the one of the planned session this workout was started for.
+    if (session.programId != null || session.plannedSessionId != null) {
       await db
         .delete(workoutSessions)
         .where(
           and(
             eq(workoutSessions.userId, auth.user.id),
-            eq(workoutSessions.programId, session.programId),
-            eq(workoutSessions.date, session.date),
             eq(workoutSessions.source, "auto"),
+            or(
+              session.programId != null
+                ? and(eq(workoutSessions.programId, session.programId), eq(workoutSessions.date, session.date))
+                : undefined,
+              session.plannedSessionId != null ? eq(workoutSessions.plannedSessionId, session.plannedSessionId) : undefined,
+            ),
           ),
         );
     }

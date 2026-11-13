@@ -15,6 +15,7 @@ import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
+import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerSessionTools } from "@/lib/mcp/tools/sessions";
 import { registerWorkoutTools } from "@/lib/mcp/tools/workouts";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -144,6 +145,10 @@ describe("MCP tool registration", () => {
       manage_season: false,
       manage_race: false,
     });
+  });
+
+  it("registers the dated session tools: list is read, manage is write", () => {
+    expect(hints(registerPlannedSessionTools)).toEqual({ list_planned_sessions: true, manage_planned_session: false });
   });
 
   it("registers the session tools, both write tools", () => {

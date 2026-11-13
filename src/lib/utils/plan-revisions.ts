@@ -26,7 +26,10 @@ export type InjurySnapshot = { v: 1; injury: Row };
  */
 export type PhaseSnap = { cycleId: number; name: string; phaseOrder: number | null; phaseType: string | null };
 export type SeasonSnapshot = { v: 1; season: Row; races: Row[]; phases: PhaseSnap[] };
+/** One planned (dated) session (docs/plans/sessions.md, 7). */
+export type PlannedSessionSnapshot = { v: 1; session: Row; programName: string | null };
 export type PlanSnapshot =
+  | PlannedSessionSnapshot
   | ProgramSnapshot
   | CycleSnapshot
   | MemorySnapshot
@@ -44,9 +47,16 @@ export const isInjurySnapshot = (s: PlanSnapshot): s is InjurySnapshot => "injur
 
 const INJURY_AREA_TEXT = (area: unknown) => String(area ?? "other").replace("_", " ");
 export const isSeasonSnapshot = (s: PlanSnapshot): s is SeasonSnapshot => "season" in s;
+export const isPlannedSessionSnapshot = (s: PlanSnapshot): s is PlannedSessionSnapshot => "session" in s;
+
+const sessionTitle = (s: PlannedSessionSnapshot) => {
+  const what = s.session.label ?? s.programName ?? "Session";
+  return s.session.date ? `${what} on ${s.session.date}` : `${what} (rotation, position ${Number(s.session.rotationPosition) + 1})`;
+};
 
 /** The name an object goes by in the history and the AI changes feed. */
 export function snapshotName(s: PlanSnapshot): string {
+  if (isPlannedSessionSnapshot(s)) return sessionTitle(s);
   if (isProgramSnapshot(s)) return String(s.program.name);
   if (isCycleSnapshot(s)) return String(s.cycle.name);
   if (isAthleteSnapshot(s)) return "Athlete profile";
@@ -298,6 +308,22 @@ function exerciseLabel(e: ExerciseSnap): string {
  * set 2: weight 60 kg → 62.5 kg"). `before` null means the object was created.
  */
 export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot): string[] {
+  if (isPlannedSessionSnapshot(after)) {
+    const prev = before && isPlannedSessionSnapshot(before) ? before : null;
+    const a = after.session;
+    if (!prev) return [a.status === "skipped" ? `Skipped ${sessionTitle(after)}` : `Added ${sessionTitle(after)}`];
+    const b = prev.session;
+    const out: string[] = [];
+    if (!sameValue(b.date, a.date)) out.push(`Moved from ${b.date} to ${a.date}`);
+    if (!sameValue(b.position, a.position) && sameValue(b.date, a.date)) out.push(`Order in the day ${b.position} → ${a.position}`);
+    if (!sameValue(b.programId, a.programId)) out.push(`Program ${prev.programName ?? "none"} → ${after.programName ?? "none"}`);
+    if (!sameValue(b.label ?? null, a.label ?? null)) out.push(`Label ${b.label ?? "none"} → ${a.label ?? "none"}`);
+    if (!sameValue(b.notes ?? null, a.notes ?? null)) out.push("Notes changed");
+    if (!sameValue(b.status, a.status)) out.push(a.status === "skipped" ? `Skipped${a.skipReason ? `: ${a.skipReason}` : ""}` : "Planned again");
+    if (!sameValue(b.touchedAt ?? null, a.touchedAt ?? null) && a.touchedAt == null) out.push("Back to the template");
+    if (!sameValue(b.deletedAt ?? null, a.deletedAt ?? null)) out.push(a.deletedAt ? "Removed" : "Restored");
+    return out;
+  }
   if (isAthleteSnapshot(after)) {
     const prev = before && isAthleteSnapshot(before) ? before.athlete : null;
     const out: string[] = [];
@@ -406,8 +432,11 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
   const prev = before && isCycleSnapshot(before) ? before : null;
   if (!prev) return [`Created "${after.cycle.name}"`];
   const out = fieldLines("", CYCLE_FIELDS, prev.cycle, after.cycle);
+  // A day's second and third sessions get their number (docs/plans/sessions.md, 3.1).
   const slotKey = (s: SlotSnap) =>
-    s.dayOfWeek != null ? DAYS[Number(s.dayOfWeek)] ?? `Day ${s.dayOfWeek}` : `Day ${s.orderIndex}`;
+    s.dayOfWeek != null
+      ? `${DAYS[Number(s.dayOfWeek)] ?? `Day ${s.dayOfWeek}`}${Number(s.daySlot ?? 1) > 1 ? ` (session ${s.daySlot})` : ""}`
+      : `Day ${s.orderIndex}`;
   const slotText = (s: SlotSnap) => s.label ?? s.programName ?? (s.programId == null ? "rest" : `program ${s.programId}`);
   const prevSlots = new Map(prev.slots.map((s) => [slotKey(s), s]));
   const nextSlots = new Map(after.slots.map((s) => [slotKey(s), s]));
@@ -429,6 +458,18 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
 
 // ── Restore (2.5, 2.6, owner decision 1) ─────────────────────────────────────
 
+/** Planned session fields a restore never writes back: identity and where the template put it. */
+export const PLANNED_SESSION_KEPT = [
+  "id",
+  "userId",
+  "cycleId",
+  "slotId",
+  "templateDate",
+  "rotationPosition",
+  "createdAt",
+  "updatedAt",
+  "deletedAt",
+] as const;
 /** Memory fields a restore never writes back. */
 export const MEMORY_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt"] as const;
 /** Fields a restore of a one-row object (athlete profile, threshold, injury) never writes back. */

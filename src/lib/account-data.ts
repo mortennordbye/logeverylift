@@ -38,6 +38,7 @@ import {
   programs,
   seasonRaces,
   seasons,
+  plannedSessions,
   sessions,
   trainingCycleSlots,
   trainingCycles,
@@ -150,6 +151,9 @@ export async function collectUserData(userId: string) {
     // plan-read: includes deleted (the export holds all of the user's data)
     seasons: await db.select().from(seasons).where(eq(seasons.userId, userId)),
     season_races: await db.select().from(seasonRaces).where(eq(seasonRaces.userId, userId)),
+    // Dated sessions of the cycles (docs/plans/sessions.md, 10), removed ones too.
+    // plan-read: includes deleted (the export holds all of the user's data)
+    planned_sessions: await db.select().from(plannedSessions).where(eq(plannedSessions.userId, userId)),
     ai_setup_plans: await db.select().from(aiSetupPlans).where(eq(aiSetupPlans.userId, userId)),
     ai_generations: await db.select().from(aiGenerations).where(eq(aiGenerations.userId, userId)),
     custom_weight_usage: await db.select().from(customWeightUsage).where(eq(customWeightUsage.userId, userId)),

@@ -2,12 +2,15 @@ import { CycleCalendarClient } from "@/components/features/CycleCalendarClient";
 import { getProgramsWithExercises } from "@/lib/actions/programs";
 import { getAllCyclesWithSlots } from "@/lib/actions/training-cycles";
 import { getCompletedSessions } from "@/lib/actions/workout-sets";
+import { listPlanned } from "@/lib/planned-sessions";
+import { addDaysStr } from "@/lib/utils/planned-sessions";
+import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 
 export default async function CalendarPage() {
-  await requireSession();
+  const session = await requireSession();
   const oneYearAgo = new Date();
   oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
@@ -29,6 +32,22 @@ export default async function CalendarPage() {
     }
   }
 
+  // The dated sessions of weekday cycles with dates (docs/plans/sessions.md, 5):
+  // moved and skipped sessions show where they are. Rotation days stay as before.
+  const dated = cycles.filter((c) => c.scheduleType === "day_of_week" && (c.startDate || c.scheduledStartDate) && c.status !== "completed");
+  const starts = dated.map((c) => (c.status === "active" ? c.startDate! : c.scheduledStartDate ?? c.startDate!));
+  const planned =
+    dated.length > 0
+      ? (
+          await listPlanned(
+            session.user.id,
+            starts.reduce((a, b) => (a < b ? a : b)),
+            dated.map((c, i) => addDaysStr(starts[i], cycleLengthDays(c))).reduce((a, b) => (a > b ? a : b)),
+          )
+        ).filter((p) => p.rotationPosition == null && p.id != null)
+      : [];
+  for (const p of planned) if (p.programId) programIds.add(p.programId);
+
   // Pre-fetch all referenced programs in a single batched query
   const programsMap = await getProgramsWithExercises([...programIds]);
 
@@ -46,7 +65,7 @@ export default async function CalendarPage() {
         <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
       </div>
 
-      <CycleCalendarClient cycles={cycles} completedDates={completedDates} programsMap={programsMap} />
+      <CycleCalendarClient cycles={cycles} completedDates={completedDates} programsMap={programsMap} planned={planned} />
     </div>
   );
 }

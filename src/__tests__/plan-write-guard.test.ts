@@ -56,7 +56,7 @@ describe("plan writes go through the revision layer", () => {
   it("has no write to a plan table outside a plan-write transaction", () => {
     const problems: string[] = [];
     const WRITE =
-      /\.(insert|update|delete)\(\s*(programs|programExercises|programSets|trainingCycles|trainingCycleSlots|coachMemory|athleteProfiles|athleteThresholds|athleteInjuries|seasons|seasonRaces)\s*\)/g;
+      /\.(insert|update|delete)\(\s*(programs|programExercises|programSets|trainingCycles|trainingCycleSlots|coachMemory|athleteProfiles|athleteThresholds|athleteInjuries|seasons|seasonRaces|plannedSessions)\s*\)/g;
     for (const { path, rel } of files) {
       if (WRITE_ALLOWED.has(rel)) continue;
       const text = readFileSync(path, "utf8");
@@ -82,11 +82,12 @@ describe("plan reads hide soft-deleted rows", () => {
     athleteThresholds: /athleteThresholds\.deletedAt|plan-read: includes deleted/,
     athleteInjuries: /athleteInjuries\.deletedAt|plan-read: includes deleted/,
     seasons: /seasons\.deletedAt|plan-read: includes deleted/,
+    plannedSessions: /livePlannedSessions|plannedSessions\.deletedAt|plan-read: includes deleted/,
   };
 
   it("filters every read of programs, slots, sets and cycles", () => {
     const problems: string[] = [];
-    const TABLES = "programs|programExercises|programSets|trainingCycles|coachMemory|athleteProfiles|athleteThresholds|athleteInjuries|seasons";
+    const TABLES = "programs|programExercises|programSets|trainingCycles|coachMemory|athleteProfiles|athleteThresholds|athleteInjuries|seasons|plannedSessions";
     const READ = new RegExp(
       `\\.from\\(\\s*(${TABLES})\\s*\\)|Join\\(\\s*(${TABLES})\\s*,|query\\.(${TABLES})\\.find(?:First|Many)`,
       "g",

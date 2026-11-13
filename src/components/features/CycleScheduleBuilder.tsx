@@ -34,7 +34,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical, PlusIcon, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, type ReactNode } from "react";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -51,7 +51,13 @@ function ProgramPicker({
   onCancel,
   autoComplete,
   onToggleAuto,
+  restLabel,
+  header,
 }: {
+  /** Replaces "— Rest day" (a later session of a day is removed, not made a rest day). */
+  restLabel?: string;
+  /** Shown under the title: the day's sessions and "Add another session". */
+  header?: ReactNode;
   programs: Program[];
   /** `autoComplete` is the switch's current value, saved with the program. */
   onSelect: (programId: number, label: string, autoComplete: boolean) => void;
@@ -78,6 +84,8 @@ function ProgramPicker({
             <X className="w-4 h-4" />
           </button>
         </div>
+
+        {header}
 
         {programs.length > 0 && (
           <div className="flex items-center justify-between gap-3 px-4 py-2 mb-1 rounded-xl bg-muted min-h-[44px]">
@@ -113,7 +121,7 @@ function ProgramPicker({
           onClick={onRest}
           className="flex items-center px-4 py-3 rounded-xl text-sm text-muted-foreground active:bg-muted transition-colors"
         >
-          — Rest day
+          {restLabel ?? "— Rest day"}
         </button>
 
         {/* Programs */}
@@ -149,57 +157,94 @@ function DayOfWeekBuilder({
   programs: Program[];
 }) {
   const router = useRouter();
-  const [pickerDay, setPickerDay] = useState<number | null>(null);
+  // The day being edited and which of its sessions (1-3, docs/plans/sessions.md, 3.1).
+  const [picker, setPicker] = useState<{ day: number; daySlot: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  const slotByDay = Object.fromEntries(
-    cycle.slots.map((s) => [s.dayOfWeek!, s]),
-  );
+  const slotsByDay = new Map<number, Slot[]>();
+  for (const s of cycle.slots) {
+    if (s.dayOfWeek == null) continue;
+    slotsByDay.set(s.dayOfWeek, [...(slotsByDay.get(s.dayOfWeek) ?? []), s].sort((a, b) => (a.daySlot ?? 1) - (b.daySlot ?? 1)));
+  }
+  const daySlots = picker ? (slotsByDay.get(picker.day) ?? []) : [];
+  const pickerSlot = picker ? daySlots.find((s) => (s.daySlot ?? 1) === picker.daySlot) : undefined;
+
+  async function save(write: Promise<{ success: boolean; error?: string }>, close: boolean) {
+    const result = await callAction(write);
+    if (!result.success) {
+      setError(result.error ?? "Could not save");
+      return;
+    }
+    setError(null);
+    if (close) setPicker(null);
+    router.refresh();
+  }
 
   async function handleSelectProgram(programId: number, label: string, autoComplete: boolean) {
-    if (pickerDay === null) return;
-    await callAction(upsertCycleSlot({
-      trainingCycleId: cycle.id,
-      dayOfWeek: pickerDay,
-      programId,
-      label,
-      autoComplete,
-    }));
-    setPickerDay(null);
-    router.refresh();
+    if (picker === null) return;
+    await save(
+      upsertCycleSlot({
+        trainingCycleId: cycle.id,
+        dayOfWeek: picker.day,
+        ...(picker.daySlot > 1 && { daySlot: picker.daySlot }),
+        programId,
+        label,
+        autoComplete,
+      }),
+      true,
+    );
   }
 
   async function handleToggleAuto(next: boolean) {
-    if (pickerDay === null) return;
-    await callAction(upsertCycleSlot({
-      trainingCycleId: cycle.id,
-      dayOfWeek: pickerDay,
-      autoComplete: next,
-    }));
-    router.refresh();
+    if (picker === null) return;
+    await save(
+      upsertCycleSlot({
+        trainingCycleId: cycle.id,
+        dayOfWeek: picker.day,
+        ...(picker.daySlot > 1 && { daySlot: picker.daySlot }),
+        autoComplete: next,
+      }),
+      false,
+    );
   }
-
-  const pickerSlot = pickerDay !== null ? slotByDay[pickerDay] : undefined;
 
   async function handleRest() {
-    if (pickerDay === null) return;
-    const existing = slotByDay[pickerDay];
-    if (existing) {
-      await callAction(removeCycleSlot(existing.id, cycle.id));
+    if (picker === null) return;
+    if (picker.daySlot > 1) {
+      // A later session of the day: remove just that one.
+      if (pickerSlot) await save(removeCycleSlot(pickerSlot.id, cycle.id), true);
+      else setPicker(null);
+      return;
     }
-    setPickerDay(null);
+    // The day becomes a rest day: every session of it goes, last first.
+    for (const s of [...daySlots].reverse()) {
+      const result = await callAction(removeCycleSlot(s.id, cycle.id));
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+    }
+    setPicker(null);
     router.refresh();
   }
+
+  const canAdd = picker !== null && daySlots.length < 3 && daySlots.length > 0 && daySlots.every((s) => s.programId != null);
 
   return (
     <>
       <div className="flex flex-col divide-y divide-border rounded-2xl bg-card overflow-hidden">
         {DAY_LABELS.map((dayLabel, i) => {
           const dayOfWeek = i + 1; // 1=Mon…7=Sun
-          const slot = slotByDay[dayOfWeek];
+          const slots = slotsByDay.get(dayOfWeek) ?? [];
+          const withProgram = slots.filter((s) => s.program);
+          const slot = slots[0];
           return (
             <button
               key={dayOfWeek}
-              onClick={() => setPickerDay(dayOfWeek)}
+              onClick={() => {
+                setError(null);
+                setPicker({ day: dayOfWeek, daySlot: 1 });
+              }}
               className="flex items-center gap-4 px-4 py-3 active:bg-border transition-colors min-h-[52px]"
             >
               <span className="text-xs font-semibold text-muted-foreground w-8 text-left uppercase">
@@ -212,9 +257,9 @@ function DayOfWeekBuilder({
                     : "text-muted-foreground"
                 }`}
               >
-                {slot?.program ? slot.program.name : "— Rest —"}
+                {withProgram.length ? withProgram.map((s) => s.program!.name).join(", ") : "— Rest —"}
               </span>
-              {slot?.program && slot.autoComplete && (
+              {slot?.program && withProgram.some((s) => s.autoComplete) && (
                 <span className="text-xs font-semibold text-emerald-600 bg-emerald-500/15 px-2 py-0.5 rounded-full shrink-0">
                   Auto
                 </span>
@@ -224,14 +269,48 @@ function DayOfWeekBuilder({
         })}
       </div>
 
-      {pickerDay !== null && (
+      {picker !== null && (
         <ProgramPicker
           programs={programs}
           onSelect={handleSelectProgram}
           onRest={handleRest}
-          onCancel={() => setPickerDay(null)}
+          onCancel={() => setPicker(null)}
           autoComplete={pickerSlot?.autoComplete}
           onToggleAuto={pickerSlot?.programId != null ? handleToggleAuto : undefined}
+          restLabel={picker.daySlot > 1 ? "— Remove this session" : undefined}
+          header={
+            <>
+              {(daySlots.length > 1 || picker.daySlot > 1) && (
+                <div className="flex gap-2 px-2 pb-2" role="tablist" aria-label="Sessions on this day">
+                  {[...daySlots.map((s) => s.daySlot ?? 1), ...(picker.daySlot > daySlots.length ? [picker.daySlot] : [])].map((n) => (
+                    <button
+                      key={n}
+                      role="tab"
+                      aria-selected={n === picker.daySlot}
+                      onClick={() => setPicker({ day: picker.day, daySlot: n })}
+                      className={`min-h-[44px] px-3 rounded-xl text-sm font-medium ${n === picker.daySlot ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+                    >
+                      Session {n}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {canAdd && picker.daySlot <= daySlots.length && (
+                <button
+                  onClick={() => setPicker({ day: picker.day, daySlot: daySlots.length + 1 })}
+                  className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium text-primary active:bg-muted"
+                >
+                  <PlusIcon className="w-4 h-4" />
+                  Add another session on this day
+                </button>
+              )}
+              {error && (
+                <p role="alert" className="px-4 pb-2 text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+            </>
+          }
         />
       )}
     </>

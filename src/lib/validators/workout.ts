@@ -59,6 +59,9 @@ export const createWorkoutSessionSchema = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Date must be in YYYY-MM-DD format")
     .optional(),
+  // The dated session this workout is for (docs/plans/sessions.md, 3.3). The
+  // server keeps it only when it is the caller's and on this program.
+  plannedSessionId: z.number().int().positive().optional(),
 });
 
 /**

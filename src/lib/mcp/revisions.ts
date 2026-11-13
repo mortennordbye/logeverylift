@@ -5,7 +5,7 @@
  */
 
 import { db } from "@/db";
-import { PLAN_OBJECT_TYPES, planRevisions, type PlanObjectType } from "@/db/schema";
+import { PLAN_OBJECT_TYPES, planRevisions, plannedSessions, type PlanObjectType } from "@/db/schema";
 import { fail, failInternal, ok } from "@/lib/mcp/result";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import {
@@ -105,9 +105,25 @@ export async function planErrorResult(userId: string, e: unknown) {
 }
 
 /** The limit scope of a restored program or cycle (T4: restores get warnings, never a block). */
-async function restoreScope(userId: string, type: PlanObjectType, id: number): Promise<LimitScope | null> {
+async function restoreScope(userId: string, type: PlanObjectType, id: number, revisionId: number): Promise<LimitScope | null> {
   if (type === "program") return { programIds: [id], cycleIds: await limitCyclesWith(db, userId, id) };
   if (type === "cycle") return (await cycleScope(id, 1))?.scope ?? null;
+  if (type === "planned_session") {
+    // The weeks of the session now and in the restored version (review 24).
+    const { mondayOf } = await import("@/lib/utils/planned-sessions");
+    // plan-read: includes deleted (a removed session can be restored)
+    const [row] = await db
+      .select({ date: plannedSessions.date })
+      .from(plannedSessions)
+      .where(and(eq(plannedSessions.id, id), eq(plannedSessions.userId, userId)));
+    const [rev] = await db
+      .select({ snapshot: planRevisions.snapshot })
+      .from(planRevisions)
+      .where(and(eq(planRevisions.id, revisionId), eq(planRevisions.userId, userId)));
+    const target = (rev?.snapshot as { session?: { date?: unknown } } | undefined)?.session?.date;
+    const dates = [row?.date, typeof target === "string" ? target : null].filter((d): d is string => d != null);
+    return { programIds: [], cycleIds: [], sessionWeeks: { userId, mondays: [...new Set(dates.map(mondayOf))].sort() } };
+  }
   return null;
 }
 
@@ -116,7 +132,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "list_revisions",
     {
       description: [
-        "List the change history of one program, training cycle, season, coach memory entry, the athlete profile (athlete), a threshold value or an injury (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
+        "List the change history of one program, training cycle, season, dated session (planned_session), coach memory entry, the athlete profile (athlete), a threshold value or an injury (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
         "Without objectType, list your own (assistant) change sets instead: each groups the writes of one review.",
         "Use the revision id or the change-set id with restore_revision.",
       ].join(" "),
@@ -158,7 +174,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "restore_revision",
     {
       description: [
-        "Restore a program, training cycle, season (its fields and races; phases stay where they are), coach memory entry, the athlete profile, a threshold value or an injury to an earlier revision (revisionId), or undo a whole change set (changeSetId).",
+        "Restore a program, training cycle, season (its fields and races; phases stay where they are), dated session (a logged or past one, or one on a day that has passed, is refused), coach memory entry, the athlete profile, a threshold value or an injury to an earlier revision (revisionId), or undo a whole change set (changeSetId).",
         "A restore keeps all ids and never changes logged workouts. Weekly targets owned by the sync, and weights or reps the progression engine set since, keep their current values; the weekly sync runs again. A restore is itself a revision and can be restored.",
         "Requires a reason. Refused while the user has a workout in progress on the program.",
         "A restore of one revision runs the training limits as warnings only: it is never refused for them, and the result lists any limit the restored plan breaks.",
@@ -181,7 +197,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
           if (!rev) return fail("Revision not found");
           // The limits as warnings (T4): read the plan around the restore.
           const lc = await limitContext(userId);
-          const scope = lc.endurance ? await restoreScope(userId, rev.objectType, rev.objectId) : null;
+          const scope = lc.endurance ? await restoreScope(userId, rev.objectType, rev.objectId, revisionId) : null;
           const before = scope ? await planFacts(db, scope) : NO_FACTS;
           const [{ last }] = await db.select({ last: max(planRevisions.id) }).from(planRevisions).where(eq(planRevisions.userId, userId));
           const done = await restoreRevision(ctx, revisionId);

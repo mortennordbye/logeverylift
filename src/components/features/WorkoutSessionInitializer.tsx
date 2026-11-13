@@ -30,10 +30,16 @@ export function WorkoutSessionInitializer({
   const sessionId = workoutSession?.sessionId ?? null;
   // Set when arriving via a "Make up" prompt (?makeup=YYYY-MM-DD): the original
   // missed day this session is making up for. Validated YYYY-MM-DD only.
-  const makeupParam = useSearchParams().get("makeup");
+  const searchParams = useSearchParams();
+  const makeupParam = searchParams.get("makeup");
   const intendedDate = makeupParam && /^\d{4}-\d{2}-\d{2}$/.test(makeupParam)
     ? makeupParam
     : undefined;
+  // Set when started for one of several sessions of a day (?planned=<id>,
+  // docs/plans/sessions.md, 3.3). The server keeps it only if it is the
+  // user's and on this program.
+  const plannedParam = searchParams.get("planned");
+  const plannedSessionId = plannedParam && /^\d+$/.test(plannedParam) ? Number(plannedParam) : undefined;
 
   // Rehydrate completed-set toggles from the server once the session id is
   // known. `completedSetIds` lives only in React state; if iOS evicted the
@@ -115,6 +121,7 @@ export function WorkoutSessionInitializer({
         startTime: startTime.toISOString(),
         programId,
         intendedDate,
+        ...(plannedSessionId != null && { plannedSessionId }),
       }).catch(() => null);
       if (result?.success) {
         workoutSession?.setActiveWorkout(
