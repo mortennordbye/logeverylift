@@ -110,6 +110,9 @@ export const racePlans = pgTable(
     plan: jsonb("plan").notNull(),
     version: integer("version").notNull().default(1),
     deletedAt: timestamp("deleted_at"),
+    // When its race was removed (removeRace, or a season restore that drops
+    // it); cleared when the race comes back. The purge counts 90 days from here.
+    orphanedAt: timestamp("orphaned_at"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

@@ -10,7 +10,7 @@
  */
 
 import { db } from "@/db";
-import { seasonRaces, seasons, trainingCycles, type PhaseType, type RaceDiscipline, type RacePriority, type TriDistance } from "@/db/schema";
+import { racePlans, seasonRaces, seasons, trainingCycles, type PhaseType, type RaceDiscipline, type RacePriority, type TriDistance } from "@/db/schema";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import {
   PlanNotFoundError,
@@ -447,6 +447,9 @@ export async function removeRace(ctx: PlanWriteContext, seasonId: number, raceId
   return raceWrite(ctx, seasonId, expectedVersion, async (w) => {
     await ownRace(w, seasonId, raceId);
     await w.tx.delete(seasonRaces).where(eq(seasonRaces.id, raceId));
+    // Its race plan stays, hidden, until a season restore brings the race back;
+    // the purge counts from now (docs/plans/nutrition-and-race-day.md, 3).
+    await w.tx.update(racePlans).set({ orphanedAt: new Date() }).where(and(eq(racePlans.seasonRaceId, raceId), eq(racePlans.userId, ctx.userId)));
     return null;
   });
 }

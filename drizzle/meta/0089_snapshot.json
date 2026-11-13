@@ -1,5 +1,5 @@
 {
-  "id": "28df7418-2a5b-48da-9810-12367e3b0163",
+  "id": "3c7f76a5-e0b6-4f71-879a-74a6ddd7c6bd",
   "prevId": "14c79b12-65a6-4380-a743-db97180af932",
   "version": "7",
   "dialect": "postgresql",
@@ -7591,6 +7591,12 @@
         },
         "deleted_at": {
           "name": "deleted_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "orphaned_at": {
+          "name": "orphaned_at",
           "type": "timestamp",
           "primaryKey": false,
           "notNull": false

@@ -127,7 +127,9 @@ export function RacePlanClient({ plan }: { plan: RacePlanView }) {
           <p className="text-sm text-muted-foreground">{p.fuel.carbsText}</p>
           <Evidence label={p.fuel.carbsEvidence} />
           <p className="text-sm pt-2">
-            Fluid {p.fuel.fluid.low}-{p.fuel.fluid.high} ml/h, sodium {p.fuel.sodium.low}-{p.fuel.sodium.high} mg/h
+            {p.fuel.fluid.thirst
+              ? "Drink to thirst; no fluid or sodium rate"
+              : `Fluid ${p.fuel.fluid.low}-${p.fuel.fluid.high} ml/h, sodium ${p.fuel.sodium.low}-${p.fuel.sodium.high} mg/h`}
             {p.fuel.sweatTestOn ? ` (sweat test ${p.fuel.sweatTestOn})` : ""}.
           </p>
           <p className="text-sm text-muted-foreground">{p.fuel.fluid.text}</p>

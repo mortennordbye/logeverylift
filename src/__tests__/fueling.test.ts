@@ -176,4 +176,13 @@ describe("review fixes: carb caps and no-sweat tests", () => {
     }
     expect(fluidPlan(null).high).toBe(900);
   });
+
+  it("rounds the fluid band down, so its top never passes 80 % of the sweat rate", () => {
+    for (let rate = 100; rate <= 400; rate += 5) {
+      const f = fluidPlan(rate);
+      expect(f.high).toBeLessThanOrEqual(rate * 0.8);
+      expect(f.low).toBeLessThanOrEqual(f.high);
+    }
+    expect([fluidPlan(1000).low, fluidPlan(1000).high]).toEqual([500, 800]);
+  });
 });

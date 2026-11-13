@@ -243,7 +243,7 @@ export async function snapshotMemory(ex: Executor, memoryId: number): Promise<Me
 async function snapshotRow(ex: Executor, type: Exclude<RowType, "memory">, id: number): Promise<PlanSnapshot> {
   const table = ROW_TABLES[type];
   const [row] = await ex.select().from(table).where(eq(table.id, id));
-  return { v: 1, [type]: stripRow(row, ["version", "updatedAt"]) } as PlanSnapshot;
+  return { v: 1, [type]: stripRow(row, ["version", "updatedAt", "orphanedAt"]) } as PlanSnapshot;
 }
 
 export async function snapshotSeason(ex: Executor, seasonId: number): Promise<SeasonSnapshot> {
@@ -1650,11 +1650,21 @@ async function restoreSeasonTo(
   const keep = new Set(target.map((r) => r.id));
   const now = new Set(current.map((r) => r.id));
   const gone = current.filter((r) => !keep.has(r.id)).map((r) => r.id);
-  if (gone.length) await tx.delete(seasonRaces).where(inArray(seasonRaces.id, gone));
+  if (gone.length) {
+    await tx.delete(seasonRaces).where(inArray(seasonRaces.id, gone));
+    // Their race plans stay, hidden; the purge counts 90 days from now.
+    await tx.update(racePlans).set({ orphanedAt: new Date() }).where(and(eq(racePlans.userId, w.ctx.userId), inArray(racePlans.seasonRaceId, gone)));
+  }
+  const back: number[] = [];
   for (const r of target) {
     if (r.id != null && now.has(r.id)) await tx.update(seasonRaces).set(r).where(eq(seasonRaces.id, r.id));
-    else await tx.insert(seasonRaces).values(r);
+    else {
+      await tx.insert(seasonRaces).values(r);
+      if (r.id != null) back.push(r.id);
+    }
   }
+  // A race back with its id brings its plan back.
+  if (back.length) await tx.update(racePlans).set({ orphanedAt: null }).where(and(eq(racePlans.userId, w.ctx.userId), inArray(racePlans.seasonRaceId, back)));
   // Back from the trash: its phases hold no race of their own again.
   if (row.deletedAt) await claimSeasonPhases(w, seasonId);
   w.seasonsToSettle.add(seasonId);
@@ -2173,12 +2183,18 @@ export async function purgePlanRevisions(now = new Date()) {
     await db.delete(table).where(inArray(table.id, ids));
   }
   // A race plan whose race was removed waits, hidden, for a season restore to
-  // bring the race back; after the trash window it goes for good.
+  // bring the race back; 90 days after the race went (orphanedAt) it goes for
+  // good. With no orphanedAt the race went with its season's own purge.
   const orphanPlans = await db
     .select({ id: racePlans.id })
     .from(racePlans)
     // plan-read: includes deleted (the purge reads every orphan)
-    .where(and(lt(racePlans.updatedAt, trashCut), sql`not exists (select 1 from ${seasonRaces} where ${seasonRaces.id} = ${racePlans.seasonRaceId})`));
+    .where(
+      and(
+        or(isNull(racePlans.orphanedAt), lt(racePlans.orphanedAt, trashCut)),
+        sql`not exists (select 1 from ${seasonRaces} where ${seasonRaces.id} = ${racePlans.seasonRaceId})`,
+      ),
+    );
   if (orphanPlans.length) {
     const ids = orphanPlans.map((r) => r.id);
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "race_plan"), inArray(planRevisions.objectId, ids)));

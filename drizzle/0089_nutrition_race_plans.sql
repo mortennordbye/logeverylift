@@ -36,6 +36,7 @@ CREATE TABLE "race_plans" (
 	"plan" jsonb NOT NULL,
 	"version" integer DEFAULT 1 NOT NULL,
 	"deleted_at" timestamp,
+	"orphaned_at" timestamp,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );

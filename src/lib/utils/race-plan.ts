@@ -50,6 +50,26 @@ export const DEFAULT_TRANSITIONS: Record<PlanDistance, { t1: number; t2: number 
 export const ASSUMED_SPEED = { swim: 100 / 130, bike: 28 / 3.6, run: 1000 / 390 };
 export const DEFAULT_SWIM_OFFSET_S = 5;
 
+/**
+ * The longest leg times a plan accepts, near the usual race cut-offs (half:
+ * swim 70 min, finish 8:30 h; full: swim 2:20 h, finish 17 h). A longer time
+ * is a likely typo, and at the bike it would give a meaningless IF.
+ */
+export const LEG_MAX_MINUTES: Record<PlanDistance, { swim: number; bike: number; run: number }> = {
+  half: { swim: 90, bike: 300, run: 240 },
+  full: { swim: 150, bike: 540, run: 420 },
+};
+
+/** Why a plan's leg time is refused, or null. */
+export function legLimitError(distance: PlanDistance, plan: Pick<RacePlanInputs, "swimMinutes" | "bikeMinutes" | "runMinutes">): string | null {
+  const max = LEG_MAX_MINUTES[distance];
+  for (const leg of ["swim", "bike", "run"] as const) {
+    const v = plan[`${leg}Minutes`];
+    if (v != null && v > max[leg]) return `A ${distance}-distance ${leg} leg is at most ${max[leg]} minutes.`;
+  }
+  return null;
+}
+
 export type RacePlanInputs = {
   startTime?: string | null;
   swimMinutes?: number | null;

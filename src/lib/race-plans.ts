@@ -15,7 +15,7 @@ import { planWrite, PlanConflictError, PlanNotFoundError, PlanStateError, type P
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { caffeinePlan, FLUID_SAFETY, NUTRITION_DISCLAIMER, raceMorning } from "@/lib/utils/fueling";
-import { ASSUMED_SPEED, fuelRates, fuelSchedule, fuelTotals, LEG_METERS, racePlan, type PlanDistance } from "@/lib/utils/race-plan";
+import { ASSUMED_SPEED, fuelRates, legLimitError, fuelSchedule, fuelTotals, LEG_METERS, racePlan, type PlanDistance } from "@/lib/utils/race-plan";
 import { currentThresholds } from "@/lib/utils/thresholds";
 import { racePlanInput, type RacePlanInput } from "@/lib/validators/nutrition";
 import { and, asc, eq, gte, isNull, sql } from "drizzle-orm";
@@ -65,9 +65,9 @@ const planDistance = (r: PlanRace): PlanDistance | null =>
   r.discipline === "triathlon" && (r.distance === "half" || r.distance === "full") ? r.distance : null;
 
 /** The stored row for a race, live or soft deleted. */
-async function rowFor(raceId: number) {
+async function rowFor(userId: string, raceId: number) {
   // plan-read: includes deleted (the caller checks deletedAt, and the next save revives a deleted row)
-  const [row] = await db.select().from(racePlans).where(eq(racePlans.seasonRaceId, raceId));
+  const [row] = await db.select().from(racePlans).where(and(eq(racePlans.seasonRaceId, raceId), eq(racePlans.userId, userId)));
   return row ?? null;
 }
 
@@ -76,7 +76,7 @@ export async function getRacePlan(userId: string, raceId: number) {
   const race = await ownedRace(userId, raceId);
   if (!race) return null;
   const distance = planDistance(race);
-  const row = await rowFor(raceId);
+  const row = await rowFor(userId, raceId);
   const live = row && !row.deletedAt ? row : null;
   const inputs = (live?.plan ?? {}) as RacePlanInput;
   if (!distance) return { race, distance: null, id: live?.id ?? null, version: live?.version ?? null, inputs, unsupported: RACE_PLAN_DISTANCE_OFF } as const;
@@ -144,7 +144,7 @@ export async function bikeContext(userId: string, distance: PlanDistance): Promi
   const today = toDateStr(await userToday(userId));
   const races = (await plannableRaces(userId, today)).filter((r) => r.distance === distance);
   const race = races.find((r) => r.priority === "A") ?? races[0];
-  const row = race ? await rowFor(race.id) : null;
+  const row = race ? await rowFor(userId, race.id) : null;
   const minutes = row && !row.deletedAt ? (row.plan as RacePlanInput).bikeMinutes : null;
   const [profile] = await db
     .select({ level: athleteProfiles.enduranceLevel })
@@ -171,14 +171,15 @@ export async function defaultPlanRace(userId: string): Promise<PlanRace | null> 
 export async function saveRacePlan(ctx: PlanWriteContext, raceId: number, change: RacePlanInput, expectedVersion?: number): Promise<{ id: number; version: number }> {
   const race = await ownedRace(ctx.userId, raceId);
   if (!race) throw new PlanNotFoundError({ type: "race_plan", id: 0 });
-  if (!planDistance(race)) throw new PlanStateError(RACE_PLAN_DISTANCE_OFF);
+  const distance = planDistance(race);
+  if (!distance) throw new PlanStateError(RACE_PLAN_DISTANCE_OFF);
   const { result, versions } = await planWrite(ctx, async (w) => {
     await w.tx.execute(sqlLock(raceId));
     // plan-read: includes deleted (a deleted plan's row is revived here)
-    const [row] = await w.tx.select().from(racePlans).where(eq(racePlans.seasonRaceId, raceId));
+    const [row] = await w.tx.select().from(racePlans).where(and(eq(racePlans.seasonRaceId, raceId), eq(racePlans.userId, ctx.userId)));
     if (!row || row.deletedAt) {
       if (row && expectedVersion !== undefined) throw new PlanConflictError({ type: "race_plan", id: row.id }, row.version, expectedVersion);
-      const plan = merge({}, change);
+      const plan = merge({}, change, distance);
       if (row) {
         await w.touch({ type: "race_plan", id: row.id }, { allowDeleted: true, action: "restore" });
         await w.tx.update(racePlans).set({ plan, deletedAt: null, updatedAt: new Date() }).where(eq(racePlans.id, row.id));
@@ -189,7 +190,7 @@ export async function saveRacePlan(ctx: PlanWriteContext, raceId: number, change
       return made.id;
     }
     await w.touch({ type: "race_plan", id: row.id }, { expectedVersion });
-    const plan = merge(row.plan as RacePlanInput, change);
+    const plan = merge(row.plan as RacePlanInput, change, distance);
     await w.tx.update(racePlans).set({ plan, updatedAt: new Date() }).where(eq(racePlans.id, row.id));
     return row.id;
   });
@@ -197,14 +198,17 @@ export async function saveRacePlan(ctx: PlanWriteContext, raceId: number, change
 }
 
 /** The stored inputs with a change applied: undefined keeps a field, null clears it. */
-function merge(current: RacePlanInput, change: RacePlanInput): RacePlanInput {
+function merge(current: RacePlanInput, change: RacePlanInput, distance: PlanDistance): RacePlanInput {
   const out: Record<string, unknown> = { ...current };
   for (const [k, v] of Object.entries(change)) {
     if (v === undefined) continue;
     if (v === null) delete out[k];
     else out[k] = v;
   }
-  return racePlanInput.parse(out);
+  const plan = racePlanInput.parse(out);
+  const tooLong = legLimitError(distance, plan);
+  if (tooLong) throw new PlanStateError(tooLong);
+  return plan;
 }
 
 function sqlLock(raceId: number) {

@@ -90,7 +90,7 @@ export function NutritionClient(p: { gut: GutTraining; fluid: Band; sodium: Band
           <div className="flex justify-between text-sm">
             <span>Fluid</span>
             <span className="font-semibold tabular-nums" data-testid="fluid-band">
-              {p.fluid.low}-{p.fluid.high} ml/h
+              {p.fluid.thirst ? "Drink to thirst" : `${p.fluid.low}-${p.fluid.high} ml/h`}
             </span>
           </div>
           <p className="text-sm text-muted-foreground">{p.fluid.text}</p>
@@ -98,7 +98,7 @@ export function NutritionClient(p: { gut: GutTraining; fluid: Band; sodium: Band
           <div className="flex justify-between text-sm pt-2">
             <span>Sodium</span>
             <span className="font-semibold tabular-nums">
-              {p.sodium.low}-{p.sodium.high} mg/h
+              {p.fluid.thirst ? "No rate" : `${p.sodium.low}-${p.sodium.high} mg/h`}
             </span>
           </div>
           <p className="text-sm text-muted-foreground">{p.sodium.text}</p>

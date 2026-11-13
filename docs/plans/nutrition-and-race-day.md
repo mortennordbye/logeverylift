@@ -94,10 +94,10 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
 
 ### 2.4 Fluid, sodium and caffeine (`fluidPlan`, `sodiumPlan`, `caffeinePlan` *new*)
 
-- Fluid/h = 50-80 % of the measured sweat rate, rounded to 50 ml, never above the sweat rate
+- Fluid/h = 50-80 % of the measured sweat rate, rounded down to 50 ml, never above the sweat rate
   (Consensus plus inference). With no test: 400-900 ml/h, labelled, and a prompt to do a test.
   A measured rate under 100 ml/h (0, or a weight gain) is its own case: drink to thirst, never
-  more than the measured loss, and retest; no default band is shown.
+  more than the measured loss, and retest; no default band and no sodium rate are shown.
   The test nearest the race temperature is used when the plan has one; else the newest.
 - Sodium: 300-600 mg/h default, or 500-1,000 mg per litre drunk (Consensus for the variation,
   inference for the doses). With a lab sweat sodium value (mg/L): sodium/h = fluid/h x
@@ -137,7 +137,9 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
 - Leg time: the user's override, else from the pacing guide (swim from CSS pace with the offset;
   run from the middle of the guide pace band), else a default speed (swim 2:10/100 m, bike
   28 km/h, run 6:30/km; Inference, shown as "assumed"). Transitions: user minutes, default
-  T1 5 and T2 3 (half), T1 8 and T2 5 (full) (Inference).
+  T1 5 and T2 3 (half), T1 8 and T2 5 (full) (Inference). Leg times above the limits near the
+  usual cut-offs are refused (`LEG_MAX_MINUTES`: half swim 90, bike 300, run 240; full swim
+  150, bike 540, run 420 minutes).
 - Timeline: start time (HH:MM), then swim, T1, bike, T2, run with clock times, as plain strings
   (no `Intl`, no `toLocale*`).
 - Fuel schedule: every 15 or 20 min (user pick, default 20) on the bike and run, none in the
@@ -165,7 +167,9 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
   urine_ml, temperature_c, sport, sweat_sodium_mg_l, notes, created_at. Logged data.
 - `race_plans` *new*: id, user_id (cascade), season_race_id (unique, no foreign key: a removed
   race or a season restore must not delete the plan; it is hidden while its race is gone and
-  comes back with it; orphans older than 90 days are purged by `purgePlanRevisions`), plan jsonb
+  comes back with it; `orphaned_at` records when its race went, set by `removeRace` and by a
+  season restore that drops the race, cleared when the race comes back; `purgePlanRevisions`
+  removes an orphan 90 days after `orphaned_at`), plan jsonb
   (`racePlanInput` *new* Zod schema: startTime, leg time overrides, T1, T2, swim offset, fuel
   interval, caffeine on/off, race temperature, notes), version, deleted_at, created_at,
   updated_at. Plan data: object type `race_plan` in the revision layer (T5), version check (T9).
@@ -256,7 +260,7 @@ needs `expectedVersion` once it exists.
 - Rollback: deploy the previous image, then run
   `DROP TABLE race_plans, sweat_tests, fuel_logs, fuel_products;`,
   `DELETE FROM plan_revisions WHERE object_type = 'race_plan';` and
-  `DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794574240726;` (the `when` of
+  `DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794575787092;` (the `when` of
   0089 in `drizzle/meta/_journal.json`), so a later deploy applies 0089 again. Lost: every fuel
   log on an app session, sweat test, product and race plan made after the deploy. Garmin fuel
   logs: the old table still holds the values from before the deploy, so an edit made after the

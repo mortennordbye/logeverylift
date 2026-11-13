@@ -193,13 +193,15 @@ export function sweatRate(t: SweatTestInput): SweatResult {
 
 // ── Fluid, sodium, caffeine (2.4) ────────────────────────────────────────────
 
-export type Band = { low: number; high: number; text: string; evidence: Evidence };
+/** `thirst`: the advice is to drink to thirst, so no fluid or sodium rate applies. */
+export type Band = { low: number; high: number; text: string; evidence: Evidence; thirst?: boolean };
 
 export const DEFAULT_FLUID: [number, number] = [400, 900];
 export const SODIUM_DEFAULT: [number, number] = [300, 600];
 export const SODIUM_MAX_MG_H = 1000;
 
-const round50 = (n: number) => Math.round(n / 50) * 50;
+/** Down to 50 ml, so a band never rises above its share of the sweat rate. */
+const floor50 = (n: number) => Math.floor(n / 50) * 50;
 
 /** Fluid per hour: 50-80 % of the measured sweat rate, never above it; the default band without a test. */
 export function fluidPlan(sweatMlPerHour: number | null): Band {
@@ -217,12 +219,13 @@ export function fluidPlan(sweatMlPerHour: number | null): Band {
     return {
       low: 0,
       high,
+      thirst: true,
       text: `Your test showed ${sweatMlPerHour <= 0 ? "no sweat loss" : `only ${sweatMlPerHour} ml/h of sweat loss`}. Drink to thirst, never more than you lose, and retest in race-like heat. ${FLUID_SAFETY}`,
       evidence: "Consensus plus inference",
     };
   }
-  const low = Math.min(sweatMlPerHour, round50(sweatMlPerHour * 0.5));
-  const high = Math.min(sweatMlPerHour, round50(sweatMlPerHour * 0.8));
+  const low = floor50(sweatMlPerHour * 0.5);
+  const high = floor50(sweatMlPerHour * 0.8);
   return {
     low,
     high,
@@ -232,7 +235,15 @@ export function fluidPlan(sweatMlPerHour: number | null): Band {
 }
 
 /** Sodium per hour: the default band, or fluid x a lab sweat sodium value, clamped to 300-1,000 mg/h. */
-export function sodiumPlan(fluid: Pick<Band, "low" | "high">, sweatSodiumMgL: number | null = null): Band {
+export function sodiumPlan(fluid: Pick<Band, "low" | "high" | "thirst">, sweatSodiumMgL: number | null = null): Band {
+  if (fluid.thirst) {
+    return {
+      low: 0,
+      high: 0,
+      text: "No sodium rate: your sweat test showed little or no sweat loss. Retest in race-like heat before you plan sodium.",
+      evidence: "Consensus (variation) plus inference (doses)",
+    };
+  }
   if (sweatSodiumMgL == null || sweatSodiumMgL <= 0) {
     return {
       low: SODIUM_DEFAULT[0],

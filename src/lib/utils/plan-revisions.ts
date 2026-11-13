@@ -539,7 +539,8 @@ export const PLANNED_SESSION_KEPT = [
 /** Memory fields a restore never writes back. */
 export const MEMORY_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt"] as const;
 /** Fields a restore of a one-row object (athlete profile, threshold, injury) never writes back. */
-export const ROW_KEPT = MEMORY_KEPT;
+/** `orphanedAt` (race plans) follows the race, never a revision. */
+export const ROW_KEPT = [...MEMORY_KEPT, "orphanedAt"] as const;
 /** Season fields a restore never writes back (the re-plan flag is recomputed). */
 export const SEASON_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt", "replanFlaggedAt", "replanReason"] as const;
 /** Program fields a restore never writes back. */

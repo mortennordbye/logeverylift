@@ -18,7 +18,7 @@ import { manageFuelProduct, manageSweatTest, saveFuelLogAction, saveRacePlanActi
 import { deleteGarminData } from "@/lib/garmin/delete-data";
 import { scopedServer } from "@/lib/mcp/scopes";
 import { registerNutritionTools } from "@/lib/mcp/tools/nutrition";
-import { restoreChangeSet, restoreRevision } from "@/lib/plan-revisions";
+import { purgePlanRevisions, restoreChangeSet, restoreRevision } from "@/lib/plan-revisions";
 import { getRacePlan } from "@/lib/race-plans";
 import { addRace, createSeason, removeRace, updateSeason } from "@/lib/seasons";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -276,6 +276,55 @@ describe("review fixes", () => {
     const back = (await getRacePlan(me, raceId))!;
     expect(back.inputs).toEqual({ bikeMinutes: 170 });
     expect(back.version).toBe(1);
+  });
+});
+
+describe("re-review fixes", () => {
+  it("purges an orphan race plan 90 days after its race was removed, not after its last edit", async () => {
+    const ctx = { userId: me, writer: "user" as const };
+    const { season } = await createSeason(ctx, { name: "2027", startDate: "2026-11-01", endDate: "2027-09-30" });
+    const added = await addRace(ctx, season.id, { name: "Half", raceDate: "2027-08-20", discipline: "triathlon", distance: "half", priority: "A" });
+    const raceId = (added.out as { id: number }).id;
+    await saveRacePlanAction({ raceId, change: { bikeMinutes: 170 } });
+    // The plan was last edited long ago.
+    const old = new Date(Date.now() - 200 * 86_400_000);
+    await db.update(racePlans).set({ updatedAt: old }).where(eq(racePlans.seasonRaceId, raceId));
+    const [withRace] = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "season"), eq(planRevisions.objectId, season.id))).orderBy(desc(planRevisions.id));
+
+    await removeRace(ctx, season.id, raceId);
+    const [orphan] = await db.select().from(racePlans).where(eq(racePlans.seasonRaceId, raceId));
+    expect(orphan.orphanedAt).not.toBeNull();
+    // The night after: the plan stays, and a season undo brings race and plan back.
+    await purgePlanRevisions(new Date(Date.now() + 86_400_000));
+    await restoreRevision(ctx, withRace.id);
+    const [back] = await db.select().from(racePlans).where(eq(racePlans.seasonRaceId, raceId));
+    expect(back.orphanedAt).toBeNull();
+    expect((await getRacePlan(me, raceId))!.inputs).toEqual({ bikeMinutes: 170 });
+
+    // Removed again and left for more than 90 days: purged.
+    await removeRace(ctx, season.id, raceId);
+    await purgePlanRevisions(new Date(Date.now() + 91 * 86_400_000));
+    expect(await db.select().from(racePlans).where(eq(racePlans.seasonRaceId, raceId))).toEqual([]);
+  });
+
+  it("refuses a leg time beyond the distance's limit", async () => {
+    const rid = await race(me);
+    expect(await saveRacePlanAction({ raceId: rid, change: { bikeMinutes: 720 } })).toEqual({
+      success: false,
+      error: "A half-distance bike leg is at most 300 minutes.",
+    });
+    expect(await saveRacePlanAction({ raceId: rid, change: { bikeMinutes: 300, runMinutes: 240, swimMinutes: 90 } })).toMatchObject({ success: true });
+  });
+
+  it("shows no sodium rate when the advice is to drink to thirst", async () => {
+    const rid = await race(me);
+    await manageSweatTest({ op: "add", test: { durationMinutes: 60, preKg: 70, postKg: 70, fluidMl: 0 } });
+    const p = (await getRacePlan(me, rid))!;
+    if (!p.distance) throw new Error("unsupported");
+    expect([p.fuel.fluid.low, p.fuel.fluid.high]).toEqual([0, 0]);
+    expect([p.fuel.sodium.low, p.fuel.sodium.high]).toEqual([0, 0]);
+    expect(p.fuel.sodium.text).toContain("No sodium rate");
+    expect(p.fuel.schedule.every((r) => r.sodiumMg === 0)).toBe(true);
   });
 });
 
