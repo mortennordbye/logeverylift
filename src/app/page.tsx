@@ -202,7 +202,7 @@ export default async function Home() {
 
       {/* Header */}
       <div className="px-6 pt-6 pb-3 shrink-0">
-        <h1 className="text-2xl font-bold tracking-tight text-center">LogEveryLift</h1>
+        <h1 className="text-2xl font-bold tracking-tight text-center" data-testid="home-title">LogEveryLift</h1>
       </div>
 
       {/* Content */}
@@ -216,7 +216,7 @@ export default async function Home() {
 
         {/* ── Today card ─────────────────────────────────── */}
         {info ? (
-          <div className={`rounded-2xl p-4 shrink-0 ${completedToday ? "bg-emerald-500/10" : "bg-muted"}`}>
+          <div className={`rounded-2xl p-4 shrink-0 ${completedToday ? "bg-emerald-500/10" : "bg-muted"}`} data-testid="today-card">
             <div className="flex items-center justify-between mb-1">
               <span className="text-sm font-semibold">{info.cycle.name}</span>
               <span className="text-xs text-muted-foreground">Week {info.currentWeek}/{info.cycle.durationWeeks}</span>
@@ -304,7 +304,7 @@ export default async function Home() {
 
         {/* ── Missed this week (day-of-week mode) ───────── */}
         {dowMissed.length > 0 && (
-          <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 shrink-0">
+          <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 shrink-0" data-testid="missed-week">
             <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-2">
               Missed this week
             </p>
@@ -335,7 +335,7 @@ export default async function Home() {
 
         {/* ── Week strip ─────────────────────────────────── */}
         {info?.cycle.scheduleType === "day_of_week" && (
-          <div className="rounded-2xl bg-muted px-4 pt-3 pb-5 flex-1 flex flex-col gap-3 overflow-hidden">
+          <div className="rounded-2xl bg-muted px-4 pt-3 pb-5 flex-1 flex flex-col gap-3 overflow-hidden" data-testid="week-strip">
             <div>
               <Link href="/more/calendar" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1 active:opacity-60">
                 This Week ›
@@ -385,7 +385,7 @@ export default async function Home() {
 
         {/* Rotation strip */}
         {info?.cycle.scheduleType === "rotation" && (
-          <div className="rounded-2xl bg-muted px-4 pt-3 pb-5 flex-1 flex flex-col gap-3 overflow-hidden">
+          <div className="rounded-2xl bg-muted px-4 pt-3 pb-5 flex-1 flex flex-col gap-3 overflow-hidden" data-testid="rotation-strip">
             <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Rotation
             </p>
@@ -415,7 +415,7 @@ export default async function Home() {
             that invented text out of the accessibility tree, and the prompt
             below it carries the actual meaning. */}
         {!info && (
-          <div className="rounded-2xl bg-muted p-4 shrink-0">
+          <div className="rounded-2xl bg-muted p-4 shrink-0" data-testid="cycle-setup">
             <div aria-hidden="true" className="opacity-40 select-none">
               <div className="flex items-center justify-between mb-1">
                 <span className="text-sm font-semibold">Your training cycle</span>
@@ -450,7 +450,7 @@ export default async function Home() {
             user has actually trained still reads as completed — real progress
             must not disappear behind the preview. */}
         {!info && (
-          <div className="rounded-2xl bg-muted px-4 pt-3 pb-5 flex-1 flex flex-col gap-3 overflow-hidden">
+          <div className="rounded-2xl bg-muted px-4 pt-3 pb-5 flex-1 flex flex-col gap-3 overflow-hidden" data-testid="week-strip">
             <div>
               <Link href="/more/calendar" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2.5 flex items-center gap-1 active:opacity-60">
                 This Week ›
@@ -497,7 +497,7 @@ export default async function Home() {
       {/* No-cycle action — pinned above nav bar. The cycle CTA lives in the
           preview card above, so only the train-now action is pinned here. */}
       {!info && (
-        <div className="px-6 pb-4 shrink-0">
+        <div className="px-6 pb-4 shrink-0" data-testid="start-bar">
           <Link
             href="/new-workout"
             className="flex items-center justify-center w-full rounded-2xl bg-primary py-4 text-base font-semibold text-primary-foreground active:opacity-80"
