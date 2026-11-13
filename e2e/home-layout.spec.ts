@@ -85,6 +85,12 @@ test("E1: move, hide and resize persist; Today at S still starts; Reset restores
   await page.goto("/");
   await page.getByRole("button", { name: "Edit home" }).click();
   await expect(grid(page)).toBeVisible();
+  // The edit bar lies over the bottom nav: a tap there cannot leave and drop the draft.
+  const navCovered = await page.evaluate(() => {
+    const bar = document.querySelector("[data-testid=home-edit-bar]")!.getBoundingClientRect();
+    return !!document.elementFromPoint(window.innerWidth / 4, bar.top + bar.height / 2)?.closest("[data-testid=home-edit-bar]");
+  });
+  expect(navCovered).toBe(true);
 
   await inSheet(page, "week", "Move up");
   await expect.poll(() => tiles(page)).toEqual(["title", "week", "today"]);

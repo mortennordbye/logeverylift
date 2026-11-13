@@ -10,6 +10,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import { Pencil, Plus, RotateCcw, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { HomeEditGrid, type Previews } from "./HomeEditGrid";
 import { WidgetGallerySheet } from "./WidgetGallerySheet";
 import { WidgetSheet } from "./WidgetSheet";
@@ -264,16 +265,21 @@ export function HomeGrid(props: HomeGridProps) {
           />
         </div>
 
-        {/* Covers the bottom nav, so a navigation cannot drop the draft. */}
-        <div
-          className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background"
-          style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
-          data-testid="home-edit-bar"
-        >
-          <p className="flex items-center justify-center h-16 max-w-lg mx-auto px-4 text-center text-xs text-muted-foreground">
-            Drag a widget to move it. Tap it for its size and more.
-          </p>
-        </div>
+        {/* Covers the bottom nav, so a navigation cannot drop the draft. In a
+            portal: the page layer animates with a transform, which would pin a
+            fixed bar to the layer instead of the screen, under the nav. */}
+        {createPortal(
+          <div
+            className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background"
+            style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
+            data-testid="home-edit-bar"
+          >
+            <p className="flex items-center justify-center h-16 max-w-lg mx-auto px-4 text-center text-xs text-muted-foreground">
+              Drag a widget to move it. Tap it for its size and more.
+            </p>
+          </div>,
+          document.body,
+        )}
 
         <WidgetSheet
           item={sheetItem}
