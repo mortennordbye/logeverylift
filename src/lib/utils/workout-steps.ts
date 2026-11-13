@@ -206,7 +206,7 @@ const workoutSchema = baseWorkoutSchema.superRefine((w, ctx) => {
   const add = (path: Issue["path"], message: string) => ctx.addIssue({ code: "custom", path, message });
 
   if (w.poolLengthM !== undefined && w.sport !== "swim") add(["poolLengthM"], "only for swims");
-  if (JSON.stringify(w).length > WORKOUT_LIMITS.jsonBytes) add([], `the workout is larger than ${WORKOUT_LIMITS.jsonBytes / 1024} KB`);
+  if (new TextEncoder().encode(JSON.stringify(w)).length > WORKOUT_LIMITS.jsonBytes) add([], `the workout is larger than ${WORKOUT_LIMITS.jsonBytes / 1024} KB`);
 
   let expanded = 0;
   const ids = new Set<string>();
@@ -500,7 +500,8 @@ export function describeWorkout(w: Workout, units: Units = DEFAULT_UNITS): strin
 /** Whether one target's low end is in zone 4 or above. Pace bounds are inference: the research table has no pace zones. */
 function hardTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: ThresholdValues): boolean {
   if (t.zone !== undefined) return t.zone >= 4;
-  if (t.offsetLow !== undefined) return t.offsetLow <= HARD_FROM.cssOffset;
+  // The slow end, as for percent targets: a larger offset is slower (review 11).
+  if (t.offsetHigh !== undefined) return t.offsetHigh <= HARD_FROM.cssOffset;
   if (t.metric === "cadence") return false;
   let pct: number | null;
   if (t.anchor === "absolute") {

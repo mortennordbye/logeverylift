@@ -187,7 +187,7 @@ lasts only until that writer runs again.
   a change to the active cycle's length, goal or level (they rescale this week's targets), and a
   dated session moved, changed, added, given a workout or planned again (counted in each
   Monday-to-Sunday week it touches, with moved sessions where they land and skipped ones left
-  out). A library workout edit is not checked.
+  out), and a library workout edit, on the weeks of the sessions it rewrites.
 
   A limit blocks only a write that makes things worse. A refused write changes nothing; send it
   again with `overrideLimits` and `overrideReason` if it still fits, and the revision stores the

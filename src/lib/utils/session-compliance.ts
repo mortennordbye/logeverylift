@@ -232,10 +232,14 @@ export function returnInfo(
 // ── A missed key session: suggest a day (6.6) ───────────────────────────────
 
 /**
- * A session that loads a day: planned or done. Leave out skipped, missed and
- * illness sessions, and the missed session itself.
+ * A session on a day, without the missed session itself. `keyOrHard` only for
+ * one that loads the day (planned, done or not yet answered); every session
+ * that holds a place in the day's cap of three is listed (review 13).
  */
 export type DayLoad = { date: string; keyOrHard: boolean };
+
+/** Most sessions a day holds, as C2's cap (MAX_SLOTS_PER_DAY in src/lib/utils/planned-sessions.ts). */
+const DAY_CAP = 3;
 
 export type MoveSuggestion = { date: string } | { date: null; reason: string };
 
@@ -269,6 +273,7 @@ export function suggestMoveDay(input: {
     if (availableDays && availableDays.length > 0 && !availableDays.includes(isoWeekday(day))) continue;
     if (inIllness(day, illness)) continue;
     if (hardOn(day) || hardOn(addDaysStr(day, -1)) || hardOn(addDaysStr(day, 1))) continue;
+    if (load.filter((l) => l.date === day).length >= DAY_CAP) continue;
     candidates.push(day);
   }
   const best = candidates.find((d) => !anyOn(d)) ?? candidates[0];
@@ -299,28 +304,48 @@ export type MatchCompleted = {
  * or by a workout with a set of that discipline, never by any workout of the
  * day. A workout with sets of two disciplines can clear one session of each,
  * so a brick logged as one workout clears both legs. A workout that cleared a
- * session without a sport is used for the day, as in C2.
+ * session without a sport is used for the day, as in C2. A workout used by a
+ * session with a sport, or with a discipline that a still open session of
+ * that sport needs, never clears a session without a sport: sessions with a
+ * sport are matched first in each pass.
  */
 export function matchEndurance(planned: MatchPlanned[], sessions: MatchCompleted[]): Map<number, { sessionId: number; step: 1 | 2 | 3 }> {
   const out = new Map<number, { sessionId: number; step: 1 | 2 | 3 }>();
-  const used = new Set<string>(); // `${sessionId}|${date}`, or with `|${sport}` for a session with a sport
+  const usedDay = new Set<string>(); // `${sessionId}|${date}`: used by a session without a sport
+  const usedSport = new Set<string>(); // `${sessionId}|${date}|${sport}`
+  const usedAnySport = new Set<string>(); // `${sessionId}|${date}`: used by any session with a sport
   const onDate = new Map<string, MatchCompleted[]>();
   for (const s of sessions) {
     for (const d of new Set([s.date, s.intendedDate].filter((x): x is string => x != null))) onDate.set(d, [...(onDate.get(d) ?? []), s]);
   }
-  const takeKey = (s: MatchCompleted, p: MatchPlanned) => (p.sport ? `${s.id}|${p.date}|${p.sport}` : `${s.id}|${p.date}`);
-  const free = (s: MatchCompleted, p: MatchPlanned) => !used.has(`${s.id}|${p.date}`) && !(p.sport && used.has(takeKey(s, p)));
+  const take = (s: MatchCompleted, p: MatchPlanned) => {
+    if (p.sport) {
+      usedSport.add(`${s.id}|${p.date}|${p.sport}`);
+      usedAnySport.add(`${s.id}|${p.date}`);
+    } else usedDay.add(`${s.id}|${p.date}`);
+  };
+  /** Sports with a session still open on a date. */
+  const openSports = (date: string) => new Set(planned.filter((q) => q.date === date && q.sport && !out.has(q.id)).map((q) => q.sport!));
+  const free = (s: MatchCompleted, p: MatchPlanned) => {
+    const day = `${s.id}|${p.date}`;
+    if (usedDay.has(day)) return false;
+    if (p.sport) return !usedSport.has(`${day}|${p.sport}`);
+    if (usedAnySport.has(day)) return false;
+    const open = openSports(p.date);
+    return ![...s.disciplines].some((d) => open.has(d));
+  };
   for (const p of planned) {
     const s = sessions.find((x) => x.plannedSessionId === p.id);
     if (s) {
       out.set(p.id, { sessionId: s.id, step: 1 });
-      used.add(takeKey(s, p));
+      take(s, p);
     }
   }
   const byDate = new Map<string, MatchPlanned[]>();
   for (const p of planned) byDate.set(p.date, [...(byDate.get(p.date) ?? []), p]);
   for (const [date, list] of byDate) {
-    const ordered = [...list].sort((a, b) => a.position - b.position || a.id - b.id);
+    // Sessions with a sport first, then by position.
+    const ordered = [...list].sort((a, b) => (a.sport ? 0 : 1) - (b.sport ? 0 : 1) || a.position - b.position || a.id - b.id);
     const candidates = (onDate.get(date) ?? []).slice().sort((a, b) => a.id - b.id);
     for (const step of [2, 3] as const) {
       for (const p of ordered) {
@@ -330,7 +355,7 @@ export function matchEndurance(planned: MatchPlanned[], sessions: MatchCompleted
         );
         if (s) {
           out.set(p.id, { sessionId: s.id, step });
-          used.add(takeKey(s, p));
+          take(s, p);
         }
       }
     }

@@ -257,7 +257,7 @@ export async function regenerateCycleSessions(
       )
       .onConflictDoNothing();
   }
-  await linkTemplateBricks(tx, cycleId, slots, mondayOf(today));
+  await linkTemplateBricks(tx, cycleId, slots, mondayOf(today), new Set(existing.filter((r) => r.done || r.linked).map((r) => r.id)));
   if (cycle.sessionsGeneratedAt == null) {
     await tx.update(trainingCycles).set({ sessionsGeneratedAt: now }).where(eq(trainingCycles.id, cycleId));
   }
@@ -274,10 +274,10 @@ export async function regenerateCycleSessions(
 /**
  * Bricks from the template (docs/plans/workouts-and-compliance.md, 5): the
  * session of a slot after one marked `brickWithNext` follows it on the same
- * day. Only untouched sessions from `from` on follow the template; a session
- * the user or the assistant changed keeps its own link.
+ * day. Only untouched sessions from `from` on that are not done or started
+ * follow the template; the rest keep their own link.
  */
-async function linkTemplateBricks(tx: Tx, cycleId: number, slots: TemplateSlot[], from: string): Promise<void> {
+async function linkTemplateBricks(tx: Tx, cycleId: number, slots: TemplateSlot[], from: string, fixed: ReadonlySet<number>): Promise<void> {
   const rows = await tx
     .select({ id: plannedSessions.id, slotId: plannedSessions.slotId, date: plannedSessions.date, brickParentId: plannedSessions.brickParentId, touchedAt: plannedSessions.touchedAt })
     .from(plannedSessions)
@@ -291,7 +291,8 @@ async function linkTemplateBricks(tx: Tx, cycleId: number, slots: TemplateSlot[]
   }
   const bySlotDate = new Map(rows.map((r) => [`${r.slotId}|${r.date}`, r]));
   for (const r of rows) {
-    if (r.touchedAt != null) continue;
+    // Touched, done and started sessions keep their link (review 15).
+    if (r.touchedAt != null || fixed.has(r.id)) continue;
     const parentSlot = nextOf.get(r.slotId!);
     const parent = parentSlot != null ? bySlotDate.get(`${parentSlot}|${r.date}`) : undefined;
     const want = parent && parent.touchedAt == null ? parent.id : null;
@@ -890,9 +891,12 @@ export async function applySessionOp(
     if (input.op === "add") await ensureInTx(w.tx, ctx.userId, input.cycleId);
     if (!limits) return { row: await sessionOpBody(w, ctx, input, today), limits: null };
     const scope = await sessionScope(w.tx, ctx.userId, input);
-    const { result, check, unusedOverrides } = await withLimits(w, limits.lc, scope, limits.override, () =>
-      sessionOpBody(w, ctx, input, today),
-    );
+    const { result, check, unusedOverrides } = await withLimits(w, limits.lc, scope, limits.override, async () => {
+      const row = await sessionOpBody(w, ctx, input, today);
+      // An added workout session's run counts in the facts after the write (review 2).
+      if (input.op === "add" && row.workout != null && scope.sessionWeeks) scope.sessionWeeks.sessionIds = [row.id];
+      return row;
+    });
     return { row: result, limits: { check, unusedOverrides } };
   });
   return { row: result.row, limits: result.limits, version: versions.get(`planned_session:${result.row.id}`) ?? result.row.version };
@@ -1009,11 +1013,18 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed.");
       set = { priority: input.priority };
       break;
-    case "link_brick":
+    case "link_brick": {
       if (row.date == null) throw new SessionInputError("A rotation session cannot be part of a brick.");
+      const [child] = await tx
+        .select({ id: plannedSessions.id })
+        .from(plannedSessions)
+        .where(and(eq(plannedSessions.brickParentId, row.id), livePlannedSessions))
+        .limit(1);
+      if (child) throw new SessionInputError("A brick has one level only: this session already leads a brick.");
       await checkBrickParent(tx, ctx.userId, { cycleId: row.cycleId, date: row.date, id: row.id, position: row.position }, input.brickParentId);
       set = { brickParentId: input.brickParentId };
       break;
+    }
     case "unlink_brick":
       set = { brickParentId: null };
       break;
@@ -1028,6 +1039,7 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
       break;
     case "pick": {
       if (row.date == null || row.date > today) throw new SessionInputError("Only a session of today or earlier can be matched to an activity.");
+      if (row.status === "skipped") throw new SessionInputError("This session was skipped; plan it again first.");
       const { garminActivities } = await import("@/db/schema");
       const { garminAllowedFor } = await import("@/lib/garmin/access");
       if (!(await garminAllowedFor(ctx.userId))) throw new SessionInputError("Garmin is not on for this account.");
@@ -1118,10 +1130,15 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
   // A brick moves as one: its later sessions follow the first to the new day.
   if (input.op === "move" && set.date != null && set.date !== row.date) {
     const children = await tx
-      .select({ id: plannedSessions.id })
+      .select()
       .from(plannedSessions)
       .where(and(eq(plannedSessions.brickParentId, row.id), livePlannedSessions));
     for (const c of children) {
+      // A logged second leg stays where it was done (review 4).
+      const [started] = await tx.select({ id: workoutSessions.id }).from(workoutSessions).where(eq(workoutSessions.plannedSessionId, c.id)).limit(1);
+      if (started || (await isDone(tx, ctx.userId, c, today))) {
+        throw new SessionInputError("The second part of this brick is logged, so the brick cannot move. Unlink it to move this session alone.");
+      }
       if ((await dayCount(tx, row.cycleId, set.date, c.id)) >= MAX_SLOTS_PER_DAY) throw new SessionInputError(FULL_DAY);
       await w.touch({ type: "planned_session", id: c.id });
       const position = (await dayCount(tx, row.cycleId, set.date, c.id)) + 1;
@@ -1139,7 +1156,7 @@ async function checkBrickParent(tx: Tx, userId: string, child: { cycleId: number
     .where(and(eq(plannedSessions.id, parentId), eq(plannedSessions.userId, userId), livePlannedSessions));
   if (!p || p.id === child.id) throw new SessionInputError("Brick session not found");
   if (p.cycleId !== child.cycleId || p.date !== child.date) throw new SessionInputError("A brick's sessions are on the same day of the same cycle.");
-  if (p.brickParentId != null) throw new SessionInputError("That session is itself the second part of a brick.");
+  if (p.brickParentId != null) throw new SessionInputError("A brick has one level only: that session is itself the second part of a brick.");
   if (child.position != null && p.position >= child.position) throw new SessionInputError("The first session of a brick comes earlier in the day.");
 }
 

@@ -9,16 +9,15 @@
 
 import { restoreDeletedAthleteRow } from "@/lib/athlete-profile";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { addIllness, deleteIllness, listIllness, updateIllness, type IllnessRow } from "@/lib/illness";
+import { addIllness, deleteIllness, updateIllness } from "@/lib/illness";
 import { DuplicateSession } from "@/lib/logged-sessions";
 import { PlanConflictError, PlanNotFoundError, PlanStateError, type PlanWriteContext } from "@/lib/plan-revisions";
-import { confirmDone, homeEndurance, type HomeEndurance } from "@/lib/session-answers";
+import { confirmDone } from "@/lib/session-answers";
 import { requireSession } from "@/lib/utils/session";
 import { confirmDoneSchema, illnessOpSchema, workoutOpSchema } from "@/lib/validators/planned-sessions";
-import { deleteWorkout, duplicateWorkout, listWorkouts, updateWorkout, type LibraryWorkout } from "@/lib/workouts";
+import { deleteWorkout, duplicateWorkout, updateWorkout } from "@/lib/workouts";
 import type { ActionResult } from "@/types/workout";
 import { revalidatePath } from "next/cache";
-import { z } from "zod";
 
 const ENDURANCE_OFF = "Endurance features are not on for this account";
 const ctxFor = (userId: string): PlanWriteContext => ({ userId, writer: "user" });
@@ -45,20 +44,8 @@ export async function confirmPlannedDone(data: unknown): Promise<ActionResult<{ 
   } catch (e) {
     const msg = known(e);
     if (msg) return { success: false, error: msg };
-    console.error("[confirmPlannedDone] failed", e);
+    console.error("[confirmPlannedDone] failed", { plannedSessionId: parsed.data.plannedSessionId });
     return { success: false, error: "Failed to save the session" };
-  }
-}
-
-/** What the home card shows: sessions to answer, missed key sessions with their day, the return rule. */
-export async function getHomeEndurance(): Promise<ActionResult<HomeEndurance | null>> {
-  const auth = await requireSession();
-  if (!(await enduranceEnabledFor(auth.user.id))) return { success: true, data: null };
-  try {
-    return { success: true, data: await homeEndurance(auth.user.id) };
-  } catch (e) {
-    console.error("[getHomeEndurance] failed", e);
-    return { success: false, error: "Failed to read the sessions" };
   }
 }
 
@@ -86,44 +73,6 @@ export async function manageIllness(data: unknown): Promise<ActionResult<{ id: n
     if (msg) return { success: false, error: msg };
     console.error("[manageIllness] failed", { op: parsed.data.op });
     return { success: false, error: "Failed to save the sick period" };
-  }
-}
-
-/** Bring back a deleted sick period. */
-export async function restoreIllness(data: unknown): Promise<ActionResult<undefined>> {
-  const auth = await requireSession();
-  const parsed = z.object({ id: z.number().int().positive() }).safeParse(data);
-  if (!parsed.success) return { success: false, error: "Invalid input" };
-  try {
-    const done = await restoreDeletedAthleteRow(ctxFor(auth.user.id), "illness", parsed.data.id);
-    if (!done) return { success: false, error: "Nothing to restore" };
-    revalidatePath("/more/athlete");
-    return { success: true, data: undefined };
-  } catch (e) {
-    const msg = known(e);
-    if (msg) return { success: false, error: msg };
-    console.error("[restoreIllness] failed", e);
-    return { success: false, error: "Failed to restore the sick period" };
-  }
-}
-
-/** The user's sick periods, newest first. */
-export async function getIllness(): Promise<ActionResult<IllnessRow[]>> {
-  const auth = await requireSession();
-  if (!(await enduranceEnabledFor(auth.user.id))) return { success: true, data: [] };
-  return { success: true, data: await listIllness(auth.user.id) };
-}
-
-/** The library, live or recently deleted. */
-export async function getWorkouts(data: unknown): Promise<ActionResult<LibraryWorkout[]>> {
-  const auth = await requireSession();
-  if (!(await enduranceEnabledFor(auth.user.id))) return { success: true, data: [] };
-  const deleted = typeof data === "object" && data != null && (data as { deleted?: unknown }).deleted === true;
-  try {
-    return { success: true, data: await listWorkouts(auth.user.id, { deleted }) };
-  } catch (e) {
-    console.error("[getWorkouts] failed", e);
-    return { success: false, error: "Failed to read the workouts" };
   }
 }
 

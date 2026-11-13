@@ -113,6 +113,15 @@ describe("parseWorkout: the rules", () => {
     ).toMatch(/no rest step/);
   });
 
+  it("counts the 32 KB limit in bytes, not characters (review 12)", () => {
+    // 140 three-byte characters per note: about 420 bytes but 140 characters a step.
+    const note = "€".repeat(140);
+    const steps = Array.from({ length: 90 }, () => work({ note }));
+    const chars = JSON.stringify(run(steps)).length;
+    expect(chars).toBeLessThan(32 * 1024);
+    expect(errorsOf(run(steps)).map((e) => e.message)).toContain("the workout is larger than 32 KB");
+  });
+
   it("caps the steps once repeats are expanded", () => {
     const big = { type: "repeat", count: 50, steps: Array.from({ length: 9 }, () => work()) };
     expect(errorsOf(run([big]))).toContainEqual({ path: "steps", message: "450 steps once repeats are expanded; at most 400" });
@@ -224,6 +233,13 @@ describe("isHardWorkout", () => {
     expect(isHardWorkout(w([work({ target: { metric: "pace", anchor: "threshold_pace", low: 97, high: 102 } })]))).toBe(true);
     expect(isHardWorkout(w([work({ target: { metric: "power", anchor: "absolute", low: 230, high: 250 } })], "bike"), { ftp: 250 })).toBe(true);
     expect(isHardWorkout(w([work({ target: { metric: "power", anchor: "absolute", low: 230, high: 250 } })], "bike"))).toBe(false);
+  });
+
+  it("reads a CSS offset by its slow end, as percent targets (review 11)", () => {
+    const swim = (offsetLow: number, offsetHigh: number) =>
+      w([{ type: "work", end: { type: "distance", meters: 400 }, target: { metric: "pace", anchor: "css", offsetLow, offsetHigh } }], "swim");
+    expect(isHardWorkout(swim(0, 10))).toBe(false);
+    expect(isHardWorkout(swim(-2, 3))).toBe(true);
   });
 
   it("a hard target on a warm-up does not count", () => {

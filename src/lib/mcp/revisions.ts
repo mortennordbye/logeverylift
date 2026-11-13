@@ -127,12 +127,15 @@ async function restoreScope(userId: string, type: PlanObjectType, id: number, re
   return null;
 }
 
+/** Object types of the endurance add-on: listed and restored only with the switch on (D18). */
+const ENDURANCE_TYPES = new Set<string>(["athlete", "injury", "workout", "illness"]);
+
 export function registerRevisionTools(server: McpServer, userId: string, clientId?: string) {
   server.registerTool(
     "list_revisions",
     {
       description: [
-        "List the change history of one program, training cycle, season, dated session (planned_session), coach memory entry, the athlete profile (athlete), a threshold value or an injury (objectType and objectId), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
+        "List the change history of one program, training cycle, season, dated session (planned_session), coach memory entry, the athlete profile (athlete), a threshold value, an injury, a library workout (workout) or a sick period (illness) (objectType and objectId; the last four need endurance features on), newest first: who changed it (user, assistant, progression engine, weekly sync, Garmin suggestion), when, the reason and what changed.",
         "Without objectType, list your own (assistant) change sets instead: each groups the writes of one review.",
         "Use the revision id or the change-set id with restore_revision.",
       ].join(" "),
@@ -146,8 +149,8 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
       try {
         if (objectType) {
           if (objectId == null) return fail("objectId is required with objectType");
-          // The athlete profile and injuries belong to the endurance add-on (D18).
-          if ((objectType === "athlete" || objectType === "injury") && !(await enduranceEnabledFor(userId))) return fail(ENDURANCE_OFF);
+          // The athlete profile, injuries, workouts and sick periods belong to the endurance add-on (D18).
+          if (ENDURANCE_TYPES.has(objectType) && !(await enduranceEnabledFor(userId))) return fail(ENDURANCE_OFF);
           const revisions = await listRevisions(userId, { type: objectType, id: objectId });
           if (revisions.length === 0) return fail("No history for that object");
           return ok(
@@ -174,7 +177,7 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
     "restore_revision",
     {
       description: [
-        "Restore a program, training cycle, season (its fields and races; phases stay where they are), dated session (a logged or past one, or one on a day that has passed, is refused), coach memory entry, the athlete profile, a threshold value or an injury to an earlier revision (revisionId), or undo a whole change set (changeSetId).",
+        "Restore a program, training cycle, season (its fields and races; phases stay where they are), dated session (a logged or past one, or one on a day that has passed, is refused), coach memory entry, the athlete profile, a threshold value, an injury, a library workout or a sick period to an earlier revision (revisionId), or undo a whole change set (changeSetId). The athlete profile, injuries, workouts and sick periods need endurance features on.",
         "A restore keeps all ids and never changes logged workouts. Weekly targets owned by the sync, and weights or reps the progression engine set since, keep their current values; the weekly sync runs again. A restore is itself a revision and can be restored.",
         "Requires a reason. Refused while the user has a workout in progress on the program.",
         "A restore of one revision runs the training limits as warnings only: it is never refused for them, and the result lists any limit the restored plan breaks.",

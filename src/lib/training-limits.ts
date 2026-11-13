@@ -24,6 +24,7 @@ import {
   programs,
   trainingCycleSlots,
   trainingCycles,
+  workouts,
 } from "@/db/schema";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { garminAllowedFor } from "@/lib/garmin/access";
@@ -231,14 +232,18 @@ async function datedCycles(ex: Executor, cycleIds: number[]): Promise<Set<number
 /** A weekday cycle's week of sessions, or null for a rotation cycle (no fixed week). */
 export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<WeekSession[] | null> {
   const [cycle] = await ex
-    .select({ scheduleType: trainingCycles.scheduleType })
+    .select({ scheduleType: trainingCycles.scheduleType, userId: trainingCycles.userId })
     .from(trainingCycles)
     .where(and(eq(trainingCycles.id, cycleId), liveCycles));
   if (!cycle || cycle.scheduleType !== "day_of_week") return null;
   const slots = await ex
-    .select({ dayOfWeek: trainingCycleSlots.dayOfWeek, programId: trainingCycleSlots.programId })
+    .select({ dayOfWeek: trainingCycleSlots.dayOfWeek, programId: trainingCycleSlots.programId, workout: workouts.workout })
     .from(trainingCycleSlots)
+    // plan-read: includes deleted (a deleted library workout reads as a rest day, as generation does)
+    .leftJoin(workouts, and(eq(workouts.id, trainingCycleSlots.workoutId), isNull(workouts.deletedAt)))
     .where(eq(trainingCycleSlots.trainingCycleId, cycleId));
+  // A slot with a library workout counts like a program slot (review 3).
+  const hardWorkout = slots.some((s) => s.programId == null && s.workout != null) ? await workoutWeekSession(ex, cycle.userId) : null;
   const programIds = [...new Set(slots.map((s) => s.programId).filter((id): id is number => id != null))];
   const sets = programIds.length
     ? await ex
@@ -255,11 +260,11 @@ export async function cycleWeekSessions(ex: Executor, cycleId: number): Promise<
         .where(and(inArray(programs.id, programIds), livePrograms, liveProgramExercises, liveProgramSets))
     : [];
   return slots
-    .filter((s) => s.dayOfWeek != null && s.programId != null)
+    .filter((s) => s.dayOfWeek != null && (s.programId != null || s.workout != null))
     .map((s) => ({
       dayOfWeek: s.dayOfWeek!,
       // A slot on a deleted program has no live sets, so it is not hard.
-      hard: isHardSession(
+      hard: s.programId == null ? hardWorkout!(s.workout) : isHardSession(
         sets
           .filter((x) => x.programId === s.programId)
           .map((x) => ({ discipline: x.discipline, sessionRole: x.sessionRole === "work" ? "work" : null, targetHeartRateZone: x.targetHeartRateZone })),
@@ -399,6 +404,21 @@ export async function planFacts(
     if (monday !== thisMonday) labels.set(`s:${monday}`, monday);
   }
   const runs = await programRuns(ex, scope.programIds, share);
+  // The runs of the cycles' library workout slots (review 3), keyed apart from programs and sessions.
+  if (scope.cycleIds.length) {
+    const { estimateWorkout, parseWorkout } = await import("@/lib/utils/workout-steps");
+    const slotWorkouts = await ex
+      .selectDistinct({ id: workouts.id, workout: workouts.workout })
+      .from(trainingCycleSlots)
+      .innerJoin(workouts, and(eq(workouts.id, trainingCycleSlots.workoutId), isNull(workouts.deletedAt)))
+      .where(and(inArray(trainingCycleSlots.trainingCycleId, scope.cycleIds), isNull(trainingCycleSlots.programId)));
+    for (const w of slotWorkouts) {
+      const p = parseWorkout(w.workout);
+      if (!p.ok || p.workout.sport !== "run") continue;
+      const est = estimateWorkout(p.workout);
+      runs.set(-1_000_000_000 - w.id, { label: `Run "${p.workout.name}"`, run: { durationS: est.durationSeconds, distanceM: est.distanceMeters } });
+    }
+  }
   // A dated session's own workout run, keyed by minus its id so it never meets a program id.
   for (const id of scope.sessionWeeks?.sessionIds ?? []) {
     const [row] = await ex.select({ workout: plannedSessions.workout, label: plannedSessions.label }).from(plannedSessions).where(and(eq(plannedSessions.id, id), livePlannedSessions));

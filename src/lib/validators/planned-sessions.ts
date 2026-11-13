@@ -29,13 +29,9 @@ export const plannedSessionOpSchema = z.discriminatedUnion("op", [
     notes: z.string().max(500).nullable().optional(),
   }),
   // Structured workouts and answers, endurance features only (docs/plans/workouts-and-compliance.md, 7).
+  // The other session operations (bricks, Garmin picks, unmiss, update from library) are MCP only until the app has a control for them.
   z.object({ op: z.literal("set_workout"), id, workoutId: id }),
-  z.object({ op: z.literal("update_from_library"), id }),
-  z.object({ op: z.literal("link_brick"), id, brickParentId: id }),
-  z.object({ op: z.literal("unlink_brick"), id }),
   z.object({ op: z.literal("miss"), id, reason: z.string().trim().max(200).nullable().optional() }),
-  z.object({ op: z.literal("unmiss"), id }),
-  z.object({ op: z.literal("pick"), id, garminActivityId: id }),
 ]);
 
 /** "Yes, I did it" from the app (docs/plans/workouts-and-compliance.md, 6.5). */

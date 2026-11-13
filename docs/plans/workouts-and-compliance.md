@@ -257,7 +257,7 @@ resolver is used by the MCP reads and the text summary now, and by C6 and any ex
   88-93% FTP, 5 min easy) · cool-down to lap". Used by MCP results, the library list and the
   planned session rows.
 - **Hard workout** (*new* rule next to `isHardSession`): a repeat that holds a `work` step, or any
-  `work` step whose target's low end is in zone 4 or above (power at least 90% FTP; heart rate at
+  `work` step whose target's slow end is in zone 4 or above (power at least 90% FTP; heart rate at
   least 94% LTHR on a bike or 95% on a run; pace at least 97% of threshold speed, or CSS + 3 s
   per 100 m or faster). This matches today's rule for sets (a `work` rep, or zone 4-5). The pace
   bounds are inference: the research table has no pace zones.
@@ -1015,10 +1015,47 @@ Checked against C2 as merged (PR #229, migration 0086). This package's migration
 - **Restore of a deleted workout or sick period** reuses `restoreDeletedAthleteRow`, which C3
   wrote for thresholds and injuries. It now takes `workout` and `illness` and needs the endurance
   switch for both.
-- **The library edit runs no training limits.** Only the session operations (`set_workout`, `add`,
-  `clear_workout`, `update_from_library`) run them. BACKLOG: "Training limits on a library
-  workout edit".
+- **A library edit by the assistant runs the training limits** on the dated weeks of the cycles
+  that use it, and the long-run cap on the workout's run (review fix 3). A user's edit is not
+  checked (D4).
 - **App UI left out:** "Update from library" and "Link as brick" in the calendar, the Garmin pick
   list in the "Yes" sheet, and Recently deleted for sick periods. The server and MCP have them.
   BACKLOG: "Brick, library and Garmin controls in the app".
 - **e2e reset** (`e2e/fixtures/reset.ts`) also clears `illness_periods` and `workouts`.
+
+## 20. Review fixes (2026-11-13)
+
+Two independent reviews of the build. Each code fix came with a test that failed first, in
+`src/__tests__/integration/workouts-compliance-review.test.ts` unless named otherwise.
+
+1. **A run cleared the day's strength session.** `matchEndurance` now matches sessions with a
+   sport first, and a workout used by a session with a sport, or with a discipline that an open
+   session of that sport needs, never clears a session without one. Unit tests "review 1" in
+   `src/__tests__/session-compliance.test.ts`; integration "linked or not, the run clears the run".
+2. **An added workout skipped the long-run cap.** The added session's run is in the facts after
+   the write.
+3. **Workout slots and library edits skipped the limits.** The facts read each cycle's library
+   workout slots (long-run cap) and the template week counts a hard workout slot. An assistant's
+   library edit runs the limits on the rewritten weeks, with the usual override.
+4. **A brick move moved a logged second leg.** Refused, with the reason.
+5. **Logs held user content.** The new Server Actions and the home read log a tag and ids only.
+6. **`list_revisions` showed workouts and sick periods with the switch off.** Gated, as athlete and
+   injury.
+7. **A restore of a library workout did not reach its sessions.** It now regenerates them, after
+   locking the cycles that use it.
+8. **A cycle restore could point a slot at a purged workout.** The slot then has no workout.
+9. **`log_session` refuses a second log for the same planned session.** This changed when its write
+   moved to `src/lib/logged-sessions.ts`. Kept, because it is safer, and the tool description says so.
+10. **Unused app code removed.** The Server Actions with no app caller are gone, and the app
+    validator accepts only the session operations the app sends (`set_workout`, `miss`).
+11. **A CSS offset target read its fast end for "hard".** It reads the slow end, as percent targets
+    do. Unit test in `src/__tests__/workout-steps.test.ts`.
+12. **The 32 KB limit counted characters.** It counts bytes. Unit test in the same file.
+13. **The suggested day could be full or next to an unanswered hard session.** Both are excluded.
+    Unit test "review 13" in `src/__tests__/session-compliance.test.ts`.
+14. **A pick put a skipped session back to planned.** Refused.
+15. **A template change could relink the brick of a done session.** Done and started sessions keep
+    their link.
+16. **Bricks could chain.** One level only: a session that leads a brick cannot become a second leg.
+17. The comment at the top of `src/lib/workouts.ts` now matches C2 decision 19.
+18. A permanent test refuses another user's ids for workouts, bricks, picks and sick periods.

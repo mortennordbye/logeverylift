@@ -3,15 +3,18 @@
  * 4.1 and 5): read, create, update, duplicate and delete reusable workouts.
  * Every write is a revision (object type `workout`). Editing or deleting a
  * library workout is a template change for every live active or scheduled
- * cycle whose slots use it: their untouched sessions from this week on follow
- * it (T7, C2's regeneration). Past, done and touched sessions keep their copy.
+ * cycle whose slots use it: their untouched sessions from this week's Monday
+ * on follow it, this week's past days included (T7; C2 decision 19). Done and
+ * touched sessions, and sessions of earlier weeks, keep their copy.
  *
  * Plain server code: callers resolve the user and check the endurance switch.
  */
 
 import { db } from "@/db";
 import { trainingCycleSlots, trainingCycles, workouts, type SessionPriority } from "@/db/schema";
-import { assertAthleteRoom, lockCycleRows, planWrite, PlanNotFoundError, type PlanWriteContext, type Tx } from "@/lib/plan-revisions";
+import { assertAthleteRoom, lockCycleRows, planWrite, PlanNotFoundError, type PlanWriteContext, type PlanWriteSession, type Tx } from "@/lib/plan-revisions";
+import { withLimits, type LimitContext, type LimitOverride } from "@/lib/training-limits";
+import type { LimitCheck, LimitRule } from "@/lib/utils/training-limits";
 import { regenerateCycleSessions, WorkoutSchemaError } from "@/lib/planned-sessions";
 import { getUserSettings } from "@/lib/user-settings";
 import { describeWorkout, estimateWorkout, parseWorkout, type Workout, type WorkoutEstimate } from "@/lib/utils/workout-steps";
@@ -86,11 +89,11 @@ function checked(input: unknown): Workout {
 }
 
 /**
- * The live active or scheduled weekday cycles whose slots use this workout,
+ * The live weekday cycles whose slots use this workout,
  * locked in A4's order (cycles first), then their untouched sessions follow
  * the library. Returns how many sessions changed.
  */
-async function regenerateUsers(tx: Tx, userId: string, workoutId: number): Promise<number> {
+export async function regenerateUsers(tx: Tx, userId: string, workoutId: number): Promise<number> {
   const cycles = await tx
     .selectDistinct({ id: trainingCycles.id })
     .from(trainingCycles)
@@ -108,8 +111,8 @@ async function regenerateUsers(tx: Tx, userId: string, workoutId: number): Promi
 }
 
 /** Ids of the cycles a library workout is used by (to lock before the workout row). */
-async function cyclesUsing(userId: string, workoutId: number): Promise<number[]> {
-  const rows = await db
+export async function cyclesUsingWorkout(userId: string, workoutId: number, ex: typeof db | Tx = db): Promise<number[]> {
+  const rows = await ex
     .selectDistinct({ id: trainingCycles.id })
     .from(trainingCycles)
     .innerJoin(trainingCycleSlots, eq(trainingCycleSlots.trainingCycleId, trainingCycles.id))
@@ -138,26 +141,41 @@ export async function updateWorkout(
   ctx: PlanWriteContext,
   id: number,
   input: { workout?: unknown; priority?: SessionPriority | null; name?: string; expectedVersion?: number },
-): Promise<{ id: number; version: number; sessionsRegenerated: number }> {
-  let workout = input.workout !== undefined ? checked(input.workout) : null;
-  const cycleIds = await cyclesUsing(ctx.userId, id);
+  /** An assistant's edit runs the training limits on the sessions it rewrites (D3, review 3); the app's never does (D4). */
+  limits?: { lc: LimitContext; override: LimitOverride },
+): Promise<{ id: number; version: number; sessionsRegenerated: number; limits: { check: LimitCheck; unusedOverrides: LimitRule[] } | null }> {
+  const workout = input.workout !== undefined ? checked(input.workout) : null;
+  const cycleIds = await cyclesUsingWorkout(ctx.userId, id);
   const { result, versions } = await planWrite(ctx, async (w) => {
     if (cycleIds.length) await lockCycleRows(w.tx, cycleIds);
-    await w.touch({ type: "workout", id }, { expectedVersion: input.expectedVersion });
-    const [row] = await w.tx.select().from(workouts).where(and(eq(workouts.id, id), eq(workouts.userId, ctx.userId), isNull(workouts.deletedAt)));
-    if (!row) throw new PlanNotFoundError({ type: "workout", id });
-    if (input.name !== undefined) workout = checked({ ...(workout ?? (row.workout as object)), name: input.name });
-    await w.tx
-      .update(workouts)
-      .set({
-        ...(workout && { workout, name: workout.name, sport: workout.sport }),
-        ...(input.priority !== undefined && { priority: input.priority }),
-        updatedAt: new Date(),
-      })
-      .where(eq(workouts.id, id));
-    return regenerateUsers(w.tx, ctx.userId, id);
+    const write = () => applyUpdate(w, ctx, id, input, workout);
+    if (!limits || !cycleIds.length) return { regenerated: await write(), limits: null };
+    const { result: regenerated, check, unusedOverrides } = await withLimits(w, limits.lc, { programIds: [], cycleIds }, limits.override, write);
+    return { regenerated, limits: { check, unusedOverrides } };
   });
-  return { id, version: versions.get(`workout:${id}`) ?? 0, sessionsRegenerated: result };
+  return { id, version: versions.get(`workout:${id}`) ?? 0, sessionsRegenerated: result.regenerated, limits: result.limits };
+}
+
+async function applyUpdate(
+  w: PlanWriteSession,
+  ctx: PlanWriteContext,
+  id: number,
+  input: { priority?: SessionPriority | null; name?: string; expectedVersion?: number },
+  given: Workout | null,
+): Promise<number> {
+  await w.touch({ type: "workout", id }, { expectedVersion: input.expectedVersion });
+  const [row] = await w.tx.select().from(workouts).where(and(eq(workouts.id, id), eq(workouts.userId, ctx.userId), isNull(workouts.deletedAt)));
+  if (!row) throw new PlanNotFoundError({ type: "workout", id });
+  const workout = input.name !== undefined ? checked({ ...(given ?? (row.workout as object)), name: input.name }) : given;
+  await w.tx
+    .update(workouts)
+    .set({
+      ...(workout && { workout, name: workout.name, sport: workout.sport }),
+      ...(input.priority !== undefined && { priority: input.priority }),
+      updatedAt: new Date(),
+    })
+    .where(eq(workouts.id, id));
+  return regenerateUsers(w.tx, ctx.userId, id);
 }
 
 export async function duplicateWorkout(ctx: PlanWriteContext, id: number): Promise<{ id: number; version: number }> {
@@ -168,7 +186,7 @@ export async function duplicateWorkout(ctx: PlanWriteContext, id: number): Promi
 }
 
 export async function deleteWorkout(ctx: PlanWriteContext, id: number, expectedVersion?: number): Promise<{ sessionsRegenerated: number }> {
-  const cycleIds = await cyclesUsing(ctx.userId, id);
+  const cycleIds = await cyclesUsingWorkout(ctx.userId, id);
   const { result } = await planWrite(ctx, async (w) => {
     if (cycleIds.length) await lockCycleRows(w.tx, cycleIds);
     await w.touch({ type: "workout", id }, { expectedVersion, action: "delete" });

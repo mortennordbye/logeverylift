@@ -1432,13 +1432,22 @@ async function restoreCycleTo(
       ? (await tx.select({ id: programs.id }).from(programs).where(inArray(programs.id, slotProgramIds))).map((p) => p.id)
       : [],
   );
+  // A slot's library workout may be gone for good (purged): the slot then has none (review 8).
+  const slotWorkoutIds = targetSnap.slots.map((s) => s.workoutId).filter((id): id is number => typeof id === "number");
+  const existingWorkouts = new Set(
+    slotWorkoutIds.length
+      ? // plan-read: includes deleted (a soft-deleted workout still exists; the slot reads it as rest)
+        (await tx.select({ id: workouts.id }).from(workouts).where(inArray(workouts.id, slotWorkoutIds))).map((x) => x.id)
+      : [],
+  );
   await tx.delete(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, cycleId));
   if (targetSnap.slots.length) {
     await tx.insert(trainingCycleSlots).values(
       targetSnap.slots.map(({ programName: _n, ...s }) => {
         void _n;
         const programId = typeof s.programId === "number" && existing.has(s.programId) ? s.programId : null;
-        return { ...(s as unknown as typeof trainingCycleSlots.$inferInsert), trainingCycleId: cycleId, programId };
+        const workoutId = typeof s.workoutId === "number" && existingWorkouts.has(s.workoutId) ? s.workoutId : null;
+        return { ...(s as unknown as typeof trainingCycleSlots.$inferInsert), trainingCycleId: cycleId, programId, workoutId };
       }),
     );
   }
@@ -1555,6 +1564,12 @@ async function restoreRowTo(
 ): Promise<string[]> {
   // The athlete profile and injuries belong to the endurance add-on (D18); thresholds are for everyone.
   if (type !== "threshold" && !(await enduranceEnabledFor(w.ctx.userId))) throw new PlanStateError(ENDURANCE_OFF);
+  // A library workout's sessions follow it (review 7): the cycles using it are locked first, in A4's order.
+  const { cyclesUsingWorkout, regenerateUsers } = type === "workout" ? await import("@/lib/workouts") : { cyclesUsingWorkout: null, regenerateUsers: null };
+  if (cyclesUsingWorkout) {
+    const ids = await cyclesUsingWorkout(w.ctx.userId, id, w.tx);
+    if (ids.length) await lockCycleRows(w.tx, ids);
+  }
   await w.touch({ type, id }, { allowDeleted: true, action: "restore", restoredFromId: targetRevisionId });
   const table = ROW_TABLES[type];
   const [row] = await w.tx.select({ deletedAt: table.deletedAt }).from(table).where(eq(table.id, id));
@@ -1570,6 +1585,7 @@ async function restoreRowTo(
     .update(table)
     .set({ ...(set as Record<string, never>), deletedAt: null, updatedAt: new Date() })
     .where(eq(table.id, id));
+  if (regenerateUsers) await regenerateUsers(w.tx, w.ctx.userId, id);
   return [];
 }
 

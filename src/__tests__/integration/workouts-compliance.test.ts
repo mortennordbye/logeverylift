@@ -11,7 +11,11 @@ import {
   workoutSets,
   workouts,
 } from "@/db/schema";
-import { confirmPlannedDone, getHomeEndurance, getIllness, getWorkouts, manageIllness, manageWorkout, restoreIllness } from "@/lib/actions/workouts-compliance";
+import { confirmPlannedDone, manageIllness, manageWorkout } from "@/lib/actions/workouts-compliance";
+import { restoreDeletedAthleteRow } from "@/lib/athlete-profile";
+import { listIllness } from "@/lib/illness";
+import { homeEndurance } from "@/lib/session-answers";
+import { listWorkouts } from "@/lib/workouts";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
@@ -164,20 +168,16 @@ describe("the workout library", () => {
     if (!dup.success) return;
     expect((await manageWorkout({ op: "rename", id: dup.data.id, name: "Copy two" })).success).toBe(true);
     expect((await manageWorkout({ op: "delete", id: w.workoutId })).success).toBe(true);
-    const live = await getWorkouts({});
-    expect(live.success && live.data.map((x) => x.name)).toEqual(["Copy two"]);
-    const gone = await getWorkouts({ deleted: true });
-    expect(gone.success && gone.data.map((x) => x.id)).toEqual([w.workoutId]);
+    expect((await listWorkouts(me)).map((x) => x.name)).toEqual(["Copy two"]);
+    expect((await listWorkouts(me, { deleted: true })).map((x) => x.id)).toEqual([w.workoutId]);
     expect((await manageWorkout({ op: "restore", id: w.workoutId })).success).toBe(true);
-    const back = await getWorkouts({});
-    expect(back.success && back.data).toHaveLength(2);
+    expect(await listWorkouts(me)).toHaveLength(2);
     const revs = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "workout"), eq(planRevisions.writer, "user")));
     expect(revs.length).toBeGreaterThanOrEqual(4);
 
     const lifter = (await createUser({ timeZone: "UTC" })).id;
     asUser(lifter);
     expect(await manageWorkout({ op: "delete", id: w.workoutId })).toMatchObject({ success: false, error: "Endurance features are not on for this account" });
-    expect(await getWorkouts({})).toEqual({ success: true, data: [] });
   });
 });
 
@@ -298,22 +298,21 @@ describe("planned vs done", () => {
     ]);
     const wed = (await sessionsOf(cycleId)).find((r) => r.date === "2026-11-04")!;
     const lateRun = await act("2026-11-05", "running", 1800);
-    expect((await updatePlannedSession({ op: "pick", id: wed.id, garminActivityId: odd })).success).toBe(true);
+    const pick = (garminActivityId: number, expectedVersion: number) => lib(admin)("confirm_planned_session", { plannedSessionId: wed.id, outcome: "done", garminActivityId, reason: "Watch ride", expectedVersion });
+    expect((await pick(odd, wed.version)).isError).toBe(false);
     const [picked] = await sessionCompliance(admin, "2026-11-04", "2026-11-04", { cycleId });
     expect(picked).toMatchObject({ state: "done", matchedBy: "pick", garminActivityId: odd });
-    expect(await updatePlannedSession({ op: "pick", id: wed.id, garminActivityId: lateRun + 100000 })).toMatchObject({ success: false });
+    expect((await pick(lateRun + 100000, wed.version + 1)).isError).toBe(true);
   });
 
   it("the app's Yes writes one linked workout; home lists the unconfirmed ones", async () => {
     const run = await runProgram();
     const cycleId = await cycle(me, [{ dayOfWeek: 3, programId: run }]);
-    const home = await getHomeEndurance();
-    expect(home.success && home.data?.unconfirmed.map((s) => s.date)).toEqual(["2026-11-04"]);
+    expect((await homeEndurance(me)).unconfirmed.map((s) => s.date)).toEqual(["2026-11-04"]);
     const wed = (await sessionsOf(cycleId)).find((r) => r.date === "2026-11-04")!;
     const yes = await confirmPlannedDone({ plannedSessionId: wed.id, durationSeconds: 2700, distanceMeters: 8000, rpe: 5 });
     expect(yes.success).toBe(true);
-    const after = await getHomeEndurance();
-    expect(after.success && after.data?.unconfirmed).toEqual([]);
+    expect((await homeEndurance(me)).unconfirmed).toEqual([]);
     expect(await confirmPlannedDone({ plannedSessionId: wed.id, durationSeconds: 30 })).toMatchObject({ success: false, error: "Invalid input" });
   });
 });
@@ -332,8 +331,7 @@ describe("sick periods", () => {
       ["2026-11-03", "done", "orange"],
       ["2026-11-04", "illness", "illness"],
     ]);
-    const home = await getHomeEndurance();
-    expect(home.success && home.data).toMatchObject({ unconfirmed: [], returnInfo: { phase: "sick" } });
+    expect(await homeEndurance(me)).toMatchObject({ unconfirmed: [], returnInfo: { phase: "sick" } });
 
     expect(await manageIllness({ op: "add", startedOn: "2026-11-04", endedOn: "2026-11-04" })).toMatchObject({ success: false, error: expect.stringContaining("overlaps") });
     expect(await manageIllness({ op: "add", startedOn: "2026-11-06" })).toMatchObject({ success: false, error: "A sick period starts today or earlier." });
@@ -341,14 +339,12 @@ describe("sick periods", () => {
     expect((await manageIllness({ op: "end", id: added.data.id, endedOn: "2026-11-03" })).success).toBe(true);
     const [wed] = await sessionCompliance(me, "2026-11-04", "2026-11-04", { cycleId });
     expect(wed.state).toBe("unconfirmed");
-    const back = await getHomeEndurance();
-    expect(back.success && back.data?.returnInfo).toMatchObject({ phase: "returning", daysSinceEnd: 2 });
+    expect((await homeEndurance(me)).returnInfo).toMatchObject({ phase: "returning", daysSinceEnd: 2 });
 
     expect((await manageIllness({ op: "delete", id: added.data.id })).success).toBe(true);
-    expect(await getIllness()).toEqual({ success: true, data: [] });
-    expect((await restoreIllness({ id: added.data.id })).success).toBe(true);
-    const list = await getIllness();
-    expect(list.success && list.data.map((p) => p.id)).toEqual([added.data.id]);
+    expect(await listIllness(me)).toEqual([]);
+    expect(await restoreDeletedAthleteRow({ userId: me, writer: "user" }, "illness", added.data.id)).not.toBeNull();
+    expect((await listIllness(me)).map((p) => p.id)).toEqual([added.data.id]);
 
     const lifter = (await createUser({ timeZone: "UTC" })).id;
     asUser(lifter);

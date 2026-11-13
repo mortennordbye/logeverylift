@@ -11,6 +11,8 @@
 import { getLibraryWorkout, createWorkout, deleteWorkout, duplicateWorkout, listWorkouts, updateWorkout } from "@/lib/workouts";
 import { addIllness, deleteIllness, listIllness, updateIllness } from "@/lib/illness";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
+import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
+import { LimitRefusedError, limitContext } from "@/lib/training-limits";
 import { REVISION_RULES, assistantContext, planErrorResult, reasonArg } from "@/lib/mcp/revisions";
 import { applySessionOp, WorkoutSchemaError } from "@/lib/planned-sessions";
 import { confirmDone, moveSuggestion, oneSession } from "@/lib/session-answers";
@@ -100,9 +102,11 @@ export function registerWorkoutLibraryTools(server: McpServer, userId: string, c
         "Updating or deleting a library workout changes the dated sessions that a cycle slot made from it and that nobody changed, from this week's Monday on (sessionsRegenerated). Sessions with their own copy, done sessions and earlier weeks keep theirs. To change one day's session, use manage_planned_session set_workout.",
         SCHEMA_TEXT,
         `Every operation requires reason. ${REVISION_RULES}`,
+        `On update: ${LIMITS_TEXT} The weeks checked are those of the sessions the edit rewrites.`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
+        ...overrideArgs,
         operation: z.enum(["create", "update", "duplicate", "delete"]),
         workoutId: z.number().int().positive().optional(),
         workout: z.unknown().optional(),
@@ -114,6 +118,8 @@ export function registerWorkoutLibraryTools(server: McpServer, userId: string, c
     },
     async (args) => {
       const ctx = assistantContext(userId, clientId, args.reason);
+      const override = overrideFrom(args);
+      if (typeof override === "string") return fail(override);
       try {
         if (args.operation === "create") {
           if (args.workout === undefined) return fail("create requires workout");
@@ -133,10 +139,21 @@ export function registerWorkoutLibraryTools(server: McpServer, userId: string, c
           audit("manage_workout", { userId, op: "delete", id: args.workoutId });
           return ok({ deleted: true, ...r });
         }
-        const r = await updateWorkout(ctx, args.workoutId, { workout: args.workout, priority: args.priority, name: args.name, expectedVersion: args.expectedVersion });
+        const r = await updateWorkout(
+          ctx,
+          args.workoutId,
+          { workout: args.workout, priority: args.priority, name: args.name, expectedVersion: args.expectedVersion },
+          { lc: await limitContext(userId), override },
+        );
         audit("manage_workout", { userId, op: "update", id: args.workoutId });
-        return ok({ workoutId: r.id, version: r.version, sessionsRegenerated: r.sessionsRegenerated });
+        return ok({
+          workoutId: r.id,
+          version: r.version,
+          sessionsRegenerated: r.sessionsRegenerated,
+          ...(r.limits && { limits: limitSummary(r.limits.check, r.limits.unusedOverrides) }),
+        });
       } catch (e) {
+        if (e instanceof LimitRefusedError) return limitRefusal(e);
         return schemaRefusal(e) ?? (await planErrorResult(userId, e)) ?? failInternal("manage_workout", e);
       }
     },

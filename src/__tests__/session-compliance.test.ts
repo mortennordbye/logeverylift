@@ -184,6 +184,22 @@ describe("matchEndurance", () => {
     expect(matchEndurance([run(1), run(2, "2026-11-03", 2)], [done(10, ["run"])]).size).toBe(1);
   });
 
+  it("a run linked to its session does not also clear the day's strength session (review 1)", () => {
+    const m = matchEndurance([lift(1, null, "2026-11-03", 1), run(2, "2026-11-03", 2)], [done(10, ["run"], { plannedSessionId: 2 })]);
+    expect(m.get(2)).toEqual({ sessionId: 10, step: 1 });
+    expect(m.has(1)).toBe(false);
+  });
+
+  it("an unlinked run clears the run, not the strength session before it (review 1)", () => {
+    const m = matchEndurance([lift(1, null, "2026-11-03", 1), run(2, "2026-11-03", 2)], [done(10, ["run"])]);
+    expect(m.get(2)).toEqual({ sessionId: 10, step: 3 });
+    expect(m.has(1)).toBe(false);
+    // A strength workout still clears the strength session, and a second workout is free for it.
+    const both = matchEndurance([lift(1, null, "2026-11-03", 1), run(2, "2026-11-03", 2)], [done(10, ["run"]), done(11, [])]);
+    expect(both.get(1)).toEqual({ sessionId: 11, step: 3 });
+    expect(both.get(2)).toEqual({ sessionId: 10, step: 3 });
+  });
+
   it("a link wins, and only on its own session", () => {
     const m = matchEndurance([run(1), run(2, "2026-11-03", 2)], [done(10, ["run"], { plannedSessionId: 2 })]);
     expect(m.get(2)).toEqual({ sessionId: 10, step: 1 });
@@ -320,6 +336,11 @@ describe("suggestMoveDay", () => {
     expect(suggestMoveDay({ ...base, load: [], availableDays: [2, 6, 7] })).toEqual({ date: "2026-11-14" });
     expect(suggestMoveDay({ ...base, load: [], illness: [{ startedOn: "2026-11-10", endedOn: "2026-11-13" }] })).toEqual({ date: "2026-11-14" });
     expect(suggestMoveDay({ ...base, load: [], illness: [{ startedOn: "2026-11-10", endedOn: null }] }).date).toBeNull();
+  });
+
+  it("never suggests a day that already holds three sessions (review 13)", () => {
+    const full = [...[1, 2, 3].map(() => easy("2026-11-11")), ...["2026-11-12", "2026-11-13", "2026-11-14", "2026-11-15"].map(easy)];
+    expect(suggestMoveDay({ ...base, load: full })).toEqual({ date: "2026-11-12" });
   });
 
   it("treats an empty list of available days as every day", () => {

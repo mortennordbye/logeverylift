@@ -40,16 +40,10 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/lib/utils/workout-steps.ts`, `src/lib/workouts.ts`, `src/lib/actions/workouts-compliance.ts` (`getWorkouts`, `manageWorkout`), `docs/mcp/workout-steps.md`.
 
 ### Brick, library and Garmin controls in the app
-- **What:** Three controls from section 7 of `docs/plans/workouts-and-compliance.md` that the app does not show yet: "Update from library" and "Link as brick" in the calendar day sheet; the list of the day's Garmin activities in the "Yes" sheet for admins (6.5); and Recently deleted with Restore for sick periods. The server has all of them (`updatePlannedSession` ops `update_from_library`, `link_brick`, `unlink_brick`, `pick`; `restoreIllness`), and the assistant can use them over MCP.
+- **What:** Three controls from section 7 of `docs/plans/workouts-and-compliance.md` that the app does not show yet: "Update from library" and "Link as brick" in the calendar day sheet; the list of the day's Garmin activities in the "Yes" sheet for admins (6.5); and Recently deleted with Restore for sick periods. The server has all of them (`applySessionOp` ops `update_from_library`, `link_brick`, `unlink_brick`, `pick`; `restoreDeletedAthleteRow` for a sick period), and the assistant can use them over MCP. The app's Server Action and validator accept none of them yet: add each op to `plannedSessionOpSchema` with its control.
 - **Why deferred:** The C4/C5 build kept the app UI to the answers, the sick periods and the library list; these are less used and fit the C6 views.
 - **Unblocked by:** Package C6, or an owner request. Sick periods also need a read of deleted rows (a `deleted` option on `listIllness`).
-- **Touchpoints:** `src/components/features/CycleCalendarClient.tsx`, `src/components/features/SessionAnswers.tsx`, `src/components/features/AthleteProfileClient.tsx`, `src/lib/illness.ts` (`listIllness`), `src/lib/actions/workouts-compliance.ts`.
-
-### Training limits on a library workout edit
-- **What:** An assistant's `manage_workout` update or delete rewrites the untouched dated sessions that cycle slots made from that workout, but runs no training limits, so a library edit that makes a week hold a fourth hard session is not refused or warned.
-- **Why deferred:** The edit can touch many weeks of several cycles; the limits check one change's weeks. The session operations that put a workout on one day (`set_workout`, `add`) do run the limits.
-- **Unblocked by:** Package D2, which adds the multi-week scope for sync output. Then wrap the regeneration in `updateWorkout` and `deleteWorkout` with `withLimits` on each cycle's dated weeks.
-- **Touchpoints:** `src/lib/workouts.ts` (`updateWorkout`, `deleteWorkout`), `src/lib/training-limits.ts` (`withLimits`), `src/lib/mcp/tools/workouts-compliance.ts`.
+- **Touchpoints:** `src/components/features/CycleCalendarClient.tsx`, `src/components/features/SessionAnswers.tsx`, `src/components/features/AthleteProfileClient.tsx`, `src/lib/illness.ts` (`listIllness`), `src/lib/validators/planned-sessions.ts` (`plannedSessionOpSchema`), `src/lib/actions/workouts-compliance.ts`.
 
 ### Today's card for workout sessions
 - **What:** A dated session that runs a structured workout, not a program, does not show on the home screen's today card or the week strip yet.

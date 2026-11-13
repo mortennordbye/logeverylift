@@ -96,9 +96,10 @@ export async function moveSuggestion(userId: string, s: SessionCompliance, week?
   const today = toDateStr(await userToday(userId));
   const monday = mondayOf(s.date);
   const sessions = week ?? (await sessionCompliance(userId, monday, addDaysStr(monday, 6)));
+  // Every session that holds a place in the day's cap; an unanswered one may still be done, so it loads its day (review 13).
   const load = sessions
-    .filter((x) => x.id !== s.id && (x.state === "planned" || x.state === "done"))
-    .map((x) => ({ date: x.date, keyOrHard: x.priority === "key" || x.hard }));
+    .filter((x) => x.id !== s.id && x.status === "planned")
+    .map((x) => ({ date: x.date, keyOrHard: (x.state === "planned" || x.state === "done" || x.state === "unconfirmed") && (x.priority === "key" || x.hard) }));
   return suggestMoveDay({ missedDate: s.date, today, load, availableDays: await availableDays(userId), illness: await illnessOf(userId) });
 }
 

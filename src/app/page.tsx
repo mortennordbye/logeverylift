@@ -63,7 +63,7 @@ async function enduranceHome(userId: string) {
       returning: info?.phase === "returning" ? info.rule : null,
     };
   } catch (e) {
-    console.error("[Home] endurance_read_failed", e);
+    console.error("[Home] endurance_read_failed", { error: e instanceof Error ? e.name : "unknown" });
     return null;
   }
 }
