@@ -198,7 +198,7 @@ the plan and runs alone.
 | C3 | Athlete profile, thresholds and intake interview | A3, A4, B4 | done ([`athlete-profile.md`](athlete-profile.md)) |
 | C4 | Structured endurance workouts | C2, C3 | building ([`workouts-and-compliance.md`](workouts-and-compliance.md)) |
 | C5 | Planned vs done, missed sessions, sick periods | C2, C4 | building ([`workouts-and-compliance.md`](workouts-and-compliance.md)) |
-| C6 | Endurance in the app: views and guided player | A2, C3, C4 | todo |
+| C6 | Endurance in the app: views and guided player | A2, C3, C4 | brief ([`endurance-app.md`](endurance-app.md)) |
 
 **C1. Seasons, races and phases (D8, D17, D22, T8).**
 - A season for every user: name, goal, start, end, next goal.
@@ -293,7 +293,7 @@ a session relates to a program.
 
 | ID | Package | Needs | Status |
 |---|---|---|---|
-| D1 | Load without Garmin, swim and run-pace load | C3, C5 | todo |
+| D1 | Load without Garmin, swim and run-pace load | C3, C5 | brief ([`endurance-app.md`](endurance-app.md)) |
 | D2 | Training limits engine (warn the AI) | B1, C1, C2, D1 | todo; part 1 done ([`ai-coach.md`](ai-coach.md)) |
 | D3 | Strength by phase and heavy-legs placement | C1, C3, D2 | todo |
 | D4 | Readiness-based session suggestions | C2, D2 | todo |
