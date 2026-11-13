@@ -7,7 +7,8 @@
 import type { TodaySession } from "@/types/workout";
 
 export type TodayAction =
-  | { kind: "link"; href: string; label: string; primary: boolean; ariaLabel?: string }
+  /** `short`: the visible text at S, where the full label does not fit; the full label stays the accessible name. */
+  | { kind: "link"; href: string; label: string; primary: boolean; ariaLabel?: string; short?: string }
   | { kind: "skip"; sessionId: number };
 
 export type TodayActionInput = {
@@ -23,7 +24,7 @@ const DIFFERENT: TodayAction = { kind: "link", href: "/new-workout", label: "Dif
 
 export function todayActions(d: TodayActionInput): { primary: TodayAction | null; more: TodayAction[] } {
   if (!d.hasCycle) {
-    return { primary: { kind: "link", href: "/cycles", label: "Set up a Cycle →", primary: true }, more: [] };
+    return { primary: { kind: "link", href: "/cycles", label: "Set up a Cycle →", short: "Set up", primary: true }, more: [] };
   }
   if (d.severalToday) {
     const all: TodayAction[] = [];
@@ -48,14 +49,20 @@ export function todayActions(d: TodayActionInput): { primary: TodayAction | null
     const href = `/programs/${d.todayProgram.id}/workout`;
     const primary: TodayAction = d.completedToday
       ? { kind: "link", href, label: d.todayAutoSession ? "Log in app" : "Do Again", primary: false }
-      : { kind: "link", href, label: "Start Today's Workout", primary: true };
+      : { kind: "link", href, label: "Start Today's Workout", short: "Start", primary: true };
     const more: TodayAction[] = [];
     if (d.todayAutoSession) more.push({ kind: "skip", sessionId: d.todayAutoSession.id });
     more.push(DIFFERENT);
     return { primary, more };
   }
   return {
-    primary: { kind: "link", href: "/new-workout", label: d.completedToday ? "Do Another Workout →" : "Start a Workout →", primary: false },
+    primary: {
+      kind: "link",
+      href: "/new-workout",
+      label: d.completedToday ? "Do Another Workout →" : "Start a Workout →",
+      short: d.completedToday ? "Another" : "Start",
+      primary: false,
+    },
     more: [],
   };
 }

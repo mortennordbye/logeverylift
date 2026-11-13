@@ -66,7 +66,7 @@ async function done(page: Page) {
 test("E1: move, hide and resize persist; Today at S still starts; Reset restores the default", async ({ page }, testInfo) => {
   const { userId, progId } = await lifter(testInfo.parallelIndex);
   await page.goto("/");
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "Edit home" }).click();
   await expect(page.getByTestId("home-edit-list")).toBeVisible();
 
   await page.getByRole("button", { name: "Move Week up" }).click();
@@ -94,7 +94,7 @@ test("E1: move, hide and resize persist; Today at S still starts; Reset restores
   await dismissReadinessSheet(page);
 
   await page.goto("/");
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "Edit home" }).click();
   page.once("dialog", (d) => void d.accept());
   const settle = trackActions(page);
   await page.getByRole("button", { name: "Reset" }).click();
@@ -109,7 +109,7 @@ test("E2: without a cycle the pinned start bar stays after a layout change", asy
   const { userId } = await bareUser(testInfo.parallelIndex);
   await page.goto("/");
   await expect(page.getByTestId("start-bar")).toBeVisible();
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "Edit home" }).click();
   await expect(page.getByTestId("start-bar")).toHaveCount(0);
   await page.getByLabel("Size of Today").selectOption("m");
   await page.getByRole("button", { name: "Hide Week" }).click();
@@ -137,7 +137,7 @@ test("E3: Endurance today below Week still starts the guided player", async ({ p
 
   await page.goto("/");
   await expect(page.getByTestId("endurance-today")).toBeVisible();
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "Edit home" }).click();
   await page.getByRole("button", { name: "Move Endurance today down" }).click();
   await expect(page.getByRole("button", { name: "Hide Endurance today" })).toHaveCount(0);
   await done(page);
@@ -158,7 +158,7 @@ test("E3: Endurance today below Week still starts the guided player", async ({ p
 test("E4: offline, Done keeps the draft and says so; back online it saves", async ({ page, context }, testInfo) => {
   const { userId } = await lifter(testInfo.parallelIndex);
   await page.goto("/");
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "Edit home" }).click();
   await page.getByRole("button", { name: "Move Week up" }).click();
 
   await context.setOffline(true);
@@ -170,4 +170,27 @@ test("E4: offline, Done keeps the draft and says so; back online it saves", asyn
   await context.setOffline(false);
   await done(page);
   await expect.poll(async () => (await layoutOf(userId))?.items.slice(1, 3).map((i) => i.id)).toEqual(["week", "today"]);
+});
+
+test("the Edit home pencil sits in the title row; with the title hidden it moves to the end of the list", async ({ page }, testInfo) => {
+  const { userId } = await lifter(testInfo.parallelIndex);
+  await page.goto("/");
+  const pencil = page.getByRole("button", { name: "Edit home" });
+  await expect(pencil).toHaveCount(1);
+  await expect(pencil).toBeInViewport();
+  await expect(page.getByTestId("home-content").getByRole("button", { name: "Edit home" })).toHaveCount(0);
+
+  await pencil.click();
+  await page.getByRole("button", { name: "Hide Title" }).click();
+  await done(page);
+  await expect.poll(async () => (await layoutOf(userId))?.items.find((i) => i.id === "title")?.hidden).toBe(true);
+
+  await page.reload();
+  // The heading stays for screen readers; the pencil is now the last thing in the list.
+  await expect(page.getByRole("heading", { name: "LogEveryLift" })).toBeAttached();
+  const atEnd = page.getByTestId("home-content").getByRole("button", { name: "Edit home" });
+  await expect(atEnd).toHaveCount(1);
+  await expect(page.getByRole("button", { name: "Edit home" })).toHaveCount(1);
+  await atEnd.click();
+  await expect(page.getByTestId("home-edit-list")).toBeVisible();
 });

@@ -130,6 +130,10 @@ function SortableRow({
           <GripVertical className="h-5 w-5" aria-hidden />
         </button>
         <p className="flex-1 min-w-0 text-sm font-semibold truncate">{title}</p>
+        <HideOrLock item={item} act={act} next={next} />
+      </div>
+      {/* The size and move controls on their own line, so the title keeps its room on a phone. */}
+      <div className="flex items-center justify-end gap-1">
         <SizeMenu item={item} act={act} />
         <button
           type="button"
@@ -151,7 +155,6 @@ function SortableRow({
         >
           <ArrowDown className="h-4 w-4" aria-hidden />
         </button>
-        <HideOrLock item={item} act={act} next={next} />
       </div>
       {previews[item.id]?.[item.size]}
     </li>

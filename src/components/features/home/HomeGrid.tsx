@@ -6,7 +6,7 @@ import { editReducer, initEdit, movableItems, type EditAction } from "@/lib/home
 import type { StoredHomeItem } from "@/lib/home/stored-layout";
 import { widgetDef, type WidgetId } from "@/lib/home/widgets";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { Plus, RotateCcw, Undo2 } from "lucide-react";
+import { Pencil, Plus, RotateCcw, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
 import { HomeEditList, type Previews, type RowControl } from "./HomeEditList";
@@ -44,9 +44,13 @@ export type HomeGridProps = {
   startBar: ReactNode;
 };
 
+/** The "Edit home" pencil: 44x44, theme tokens, a visible focus ring, tap feedback. */
+const PENCIL =
+  "h-11 w-11 inline-flex items-center justify-center rounded-full text-muted-foreground active:opacity-60 active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+
 const ENTER_TEXT = "Editing home. Drag or use Move up and Move down to reorder.";
 
-/** Focus "Edit" on the next mount: a save remounts this component with the new layout. */
+/** Focus "Edit home" on the next mount: a save remounts this component with the new layout. */
 let focusEditOnMount = false;
 
 type Status = { kind: "error"; text: string } | { kind: "conflict" } | null;
@@ -277,9 +281,10 @@ export function HomeGrid(props: HomeGridProps) {
             type="button"
             ref={editTitleRef}
             onClick={() => enter("title")}
-            className="absolute right-3 top-5 min-h-11 min-w-11 px-2 text-sm font-medium text-primary active:opacity-60"
+            aria-label="Edit home"
+            className={`${PENCIL} absolute right-3 top-5`}
           >
-            Edit
+            <Pencil className="h-5 w-5" aria-hidden />
           </button>
         </div>
       ) : (
@@ -315,14 +320,18 @@ export function HomeGrid(props: HomeGridProps) {
             </Fragment>
           );
         })}
-        <button
-          type="button"
-          ref={editEndRef}
-          onClick={() => enter("end")}
-          className="shrink-0 self-center min-h-11 px-4 text-sm font-medium text-muted-foreground active:opacity-60"
-        >
-          Edit home
-        </button>
+        {/* With the title hidden, the pencil moves here, so edit mode is always reachable. */}
+        {!titleShown && (
+          <button
+            type="button"
+            ref={editEndRef}
+            onClick={() => enter("end")}
+            aria-label="Edit home"
+            className={`${PENCIL} shrink-0 self-center`}
+          >
+            <Pencil className="h-5 w-5" aria-hidden />
+          </button>
+        )}
       </div>
 
       {startBar}

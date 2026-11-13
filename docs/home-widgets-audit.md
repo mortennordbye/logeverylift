@@ -402,7 +402,7 @@ src/app/page.tsx (Server)
       streamed widgets (recentPrs, friendsActivity, garminReadiness)
                                                <WidgetErrorBoundary><Suspense fallback=Skeleton>
                                                <StreamedWidget/> (safeLoad(load(ctx)))
-    "Edit home" button at the end of the list
+    "Edit home" pencil at the end of the list, only when the title is hidden (decision 16)
   <StartBar/> when no cycle and not editing
   <Suspense><SharePromptLoader/></Suspense>    slot "end", as now
 ```
@@ -617,8 +617,10 @@ Outside edit mode:
 - The last widget stretches when its def has `stretch` (Week), as the page does now.
 
 Enter:
-- "Edit" text button at the right of the title row (44x44) and "Edit home" at the end of the
-  list (stays when the title is hidden). No long-press.
+- A pencil icon button (44x44, `aria-label="Edit home"`, visible focus ring, `:active`
+  feedback) at the top right of the title row, and nowhere else. When the user hides the
+  title, the pencil moves to the end of the list, so edit mode is always reachable
+  (decision 16). No long-press.
 - On enter, announce "Editing home. Drag or use Move up and Move down to reorder." in a polite
   live region, and move focus to the first row's handle.
 
@@ -813,7 +815,7 @@ Decided by the hub on 2026-11-13; the owner may change any of them.
 | # | Question | Decision |
 |---|---|---|
 | 1 | Can the user hide Today? | No. Move and resize only. Same for Endurance today. |
-| 2 | Can the user hide the title row? | Yes. The `h1` stays as `sr-only`, and "Edit home" stays at the end of the list. |
+| 2 | Can the user hide the title row? | Yes. The `h1` stays as `sr-only`, and the "Edit home" pencil moves to the end of the list. |
 | 3 | Can the user hide or move notices? | No. They render in fixed slots and keep their own dismiss paths; "Missed this week" keeps its setting. |
 | 4 | Where is the layout stored? | `user.home_layout jsonb`; null means default. |
 | 5 | May the home scroll? | Yes. The default still looks the same. |
@@ -827,6 +829,7 @@ Decided by the hub on 2026-11-13; the owner may change any of them.
 | 13 | One layout per account or per device? | Per account. |
 | 14 | Endurance today above the strength card by default? | No. Keep today's order. |
 | 15 | Weekly leaderboard widget? | Only after `getFriendsLeaderboard` uses the user's week. |
+| 16 | Where is the way into edit mode? | Decided by the owner on 2026-11-13: only a pencil icon button ("Edit home") at the top right of the title row. No "Edit home" button at the end of the list, except when the title is hidden: then the pencil moves there. |
 
 ## 10. Sources
 

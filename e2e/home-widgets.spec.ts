@@ -37,7 +37,7 @@ test("every available widget, at every size, from the gallery", async ({ page },
     (await testDb().select({ l: users.homeLayout }).from(users).where(eq(users.id, user!.id)))[0].l as StoredHomeLayout | null;
 
   await page.goto("/");
-  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "Edit home" }).click();
   await page.getByRole("button", { name: "Add widget" }).click();
   const gallery = page.getByTestId("widget-gallery");
   await expect(gallery).toBeVisible();
@@ -50,7 +50,7 @@ test("every available widget, at every size, from the gallery", async ({ page },
   }
 
   for (let round = 0; round < ROUNDS; round++) {
-    if (round > 0) await page.getByRole("button", { name: "Edit", exact: true }).click();
+    if (round > 0) await page.getByRole("button", { name: "Edit home" }).click();
     for (const id of ADDABLE) {
       if (widgetDef(id).sizes.length > 1) await page.getByLabel(`Size of ${widgetDef(id).title}`).selectOption(sizeIn(id, round));
     }

@@ -40,7 +40,7 @@ function setup(items = ITEMS) {
   );
 }
 
-const edit = () => fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+const edit = () => fireEvent.click(screen.getByRole("button", { name: "Edit home" }));
 const done = async () => {
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
@@ -137,7 +137,7 @@ describe("home edit mode (C2)", () => {
       force: false,
     });
     expect(screen.queryByTestId("home-edit-list")).toBeNull();
-    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit" }));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit home" }));
   });
 
   it("a failed save stays in edit mode with the draft", async () => {
@@ -193,6 +193,26 @@ describe("home edit mode (C2)", () => {
     });
     expect(window.confirm).toHaveBeenCalledWith("Reset home to the default layout?");
     expect(save.mock.calls[0][0]).toEqual({ items: null, baseUpdatedAt: null, force: false });
+  });
+
+  it("the Edit home pencil sits in the title row, and only there", () => {
+    setup();
+    const pencils = screen.getAllByRole("button", { name: "Edit home" });
+    expect(pencils).toHaveLength(1);
+    expect(pencils[0].closest("[data-testid=home-content]")).toBeNull();
+    expect(pencils[0].className).toMatch(/\bh-11\b/);
+    expect(pencils[0].className).toMatch(/\bw-11\b/);
+  });
+
+  it("with the title hidden, the pencil moves to the end of the list and still opens edit mode", () => {
+    setup([{ id: "title", size: "m", hidden: true }, ...ITEMS.slice(1)]);
+    const pencils = screen.getAllByRole("button", { name: "Edit home" });
+    expect(pencils).toHaveLength(1);
+    const content = screen.getByTestId("home-content");
+    expect(content.lastElementChild).toBe(pencils[0]);
+    expect(screen.getByTestId("home-title").className).toContain("sr-only");
+    fireEvent.click(pencils[0]);
+    expect(screen.getByTestId("home-edit-list")).toBeTruthy();
   });
 
   it("every edit-mode control is at least 44 px and has a name", () => {

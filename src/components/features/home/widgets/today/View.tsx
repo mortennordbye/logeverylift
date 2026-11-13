@@ -200,14 +200,14 @@ function ActionLink({ a }: { a: Extract<TodayAction, { kind: "link" }> }) {
     <Link
       href={a.href}
       prefetch={a.href.startsWith("/programs/")}
-      aria-label={a.ariaLabel}
+      aria-label={a.ariaLabel ?? (a.short ? a.label : undefined)}
       className={
         a.primary
           ? "inline-flex min-h-11 min-w-0 items-center rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground active:opacity-80"
           : "inline-flex min-h-11 min-w-0 items-center rounded-xl border border-border px-3 text-sm font-medium text-muted-foreground active:opacity-70"
       }
     >
-      <span className="truncate">{a.label}</span>
+      <span className="truncate">{a.short ?? a.label}</span>
     </Link>
   );
 }
