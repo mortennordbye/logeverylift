@@ -18,7 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./users";
 
-export const PLAN_OBJECT_TYPES = ["program", "cycle", "memory", "athlete", "threshold", "injury", "season", "planned_session"] as const;
+export const PLAN_OBJECT_TYPES = ["program", "cycle", "memory", "athlete", "threshold", "injury", "season", "planned_session", "workout", "illness"] as const;
 export const PLAN_REVISION_ACTIONS = ["create", "update", "delete", "restore", "baseline", "conflict"] as const;
 export const PLAN_WRITERS = ["user", "assistant", "progression", "sync", "apply"] as const;
 

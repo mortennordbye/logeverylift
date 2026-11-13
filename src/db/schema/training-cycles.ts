@@ -23,6 +23,7 @@ import {
 import { programs } from "./programs";
 import { seasons } from "./seasons";
 import { users } from "./users";
+import { SESSION_PRIORITIES, workouts } from "./workouts";
 
 /** Phase types of a cycle inside a season (docs/plans/seasons.md, 2.4). */
 export const PHASE_TYPES = ["general", "base", "build", "peak", "taper", "transition"] as const;
@@ -135,6 +136,13 @@ export const trainingCycleSlots = pgTable(
     // Order inside the day on a weekday cycle (1-3): a day can hold several
     // sessions (D7). Always 1 on a rotation cycle.
     daySlot: integer("day_slot").default(1).notNull(),
+    // A library workout instead of a program (weekday cycles only); generation
+    // copies it into each dated session (docs/plans/workouts-and-compliance.md, 4.3).
+    workoutId: integer("workout_id").references(() => workouts.id, { onDelete: "set null" }),
+    // key, support or optional, copied to generated sessions; null = derived.
+    priority: text("priority", { enum: SESSION_PRIORITIES }),
+    // The next slot of the day is the run of a brick that starts with this one.
+    brickWithNext: boolean("brick_with_next").default(false).notNull(),
   },
   (t) => [
     unique("uniq_cycle_day").on(t.trainingCycleId, t.dayOfWeek, t.daySlot),

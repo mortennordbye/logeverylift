@@ -23,6 +23,12 @@ export type TemplateSlot = {
   label: string | null;
   notes: string | null;
   autoComplete: boolean;
+  /** A library workout instead of a program (docs/plans/workouts-and-compliance.md, 5): its JSON, copied into each session. */
+  workout?: unknown;
+  workoutId?: number | null;
+  priority?: "key" | "support" | "optional" | null;
+  /** The next slot of the day is the run of a brick. */
+  brickWithNext?: boolean;
 };
 
 /**
@@ -64,11 +70,19 @@ export type GeneratedSession = {
   templateDate: string;
   date: string;
   position: number;
-  programId: number;
+  /** Null for a workout session. */
+  programId: number | null;
   label: string | null;
   notes: string | null;
   autoComplete: boolean;
+  /** Set only for a workout slot (docs/plans/workouts-and-compliance.md, 5). */
+  workout?: unknown;
+  workoutId?: number | null;
+  /** Set only when the slot sets a priority. */
+  priority?: "key" | "support" | "optional" | null;
 };
+
+const sameJson = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 /** Add days to a YYYY-MM-DD date. */
 export function addDaysStr(date: string, days: number): string {
@@ -97,7 +111,7 @@ export function generateWeekday(start: string, lengthDays: number, slots: Templa
   const out: GeneratedSession[] = [];
   const byDay = new Map<number, TemplateSlot[]>();
   for (const s of slots) {
-    if (s.dayOfWeek == null || s.programId == null) continue;
+    if (s.dayOfWeek == null || (s.programId == null && s.workout == null)) continue;
     byDay.set(s.dayOfWeek, [...(byDay.get(s.dayOfWeek) ?? []), s]);
   }
   for (let i = 0; i < lengthDays; i++) {
@@ -109,10 +123,12 @@ export function generateWeekday(start: string, lengthDays: number, slots: Templa
         templateDate: date,
         date,
         position: s.daySlot,
-        programId: s.programId!,
+        programId: s.programId,
         label: s.label,
         notes: s.notes,
         autoComplete: s.autoComplete,
+        ...(s.programId == null && s.workout != null && { workout: s.workout, workoutId: s.workoutId ?? null }),
+        ...(s.priority != null && { priority: s.priority }),
       });
     }
   }
@@ -136,6 +152,9 @@ export type ExistingRow = {
   linked?: boolean;
   /** Skipped: it keeps no place in the day's count of three. */
   skipped?: boolean;
+  workout?: unknown;
+  workoutId?: number | null;
+  priority?: "key" | "support" | "optional" | null;
 };
 
 export type RegenerationPlan = {
@@ -230,6 +249,11 @@ export function regenerationPlan(params: {
     if (r.label !== g.label) fields.label = g.label;
     if (r.notes !== g.notes) fields.notes = g.notes;
     if (r.autoComplete !== g.autoComplete) fields.autoComplete = g.autoComplete;
+    if (!sameJson(r.workout, g.workout)) {
+      fields.workout = g.workout ?? null;
+      fields.workoutId = g.workoutId ?? null;
+    }
+    if ((r.priority ?? null) !== (g.priority ?? null)) fields.priority = g.priority ?? null;
     if (Object.keys(fields).length) plan.update.push({ id: r.id, fields });
   }
 

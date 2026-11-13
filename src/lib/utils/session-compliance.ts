@@ -275,3 +275,167 @@ export function suggestMoveDay(input: {
   if (best) return { date: best };
   return { date: null, reason: "No free day this week. Skip it and go on." };
 }
+
+// ── The state of a session (6.2) ────────────────────────────────────────────
+
+export type Sport = "swim" | "bike" | "run";
+export type SessionState = "planned" | "done" | "missed" | "unconfirmed" | "illness" | "sick" | "skipped";
+export type MatchedBy = "link" | "pick" | "app" | "garmin";
+
+export type MatchPlanned = { id: number; date: string; position: number; programId: number | null; sport: Sport | null };
+export type MatchCompleted = {
+  id: number;
+  date: string;
+  intendedDate: string | null;
+  programId: number | null;
+  plannedSessionId: number | null;
+  /** Disciplines of the workout's sets. */
+  disciplines: ReadonlySet<Sport>;
+};
+
+/**
+ * The C2 matcher (`matchPlanned`) with the endurance rule of 6.2 step 5: a
+ * session with a sport is cleared by a link, by a workout of the same program,
+ * or by a workout with a set of that discipline, never by any workout of the
+ * day. A workout with sets of two disciplines can clear one session of each,
+ * so a brick logged as one workout clears both legs. A workout that cleared a
+ * session without a sport is used for the day, as in C2.
+ */
+export function matchEndurance(planned: MatchPlanned[], sessions: MatchCompleted[]): Map<number, { sessionId: number; step: 1 | 2 | 3 }> {
+  const out = new Map<number, { sessionId: number; step: 1 | 2 | 3 }>();
+  const used = new Set<string>(); // `${sessionId}|${date}`, or with `|${sport}` for a session with a sport
+  const onDate = new Map<string, MatchCompleted[]>();
+  for (const s of sessions) {
+    for (const d of new Set([s.date, s.intendedDate].filter((x): x is string => x != null))) onDate.set(d, [...(onDate.get(d) ?? []), s]);
+  }
+  const takeKey = (s: MatchCompleted, p: MatchPlanned) => (p.sport ? `${s.id}|${p.date}|${p.sport}` : `${s.id}|${p.date}`);
+  const free = (s: MatchCompleted, p: MatchPlanned) => !used.has(`${s.id}|${p.date}`) && !(p.sport && used.has(takeKey(s, p)));
+  for (const p of planned) {
+    const s = sessions.find((x) => x.plannedSessionId === p.id);
+    if (s) {
+      out.set(p.id, { sessionId: s.id, step: 1 });
+      used.add(takeKey(s, p));
+    }
+  }
+  const byDate = new Map<string, MatchPlanned[]>();
+  for (const p of planned) byDate.set(p.date, [...(byDate.get(p.date) ?? []), p]);
+  for (const [date, list] of byDate) {
+    const ordered = [...list].sort((a, b) => a.position - b.position || a.id - b.id);
+    const candidates = (onDate.get(date) ?? []).slice().sort((a, b) => a.id - b.id);
+    for (const step of [2, 3] as const) {
+      for (const p of ordered) {
+        if (out.has(p.id)) continue;
+        const s = candidates.find(
+          (c) => free(c, p) && (step === 2 ? c.programId != null && c.programId === p.programId : p.sport == null || c.disciplines.has(p.sport)),
+        );
+        if (s) {
+          out.set(p.id, { sessionId: s.id, step });
+          used.add(takeKey(s, p));
+        }
+      }
+    }
+  }
+  return out;
+}
+
+export type GarminCandidate = { id: number; date: string; sport: Sport | "strength" | "other"; durationS: number; distanceM: number | null };
+export type GarminRow = { id: number; date: string; position: number; sport: Sport; plannedDurationS: number | null; plannedDistanceM: number | null };
+
+/**
+ * Pair sessions still not done with Garmin activities (6.4): same sport, same
+ * day; with several on a day, the closest planned and done duration (or
+ * distance), in order of position. Each activity is used once; `used` holds
+ * activities already taken by a pick or by a logged workout.
+ */
+export function pairGarmin(rows: GarminRow[], activities: GarminCandidate[], used: ReadonlySet<number> = new Set()): Map<number, number> {
+  const out = new Map<number, number>();
+  const taken = new Set(used);
+  const gap = (r: GarminRow, a: GarminCandidate) => {
+    if (r.plannedDurationS && a.durationS > 0) return Math.abs(Math.log(a.durationS / r.plannedDurationS));
+    if (r.plannedDistanceM && a.distanceM) return Math.abs(Math.log(a.distanceM / r.plannedDistanceM));
+    return 0;
+  };
+  const ordered = [...rows].sort((a, b) => (a.date === b.date ? a.position - b.position || a.id - b.id : a.date < b.date ? -1 : 1));
+  for (const r of ordered) {
+    const best = activities
+      .filter((a) => !taken.has(a.id) && a.date === r.date && a.sport === r.sport)
+      .sort((a, b) => gap(r, a) - gap(r, b) || a.id - b.id)[0];
+    if (best) {
+      out.set(r.id, best.id);
+      taken.add(best.id);
+    }
+  }
+  return out;
+}
+
+/** "Did you do it?" covers sessions from this many days back (decision 20). */
+export const PROMPT_DAYS = 7;
+
+/**
+ * One session's state, first match wins (6.2). `endurance` is the switch;
+ * with it off, only C2's states come out (done, skipped, missed, planned).
+ */
+export function sessionState(p: {
+  date: string;
+  today: string;
+  status: "planned" | "skipped" | "missed";
+  sport: Sport | null;
+  endurance: boolean;
+  linked: boolean;
+  picked: boolean;
+  appMatched: boolean;
+  garminMatched: boolean;
+  inIllness: boolean;
+}): { state: SessionState; matchedBy: MatchedBy | null } {
+  if (p.linked) return { state: "done", matchedBy: "link" };
+  if (p.endurance && p.picked) return { state: "done", matchedBy: "pick" };
+  if (p.status === "skipped") return { state: "skipped", matchedBy: null };
+  if (p.endurance && p.status === "missed") return { state: "missed", matchedBy: null };
+  if (p.appMatched) return { state: "done", matchedBy: "app" };
+  if (p.endurance && p.garminMatched) return { state: "done", matchedBy: "garmin" };
+  if (p.endurance && p.inIllness) return { state: p.date < p.today ? "illness" : "sick", matchedBy: null };
+  if (p.date < p.today) {
+    if (p.endurance && p.sport != null && p.date >= addDaysStr(p.today, -PROMPT_DAYS)) return { state: "unconfirmed", matchedBy: null };
+    return { state: "missed", matchedBy: null };
+  }
+  return { state: "planned", matchedBy: null };
+}
+
+/** A bike or run this long or longer, the longest of its sport in its week, reads as key (inference). */
+export const KEY_LONG_SECONDS = 90 * 60;
+
+export type PriorityInput = {
+  id: number;
+  date: string;
+  sport: Sport | null;
+  hard: boolean;
+  plannedDurationS: number | null;
+  stored: "key" | "support" | "optional" | null;
+};
+
+/**
+ * Each session's priority (3.4): the stored one, else key when hard, or when
+ * it is the longest bike or run of its week and at least 90 minutes (D11:
+ * long ride, long run; the 90 minutes is inference), else support.
+ */
+export function effectivePriorities(rows: PriorityInput[]): Map<number, "key" | "support" | "optional"> {
+  const longest = new Map<string, number>();
+  for (const r of rows) {
+    if ((r.sport === "bike" || r.sport === "run") && r.plannedDurationS) {
+      const k = `${mondayOf(r.date)}|${r.sport}`;
+      longest.set(k, Math.max(longest.get(k) ?? 0, r.plannedDurationS));
+    }
+  }
+  return new Map(
+    rows.map((r): [number, "key" | "support" | "optional"] => {
+      if (r.stored) return [r.id, r.stored];
+      if (r.sport == null) return [r.id, "support"];
+      const long =
+        (r.sport === "bike" || r.sport === "run") &&
+        r.plannedDurationS != null &&
+        r.plannedDurationS >= KEY_LONG_SECONDS &&
+        r.plannedDurationS === longest.get(`${mondayOf(r.date)}|${r.sport}`);
+      return [r.id, r.hard || long ? "key" : "support"];
+    }),
+  );
+}

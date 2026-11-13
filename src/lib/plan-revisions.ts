@@ -18,6 +18,7 @@ import {
   athleteThresholds,
   coachMemory,
   exercises,
+  illnessPeriods,
   planRevisions,
   plannedSessions,
   programExercises,
@@ -28,6 +29,7 @@ import {
   trainingCycleSlots,
   trainingCycles,
   workoutSessions,
+  workouts,
   type PlanObjectType,
   type PlanRevisionAction,
   type PlanWriter,
@@ -63,7 +65,9 @@ import {
   type PlanSnapshot,
   isAthleteSnapshot,
   isInjurySnapshot,
+  isIllnessSnapshot,
   isThresholdSnapshot,
+  isWorkoutSnapshot,
   type ProgramSnapshot,
   type Row,
   type SeasonSnapshot,
@@ -117,6 +121,8 @@ const NOT_FOUND: Record<PlanObjectType, string> = {
   injury: "Injury not found",
   season: "Season not found",
   planned_session: "Planned session not found",
+  workout: "Workout not found",
+  illness: "Sick period not found",
 };
 
 /** The object is missing, deleted, or not the caller's. */
@@ -148,6 +154,8 @@ const ROW_TABLES = {
   athlete: athleteProfiles,
   threshold: athleteThresholds,
   injury: athleteInjuries,
+  workout: workouts,
+  illness: illnessPeriods,
 } as const;
 type RowType = keyof typeof ROW_TABLES;
 const isRowType = (type: PlanObjectType): type is RowType => type in ROW_TABLES;
@@ -227,7 +235,7 @@ export async function snapshotMemory(ex: Executor, memoryId: number): Promise<Me
   return { v: 1, memory: stripRow(row, ["version", "updatedAt"]) };
 }
 
-/** A one-row object other than memory: `{ v: 1, athlete | threshold | injury: row }`. */
+/** A one-row object other than memory: `{ v: 1, athlete | threshold | injury | workout | illness: row }`. */
 async function snapshotRow(ex: Executor, type: Exclude<RowType, "memory">, id: number): Promise<PlanSnapshot> {
   const table = ROW_TABLES[type];
   const [row] = await ex.select().from(table).where(eq(table.id, id));
@@ -1479,14 +1487,41 @@ async function restoreMemoryTo(
 /** Live thresholds per kind (one definition, in the pure module), and live injuries, a user may keep. */
 export { THRESHOLDS_PER_KIND_MAX };
 export const INJURIES_MAX = 50;
+/** Live library workouts and sick periods a user may keep (docs/plans/workouts-and-compliance.md, 4.1, 4.4). */
+export const WORKOUTS_MAX = 300;
+export const ILLNESS_MAX = 200;
+/**
+ * Refuse a sick period that overlaps another live one of the user (an open
+ * period runs on from its first day). `excludeId` is the period being written.
+ */
+export async function assertNoIllnessOverlap(tx: Tx, userId: string, startedOn: string, endedOn: string | null, excludeId?: number) {
+  const rows = await tx
+    .select({ id: illnessPeriods.id, startedOn: illnessPeriods.startedOn, endedOn: illnessPeriods.endedOn })
+    .from(illnessPeriods)
+    .where(and(eq(illnessPeriods.userId, userId), isNull(illnessPeriods.deletedAt)));
+  const end = endedOn ?? "9999-12-31";
+  const clash = rows.find((r) => r.id !== excludeId && r.startedOn <= end && (r.endedOn ?? "9999-12-31") >= startedOn);
+  if (clash) throw new PlanStateError(`This overlaps the sick period from ${clash.startedOn}${clash.endedOn ? ` to ${clash.endedOn}` : ""}. Change that one instead.`);
+}
+
 export const ENDURANCE_OFF = "Endurance features are not on for this account";
 
 /**
  * Refuse a new live threshold of a kind, or injury, past the cap. Takes a
  * per-user lock for the rest of the transaction, so two adds cannot both pass.
  */
-export async function assertAthleteRoom(tx: Tx, userId: string, type: "threshold" | "injury", kind?: string) {
+export async function assertAthleteRoom(tx: Tx, userId: string, type: "threshold" | "injury" | "workout" | "illness", kind?: string) {
   await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_${type}:${userId}`}))`);
+  if (type === "workout" || type === "illness") {
+    const table = type === "workout" ? workouts : illnessPeriods;
+    const max = type === "workout" ? WORKOUTS_MAX : ILLNESS_MAX;
+    const [{ n }] = await tx
+      .select({ n: sql<number>`count(*)::int` })
+      .from(table)
+      .where(and(eq(table.userId, userId), isNull(table.deletedAt)));
+    if (n >= max) throw new PlanStateError(type === "workout" ? `At most ${max} workouts. Delete old ones first.` : `At most ${max} sick periods. Delete old ones first.`);
+    return;
+  }
   if (type === "threshold") {
     const [{ n }] = await tx
       .select({ n: sql<number>`count(*)::int` })
@@ -1527,6 +1562,8 @@ async function restoreRowTo(
   for (const k of ROW_KEPT) delete set[k];
   // Bringing a deleted row back adds one live row: the cap applies.
   if (row?.deletedAt && type !== "athlete") await assertAthleteRoom(w.tx, w.ctx.userId, type, String(set.kind ?? ""));
+  // Sick periods never overlap (docs/plans/workouts-and-compliance.md, 4.4).
+  if (type === "illness") await assertNoIllnessOverlap(w.tx, w.ctx.userId, String(set.startedOn), (set.endedOn as string | null) ?? null, id);
   // jsonb gives timestamps back as strings.
   if (typeof set.interviewCompletedAt === "string") set.interviewCompletedAt = new Date(set.interviewCompletedAt);
   await w.tx
@@ -1658,6 +1695,8 @@ async function restoreInSession(w: PlanWriteSession, rev: typeof planRevisions.$
   if (isAthleteSnapshot(snap)) return restoreRowTo(w, "athlete", rev.objectId, snap.athlete, rev.id);
   if (isThresholdSnapshot(snap)) return restoreRowTo(w, "threshold", rev.objectId, snap.threshold, rev.id);
   if (isInjurySnapshot(snap)) return restoreRowTo(w, "injury", rev.objectId, snap.injury, rev.id);
+  if (isWorkoutSnapshot(snap)) return restoreRowTo(w, "workout", rev.objectId, snap.workout, rev.id);
+  if (isIllnessSnapshot(snap)) return restoreRowTo(w, "illness", rev.objectId, snap.illness, rev.id);
   if (isSeasonSnapshot(snap)) return restoreSeasonTo(w, rev.objectId, snap, rev.id);
   if (isPlannedSessionSnapshot(snap)) return restorePlannedSessionTo(w, rev.objectId, snap, rev.id);
   return isProgramSnapshot(snap)
@@ -1706,7 +1745,7 @@ export async function restoreRevision(ctx: PlanWriteContext, revisionId: number)
     const capLock =
       rev.objectType === "memory"
         ? `coach_memory:${ctx.userId}`
-        : rev.objectType === "threshold" || rev.objectType === "injury"
+        : rev.objectType === "threshold" || rev.objectType === "injury" || rev.objectType === "workout" || rev.objectType === "illness"
           ? `athlete_${rev.objectType}:${ctx.userId}`
           : null;
     if (capLock) await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${capLock}))`);
@@ -1745,7 +1784,7 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
   }
   // Cycles first, then programs: the lock order every write uses. Memory
   // entries last; nothing else locks them.
-  const order: Record<PlanObjectType, number> = { season: -1, cycle: 0, program: 1, memory: 2, athlete: 3, threshold: 4, injury: 5, planned_session: 6 };
+  const order: Record<PlanObjectType, number> = { season: -1, cycle: 0, program: 1, memory: 2, athlete: 3, threshold: 4, injury: 5, illness: 6, workout: 7, planned_session: 8 };
   const firsts = [...firstByObject.values()].sort((a, b) =>
     a.objectType === b.objectType ? a.objectId - b.objectId : order[a.objectType] - order[b.objectType],
   );
@@ -1757,7 +1796,7 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
       await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`coach_memory:${ctx.userId}`}))`);
     }
     // The same for the athlete caps (assertAthleteRoom).
-    for (const type of ["threshold", "injury"] as const) {
+    for (const type of ["threshold", "injury", "workout", "illness"] as const) {
       if (firsts.some((f) => f.objectType === type)) {
         await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_${type}:${ctx.userId}`}))`);
       }
@@ -1767,7 +1806,7 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
     // The athlete profile and injuries belong to the endurance add-on (D18).
     // With it off, they stay as they are and the rest of the set undoes.
     let todo = firsts;
-    const gated = firsts.filter((f) => f.objectType === "athlete" || f.objectType === "injury");
+    const gated = firsts.filter((f) => f.objectType === "athlete" || f.objectType === "injury" || f.objectType === "workout" || f.objectType === "illness");
     if (gated.length && !(await enduranceEnabledFor(ctx.userId))) {
       todo = firsts.filter((f) => !gated.includes(f));
       skipped.push("Your athlete profile and injuries were not changed: endurance features are off for this account");
@@ -2080,7 +2119,7 @@ export async function purgePlanRevisions(now = new Date()) {
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "memory"), inArray(planRevisions.objectId, ids)));
     await db.delete(coachMemory).where(inArray(coachMemory.id, ids));
   }
-  for (const type of ["athlete", "threshold", "injury"] as const) {
+  for (const type of ["athlete", "threshold", "injury", "workout", "illness"] as const) {
     const table = ROW_TABLES[type];
     const old = await db.select({ id: table.id }).from(table).where(lt(table.deletedAt, trashCut));
     if (!old.length) continue;

@@ -20,6 +20,9 @@ export type MemorySnapshot = { v: 1; memory: Row };
 export type AthleteSnapshot = { v: 1; athlete: Row };
 export type ThresholdSnapshot = { v: 1; threshold: Row };
 export type InjurySnapshot = { v: 1; injury: Row };
+/** A library workout and a sick period (docs/plans/workouts-and-compliance.md, 4.5). */
+export type WorkoutSnapshot = { v: 1; workout: Row };
+export type IllnessSnapshot = { v: 1; illness: Row };
 /**
  * A season with its races, and its phases for the history text
  * (docs/plans/seasons.md, 2.3). A restore never moves the phases.
@@ -36,6 +39,8 @@ export type PlanSnapshot =
   | AthleteSnapshot
   | ThresholdSnapshot
   | InjurySnapshot
+  | WorkoutSnapshot
+  | IllnessSnapshot
   | SeasonSnapshot;
 
 export const isProgramSnapshot = (s: PlanSnapshot): s is ProgramSnapshot => "program" in s;
@@ -44,6 +49,10 @@ export const isMemorySnapshot = (s: PlanSnapshot): s is MemorySnapshot => "memor
 export const isAthleteSnapshot = (s: PlanSnapshot): s is AthleteSnapshot => "athlete" in s;
 export const isThresholdSnapshot = (s: PlanSnapshot): s is ThresholdSnapshot => "threshold" in s;
 export const isInjurySnapshot = (s: PlanSnapshot): s is InjurySnapshot => "injury" in s;
+export const isWorkoutSnapshot = (s: PlanSnapshot): s is WorkoutSnapshot => "workout" in s && !("session" in s);
+export const isIllnessSnapshot = (s: PlanSnapshot): s is IllnessSnapshot => "illness" in s;
+
+const illnessDates = (r: Row) => `${r.startedOn} to ${r.endedOn ?? "now"}`;
 
 const INJURY_AREA_TEXT = (area: unknown) => String(area ?? "other").replace("_", " ");
 export const isSeasonSnapshot = (s: PlanSnapshot): s is SeasonSnapshot => "season" in s;
@@ -66,6 +75,8 @@ export function snapshotName(s: PlanSnapshot): string {
     return `Injury: ${side}${INJURY_AREA_TEXT(s.injury.area)}`;
   }
   if (isSeasonSnapshot(s)) return String(s.season.name);
+  if (isWorkoutSnapshot(s)) return `Workout: ${String(s.workout.name)}`;
+  if (isIllnessSnapshot(s)) return `Sick period from ${String(s.illness.startedOn)}`;
   const text = String(s.memory.text);
   return text.length > 40 ? `${text.slice(0, 39)}…` : text;
 }
@@ -319,7 +330,22 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!sameValue(b.programId, a.programId)) out.push(`Program ${prev.programName ?? "none"} → ${after.programName ?? "none"}`);
     if (!sameValue(b.label ?? null, a.label ?? null)) out.push(`Label ${b.label ?? "none"} → ${a.label ?? "none"}`);
     if (!sameValue(b.notes ?? null, a.notes ?? null)) out.push("Notes changed");
-    if (!sameValue(b.status, a.status)) out.push(a.status === "skipped" ? `Skipped${a.skipReason ? `: ${a.skipReason}` : ""}` : "Planned again");
+    if (!sameValue(b.workout ?? null, a.workout ?? null)) {
+      const name = (w: unknown) => (w && typeof w === "object" ? String((w as { name?: unknown }).name ?? "workout") : null);
+      out.push(a.workout == null ? `Workout ${name(b.workout)} cleared` : b.workout == null ? `Workout set: ${name(a.workout)}` : `Workout changed: ${name(b.workout)} → ${name(a.workout)}`);
+    }
+    if (!sameValue(b.priority ?? null, a.priority ?? null)) out.push(`Priority ${b.priority ?? "default"} → ${a.priority ?? "default"}`);
+    if (!sameValue(b.brickParentId ?? null, a.brickParentId ?? null)) out.push(a.brickParentId == null ? "Brick unlinked" : "Linked as a brick");
+    if (!sameValue(b.garminActivityId ?? null, a.garminActivityId ?? null)) out.push(a.garminActivityId == null ? "Garmin activity unlinked" : "Garmin activity picked");
+    if (!sameValue(b.status, a.status)) {
+      out.push(
+        a.status === "skipped"
+          ? `Skipped${a.skipReason ? `: ${a.skipReason}` : ""}`
+          : a.status === "missed"
+            ? `Confirmed missed${a.missedReason ? `: ${a.missedReason}` : ""}`
+            : "Planned again",
+      );
+    }
     if (!sameValue(b.touchedAt ?? null, a.touchedAt ?? null) && a.touchedAt == null) out.push("Back to the template");
     if (!sameValue(b.deletedAt ?? null, a.deletedAt ?? null)) out.push(a.deletedAt ? "Removed" : "Restored");
     return out;
@@ -361,6 +387,28 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!sameValue(prev.description, after.injury.description)) out.push("description changed");
     if (!sameValue(prev.avoid ?? null, after.injury.avoid ?? null)) out.push("what to avoid changed");
     if (!sameValue(prev.deletedAt ?? null, after.injury.deletedAt ?? null)) out.push(after.injury.deletedAt ? "Deleted" : "Restored");
+    return out;
+  }
+  if (isWorkoutSnapshot(after)) {
+    const prev = before && isWorkoutSnapshot(before) ? before.workout : null;
+    const a = after.workout;
+    if (!prev) return [`Added workout "${a.name}"`];
+    const out: string[] = [];
+    if (!sameValue(prev.name, a.name)) out.push(`Name ${prev.name} → ${a.name}`);
+    if (!sameValue(prev.workout, a.workout)) out.push("Steps changed");
+    if (!sameValue(prev.priority ?? null, a.priority ?? null)) out.push(`Priority ${prev.priority ?? "default"} → ${a.priority ?? "default"}`);
+    if (!sameValue(prev.deletedAt ?? null, a.deletedAt ?? null)) out.push(a.deletedAt ? "Deleted" : "Restored");
+    return out;
+  }
+  if (isIllnessSnapshot(after)) {
+    const prev = before && isIllnessSnapshot(before) ? before.illness : null;
+    const a = after.illness;
+    if (!prev) return [`Sick period ${illnessDates(a)}`];
+    const out: string[] = [];
+    if (!sameValue(prev.startedOn, a.startedOn) || !sameValue(prev.endedOn ?? null, a.endedOn ?? null)) out.push(`Sick period ${illnessDates(prev)} → ${illnessDates(a)}`);
+    if (!sameValue(prev.severity ?? null, a.severity ?? null)) out.push(`Severity ${prev.severity ?? "not given"} → ${a.severity ?? "not given"}`);
+    if (!sameValue(prev.notes ?? null, a.notes ?? null)) out.push("notes changed");
+    if (!sameValue(prev.deletedAt ?? null, a.deletedAt ?? null)) out.push(a.deletedAt ? "Deleted" : "Restored");
     return out;
   }
   if (isSeasonSnapshot(after)) {

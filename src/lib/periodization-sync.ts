@@ -8,6 +8,7 @@
 import { db } from "@/db";
 import { garminDailyMetrics, programExercises, programSets, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { userToday } from "@/lib/user-settings";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { planWrite, startDueScheduledCycle, type PlanWriteContext } from "@/lib/plan-revisions";
 import { programs } from "@/db/schema";
@@ -109,9 +110,59 @@ async function computeCycleAdaptation(
   userId: string,
   programIds: number[],
   currentWeek: number,
+  cycleId: number,
 ): Promise<{ pct: number; note: string }> {
-  const signals = await cycleAdaptationSignals(userId, programIds, currentWeek);
+  const signals = await adaptationSignalsFor(userId, programIds, currentWeek, cycleId);
   return signals ? computeAdaptationFactor(signals) : { pct: 100, note: "" };
+}
+
+/**
+ * The signals for a cycle (docs/plans/workouts-and-compliance.md, 6.10): from
+ * its dated sessions for a user with the endurance switch on and a weekday
+ * cycle that has them; otherwise PZ-26 exactly as before, so a lifter sees no
+ * change.
+ */
+async function adaptationSignalsFor(userId: string, programIds: number[], currentWeek: number, cycleId: number): Promise<AdaptationSignals | null> {
+  if (currentWeek >= 2 && (await enduranceEnabledFor(userId))) {
+    const [c] = await db
+      .select({ scheduleType: trainingCycles.scheduleType, generatedAt: trainingCycles.sessionsGeneratedAt })
+      .from(trainingCycles)
+      .where(and(eq(trainingCycles.id, cycleId), liveCycles));
+    if (c?.scheduleType === "day_of_week" && c.generatedAt != null) return datedAdaptationSignals(userId, cycleId);
+  }
+  return cycleAdaptationSignals(userId, programIds, currentWeek);
+}
+
+/**
+ * Adherence from dated sessions: done over counted sessions of the cycle in
+ * the 7 days before today, plus today's done ones, capped at 1. Counted as in
+ * consistency (6.9): a skip before the day leaves the count; illness, misses
+ * and later skips count as not done. Readiness and RPE come from the matched
+ * logged workouts. No counted session is the neutral case.
+ */
+async function datedAdaptationSignals(userId: string, cycleId: number): Promise<AdaptationSignals | null> {
+  const { sessionCompliance } = await import("@/lib/session-compliance");
+  const { countsInWeek } = await import("@/lib/utils/session-compliance");
+  const today = toDateStr(await userToday(userId));
+  const since = new Date(`${today}T00:00:00Z`);
+  since.setUTCDate(since.getUTCDate() - 7);
+  const sessions = await sessionCompliance(userId, since.toISOString().slice(0, 10), today, { cycleId });
+  const counted = sessions.filter((s) =>
+    countsInWeek({ date: s.date, done: s.state === "done", skipped: s.status === "skipped", statusOn: s.statusOn }, today),
+  );
+  if (!counted.length) return null;
+  const done = counted.filter((s) => s.state === "done");
+  const adherence = Math.min(1, done.length / counted.length);
+  const ids = [...new Set(done.map((s) => s.loggedSessionId).filter((id): id is number => id != null))];
+  if (!ids.length) return { adherence, avgReadiness: null, avgRpe: null };
+  const logged = await db.select({ readiness: workoutSessions.readiness }).from(workoutSessions).where(inArray(workoutSessions.id, ids));
+  const readiness = logged.map((r) => r.readiness).filter((x): x is number => x != null);
+  const rpeRows = await db.select({ rpe: workoutSets.rpe }).from(workoutSets).where(inArray(workoutSets.sessionId, ids));
+  return {
+    adherence,
+    avgReadiness: readiness.length ? readiness.reduce((a, b) => a + b, 0) / readiness.length : null,
+    avgRpe: meanLoggedRpe(rpeRows.map((r) => r.rpe)),
+  };
 }
 
 /** The logged signals the nudge reads; null on week 1 or with no programs (the neutral case). */
@@ -229,7 +280,7 @@ export async function syncPeriodizedTargets(
 
   // No-wearable performance nudge from the last 7 days. Skipped on week 1 (no
   // history yet) so a fresh cycle is never eased for "missing" sessions.
-  const adaptation = adaptationOverride ?? (await computeCycleAdaptation(userId, programIds, currentWeek));
+  const adaptation = adaptationOverride ?? (await computeCycleAdaptation(userId, programIds, currentWeek, cycleId));
   const effective = multiplier * (adaptation.pct / 100);
 
   // One change set per cycle-week, so the history groups a week's rewrite.
@@ -364,7 +415,7 @@ export async function wearableSuggestion(userId: string, now = new Date()): Prom
   const { currentWeek, isOver } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, today, cycle.durationDays);
   if (isOver) return null;
   const programIds = await liveSlotProgramIds(cycle.slots);
-  const signals = await cycleAdaptationSignals(userId, programIds, currentWeek);
+  const signals = await adaptationSignalsFor(userId, programIds, currentWeek, cycle.id);
   const wearable = await wearableSignals(userId, now);
   if (!signals || !wearable) return null;
   const suggested = computeAdaptationFactor({ ...signals, wearable });

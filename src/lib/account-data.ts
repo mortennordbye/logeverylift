@@ -6,6 +6,8 @@ import {
   customWeightUsage,
   dismissedMakeups,
   athleteInjuries,
+  illnessPeriods,
+  workouts,
   athleteProfiles,
   athleteThresholds,
   coachMemory,
@@ -147,6 +149,10 @@ export async function collectUserData(userId: string) {
     athlete_profiles: await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, userId)),
     athlete_thresholds: await db.select().from(athleteThresholds).where(eq(athleteThresholds.userId, userId)),
     athlete_injuries: await db.select().from(athleteInjuries).where(eq(athleteInjuries.userId, userId)),
+    // plan-read: includes deleted (the export holds all of the user's data)
+    workouts: await db.select().from(workouts).where(eq(workouts.userId, userId)),
+    // plan-read: includes deleted (the export holds all of the user's data)
+    illness_periods: await db.select().from(illnessPeriods).where(eq(illnessPeriods.userId, userId)),
     // Seasons and their races (docs/plans/seasons.md, 4), deleted ones too.
     // plan-read: includes deleted (the export holds all of the user's data)
     seasons: await db.select().from(seasons).where(eq(seasons.userId, userId)),

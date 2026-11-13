@@ -1,0 +1,181 @@
+/**
+ * The workout library on the server (docs/plans/workouts-and-compliance.md,
+ * 4.1 and 5): read, create, update, duplicate and delete reusable workouts.
+ * Every write is a revision (object type `workout`). Editing or deleting a
+ * library workout is a template change for every live active or scheduled
+ * cycle whose slots use it: their untouched sessions from this week on follow
+ * it (T7, C2's regeneration). Past, done and touched sessions keep their copy.
+ *
+ * Plain server code: callers resolve the user and check the endurance switch.
+ */
+
+import { db } from "@/db";
+import { trainingCycleSlots, trainingCycles, workouts, type SessionPriority } from "@/db/schema";
+import { assertAthleteRoom, lockCycleRows, planWrite, PlanNotFoundError, type PlanWriteContext, type Tx } from "@/lib/plan-revisions";
+import { regenerateCycleSessions, WorkoutSchemaError } from "@/lib/planned-sessions";
+import { getUserSettings } from "@/lib/user-settings";
+import { describeWorkout, estimateWorkout, parseWorkout, type Workout, type WorkoutEstimate } from "@/lib/utils/workout-steps";
+import { and, asc, eq, ilike, isNotNull, isNull } from "drizzle-orm";
+
+export type LibraryWorkout = {
+  id: number;
+  name: string;
+  sport: Workout["sport"];
+  priority: SessionPriority | null;
+  workout: Workout;
+  summary: string;
+  estimate: WorkoutEstimate;
+  version: number;
+  deletedAt: Date | null;
+};
+
+type WorkoutRow = typeof workouts.$inferSelect;
+
+function view(row: WorkoutRow, units: Parameters<typeof describeWorkout>[1]): LibraryWorkout | null {
+  const parsed = parseWorkout(row.workout);
+  if (!parsed.ok) {
+    console.error("[workouts] invalid_stored", { id: row.id });
+    return null;
+  }
+  return {
+    id: row.id,
+    name: row.name,
+    sport: row.sport,
+    priority: row.priority,
+    workout: parsed.workout,
+    summary: describeWorkout(parsed.workout, units),
+    estimate: estimateWorkout(parsed.workout),
+    version: row.version,
+    deletedAt: row.deletedAt,
+  };
+}
+
+/** The user's live library, by name; `deleted` lists the recently deleted ones instead. */
+export async function listWorkouts(userId: string, opts: { sport?: Workout["sport"]; q?: string; deleted?: boolean } = {}): Promise<LibraryWorkout[]> {
+  const { units } = await getUserSettings(userId);
+  const rows = await db
+    .select()
+    .from(workouts)
+    .where(
+      and(
+        eq(workouts.userId, userId),
+        // plan-read: includes deleted (Recently deleted lists them on purpose)
+        opts.deleted ? isNotNull(workouts.deletedAt) : isNull(workouts.deletedAt),
+        opts.sport ? eq(workouts.sport, opts.sport) : undefined,
+        opts.q ? ilike(workouts.name, `%${opts.q.replace(/[%_\\]/g, "\\$&")}%`) : undefined,
+      ),
+    )
+    .orderBy(asc(workouts.name), asc(workouts.id));
+  return rows
+    .filter((r) => (opts.deleted ? r.deletedAt != null : true))
+    .map((r) => view(r, units))
+    .filter((w): w is LibraryWorkout => w != null);
+}
+
+/** One live library workout of the user, or null. */
+export async function getLibraryWorkout(userId: string, id: number): Promise<LibraryWorkout | null> {
+  const { units } = await getUserSettings(userId);
+  const [row] = await db.select().from(workouts).where(and(eq(workouts.id, id), eq(workouts.userId, userId), isNull(workouts.deletedAt)));
+  return row ? view(row, units) : null;
+}
+
+function checked(input: unknown): Workout {
+  const parsed = parseWorkout(input);
+  if (!parsed.ok) throw new WorkoutSchemaError(parsed.errors);
+  return parsed.workout;
+}
+
+/**
+ * The live active or scheduled weekday cycles whose slots use this workout,
+ * locked in A4's order (cycles first), then their untouched sessions follow
+ * the library. Returns how many sessions changed.
+ */
+async function regenerateUsers(tx: Tx, userId: string, workoutId: number): Promise<number> {
+  const cycles = await tx
+    .selectDistinct({ id: trainingCycles.id })
+    .from(trainingCycles)
+    .innerJoin(trainingCycleSlots, eq(trainingCycleSlots.trainingCycleId, trainingCycles.id))
+    .where(and(eq(trainingCycles.userId, userId), isNull(trainingCycles.deletedAt), eq(trainingCycleSlots.workoutId, workoutId), eq(trainingCycles.scheduleType, "day_of_week")));
+  if (!cycles.length) return 0;
+  const ids = cycles.map((c) => c.id).sort((a, b) => a - b);
+  await lockCycleRows(tx, ids);
+  let changed = 0;
+  for (const id of ids) {
+    const r = await regenerateCycleSessions(tx, userId, id);
+    changed += r.inserted + r.updated + r.removed;
+  }
+  return changed;
+}
+
+/** Ids of the cycles a library workout is used by (to lock before the workout row). */
+async function cyclesUsing(userId: string, workoutId: number): Promise<number[]> {
+  const rows = await db
+    .selectDistinct({ id: trainingCycles.id })
+    .from(trainingCycles)
+    .innerJoin(trainingCycleSlots, eq(trainingCycleSlots.trainingCycleId, trainingCycles.id))
+    .where(and(eq(trainingCycles.userId, userId), isNull(trainingCycles.deletedAt), eq(trainingCycleSlots.workoutId, workoutId)));
+  return rows.map((r) => r.id).sort((a, b) => a - b);
+}
+
+export async function createWorkout(
+  ctx: PlanWriteContext,
+  input: { workout: unknown; priority?: SessionPriority | null },
+): Promise<{ id: number; version: number }> {
+  const workout = checked(input.workout);
+  const { result, versions } = await planWrite(ctx, async (w) => {
+    await assertAthleteRoom(w.tx, ctx.userId, "workout");
+    const [row] = await w.tx
+      .insert(workouts)
+      .values({ userId: ctx.userId, name: workout.name, sport: workout.sport, workout, priority: input.priority ?? null })
+      .returning({ id: workouts.id });
+    w.create({ type: "workout", id: row.id });
+    return row.id;
+  });
+  return { id: result, version: versions.get(`workout:${result}`) ?? 1 };
+}
+
+export async function updateWorkout(
+  ctx: PlanWriteContext,
+  id: number,
+  input: { workout?: unknown; priority?: SessionPriority | null; name?: string; expectedVersion?: number },
+): Promise<{ id: number; version: number; sessionsRegenerated: number }> {
+  let workout = input.workout !== undefined ? checked(input.workout) : null;
+  const cycleIds = await cyclesUsing(ctx.userId, id);
+  const { result, versions } = await planWrite(ctx, async (w) => {
+    if (cycleIds.length) await lockCycleRows(w.tx, cycleIds);
+    await w.touch({ type: "workout", id }, { expectedVersion: input.expectedVersion });
+    const [row] = await w.tx.select().from(workouts).where(and(eq(workouts.id, id), eq(workouts.userId, ctx.userId), isNull(workouts.deletedAt)));
+    if (!row) throw new PlanNotFoundError({ type: "workout", id });
+    if (input.name !== undefined) workout = checked({ ...(workout ?? (row.workout as object)), name: input.name });
+    await w.tx
+      .update(workouts)
+      .set({
+        ...(workout && { workout, name: workout.name, sport: workout.sport }),
+        ...(input.priority !== undefined && { priority: input.priority }),
+        updatedAt: new Date(),
+      })
+      .where(eq(workouts.id, id));
+    return regenerateUsers(w.tx, ctx.userId, id);
+  });
+  return { id, version: versions.get(`workout:${id}`) ?? 0, sessionsRegenerated: result };
+}
+
+export async function duplicateWorkout(ctx: PlanWriteContext, id: number): Promise<{ id: number; version: number }> {
+  const src = await getLibraryWorkout(ctx.userId, id);
+  if (!src) throw new PlanNotFoundError({ type: "workout", id });
+  const name = `${src.name} (copy)`.slice(0, 80);
+  return createWorkout(ctx, { workout: { ...src.workout, name }, priority: src.priority });
+}
+
+export async function deleteWorkout(ctx: PlanWriteContext, id: number, expectedVersion?: number): Promise<{ sessionsRegenerated: number }> {
+  const cycleIds = await cyclesUsing(ctx.userId, id);
+  const { result } = await planWrite(ctx, async (w) => {
+    if (cycleIds.length) await lockCycleRows(w.tx, cycleIds);
+    await w.touch({ type: "workout", id }, { expectedVersion, action: "delete" });
+    const [row] = await w.tx.select({ id: workouts.id }).from(workouts).where(and(eq(workouts.id, id), eq(workouts.userId, ctx.userId), isNull(workouts.deletedAt)));
+    if (!row) throw new PlanNotFoundError({ type: "workout", id });
+    await w.tx.update(workouts).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(workouts.id, id));
+    return regenerateUsers(w.tx, ctx.userId, id);
+  });
+  return { sessionsRegenerated: result };
+}

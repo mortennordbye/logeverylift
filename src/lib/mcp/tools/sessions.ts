@@ -16,7 +16,6 @@ import {
   trainingCycleSlots,
   trainingCycles,
   workoutSessions,
-  workoutSets,
 } from "@/db/schema";
 import { insertAutoSessions } from "@/lib/auto-sessions";
 import { startDueScheduledCycle } from "@/lib/plan-revisions";
@@ -24,13 +23,11 @@ import { liveCycles, livePlannedSessions, livePrograms, liveSlotProgram } from "
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { instantInZone, localDateStr } from "@/lib/utils/user-date";
-import type { Tx } from "@/lib/plan-revisions";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
-import { rpeFromRir } from "@/lib/utils/rir";
 import { WORKOUT_FEELINGS } from "@/lib/validators/workout";
-import { lockRecords, rebuildPRsFrom } from "@/lib/workout-records";
+import { DuplicateSession, writeLoggedSession } from "@/lib/logged-sessions";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { and, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 
 /** How far back log_session reaches. */
@@ -55,39 +52,6 @@ const loggedSet = z
     setType: z.enum(["working", "warmup"]).optional(),
   })
   .strict();
-
-class DuplicateSession extends Error {
-  constructor(id: number) {
-    super(`The user already logged this on that day (session ${id}). Read recent_workouts.`);
-  }
-}
-
-/**
- * A completed session the new log would repeat: the same program on the same
- * day; or, with no program, an assistant-logged session that day with the
- * same exercises.
- */
-async function findDuplicate(tx: Tx, userId: string, date: string, programId: number | null, exerciseIds: number[]) {
-  const sameDay = and(eq(workoutSessions.userId, userId), eq(workoutSessions.date, date), eq(workoutSessions.isCompleted, true));
-  if (programId != null) {
-    const [dup] = await tx
-      .select({ id: workoutSessions.id })
-      .from(workoutSessions)
-      .where(and(sameDay, eq(workoutSessions.programId, programId), ne(workoutSessions.source, "auto")))
-      .limit(1);
-    return dup?.id ?? null;
-  }
-  const rows = await tx
-    .select({ id: workoutSessions.id, exerciseId: workoutSets.exerciseId })
-    .from(workoutSessions)
-    .innerJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
-    .where(and(sameDay, isNull(workoutSessions.programId), eq(workoutSessions.source, "assistant")));
-  const want = [...exerciseIds].sort((a, b) => a - b).join(",");
-  const bySession = new Map<number, Set<number>>();
-  for (const r of rows) bySession.set(r.id, (bySession.get(r.id) ?? new Set()).add(r.exerciseId));
-  for (const [id, ids] of bySession) if ([...ids].sort((a, b) => a - b).join(",") === want) return id;
-  return null;
-}
 
 /** A dated session of the user, live, in a live weekday cycle. */
 async function ownPlanned(userId: string, id: number) {
@@ -174,76 +138,23 @@ export function registerSessionTools(server: McpServer, userId: string) {
           .where(and(inArray(exercises.id, exerciseIds), or(isNull(exercises.userId), eq(exercises.userId, userId))));
         if (visible.length !== exerciseIds.length) return fail("Exercise not found");
 
-        const programId = args.programId ?? null;
-        const session = await db.transaction(async (tx) => {
-          // One log per user and day at a time, so a retried call cannot
-          // write the same session twice.
-          await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`log_session:${userId}:${args.date}`}))`);
-          const dup = await findDuplicate(tx, userId, args.date, programId, exerciseIds);
-          if (dup) return new DuplicateSession(dup);
-          const [row] = await tx
-            .insert(workoutSessions)
-            .values({
-              userId,
-              programId: args.programId ?? null,
-              plannedSessionId,
-              date: args.date,
-              startTime: start,
-              endTime: args.durationMinutes ? new Date(start.getTime() + args.durationMinutes * 60_000) : null,
-              feeling: args.feeling ?? null,
-              notes: args.notes ?? null,
-              isCompleted: true,
-              source: "assistant",
-            })
-            .returning();
-          // Dated by when they happened: the records replay orders and dates
-          // sets by createdAt. One second apart keeps the input's order.
-          await tx.insert(workoutSets).values(
-            args.sets.map((s, i) => ({
-              sessionId: row.id,
-              exerciseId: s.exerciseId,
-              setNumber: s.setNumber,
-              setType: s.setType ?? "working",
-              actualReps: s.reps ?? 0,
-              weightKg: String(s.weightKg ?? 0),
-              durationSeconds: s.durationSeconds ?? null,
-              distanceMeters: s.distanceMeters ?? null,
-              heartRateZone: s.heartRateZone ?? null,
-              rir: s.rir ?? null,
-              rpe: s.rir != null ? rpeFromRir(s.rir) : (s.rpe ?? null),
-              restTimeSeconds: 0,
-              notes: s.notes ?? null,
-              createdAt: new Date(start.getTime() + i * 1000),
-            })),
-          );
-          // As completeWorkoutSession: a logged day replaces its auto row.
-          if (plannedSessionId != null) {
-            await tx
-              .delete(workoutSessions)
-              .where(
-                and(eq(workoutSessions.userId, userId), eq(workoutSessions.plannedSessionId, plannedSessionId), eq(workoutSessions.source, "auto")),
-              );
-          }
-          if (args.programId != null) {
-            await tx
-              .delete(workoutSessions)
-              .where(
-                and(
-                  eq(workoutSessions.userId, userId),
-                  eq(workoutSessions.programId, args.programId),
-                  eq(workoutSessions.date, args.date),
-                  eq(workoutSessions.source, "auto"),
-                ),
-              );
-          }
-          for (const exerciseId of exerciseIds.sort((a, b) => a - b)) {
-            await lockRecords(tx, userId, exerciseId);
-            await rebuildPRsFrom(tx, userId, exerciseId, start);
-          }
-          return row;
-        });
-
-        if (session instanceof DuplicateSession) return fail(session.message);
+        let session;
+        try {
+          session = await writeLoggedSession(userId, {
+            date: args.date,
+            start,
+            programId: args.programId ?? null,
+            plannedSessionId,
+            durationMinutes: args.durationMinutes,
+            feeling: args.feeling,
+            notes: args.notes ?? null,
+            source: "assistant",
+            sets: args.sets,
+          });
+        } catch (e) {
+          if (e instanceof DuplicateSession) return fail(e.message);
+          throw e;
+        }
         audit("log_session", { userId, sessionId: session.id });
         return ok({ logged: true, sessionId: session.id, date: session.date, sets: args.sets.length });
       } catch (e) {

@@ -16,6 +16,7 @@ import {
   trainingCycles,
   users,
   workoutSessions,
+  workouts,
 } from "@/db/schema";
 import { localDateStr } from "@/lib/utils/user-date";
 import { liveCycles, livePlannedSessions, livePrograms } from "@/lib/plan-live";
@@ -39,6 +40,8 @@ import {
   type TemplateSlot,
 } from "@/lib/utils/planned-sessions";
 import { insertAutoSessions } from "@/lib/auto-sessions";
+import type { SessionPriority } from "@/db/schema/workouts";
+import { parseWorkout, type Workout } from "@/lib/utils/workout-steps";
 import type { MissedSlot, TodaySession, TrainingCycleSlotWithProgram } from "@/types/workout";
 import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 
@@ -68,12 +71,17 @@ export function cycleBlock(c: {
 
 async function templateSlots(ex: Executor, cycleId: number): Promise<TemplateSlot[]> {
   const rows = await ex
-    .select({ slot: trainingCycleSlots, programDeletedAt: programs.deletedAt })
+    .select({ slot: trainingCycleSlots, programDeletedAt: programs.deletedAt, libraryWorkout: workouts.workout, workoutDeletedAt: workouts.deletedAt })
     .from(trainingCycleSlots)
     // plan-read: includes deleted (a deleted program reads as a rest day, as liveSlotProgram does)
     .leftJoin(programs, eq(programs.id, trainingCycleSlots.programId))
+    // A deleted library workout reads as a rest day too.
+    .leftJoin(workouts, eq(workouts.id, trainingCycleSlots.workoutId))
     .where(eq(trainingCycleSlots.trainingCycleId, cycleId));
-  return rows.map(({ slot, programDeletedAt }) => ({
+  return rows.map(({ slot, programDeletedAt, libraryWorkout, workoutDeletedAt }) => ({
+    ...(slot.workoutId != null && libraryWorkout != null && !workoutDeletedAt && slot.programId == null && { workout: libraryWorkout, workoutId: slot.workoutId }),
+    priority: slot.priority,
+    brickWithNext: slot.brickWithNext,
     id: slot.id,
     dayOfWeek: slot.dayOfWeek,
     daySlot: slot.daySlot,
@@ -169,6 +177,9 @@ export async function regenerateCycleSessions(
     done: done.has(r.id) || (r.date != null && r.date < today && r.status === "skipped"),
     linked: linked.has(r.id),
     skipped: r.status === "skipped",
+    workout: r.workout,
+    workoutId: r.workoutId,
+    priority: r.priority,
   }));
   const slots = await templateSlots(tx, cycleId);
   const generated = block ? generateWeekday(block.start, cycleLengthDays(cycle), slots) : [];
@@ -246,6 +257,7 @@ export async function regenerateCycleSessions(
       )
       .onConflictDoNothing();
   }
+  await linkTemplateBricks(tx, cycleId, slots, mondayOf(today));
   if (cycle.sessionsGeneratedAt == null) {
     await tx.update(trainingCycles).set({ sessionsGeneratedAt: now }).where(eq(trainingCycles.id, cycleId));
   }
@@ -259,12 +271,40 @@ export async function regenerateCycleSessions(
   };
 }
 
+/**
+ * Bricks from the template (docs/plans/workouts-and-compliance.md, 5): the
+ * session of a slot after one marked `brickWithNext` follows it on the same
+ * day. Only untouched sessions from `from` on follow the template; a session
+ * the user or the assistant changed keeps its own link.
+ */
+async function linkTemplateBricks(tx: Tx, cycleId: number, slots: TemplateSlot[], from: string): Promise<void> {
+  const rows = await tx
+    .select({ id: plannedSessions.id, slotId: plannedSessions.slotId, date: plannedSessions.date, brickParentId: plannedSessions.brickParentId, touchedAt: plannedSessions.touchedAt })
+    .from(plannedSessions)
+    .where(and(eq(plannedSessions.cycleId, cycleId), livePlannedSessions, isNotNull(plannedSessions.slotId), gte(plannedSessions.date, from)));
+  if (!rows.length) return;
+  const nextOf = new Map<number, number>();
+  for (const s of slots) {
+    if (!s.brickWithNext || s.dayOfWeek == null) continue;
+    const next = slots.find((x) => x.dayOfWeek === s.dayOfWeek && x.daySlot === s.daySlot + 1);
+    if (next) nextOf.set(next.id, s.id);
+  }
+  const bySlotDate = new Map(rows.map((r) => [`${r.slotId}|${r.date}`, r]));
+  for (const r of rows) {
+    if (r.touchedAt != null) continue;
+    const parentSlot = nextOf.get(r.slotId!);
+    const parent = parentSlot != null ? bySlotDate.get(`${parentSlot}|${r.date}`) : undefined;
+    const want = parent && parent.touchedAt == null ? parent.id : null;
+    if (r.brickParentId !== want) await tx.update(plannedSessions).set({ brickParentId: want }).where(eq(plannedSessions.id, r.id));
+  }
+}
+
 /** The template part of a cycle snapshot: what generation reads. */
 export function cycleTemplateKey(snap: { cycle: Record<string, unknown>; slots: Record<string, unknown>[] }): string {
   const c = snap.cycle;
   const slots = [...snap.slots]
     .sort((a, b) => Number(a.id) - Number(b.id))
-    .map((s) => [s.id, s.dayOfWeek, s.daySlot ?? 1, s.orderIndex, s.programId, s.label, s.notes, s.autoComplete]);
+    .map((s) => [s.id, s.dayOfWeek, s.daySlot ?? 1, s.orderIndex, s.programId, s.label, s.notes, s.autoComplete, s.workoutId ?? null, s.priority ?? null, s.brickWithNext ?? false]);
   return JSON.stringify([c.status, c.startDate, c.scheduledStartDate, c.durationWeeks, c.durationDays ?? null, c.scheduleType, slots]);
 }
 
@@ -498,10 +538,21 @@ export async function weekdayToday(params: {
   let sessions = await loadSessions();
   let match = matchPlanned(forMatch, sessions);
 
+  // With the endurance switch on, a session with a sport goes through Garmin
+  // or "Did you do it?" instead of an auto row, and leaves the missed list for
+  // that card (docs/plans/workouts-and-compliance.md, 6.2 and 7). Lifters: no change.
+  const { enduranceEnabledFor } = await import("@/lib/endurance");
+  const sportSessions = new Set<number>();
+  if (await enduranceEnabledFor(userId)) {
+    const { programSports } = await import("@/lib/session-compliance");
+    const sports = await programSports(rows.map((r) => r.row.programId!));
+    for (const { row } of rows) if (sports.get(row.programId!)) sportSessions.add(row.id);
+  }
+
   // Days tracked outside the app: a session not done by its own workout or
   // one of its program (a workout of another program does not count, as before).
   const due = rows.filter(({ row, programDeletedAt }) => {
-    if (!row.autoComplete || row.programId == null || programDeletedAt) return false;
+    if (!row.autoComplete || row.programId == null || programDeletedAt || sportSessions.has(row.id)) return false;
     const m = match.get(row.id);
     return !m || m.step === 3;
   });
@@ -552,7 +603,7 @@ export async function weekdayToday(params: {
 
   const missedSlots: MissedSlot[] = missedEnabled
     ? rows
-        .filter(({ row }) => row.date! < todayStr && !match.has(row.id))
+        .filter(({ row }) => row.date! < todayStr && !match.has(row.id) && !sportSessions.has(row.id))
         .map(({ row }) => ({ date: row.date!, slot: slotFor(row), plannedSessionId: row.id }))
     : [];
   return { todaySlot, todaySessions, missedSlots };
@@ -578,7 +629,16 @@ export async function countTouchedFuture(userId: string, cycleId: number): Promi
 
 // ── Template slots (3.1) ─────────────────────────────────────────────────────
 
-type SlotValues = { label?: string | null; programId?: number | null; notes?: string | null; autoComplete?: boolean };
+type SlotValues = {
+  label?: string | null;
+  programId?: number | null;
+  notes?: string | null;
+  autoComplete?: boolean;
+  /** A library workout instead of a program; weekday cycles only (docs/plans/workouts-and-compliance.md, 4.3). */
+  workoutId?: number | null;
+  priority?: "key" | "support" | "optional" | null;
+  brickWithNext?: boolean;
+};
 
 /**
  * Upsert one template slot inside a cycle write, keyed by weekday and the
@@ -607,9 +667,22 @@ export async function upsertSlotInTx(
           .from(trainingCycleSlots)
           .where(and(eq(trainingCycleSlots.trainingCycleId, cycleId), eq(trainingCycleSlots.orderIndex, key.orderIndex ?? -1)));
   const existing = key.dayOfWeek != null ? daySlots.find((s) => s.daySlot === daySlot) : daySlots[0];
+  if (key.dayOfWeek == null && values.workoutId != null) throw new SessionInputError("Workouts go on a weekday cycle only.");
+  // A slot runs a program or a workout, never both: setting one clears the other.
+  if (values.workoutId != null) values = { ...values, programId: null };
+  else if (values.programId != null) values = { ...values, workoutId: null };
   if (key.dayOfWeek != null) {
-    const programId = values.programId !== undefined ? values.programId : (existing?.programId ?? null);
-    const problem = daySlotProblem({ daySlot, programId, others: daySlots.filter((s) => s.id !== existing?.id) });
+    // A workout slot is a session, not a rest day, for the day's rules.
+    const content = (s: { programId: number | null; workoutId?: number | null }) => s.programId ?? (s.workoutId != null ? -1 : null);
+    const programId = content({
+      programId: values.programId !== undefined ? values.programId : (existing?.programId ?? null),
+      workoutId: values.workoutId !== undefined ? values.workoutId : (existing?.workoutId ?? null),
+    });
+    const problem = daySlotProblem({
+      daySlot,
+      programId,
+      others: daySlots.filter((s) => s.id !== existing?.id).map((s) => ({ daySlot: s.daySlot, programId: content(s) })),
+    });
     if (problem) throw new SessionInputError(problem);
   }
   if (existing) {
@@ -656,9 +729,55 @@ export type SessionOp =
   | { op: "change"; id: number; programId?: number; label?: string | null; notes?: string | null; position?: number; expectedVersion?: number }
   | { op: "reset"; id: number; expectedVersion?: number }
   | { op: "remove"; id: number; expectedVersion?: number }
-  | { op: "add"; cycleId: number; date: string; programId: number; position?: number; label?: string | null; notes?: string | null };
+  | {
+      op: "add";
+      cycleId: number;
+      date: string;
+      /** A program, or a workout (JSON or a library id) with the endurance switch on. */
+      programId?: number;
+      workout?: unknown;
+      workoutId?: number;
+      priority?: SessionPriority | null;
+      brickParentId?: number;
+      position?: number;
+      label?: string | null;
+      notes?: string | null;
+    }
+  // Structured workouts and answers (docs/plans/workouts-and-compliance.md, 5 and 6).
+  | { op: "set_workout"; id: number; workout?: unknown; workoutId?: number; expectedVersion?: number }
+  | { op: "clear_workout"; id: number; programId: number; expectedVersion?: number }
+  | { op: "update_from_library"; id: number; expectedVersion?: number }
+  | { op: "set_priority"; id: number; priority: SessionPriority | null; expectedVersion?: number }
+  | { op: "link_brick"; id: number; brickParentId: number; expectedVersion?: number }
+  | { op: "unlink_brick"; id: number; expectedVersion?: number }
+  | { op: "miss"; id: number; reason?: string | null; expectedVersion?: number }
+  | { op: "unmiss"; id: number; expectedVersion?: number }
+  | { op: "pick"; id: number; garminActivityId: number; expectedVersion?: number };
 
 export class SessionInputError extends PlanStateError {}
+
+/** The workout JSON broke the schema check (D3: never overridable). Each problem has its path. */
+export class WorkoutSchemaError extends SessionInputError {
+  constructor(readonly errors: { path: string; message: string }[]) {
+    super(`The workout is not valid: ${errors.map((e) => (e.path ? `${e.path}: ${e.message}` : e.message)).join("; ")}`);
+  }
+}
+
+/** A workout from JSON or the user's library, through the schema check. */
+export async function resolveWorkoutInput(ex: Executor, userId: string, input: { workout?: unknown; workoutId?: number }): Promise<{ workout: Workout; workoutId: number | null }> {
+  if (input.workoutId != null) {
+    const [lib] = await ex.select().from(workouts).where(and(eq(workouts.id, input.workoutId), eq(workouts.userId, userId), isNull(workouts.deletedAt)));
+    if (!lib) throw new SessionInputError("Workout not found");
+    const parsed = parseWorkout(lib.workout);
+    if (!parsed.ok) throw new WorkoutSchemaError(parsed.errors);
+    return { workout: parsed.workout, workoutId: lib.id };
+  }
+  const parsed = parseWorkout(input.workout);
+  if (!parsed.ok) throw new WorkoutSchemaError(parsed.errors);
+  return { workout: parsed.workout, workoutId: null };
+}
+
+const ENDURANCE_OPS = new Set(["set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "miss", "unmiss", "pick"]);
 
 async function ownedProgram(ex: Executor, userId: string, programId: number) {
   const [p] = await ex.select({ userId: programs.userId }).from(programs).where(and(eq(programs.id, programId), livePrograms));
@@ -785,7 +904,7 @@ async function sessionScope(tx: Tx, userId: string, input: SessionOp): Promise<L
   const programIds: number[] = [];
   if (input.op === "add") {
     mondays.add(mondayOf(input.date));
-    programIds.push(input.programId);
+    if (input.programId != null) programIds.push(input.programId);
   } else {
     const [row] = await tx
       .select({ date: plannedSessions.date, templateDate: plannedSessions.templateDate })
@@ -796,13 +915,20 @@ async function sessionScope(tx: Tx, userId: string, input: SessionOp): Promise<L
     // A reset puts the session back on its template day (review 20).
     if (input.op === "reset" && row?.templateDate) mondays.add(mondayOf(row.templateDate));
     if (input.op === "change" && input.programId != null) programIds.push(input.programId);
+    if (input.op === "clear_workout") programIds.push(input.programId);
   }
-  return { programIds, cycleIds: [], sessionWeeks: { userId, mondays: [...mondays].sort() } };
+  // A workout session's run counts for the long-run cap (docs/plans/workouts-and-compliance.md, 8).
+  const sessionIds = input.op === "add" ? undefined : [input.id];
+  return { programIds, cycleIds: [], sessionWeeks: { userId, mondays: [...mondays].sort(), sessionIds } };
 }
 
 async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: SessionOp, today: string): Promise<PlannedRow> {
   const tx = w.tx;
   const now = new Date();
+  if (ENDURANCE_OPS.has(input.op) || (input.op === "add" && input.programId == null)) {
+    const { enduranceEnabledFor } = await import("@/lib/endurance");
+    if (!(await enduranceEnabledFor(ctx.userId))) throw new SessionInputError("Endurance features are not on for this account");
+  }
   if (input.op === "add") {
     const [cycle] = await tx
       .select()
@@ -813,7 +939,12 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     const block = cycleBlock(cycle);
     if (!block) throw new SessionInputError("This cycle has no dates yet: start or schedule it first.");
     checkDate(input.date, today, block);
-    await ownedProgram(tx, ctx.userId, input.programId);
+    if ((input.programId == null) === (input.workout == null && input.workoutId == null)) {
+      throw new SessionInputError("Send a programId, or a workout or workoutId: one of them.");
+    }
+    if (input.programId != null) await ownedProgram(tx, ctx.userId, input.programId);
+    const wk = input.programId == null ? await resolveWorkoutInput(tx, ctx.userId, input) : null;
+    if (input.brickParentId != null) await checkBrickParent(tx, ctx.userId, { cycleId: cycle.id, date: input.date }, input.brickParentId);
     // Two adds to one day at once must not both pass the cap (review 25).
     await lockCycleRows(tx, [cycle.id]);
     if ((await dayCount(tx, cycle.id, input.date)) >= MAX_SLOTS_PER_DAY) throw new SessionInputError(FULL_DAY);
@@ -824,7 +955,11 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
         cycleId: cycle.id,
         date: input.date,
         position: input.position ?? (await dayCount(tx, cycle.id, input.date)) + 1,
-        programId: input.programId,
+        programId: input.programId ?? null,
+        workout: wk?.workout ?? null,
+        workoutId: wk?.workoutId ?? null,
+        priority: input.priority ?? null,
+        brickParentId: input.brickParentId ?? null,
         label: input.label ?? null,
         notes: input.notes ?? null,
         touchedAt: now,
@@ -843,16 +978,75 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
   switch (input.op) {
     case "move": {
       if (!block) throw new SessionInputError("This cycle has no dates any more.");
+      if (row.brickParentId != null) throw new SessionInputError("Move the brick by its first session, or unlink it.");
       checkDate(input.date, today, block);
       if (input.date !== row.date && (await dayCount(tx, row.cycleId, input.date, row.id)) >= MAX_SLOTS_PER_DAY) {
         throw new SessionInputError(FULL_DAY);
       }
       set = { date: input.date, position: input.position ?? (input.date === row.date ? row.position : (await dayCount(tx, row.cycleId, input.date, row.id)) + 1) };
+      // A confirmed miss moved to a coming day is planned again (D19).
+      if (row.status === "missed") set = { ...set, status: "planned", missedReason: null, statusOn: null };
       break;
     }
     case "skip":
-      set = { status: "skipped", skipReason: input.reason ?? null };
+      set = { status: "skipped", skipReason: input.reason ?? null, statusOn: today };
       break;
+    case "set_workout":
+    case "update_from_library": {
+      if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
+      const source = input.op === "set_workout" ? input : { workoutId: row.workoutId ?? undefined };
+      if (input.op === "update_from_library" && row.workoutId == null) throw new SessionInputError("This session's workout is not from the library.");
+      const wk = await resolveWorkoutInput(tx, ctx.userId, source);
+      set = { workout: wk.workout, workoutId: wk.workoutId, programId: null };
+      break;
+    }
+    case "clear_workout":
+      if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
+      await ownedProgram(tx, ctx.userId, input.programId);
+      set = { workout: null, workoutId: null, programId: input.programId };
+      break;
+    case "set_priority":
+      if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed.");
+      set = { priority: input.priority };
+      break;
+    case "link_brick":
+      if (row.date == null) throw new SessionInputError("A rotation session cannot be part of a brick.");
+      await checkBrickParent(tx, ctx.userId, { cycleId: row.cycleId, date: row.date, id: row.id, position: row.position }, input.brickParentId);
+      set = { brickParentId: input.brickParentId };
+      break;
+    case "unlink_brick":
+      set = { brickParentId: null };
+      break;
+    case "miss":
+      if (row.date == null || row.date >= today) throw new SessionInputError("Only a session whose day has passed can be marked missed.");
+      if (row.status !== "planned") throw new SessionInputError("Only a planned session can be marked missed.");
+      set = { status: "missed", missedReason: input.reason ?? null, statusOn: today };
+      break;
+    case "unmiss":
+      if (row.status !== "missed") throw new SessionInputError("This session is not marked missed.");
+      set = { status: "planned", missedReason: null, statusOn: null };
+      break;
+    case "pick": {
+      if (row.date == null || row.date > today) throw new SessionInputError("Only a session of today or earlier can be matched to an activity.");
+      const { garminActivities } = await import("@/db/schema");
+      const { garminAllowedFor } = await import("@/lib/garmin/access");
+      if (!(await garminAllowedFor(ctx.userId))) throw new SessionInputError("Garmin is not on for this account.");
+      const [act] = await tx
+        .select({ id: garminActivities.id, start: garminActivities.startTimeLocal })
+        .from(garminActivities)
+        .where(and(eq(garminActivities.id, input.garminActivityId), eq(garminActivities.userId, ctx.userId)));
+      if (!act) throw new SessionInputError("Activity not found");
+      const day = act.start.toISOString().slice(0, 10);
+      if (day < addDaysStr(row.date, -1) || day > addDaysStr(row.date, 1)) throw new SessionInputError(`That activity is on ${day}; pick one from the session's day or the day before or after.`);
+      const [other] = await tx
+        .select({ id: plannedSessions.id })
+        .from(plannedSessions)
+        .where(and(eq(plannedSessions.garminActivityId, act.id), livePlannedSessions, ne(plannedSessions.id, row.id)))
+        .limit(1);
+      if (other) throw new SessionInputError("That activity is already matched to another session.");
+      set = { garminActivityId: act.id, status: "planned", missedReason: null, statusOn: null };
+      break;
+    }
     case "unskip":
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be planned again; add one on a coming day instead.");
       if (row.date != null && (await dayCount(tx, row.cycleId, row.date, row.id)) >= MAX_SLOTS_PER_DAY) throw new SessionInputError(FULL_DAY);
@@ -921,7 +1115,32 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
       return { ...row, deletedAt: now };
   }
   await tx.update(plannedSessions).set({ ...set, touchedAt: now, updatedAt: now }).where(eq(plannedSessions.id, row.id));
+  // A brick moves as one: its later sessions follow the first to the new day.
+  if (input.op === "move" && set.date != null && set.date !== row.date) {
+    const children = await tx
+      .select({ id: plannedSessions.id })
+      .from(plannedSessions)
+      .where(and(eq(plannedSessions.brickParentId, row.id), livePlannedSessions));
+    for (const c of children) {
+      if ((await dayCount(tx, row.cycleId, set.date, c.id)) >= MAX_SLOTS_PER_DAY) throw new SessionInputError(FULL_DAY);
+      await w.touch({ type: "planned_session", id: c.id });
+      const position = (await dayCount(tx, row.cycleId, set.date, c.id)) + 1;
+      await tx.update(plannedSessions).set({ date: set.date, position, touchedAt: now, updatedAt: now }).where(eq(plannedSessions.id, c.id));
+    }
+  }
   return (await liveRow(tx, ctx.userId, row.id)).row;
+}
+
+/** A brick's first session: the user's, live, same cycle and day, earlier in the day, and not itself a second leg. */
+async function checkBrickParent(tx: Tx, userId: string, child: { cycleId: number; date: string; id?: number; position?: number }, parentId: number) {
+  const [p] = await tx
+    .select()
+    .from(plannedSessions)
+    .where(and(eq(plannedSessions.id, parentId), eq(plannedSessions.userId, userId), livePlannedSessions));
+  if (!p || p.id === child.id) throw new SessionInputError("Brick session not found");
+  if (p.cycleId !== child.cycleId || p.date !== child.date) throw new SessionInputError("A brick's sessions are on the same day of the same cycle.");
+  if (p.brickParentId != null) throw new SessionInputError("That session is itself the second part of a brick.");
+  if (child.position != null && p.position >= child.position) throw new SessionInputError("The first session of a brick comes earlier in the day.");
 }
 
 function checkDate(date: string, today: string, block: { start: string; end: string }) {
@@ -1039,12 +1258,13 @@ export async function declineDay(ctx: PlanWriteContext, date: string, plannedSes
     )
     .orderBy(asc(plannedSessions.id));
   if (rows.length) {
+    const statusOn = toDateStr(await userToday(ctx.userId));
     await planWrite(ctx, async (w) => {
       for (const r of rows) {
         await w.touch({ type: "planned_session", id: r.id });
         await w.tx
           .update(plannedSessions)
-          .set({ status: "skipped", touchedAt: new Date(), updatedAt: new Date() })
+          .set({ status: "skipped", statusOn, touchedAt: new Date(), updatedAt: new Date() })
           .where(eq(plannedSessions.id, r.id));
       }
     });
@@ -1079,6 +1299,7 @@ export async function skipAutoDay(
   ctx: PlanWriteContext,
   session: { id: number; plannedSessionId: number | null; programId: number | null; date: string },
 ): Promise<void> {
+  const statusOn = toDateStr(await userToday(ctx.userId));
   await planWrite(ctx, async (w) => {
     const rows = await w.tx
       .select({ id: plannedSessions.id })
@@ -1096,7 +1317,7 @@ export async function skipAutoDay(
       .orderBy(asc(plannedSessions.id));
     for (const r of rows) {
       await w.touch({ type: "planned_session", id: r.id });
-      await w.tx.update(plannedSessions).set({ status: "skipped", touchedAt: new Date(), updatedAt: new Date() }).where(eq(plannedSessions.id, r.id));
+      await w.tx.update(plannedSessions).set({ status: "skipped", statusOn, touchedAt: new Date(), updatedAt: new Date() }).where(eq(plannedSessions.id, r.id));
     }
     await w.tx.delete(workoutSessions).where(and(eq(workoutSessions.id, session.id), eq(workoutSessions.userId, ctx.userId)));
     await dismissIfDayClear(ctx.userId, session.date, w.tx);
