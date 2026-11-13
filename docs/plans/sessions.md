@@ -773,3 +773,17 @@ Three reviews of the build. Each fix came with a test that failed first, in
 - **`upsertCycleSlot`** returns "Failed to save the slot", not the internal error.
 - **The matcher's tests** now cover several sessions a day and links (unit,
   `src/__tests__/planned-sessions.test.ts`).
+
+Round 3 (tests in `src/__tests__/integration/planned-sessions-review-3.test.ts`):
+
+- **Limits on slot and program writes** check every calendar week of the cycle's dated sessions
+  from this Monday to the block's end, and refuse if any week gets worse; the message names the
+  week ("The week of 2026-11-16 would hold …").
+- **An add** on a cycle that has no dated sessions yet makes them first, in the same
+  transaction, so the cap and the limits count the template's sessions.
+- **The template day of a moved session** that a block change removed stays empty in every later
+  run, not only the one that removed it; a new start date frees it.
+- **Regeneration reads the user's zone** on its own transaction's connection, so it never waits
+  for a second pooled connection while it holds the cycle's lock.
+- **A template session the cap keeps out** is logged, and `edit_cycle_slot` returns its day in
+  `sessionsKeptOutByCap`. `removeCycleSlot` returns "Failed to remove the slot".
