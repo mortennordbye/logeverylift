@@ -653,4 +653,38 @@ with `limitWarnings` in `get_training_cycle`, and the data inventory text. Diffe
   e2e spec covers the line, and a unit test covers its text.
 - **Readiness swap card placement:** after the today card, before "Did you do these?".
 
-Still to build: the weekly load ramp (waits for D1).
+Stage 3 (2026-11-13, after D1 merged in PR #232) shipped `weekly_load_ramp`. Section 13 against
+D1's merged code: the one reader is `getTrainingLoad` in `src/lib/training-load.ts` (source,
+days with every track's CTL, ATL, TSB and load, and a calibrating flag); the planned estimate is
+`plannedLoad` with `DEFAULT_IF` in `src/lib/utils/training-load.ts`, and `workoutPlannedLoad` with
+`loadAnchors` in `src/lib/utils/step-results.ts` for a workout. All as the brief expected.
+Differences:
+
+- **Calibrating needs history, not only D1's flag.** D1's app series starts at the window's
+  first day when a user has logged nothing, so its flag is off for a user with no history, whose
+  fitness reads 0 and any plan a steep ramp. The rule reads the 60 days before today: no load at
+  all is "no training load yet"; a first day with load less than 42 days ago is "calibrating".
+- **A template week** (a cycle with no dated sessions) is laid on this week, from today, and the
+  next week.
+- **Future weeks of the active block** scale peak-anchored sets by that week's curve at 100%
+  volume; this week uses the values the weekly sync stored.
+- **Each group is projected alone:** a dated cycle or a session week, as the other rules read
+  them; sessions of another cycle in the same week are not added.
+- **A session with a heart-rate target or none** uses D1's default IF and counts as a rough
+  estimate in the message ("N sessions have no time or no power or pace target").
+- **Today's done load** comes from today's row of the series; with no row yet (the Garmin job has
+  not run), it counts 0.
+
+## 19. The e2e reset deadlock (2026-11-13)
+
+`e2e/fixtures/reset.ts` failed once with "deadlock detected while deleting tuple in relation
+workout_sessions" (miss-sheet, WebKit). The previous spec's last set write can still run on the
+server when the next spec's reset starts. A set write takes the records lock (`lockRecords`),
+writes a set into one session, then a record on an earlier session's set (`rebuildPRsFrom`).
+The reset deleted the sessions first, in heap order, so it could lock the earlier session and
+wait on the later one while the write waited on the earlier one. A lock watcher on the e2e
+database saw app writes (`training_cycles ... FOR NO KEY UPDATE`) wait on a running reset, and a
+script with the write's order reproduced the same error every time. The reset now takes the
+records locks for every exercise the account has sets or records for, then its cycles, then
+its programs, in the app's order, before it deletes anything. `e2e/reset-lock-order.spec.ts`
+fails with the old reset ("deadlock detected") and passes now.

@@ -55,6 +55,11 @@ import {
   type PlacedGroup,
   type PlacedSession,
   type ReadinessFlag,
+  type WeekShare,
+  type RampStart,
+  programSteps,
+  weeklyLoadRamp,
+  weeklyRamps,
   isHardSession,
   longRunCap,
   longestRuns,
@@ -105,6 +110,9 @@ export type LimitContext = {
   readinessWhy?: string | null;
   /** The athlete profile's strength goal, null when none is set. */
   strengthGoal?: StrengthGoal | null;
+  /** Endurance fitness to project the weekly load ramp from, or not set with `loadWhy`. */
+  load?: RampStart | null;
+  loadWhy?: string | null;
 };
 
 const NO_ENDURANCE = "The endurance features are off for this account, so no training limit runs.";
@@ -113,6 +121,35 @@ const NO_GARMIN =
 const NO_READINESS = "Hard session after a low-readiness day not checked: no HRV and resting HR data (needs Garmin).";
 const STALE_READINESS = "Hard session after a low-readiness day not checked: no HRV reading from Garmin today or yesterday.";
 const NO_STRENGTH_GOAL = "Strength sessions per week not checked: no strength goal in the athlete profile.";
+const NO_LOAD = "Weekly load ramp not checked: no training load yet (no Garmin data and no session logged in the app).";
+const CALIBRATING = (n: number) =>
+  `Weekly load ramp not checked: fitness is still calibrating (${Math.min(n, 42)} of 42 days of history). Check the change against the ramp rule in logeverylift://docs/endurance-training-reference yourself.`;
+
+/**
+ * Endurance fitness (swim + bike + run CTL; hub decision 1) from D1's one
+ * reader (Garmin series where the user has it, else the app series, never
+ * both), for the weekly load ramp. Not checked while it calibrates (decision 3).
+ */
+async function rampStart(userId: string, today: string): Promise<{ load: RampStart | null; why: string | null }> {
+  const { getTrainingLoad } = await import("@/lib/training-load");
+  const series = await getTrainingLoad(userId, 60);
+  const days = series.days.filter((d) => d.tracks?.total);
+  // History starts at the first day with any load: none in 60 days is no
+  // data, and under 42 days of it is still calibrating (a new user's fitness
+  // starts from 0, so any plan would read as a steep ramp).
+  const first = days.findIndex((d) => (d.tracks.total?.load ?? 0) > 0);
+  if (first < 0) return { load: null, why: NO_LOAD };
+  const last = days.at(-1)!;
+  const history = days.length - first;
+  if (last.calibrating || (first > 0 && history < 42)) return { load: null, why: CALIBRATING(history) };
+  const endurance = (d: (typeof days)[number], k: "ctl" | "load") => (["swim", "bike", "run"] as const).reduce((a, sp) => a + (d.tracks[sp]?.[k] ?? 0), 0);
+  const past = days.filter((d) => d.date < today);
+  const pastCtl = new Map(past.map((d) => [d.date, endurance(d, "ctl")]));
+  const todayRow = days.find((d) => d.date === today);
+  const ctlYesterday = past.length ? endurance(past.at(-1)!, "ctl") : 0;
+  return { load: { today, ctlYesterday, pastCtl, doneToday: todayRow ? endurance(todayRow, "load") : 0 }, why: null };
+}
+
 const NO_PHASE = "Strength sessions per week not checked: the cycle has no phase type, so one template runs the whole block.";
 
 const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
@@ -234,6 +271,7 @@ export async function limitContext(userId: string): Promise<LimitContext> {
       today,
       readinessWhy: NO_READINESS,
       strengthGoal,
+      ...(await rampStart(userId, today).then((r) => ({ load: r.load, loadWhy: r.why }))),
     };
   }
   const days = await readinessDays(userId, today);
@@ -248,6 +286,7 @@ export async function limitContext(userId: string): Promise<LimitContext> {
     readiness: fresh ? readinessFlag(days, today) : undefined,
     readinessWhy: fresh ? null : STALE_READINESS,
     strengthGoal,
+    ...(await rampStart(userId, today).then((r) => ({ load: r.load, loadWhy: r.why }))),
   };
 }
 
@@ -478,6 +517,8 @@ type PlaceRow = {
   priority: "key" | "support" | "optional" | null;
   label: string | null;
   cycleId: number | null;
+  /** A logged workout is linked to it (its load is in the fitness series). */
+  done?: boolean;
 };
 
 /** The user's current threshold values, read on this connection. */
@@ -486,6 +527,41 @@ async function thresholdsOn(ex: Executor, userId: string) {
   const { currentThresholds } = await import("@/lib/utils/thresholds");
   const rows = await ex.select().from(athleteThresholds).where(and(eq(athleteThresholds.userId, userId), isNull(athleteThresholds.deletedAt)));
   return Object.fromEntries(Object.entries(currentThresholds(rows)).map(([k, r]) => [k, r!.value]));
+}
+
+/** D1's planned load of a workout, or none when it cannot be estimated. */
+function workoutLoad(estimate: () => { load: number; partial: boolean }): { plannedLoad: number | null; loadPartial: boolean } {
+  try {
+    const e = estimate();
+    return { plannedLoad: e.load, loadPartial: e.partial };
+  } catch {
+    return { plannedLoad: null, loadPartial: true };
+  }
+}
+
+/**
+ * The share of peak a dated session's peak-anchored sets run at: a later week
+ * of an active block than this one runs at that week's curve (100% volume);
+ * this week and anything else use the stored values, which the weekly sync set.
+ */
+async function weekShares(ex: Executor, rows: PlaceRow[]): Promise<WeekShare> {
+  const ids = [...new Set(rows.map((r) => r.cycleId).filter((id): id is number => id != null))];
+  if (!ids.length || rows.every((r) => r.ref.startsWith("t:"))) return () => null;
+  const { cycleWeek, parseDateStr } = await import("@/lib/utils/cycle-position");
+  const cycles = await ex.select().from(trainingCycles).where(and(inArray(trainingCycles.id, ids), liveCycles));
+  const byId = new Map(cycles.map((c) => [c.id, c]));
+  const todays = new Map<string, string>();
+  return (cycleId, date) => {
+    const c = cycleId != null ? byId.get(cycleId) : undefined;
+    if (!c || c.status !== "active" || !c.startDate) return null;
+    const startDate = parseDateStr(c.startDate);
+    const week = cycleWeek(startDate, c.durationWeeks, parseDateStr(date), c.durationDays);
+    if (week.isOver) return null;
+    const nowKey = String(c.id);
+    if (!todays.has(nowKey)) todays.set(nowKey, String(c.lastSyncedWeek ?? 1));
+    if (week.currentWeek <= Number(todays.get(nowKey))) return null;
+    return cycleLoad(c, week.currentWeek, c.durationWeeks).multiplier;
+  };
 }
 
 /**
@@ -513,6 +589,9 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promis
           sessionRole: programSets.sessionRole,
           targetHeartRateZone: programSets.targetHeartRateZone,
           durationSeconds: programSets.durationSeconds,
+          distanceMeters: programSets.distanceMeters,
+          peakDuration: programSets.peakDurationSeconds,
+          peakDistance: programSets.peakDistanceMeters,
         })
         .from(programs)
         .innerJoin(programExercises, eq(programExercises.programId, programs.id))
@@ -523,11 +602,15 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promis
   const byProgram = new Map<number, typeof sets>();
   for (const s of sets) byProgram.set(s.programId, [...(byProgram.get(s.programId) ?? []), s]);
 
-  const thresholds = rows.some((r) => r.programId == null && r.workout != null) ? await thresholdsOn(ex, userId) : {};
+  const thresholds = rows.length ? await thresholdsOn(ex, userId) : {};
   const { estimateWorkout, isHardWorkout, parseWorkout } = await import("@/lib/utils/workout-steps");
+  const { loadAnchors, workoutPlannedLoad } = await import("@/lib/utils/step-results");
+  const { DEFAULT_IF, plannedLoad } = await import("@/lib/utils/training-load");
+  const anchors = loadAnchors(thresholds);
+  const share = await weekShares(ex, rows);
 
   return rows.map((r): PlacedSession => {
-    const base = { ref: r.ref, date: r.date, position: r.position, storedPriority: r.priority, cycleId: r.cycleId };
+    const base = { ref: r.ref, date: r.date, position: r.position, storedPriority: r.priority, cycleId: r.cycleId, done: r.done ?? false };
     if (r.programId == null) {
       const p = r.workout != null ? parseWorkout(r.workout) : null;
       if (!p?.ok) return { ...base, label: r.label ?? "Session", sport: null, hard: false, plannedDurationS: null, heavyLegSets: 0, strengthSets: 0 };
@@ -539,6 +622,7 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promis
         plannedDurationS: estimateWorkout(p.workout, thresholds).durationSeconds || null,
         heavyLegSets: 0,
         strengthSets: 0,
+        ...workoutLoad(() => workoutPlannedLoad(p.workout, thresholds)),
       };
     }
     // A slot or session on a deleted program has no live sets: an empty session.
@@ -546,6 +630,23 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promis
     const disciplines = new Set(mine.map((s) => s.discipline));
     const sport = disciplines.size === 1 && !disciplines.has(null) ? [...disciplines][0] : null;
     const legSets = mine.map((s) => ({ ...s, exerciseType: s.typeOverride ?? s.exerciseType }));
+    // Planned load (brief 3.1.1): each discipline's sets as steps for D1's estimate;
+    // a future week of the block scales peak-anchored sets by that week's share.
+    const k = share(r.cycleId, r.date);
+    const loadSets = mine.map((s) => ({
+      ...s,
+      durationSeconds: k != null && s.peakDuration != null ? scaledDuration(s.peakDuration, k) : s.durationSeconds,
+      distanceMeters: k != null && s.peakDistance != null ? scaledDistance(s.peakDistance, k) : s.distanceMeters,
+    }));
+    let load: number | null = null;
+    let partial = false;
+    for (const sport of ["swim", "bike", "run"] as const) {
+      const steps = programSteps(loadSets.filter((s) => s.discipline === sport), anchors, DEFAULT_IF);
+      if (!steps.length) continue;
+      const est = plannedLoad(sport, steps, anchors);
+      load = (load ?? 0) + est.load;
+      partial ||= est.partial;
+    }
     return {
       ...base,
       label: r.label ?? mine[0]?.name ?? "Session",
@@ -556,6 +657,8 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promis
       plannedDurationS: sport ? mine.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) || null : null,
       heavyLegSets: legSets.filter(isHeavyLegSet).length,
       strengthSets: legSets.filter(isStrengthSet).length,
+      plannedLoad: load,
+      loadPartial: partial,
     };
   });
 }
@@ -643,7 +746,14 @@ async function datedRows(ex: Executor, userId: string, from: string, to: string,
         cycleId != null ? eq(plannedSessions.cycleId, cycleId) : undefined,
       ),
     );
-  return rows.map((r) => ({ ...r, ref: `p:${r.id}`, date: r.date! }));
+  const linked = rows.length
+    ? await ex
+        .selectDistinct({ id: workoutSessions.plannedSessionId })
+        .from(workoutSessions)
+        .where(and(inArray(workoutSessions.plannedSessionId, rows.map((r) => r.id)), eq(workoutSessions.isCompleted, true)))
+    : [];
+  const done = new Set(linked.map((l) => l.id));
+  return rows.map((r) => ({ ...r, ref: `p:${r.id}`, date: r.date!, done: done.has(r.id) }));
 }
 
 /** A dated cycle's sessions from this week (or its first week) to its last day, with the two days before. */
@@ -842,6 +952,46 @@ export async function planFacts(
   return { runs, weeks, labels, placed };
 }
 
+/**
+ * The weekly load ramp over the groups a write touches: each dated group's
+ * calendar weeks from its first Monday, or a template week laid on this week
+ * (from today) and the next. A group's sessions are projected alone, as the
+ * other rules read them.
+ */
+function rampHit(start: RampStart, before: ReadonlyMap<string, PlacedGroup>, after: ReadonlyMap<string, PlacedGroup>): BrokenLimit | null {
+  const thisMonday = mondayOfDay(start.today);
+  const laid = (g: PlacedGroup): { sessions: PlacedSession[]; mondays: string[] } => {
+    if (!g.loop) {
+      const mondays: string[] = [];
+      for (let m = mondayOfDay(g.from); m <= g.to; m = addDay(m, 7)) if (addDay(m, 6) >= start.today) mondays.push(m);
+      return { sessions: g.sessions, mondays };
+    }
+    const next = addDay(thisMonday, 7);
+    const sessions = [thisMonday, next].flatMap((m) =>
+      g.sessions.map((s) => ({ ...s, date: addDay(m, dowOfDay(s.date) - 1) })).filter((s) => s.date >= start.today),
+    );
+    return { sessions, mondays: [thisMonday, next] };
+  };
+  const hits: BrokenLimit[] = [];
+  for (const [k, g] of after) {
+    const a = laid(g);
+    const b = before.get(k);
+    const bl = b ? laid(b) : null;
+    const hit = weeklyLoadRamp(bl ? weeklyRamps(start, bl.sessions, bl.mondays) : new Map(), weeklyRamps(start, a.sessions, a.mondays), thisMonday);
+    if (hit) hits.push(hit);
+  }
+  if (!hits.length) return null;
+  return hits.length === 1 ? hits[0] : { ...hits[0], message: hits.map((h) => h.message).join(" "), numbers: { groups: hits.map((h) => h.numbers) } };
+}
+
+const addDay = (d: string, n: number) => {
+  const x = new Date(`${d}T00:00:00Z`);
+  x.setUTCDate(x.getUTCDate() + n);
+  return x.toISOString().slice(0, 10);
+};
+const dowOfDay = (d: string) => ((new Date(`${d}T00:00:00Z`).getUTCDay() + 6) % 7) + 1;
+const mondayOfDay = (d: string) => addDay(d, 1 - dowOfDay(d));
+
 export const NO_FACTS: PlanFacts = { runs: new Map(), weeks: new Map() };
 
 // ── Evaluating ──────────────────────────────────────────────────────────────
@@ -924,6 +1074,13 @@ export function evaluateLimits(
       else {
         checked.push("strength_per_week");
         const hit = strengthPerWeek(placedBefore, placedAfter, lc.strengthGoal);
+        if (hit) broken.push(hit);
+      }
+
+      if (!lc.load || !lc.today) notChecked.push({ rule: "weekly_load_ramp", why: lc.loadWhy ?? NO_LOAD });
+      else {
+        checked.push("weekly_load_ramp");
+        const hit = rampHit(lc.load, placedBefore, placedAfter);
         if (hit) broken.push(hit);
       }
     }

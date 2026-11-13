@@ -19,7 +19,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### Seasons: fitness projection across phases
 - **What:** The Garmin race views read the A race from the season, but the fitness projection to race day uses only the active phase's curve. Phases after it are not projected. (The other gap of the seasons package, limits on the chained start and on `resume`, closed with D2 part 2: `docs/plans/limits-strength-readiness.md`.)
 - **Why deferred:** The projection across phases needs the timeline of every later phase and its programs, which belongs with D2's load model.
-- **Unblocked by:** The weekly load ramp of D2 part 2 (after D1). Then build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
+- **Unblocked by:** Nothing now: D1's load and the weekly load ramp (D2 part 2) are in. Build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
 - **Touchpoints:** `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
 
 ### Dated sessions: what C2 left for later

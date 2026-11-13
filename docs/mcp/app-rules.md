@@ -191,7 +191,7 @@ lasts only until that writer runs again.
   it since, the write is refused with what changed; read it again and redo the change.
 - **Deletes can be undone.** Deleted programs, cycles, seasons, library workouts and sick periods
   stay restorable for 90 days.
-- **Five training limits in code** (`src/lib/utils/training-limits.ts`), for users with
+- **Six training limits in code** (`src/lib/utils/training-limits.ts`), for users with
   endurance features on, on assistant plan writes only (the user's own edits are never checked):
   - `long_run_cap`: no planned run more than 1.10x the longest run in the last 30 days (Study,
     large cohort). The longest run comes from Garmin and from runs logged in the app; with
@@ -212,8 +212,13 @@ lasts only until that writer runs again.
     a week for the athlete's strength goal (`get_athlete_profile`); a write that moves a week
     further from the default is refused until you override it with a reason (D21). Needs a
     strength goal.
+  - `weekly_load_ramp`: endurance fitness (CTL of swim, bike and run, from `get_training_load`:
+    Garmin where the user has it, else the sessions logged in the app) may rise at most 8 a week,
+    6 while it is 45 or less (Coach convention). The week is projected day by day from yesterday's
+    fitness with each planned session's estimated load (Inference). Not checked while fitness
+    calibrates (under 42 days of history) or with no load at all.
 
-  The last three run when the write touches a weekday cycle's days; on rotation cycles they do
+  The last four run when the write touches a weekday cycle's days; on rotation cycles they do
   not run. `list_planned_sessions` marks a strength session in a heavy-legs conflict
   (`heavyLegsBeforeKey`), as the app's calendar does.
 - **Readiness swap.** On a low-readiness morning (Garmin, admins only for now) the app suggests
@@ -236,8 +241,8 @@ lasts only until that writer runs again.
   refused, but the result warns. `manage_season` `resume` is checked like a start. The app's own
   writes (the weekly sync, an applied Garmin suggestion, a scheduled or chained start) are never
   refused either; their warnings are stored on the revision for the user and you to see.
-  The weekly load ramp is not in code yet: check it against the endurance training reference
-  (`logeverylift://docs/endurance-training-reference`) and name the rule and its evidence label.
+  The rules and their evidence labels are in the endurance training reference
+  (`logeverylift://docs/endurance-training-reference`).
 - **Time:** "today", the cycle week, the weekly sync and the date a workout is logged on follow
   the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:54`). With
   no zone set, they follow the server's clock and the phone's day.

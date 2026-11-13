@@ -21,6 +21,7 @@ export const LIMIT_RULES = [
   "hard_after_low_readiness",
   "heavy_legs_before_key",
   "strength_per_week",
+  "weekly_load_ramp",
 ] as const;
 export type LimitRule = (typeof LIMIT_RULES)[number];
 
@@ -305,6 +306,11 @@ export type PlacedSession = {
   heavyLegSets: number;
   strengthSets: number;
   cycleId: number | null;
+  /** Estimated planned endurance load (D1, 100 = one hour at threshold), null with no time; `loadPartial` when a step had no time or target. */
+  plannedLoad?: number | null;
+  loadPartial?: boolean;
+  /** A logged workout is linked to it: its load is in the fitness series already. */
+  done?: boolean;
 };
 
 /** `blockEnd` is the block's last day. */
@@ -634,5 +640,151 @@ export function readinessSwap(input: { flag: ReadinessFlag | null; today: string
     flag,
     text: `Low readiness today: ${flag.text}. Make "${s.label}" an easy ${minutes} min zone 2 session?${taper ? ` ${TAPER_NOTE}` : ""}`,
   };
+}
+
+// ── Weekly load ramp (D2) ───────────────────────────────────────────────────
+//
+// "Planned 7-day CTL ramp over 8: Reject or cut the week" — Coach convention.
+// "CTL 45 or below and ramp over 6: Cut to 3-5/week" — Vendor/coach
+// convention. The acute:chronic ratio does not predict injury (Study,
+// Impellizzeri), so the rule uses the CTL ramp. docs/research/
+// endurance-training-reference.md, "CTL ramp limits are conventions, and the
+// ACWR is not an injury predictor". Endurance CTL only (swim + bike + run;
+// hub decision 1); the planned load is D1's estimate (Inference).
+
+export const RAMP_LIMIT = 8;
+export const RAMP_LIMIT_LOW = 6;
+/** At or below this CTL the lower limit applies. */
+export const RAMP_LOW_CTL = 45;
+const RAMP_EVIDENCE = "Coach convention (Friel, TrainingPeaks); the planned load is an estimate (Inference)";
+const CTL_DAYS = 42;
+
+/** What the projection starts from: endurance CTL at the end of yesterday, CTL of past days, and load already done today. */
+export type RampStart = { today: string; ctlYesterday: number; pastCtl: ReadonlyMap<string, number>; doneToday: number };
+
+export type RampWeek = { monday: string; ctlStart: number; ctlEnd: number; ramp: number; limit: number; plannedLoad: number; partialSessions: number };
+
+/**
+ * The planned endurance load by day from today on: planned sessions not yet
+ * done, plus what was done today. Past days are in the fitness series.
+ */
+export function plannedDayLoads(start: RampStart, sessions: PlacedSession[]): { loads: Map<string, number>; partial: Map<string, number> } {
+  const loads = new Map<string, number>([[start.today, start.doneToday]]);
+  const partial = new Map<string, number>();
+  for (const s of sessions) {
+    if (s.date < start.today || s.done || s.sport == null) continue;
+    loads.set(s.date, (loads.get(s.date) ?? 0) + (s.plannedLoad ?? 0));
+    if (s.plannedLoad == null || s.loadPartial) partial.set(s.date, (partial.get(s.date) ?? 0) + 1);
+  }
+  return { loads, partial };
+}
+
+/**
+ * Each calendar week's endurance CTL ramp, projected day by day with the
+ * PMC model (CTL(d) = CTL(d-1) + (load(d) - CTL(d-1)) / 42) from yesterday's
+ * CTL. A week's start is the CTL at the end of the Sunday before.
+ */
+export function weeklyRamps(start: RampStart, sessions: PlacedSession[], mondays: string[]): Map<string, RampWeek> {
+  const { loads, partial } = plannedDayLoads(start, sessions);
+  const out = new Map<string, RampWeek>();
+  if (!mondays.length) return out;
+  const last = addDaysStr([...mondays].sort().at(-1)!, 6);
+  const ctl = new Map<string, number>(start.pastCtl);
+  let prev = start.ctlYesterday;
+  ctl.set(addDaysStr(start.today, -1), prev);
+  for (let d = start.today; d <= last; d = addDaysStr(d, 1)) {
+    prev = prev + ((loads.get(d) ?? 0) - prev) / CTL_DAYS;
+    ctl.set(d, prev);
+  }
+  for (const monday of mondays) {
+    const ctlStart = ctl.get(addDaysStr(monday, -1));
+    const ctlEnd = ctl.get(addDaysStr(monday, 6));
+    if (ctlStart == null || ctlEnd == null) continue;
+    let plannedLoad = 0;
+    let partialSessions = 0;
+    for (let d = monday; d <= addDaysStr(monday, 6); d = addDaysStr(d, 1)) {
+      if (d >= start.today) plannedLoad += loads.get(d) ?? 0;
+      partialSessions += partial.get(d) ?? 0;
+    }
+    out.set(monday, {
+      monday,
+      ctlStart,
+      ctlEnd,
+      ramp: ctlEnd - ctlStart,
+      limit: ctlStart <= RAMP_LOW_CTL ? RAMP_LIMIT_LOW : RAMP_LIMIT,
+      plannedLoad,
+      partialSessions,
+    });
+  }
+  return out;
+}
+
+const r1n = (n: number) => Math.round(n * 10) / 10;
+
+/** Broken when a week's ramp after the write is over its limit and above the ramp before (a new week counts as no ramp before). */
+export function weeklyLoadRamp(before: ReadonlyMap<string, RampWeek>, after: ReadonlyMap<string, RampWeek>, thisMonday: string): BrokenLimit | null {
+  const hits = [...after.values()]
+    .filter((w) => w.ramp > w.limit && w.ramp > (before.get(w.monday)?.ramp ?? -Infinity) + 1e-9)
+    .sort((a, b) => a.monday.localeCompare(b.monday));
+  if (!hits.length) return null;
+  const text = (w: RampWeek) => {
+    const which = w.monday === thisMonday ? "This week" : `The week of ${w.monday}`;
+    const partial = w.partialSessions ? ` ${w.partialSessions} session${w.partialSessions === 1 ? " has" : "s have"} no time or no power or pace target, so the estimate is rough.` : "";
+    return `${which} would raise fitness (endurance CTL) by ${r1n(w.ramp)} in 7 days, from ${Math.round(w.ctlStart)} to ${Math.round(w.ctlEnd)}. Limit ${w.limit} a week (${RAMP_LIMIT_LOW} while fitness is ${RAMP_LOW_CTL} or less). The planned load is an estimate.${partial}`;
+  };
+  const shown = hits.slice(0, 3).map(text);
+  if (hits.length > 3) shown.push(`And ${hits.length - 3} more weeks.`);
+  const numbers = (w: RampWeek) => ({
+    week: w.monday,
+    ctlStart: r1n(w.ctlStart),
+    ctlEnd: r1n(w.ctlEnd),
+    ramp: r1n(w.ramp),
+    limit: w.limit,
+    plannedLoad: Math.round(w.plannedLoad),
+    partialSessions: w.partialSessions,
+  });
+  return {
+    rule: "weekly_load_ramp",
+    message: shown.join(" "),
+    numbers: hits.length === 1 ? numbers(hits[0]) : { weeks: hits.map(numbers) },
+    evidence: RAMP_EVIDENCE,
+    source: `${REFERENCE} (CTL ramp limits are conventions, and the ACWR is not an injury predictor)`,
+  };
+}
+
+/** The share of peak a set with a peak anchor runs at in one week, or null to use its stored values. */
+export type WeekShare = (cycleId: number | null, date: string) => number | null;
+
+/**
+ * Planned steps of a program's endurance sets for D1's estimate (brief
+ * 3.1.1, Inference): a `work` role or zone 4-5 is a work step, zone 1 a
+ * recovery step, the rest steady (warm-up IF). Time is the set's duration,
+ * or with only a distance, the distance at that IF of the threshold speed
+ * (run) or CSS (swim).
+ */
+export type LoadSet = {
+  discipline: "swim" | "bike" | "run" | null;
+  sessionRole: string | null;
+  targetHeartRateZone: number | null;
+  durationSeconds: number | null;
+  distanceMeters: number | null;
+};
+
+export function programSteps(
+  sets: LoadSet[],
+  anchors: { runThresholdSpeed?: number | null; swimCss?: number | null },
+  defaultIf: Record<"warmup" | "work" | "recovery", number>,
+): { type: "warmup" | "work" | "recovery"; seconds: number | null }[] {
+  return sets
+    .filter((s) => s.discipline != null)
+    .map((s) => {
+      const type = s.sessionRole === "work" || (s.targetHeartRateZone ?? 0) >= 4 ? "work" : s.targetHeartRateZone === 1 ? "recovery" : "warmup";
+      let seconds = s.durationSeconds && s.durationSeconds > 0 ? s.durationSeconds : null;
+      if (seconds == null && s.distanceMeters && s.distanceMeters > 0) {
+        const speed = s.discipline === "run" ? anchors.runThresholdSpeed : s.discipline === "swim" ? anchors.swimCss : null;
+        if (speed && speed > 0) seconds = s.distanceMeters / (defaultIf[type] * speed);
+      }
+      return { type, seconds };
+    });
 }
 
