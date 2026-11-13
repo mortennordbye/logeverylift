@@ -52,7 +52,8 @@ export type ProductInput = z.infer<typeof productInput>;
 
 export const sweatTestInput = z.object({
   testedOn: dateStr.optional(),
-  durationMinutes: z.number().min(1).max(600),
+  // The same bounds as sweatTestError in src/lib/utils/fueling.ts.
+  durationMinutes: z.number().min(30).max(240),
   preKg: z.number().positive().max(400),
   postKg: z.number().positive().max(400),
   fluidMl: z.number().int().min(0).max(20000),

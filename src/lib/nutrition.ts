@@ -17,6 +17,7 @@ import { toDateStr } from "@/lib/utils/cycle-position";
 import {
   carbsPerHour,
   fluidPlan,
+  fuelLogError,
   gutTraining,
   itemTotals,
   sodiumPlan,
@@ -150,6 +151,8 @@ export async function saveFuelLog(userId: string, input: FuelLogInput): Promise<
     await db.delete(fuelLogs).where(where);
     return null;
   }
+  const typo = fuelLogError({ durationS: link.durationS, carbsG: values.carbsG });
+  if (typo) throw new NutritionError(typo);
   const [row] = await db
     .insert(fuelLogs)
     .values({

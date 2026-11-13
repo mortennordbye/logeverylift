@@ -6,7 +6,7 @@
  */
 
 import { phaseLayout } from "@/lib/utils/periodization";
-import { BIKE_IF, HR_CEILING_SHARE, RUN_SPEED_SHARE } from "@/lib/utils/race-plan";
+import { bikeGuide, runGuide } from "@/lib/utils/race-plan";
 import { addDays } from "../dates";
 import type { RaceDistance } from "./overview";
 
@@ -17,16 +17,11 @@ export function taperStart(startDate: string, durationWeeks: number): string {
 }
 
 /**
- * Race intensity as a share of threshold: one rule with the race-day plan
- * (src/lib/utils/race-plan.ts; docs/plans/nutrition-and-race-day.md, 2.5).
- * Bike: the general IF band for the distance. Run: share of critical speed
- * (inference). Heart-rate ceiling: 85 % of LTHR, the same for both.
+ * Race intensity: the race-day plan's own rule (bikeGuide and runGuide in
+ * src/lib/utils/race-plan.ts; docs/plans/nutrition-and-race-day.md, 2.5), so
+ * the race page and the plan show the same watts and ceilings for the same
+ * bike time, athlete level and thresholds.
  */
-export const PACING: Record<RaceDistance, { bike: [number, number]; run: [number, number] }> = {
-  full: { bike: BIKE_IF.full.general, run: RUN_SPEED_SHARE.full },
-  half: { bike: BIKE_IF.half.general, run: RUN_SPEED_SHARE.half },
-};
-export { HR_CEILING_SHARE };
 /** Under this durability (2.7) the bike guide takes the lower end. */
 export const LOW_DURABILITY = 0.9;
 
@@ -38,14 +33,19 @@ export type PacingGuide = {
   runHrCeiling: number | null;
 };
 
-export function pacingGuide(input: { distance: RaceDistance; ftp: number | null; cs: number | null; lthrBike: number | null; lthrRun: number | null }): PacingGuide {
-  const p = PACING[input.distance];
-  return {
-    bikeWatts: input.ftp ? [Math.round(input.ftp * p.bike[0]), Math.round(input.ftp * p.bike[1])] : null,
-    bikeHrCeiling: input.lthrBike ? Math.round(input.lthrBike * HR_CEILING_SHARE) : null,
-    runSpeed: input.cs ? [input.cs * p.run[0], input.cs * p.run[1]] : null,
-    runHrCeiling: input.lthrRun ? Math.round(input.lthrRun * HR_CEILING_SHARE) : null,
-  };
+export function pacingGuide(input: {
+  distance: RaceDistance;
+  /** The expected bike time: the race plan's, else the assumed speed (bikeContext in src/lib/race-plans.ts). */
+  bikeHours: number;
+  firstTimer: boolean;
+  ftp: number | null;
+  cs: number | null;
+  lthrBike: number | null;
+  lthrRun: number | null;
+}): PacingGuide {
+  const bike = bikeGuide(input.distance, input.bikeHours, input.ftp, input.lthrBike, input.firstTimer);
+  const run = runGuide(input.distance, input.cs, input.lthrRun);
+  return { bikeWatts: bike.watts, bikeHrCeiling: bike.hrCeiling, runSpeed: run.speed, runHrCeiling: run.hrCeiling };
 }
 
 export type RunSummary = { id: number; day: string; speed: number; hr: number; durationS: number };

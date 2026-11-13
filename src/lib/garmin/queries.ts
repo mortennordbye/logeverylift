@@ -1186,7 +1186,16 @@ export async function getRaceData(userId: string, todayArg?: string): Promise<Ra
   const th = thresholdHistory(trends.acts, addDays(today, -6), today).at(-1);
   const watchLthr = [...trends.acts].reverse().find((a) => a.watchLthr)?.watchLthr ?? null;
   const lthrRun = th?.lthrRun ?? null;
-  const pacing = pacingGuide({ distance: volume.distance, ftp: th?.ftp ?? null, cs: th?.cs ?? null, lthrBike: th?.lthrBike ?? watchLthr, lthrRun: lthrRun ?? watchLthr });
+  // The race plan's bike time and the athlete's level, so the race page and the plan give the same numbers.
+  const { bikeContext } = await import("@/lib/race-plans");
+  const pacing = pacingGuide({
+    distance: volume.distance,
+    ...(await bikeContext(userId, volume.distance)),
+    ftp: th?.ftp ?? null,
+    cs: th?.cs ?? null,
+    lthrBike: th?.lthrBike ?? watchLthr,
+    lthrRun: lthrRun ?? watchLthr,
+  });
 
   // Runs with mean speed and HR, for bricks against fresh runs.
   const runRows = await db

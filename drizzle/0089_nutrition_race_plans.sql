@@ -60,7 +60,6 @@ ALTER TABLE "fuel_logs" ADD CONSTRAINT "fuel_logs_user_id_user_id_fk" FOREIGN KE
 ALTER TABLE "fuel_logs" ADD CONSTRAINT "fuel_logs_workout_session_id_workout_sessions_id_fk" FOREIGN KEY ("workout_session_id") REFERENCES "public"."workout_sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "fuel_products" ADD CONSTRAINT "fuel_products_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "race_plans" ADD CONSTRAINT "race_plans_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "race_plans" ADD CONSTRAINT "race_plans_season_race_id_season_races_id_fk" FOREIGN KEY ("season_race_id") REFERENCES "public"."season_races"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sweat_tests" ADD CONSTRAINT "sweat_tests_user_id_user_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE UNIQUE INDEX "uniq_fuel_log_session" ON "fuel_logs" USING btree ("user_id","workout_session_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "uniq_fuel_log_garmin" ON "fuel_logs" USING btree ("user_id","garmin_activity_id");--> statement-breakpoint

@@ -53,8 +53,12 @@ export function FuelForm({
   onSave: (v: FuelValues) => Promise<ActionResult<unknown>>;
 }) {
   const [counts, setCounts] = useState<Record<number, number>>(() => initialCounts(initial?.items));
-  // A total that was saved from products shows as the products' sum, not as typed.
-  const fromItems = Object.keys(initialCounts(initial?.items)).length > 0;
+  // A total that was saved from products shows as the products' sum, not as
+  // typed, but only when every saved product can show here. Without the
+  // product list (the Garmin card) or after a product was deleted, the stored
+  // totals fill the fields, so a save never wipes them.
+  const saved = Object.keys(initialCounts(initial?.items)).map(Number);
+  const fromItems = saved.length > 0 && saved.every((id) => products.some((p) => p.id === id));
   const [typed, setTyped] = useState<Record<FieldKey, string>>(() => ({
     carbsG: fromItems ? "" : str(initial?.carbsG),
     fluidMl: fromItems ? "" : str(initial?.fluidMl),

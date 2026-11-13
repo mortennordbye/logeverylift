@@ -22,6 +22,12 @@ export const GUT_START_G_H = 60;
 export const GUT_STEP_G_H = 10;
 /** The consensus ceiling without a proved higher tolerance. */
 export const CARB_CEILING_G_H = 90;
+/** The top studied intake (Podlogar 2022): nothing above it is ever proved or shown. */
+export const CARB_MAX_G_H = 120;
+/** A logged rate above this is refused as a likely typo. */
+export const CARB_LOG_MAX_G_H = 150;
+/** Tolerated logs above 90 g/h needed before the ceiling passes 90 (90-120 only after weeks without symptoms). */
+export const ABOVE_CEILING_LOGS = 2;
 /** Race at about 80 % of the highest tolerance proved in training (coach convention). */
 export const RACE_SHARE_OF_TOLERANCE = 0.8;
 
@@ -39,7 +45,7 @@ export type CarbTarget = {
 /** Carbs per hour for a session of this length (2.1). `proved` is the gut tolerance in g/h, if any. */
 export function carbTarget(durationSeconds: number, proved: number | null = null): CarbTarget {
   const min = durationSeconds / 60;
-  const ceiling = proved != null && proved > CARB_CEILING_G_H ? proved : CARB_CEILING_G_H;
+  const ceiling = carbCeiling(proved);
   if (min < 90) return { kind: "none", bike: null, run: null, ceiling, text: "Under 90 minutes: water only is fine.", evidence: "Coach convention" };
   if (min <= 120) {
     return { kind: "optional", bike: null, run: null, ceiling, text: "90 minutes to 2 hours: fuel if it is a key session, to practise.", evidence: "Coach convention" };
@@ -48,7 +54,7 @@ export function carbTarget(durationSeconds: number, proved: number | null = null
   if (min > 150 && trained) {
     return {
       kind: "practise",
-      bike: [60, Math.min(ceiling, proved!)],
+      bike: [60, ceiling],
       run: [50, Math.min(70, proved!)],
       ceiling,
       text:
@@ -66,6 +72,17 @@ export function carbTarget(durationSeconds: number, proved: number | null = null
     text: "Practise race fueling with race products: bike 60-80 g/h, run 50-70 g/h, 2:1 glucose:fructose.",
     evidence: "Consensus plus study; the bike and run split is inference",
   };
+}
+
+/** The highest rate a target may show: 90 g/h, or the proved tolerance above it, never above 120. */
+export function carbCeiling(proved: number | null): number {
+  return Math.min(CARB_MAX_G_H, proved != null && proved > CARB_CEILING_G_H ? proved : CARB_CEILING_G_H);
+}
+
+/** Why a fuel log is refused as a likely typo (over 150 g/h), or null. */
+export function fuelLogError(log: Pick<GutLog, "durationS" | "carbsG">): string | null {
+  const rate = carbsPerHour(log);
+  return rate != null && rate > CARB_LOG_MAX_G_H ? `That is over ${CARB_LOG_MAX_G_H} g/h of carbohydrate. Check the numbers.` : null;
 }
 
 export type GutLog = { durationS: number | null; carbsG: number | null; giScore: number | null; day: string };
@@ -94,9 +111,12 @@ export function gutTraining(logs: GutLog[]): GutTraining {
     .filter((l) => l.durationS != null && l.durationS >= GUT_MIN_SECONDS && l.giScore != null && carbsPerHour(l) != null)
     .sort((a, b) => (a.day < b.day ? 1 : a.day > b.day ? -1 : 0));
   const clean = scored.filter((l) => l.giScore! < GI_SYMPTOM_SCORE).map((l) => carbsPerHour(l)!);
-  const proved = clean.length ? Math.max(...clean) : null;
+  // Above 90 g/h only after more than one tolerated session there, and never above 120.
+  const above = clean.filter((r) => r > CARB_CEILING_G_H).length;
+  const top = clean.length ? Math.max(...clean) : null;
+  const proved = top == null ? null : Math.min(top, above >= ABOVE_CEILING_LOGS ? CARB_MAX_G_H : CARB_CEILING_G_H);
   const lastHadSymptoms = scored.length > 0 && scored[0].giScore! >= GI_SYMPTOM_SCORE;
-  const ceiling = proved != null && proved > CARB_CEILING_G_H ? proved : CARB_CEILING_G_H;
+  const ceiling = carbCeiling(proved);
   const raceTarget = proved != null ? Math.min(ceiling, Math.round((proved * RACE_SHARE_OF_TOLERANCE) / 5) * 5) : null;
   if (proved == null) {
     return {
@@ -119,7 +139,7 @@ export function gutTraining(logs: GutLog[]): GutTraining {
     };
   }
   // Past 90 g/h only from a tolerance already proved past it.
-  const next = proved >= CARB_CEILING_G_H ? proved : Math.min(CARB_CEILING_G_H, proved + GUT_STEP_G_H);
+  const next = proved >= CARB_CEILING_G_H ? Math.min(proved, CARB_MAX_G_H) : Math.min(CARB_CEILING_G_H, proved + GUT_STEP_G_H);
   return {
     proved,
     lastHadSymptoms,
@@ -183,11 +203,21 @@ const round50 = (n: number) => Math.round(n / 50) * 50;
 
 /** Fluid per hour: 50-80 % of the measured sweat rate, never above it; the default band without a test. */
 export function fluidPlan(sweatMlPerHour: number | null): Band {
-  if (sweatMlPerHour == null || sweatMlPerHour <= 0) {
+  if (sweatMlPerHour == null) {
     return {
       low: DEFAULT_FLUID[0],
       high: DEFAULT_FLUID[1],
       text: `Usually ${DEFAULT_FLUID[0]}-${DEFAULT_FLUID[1]} ml/h. Do a sweat test for your own number. ${FLUID_SAFETY}`,
+      evidence: "Consensus plus inference",
+    };
+  }
+  // A measured rate of 0, a gain, or one too small to split into a 50 ml band: no band above it.
+  if (sweatMlPerHour < 100) {
+    const high = Math.max(0, Math.floor(sweatMlPerHour / 10) * 10);
+    return {
+      low: 0,
+      high,
+      text: `Your test showed ${sweatMlPerHour <= 0 ? "no sweat loss" : `only ${sweatMlPerHour} ml/h of sweat loss`}. Drink to thirst, never more than you lose, and retest in race-like heat. ${FLUID_SAFETY}`,
       evidence: "Consensus plus inference",
     };
   }

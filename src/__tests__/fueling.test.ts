@@ -10,6 +10,7 @@ import {
   sodiumPlan,
   sweatRate,
   sweatTestError,
+  fuelLogError,
 } from "@/lib/utils/fueling";
 import { describe, expect, it } from "vitest";
 
@@ -70,7 +71,7 @@ describe("gutTraining", () => {
   });
   it("does not step past 90 g/h", () => {
     expect(gutTraining([log(170, 120, 0)]).next).toBe(90);
-    expect(gutTraining([log(200, 120, 0)]).next).toBe(100);
+    expect(gutTraining([log(200, 120, 0)]).next).toBe(90);
   });
   it("gives no carbs per hour without a duration", () => {
     expect(carbsPerHour({ carbsG: 50, durationS: null })).toBeNull();
@@ -141,5 +142,38 @@ describe("itemTotals", () => {
         { productId: 2, name: "Drink", count: 2, carbsG: 40, sodiumMg: 300, caffeineMg: null, fluidMl: 500 },
       ]),
     ).toEqual({ carbsG: 155, sodiumMg: 750, caffeineMg: null, fluidMl: 1000 });
+  });
+});
+
+describe("review fixes: carb caps and no-sweat tests", () => {
+  const log = (carbsG: number, minutes: number, giScore: number | null, day = "2026-11-01") => ({ carbsG, durationS: min(minutes), giScore, day });
+
+  it("never proves more than 120 g/h", () => {
+    const g = gutTraining([log(300, 90, 1, "2026-11-01"), log(300, 90, 1, "2026-11-02")]);
+    expect(g.proved).toBe(120);
+    expect(g.raceTarget).toBe(95);
+    expect(carbTarget(min(300), 200).ceiling).toBe(120);
+  });
+
+  it("needs more than one tolerated log above 90 g/h before the ceiling passes 90", () => {
+    expect(gutTraining([log(200, 120, 0)]).proved).toBe(90);
+    expect(gutTraining([log(200, 120, 0, "2026-11-01"), log(210, 120, 1, "2026-11-08")]).proved).toBe(105);
+  });
+
+  it("refuses a log above 150 g/h as a likely typo", () => {
+    expect(fuelLogError({ carbsG: 300, durationS: min(90) })).toContain("150 g/h");
+    expect(fuelLogError({ carbsG: 225, durationS: min(90) })).toBeNull();
+    expect(fuelLogError({ carbsG: 300, durationS: null })).toBeNull();
+  });
+
+  it("treats a measured sweat rate of 0, or one too small to split, as its own case", () => {
+    for (const rate of [0, 1, 31, -200]) {
+      const f = fluidPlan(rate);
+      expect(f.high).toBeLessThanOrEqual(Math.max(0, rate));
+      expect(f.low).toBe(0);
+      expect(f.text).toContain("Drink to thirst");
+      expect(f.text).toContain("retest");
+    }
+    expect(fluidPlan(null).high).toBe(900);
   });
 });

@@ -15,7 +15,7 @@ import { planWrite, PlanConflictError, PlanNotFoundError, PlanStateError, type P
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { caffeinePlan, FLUID_SAFETY, NUTRITION_DISCLAIMER, raceMorning } from "@/lib/utils/fueling";
-import { fuelRates, fuelSchedule, racePlan, type PlanDistance } from "@/lib/utils/race-plan";
+import { ASSUMED_SPEED, fuelRates, fuelSchedule, fuelTotals, LEG_METERS, racePlan, type PlanDistance } from "@/lib/utils/race-plan";
 import { currentThresholds } from "@/lib/utils/thresholds";
 import { racePlanInput, type RacePlanInput } from "@/lib/validators/nutrition";
 import { and, asc, eq, gte, isNull, sql } from "drizzle-orm";
@@ -118,18 +118,42 @@ export async function getRacePlan(userId: string, raceId: number) {
       carbsPerHour: carbs,
       carbsText:
         nutrition.gut.raceTarget == null
-          ? "No proved gut tolerance yet: the plan starts at 60 g/h on the bike. Train your gut first (Nutrition)."
-          : `Race at about 80 % of the ${nutrition.gut.proved} g/h you tolerated in training.`,
+          ? `No proved gut tolerance yet: the plan uses ${carbs.bike} g/h on the bike, the bottom of the usual band. Train your gut first (Nutrition), and never race on more than you tested.`
+          : carbs.bike < 60
+            ? `You tolerated ${nutrition.gut.proved} g/h in training, so the plan uses ${carbs.bike} g/h on the bike (80 % of it). Train your gut toward 60-80 g/h before race day.`
+            : `${carbs.bike} g/h on the bike: about 80 % of the ${nutrition.gut.proved} g/h you tolerated in training.`,
       carbsEvidence: "Coach convention; the bike and run split is inference",
       fluid: nutrition.fluid,
       sodium: nutrition.sodium,
       sweatTestOn: nutrition.test?.testedOn ?? null,
       schedule,
+      totals: fuelTotals(schedule),
       caffeine: inputs.caffeine ? caffeinePlan(weightKg) : null,
     },
     raceMorning: raceMorning(weightKg),
     safety: [NUTRITION_DISCLAIMER, FLUID_SAFETY, "Pacing is a guide from your thresholds, never a finish prediction."],
   } as const;
+}
+
+/**
+ * The bike time and athlete level the pacing rule needs, for the Garmin race
+ * page: the bike time from the plan of the next race of this distance (an A
+ * race first), else the assumed speed, as the race plan uses.
+ */
+export async function bikeContext(userId: string, distance: PlanDistance): Promise<{ bikeHours: number; firstTimer: boolean }> {
+  const today = toDateStr(await userToday(userId));
+  const races = (await plannableRaces(userId, today)).filter((r) => r.distance === distance);
+  const race = races.find((r) => r.priority === "A") ?? races[0];
+  const row = race ? await rowFor(race.id) : null;
+  const minutes = row && !row.deletedAt ? (row.plan as RacePlanInput).bikeMinutes : null;
+  const [profile] = await db
+    .select({ level: athleteProfiles.enduranceLevel })
+    .from(athleteProfiles)
+    .where(and(eq(athleteProfiles.userId, userId), isNull(athleteProfiles.deletedAt)));
+  return {
+    bikeHours: (minutes ?? LEG_METERS[distance].bike / ASSUMED_SPEED.bike / 60) / 60,
+    firstTimer: profile?.level == null || profile.level === "novice",
+  };
 }
 
 /** The next A race the user can plan, else the next plannable race. */

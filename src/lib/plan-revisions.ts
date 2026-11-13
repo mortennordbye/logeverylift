@@ -1645,8 +1645,16 @@ async function restoreSeasonTo(
       ...flag,
     })
     .where(eq(seasons.id, seasonId));
-  await tx.delete(seasonRaces).where(eq(seasonRaces.seasonId, seasonId));
-  if (target.length) await tx.insert(seasonRaces).values(target);
+  // Races that stay are updated in place, so rows keyed to a race (its race
+  // plan) keep it; only races the target lacks are removed.
+  const keep = new Set(target.map((r) => r.id));
+  const now = new Set(current.map((r) => r.id));
+  const gone = current.filter((r) => !keep.has(r.id)).map((r) => r.id);
+  if (gone.length) await tx.delete(seasonRaces).where(inArray(seasonRaces.id, gone));
+  for (const r of target) {
+    if (r.id != null && now.has(r.id)) await tx.update(seasonRaces).set(r).where(eq(seasonRaces.id, r.id));
+    else await tx.insert(seasonRaces).values(r);
+  }
   // Back from the trash: its phases hold no race of their own again.
   if (row.deletedAt) await claimSeasonPhases(w, seasonId);
   w.seasonsToSettle.add(seasonId);
@@ -2163,6 +2171,18 @@ export async function purgePlanRevisions(now = new Date()) {
     const ids = old.map((r) => r.id);
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, type), inArray(planRevisions.objectId, ids)));
     await db.delete(table).where(inArray(table.id, ids));
+  }
+  // A race plan whose race was removed waits, hidden, for a season restore to
+  // bring the race back; after the trash window it goes for good.
+  const orphanPlans = await db
+    .select({ id: racePlans.id })
+    .from(racePlans)
+    // plan-read: includes deleted (the purge reads every orphan)
+    .where(and(lt(racePlans.updatedAt, trashCut), sql`not exists (select 1 from ${seasonRaces} where ${seasonRaces.id} = ${racePlans.seasonRaceId})`));
+  if (orphanPlans.length) {
+    const ids = orphanPlans.map((r) => r.id);
+    await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "race_plan"), inArray(planRevisions.objectId, ids)));
+    await db.delete(racePlans).where(inArray(racePlans.id, ids));
   }
   // plan-read: includes deleted (the purge reads deleted rows on purpose)
   const oldCycles = await db.select({ id: trainingCycles.id }).from(trainingCycles).where(lt(trainingCycles.deletedAt, trashCut));

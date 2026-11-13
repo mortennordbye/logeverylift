@@ -105,7 +105,7 @@ what it describes, that package updates this file and the server instructions in
   session logged in the app (`workoutSessionId`) or one Garmin activity: carbohydrate, fluid,
   sodium, caffeine, the products used and a GI score (0 = no gut symptoms, 10 = worst). Gut
   training counts logs of 90 minutes or more with a GI score under 4; the race target is 80 % of
-  the highest. Fluid is 50-80 % of the measured sweat rate, never above it; sodium stays inside
+  the highest, never above 120 g/h (above 90 only after more than one tolerated session there). Fluid is 50-80 % of the measured sweat rate, never above it; sodium stays inside
   300-1,000 mg/h. A race plan stores only its inputs (start time, leg and transition times, swim
   offset, fuel interval, caffeine, race temperature); the timeline, pacing and fuel schedule are
   worked out on read. Fuel logs, products and sweat tests are logged data (no revision); a race

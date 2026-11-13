@@ -71,7 +71,10 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
 ### 2.2 Gut-training progress (`gutTraining` *new*)
 
 - Proved tolerance = the highest carbs/h in a fuel log of a session of 90 min or more with a GI
-  score under 4 (0 = no symptoms, 10 = worst). A log with no GI score does not count.
+  score under 4 (0 = no symptoms, 10 = worst). A log with no GI score does not count. Above
+  90 g/h it counts only when more than one tolerated log is above 90, and it is never above
+  120 g/h, the top studied intake (Podlogar 2022; 90-120 only after 6-10+ weeks without
+  symptoms). A log above 150 g/h is refused as a likely typo (`fuelLogError`).
 - Next step = proved + 10 g/h, every 1-2 weeks, 2-3 long sessions a week (Coach convention plus
   inference); never above 90 unless proved is already above 90. With no proved value the start
   is 60 g/h (bottom of the consensus band).
@@ -93,6 +96,8 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
 
 - Fluid/h = 50-80 % of the measured sweat rate, rounded to 50 ml, never above the sweat rate
   (Consensus plus inference). With no test: 400-900 ml/h, labelled, and a prompt to do a test.
+  A measured rate under 100 ml/h (0, or a weight gain) is its own case: drink to thirst, never
+  more than the measured loss, and retest; no default band is shown.
   The test nearest the race temperature is used when the plan has one; else the newest.
 - Sodium: 300-600 mg/h default, or 500-1,000 mg per litre drunk (Consensus for the variation,
   inference for the doses). With a lab sweat sodium value (mg/L): sodium/h = fluid/h x
@@ -106,13 +111,18 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
 
 - Bike: IF_target = sqrt(TSS_cap / (100 x bike hours)) (Coach convention; the rearrangement is
   inference). TSS_cap: full 250-300, half 170-180. Clamp: full 0.65-0.75 general, 0.65-0.70
-  first-timer; half 0.75-0.85 general, 0.70-0.75 first-timer. "First-timer" = athlete profile
+  first-timer; half 0.75-0.85 general, 0.70-0.75 first-timer. The top is rounded down, so it
+  never puts the bike over the cap (6 h: 0.70, not 0.71). When the cap needs less than the
+  band's floor (a slow rider: full at 8 h), the cap wins and the plan says why (research: slower
+  riders must ride a lower IF; 7 h gives about 0.63). "First-timer" = athlete profile
   `enduranceLevel` novice, or no level. Watts = IF x FTP. Bike hours come from the leg time
   (2.6); the plan iterates once (speed at the IF band is not known, so the user's bike time
   is the input). A guide, never a finish prediction.
-- Run: the research gives no run-off-the-bike pace share. The plan shows an HR ceiling at
-  85 % of run LTHR (the app's low-band top, under the research's VT1 estimate of about 89 %;
-  Inference) and, when a run threshold pace exists,
+- Heart-rate ceilings per distance (research zone table; the pairing with IF is inference):
+  full 85 % of LTHR on the bike and the run (the app's low-band top, under the research's VT1
+  estimate of about 89 %); half 93 % of bike LTHR and 94 % of run LTHR, the top of Friel
+  zone 3, which goes with IF 0.75-0.85 and 85-90 % of threshold speed.
+- Run: the research gives no run-off-the-bike pace share. The plan shows the HR ceiling and, when a run threshold pace exists,
   a guide pace band at 80-85 % (full) or 85-90 % (half) of threshold speed, labelled
   "Inference; not in the research reference". The same numbers the Garmin race page uses
   today, now in one shared rule (decision 3).
@@ -132,8 +142,11 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
   (no `Intl`, no `toLocale*`).
 - Fuel schedule: every 15 or 20 min (user pick, default 20) on the bike and run, none in the
   swim. Each row: clock time, leg, grams (rate x interval), fluid ml, sodium mg. Bike rate =
-  race target from 2.2 clamped to the bike band; run rate = 10 g/h lower, at least 50 (the run
-  band is 50-70, Consensus plus study; the split is inference). Totals per leg and per hour.
+  race target from 2.2, never above the ceiling and never lifted above it: with nothing proved,
+  60 g/h (the bottom of the band) and "train your gut first"; with a target under 60, the
+  target itself and "train your gut toward 60-80 g/h". Run rate = 10 g/h lower, inside 50-70
+  when the bike is at 60 or more (Consensus plus study; the split is inference). Totals per leg
+  (`fuelTotals`), in the app and over MCP.
 - Race morning: 1-3 g/kg carbs 2-3 h before the start; the two days before: 8-12 g/kg/day, low
   fibre (Consensus), with grams from the latest body weight.
 
@@ -150,7 +163,9 @@ The ceiling shown is 90 g/h unless the athlete's proved tolerance (2.2) is highe
   updated_at. With items, the totals are their sum unless typed. Logged data: no revisions.
 - `sweat_tests` *new*: id, user_id (cascade), tested_on, duration_s, pre_kg, post_kg, fluid_ml,
   urine_ml, temperature_c, sport, sweat_sodium_mg_l, notes, created_at. Logged data.
-- `race_plans` *new*: id, user_id (cascade), season_race_id (cascade, unique), plan jsonb
+- `race_plans` *new*: id, user_id (cascade), season_race_id (unique, no foreign key: a removed
+  race or a season restore must not delete the plan; it is hidden while its race is gone and
+  comes back with it; orphans older than 90 days are purged by `purgePlanRevisions`), plan jsonb
   (`racePlanInput` *new* Zod schema: startTime, leg time overrides, T1, T2, swim offset, fuel
   interval, caffeine on/off, race temperature, notes), version, deleted_at, created_at,
   updated_at. Plan data: object type `race_plan` in the revision layer (T5), version check (T9).
@@ -238,12 +253,15 @@ needs `expectedVersion` once it exists.
   `INSERT INTO fuel_logs (user_id, garmin_activity_id, duration_s, carbs_g, fluid_ml, ...)
   SELECT ... FROM garmin_fuel_logs LEFT JOIN garmin_activities ...` with
   `ON CONFLICT DO NOTHING`. `garmin_fuel_logs` stays.
-- Rollback: deploy the previous image and run `DROP TABLE race_plans, sweat_tests, fuel_logs,
-  fuel_products;` and remove the journal entry. Entries made after the deploy (new fuel logs,
-  sweat tests, products, race plans and their `race_plan` revisions:
-  `DELETE FROM plan_revisions WHERE object_type = 'race_plan'`) are lost. Garmin fuel logs
-  made before the deploy are safe in the old table; Garmin logs written after the deploy are
-  lost.
+- Rollback: deploy the previous image, then run
+  `DROP TABLE race_plans, sweat_tests, fuel_logs, fuel_products;`,
+  `DELETE FROM plan_revisions WHERE object_type = 'race_plan';` and
+  `DELETE FROM drizzle.__drizzle_migrations WHERE created_at = 1794574240726;` (the `when` of
+  0089 in `drizzle/meta/_journal.json`), so a later deploy applies 0089 again. Lost: every fuel
+  log on an app session, sweat test, product and race plan made after the deploy. Garmin fuel
+  logs: the old table still holds the values from before the deploy, so an edit made after the
+  deploy is lost (the old value shows), a log cleared after the deploy comes back, and a log
+  first made after the deploy is lost.
 - Next release: drop `garmin_fuel_logs` (BACKLOG entry).
 
 ## 10. Lifter risk
@@ -291,18 +309,26 @@ recommendations; the owner may change them.
 
 ## 13. Where the build differs from the brief
 
-- **HR ceiling 85 %, not 89 %, of LTHR.** The Garmin race page already used 85 % (the top of the
-  app's low band), and one shared rule must give one number. 85 % is the safer of the two.
-- **Full-distance general bike band 0.65-0.75,** not 0.60-0.75: the low end follows the
-  first-timer advice (0.65), and nothing in the research supports riding a full below it on
-  purpose. The top 0.75 is the TSS-cap formula at about 5.3 h.
-- **The Garmin race page changed numbers** (decision 3): bike half 75-82 % became 75-85 % and
-  full 68-75 % became 65-75 % of FTP (`PACING` in `src/lib/garmin/analytics/race.ts` now reads
-  `BIKE_IF` and `RUN_SPEED_SHARE` from `src/lib/utils/race-plan.ts`).
+- **HR ceilings per distance.** Full 85 % of LTHR, not 89 % (the safer number, and the one the
+  Garmin page used). Half 93 % (bike) and 94 % (run): 85 % contradicted the half's own watts.
+- **Full-distance general bike band 0.65-0.75,** not 0.60-0.75: 0.65 is the floor for a rider
+  whose bike time allows it. A slow rider goes below it when the TSS cap needs that (research:
+  7 h gives about 0.63), and the plan says why. The top 0.75 is the TSS-cap formula at about
+  5.3 h.
+- **The Garmin race page uses the plan's rule** (decision 3): `pacingGuide` in
+  `src/lib/garmin/analytics/race.ts` calls `bikeGuide` and `runGuide` with the expected bike
+  time (the race plan's, else the assumed speed) and the athlete level (`bikeContext` in
+  `src/lib/race-plans.ts`), so both show the same watts and ceilings for the same thresholds.
 - **The Garmin fuel card** uses the shared fuel form (sodium, caffeine, GI score, notes; no
   products, since products need the endurance switch). It still needs only the activity to be
   the user's, as before.
 - **The run guide pace** shows only with a run threshold pace; the leg time then comes from the
   middle of the guide band. Without it the run leg uses the assumed 6:30/km.
+- **Review fixes (2026-11-13):** the 120 g/h cap and the 150 g/h typo check (2.2), the
+  no-sweat case (2.4), no lift of race carbs above a low tolerance (2.6), the TSS cap below the
+  band floor (2.5), per-distance HR ceilings, the sodium label on the race plan, race plans that
+  survive a season undo or a removed race (3; `restoreSeasonTo` now updates races in place),
+  stored totals kept when a log's products cannot show (the fuel form), and the rollback note
+  (9).
 - **Plan corrections:** `docs/plans/garmin-insights-design.md` names the old bands; a note there
   points to this brief. E1 and E2 are `done` in the plan and the README.

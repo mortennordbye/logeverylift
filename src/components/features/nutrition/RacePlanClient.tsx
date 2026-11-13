@@ -38,6 +38,7 @@ export type RacePlanView =
         sodium: Band;
         sweatTestOn: string | null;
         schedule: FuelRow[];
+        totals: Record<"bike" | "run", { carbsG: number; fluidMl: number; sodiumMg: number }>;
         caffeine: CaffeinePlan | null;
       };
       raceMorning: { text: string; evidence: string }[];
@@ -131,6 +132,10 @@ export function RacePlanClient({ plan }: { plan: RacePlanView }) {
           </p>
           <p className="text-sm text-muted-foreground">{p.fuel.fluid.text}</p>
           <Evidence label={p.fuel.fluid.evidence} />
+          <p className="text-sm text-muted-foreground" data-testid="sodium-text">
+            {p.fuel.sodium.text}
+          </p>
+          <Evidence label={p.fuel.sodium.evidence} />
           {p.fuel.caffeine && (
             <>
               <p className="text-sm pt-2">{p.fuel.caffeine.text}</p>
@@ -160,6 +165,13 @@ export function RacePlanClient({ plan }: { plan: RacePlanView }) {
             ))}
           </tbody>
         </table>
+        <div className="mx-4 mt-2 space-y-0.5 text-sm" data-testid="fuel-totals">
+          {(["bike", "run"] as const).map((leg) => (
+            <p key={leg}>
+              {LEG_NAME[leg]} in all: {p.fuel.totals[leg].carbsG} g carbohydrate, {p.fuel.totals[leg].fluidMl} ml fluid, {p.fuel.totals[leg].sodiumMg} mg sodium
+            </p>
+          ))}
+        </div>
       </section>
 
       <section>

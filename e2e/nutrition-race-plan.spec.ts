@@ -96,8 +96,10 @@ test("log fuel for an app session, then plan the A race", async ({ page }, testI
   // Swim 40 min, then T1 (5 min default for a half): the bike starts at 08:45.
   await expect(timeline.getByRole("row").nth(2)).toContainText("08:45");
   await expect(page.getByTestId("bike-pacing")).toContainText("188-188 W");
-  // Race fuel at 80 % of 70 g/h = 55 g/h, raised to the 60 g/h floor on the bike.
-  await expect(page.getByTestId("fuel-schedule")).toContainText("20 g");
+  // Race fuel at 80 % of 70 g/h = 55 g/h on the bike, never lifted above that: 18 g per 20 minutes.
+  await expect(page.getByTestId("fuel-schedule")).toContainText("18 g");
+  await expect(page.getByTestId("fuel-totals")).toContainText("Bike in all");
+  await expect(page.getByTestId("sodium-text")).toContainText("mg/h");
 
   const [row] = await db.select().from(racePlans).where(eq(racePlans.seasonRaceId, raceId));
   expect(row).toMatchObject({ version: 1, plan: { startTime: "08:00", bikeMinutes: 150, swimMinutes: 40, fuelIntervalMinutes: 20, caffeine: false } });

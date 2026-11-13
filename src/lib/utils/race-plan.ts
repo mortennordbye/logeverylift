@@ -9,7 +9,7 @@
  * Clock times are plain "HH:MM" strings: no Intl, no toLocale*.
  */
 
-import { CARB_CEILING_G_H, type Evidence } from "./fueling";
+import { carbCeiling, type Evidence } from "./fueling";
 
 export type PlanDistance = "full" | "half";
 export const PLAN_DISTANCES: readonly PlanDistance[] = ["full", "half"];
@@ -33,8 +33,17 @@ export const BIKE_IF: Record<PlanDistance, { general: [number, number]; firstTim
 export const BIKE_TSS_CAP: Record<PlanDistance, [number, number]> = { full: [250, 300], half: [170, 180] };
 /** Run guide as a share of threshold (or critical) speed. Not in the research: inference. */
 export const RUN_SPEED_SHARE: Record<PlanDistance, [number, number]> = { full: [0.8, 0.85], half: [0.85, 0.9] };
-/** Heart-rate ceiling as a share of LTHR: the top of the app's low band, under the research's VT1 estimate of about 89 %. */
-export const HR_CEILING_SHARE = 0.85;
+/**
+ * Heart-rate ceiling as a share of LTHR, per distance and sport. Full: 85 %,
+ * the top of the app's low band, under the research's VT1 estimate of about
+ * 89 %. Half: the top of Friel zone 3 (bike 93 %, run 94 %), the zone that
+ * goes with IF 0.75-0.85 and 85-90 % of threshold speed (research zone table;
+ * the pairing is inference).
+ */
+export const HR_CEILING: Record<PlanDistance, { bike: number; run: number }> = {
+  full: { bike: 0.85, run: 0.85 },
+  half: { bike: 0.93, run: 0.94 },
+};
 
 export const DEFAULT_TRANSITIONS: Record<PlanDistance, { t1: number; t2: number }> = { full: { t1: 8, t2: 5 }, half: { t1: 5, t2: 3 } };
 /** Assumed speeds when there is neither an override nor a threshold (inference). m/s. */
@@ -74,22 +83,33 @@ export function hoursMinutes(minutes: number): string {
 
 export type BikeGuide = { ifRange: [number, number]; watts: [number, number] | null; hrCeiling: number | null; text: string; evidence: Evidence };
 
-/** Bike IF from the TSS cap and the bike time, kept inside the distance's band. */
+/** Round down to 0.01, so a rounded IF never crosses the TSS cap. */
+const floor2 = (x: number) => Math.floor(x * 100 + 1e-9) / 100;
+
+/**
+ * Bike IF from the TSS cap and the bike time, inside the distance's band. The
+ * top never puts the bike over the cap. A slow rider whose cap needs less than
+ * the band's floor gets the lower IF the cap allows (research: slower riders
+ * must ride a lower IF; 7 h gives about 0.63), and the text says why.
+ */
 export function bikeGuide(distance: PlanDistance, bikeHours: number, ftp: number | null, lthrBike: number | null, firstTimer: boolean): BikeGuide {
   const band = firstTimer ? BIKE_IF[distance].firstTimer : BIKE_IF[distance].general;
   const [capLo, capHi] = BIKE_TSS_CAP[distance];
-  const clamp = (x: number) => Math.min(band[1], Math.max(band[0], x));
-  const lo = clamp(Math.sqrt(capLo / (100 * bikeHours)));
-  const hi = clamp(Math.sqrt(capHi / (100 * bikeHours)));
-  const ifRange: [number, number] = [Math.round(lo * 100) / 100, Math.round(hi * 100) / 100];
+  const capTop = Math.sqrt(capHi / (100 * bikeHours));
+  const capLow = Math.sqrt(capLo / (100 * bikeHours));
+  const underFloor = capTop < band[0];
+  const hi = floor2(Math.min(band[1], capTop));
+  const lo = underFloor ? floor2(capLow) : Math.min(hi, floor2(Math.max(band[0], capLow)));
+  const ifRange: [number, number] = [lo, hi];
   const watts: [number, number] | null = ftp ? [Math.round(ftp * ifRange[0]), Math.round(ftp * ifRange[1])] : null;
+  const why = underFloor ? ` Below the usual ${band[0].toFixed(2)}: at this bike time the TSS cap of ${capHi} needs a lower IF.` : "";
   return {
     ifRange,
     watts,
-    hrCeiling: lthrBike ? Math.round(lthrBike * HR_CEILING_SHARE) : null,
+    hrCeiling: lthrBike ? Math.round(lthrBike * HR_CEILING[distance].bike) : null,
     text: ftp
-      ? `IF ${ifRange[0].toFixed(2)}-${ifRange[1].toFixed(2)}: ${watts![0]}-${watts![1]} W for about ${hoursMinutes(bikeHours * 60)} on the bike.`
-      : `IF ${ifRange[0].toFixed(2)}-${ifRange[1].toFixed(2)}. Add your FTP for watts.`,
+      ? `IF ${ifRange[0].toFixed(2)}-${ifRange[1].toFixed(2)}: ${watts![0]}-${watts![1]} W for about ${hoursMinutes(bikeHours * 60)} on the bike.${why}`
+      : `IF ${ifRange[0].toFixed(2)}-${ifRange[1].toFixed(2)}. Add your FTP for watts.${why}`,
     evidence: "Coach convention; the formula rearrangement is inference",
   };
 }
@@ -98,7 +118,7 @@ export type RunGuide = { speed: [number, number] | null; hrCeiling: number | nul
 
 export function runGuide(distance: PlanDistance, runSpeed: number | null, lthrRun: number | null): RunGuide {
   const share = RUN_SPEED_SHARE[distance];
-  const hrCeiling = lthrRun ? Math.round(lthrRun * HR_CEILING_SHARE) : null;
+  const hrCeiling = lthrRun ? Math.round(lthrRun * HR_CEILING[distance].run) : null;
   const speed: [number, number] | null = runSpeed ? [runSpeed * share[0], runSpeed * share[1]] : null;
   const parts = [hrCeiling ? `Keep heart rate under ${hrCeiling} bpm.` : "Add your run threshold heart rate for a ceiling."];
   if (!runSpeed) parts.push("Add your run threshold pace for a guide pace.");
@@ -119,12 +139,27 @@ export type FuelRow = { clock: string; leg: "bike" | "run"; carbsG: number; flui
 
 export type RatePlan = { carbs: { bike: number; run: number }; fluid: [number, number]; sodium: [number, number] };
 
-/** Bike rate from the race target (60-80 g/h untrained, up to the proved ceiling); run 10 g/h lower, at least 50. */
+/**
+ * Bike rate: the race target up to the ceiling, or 60 g/h (the bottom of the
+ * consensus band) with nothing proved. Never above a low proved tolerance:
+ * a target under 60 stays as it is, and the plan says to train the gut. Run
+ * 10 g/h lower, inside 50-70 when the bike is at 60 or more.
+ */
 export function fuelRates(raceTarget: number | null, proved: number | null): { bike: number; run: number } {
-  const ceiling = proved != null && proved > CARB_CEILING_G_H ? proved : CARB_CEILING_G_H;
-  const bike = raceTarget == null ? 60 : Math.min(ceiling, Math.max(60, raceTarget));
-  const run = Math.min(70, Math.max(50, bike - 10));
+  const bike = raceTarget == null ? 60 : Math.min(carbCeiling(proved), raceTarget);
+  const run = bike >= 60 ? Math.min(70, Math.max(50, bike - 10)) : Math.max(0, bike - 10);
   return { bike, run };
+}
+
+/** Carbs, fluid and sodium per leg of a fuel schedule. */
+export function fuelTotals(rows: FuelRow[]): Record<"bike" | "run", { carbsG: number; fluidMl: number; sodiumMg: number }> {
+  const out = { bike: { carbsG: 0, fluidMl: 0, sodiumMg: 0 }, run: { carbsG: 0, fluidMl: 0, sodiumMg: 0 } };
+  for (const r of rows) {
+    out[r.leg].carbsG += r.carbsG;
+    out[r.leg].fluidMl += r.fluidMl;
+    out[r.leg].sodiumMg += r.sodiumMg;
+  }
+  return out;
 }
 
 /** One row per interval on the bike and the run (none in the swim), at the middle of the fluid and sodium bands. */

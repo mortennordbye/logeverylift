@@ -49,6 +49,28 @@ describe("FuelForm", () => {
     expect(screen.getByRole("button", { name: "2" }).getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("keeps the stored totals when a log's products cannot show (Garmin card, deleted product)", async () => {
+    const onSave = vi.fn<(v: FuelValues) => Promise<{ success: true; data: null }>>(async () => ({ success: true, data: null }));
+    const initial = { carbsG: 100, sodiumMg: 200, fluidMl: null, items: [{ productId: 9, name: "Old gel", count: 4, carbsG: 25, sodiumMg: 50, caffeineMg: null, fluidMl: null }] };
+    const { unmount } = render(<FuelForm idPrefix="t" initial={initial} onSave={onSave} />);
+    expect((screen.getByLabelText("Carbohydrate") as HTMLInputElement).value).toBe("100");
+    expect((screen.getByLabelText("Sodium") as HTMLInputElement).value).toBe("200");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    });
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ carbsG: 100, sodiumMg: 200, items: null }));
+    unmount();
+
+    // One product still exists, one was deleted: the totals stay as typed, the known product keeps its count.
+    render(<FuelForm idPrefix="u" initial={{ ...initial, items: [...initial.items, { productId: 1, name: "Gel", count: 1, carbsG: 25, sodiumMg: 50, caffeineMg: null, fluidMl: null }] }} products={[gel]} onSave={onSave} />);
+    expect((screen.getByLabelText("Carbohydrate") as HTMLInputElement).value).toBe("100");
+    expect(screen.getByTestId("count-1").textContent).toBe("1");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    });
+    expect(onSave).toHaveBeenLastCalledWith(expect.objectContaining({ carbsG: 100, items: [{ productId: 1, count: 1 }] }));
+  });
+
   it("does not save a negative number", () => {
     render(<FuelForm idPrefix="t" initial={null} onSave={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Carbohydrate"), { target: { value: "-5" } });

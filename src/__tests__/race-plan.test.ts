@@ -1,4 +1,4 @@
-import { addClock, bikeGuide, fuelRates, fuelSchedule, hoursMinutes, racePlan, runGuide, swimGuide } from "@/lib/utils/race-plan";
+import { addClock, bikeGuide, fuelRates, fuelSchedule, fuelTotals, hoursMinutes, racePlan, runGuide, swimGuide } from "@/lib/utils/race-plan";
 import { describe, expect, it } from "vitest";
 
 const none = { ftp: null, lthrRun: null, lthrBike: null, runSpeed: null, swimCss: null };
@@ -15,16 +15,16 @@ describe("bikeGuide", () => {
   it("follows the TSS-cap formula inside the full band", () => {
     // 6 h, cap 250-300: IF 0.645-0.707; the band floor lifts the low end to 0.65.
     const g = bikeGuide("full", 6, 200, null, false);
-    expect(g.ifRange).toEqual([0.65, 0.71]);
-    expect(g.watts).toEqual([130, 142]);
+    expect(g.ifRange).toEqual([0.65, 0.7]);
+    expect(g.watts).toEqual([130, 140]);
   });
   it("keeps a first-timer inside 0.65-0.70 on a full", () => {
     expect(bikeGuide("full", 5, 200, null, true).ifRange).toEqual([0.7, 0.7]);
   });
   it("keeps a half inside 0.75-0.85, and 0.70-0.75 for a first-timer", () => {
-    expect(bikeGuide("half", 2.5, 250, 160, false).ifRange).toEqual([0.82, 0.85]);
+    expect(bikeGuide("half", 2.5, 250, 160, false).ifRange).toEqual([0.82, 0.84]);
     expect(bikeGuide("half", 3, 250, 160, true).ifRange).toEqual([0.75, 0.75]);
-    expect(bikeGuide("half", 3, 250, 160, true).hrCeiling).toBe(136);
+    expect(bikeGuide("half", 3, 250, 160, true).hrCeiling).toBe(149);
   });
   it("gives no watts without FTP", () => {
     const g = bikeGuide("half", 3, null, null, false);
@@ -37,7 +37,7 @@ describe("run and swim guides", () => {
   it("labels the run pace as inference and gives an HR ceiling", () => {
     const r = runGuide("half", 4, 170);
     expect(r.speed![0]).toBeCloseTo(3.4);
-    expect(r.hrCeiling).toBe(145);
+    expect(r.hrCeiling).toBe(160);
     expect(r.evidence).toContain("Inference");
   });
   it("adds the offset to CSS pace", () => {
@@ -90,5 +90,36 @@ describe("fuel schedule", () => {
     ]);
     expect(rows[0].fluidMl).toBe(200);
     expect(rows[0].sodiumMg).toBe(150);
+  });
+});
+
+describe("review fixes: TSS cap, carbs and HR ceilings", () => {
+  const tss = (hours: number, ifv: number) => hours * ifv * ifv * 100;
+
+  it("never puts the top of the bike IF over the TSS cap at 6, 7 and 8 h", () => {
+    expect(bikeGuide("full", 6, 200, null, false).ifRange).toEqual([0.65, 0.7]);
+    expect(bikeGuide("full", 7, 200, null, false).ifRange).toEqual([0.65, 0.65]);
+    const slow = bikeGuide("full", 8, 200, null, false);
+    expect(slow.ifRange).toEqual([0.55, 0.61]);
+    expect(slow.text).toContain("TSS cap");
+    for (const h of [6, 7, 8]) expect(tss(h, bikeGuide("full", h, 200, null, false).ifRange[1])).toBeLessThanOrEqual(300);
+  });
+
+  it("never lifts race carbs above a low proved tolerance", () => {
+    expect(fuelRates(30, 40)).toEqual({ bike: 30, run: 20 });
+    expect(fuelRates(55, 70)).toEqual({ bike: 55, run: 45 });
+  });
+
+  it("sets the heart-rate ceiling per distance: a half rides and runs at zone 3", () => {
+    expect(bikeGuide("half", 3, 250, 160, false).hrCeiling).toBe(149);
+    expect(runGuide("half", 4, 170).hrCeiling).toBe(160);
+    expect(bikeGuide("full", 6, 250, 160, false).hrCeiling).toBe(136);
+    expect(runGuide("full", 4, 170).hrCeiling).toBe(145);
+  });
+
+  it("totals the fuel schedule per leg", () => {
+    const p = racePlan("half", { startTime: "07:00", swimMinutes: 40, bikeMinutes: 60, runMinutes: 40 }, none, false);
+    const rows = fuelSchedule(p.timeline, 20, { carbs: { bike: 60, run: 50 }, fluid: [400, 800], sodium: [300, 600] });
+    expect(fuelTotals(rows)).toEqual({ bike: { carbsG: 60, fluidMl: 600, sodiumMg: 450 }, run: { carbsG: 34, fluidMl: 400, sodiumMg: 300 } });
   });
 });

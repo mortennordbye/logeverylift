@@ -1,5 +1,5 @@
 {
-  "id": "d191a600-7d7c-4cc0-8a59-662a173d645e",
+  "id": "28df7418-2a5b-48da-9810-12367e3b0163",
   "prevId": "14c79b12-65a6-4380-a743-db97180af932",
   "version": "7",
   "dialect": "postgresql",
@@ -7634,19 +7634,6 @@
           "tableTo": "user",
           "columnsFrom": [
             "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "race_plans_season_race_id_season_races_id_fk": {
-          "name": "race_plans_season_race_id_season_races_id_fk",
-          "tableFrom": "race_plans",
-          "tableTo": "season_races",
-          "columnsFrom": [
-            "season_race_id"
           ],
           "columnsTo": [
             "id"

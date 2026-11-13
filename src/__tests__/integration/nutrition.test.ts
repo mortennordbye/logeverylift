@@ -20,6 +20,7 @@ import { scopedServer } from "@/lib/mcp/scopes";
 import { registerNutritionTools } from "@/lib/mcp/tools/nutrition";
 import { restoreChangeSet, restoreRevision } from "@/lib/plan-revisions";
 import { getRacePlan } from "@/lib/race-plans";
+import { addRace, createSeason, removeRace, updateSeason } from "@/lib/seasons";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { readFileSync } from "node:fs";
@@ -222,13 +223,59 @@ describe("race plans", () => {
     // Half, first-timer (no profile): IF 0.70-0.75 at 2.5 h.
     expect(p.plan.bike.ifRange).toEqual([0.75, 0.75]);
     expect(p.plan.bike.watts).toEqual([188, 188]);
-    expect(p.plan.run.hrCeiling).toBe(145);
+    expect(p.plan.run.hrCeiling).toBe(160); // a half runs at the top of zone 3: 94 % of 170
     // Race at 80 % of 80 g/h = 65 g/h on the bike, 55 on the run.
     expect(p.fuel.carbsPerHour).toEqual({ bike: 65, run: 55 });
     expect([p.fuel.fluid.low, p.fuel.fluid.high]).toEqual([500, 800]);
     expect(p.fuel.schedule[0]).toMatchObject({ leg: "bike", carbsG: 22 });
     expect(p.safety[0]).toContain("not medical advice");
     expect(p.plan.timeline[0]).toEqual({ leg: "swim", start: "08:00", minutes: expect.any(Number), source: "assumed" });
+  });
+});
+
+describe("review fixes", () => {
+  it("refuses a fuel log above 150 g/h as a likely typo", async () => {
+    const sid = await rideSession(me, 90);
+    expect(await saveFuelLogAction({ workoutSessionId: sid, carbsG: 300, giScore: 1 })).toEqual({
+      success: false,
+      error: "That is over 150 g/h of carbohydrate. Check the numbers.",
+    });
+    expect(await db.select().from(fuelLogs).where(eq(fuelLogs.userId, me))).toEqual([]);
+  });
+
+  it("keeps race carbs at a low proved tolerance, and the text says the same number", async () => {
+    const rid = await race(me);
+    const sid = await rideSession(me, 120);
+    await saveFuelLogAction({ workoutSessionId: sid, carbsG: 80, giScore: 0 }); // 40 g/h
+    const p = (await getRacePlan(me, rid))!;
+    if (!p.distance) throw new Error("unsupported");
+    expect(p.fuel.carbsPerHour).toEqual({ bike: 30, run: 20 });
+    expect(p.fuel.carbsText).toContain("30 g/h");
+    expect(p.fuel.carbsText).toContain("Train your gut");
+    expect(p.fuel.totals.bike.carbsG).toBe(p.fuel.schedule.filter((r) => r.leg === "bike").reduce((s, r) => s + r.carbsG, 0));
+  });
+
+  it("a season undo and a removed race keep the race plan", async () => {
+    const ctx = { userId: me, writer: "user" as const };
+    const { season } = await createSeason(ctx, { name: "2027", startDate: "2026-11-01", endDate: "2027-09-30" });
+    const added = await addRace(ctx, season.id, { name: "Half", raceDate: "2027-08-20", discipline: "triathlon", distance: "half", priority: "A" });
+    const raceId = (added.out as { id: number }).id;
+    await saveRacePlanAction({ raceId, change: { bikeMinutes: 170 } });
+
+    // Change the season, then undo it: the races are restored, the plan stays.
+    const [before] = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "season"), eq(planRevisions.objectId, season.id))).orderBy(desc(planRevisions.id));
+    await updateSeason(ctx, season.id, { name: "2027 season" });
+    await restoreRevision(ctx, before.id);
+    expect((await getRacePlan(me, raceId))!.inputs).toEqual({ bikeMinutes: 170 });
+
+    // Remove the race: the plan is hidden. Restore the season: race and plan come back.
+    const [withRace] = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "season"), eq(planRevisions.objectId, season.id))).orderBy(desc(planRevisions.id));
+    await removeRace(ctx, season.id, raceId);
+    expect(await getRacePlan(me, raceId)).toBeNull();
+    await restoreRevision(ctx, withRace.id);
+    const back = (await getRacePlan(me, raceId))!;
+    expect(back.inputs).toEqual({ bikeMinutes: 170 });
+    expect(back.version).toBe(1);
   });
 });
 
@@ -241,7 +288,9 @@ describe("MCP tools", () => {
     expect(r.data.safety).toContain("not medical advice");
     expect(r.data.gutTraining).toMatchObject({ proved: 70, next: 80, raceTarget: 55 });
     expect(r.data.fuelLogs).toEqual([expect.objectContaining({ workoutSessionId: sid, carbsPerHour: 70, giScore: 0 })]);
-    expect(r.data.carbRules).toHaveLength(3);
+    expect(r.data.carbRules).toHaveLength(4);
+    expect(r.data.carbRules[3]).toMatchObject({ fromMinutes: 151, whenProvedGPerHour: 90 });
+    expect(r.data.carbRules[3].text).toContain("up to 90 g/h");
   });
 
   it("log_fuel, manage_fuel_products and manage_sweat_tests write the user's own rows only", async () => {
@@ -268,6 +317,8 @@ describe("MCP tools", () => {
     const read = await t("get_race_plan", {});
     expect(read.data.race.id).toBe(a);
     expect(read.data.version).toBeNull();
+    expect(read.data.fuel.totals.bike.carbsG).toBeGreaterThan(0);
+    expect(read.data.fuel.sodium.evidence).toContain("Consensus");
     expect((await t("update_race_plan", { raceId: a, runMinutes: 120, reason: "Expected run time" })).data).toMatchObject({ saved: true, version: 1 });
     expect((await t("update_race_plan", { raceId: a, runMinutes: 110, reason: "x" })).raw).toContain("expectedVersion is required");
     expect((await t("update_race_plan", { raceId: a, runMinutes: 110, reason: "x", expectedVersion: 7 })).raw).toContain("Conflict");

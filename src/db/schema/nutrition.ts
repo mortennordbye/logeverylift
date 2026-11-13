@@ -15,7 +15,7 @@
 
 import { sql } from "drizzle-orm";
 import { bigint, check, date, index, integer, jsonb, pgTable, real, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
-import { seasonRaces } from "./seasons";
+
 import { users } from "./users";
 import { workoutSessions } from "./workout-sessions";
 
@@ -101,9 +101,11 @@ export const racePlans = pgTable(
     userId: text("user_id")
       .references(() => users.id, { onDelete: "cascade" })
       .notNull(),
-    seasonRaceId: integer("season_race_id")
-      .references(() => seasonRaces.id, { onDelete: "cascade" })
-      .notNull(),
+    // No foreign key on purpose: a removed race, or a season restore that
+    // re-inserts its races, must not delete the plan. The plan is hidden while
+    // its race is gone and comes back with it (same id); readers join the race.
+    // An orphan plan is purged with the revision rule (purgePlanRevisions).
+    seasonRaceId: integer("season_race_id").notNull(),
     // racePlanInput in src/lib/validators/nutrition.ts.
     plan: jsonb("plan").notNull(),
     version: integer("version").notNull().default(1),

@@ -32,10 +32,17 @@ import { z } from "zod";
 const SAFETY = `${NUTRITION_DISCLAIMER} ${FLUID_SAFETY} Pass these numbers on as guides with their evidence labels, never as a prescription.`;
 
 /** The carbs rule by session length, as the model reads it. */
-const CARB_RULES = [0, 90, 121].map((fromMinutes) => {
-  const t = carbTarget(fromMinutes * 60);
-  return { fromMinutes, text: t.text, evidence: t.evidence };
-});
+const CARB_RULES = [
+  ...[0, 90, 121].map((fromMinutes) => {
+    const t = carbTarget(fromMinutes * 60);
+    return { fromMinutes, text: t.text, evidence: t.evidence };
+  }),
+  // Over 2.5 h with a gut proved at 90 g/h; past 90 only from more than one tolerated session there, never past 120.
+  (() => {
+    const t = carbTarget(151 * 60, 90);
+    return { fromMinutes: 151, whenProvedGPerHour: 90, text: t.text, evidence: t.evidence };
+  })(),
+];
 
 export function registerNutritionTools(server: McpServer, userId: string, clientId?: string, opts: { garmin?: boolean } = {}) {
   server.registerTool(
