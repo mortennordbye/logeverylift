@@ -2,17 +2,17 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { friendships, inviteTokens, users } from "../src/db/schema";
 import { LEGAL_VERSION } from "../src/lib/constants/legal";
-import { e2eUser } from "./fixtures/env";
+import { e2eUser, signUpClientIp } from "./fixtures/env";
 import { expect, test } from "./fixtures/test";
 import { testDb } from "./fixtures/reset";
 
-// The invitee is signed out, on a device of their own: a separate client IP
-// keeps their sign-in clear of Better Auth's per-IP limit, which the workers'
-// own logins in auth.setup.ts have just used. The token belongs to the
-// worker's e2e account.
+// The invitee is signed out, on a device of their own, with a client IP of
+// their own (signUpClientIp). The token belongs to the worker's e2e account.
 test.use({
   storageState: { cookies: [], origins: [] },
-  extraHTTPHeaders: { "x-forwarded-for": "203.0.113.7" },
+  extraHTTPHeaders: async ({}, provide, testInfo) => {
+    await provide({ "x-forwarded-for": signUpClientIp(testInfo) });
+  },
 });
 
 test("an invite link opens the front page and keeps the token through sign-up", async ({ page }, testInfo) => {

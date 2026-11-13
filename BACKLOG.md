@@ -33,6 +33,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 ### Time zone and units: places still on the server zone or metric
 - **What:** The user's time zone and endurance units (`src/lib/utils/user-date.ts`, `src/lib/utils/units.ts`) cover the weekly sync, the cycle views, cycle start dates, the home page, the workout session date, and the endurance screens. These still use the server's zone or metric:
   - "this week" sums in metrics (`src/lib/actions/metrics.ts:178`, `:210`), friends (`src/lib/actions/friends.ts:642`, `:753`), the AI generation day limit (`src/lib/actions/ai-generate.ts:74`) and the admin demo data (`lastMonday`, `src/lib/actions/admin.ts:35`);
+  - the training streak (`computeStreakWeeks`, `src/lib/utils/training-streak.ts`), which counts UTC weeks because its week starts come from Postgres `date_trunc('week', startTime)` on UTC timestamps (`src/lib/actions/metrics.ts:1407`, `src/lib/mcp/tools/workouts.ts:358`); per-user weeks need those queries cut in the user's zone too;
   - the Garmin pages, which take today from the Garmin profile's zone (`garminToday`, `src/lib/garmin/today.ts:11`) and show metric;
   - friends' set labels, built on the server in metric (`src/lib/actions/friends.ts:1163`);
   - progression step labels for distance ("+0.5km", `src/components/features/WorkoutSetsClient.tsx:1439`, and the rule text at `src/lib/utils/progression.ts:1101`);

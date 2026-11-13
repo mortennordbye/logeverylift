@@ -3,6 +3,7 @@
 import { db } from "@/db";
 import { inviteTokens, users } from "@/db/schema";
 import { auth } from "@/lib/auth";
+import { consentRecord, termsConsentSchema } from "@/lib/consent";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { ForbiddenError, requireAdmin } from "@/lib/utils/session";
 import type { ActionResult } from "@/types/workout";
@@ -36,6 +37,8 @@ export async function registerWithToken(
   name: string,
   email: string,
   password: string,
+  // The boxes ticked on the sign-up form ({ version, terms, healthData }).
+  consent?: unknown,
 ): Promise<ActionResult> {
   const ip = await callerIp();
   const blocked = checkRateLimit(`invite-register:${ip}`, TOKEN_REGISTER_LIMIT);
@@ -68,6 +71,10 @@ export async function registerWithToken(
       return { success: false, error: "This invite token has already been used" };
     }
 
+    // Stored with the account, as open sign-up does (src/lib/auth.ts), so a
+    // failed request after this can't lose it. Without it, home asks.
+    const consented = termsConsentSchema.safeParse(consent).success;
+
     // Create the user via the admin plugin. Called without headers/request,
     // createUser skips its admin-session check — the invite token is the
     // gate. Open sign-up also exists (auth.ts); this path is kept so invited
@@ -78,6 +85,7 @@ export async function registerWithToken(
         name: parsed.data.name,
         email: parsed.data.email,
         password: parsed.data.password,
+        data: consented ? consentRecord() : {},
       },
     });
 

@@ -3,7 +3,6 @@
 import { ConsentChecks, type ConsentState } from "@/components/features/ConsentChecks";
 import { redeemFriendCode } from "@/lib/actions/friend-invites";
 import { registerWithToken } from "@/lib/actions/invite-tokens";
-import { acceptTerms } from "@/lib/actions/legal";
 import { LEGAL_VERSION } from "@/lib/constants/legal";
 import { authClient } from "@/lib/auth-client";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -26,13 +25,11 @@ export function SignupForm() {
   const [error, setError] = useState("");
   const [consent, setConsent] = useState<ConsentState>({ terms: false, healthData: false });
 
-  // The account exists and is signed in by now. If this write fails, the home
-  // screen asks again (src/app/consent), so it never blocks the sign-up.
-  async function recordConsent() {
-    await callAction(acceptTerms({ version: LEGAL_VERSION, ...consent })).catch(() => {});
-  }
+  // Sent with the new account and stored with it (src/lib/auth.ts), never in a
+  // request of its own after sign-in, which could fail unseen.
+  const consentRecord = { version: LEGAL_VERSION, ...consent };
 
-  // Also after sign-in. A failure only means starting without the friend.
+  // After sign-in. A failure only means starting without the friend.
   async function connectInviter() {
     if (friendCode) await callAction(redeemFriendCode({ code: friendCode })).catch(() => {});
   }
@@ -49,7 +46,7 @@ export function SignupForm() {
     setError("");
 
     if (inviteToken) {
-      const result = await callAction(registerWithToken(inviteToken, name, email, password));
+      const result = await callAction(registerWithToken(inviteToken, name, email, password, consentRecord));
       if (!result.success) {
         setError(result.error);
         setLoading(false);
@@ -60,20 +57,20 @@ export function SignupForm() {
         password,
       });
       // Account was created; fall back to signing in manually.
-      if (!signInResult.error) {
-        await recordConsent();
-        await connectInviter();
-      }
+      if (!signInResult.error) await connectInviter();
       window.location.href = signInResult.error ? "/login" : "/";
       return;
     }
 
-    // Signs the new user in on success (better-auth autoSignIn).
-    const result = await authClient.signUp.email({
+    // Signs the new user in on success (better-auth autoSignIn). The client's
+    // type doesn't know `consent`; the server reads it from the body.
+    const body: Parameters<typeof authClient.signUp.email>[0] & { consent: typeof consentRecord } = {
       name: name.trim(),
       email: email.trim().toLowerCase(),
       password,
-    });
+      consent: consentRecord,
+    };
+    const result = await authClient.signUp.email(body);
 
     if (result.error) {
       setError(
@@ -87,7 +84,6 @@ export function SignupForm() {
       return;
     }
 
-    await recordConsent();
     await connectInviter();
     window.location.href = "/";
   }

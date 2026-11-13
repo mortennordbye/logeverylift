@@ -14,6 +14,7 @@ import {
   verifications,
 } from "@/db/schema";
 import { handOverSharedCustomExercises } from "@/lib/account-data";
+import { consentRecord, termsConsentSchema } from "@/lib/consent";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { env, trustedOrigins } from "@/lib/env";
 import { betterAuth } from "better-auth";
@@ -55,6 +56,13 @@ export const auth = betterAuth({
       // Written server-side only (registerWithToken, admin createUser);
       // input: false keeps a public sign-up from claiming an inviter.
       invitedById: { type: "string", required: false, input: false },
+      // The consent record (src/lib/consent.ts). Declared so the sign-up hook
+      // below can write it with the new user; input: false refuses it from
+      // the client, which sends the ticked boxes as `consent` instead.
+      termsVersion: { type: "string", required: false, input: false, returned: false },
+      policySeenVersion: { type: "string", required: false, input: false, returned: false },
+      termsAcceptedAt: { type: "date", required: false, input: false, returned: false },
+      healthConsentAt: { type: "date", required: false, input: false, returned: false },
     },
     // Self-service deletion from Account (POST /api/auth/delete-user). The
     // client sends the password, which Better Auth checks.
@@ -70,6 +78,29 @@ export const auth = betterAuth({
   },
   databaseHooks: {
     user: {
+      // Open sign-up stores the consent the form collected in the same insert
+      // as the account. Recorded in a request after sign-up, it could fail or
+      // be cut off unseen, and home then asked a user who had just ticked both
+      // boxes to accept again. Without a valid `consent`, the account is
+      // created without it and home asks for it (src/app/consent).
+      //
+      // Admin create-user passes its `data` straight to the insert. Only the
+      // server's own call, registerWithToken, may record consent through it
+      // (it has no request or headers); an admin must not give consent on
+      // someone else's behalf.
+      create: {
+        before: async (user, ctx) => {
+          if (ctx?.path === "/admin/create-user" && (ctx.request || ctx.headers)) {
+            return {
+              data: { ...user, termsVersion: null, policySeenVersion: null, termsAcceptedAt: null, healthConsentAt: null },
+            };
+          }
+          if (ctx?.path !== "/sign-up/email") return;
+          const consent = termsConsentSchema.safeParse((ctx.body as { consent?: unknown } | undefined)?.consent);
+          if (!consent.success) return;
+          return { data: { ...user, ...consentRecord() } };
+        },
+      },
       // Runs for both self-deletion and admin removeUser.
       delete: { before: async (user) => handOverSharedCustomExercises(user.id) },
     },
