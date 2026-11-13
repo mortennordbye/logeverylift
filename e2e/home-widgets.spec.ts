@@ -2,20 +2,10 @@ import { eq } from "drizzle-orm";
 import { users } from "../src/db/schema";
 import type { StoredHomeLayout } from "../src/lib/home/stored-layout";
 import { WIDGETS, widgetDef, type WidgetId } from "../src/lib/home/widgets";
-import { e2eUser, signUpClientIp } from "./fixtures/env";
+import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
 import { trackActions } from "./helpers";
-
-// Better Auth rate limits the session check per client IP, and every worker
-// shares 127.0.0.1. These specs reload often; a client IP of their own keeps
-// that load off the limit the rest of the suite shares (consent.spec.ts fails
-// on any 429).
-test.use({
-  extraHTTPHeaders: async ({}, provide, testInfo) => {
-    await provide({ "x-forwarded-for": signUpClientIp(testInfo) });
-  },
-});
 
 /**
  * E5 in docs/home-widgets-audit.md, section 7: every widget the e2e user can

@@ -1,5 +1,5 @@
 import { test as base, expect } from "@playwright/test";
-import { authFile, e2eUser } from "./env";
+import { authFile, e2eUser, signUpClientIp } from "./env";
 import { closeResetPool, resetE2EUser } from "./reset";
 
 /**
@@ -31,7 +31,18 @@ export const test = base.extend<{ resetData: void; failOnPageError: void }, { re
   // (Chromium gets --mute-audio in playwright.config.ts). Each audio context's
   // `destination` becomes a gain node at 0 in front of the real one, so the
   // app's audio code still runs in full and nothing reaches the speakers.
-  context: async ({ context }, provide) => {
+  //
+  // Better Auth also rate limits per client IP (100 session checks per 10 s),
+  // and every worker reaches the server from 127.0.0.1, so a busy run could
+  // push one spec's session check into a 429. Each test's auth calls carry a
+  // client IP of its own. A spec that sets its own (signup, invite) keeps it.
+  context: async ({ context }, provide, testInfo) => {
+    const ip = signUpClientIp(testInfo);
+    await context.route("**/api/auth/**", (route) => {
+      const headers = route.request().headers();
+      if (headers["x-forwarded-for"]) return route.continue();
+      return route.continue({ headers: { ...headers, "x-forwarded-for": ip } });
+    });
     await context.addInitScript(() => {
       const Base = (window as unknown as { BaseAudioContext?: typeof BaseAudioContext }).BaseAudioContext;
       const real = Base ? Object.getOwnPropertyDescriptor(Base.prototype, "destination")?.get : undefined;

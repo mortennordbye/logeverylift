@@ -18,7 +18,8 @@ export function authFile(workerIndex: number): string {
  * A client IP of this test's own, for specs that sign up signed out. Sign-up
  * is limited per IP (src/app/api/auth/[...all]/route.ts); one IP per test,
  * browser and repeat keeps `--repeat-each` under that limit, and clear of the
- * workers' own logins in auth.setup.ts.
+ * workers' own logins in auth.setup.ts. The shared fixture (fixtures/test.ts)
+ * also sends every test's auth calls from it, for Better Auth's own limit.
  */
 export function signUpClientIp(testInfo: { testId: string; repeatEachIndex: number }): string {
   let hash = 0;
