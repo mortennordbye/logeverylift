@@ -13,7 +13,7 @@ the merged briefs [`ai-coach.md`](ai-coach.md) (D2 part 1), [`seasons.md`](seaso
 built in parallel; its brief is `docs/plans/endurance-app.md` on its branch. Section 13 lists what
 this PR needs from D1's final code.
 
-Status: brief, 2026-11-13. The findings describe `main` at d03b371 (after PR #231); every
+Status: building, 2026-11-13. The hub decided the open questions on 2026-11-13 (section 17, "Decisions"). The findings describe `main` at d03b371 (after PR #231); every
 `file:line` in them was opened then. Open questions are in section 17; the owner is away and the
 hub decides them from the recommendations.
 
@@ -591,3 +591,33 @@ says so.
     only the readiness card.
 25. **Long-run cap from app runs?** Recommend: yes, the longest of Garmin and app runs, so users
     without Garmin are checked (plan, D2 part 2).
+
+### Decisions
+
+Decided by the hub on 2026-11-13, owner may change. The hub took every recommendation above.
+
+1. The ramp uses endurance CTL (swim + bike + run), not total CTL.
+2. Ramp limits: 8 a week, 6 when CTL at the week's start is 45 or less.
+3. The ramp is not checked while fitness is calibrating.
+4. Program sessions get planned load by the mapping in 3.1.1, labelled Inference, partial sessions counted.
+5. The readiness flag is HRV below the band on the day and the day before, and the resting HR flag on the day.
+6. No readiness without Garmin in this PR; BACKLOG entry "Readiness without Garmin".
+7. The readiness rule and the suggestion run in a taper too, with the taper line.
+8. The window of `hard_after_low_readiness` is the flagged day and the day after, from today on.
+9. The swap replaces today's hard session with an easy version; it never moves the hard session.
+10. The easy session keeps the planned time, at most 60 minutes.
+11. The swap's writer is `apply` for the user's tap and `assistant` over MCP.
+12. No dismiss button and nothing stored for a dismissal.
+13. Heavy legs as in 3.3: 3+ working sets, loaded squat or hinge or lower-body jumps, 12 reps or fewer.
+14. Key sessions for heavy legs are bike and run sessions with effective priority key, bricks by their parts; not swims.
+15. On the same day, a lift before the key session counts; a lift after it does not.
+16. Planned and done sessions count for heavy legs; skipped and missed do not.
+17. The strength rule runs only on cycles with a phase type and with a strength goal.
+18. A strength session is 3 or more working sets on strength exercises.
+19. The strength rule checks both directions from the default.
+20. Sync warnings show in the history row, on the active cycle's page and as `limitWarnings` in `get_training_cycle`.
+21. The Garmin volume apply gets warnings, like the sync.
+22. `resume` in the app is not checked; over MCP it gets the full check with override.
+23. Rotation cycles are not checked for the ramp, heavy legs, strength or readiness; the swap needs a weekday cycle.
+24. The D3 lines show in the cycle calendar and the session detail; home gets only the readiness card.
+25. The long-run cap uses the longest of Garmin and app runs.
