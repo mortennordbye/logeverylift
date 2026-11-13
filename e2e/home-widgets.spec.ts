@@ -2,9 +2,14 @@ import { eq } from "drizzle-orm";
 import { users } from "../src/db/schema";
 import type { StoredHomeLayout } from "../src/lib/home/stored-layout";
 import { WIDGETS, widgetDef, type WidgetId } from "../src/lib/home/widgets";
+import { SIZE_LABEL } from "../src/lib/home/widgets/types";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
+
+// Edit mode jiggles the widgets, and Playwright waits for an element to stop
+// moving before it clicks. The jiggle has its own test, with motion on.
+test.use({ contextOptions: { reducedMotion: "reduce" } });
 import { trackActions } from "./helpers";
 
 /**
@@ -46,17 +51,22 @@ test("every available widget, at every size, from the gallery", async ({ page },
   for (const [n, id] of ADDABLE.entries()) {
     if (n > 0) await page.getByRole("button", { name: "Add widget" }).click();
     await gallery.getByRole("button", { name: `Add ${widgetDef(id).title}` }).click();
-    await expect(page.locator(`[data-testid="edit-row"][data-edit-row="${id}"]`)).toBeVisible();
+    await expect(page.locator(`[data-edit-tile="${id}"]`)).toBeVisible();
   }
 
   for (let round = 0; round < ROUNDS; round++) {
     if (round > 0) await page.getByRole("button", { name: "Edit home" }).click();
     for (const id of ADDABLE) {
-      if (widgetDef(id).sizes.length > 1) await page.getByLabel(`Size of ${widgetDef(id).title}`).selectOption(sizeIn(id, round));
+      if (widgetDef(id).sizes.length < 2) continue;
+      await page.locator(`[data-edit-tile="${id}"] [data-control="tile"]`).click();
+      const sheet = page.getByTestId("widget-sheet");
+      await sheet.getByRole("button", { name: SIZE_LABEL[sizeIn(id, round)], exact: true }).click();
+      await sheet.getByRole("button", { name: "Close" }).click();
+      await expect(sheet).toBeHidden();
     }
     const settle = trackActions(page);
     await page.getByRole("button", { name: "Done" }).click();
-    await expect(page.getByTestId("home-edit-list")).toBeHidden();
+    await expect(page.getByTestId("home-edit-grid")).toBeHidden();
     await settle();
     await expect
       .poll(async () => (await layout())?.items.filter((i) => ADDABLE.includes(i.id as WidgetId)).map((i) => [i.id, i.size, i.hidden]))

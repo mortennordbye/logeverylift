@@ -5,6 +5,10 @@ import type { StoredHomeLayout } from "../src/lib/home/stored-layout";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
+
+// Edit mode jiggles the widgets, and Playwright waits for an element to stop
+// moving before it clicks. The jiggle has its own test, with motion on.
+test.use({ contextOptions: { reducedMotion: "reduce" } });
 import { dismissReadinessSheet, trackActions } from "./helpers";
 
 /**
@@ -54,12 +58,25 @@ async function lifter(parallelIndex: number) {
 const layoutOf = async (userId: string) =>
   (await testDb().select({ l: users.homeLayout }).from(users).where(eq(users.id, userId)))[0].l as StoredHomeLayout | null;
 
-const editRows = (page: Page) => page.getByTestId("edit-row");
+const grid = (page: Page) => page.getByTestId("home-edit-grid");
+const tile = (page: Page, id: string) => page.locator(`[data-edit-tile="${id}"] [data-control="tile"]`);
+const sheet = (page: Page) => page.getByTestId("widget-sheet");
+/** The widgets in the edit grid, in order. */
+const tiles = (page: Page) =>
+  page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>("[data-edit-tile]")).map((el) => el.dataset.editTile));
+
+/** Tap a widget in the edit grid, press a button in its sheet, close the sheet. */
+async function inSheet(page: Page, id: string, button: string) {
+  await tile(page, id).click();
+  await sheet(page).getByRole("button", { name: button, exact: true }).click();
+  await sheet(page).getByRole("button", { name: "Close" }).click();
+  await expect(sheet(page)).toBeHidden();
+}
 
 async function done(page: Page) {
   const settle = trackActions(page);
   await page.getByRole("button", { name: "Done" }).click();
-  await expect(page.getByTestId("home-edit-list")).toBeHidden();
+  await expect(grid(page)).toBeHidden();
   await settle();
 }
 
@@ -67,14 +84,17 @@ test("E1: move, hide and resize persist; Today at S still starts; Reset restores
   const { userId, progId } = await lifter(testInfo.parallelIndex);
   await page.goto("/");
   await page.getByRole("button", { name: "Edit home" }).click();
-  await expect(page.getByTestId("home-edit-list")).toBeVisible();
+  await expect(grid(page)).toBeVisible();
 
-  await page.getByRole("button", { name: "Move Week up" }).click();
-  await expect(editRows(page).nth(1)).toHaveAttribute("data-edit-row", "week");
+  await inSheet(page, "week", "Move up");
+  await expect.poll(() => tiles(page)).toEqual(["title", "week", "today"]);
   await page.getByRole("button", { name: "Hide Week" }).click();
-  await page.getByLabel("Size of Today").selectOption("s");
+  await inSheet(page, "today", "Small");
   // Today holds the start buttons: it cannot be hidden.
   await expect(page.getByRole("button", { name: "Hide Today" })).toHaveCount(0);
+  await tile(page, "today").click();
+  await expect(sheet(page).getByRole("button", { name: "Hide" })).toHaveCount(0);
+  await sheet(page).getByRole("button", { name: "Close" }).click();
   await done(page);
 
   await expect.poll(async () => (await layoutOf(userId))?.items.slice(0, 3)).toEqual([
@@ -98,7 +118,7 @@ test("E1: move, hide and resize persist; Today at S still starts; Reset restores
   page.once("dialog", (d) => void d.accept());
   const settle = trackActions(page);
   await page.getByRole("button", { name: "Reset" }).click();
-  await expect(page.getByTestId("home-edit-list")).toBeHidden();
+  await expect(grid(page)).toBeHidden();
   await settle();
   await expect.poll(() => layoutOf(userId)).toBeNull();
   await page.reload();
@@ -111,7 +131,7 @@ test("E2: without a cycle the pinned start bar stays after a layout change", asy
   await expect(page.getByTestId("start-bar")).toBeVisible();
   await page.getByRole("button", { name: "Edit home" }).click();
   await expect(page.getByTestId("start-bar")).toHaveCount(0);
-  await page.getByLabel("Size of Today").selectOption("m");
+  await inSheet(page, "today", "Medium");
   await page.getByRole("button", { name: "Hide Week" }).click();
   await done(page);
   await expect.poll(async () => (await layoutOf(userId)) !== null).toBe(true);
@@ -138,7 +158,7 @@ test("E3: Endurance today below Week still starts the guided player", async ({ p
   await page.goto("/");
   await expect(page.getByTestId("endurance-today")).toBeVisible();
   await page.getByRole("button", { name: "Edit home" }).click();
-  await page.getByRole("button", { name: "Move Endurance today down" }).click();
+  await inSheet(page, "enduranceToday", "Move down");
   await expect(page.getByRole("button", { name: "Hide Endurance today" })).toHaveCount(0);
   await done(page);
 
@@ -159,12 +179,12 @@ test("E4: offline, Done keeps the draft and says so; back online it saves", asyn
   const { userId } = await lifter(testInfo.parallelIndex);
   await page.goto("/");
   await page.getByRole("button", { name: "Edit home" }).click();
-  await page.getByRole("button", { name: "Move Week up" }).click();
+  await inSheet(page, "week", "Move up");
 
   await context.setOffline(true);
   await page.getByRole("button", { name: "Done" }).click();
   await expect(page.getByTestId("home-save-error")).toHaveText("You're offline. Try again when connected.");
-  await expect(editRows(page).nth(1)).toHaveAttribute("data-edit-row", "week");
+  expect(await tiles(page)).toEqual(["title", "week", "today"]);
   expect(await layoutOf(userId)).toBeNull();
 
   await context.setOffline(false);
@@ -192,5 +212,68 @@ test("the Edit home pencil sits in the title row; with the title hidden it moves
   await expect(atEnd).toHaveCount(1);
   await expect(page.getByRole("button", { name: "Edit home" })).toHaveCount(1);
   await atEnd.click();
-  await expect(page.getByTestId("home-edit-list")).toBeVisible();
+  await expect(grid(page)).toBeVisible();
+});
+
+test("a long press on a widget enters edit mode; its release opens nothing", async ({ page }, testInfo) => {
+  await lifter(testInfo.parallelIndex);
+  await page.goto("/");
+  const week = page.getByTestId("week-strip");
+  await expect(week).toBeVisible();
+  const box = (await week.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  // Held, not moved: edit mode comes on its own after about half a second.
+  await expect(grid(page)).toBeVisible();
+  await page.mouse.up();
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("drag a widget in the grid; the order persists after a reload", async ({ page }, testInfo) => {
+  const { userId } = await lifter(testInfo.parallelIndex);
+  // dnd-kit swallows every click for 50 ms after a drop (the one the release
+  // makes). The clock lets the test step past that instead of waiting.
+  await page.clock.install();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Edit home" }).click();
+  await expect.poll(() => tiles(page)).toEqual(["title", "today", "week"]);
+
+  const from = (await tile(page, "week").boundingBox())!;
+  const to = (await tile(page, "today").boundingBox())!;
+  // Press near Week's top edge: on a short screen the rest of it is below the fold.
+  await page.mouse.move(from.x + from.width / 2, from.y + 40);
+  await page.mouse.down();
+  // Past the 8 px activation distance, then onto Today, in steps.
+  await page.mouse.move(from.x + from.width / 2, from.y + 20, { steps: 5 });
+  await page.mouse.move(to.x + to.width / 2, to.y + 30, { steps: 15 });
+  await expect.poll(() => tiles(page)).toEqual(["title", "week", "today"]);
+  await page.mouse.up();
+  await page.clock.runFor(100);
+  await expect(sheet(page)).toHaveCount(0);
+  expect(await tiles(page)).toEqual(["title", "week", "today"]);
+  await done(page);
+  await expect.poll(async () => (await layoutOf(userId))?.items.slice(0, 3).map((i) => i.id)).toEqual(["title", "week", "today"]);
+
+  await page.reload();
+  const order = await page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>("[data-testid]"))
+      .map((el) => el.dataset.testid)
+      .filter((id) => id === "week-strip" || id === "today-card"),
+  );
+  expect(order).toEqual(["week-strip", "today-card"]);
+});
+
+test("widgets jiggle in edit mode, and not with reduced motion", async ({ page }, testInfo) => {
+  await lifter(testInfo.parallelIndex);
+  const jiggle = () => page.locator('[data-edit-tile="week"] .home-jiggle').evaluate((el) => getComputedStyle(el).animationName);
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Edit home" }).click();
+  expect(await jiggle()).toBe("home-jiggle");
+  await page.getByRole("button", { name: "Cancel" }).click();
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.getByRole("button", { name: "Edit home" }).click();
+  expect(await jiggle()).toBe("none");
 });

@@ -5,15 +5,19 @@ import { afterTrainingRow, toRows, type ResolvedItem } from "@/lib/home/layout";
 import { editReducer, initEdit, movableItems, type EditAction } from "@/lib/home/layout-reducer";
 import type { StoredHomeItem } from "@/lib/home/stored-layout";
 import { widgetDef, type WidgetId } from "@/lib/home/widgets";
+import { SIZE_LABEL } from "@/lib/home/widgets/types";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Pencil, Plus, RotateCcw, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
-import { HomeEditList, type Previews, type RowControl } from "./HomeEditList";
+import { HomeEditGrid, type Previews } from "./HomeEditGrid";
 import { WidgetGallerySheet } from "./WidgetGallerySheet";
+import { WidgetSheet } from "./WidgetSheet";
+import { useLongPress } from "./use-long-press";
 
 /**
- * The home screen's layout and its edit mode (docs/home-widgets-audit.md, 6.9).
+ * The home screen's layout and its edit mode (docs/home-widgets-audit.md, 6.9
+ * and decision 17).
  *
  * Outside edit mode widget content arrives rendered from the server in
  * `slots`, and this only places it: two consecutive S widgets share a row, M
@@ -21,10 +25,11 @@ import { WidgetGallerySheet } from "./WidgetGallerySheet";
  * when its def says so (Week), as the old page did. The content scrolls when
  * it is taller than the screen.
  *
- * In edit mode the page shows the edit list instead; notices, the start bar
- * and widget content are not rendered, and the edit bar covers the bottom nav
- * until Done or Cancel, so a navigation cannot drop the draft. The page keys
- * this component on the saved layout, so a save resets it to the new layout.
+ * Edit mode starts from the pencil or a long-press on a widget, and shows the
+ * same grid with the widgets jiggling (HomeEditGrid). Notices and the start
+ * bar are not shown, and a bar covers the bottom nav until Done or Cancel, so
+ * a navigation cannot drop the draft. The page keys this component on the
+ * saved layout, so a save resets it to the new layout.
  */
 export type HomeGridProps = {
   items: ResolvedItem[];
@@ -48,13 +53,16 @@ export type HomeGridProps = {
 const PENCIL =
   "h-11 w-11 inline-flex items-center justify-center rounded-full text-muted-foreground active:opacity-60 active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
 
-const ENTER_TEXT = "Editing home. Drag or use Move up and Move down to reorder.";
+const BAR_BTN =
+  "min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 px-2 text-sm font-medium active:opacity-60 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl";
+
+const ENTER_TEXT = "Editing home. Drag a widget to move it, or tap it for its size, Move up and Move down.";
 
 /** Focus "Edit home" on the next mount: a save remounts this component with the new layout. */
 let focusEditOnMount = false;
 
 type Status = { kind: "error"; text: string } | { kind: "conflict" } | null;
-type Focus = { id: WidgetId; control: RowControl } | null;
+type Focus = { id: WidgetId; control: "tile" | "hide" } | null;
 
 function toStored(items: ResolvedItem[]): StoredHomeItem[] {
   return items.map(({ id, size, hidden, settings }) => (settings ? { id, size, hidden, settings } : { id, size, hidden }));
@@ -66,25 +74,27 @@ export function HomeGrid(props: HomeGridProps) {
   const [editing, setEditing] = useState(false);
   const [state, dispatch] = useReducer(editReducer, items, initEdit);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [sheetId, setSheetId] = useState<WidgetId | null>(null);
   const [status, setStatus] = useState<Status>(null);
   const [saving, setSaving] = useState(false);
   const [say, setSay] = useState("");
   const pendingFocus = useRef<Focus>(null);
-  const openedFrom = useRef<"title" | "end">("title");
+  const openedFrom = useRef<"title" | "end" | "press">("title");
   const editTitleRef = useRef<HTMLButtonElement>(null);
   const editEndRef = useRef<HTMLButtonElement>(null);
   const focusEdit = useRef(false);
+  const blockClicksUntil = useRef(0);
   const dirty = state.past.length > 0;
 
-  // Focus after a change: the moved row's control, the next row after a hide.
+  // Focus after a change: the moved widget, the next widget after a hide.
   useEffect(() => {
     const f = pendingFocus.current;
     if (!f) return;
     pendingFocus.current = null;
-    document.querySelector<HTMLElement>(`[data-edit-row="${f.id}"] [data-control="${f.control}"]`)?.focus();
+    document.querySelector<HTMLElement>(`[data-edit-tile="${f.id}"] [data-control="${f.control}"]`)?.focus();
   });
 
-  // Back on the button that opened edit mode, after Done or Cancel.
+  // Back on the pencil after Done or Cancel.
   useEffect(() => {
     if (focusEditOnMount) {
       focusEditOnMount = false;
@@ -94,7 +104,7 @@ export function HomeGrid(props: HomeGridProps) {
   useEffect(() => {
     if (!focusEdit.current) return;
     focusEdit.current = false;
-    ((openedFrom.current === "title" ? editTitleRef.current : editEndRef.current) ?? editEndRef.current)?.focus();
+    (editTitleRef.current ?? editEndRef.current)?.focus();
   });
 
   // A reload or a closed tab would drop the draft: ask first.
@@ -111,19 +121,22 @@ export function HomeGrid(props: HomeGridProps) {
     if (text) setSay(text);
   }
 
-  function enter(from: "title" | "end") {
+  function enter(from: "title" | "end" | "press") {
     openedFrom.current = from;
+    // The release of a long-press must not open a widget's sheet.
+    if (from === "press") blockClicksUntil.current = performance.now() + 600;
     dispatch({ type: "load", items });
     setStatus(null);
     setEditing(true);
     setSay(ENTER_TEXT);
     const first = movableItems(items)[0];
-    pendingFocus.current = first ? { id: first.id, control: "handle" } : null;
+    pendingFocus.current = first ? { id: first.id, control: "tile" } : null;
   }
 
   function leave() {
     setEditing(false);
     setGalleryOpen(false);
+    setSheetId(null);
     setStatus(null);
     focusEdit.current = true;
   }
@@ -163,6 +176,8 @@ export function HomeGrid(props: HomeGridProps) {
     void save(null, false);
   }
 
+  const longPress = useLongPress(() => enter("press"));
+
   const liveRegion = (
     <p className="sr-only" aria-live="polite" data-testid="home-announce">
       {say}
@@ -170,26 +185,53 @@ export function HomeGrid(props: HomeGridProps) {
   );
 
   if (editing) {
-    const hidden = state.items.filter((i) => i.hidden && widgetDef(i.id).kind === "widget");
+    const hidden = state.items.filter((i) => i.hidden);
+    const movable = movableItems(state.items);
+    const titleOf = (id: WidgetId) => widgetDef(id).title;
+    const savedSize = new Map(items.filter((i) => !i.hidden).map((i) => [i.id, i.size]));
+    // The real widget at the size it was saved at; its static preview at any other size.
+    const content = (item: ResolvedItem): ReactNode => {
+      const real = item.id === "title" ? title : slots[item.id];
+      return savedSize.get(item.id) === item.size && real != null ? real : previews[item.id]?.[item.size];
+    };
+    const sheetItem = sheetId ? (state.items.find((i) => i.id === sheetId && !i.hidden) ?? null) : null;
+    const nextAfter = (id: WidgetId): Focus => {
+      const n = movable.findIndex((i) => i.id === id);
+      const next = movable[n + 1] ?? movable[n - 1];
+      return next && next.id !== id ? { id: next.id, control: "tile" } : null;
+    };
+    const hide = (id: WidgetId) => act({ type: "hide", id }, nextAfter(id), `${titleOf(id)} hidden`);
+
     return (
       <>
         {liveRegion}
-        <div className="px-4 pt-4 pb-2 shrink-0 flex items-center justify-between gap-2">
-          <button type="button" onClick={cancel} className="min-h-11 min-w-11 px-2 text-base text-muted-foreground active:opacity-60">
-            Cancel
-          </button>
-          <h1 className="text-lg font-semibold">Edit home</h1>
-          <button
-            type="button"
-            onClick={done}
-            disabled={saving}
-            className="min-h-11 min-w-11 px-2 text-base font-semibold text-primary active:opacity-60 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Done"}
-          </button>
+        <div className="px-4 pt-4 shrink-0 space-y-1">
+          <div className="flex items-center justify-between gap-2">
+            <button type="button" onClick={cancel} className={`${BAR_BTN} text-base text-muted-foreground`}>
+              Cancel
+            </button>
+            <h1 className="text-lg font-semibold">Edit home</h1>
+            <button type="button" onClick={done} disabled={saving} className={`${BAR_BTN} text-base font-semibold text-primary`}>
+              {saving ? "Saving…" : "Done"}
+            </button>
+          </div>
+          <div className="flex items-center justify-center gap-1">
+            <button type="button" onClick={() => setGalleryOpen(true)} disabled={hidden.length === 0} className={`${BAR_BTN} text-primary`}>
+              <Plus className="h-4 w-4" aria-hidden />
+              Add widget
+            </button>
+            <button type="button" onClick={() => act({ type: "undo" }, null, "Undone")} disabled={!dirty} className={BAR_BTN}>
+              <Undo2 className="h-4 w-4" aria-hidden />
+              Undo
+            </button>
+            <button type="button" onClick={reset} disabled={saving} className={`${BAR_BTN} text-destructive`}>
+              <RotateCcw className="h-4 w-4" aria-hidden />
+              Reset
+            </button>
+          </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4 space-y-3">
           {status?.kind === "error" && (
             <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive" data-testid="home-save-error">
               {status.text}
@@ -212,45 +254,45 @@ export function HomeGrid(props: HomeGridProps) {
               </div>
             </div>
           )}
-          <HomeEditList items={state.items} previews={previews} act={act} />
+          <HomeEditGrid
+            items={state.items}
+            content={content}
+            onOpen={setSheetId}
+            onHide={hide}
+            onMoveTo={(id, index) => act({ type: "moveTo", id, index }, { id, control: "tile" })}
+            clickBlocked={(now) => now < blockClicksUntil.current}
+          />
         </div>
 
-        {/* Covers the bottom nav: same height, above it. */}
+        {/* Covers the bottom nav, so a navigation cannot drop the draft. */}
         <div
           className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background"
           style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
           data-testid="home-edit-bar"
         >
-          <div className="flex items-center justify-around h-16 max-w-lg mx-auto">
-            <button
-              type="button"
-              onClick={() => setGalleryOpen(true)}
-              disabled={hidden.length === 0}
-              className="min-h-11 min-w-11 inline-flex items-center gap-1.5 px-3 text-sm font-medium text-primary active:opacity-60 disabled:opacity-40"
-            >
-              <Plus className="h-4 w-4" aria-hidden />
-              Add widget
-            </button>
-            <button
-              type="button"
-              onClick={() => act({ type: "undo" }, null, "Undone")}
-              disabled={!dirty}
-              className="min-h-11 min-w-11 inline-flex items-center gap-1.5 px-3 text-sm font-medium active:opacity-60 disabled:opacity-40"
-            >
-              <Undo2 className="h-4 w-4" aria-hidden />
-              Undo
-            </button>
-            <button
-              type="button"
-              onClick={reset}
-              disabled={saving}
-              className="min-h-11 min-w-11 inline-flex items-center gap-1.5 px-3 text-sm font-medium text-destructive active:opacity-60 disabled:opacity-40"
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden />
-              Reset
-            </button>
-          </div>
+          <p className="flex items-center justify-center h-16 max-w-lg mx-auto px-4 text-center text-xs text-muted-foreground">
+            Drag a widget to move it. Tap it for its size and more.
+          </p>
         </div>
+
+        <WidgetSheet
+          item={sheetItem}
+          index={sheetItem ? movable.findIndex((i) => i.id === sheetItem.id) : -1}
+          count={movable.length}
+          onClose={() => {
+            if (sheetId) pendingFocus.current = { id: sheetId, control: "tile" };
+            setSheetId(null);
+          }}
+          onResize={(id, size) => act({ type: "resize", id, size }, null, `${titleOf(id)} is now ${SIZE_LABEL[size].toLowerCase()}`)}
+          onMove={(id, dir) => {
+            const n = movable.findIndex((i) => i.id === id) + (dir === "up" ? 0 : 2);
+            act({ type: dir === "up" ? "moveUp" : "moveDown", id }, null, `${titleOf(id)} moved to position ${n} of ${movable.length}`);
+          }}
+          onHide={(id) => {
+            setSheetId(null);
+            hide(id);
+          }}
+        />
 
         <WidgetGallerySheet
           open={galleryOpen}
@@ -259,7 +301,7 @@ export function HomeGrid(props: HomeGridProps) {
           previews={previews}
           onAdd={(id) => {
             setGalleryOpen(false);
-            act({ type: "add", id }, { id, control: "handle" }, `${widgetDef(id).title} added`);
+            act({ type: "add", id }, { id, control: "tile" }, `${titleOf(id)} added`);
           }}
         />
       </>
@@ -275,7 +317,7 @@ export function HomeGrid(props: HomeGridProps) {
     <>
       {liveRegion}
       {titleShown ? (
-        <div className="relative px-6 pt-6 pb-3 shrink-0">
+        <div className="relative px-6 pt-6 pb-3 shrink-0" data-widget="title" {...longPress}>
           {title}
           <button
             type="button"
@@ -295,7 +337,7 @@ export function HomeGrid(props: HomeGridProps) {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col gap-3 px-6 min-h-0 overflow-y-auto pb-4" data-testid="home-content">
+      <div className="flex-1 flex flex-col gap-3 px-6 min-h-0 overflow-y-auto pb-4" data-testid="home-content" {...longPress}>
         {topNotices}
         {after < 0 && afterTraining}
         {rows.map((row, n) => {

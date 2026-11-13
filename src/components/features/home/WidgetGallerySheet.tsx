@@ -4,7 +4,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import type { ResolvedItem } from "@/lib/home/layout";
 import { widgetDef, type WidgetId } from "@/lib/home/widgets";
 import { SIZE_LABEL, type WidgetGroup } from "@/lib/home/widgets/types";
-import type { Previews } from "./HomeEditList";
+import type { Previews } from "./HomeEditGrid";
 
 /**
  * "Add widget" (docs/home-widgets-audit.md, 6.9): the widgets this user can

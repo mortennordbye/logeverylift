@@ -608,6 +608,16 @@ export async function saveHomeLayout(data: unknown): Promise<ActionResult<{ upda
 
 ### 6.9 Edit mode
 
+> **Superseded in part by decision 17 (owner, 2026-11-13).** Edit mode is the real grid,
+> as on the iPhone home screen, not a separate list: widgets jiggle, drag a whole widget to
+> reorder, a "−" badge hides, a tap opens a sheet with Size, Move up, Move down and Hide,
+> and "+ Add widget", Undo and Reset sit at the top. A long-press (500 ms, cancelled by
+> more than 8 px of movement or a scroll) on any widget also enters edit mode. The rules
+> below on saving, conflicts, Cancel, the covered bottom nav, `DndContext` mounted only in
+> edit mode with `id="home-edit"`, and focus still apply; where they speak of rows, read
+> widgets in the grid. Code: `src/components/features/home/HomeEditGrid.tsx`,
+> `WidgetSheet.tsx`, `use-long-press.ts`.
+
 `src/components/features/home/HomeGrid.tsx` (client) renders the grid outside edit mode and
 `HomeEditList.tsx` inside it. State: `src/lib/home/layout-reducer.ts` (pure: `move`, `moveUp`,
 `moveDown`, `resize`, `hide`, `show`, `add`, `reset`, `undo`) with `useReducer`. Key
@@ -828,11 +838,12 @@ Decided by the hub on 2026-11-13; the owner may change any of them.
 | 9 | Rest timer widget? | No. It belongs to an open workout. |
 | 10 | Quick start widget? | Phase 3, with its own e2e spec. |
 | 11 | Can the AI coach change the layout? | No. Read only through `get_profile`. |
-| 12 | Long-press to enter edit mode? | No, an "Edit" button. Revisit after use. |
+| 12 | Long-press to enter edit mode? | Was: no, an "Edit" button. Now yes, as well as the pencil (decision 17). |
 | 13 | One layout per account or per device? | Per account. |
 | 14 | Endurance today above the strength card by default? | No. Keep today's order. |
 | 15 | Weekly leaderboard widget? | Only after `getFriendsLeaderboard` uses the user's week. |
 | 16 | Where is the way into edit mode? | Decided by the owner on 2026-11-13: only a pencil icon button ("Edit home") at the top right of the title row. No "Edit home" button at the end of the list, except when the title is hidden: then the pencil moves there. |
+| 17 | What does edit mode look like? | Decided by the owner on 2026-11-13, replacing the list in 6.9: the real grid, as on the iPhone home screen. Two columns (S one, M and L both; L is the taller content). Widgets jiggle (off with reduced motion). Enter by the pencil or a long-press on a widget. Drag the whole widget to reorder; a "−" badge on hideable widgets; a tap opens a sheet with Size, Move up, Move down (WCAG 2.5.7) and Hide; "+ Add widget", Undo and Reset at the top. |
 
 ## 10. Sources
 
@@ -896,7 +907,16 @@ Where the build differs from sections 6 and 7, and why. The code is the referenc
   deep in a view show its error state instead of failing the page.
 - **Garmin readiness** reads one row of `garmin_daily_metrics` (the newest up to today) rather
   than `getTodayData`, which reads the whole Today tab. The value is the same.
-- **The size menu** is a native `select` with only the allowed sizes, not a custom menu.
+- **Edit mode is the grid** (decision 17). While a widget is dragged the grid reorders
+  under it and the widget follows the pointer in an overlay, so S, M and L widgets keep an
+  honest layout; after a swap the same neighbour does not swap back until the pointer has
+  left it, which stops flicker between widgets of different heights. Mouse and pen drag after
+  8 px; touch after holding 180 ms (dnd-kit's TouchSensor), so a swipe still scrolls.
+- **Size in edit mode** shows the real widget at the size it was saved at, and its static
+  preview at any other size, until Done: the server renders the real widget at the new size.
+  Rendering every size of every widget on each home load would grow the page for everyone.
+- **L is not a fixed double height.** Widgets keep their natural height, so nothing is
+  clipped; L is the taller content of the same widget.
 - **The title row** cannot be moved, only resized or hidden: a header is always first.
 - **A save drops widgets the user cannot have** from the client's list instead of refusing
   the save; `mergeForSave` keeps the stored ones. The conflict check is part of the UPDATE.
