@@ -169,7 +169,7 @@ test("an MCP client connects through consent and calls a tool with its token", a
   expect(init.body.result.instructions).toContain("weekly review");
   const listed = await rpc("resources/list");
   const uris = listed.body.result.resources.map((r: { uri: string }) => r.uri);
-  expect(uris).toEqual(["logeverylift://docs/endurance-training-reference", "logeverylift://docs/app-rules"]);
+  expect(uris).toEqual(["logeverylift://docs/endurance-training-reference", "logeverylift://docs/app-rules", "logeverylift://docs/workout-steps"]);
   for (const uri of uris) {
     const read = await rpc("resources/read", { uri });
     expect(read.body.result?.contents?.[0]?.text, read.text).toMatch(/^<!-- version \d{4}-\d{2}-\d{2}\+[0-9a-f]{12} -->/);
