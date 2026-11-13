@@ -11,7 +11,12 @@ import { todayIn } from "@/lib/utils/user-date";
 import { eq } from "drizzle-orm";
 import { cache } from "react";
 
-export type UserSettings = { timeZone: string | null; units: Units };
+export type UserSettings = {
+  timeZone: string | null;
+  units: Units;
+  /** The raw `home_layout` column; parse it with parseStoredLayout (src/lib/home/layout.ts). */
+  homeLayout: unknown;
+};
 
 export const getUserSettings = cache(async (userId: string): Promise<UserSettings> => {
   const [row] = await db
@@ -19,13 +24,15 @@ export const getUserSettings = cache(async (userId: string): Promise<UserSetting
       timeZone: users.timeZone,
       distanceUnit: users.distanceUnit,
       swimUnit: users.swimUnit,
+      homeLayout: users.homeLayout,
     })
     .from(users)
     .where(eq(users.id, userId));
-  if (!row) return { timeZone: null, units: DEFAULT_UNITS };
+  if (!row) return { timeZone: null, units: DEFAULT_UNITS, homeLayout: null };
   return {
     timeZone: row.timeZone,
     units: { distance: row.distanceUnit, swim: row.swimUnit },
+    homeLayout: row.homeLayout,
   };
 });
 
