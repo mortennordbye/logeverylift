@@ -37,7 +37,7 @@ afterEach(() => {
 });
 
 const stored = async (id: string) => (await db.select({ l: users.homeLayout }).from(users).where(eq(users.id, id)))[0].l;
-const LIFTER = { endurance: false, garmin: false };
+const LIFTER = { endurance: false, garmin: false, cycle: true };
 const items = (over: Partial<Record<string, { size?: "s" | "m" | "l"; hidden?: boolean }>> = {}) =>
   defaultLayout(LIFTER).map((i) => ({ id: i.id, size: over[i.id]?.size ?? i.size, hidden: over[i.id]?.hidden ?? i.hidden }));
 
@@ -101,7 +101,7 @@ describe("saveHomeLayout (I1)", () => {
 
   it("keeps the endurance widgets when the switch is off and the user saves", async () => {
     await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, me));
-    const endurance = defaultLayout({ endurance: true, garmin: false }).map(({ id, size, hidden }) => ({ id, size, hidden }));
+    const endurance = defaultLayout({ endurance: true, garmin: false, cycle: true }).map(({ id, size, hidden }) => ({ id, size, hidden }));
     await saveHomeLayout({ items: endurance, baseUpdatedAt: null, force: false });
     let base = ((await stored(me)) as StoredHomeLayout).updatedAt;
 
@@ -114,9 +114,27 @@ describe("saveHomeLayout (I1)", () => {
     base = row.updatedAt;
 
     await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, me));
-    const visible = resolveLayout(row, { endurance: true, garmin: false }).filter((i) => !i.hidden).map((i) => i.id);
+    const visible = resolveLayout(row, { endurance: true, garmin: false, cycle: true }).filter((i) => !i.hidden).map((i) => i.id);
     // Kept items are appended after what the user saved (mergeForSave), still visible.
     expect(visible).toEqual(["title", "today", "week", "enduranceToday"]);
+  });
+
+  it("without an active cycle, a saved Cycle progress is kept but not taken from the client", async () => {
+    const [cycle] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Block", durationWeeks: 4, status: "active", startDate: "2026-11-02" })
+      .returning();
+    await saveHomeLayout({ items: items({ cycle: { size: "s", hidden: false } }), baseUpdatedAt: null, force: false });
+    const base = ((await stored(me)) as StoredHomeLayout).updatedAt;
+    expect(((await stored(me)) as StoredHomeLayout).items.find((i) => i.id === "cycle")).toEqual({ id: "cycle", size: "s", hidden: false });
+
+    await db.update(trainingCycles).set({ status: "completed" }).where(eq(trainingCycles.id, cycle.id));
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date(Date.parse(base) + 1000));
+    const noCycle = items().filter((i) => i.id !== "cycle");
+    await saveHomeLayout({ items: [...noCycle, { id: "cycle", size: "m", hidden: true }], baseUpdatedAt: base, force: false });
+    // The client's cycle item is not taken; the stored one stays, as it was.
+    expect(((await stored(me)) as StoredHomeLayout).items.find((i) => i.id === "cycle")).toEqual({ id: "cycle", size: "s", hidden: false });
   });
 
   it("does not take a widget the user cannot have from the client", async () => {

@@ -1,7 +1,8 @@
 "use server";
 
 import { db } from "@/db";
-import { users } from "@/db/schema";
+import { trainingCycles, users } from "@/db/schema";
+import { liveCycles } from "@/lib/plan-live";
 import { garminAllowed } from "@/lib/garmin/access";
 import { itemSchema, mergeForSave, parseStoredLayout } from "@/lib/home/layout";
 import type { StoredHomeItem, StoredHomeLayout } from "@/lib/home/stored-layout";
@@ -66,7 +67,13 @@ export async function saveHomeLayout(data: unknown): Promise<ActionResult<{ upda
     const stored = parseStoredLayout(row.homeLayout, userId);
     let next: StoredHomeLayout | null = null;
     if (items !== null) {
-      const audience = { endurance: row.enduranceEnabled, garmin: garminAllowed(row.role) };
+      // Only whether a cycle is active, read without getActiveCycleForUser (which writes).
+      const [active] = await db
+        .select({ id: trainingCycles.id })
+        .from(trainingCycles)
+        .where(and(eq(trainingCycles.userId, userId), eq(trainingCycles.status, "active"), liveCycles))
+        .limit(1);
+      const audience = { endurance: row.enduranceEnabled, garmin: garminAllowed(row.role), cycle: active !== undefined };
       // Widgets this user cannot have are not taken from the client; the
       // stored ones are kept by mergeForSave.
       const own: StoredHomeItem[] = items.filter((i) => widgetDef(i.id as keyof typeof WIDGETS).available(audience));

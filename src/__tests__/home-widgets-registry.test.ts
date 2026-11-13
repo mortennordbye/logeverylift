@@ -29,8 +29,8 @@ describe("widget registry", () => {
 
   it("new widgets are hidden by default for every audience", () => {
     const audiences = [
-      { endurance: false, garmin: false },
-      { endurance: true, garmin: true },
+      { endurance: false, garmin: false, cycle: true },
+      { endurance: true, garmin: true, cycle: true },
     ];
     for (const id of ["recentPrs", "friendsActivity", "garminReadiness"] as const) {
       for (const a of audiences) expect(widgetDef(id).defaultVisible(a)).toBe(false);

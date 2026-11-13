@@ -15,7 +15,7 @@ import { trackActions } from "./helpers";
  * admin accounts only and must not be offered here.
  */
 
-const AUDIENCE = { endurance: false, garmin: false };
+const AUDIENCE = { endurance: false, garmin: false, cycle: true };
 /** Widgets the default home hides, which the gallery offers. */
 const ADDABLE = (Object.keys(WIDGETS) as WidgetId[]).filter((id) => {
   const def = widgetDef(id);

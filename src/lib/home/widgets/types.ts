@@ -9,7 +9,8 @@ import type { z } from "zod";
 export type WidgetSize = "s" | "m" | "l";
 export type WidgetKind = "header" | "widget";
 export type WidgetGroup = "training" | "prs" | "stats" | "garmin" | "friends" | "actions" | "coach";
-export type Audience = { endurance: boolean; garmin: boolean };
+/** Who the user is, for which widgets they can have. `cycle`: an active training cycle. */
+export type Audience = { endurance: boolean; garmin: boolean; cycle: boolean };
 
 export type WidgetDef = {
   /** Stable, never reused; retired ids go to RETIRED_IDS. */

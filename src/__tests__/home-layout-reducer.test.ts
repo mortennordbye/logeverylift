@@ -81,7 +81,7 @@ describe("editReducer", () => {
   });
 
   it("reset gives the default and can be undone", () => {
-    const def = defaultLayout({ endurance: false, garmin: false });
+    const def = defaultLayout({ endurance: false, garmin: false, cycle: true });
     const s = run(start(), { type: "reset", items: def });
     expect(s.items).toEqual(def);
     expect(run(s, { type: "undo" }).items).toEqual(start().items);

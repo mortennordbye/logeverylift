@@ -11,6 +11,7 @@ export const cycle = {
   critical: false,
   source: "core",
   // Today at L shows it already.
-  available: () => true,
+  // Without a cycle Today already shows "Set up a Cycle"; the widget comes back with a cycle.
+  available: (a) => a.cycle,
   defaultVisible: () => false,
 } as const satisfies WidgetDef;

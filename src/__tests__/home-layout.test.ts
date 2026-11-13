@@ -15,9 +15,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 /** U1 and U2 in docs/home-widgets-audit.md, section 7. */
 
-const LIFTER = { endurance: false, garmin: false };
-const ENDURANCE = { endurance: true, garmin: false };
-const ADMIN = { endurance: false, garmin: true };
+const LIFTER = { endurance: false, garmin: false, cycle: true };
+const ENDURANCE = { endurance: true, garmin: false, cycle: true };
+const ADMIN = { endurance: false, garmin: true, cycle: true };
 
 const stored = (items: StoredHomeItem[]): StoredHomeLayout => ({ v: 1, updatedAt: "2026-11-13T10:00:00.000Z", items });
 const visible = (items: ResolvedItem[]) => items.filter((i) => !i.hidden).map((i) => i.id);
@@ -99,6 +99,18 @@ describe("resolveLayout (U1)", () => {
     expect(r[0].id).toBe("today");
     expect(r.slice(1).every((i) => i.hidden)).toBe(true);
     expect(r.map((i) => i.id)).toEqual(expect.arrayContaining(["title", "week", "recentPrs"]));
+  });
+
+  it("without a cycle, Cycle progress is not offered, and a saved one comes back with a cycle", () => {
+    const NO_CYCLE = { ...LIFTER, cycle: false };
+    expect(defaultLayout(NO_CYCLE).map((i) => i.id)).not.toContain("cycle");
+    const saved = stored([
+      { id: "today", size: "l", hidden: false },
+      { id: "cycle", size: "s", hidden: false },
+    ]);
+    expect(resolveLayout(saved, NO_CYCLE).map((i) => i.id)).not.toContain("cycle");
+    expect(mergeForSave(saved, [{ id: "today", size: "m", hidden: false }], NO_CYCLE).map((i) => i.id)).toEqual(["today", "cycle"]);
+    expect(resolveLayout(saved, LIFTER).find((i) => i.id === "cycle")).toEqual({ id: "cycle", size: "s", hidden: false });
   });
 
   it("leaves out widgets the audience cannot have", () => {

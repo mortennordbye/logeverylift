@@ -417,9 +417,12 @@ Rules:
   primitives (`activeCycle()`, `completedSince(mondayStr)`), so React `cache()` dedupes them.
   Pass `cycleResult` into `getWorkoutInsight` (`src/lib/actions/workout-sets.ts:1581`, second
   parameter), as the page does now.
-- **Audience** is `{ endurance: boolean; garmin: boolean }`. It does not depend on the cycle:
-  Today switches between its cycle and no-cycle variants by data, and Cycle progress shows an
-  empty state without a cycle. So the Server Action can compute it from the user row alone.
+- **Audience** is `{ endurance: boolean; garmin: boolean; cycle: boolean }`. Today switches
+  between its cycle and no-cycle variants by data. Cycle progress is available only with an
+  active cycle (owner, 2026-11-13: without one, Today already says "Set up a Cycle"); a saved
+  Cycle progress stays in the stored row and comes back with a cycle. The page takes `cycle`
+  from the core data; the Server Action reads whether an active cycle exists, without
+  `getActiveCycleForUser`.
 - `src/app/loading.tsx` shows a neutral skeleton (title, one card, one strip): it cannot know
   the user type. This also closes `docs/ui-polish-audit.md` B2.
 
@@ -441,7 +444,7 @@ Def (`src/lib/home/widgets/types.ts`):
 export type WidgetSize = "s" | "m" | "l";
 export type WidgetKind = "header" | "widget";
 export type WidgetGroup = "training" | "prs" | "stats" | "garmin" | "friends" | "actions" | "coach";
-export type Audience = { endurance: boolean; garmin: boolean };
+export type Audience = { endurance: boolean; garmin: boolean; cycle: boolean };
 
 export type WidgetDef = {
   id: string;                  // stable, never reused; retired ids go to RETIRED_IDS
@@ -536,7 +539,7 @@ Phase 1 registry:
 |---|---|---|---|---|---|---|
 | `title` | header | M, L (M) | no | core | all | all |
 | `today` | widget | S, M, L (L) | **yes** | core | all | all |
-| `cycle` | widget | S, M (M) | no | core | all | none (Today L shows it) |
+| `cycle` | widget | S, M (M) | no | core | cycle | none (Today L shows it) |
 | `enduranceToday` | widget | M (M) | **yes** | core | endurance | endurance |
 | `week` | widget | M, L (L), `stretch` | no | core | all | all |
 | `weeklyGoal` | widget | S, M (S) | no | core | all | none (Week L shows it) |

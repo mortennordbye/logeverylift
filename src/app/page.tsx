@@ -43,7 +43,7 @@ export default async function Home() {
 
   // -- reads (the week read in here can still make a cycle's sessions) --
   const core = await loadHomeCore(session, settings, today, cycleResult);
-  const audience = { endurance: core.enduranceEnabled, garmin: garminAllowed(session.user.role) };
+  const audience = { endurance: core.enduranceEnabled, garmin: garminAllowed(session.user.role), cycle: core.info !== null };
   const stored = parseStoredLayout(settings.homeLayout, session.user.id);
   const items = resolveLayout(stored, audience);
   const ctx: HomeContext = { userId: session.user.id, role: session.user.role ?? null, today: core.todayStr };
