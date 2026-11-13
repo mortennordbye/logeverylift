@@ -74,10 +74,16 @@ test.beforeEach(async ({ page }) => {
       value: { request: async () => ({ release: async () => undefined }) },
     });
   });
-  // A hydration mismatch is a console error, not a page error: fail on it too.
+  // A hydration mismatch is a console error, not a page error: collect it and fail after the spec.
+  hydrationErrors = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error" && /Hydration|#418|#423|did not match/i.test(msg.text())) throw new Error(`hydration: ${msg.text()}`);
+    if (msg.type() === "error" && /Hydration|#418|#423|did not match/i.test(msg.text())) hydrationErrors.push(msg.text());
   });
+});
+
+let hydrationErrors: string[] = [];
+test.afterEach(() => {
+  expect(hydrationErrors, "hydration errors in the browser console").toEqual([]);
 });
 
 test("a guided ride from home: steps change on time, pause, skip, lap, results saved and linked", async ({ page }, testInfo) => {
@@ -131,10 +137,10 @@ test("a guided ride from home: steps change on time, pause, skip, lap, results s
 
   await page.goto("/week");
   await expect(page.getByTestId("load-card")).toBeVisible();
-  // Done and linked: a band instead of "planned" (about 13 s of the 10 min planned).
+  // Done and linked, with the logged time. The lap step leaves the plan's time open, so the band is "done".
   const week = page.getByTestId("week-session").filter({ hasText: "Quick ride" });
-  await expect(week).toContainText("far off plan");
   await expect(week).toContainText("done 00:1");
+  await expect(week).not.toContainText("planned");
 });
 
 test("a swim opens the pool view with the target per 100 m and the send-off clock", async ({ page }, testInfo) => {
