@@ -27,6 +27,32 @@ export const test = base.extend<{ resetData: void; failOnPageError: void }, { re
   storageState: async ({}, provide, testInfo) => {
     await provide(authFile(testInfo.parallelIndex));
   },
+  // The guided player beeps through Web Audio, and WebKit has no mute flag
+  // (Chromium gets --mute-audio in playwright.config.ts). Each audio context's
+  // `destination` becomes a gain node at 0 in front of the real one, so the
+  // app's audio code still runs in full and nothing reaches the speakers.
+  context: async ({ context }, provide) => {
+    await context.addInitScript(() => {
+      const Base = (window as unknown as { BaseAudioContext?: typeof BaseAudioContext }).BaseAudioContext;
+      const real = Base ? Object.getOwnPropertyDescriptor(Base.prototype, "destination")?.get : undefined;
+      if (!Base || !real) return;
+      const silent = new WeakMap<BaseAudioContext, GainNode>();
+      Object.defineProperty(Base.prototype, "destination", {
+        configurable: true,
+        get(this: BaseAudioContext) {
+          let gain = silent.get(this);
+          if (!gain) {
+            gain = this.createGain();
+            gain.gain.value = 0;
+            gain.connect(real.call(this) as AudioDestinationNode);
+            silent.set(this, gain);
+          }
+          return gain;
+        },
+      });
+    });
+    await provide(context);
+  },
   resetData: [
     async ({}, use, testInfo) => {
       await resetE2EUser(e2eUser(testInfo.parallelIndex).email);
