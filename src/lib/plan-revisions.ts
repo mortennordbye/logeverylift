@@ -307,6 +307,8 @@ export class PlanWriteSession {
   private regenerated = new Map<number, string>();
   /** Dated sessions each cycle's regeneration made, changed or removed in this write. */
   readonly regenerationCounts = new Map<number, number>();
+  /** Template days each cycle's regeneration left out for the cap of three. */
+  readonly regenerationCapped = new Map<number, string[]>();
   /** Seasons whose phases a restore moved: settled before the write ends (settleSeason). */
   readonly seasonsToSettle = new Set<number>();
 
@@ -456,6 +458,7 @@ export class PlanWriteSession {
       this.regenerated.set(t.target.id, key);
       const r = await regenerateCycleSessions(this.tx, this.ctx.userId, t.target.id, { includePast: moved });
       this.regenerationCounts.set(t.target.id, (this.regenerationCounts.get(t.target.id) ?? 0) + r.inserted + r.updated + r.removed);
+      this.regenerationCapped.set(t.target.id, [...(this.regenerationCapped.get(t.target.id) ?? []), ...r.keptOutByCap]);
     }
     for (const target of this.created) {
       if (target.type !== "cycle" || this.regenerated.has(target.id)) continue;

@@ -834,7 +834,8 @@ export async function removeCycleSlot(
     revalidatePath("/");
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[removeCycleSlot] failed", err);
+    return { success: false, error: "Failed to remove the slot" };
   }
 }
 

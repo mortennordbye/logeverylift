@@ -107,7 +107,7 @@ describe("regenerationPlan (T7)", () => {
 
   it("updates an untouched future session in place, keeping its id", () => {
     const plan = regenerationPlan({ existing: [row(1, 7, "2026-11-11")], generated: [gen(7, "2026-11-11", 99)], today, block, includePast: false });
-    expect(plan).toEqual({ update: [{ id: 1, fields: { programId: 99 } }], insert: [], remove: [] });
+    expect(plan).toEqual({ update: [{ id: 1, fields: { programId: 99 } }], insert: [], remove: [], capped: [] });
   });
 
   it("never changes a past or a done session, and keeps a touched or added one", () => {
@@ -118,7 +118,7 @@ describe("regenerationPlan (T7)", () => {
       row(4, 0, "2026-11-13", { slotId: null, templateDate: null }), // added by hand
     ];
     const plan = regenerationPlan({ existing, generated: [], today, block, includePast: false });
-    expect(plan).toEqual({ update: [], insert: [], remove: [] });
+    expect(plan).toEqual({ update: [], insert: [], remove: [], capped: [] });
   });
 
   it("removes an untouched future session the template no longer has, and adds new ones from today on", () => {
@@ -158,7 +158,7 @@ describe("regenerationPlan (T7)", () => {
       block: null,
       includePast: false,
     });
-    expect(plan).toEqual({ update: [], insert: [], remove: [2, 3] });
+    expect(plan).toEqual({ update: [], insert: [], remove: [2, 3], capped: [] });
   });
 });
 
@@ -303,7 +303,7 @@ describe("review fixes (docs/plans/sessions.md, section 20)", () => {
       block,
       includePast: false,
     });
-    expect(plan).toEqual({ update: [], insert: [], remove: [1] });
+    expect(plan).toEqual({ update: [], insert: [], remove: [1], capped: [] });
   });
 
   it("15. no day gets a fourth session; skipped ones keep no place", () => {

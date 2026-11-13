@@ -19,6 +19,7 @@ import {
   garminConnections,
   plannedSessions,
   programExercises,
+  users,
   programSets,
   programs,
   trainingCycleSlots,
@@ -149,13 +150,56 @@ export async function programRuns(
   return out;
 }
 
+/** The Monday of today's week in the user's zone. */
+async function mondayToday(ex: Executor, userId: string): Promise<string> {
+  const { mondayOf } = await import("@/lib/utils/planned-sessions");
+  return mondayOf(await todayOn(ex, userId));
+}
+
+/** Today (YYYY-MM-DD) in the user's zone, read on this connection (as userToday does). */
+async function todayOn(ex: Executor, userId: string): Promise<string> {
+  const { localDateStr } = await import("@/lib/utils/user-date");
+  const [u] = await ex.select({ timeZone: users.timeZone }).from(users).where(eq(users.id, userId));
+  return localDateStr(new Date(), u?.timeZone ?? null);
+}
+
 /**
- * The week a cycle write is checked on: for a weekday cycle with dated
- * sessions, the calendar week those sessions fill (this week, or the first
- * week of a block that starts later; docs/plans/sessions.md, 6 and review 21),
- * so moved and added sessions count; before it has dated sessions, the
- * template's week.
+ * A cycle's dated sessions grouped by calendar week, from this week (or the
+ * block's first week, if it starts later) to the block's last week. Weeks with
+ * no session are there too, empty, so a write that fills one is seen.
  */
+async function datedCycleWeeks(ex: Executor, cycleId: number): Promise<{ thisMonday: string; byWeek: Map<string, WeekSession[]> }> {
+  const { addDaysStr, dowOf, mondayOf } = await import("@/lib/utils/planned-sessions");
+  const { cycleBlock } = await import("@/lib/planned-sessions");
+  const [c] = await ex.select().from(trainingCycles).where(and(eq(trainingCycles.id, cycleId), liveCycles));
+  const byWeek = new Map<string, WeekSession[]>();
+  const today = c ? await todayOn(ex, c.userId) : toDateStr(new Date());
+  const thisMonday = mondayOf(today);
+  const block = c ? cycleBlock(c) : null;
+  if (!c || !block) return { thisMonday, byWeek };
+  const first = mondayOf(block.start > today ? block.start : today);
+  const last = addDaysStr(block.end, -1);
+  for (let m = first; m <= last; m = addDaysStr(m, 7)) byWeek.set(m, []);
+  const rows = await ex
+    .select({ date: plannedSessions.date, programId: plannedSessions.programId })
+    .from(plannedSessions)
+    .where(
+      and(
+        eq(plannedSessions.cycleId, cycleId),
+        livePlannedSessions,
+        eq(plannedSessions.status, "planned"),
+        gte(plannedSessions.date, first),
+        lte(plannedSessions.date, last),
+      ),
+    );
+  const hard = await hardPrograms(ex, rows.map((r) => r.programId).filter((id): id is number => id != null));
+  for (const r of rows) {
+    if (r.programId == null) continue;
+    byWeek.get(mondayOf(r.date!))?.push({ dayOfWeek: dowOf(r.date!), hard: hard.get(r.programId) ?? false });
+  }
+  return { thisMonday, byWeek };
+}
+
 /** The weekday cycles among these that have dated sessions. */
 async function datedCycles(ex: Executor, cycleIds: number[]): Promise<Set<number>> {
   if (cycleIds.length === 0) return new Set();
@@ -164,25 +208,6 @@ async function datedCycles(ex: Executor, cycleIds: number[]): Promise<Set<number
     .from(trainingCycles)
     .where(and(inArray(trainingCycles.id, cycleIds), liveCycles, eq(trainingCycles.scheduleType, "day_of_week"), isNotNull(trainingCycles.sessionsGeneratedAt)));
   return new Set(rows.map((r) => r.id));
-}
-
-async function cycleWeek(ex: Executor, cycleId: number): Promise<WeekSession[] | null> {
-  const [c] = await ex
-    .select({
-      userId: trainingCycles.userId,
-      scheduleType: trainingCycles.scheduleType,
-      generated: trainingCycles.sessionsGeneratedAt,
-      status: trainingCycles.status,
-      startDate: trainingCycles.startDate,
-      scheduledStartDate: trainingCycles.scheduledStartDate,
-    })
-    .from(trainingCycles)
-    .where(and(eq(trainingCycles.id, cycleId), liveCycles));
-  if (!c || c.scheduleType !== "day_of_week" || c.generated == null) return cycleWeekSessions(ex, cycleId);
-  const { mondayOf } = await import("@/lib/utils/planned-sessions");
-  const today = toDateStr(await userToday(c.userId));
-  const start = c.status === "active" ? c.startDate : c.scheduledStartDate;
-  return calendarWeekSessions(ex, c.userId, mondayOf(start && start > today ? start : today), cycleId);
 }
 
 /** A weekday cycle's week of sessions, or null for a rotation cycle (no fixed week). */
@@ -310,8 +335,15 @@ export type LimitScope = { programIds: number[]; cycleIds: number[]; sessionWeek
 
 export type PlanFacts = {
   runs: Map<number, { label: string; run: PlannedRun }>;
-  /** Each cycle's week; null for a rotation cycle (no fixed week). */
-  weeks: Map<number, WeekSession[] | null>;
+  /**
+   * The weeks checked, by key: `c:<cycle>` for a cycle's template week (null
+   * for a rotation cycle, which has no fixed week), `c:<cycle>:<monday>` for
+   * each calendar week of a cycle's dated sessions, `s:<monday>` for a week a
+   * session change touches.
+   */
+  weeks: Map<string, WeekSession[] | null>;
+  /** The Monday of a key's calendar week, when it is not this week: the message names it. */
+  labels?: Map<string, string>;
 };
 
 export async function planFacts(
@@ -321,13 +353,28 @@ export async function planFacts(
   /** Cycles checked on their dated calendar week; the rest on the template's week. */
   dated: ReadonlySet<number> = new Set(),
 ): Promise<PlanFacts> {
-  const weeks = new Map<number, WeekSession[] | null>();
-  for (const id of scope.cycleIds) weeks.set(id, dated.has(id) ? await cycleWeek(ex, id) : await cycleWeekSessions(ex, id));
-  // Calendar weeks get keys below zero, apart from the cycle ids.
-  for (const [i, monday] of (scope.sessionWeeks?.mondays ?? []).entries()) {
-    weeks.set(-(i + 1), await calendarWeekSessions(ex, scope.sessionWeeks!.userId, monday));
+  const weeks = new Map<string, WeekSession[] | null>();
+  const labels = new Map<string, string>();
+  for (const id of scope.cycleIds) {
+    if (!dated.has(id)) {
+      weeks.set(`c:${id}`, await cycleWeekSessions(ex, id));
+      continue;
+    }
+    // Every calendar week from this Monday to the block's end (review, round 3):
+    // a template change rewrites them all, so any of them can get worse.
+    const { thisMonday, byWeek } = await datedCycleWeeks(ex, id);
+    for (const [monday, week] of byWeek) {
+      weeks.set(`c:${id}:${monday}`, week);
+      if (monday !== thisMonday) labels.set(`c:${id}:${monday}`, monday);
+    }
   }
-  return { runs: await programRuns(ex, scope.programIds, share), weeks };
+  const sessionUser = scope.sessionWeeks?.userId;
+  const thisMonday = sessionUser ? await mondayToday(ex, sessionUser) : null;
+  for (const monday of scope.sessionWeeks?.mondays ?? []) {
+    weeks.set(`s:${monday}`, await calendarWeekSessions(ex, sessionUser!, monday));
+    if (monday !== thisMonday) labels.set(`s:${monday}`, monday);
+  }
+  return { runs: await programRuns(ex, scope.programIds, share), weeks, labels };
 }
 
 export const NO_FACTS: PlanFacts = { runs: new Map(), weeks: new Map() };
@@ -362,14 +409,22 @@ export function evaluateLimits(
     } else {
       notChecked.push({ rule: "long_run_cap", why: lc.runsWhy ?? NO_GARMIN });
     }
-    const weeks = [...after.weeks].filter((e): e is [number, WeekSession[]] => e[1] != null);
+    const weeks = [...after.weeks].filter((e): e is [string, WeekSession[]] => e[1] != null);
     if (weeks.length) {
       checked.push("hard_sessions_per_week");
       const hits = weeks
-        .map(([id, week]) => hardSessionsPerWeek(before.weeks.get(id) ?? [], week))
+        .map(([key, week]) => {
+          const hit = hardSessionsPerWeek(before.weeks.get(key) ?? [], week);
+          const monday = after.labels?.get(key);
+          return hit && monday ? { ...hit, message: hit.message.replace("This week", `The week of ${monday}`), numbers: { ...hit.numbers, week: monday } } : hit;
+        })
         .filter((h): h is BrokenLimit => h != null);
       // One result per rule, so one override covers it.
-      if (hits.length) broken.push({ ...hits[0], message: hits.map((h) => h.message).join(" "), numbers: hits.length > 1 ? { cycles: hits.map((h) => h.numbers) } : hits[0].numbers });
+      if (hits.length) {
+        const shown = hits.slice(0, 3).map((h) => h.message);
+        if (hits.length > 3) shown.push(`And ${hits.length - 3} more weeks.`);
+        broken.push({ ...hits[0], message: shown.join(" "), numbers: hits.length > 1 ? { weeks: hits.map((h) => h.numbers) } : hits[0].numbers });
+      }
     } else {
       notChecked.push({
         rule: "hard_sessions_per_week",

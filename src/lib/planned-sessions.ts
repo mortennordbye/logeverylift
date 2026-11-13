@@ -14,8 +14,10 @@ import {
   programs,
   trainingCycleSlots,
   trainingCycles,
+  users,
   workoutSessions,
 } from "@/db/schema";
+import { localDateStr } from "@/lib/utils/user-date";
 import { liveCycles, livePlannedSessions, livePrograms } from "@/lib/plan-live";
 import { PlanNotFoundError, PlanStateError, lockCycleRows, planWrite, type PlanWriteContext, type PlanWriteSession, type Tx } from "@/lib/plan-revisions";
 import { withLimits, type LimitContext, type LimitOverride, type LimitScope } from "@/lib/training-limits";
@@ -31,6 +33,7 @@ import {
   mondayOf,
   matchPlanned,
   regenerationPlan,
+  templateKey,
   type CompletedForMatch,
   type ExistingRow,
   type TemplateSlot,
@@ -41,6 +44,12 @@ import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from 
 
 type Executor = typeof db | Tx;
 export type PlannedRow = typeof plannedSessions.$inferSelect;
+
+/** Today (YYYY-MM-DD) in the user's zone, as userToday gives it, read on this executor's connection. */
+export async function todayOn(ex: Executor, userId: string): Promise<string> {
+  const [u] = await ex.select({ timeZone: users.timeZone }).from(users).where(eq(users.id, userId));
+  return localDateStr(new Date(), u?.timeZone ?? null);
+}
 
 /** A cycle's dates: [start, end) for an active cycle or a scheduled draft, else null. */
 export function cycleBlock(c: {
@@ -119,12 +128,14 @@ export async function regenerateCycleSessions(
   userId: string,
   cycleId: number,
   opts: { includePast?: boolean; backfill?: boolean } = {},
-): Promise<{ inserted: number; updated: number; removed: number; removedTouched: number }> {
-  const none = { inserted: 0, updated: 0, removed: 0, removedTouched: 0 };
+): Promise<{ inserted: number; updated: number; removed: number; removedTouched: number; keptOutByCap: string[] }> {
+  const none = { inserted: 0, updated: 0, removed: 0, removedTouched: 0, keptOutByCap: [] as string[] };
   // plan-read: includes deleted (a deleted cycle is checked just below)
   const [cycle] = await tx.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId));
   if (!cycle || cycle.userId !== userId || cycle.deletedAt) return none;
-  const today = toDateStr(await userToday(userId));
+  // Read on this transaction's connection: it may hold the cycle's row lock,
+  // and must not wait for a second pooled connection while it does.
+  const today = await todayOn(tx, userId);
   const block = cycle.scheduleType === "day_of_week" ? cycleBlock(cycle) : null;
   const existingRows = await tx
     .select()
@@ -162,8 +173,31 @@ export async function regenerateCycleSessions(
   const slots = await templateSlots(tx, cycleId);
   const generated = block ? generateWeekday(block.start, cycleLengthDays(cycle), slots) : [];
   const includePast = opts.includePast || opts.backfill || cycle.sessionsGeneratedAt == null;
+  // Template days of sessions the user moved, which a block change then
+  // removed, stay empty in later runs too (review round 3). A new start date
+  // makes new days, so it frees them.
+  const reserved = opts.includePast
+    ? new Set<string>()
+    : new Set(
+        (
+          await tx
+            .select({ slotId: plannedSessions.slotId, templateDate: plannedSessions.templateDate })
+            .from(plannedSessions)
+            .where(
+              and(
+                eq(plannedSessions.cycleId, cycleId),
+                // plan-read: includes deleted (removed moved sessions keep their template day empty)
+                isNotNull(plannedSessions.deletedAt),
+                isNotNull(plannedSessions.touchedAt),
+                isNotNull(plannedSessions.templateDate),
+                isNull(plannedSessions.rotationPosition),
+              ),
+            )
+        ).map((r) => templateKey(r.slotId, r.templateDate)),
+      );
   // This week's past days follow a template edit too (hub decision, section 20).
-  const plan = regenerationPlan({ existing, generated, today, block, includePast, editableFrom: mondayOf(today) });
+  const plan = regenerationPlan({ existing, generated, today, block, includePast, editableFrom: mondayOf(today), reserved });
+  if (plan.capped.length) console.info("[planned-sessions] cap of three kept out", { cycleId, days: plan.capped.length });
 
   const now = new Date();
   // Rotation overrides belong to a walk: a new start drops them all, and a
@@ -218,6 +252,7 @@ export async function regenerateCycleSessions(
     updated: plan.update.length,
     removed: plan.remove.length,
     removedTouched: plan.remove.filter((id) => touchedIds.has(id)).length,
+    keptOutByCap: plan.capped,
   };
 }
 
@@ -228,6 +263,17 @@ export function cycleTemplateKey(snap: { cycle: Record<string, unknown>; slots: 
     .sort((a, b) => Number(a.id) - Number(b.id))
     .map((s) => [s.id, s.dayOfWeek, s.daySlot ?? 1, s.orderIndex, s.programId, s.label, s.notes, s.autoComplete]);
   return JSON.stringify([c.status, c.startDate, c.scheduledStartDate, c.durationWeeks, c.durationDays ?? null, c.scheduleType, slots]);
+}
+
+/** The backfill inside a transaction that is already open, under the cycle's lock. */
+async function ensureInTx(tx: Tx, userId: string, cycleId: number): Promise<void> {
+  await lockCycleRows(tx, [cycleId]);
+  const [c] = await tx
+    .select({ at: trainingCycles.sessionsGeneratedAt, userId: trainingCycles.userId })
+    .from(trainingCycles)
+    .where(and(eq(trainingCycles.id, cycleId), liveCycles));
+  if (!c || c.at || c.userId !== userId) return;
+  await regenerateCycleSessions(tx, userId, cycleId, { backfill: true });
 }
 
 /**
@@ -717,6 +763,9 @@ export async function applySessionOp(
 ): Promise<{ row: PlannedRow; version: number; limits: { check: LimitCheck; unusedOverrides: LimitRule[] } | null }> {
   const today = toDateStr(await userToday(ctx.userId));
   const { result, versions } = await planWrite(ctx, async (w) => {
+    // A cycle not read yet has no dated sessions: make them first, so the cap
+    // and the limits count its template's sessions (review round 3).
+    if (input.op === "add") await ensureInTx(w.tx, ctx.userId, input.cycleId);
     if (!limits) return { row: await sessionOpBody(w, ctx, input, today), limits: null };
     const scope = await sessionScope(w.tx, ctx.userId, input);
     const { result, check, unusedOverrides } = await withLimits(w, limits.lc, scope, limits.override, () =>

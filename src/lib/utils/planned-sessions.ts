@@ -142,6 +142,8 @@ export type RegenerationPlan = {
   update: { id: number; fields: Partial<GeneratedSession> }[];
   insert: GeneratedSession[];
   remove: number[];
+  /** Template days left out because the day already holds three sessions. */
+  capped: string[];
 };
 
 export const templateKey = (slotId: number | null, templateDate: string | null) => `${slotId}|${templateDate}`;
@@ -167,18 +169,23 @@ export function regenerationPlan(params: {
   block: { start: string; end: string } | null;
   includePast: boolean;
   editableFrom?: string;
+  /**
+   * Template days (slot|date keys) not to fill: those of sessions the user
+   * moved and that a block change then removed, in this run or an earlier one.
+   */
+  reserved?: ReadonlySet<string>;
 }): RegenerationPlan {
   const { existing, generated, today, block, includePast } = params;
   const editableFrom = params.editableFrom && params.editableFrom < today ? params.editableFrom : today;
   const fixed = (r: ExistingRow) => r.done || r.linked === true;
   if (block == null) {
     // No dates any more: the sessions from today on go; the past stays.
-    return { update: [], insert: [], remove: existing.filter((r) => !fixed(r) && (r.date == null || r.date >= today)).map((r) => r.id) };
+    return { update: [], insert: [], remove: existing.filter((r) => !fixed(r) && (r.date == null || r.date >= today)).map((r) => r.id), capped: [] };
   }
   const inBlock = (d: string | null) => d != null && block != null && d >= block.start && d < block.end;
   const gen = new Map(generated.map((g) => [templateKey(g.slotId, g.templateDate), g]));
-  const plan: RegenerationPlan = { update: [], insert: [], remove: [] };
-  const kept = new Set<string>();
+  const plan: RegenerationPlan = { update: [], insert: [], remove: [], capped: [] };
+  const kept = new Set<string>(params.reserved ?? []);
   /** Sessions per day that keep a place in the cap: not skipped, not removed. */
   const perDay = new Map<string, number>();
   const count = (date: string | null) => {
@@ -230,7 +237,10 @@ export function regenerationPlan(params: {
     if (kept.has(k)) continue;
     if (!inBlock(g.date)) continue;
     if (g.date < editableFrom && !includePast) continue;
-    if ((perDay.get(g.date) ?? 0) >= MAX_SLOTS_PER_DAY) continue;
+    if ((perDay.get(g.date) ?? 0) >= MAX_SLOTS_PER_DAY) {
+      plan.capped.push(g.date);
+      continue;
+    }
     count(g.date);
     plan.insert.push(g);
   }

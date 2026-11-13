@@ -112,8 +112,14 @@ async function restoreScope(userId: string, type: PlanObjectType, id: number, re
     // The weeks of the session now and in the restored version (review 24).
     const { mondayOf } = await import("@/lib/utils/planned-sessions");
     // plan-read: includes deleted (a removed session can be restored)
-    const [row] = await db.select({ date: plannedSessions.date }).from(plannedSessions).where(eq(plannedSessions.id, id));
-    const [rev] = await db.select({ snapshot: planRevisions.snapshot }).from(planRevisions).where(eq(planRevisions.id, revisionId));
+    const [row] = await db
+      .select({ date: plannedSessions.date })
+      .from(plannedSessions)
+      .where(and(eq(plannedSessions.id, id), eq(plannedSessions.userId, userId)));
+    const [rev] = await db
+      .select({ snapshot: planRevisions.snapshot })
+      .from(planRevisions)
+      .where(and(eq(planRevisions.id, revisionId), eq(planRevisions.userId, userId)));
     const target = (rev?.snapshot as { session?: { date?: unknown } } | undefined)?.session?.date;
     const dates = [row?.date, typeof target === "string" ? target : null].filter((d): d is string => d != null);
     return { programIds: [], cycleIds: [], sessionWeeks: { userId, mondays: [...new Set(dates.map(mondayOf))].sort() } };
