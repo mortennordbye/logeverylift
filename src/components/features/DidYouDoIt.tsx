@@ -8,7 +8,8 @@
  * not change.
  */
 
-import { EndIllness, shortDay } from "@/components/features/IllnessSheet";
+import { EndIllness } from "@/components/features/IllnessSheet";
+import { shortDay } from "@/lib/utils/seasons";
 import type { AnswerSession } from "@/components/features/answer-session";
 import { AnswerButtons, AnswerSheets } from "@/components/features/SessionAnswers";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";

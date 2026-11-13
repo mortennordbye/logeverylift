@@ -24,10 +24,6 @@ export type IllnessDraft = {
 const SEVERITIES: IllnessSeverity[] = ["mild", "moderate", "severe"];
 const SEVERITY_LABEL: Record<IllnessSeverity, string> = { mild: "Mild", moderate: "Moderate", severe: "Severe" };
 
-/** `YYYY-MM-DD` as "Thu 14 Nov", by the calendar (no time zone). */
-export function shortDay(day: string): string {
-  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
-}
 
 const field = "mt-1 w-full min-h-[44px] rounded-xl bg-muted px-4 text-base";
 const chip = (on: boolean) => `min-h-[44px] rounded-xl px-4 py-2 text-left text-sm font-medium active:opacity-70 ${on ? "bg-primary text-primary-foreground" : "bg-muted"}`;

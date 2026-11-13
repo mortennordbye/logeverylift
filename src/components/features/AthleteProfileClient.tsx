@@ -12,7 +12,8 @@ import {
   type InjuryView,
   type ProfileView,
 } from "@/components/features/AthleteProfileParts";
-import { EndIllness, IllnessSheet, shortDay, type IllnessDraft } from "@/components/features/IllnessSheet";
+import { EndIllness, IllnessSheet, type IllnessDraft } from "@/components/features/IllnessSheet";
+import { shortDay } from "@/lib/utils/seasons";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { restoreInjuryEntry } from "@/lib/actions/athlete-profile";
 import { callAction } from "@/lib/utils/stale-bundle";
