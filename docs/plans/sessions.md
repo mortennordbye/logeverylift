@@ -782,7 +782,9 @@ Round 3 (tests in `src/__tests__/integration/planned-sessions-review-3.test.ts`)
 - **An add** on a cycle that has no dated sessions yet makes them first, in the same
   transaction, so the cap and the limits count the template's sessions.
 - **The template day of a moved session** that a block change removed stays empty in every later
-  run, not only the one that removed it; a new start date frees it.
+  run, not only the one that removed it; a new start date frees it. Round 4: only a session moved
+  off its template day reserves it; one skipped or changed on its own day comes back when the
+  block grows again.
 - **Regeneration reads the user's zone** on its own transaction's connection, so it never waits
   for a second pooled connection while it holds the cycle's lock.
 - **A template session the cap keeps out** is logged, and `edit_cycle_slot` returns its day in

@@ -191,6 +191,9 @@ export async function regenerateCycleSessions(
                 isNotNull(plannedSessions.touchedAt),
                 isNotNull(plannedSessions.templateDate),
                 isNull(plannedSessions.rotationPosition),
+                // Only a session the user moved off its day (review round 4): one
+                // skipped or changed on its own day comes back with the block.
+                sql`${plannedSessions.date} <> ${plannedSessions.templateDate}`,
               ),
             )
         ).map((r) => templateKey(r.slotId, r.templateDate)),

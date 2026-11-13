@@ -148,3 +148,91 @@ describe("review round 3", () => {
     expect(r.data.sessionsKeptOutByCap).toEqual(["2026-11-09"]);
   });
 });
+
+describe("review round 4", () => {
+  const setWeeks = (id: number, weeks: number) =>
+    planWrite({ userId: me, writer: "user" }, async (w) => {
+      await w.touch({ type: "cycle", id });
+      await w.tx.update(trainingCycles).set({ durationWeeks: weeks }).where(eq(trainingCycles.id, id));
+    });
+
+  it("1. a session changed on its own day comes back when the block grows again", async () => {
+    const id = await weekdayCycle();
+    await read();
+    const thu = (await rows(id)).find((r) => r.date === "2026-11-19")!;
+    expect((await updatePlannedSession({ op: "change", id: thu.id, notes: "Easy" })).success).toBe(true);
+    await setWeeks(id, 3); // ends 15 Nov: Thursday 19 Nov goes
+    expect((await rows(id)).filter((r) => r.date === "2026-11-19")).toEqual([]);
+    await setWeeks(id, 4); // same start, back to four weeks
+    expect((await rows(id)).filter((r) => r.date === "2026-11-19").map((r) => r.programId)).toEqual([progC]);
+  });
+
+  it("1. a skipped session comes back on its day when the block grows again", async () => {
+    const id = await weekdayCycle();
+    await read();
+    const wed = (await rows(id)).find((r) => r.date === "2026-11-18")!;
+    expect((await updatePlannedSession({ op: "skip", id: wed.id })).success).toBe(true);
+    await setWeeks(id, 3);
+    await setWeeks(id, 4);
+    expect((await rows(id)).filter((r) => r.date === "2026-11-18")).toHaveLength(1);
+  });
+
+  it("1. a session changed on its day keeps one row when its slot moves weekday and back", async () => {
+    const id = await weekdayCycle();
+    await read();
+    const thu = (await rows(id)).find((r) => r.date === "2026-11-19")!;
+    await updatePlannedSession({ op: "change", id: thu.id, notes: "Easy" });
+    const [slot] = await db.select().from(trainingCycleSlots).where(and(eq(trainingCycleSlots.trainingCycleId, id), eq(trainingCycleSlots.dayOfWeek, 4)));
+    await planWrite({ userId: me, writer: "user" }, async (w) => {
+      await w.touch({ type: "cycle", id });
+      await w.tx.update(trainingCycleSlots).set({ dayOfWeek: 5 }).where(eq(trainingCycleSlots.id, slot.id));
+    });
+    await planWrite({ userId: me, writer: "user" }, async (w) => {
+      await w.touch({ type: "cycle", id });
+      await w.tx.update(trainingCycleSlots).set({ dayOfWeek: 4 }).where(eq(trainingCycleSlots.id, slot.id));
+    });
+    const thursdays = (await rows(id)).filter((r) => r.date === "2026-11-19");
+    expect(thursdays).toHaveLength(1);
+    expect(thursdays[0].notes).toBe("Easy");
+    expect((await rows(id)).filter((r) => r.date === "2026-11-20")).toEqual([]);
+  });
+
+  it("2. a program set edit is refused when a later dated week of a scheduled draft gets a fourth hard session", async () => {
+    const h = (await createProgram(me, [{ exerciseId: bike, sets: [{ durationSeconds: 300, sessionRole: "work", targetReps: null }] }])).program.id;
+    const easy = await createProgram(me, [{ exerciseId: bike, sets: [{ durationSeconds: 300, targetReps: null }] }]);
+    // The active cycle: hard on Mon and Wed, the easy program on Fri.
+    const [act] = await db.insert(trainingCycles).values({ userId: me, name: "Now", durationWeeks: 1, status: "active", startDate: "2026-11-02" }).returning();
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: act.id, dayOfWeek: 1, programId: h },
+      { trainingCycleId: act.id, dayOfWeek: 3, programId: h },
+      { trainingCycleId: act.id, dayOfWeek: 5, programId: easy.program.id },
+    ]);
+    await read();
+    // A draft scheduled for 9 Nov, three weeks: hard Mon, Wed, Thu, the easy one on Fri.
+    const [next] = await db.insert(trainingCycles).values({ userId: me, name: "Next", durationWeeks: 3, status: "draft" }).returning();
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: next.id, dayOfWeek: 1, programId: h },
+      { trainingCycleId: next.id, dayOfWeek: 3, programId: h },
+      { trainingCycleId: next.id, dayOfWeek: 4, programId: h },
+      { trainingCycleId: next.id, dayOfWeek: 5, programId: easy.program.id },
+    ]);
+    const { scheduleCycle } = await import("@/lib/plan-revisions");
+    await scheduleCycle({ userId: me, writer: "user" }, next.id, "2026-11-09");
+    // Making the easy program hard: this week of the active cycle gets three (allowed);
+    // every week of the draft gets four.
+    const { registerProgramTools } = await import("@/lib/mcp/tools/programs");
+    const { programs } = await import("@/db/schema");
+    const v = (await db.select({ v: programs.version }).from(programs).where(eq(programs.id, easy.program.id)))[0].v;
+    const r = await mcpTools(registerProgramTools, me)("edit_program_exercise", {
+      operation: "update",
+      programExerciseId: easy.slots[0].programExerciseId,
+      sets: [{ id: easy.slots[0].setIds[0], setNumber: 1, durationSeconds: 300, sessionRole: "work" }],
+      reason: "Make Friday intervals",
+      expectedVersion: v,
+    });
+    expect(r.isError).toBe(true);
+    const broken = JSON.parse(r.raw).brokenLimits[0];
+    expect(broken.rule).toBe("hard_sessions_per_week");
+    expect(broken.message).toContain("The week of 2026-11-16");
+  });
+});
