@@ -49,7 +49,7 @@ export default async function Home() {
   const ctx: HomeContext = { userId: session.user.id, role: session.user.role ?? null, today: core.todayStr };
 
   // Only visible widgets render; a hidden streamed widget runs no query.
-  const renderers: Partial<Record<WidgetId, Renderer>> = RENDERERS;
+  const renderers: Record<WidgetId, Renderer> = RENDERERS;
   const slots: Partial<Record<WidgetId, ReactNode>> = {};
   for (const item of items) {
     const r = renderers[item.id];

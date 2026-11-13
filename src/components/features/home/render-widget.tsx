@@ -45,10 +45,15 @@ export function renderCoreWidget(id: string, r: Renderer, core: HomeCore, size: 
   );
 }
 
-async function Streamed({ id, r, ctx, size, settings }: { id: string; r: Renderer; ctx: HomeContext; size: WidgetSize; settings?: unknown }) {
+/** What a streamed widget shows once its loader settles: the view, the empty state, or the error state. */
+export async function streamedContent(id: string, r: Renderer, ctx: HomeContext, size: WidgetSize, settings?: unknown): Promise<ReactNode> {
   const loaded = await safeLoad(id, () => r.load!(ctx));
   if (!loaded.ok) return errorOf(r, size);
   return loaded.data === null ? r.Empty({ size }) : r.View({ data: loaded.data, size, settings });
+}
+
+async function Streamed({ id, r, ctx, size, settings }: { id: string; r: Renderer; ctx: HomeContext; size: WidgetSize; settings?: unknown }) {
+  return streamedContent(id, r, ctx, size, settings);
 }
 
 /** A streamed widget: its own Suspense (the skeleton) and error boundary. Its loader only reads. */
