@@ -3,7 +3,11 @@ import {
   complianceRatio,
   consistency,
   countsInWeek,
+  effectivePriorities,
   inIllness,
+  matchEndurance,
+  pairGarmin,
+  sessionState,
   isoWeekday,
   mondayOf,
   RETURN_RULE,
@@ -13,6 +17,7 @@ import {
   type ConsistencySession,
   type IllnessPeriod,
 } from "@/lib/utils/session-compliance";
+import { generateWeekday, regenerationPlan } from "@/lib/utils/planned-sessions";
 import { describe, expect, it } from "vitest";
 
 /** Planned vs done (docs/plans/workouts-and-compliance.md, section 6). 2026-11-09 is a Monday. */
@@ -146,6 +151,142 @@ describe("sick periods", () => {
 
   it("says nothing with no period", () => {
     expect(returnInfo([], "2026-11-10", [])).toBeNull();
+  });
+});
+
+describe("matchEndurance", () => {
+  const run = (id: number, date = "2026-11-03", position = 1) => ({ id, date, position, programId: null, sport: "run" as const });
+  const lift = (id: number, programId: number | null, date = "2026-11-03", position = 1) => ({ id, date, position, programId, sport: null });
+  const done = (id: number, disciplines: ("swim" | "bike" | "run")[], extra: Partial<{ programId: number; plannedSessionId: number; date: string }> = {}) => ({
+    id,
+    date: extra.date ?? "2026-11-03",
+    intendedDate: null,
+    programId: extra.programId ?? null,
+    plannedSessionId: extra.plannedSessionId ?? null,
+    disciplines: new Set(disciplines),
+  });
+
+  it("a session with a sport needs a workout with that discipline", () => {
+    expect(matchEndurance([run(1)], [done(10, [])]).size).toBe(0);
+    expect(matchEndurance([run(1)], [done(10, ["run"])]).get(1)).toEqual({ sessionId: 10, step: 3 });
+    expect(matchEndurance([run(1)], [done(10, ["bike"])]).size).toBe(0);
+  });
+
+  it("a session without a sport keeps C2's any-workout rule", () => {
+    expect(matchEndurance([lift(1, 5)], [done(10, [])]).get(1)).toEqual({ sessionId: 10, step: 3 });
+    expect(matchEndurance([lift(1, 5)], [done(10, [], { programId: 5 })]).get(1)).toEqual({ sessionId: 10, step: 2 });
+  });
+
+  it("a brick logged as one workout clears both legs; one discipline clears one session", () => {
+    const ride = { ...run(1), sport: "bike" as const };
+    const m = matchEndurance([ride, run(2, "2026-11-03", 2)], [done(10, ["bike", "run"])]);
+    expect([...m.keys()].sort()).toEqual([1, 2]);
+    expect(matchEndurance([run(1), run(2, "2026-11-03", 2)], [done(10, ["run"])]).size).toBe(1);
+  });
+
+  it("a link wins, and only on its own session", () => {
+    const m = matchEndurance([run(1), run(2, "2026-11-03", 2)], [done(10, ["run"], { plannedSessionId: 2 })]);
+    expect(m.get(2)).toEqual({ sessionId: 10, step: 1 });
+    expect(m.has(1)).toBe(false);
+  });
+});
+
+describe("pairGarmin", () => {
+  const row = (id: number, plannedDurationS: number | null, position = 1) => ({ id, date: "2026-11-03", position, sport: "run" as const, plannedDurationS, plannedDistanceM: null });
+  const act = (id: number, durationS: number, sport: "run" | "bike" | "other" = "run", date = "2026-11-03") => ({ id, date, sport, durationS, distanceM: null });
+
+  it("pairs by sport and day, closest duration first, each activity once", () => {
+    const m = pairGarmin([row(1, 3600), row(2, 1200, 2)], [act(10, 1300), act(11, 3500)]);
+    expect([...m]).toEqual([
+      [1, 11],
+      [2, 10],
+    ]);
+    expect(pairGarmin([row(1, 3600)], [act(10, 3600, "bike"), act(11, 3600, "run", "2026-11-04")]).size).toBe(0);
+    expect(pairGarmin([row(1, 3600)], [act(10, 3600)], new Set([10])).size).toBe(0);
+  });
+
+  it("matches a short activity too: the band shows the gap", () => {
+    expect(pairGarmin([row(1, 7200)], [act(10, 600)]).get(1)).toBe(10);
+  });
+});
+
+describe("sessionState", () => {
+  const base = { date: "2026-11-03", today: "2026-11-05", status: "planned" as const, sport: "run" as const, endurance: true, linked: false, picked: false, appMatched: false, garminMatched: false, inIllness: false };
+
+  it("follows the order of 6.2", () => {
+    expect(sessionState({ ...base, linked: true, status: "missed" })).toEqual({ state: "done", matchedBy: "link" });
+    expect(sessionState({ ...base, picked: true, status: "missed" })).toEqual({ state: "done", matchedBy: "pick" });
+    expect(sessionState({ ...base, status: "skipped", appMatched: true })).toEqual({ state: "skipped", matchedBy: null });
+    expect(sessionState({ ...base, status: "missed", garminMatched: true })).toEqual({ state: "missed", matchedBy: null });
+    expect(sessionState({ ...base, appMatched: true, inIllness: true })).toEqual({ state: "done", matchedBy: "app" });
+    expect(sessionState({ ...base, garminMatched: true })).toEqual({ state: "done", matchedBy: "garmin" });
+    expect(sessionState({ ...base, inIllness: true })).toEqual({ state: "illness", matchedBy: null });
+    expect(sessionState({ ...base, inIllness: true, date: "2026-11-06" })).toEqual({ state: "sick", matchedBy: null });
+    expect(sessionState(base)).toEqual({ state: "unconfirmed", matchedBy: null });
+    expect(sessionState({ ...base, date: "2026-10-29" })).toEqual({ state: "unconfirmed", matchedBy: null });
+    expect(sessionState({ ...base, date: "2026-10-28" })).toEqual({ state: "missed", matchedBy: null });
+    expect(sessionState({ ...base, sport: null })).toEqual({ state: "missed", matchedBy: null });
+    expect(sessionState({ ...base, date: "2026-11-05" })).toEqual({ state: "planned", matchedBy: null });
+  });
+
+  it("gives a lifter only C2's states", () => {
+    const lifter = { ...base, endurance: false };
+    expect(sessionState({ ...lifter, picked: true, garminMatched: true, inIllness: true })).toEqual({ state: "missed", matchedBy: null });
+    expect(sessionState({ ...lifter, appMatched: true })).toEqual({ state: "done", matchedBy: "app" });
+  });
+});
+
+describe("effectivePriorities", () => {
+  const r = (id: number, date: string, sport: "run" | "bike" | "swim" | null, plannedDurationS: number | null, hard = false, stored: "key" | "support" | "optional" | null = null) => ({ id, date, sport, hard, plannedDurationS, stored });
+
+  it("stored wins; hard is key; the longest bike or run of a week at 90 min or more is key", () => {
+    const p = effectivePriorities([
+      r(1, "2026-11-03", "run", 5400),
+      r(2, "2026-11-05", "run", 3600),
+      r(3, "2026-11-04", "run", 1800, true),
+      r(4, "2026-11-06", "bike", 4800),
+      r(5, "2026-11-07", "swim", 7200),
+      r(6, "2026-11-08", "run", 1200, false, "key"),
+      r(7, "2026-11-08", null, 3600),
+      r(8, "2026-11-10", "run", 5400, false, "optional"),
+    ]);
+    expect([...p]).toEqual([
+      [1, "key"],
+      [2, "support"],
+      [3, "key"],
+      [4, "support"],
+      [5, "support"],
+      [6, "key"],
+      [7, "support"],
+      [8, "optional"],
+    ]);
+  });
+});
+
+describe("generation with workout slots", () => {
+  it("a workout slot makes sessions with its copy; a program slot is unchanged; a rest slot makes none", () => {
+    const wk = { v: 1, sport: "run", name: "Easy", steps: [] };
+    const out = generateWeekday("2026-11-02", 7, [
+      { id: 1, dayOfWeek: 1, daySlot: 1, programId: 9, label: null, notes: null, autoComplete: false },
+      { id: 2, dayOfWeek: 2, daySlot: 1, programId: null, label: null, notes: null, autoComplete: false, workout: wk, workoutId: 4, priority: "key" },
+      { id: 3, dayOfWeek: 3, daySlot: 1, programId: null, label: null, notes: null, autoComplete: false },
+    ]);
+    expect(out).toEqual([
+      { slotId: 1, templateDate: "2026-11-02", date: "2026-11-02", position: 1, programId: 9, label: null, notes: null, autoComplete: false },
+      { slotId: 2, templateDate: "2026-11-03", date: "2026-11-03", position: 1, programId: null, label: null, notes: null, autoComplete: false, workout: wk, workoutId: 4, priority: "key" },
+    ]);
+  });
+
+  it("regeneration updates an untouched session's workout and priority in place", () => {
+    const wk = { v: 1, name: "New" };
+    const plan = regenerationPlan({
+      existing: [{ id: 50, slotId: 2, templateDate: "2026-11-10", date: "2026-11-10", position: 1, programId: null, label: null, notes: null, autoComplete: false, touched: false, done: false, workout: { v: 1, name: "Old" }, workoutId: 4, priority: null }],
+      generated: [{ slotId: 2, templateDate: "2026-11-10", date: "2026-11-10", position: 1, programId: null, label: null, notes: null, autoComplete: false, workout: wk, workoutId: 4, priority: "key" }],
+      today: "2026-11-05",
+      block: { start: "2026-11-02", end: "2026-11-30" },
+      includePast: false,
+    });
+    expect(plan.update).toEqual([{ id: 50, fields: { workout: wk, workoutId: 4, priority: "key" } }]);
   });
 });
 

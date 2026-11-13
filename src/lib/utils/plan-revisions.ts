@@ -330,7 +330,7 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!sameValue(b.programId, a.programId)) out.push(`Program ${prev.programName ?? "none"} → ${after.programName ?? "none"}`);
     if (!sameValue(b.label ?? null, a.label ?? null)) out.push(`Label ${b.label ?? "none"} → ${a.label ?? "none"}`);
     if (!sameValue(b.notes ?? null, a.notes ?? null)) out.push("Notes changed");
-    if (!sameValue(b.workout ?? null, a.workout ?? null)) {
+    if (canonical(b.workout ?? null) !== canonical(a.workout ?? null)) {
       const name = (w: unknown) => (w && typeof w === "object" ? String((w as { name?: unknown }).name ?? "workout") : null);
       out.push(a.workout == null ? `Workout ${name(b.workout)} cleared` : b.workout == null ? `Workout set: ${name(a.workout)}` : `Workout changed: ${name(b.workout)} → ${name(a.workout)}`);
     }
@@ -395,7 +395,7 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!prev) return [`Added workout "${a.name}"`];
     const out: string[] = [];
     if (!sameValue(prev.name, a.name)) out.push(`Name ${prev.name} → ${a.name}`);
-    if (!sameValue(prev.workout, a.workout)) out.push("Steps changed");
+    if (canonical(prev.workout) !== canonical(a.workout)) out.push("Steps changed");
     if (!sameValue(prev.priority ?? null, a.priority ?? null)) out.push(`Priority ${prev.priority ?? "default"} → ${a.priority ?? "default"}`);
     if (!sameValue(prev.deletedAt ?? null, a.deletedAt ?? null)) out.push(a.deletedAt ? "Deleted" : "Restored");
     return out;
