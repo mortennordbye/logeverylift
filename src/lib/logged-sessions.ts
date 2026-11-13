@@ -90,6 +90,10 @@ async function findDuplicate(tx: Tx, userId: string, input: LoggedSessionInput, 
 export async function writeLoggedSession(userId: string, input: LoggedSessionInput, after?: (tx: Tx, sessionId: number) => Promise<void>) {
   const exerciseIds = [...new Set(input.sets.map((s) => s.exerciseId))];
   return db.transaction(async (tx) => {
+    // The records locks first, before any row, in exercise order: the order a
+    // set write and the e2e reset take them, so none of them can wait on
+    // another's row while holding a lock it needs.
+    for (const exerciseId of [...exerciseIds].sort((a, b) => a - b)) await lockRecords(tx, userId, exerciseId);
     // One log per user and day at a time, so a retried call cannot
     // write the same session twice.
     await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`log_session:${userId}:${input.date}`}))`);
@@ -149,10 +153,7 @@ export async function writeLoggedSession(userId: string, input: LoggedSessionInp
           ),
         );
     }
-    for (const exerciseId of exerciseIds.sort((a, b) => a - b)) {
-      await lockRecords(tx, userId, exerciseId);
-      await rebuildPRsFrom(tx, userId, exerciseId, start);
-    }
+    for (const exerciseId of [...exerciseIds].sort((a, b) => a - b)) await rebuildPRsFrom(tx, userId, exerciseId, start);
     if (after) await after(tx, row.id);
     return row;
   });

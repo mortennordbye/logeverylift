@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { garminConnections, garminDailyMetrics, planRevisions, plannedSessions, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { athleteThresholds, garminConnections, garminDailyMetrics, planRevisions, plannedSessions, trainingCycleSlots, trainingCycles, users, workoutSessions } from "@/db/schema";
 import { makeSessionEasy } from "@/lib/actions/readiness";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
@@ -194,5 +194,62 @@ describe("sync warnings in get_training_cycle (T4)", () => {
     const got = await mcpTools(registerCycleTools, me)("get_training_cycle", { cycleId: c.id });
     expect(got.isError, got.raw).toBe(false);
     expect(got.data.limitWarnings).toEqual([expect.objectContaining({ rule: "long_run_cap" })]);
+  });
+});
+
+describe("review fixes", () => {
+  it("7: a double tap on two devices writes one revision; the second is told the suggestion changed", async () => {
+    await readings(me, true);
+    const { session } = await hardToday();
+    const swap = await readinessSwapFor(me);
+    expect(swap?.version).toBe(session.version);
+    const tap = () => makeSessionEasy({ plannedSessionId: session.id, expectedVersion: swap!.version });
+    const results = await Promise.all([tap(), tap()]);
+    expect(results.filter((r) => r.success)).toHaveLength(1);
+    expect(results.find((r) => !r.success)).toEqual({ success: false, error: "Readiness changed: there is no swap to make for this session now." });
+    const revs = await db
+      .select()
+      .from(planRevisions)
+      .where(and(eq(planRevisions.objectType, "planned_session"), eq(planRevisions.objectId, session.id), eq(planRevisions.writer, "apply")));
+    expect(revs).toHaveLength(1);
+  });
+
+  it("leaves out a session with a workout in progress", async () => {
+    await readings(me, true);
+    const { session } = await hardToday();
+    await db.insert(workoutSessions).values({ userId: me, date: TODAY, isCompleted: false, startTime: new Date(`${TODAY}T06:00:00Z`), plannedSessionId: session.id });
+    expect(await readinessSwapFor(me)).toBeNull();
+  });
+
+  it("clears a stored key priority, so the easy session is not a key session", async () => {
+    await readings(me, true);
+    const { session } = await hardToday();
+    await db.update(plannedSessions).set({ priority: "key" }).where(eq(plannedSessions.id, session.id));
+    const r = await makeSessionEasy({ plannedSessionId: session.id, expectedVersion: session.version });
+    expect(r.success).toBe(true);
+    expect((await sessionRow(session.id)).priority).toBeNull();
+  });
+
+  it("reads a long run planned by distance as key, from the threshold pace", async () => {
+    await db.insert(athleteThresholds).values({ userId: me, kind: "run_threshold_pace", value: 4, measuredOn: "2026-11-01", source: "manual" });
+    const legs = (await createProgram(me, [{ exerciseId: squat, sets: [{ targetReps: 5 }, { targetReps: 5 }, { targetReps: 5 }] }])).program.id;
+    const longRun = (await createProgram(me, [{ exerciseId: run, sets: [{ distanceMeters: 20_000, targetReps: null }] }])).program.id;
+    const [c] = await db.insert(trainingCycles).values({ userId: me, name: "Block", durationWeeks: 4, status: "active", startDate: "2026-11-02" }).returning();
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: c.id, dayOfWeek: 5, programId: legs, label: "Leg day" },
+      { trainingCycleId: c.id, dayOfWeek: 6, programId: longRun, label: "Long run" },
+    ]);
+    const list = await mcpTools(registerPlannedSessionTools, me)("list_planned_sessions", { from: "2026-11-06", to: "2026-11-07" });
+    expect(list.data.sessions[0].heavyLegsBeforeKey).toEqual([expect.objectContaining({ key: "Long run", daysBefore: 1 })]);
+  });
+
+  it("shows no sync warnings once the endurance switch is off", async () => {
+    const { program } = await createProgram(me, [{ exerciseId: run, sets: [{ durationSeconds: 30 * MIN, peakDurationSeconds: 120 * MIN, targetReps: null }] }]);
+    const [c] = await db.insert(trainingCycles).values({ userId: me, name: "Block", durationWeeks: 8, status: "active", startDate: "2026-11-02", goal: "maintain" }).returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: c.id, dayOfWeek: 7, programId: program.id });
+    await syncPeriodizedTargets(c.id, me, [{ programId: program.id }], 1, 8, "maintain", null);
+    await db.update(users).set({ enduranceEnabled: false }).where(eq(users.id, me));
+    const got = await mcpTools(registerCycleTools, me)("get_training_cycle", { cycleId: c.id });
+    expect(got.data.limitWarnings).toBeUndefined();
   });
 });

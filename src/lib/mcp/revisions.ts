@@ -27,6 +27,7 @@ import {
   asWarnings,
   limitCyclesWith,
   cycleScope,
+  datedCycles,
   evaluateLimits,
   limitContext,
   planFacts,
@@ -170,12 +171,14 @@ async function restoreWithWarnings<T extends object>(
   scope: LimitScope | null,
   restore: () => Promise<T | null>,
 ): Promise<{ done: T; check: LimitCheck | null } | null> {
-  const before = scope ? await planFacts(db, scope) : NO_FACTS;
+  // A cycle with dated sessions is read on them, before and after, as in withLimits (review nit).
+  const dated = scope ? await datedCycles(db, scope.cycleIds) : new Set<number>();
+  const before = scope ? await planFacts(db, scope, null, dated) : NO_FACTS;
   const [{ last }] = await db.select({ last: max(planRevisions.id) }).from(planRevisions).where(eq(planRevisions.userId, userId));
   const done = await restore();
   if (!done) return null;
   if (!scope) return { done, check: null };
-  const after = await planFacts(db, scope);
+  const after = await planFacts(db, scope, null, dated);
   const { blocking, check } = evaluateLimits(lc, before, after, NO_OVERRIDE);
   const warned = asWarnings(check, blocking);
   await db

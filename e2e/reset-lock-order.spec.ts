@@ -64,3 +64,45 @@ test("the reset waits for a set write that is still running instead of deadlocki
     await a.end();
   }
 });
+
+// A logged session (writeLoggedSession: log_session, "Did you do it?", step
+// results) takes the records locks first and then inserts the session, which
+// locks its program for key share. In the old order (session first, records
+// lock last) the reset took the records lock, waited on the program, and the
+// log waited on the records lock: a deadlock (review item 6).
+test("the reset waits for a logged session that is still being written", async ({}, testInfo) => {
+  const email = e2eUser(testInfo.parallelIndex).email;
+  const a = new pg.Client({ connectionString: assertTestDatabase(process.env.DATABASE_URL).toString() });
+  await a.connect();
+  try {
+    const {
+      rows: [u],
+    } = await a.query('select id from "user" where email = $1', [email]);
+    const {
+      rows: [p],
+    } = await a.query("select id from programs where user_id = $1 and deleted_at is null order by id limit 1", [u.id]);
+    const {
+      rows: [ex],
+    } = await a.query("select ws.exercise_id as id from workout_sets ws join workout_sessions w on w.id = ws.session_id where w.user_id = $1 limit 1", [u.id]);
+
+    await a.query("begin");
+    await a.query("select pg_advisory_xact_lock(hashtext($1), $2)", [u.id, ex.id]);
+    const {
+      rows: [s],
+    } = await a.query("insert into workout_sessions (user_id, program_id, date, is_completed, source) values ($1, $2, current_date, true, 'assistant') returning id", [u.id, p.id]);
+    const reset = resetE2EUser(email).then(
+      () => null,
+      (e: { cause?: { message?: string }; message: string }) => e.cause?.message ?? e.message,
+    );
+    const me = (a as unknown as { processID: number }).processID;
+    await expect
+      .poll(async () => (await a.query("select count(*)::int as n from pg_stat_activity where $1 = any(pg_blocking_pids(pid))", [me])).rows[0].n)
+      .toBe(1);
+    await a.query("insert into workout_sets (session_id, exercise_id, set_number, actual_reps, weight_kg, rest_time_seconds) values ($1, $2, 1, 1, 1, 0)", [s.id, ex.id]);
+    await a.query("commit");
+    expect(await reset).toBeNull();
+  } finally {
+    await a.query("rollback").catch(() => {});
+    await a.end();
+  }
+});

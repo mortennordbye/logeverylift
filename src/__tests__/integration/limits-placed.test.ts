@@ -218,6 +218,22 @@ describe("long_run_cap from runs logged in the app", () => {
     expect(r.isError).toBe(true);
     expect(JSON.parse(r.raw).brokenLimits[0].message).toContain("1:20 h is 1.33x your longest run in the last 30 days (1:00 h on 2026-10-26)");
   });
+
+  it("counts the distance of a logged run with incline 0 (no incline, as D1 reads it)", async () => {
+    const [s] = await db.insert(workoutSessions).values({ userId: me, date: "2026-10-26", isCompleted: true, startTime: new Date("2026-10-26T07:00:00Z") }).returning();
+    await db.insert(workoutSets).values({ sessionId: s.id, exerciseId: run, setNumber: 1, actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: 60 * MIN, distanceMeters: 10_000, inclinePercent: 0 });
+    const { program, slots } = await createProgram(me, [{ exerciseId: run, sets: [{ distanceMeters: 10_000, targetReps: null }] }]);
+    const [p] = await db.select({ v: programs.version }).from(programs).where(eq(programs.id, program.id));
+    const r = await mcpTools(registerProgramTools, me)("edit_program_exercise", {
+      operation: "update",
+      programExerciseId: slots[0].programExerciseId,
+      sets: [{ id: slots[0].setIds[0], setNumber: 1, distanceMeters: 12_000 }],
+      reason: "Longer long run",
+      expectedVersion: p.v,
+    });
+    expect(r.isError).toBe(true);
+    expect(JSON.parse(r.raw).brokenLimits[0].message).toContain("is 1.20x your longest run in the last 30 days (10.0 km on 2026-10-26)");
+  });
 });
 
 describe("warnings on the app's own writes (T4)", () => {

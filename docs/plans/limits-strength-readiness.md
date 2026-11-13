@@ -688,3 +688,32 @@ script with the write's order reproduced the same error every time. The reset no
 records locks for every exercise the account has sets or records for, then its cycles, then
 its programs, in the app's order, before it deletes anything. `e2e/reset-lock-order.spec.ts`
 fails with the old reset ("deadlock detected") and passes now.
+
+## 20. Review fixes (2026-11-13)
+
+Two independent reviews. Each code fix came with a test that failed first.
+
+1. **A start read stored values, not week 1 at its share.** Template weeks now take the write's
+   share for peak-anchored sets. Test "1: a start reads the template at its first week's share"
+   (`src/__tests__/integration/limits-ramp.test.ts`, as 2, 3 and 5).
+2. **Today's load counted twice** for a session done through a Garmin pick or a C5 match. Those
+   read as done. Test "2: today's session matched to a logged workout counts once".
+3. **A session week far ahead was projected over empty days.** The ramp now projects through the
+   user's dated sessions from today to the group's first week. Test "3: a session week far ahead".
+4. **A mixed program added no load.** The ramp counts any session with an estimate. The unit test
+   that pinned the old rule now pins the new one (`src/__tests__/training-limits-ramp.test.ts`).
+5. **A returning athlete read as calibrating.** History counts from the source's first day with
+   load, however long ago; the count is days before today. Test "5: a returning athlete".
+6. **`writeLoggedSession` took the records lock last.** It now takes it first, before any row, as
+   a set write and the e2e reset do. Test `src/__tests__/integration/logged-session-locks.test.ts`;
+   `e2e/reset-lock-order.spec.ts` covers the path.
+7. **A double tap could make two revisions.** App writers keep the version (A4), so the swap
+   checks under the row lock that the session still runs what it ran. The second tap reads "Readiness
+   changed". Test "7: a double tap on two devices writes one revision".
+
+Nits: live cycles only in the session reader; restores read dated cycles on their sessions; an
+incline of 0 is no incline; a long run planned by distance gets its time from threshold pace for
+the key rule; sync warnings need the endurance switch; a session with a workout in progress is
+left out of the swap; the swap clears a stored key priority (a brick keeps its link); the reset
+also clears Garmin rows and the role. A `SessionInputError` was already mapped (it is a
+`PlanStateError`).

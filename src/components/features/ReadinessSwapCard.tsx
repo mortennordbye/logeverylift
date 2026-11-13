@@ -14,7 +14,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export type ReadinessSwapView = { sessionId: number; label: string; minutes: number; text: string };
+export type ReadinessSwapView = { sessionId: number; label: string; minutes: number; text: string; version?: number };
 
 export function ReadinessSwapCard({ swap }: { swap: ReadinessSwapView }) {
   const router = useRouter();
@@ -25,7 +25,7 @@ export function ReadinessSwapCard({ swap }: { swap: ReadinessSwapView }) {
     if (pending) return;
     setPending(true);
     setError(null);
-    const r = await callAction(makeSessionEasy({ plannedSessionId: swap.sessionId }));
+    const r = await callAction(makeSessionEasy({ plannedSessionId: swap.sessionId, expectedVersion: swap.version }));
     setPending(false);
     if (!r.success) {
       setError(r.error);

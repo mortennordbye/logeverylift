@@ -75,7 +75,7 @@ async function enduranceHome(userId: string, today: string) {
     const sick = info?.phase === "sick" ? ((await listIllness(userId)).find((p) => p.id === info.periodId) ?? null) : null;
     const swap = await readinessSwapFor(userId);
     return {
-      readinessSwap: swap ? { sessionId: swap.sessionId, label: swap.label, minutes: swap.minutes, text: swap.text } : null,
+      readinessSwap: swap ? { sessionId: swap.sessionId, label: swap.label, minutes: swap.minutes, text: swap.text, version: swap.version } : null,
       unconfirmed: home.unconfirmed.map(answerSession),
       missedKey: home.missedKey.map((m) => ({
         session: answerSession(m.session),

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { planRevisions, programs, trainingCycleSlots, trainingCycles, workoutSessions, workoutSets } from "@/db/schema";
 import { updateProgramSet } from "@/lib/actions/programs";
+import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { and, desc, eq } from "drizzle-orm";
@@ -107,7 +108,7 @@ describe("weekly_load_ramp", () => {
     const p = await dailyRides(me);
     const r = await longer(me, p);
     expect(r.isError, r.raw).toBe(false);
-    expect(r.data.limits.notChecked).toContainEqual(expect.objectContaining({ rule: "weekly_load_ramp", why: expect.stringContaining("calibrating (21 of 42 days") }));
+    expect(r.data.limits.notChecked).toContainEqual(expect.objectContaining({ rule: "weekly_load_ramp", why: expect.stringContaining("calibrating (20 of 42 days") }));
 
     const fresh = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
     const q = await dailyRides(fresh);
@@ -120,5 +121,79 @@ describe("weekly_load_ramp", () => {
     const u = await dailyRides(user);
     asUser(user);
     expect((await updateProgramSet({ id: u.setId, durationSeconds: 160 * MIN })).success).toBe(true);
+  });
+});
+
+/** Every ctlStart in a refusal's numbers, however many weeks and groups it holds. */
+function ctlStarts(n: unknown): number[] {
+  if (Array.isArray(n)) return n.flatMap(ctlStarts);
+  if (n && typeof n === "object") {
+    const o = n as Record<string, unknown>;
+    return typeof o.ctlStart === "number" ? [o.ctlStart] : Object.values(o).flatMap(ctlStarts);
+  }
+  return [];
+}
+
+describe("weekly_load_ramp review fixes", () => {
+  it("1: a start reads the template at its first week's share, not the stored values", async () => {
+    await history(me, 60);
+    // Stored 60 min, peak 200 min: week 1 of the block runs at its share of the peak.
+    const { program } = await createProgram(me, [
+      { exerciseId: bike, sets: [{ durationSeconds: 60 * MIN, peakDurationSeconds: 200 * MIN, targetHeartRateZone: 2, targetReps: null }] },
+    ]);
+    const [c] = await db.insert(trainingCycles).values({ userId: me, name: "Next", durationWeeks: 4, goal: "maintain" }).returning();
+    await db.insert(trainingCycleSlots).values([1, 2, 3, 4, 5, 6, 7].map((d) => ({ trainingCycleId: c.id, dayOfWeek: d, programId: program.id })));
+    const r = await mcpTools(registerCycleTools, me)("manage_training_cycle", { operation: "start", cycleId: c.id, reason: "Start", expectedVersion: 1 });
+    expect(r.isError).toBe(true);
+    expect(JSON.parse(r.raw).brokenLimits.map((b: { rule: string }) => b.rule)).toContain("weekly_load_ramp");
+  });
+
+  it("2: today's session matched to a logged workout counts once, as when it is linked", async () => {
+    const loadOf = async (link: boolean) => {
+      const user = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+      await history(user, 60);
+      const p = await dailyRides(user);
+      const list = await mcpTools(registerPlannedSessionTools, user)("list_planned_sessions", { from: TODAY, to: TODAY });
+      const [s] = await db.insert(workoutSessions).values({ userId: user, date: TODAY, isCompleted: true, startTime: new Date(`${TODAY}T07:00:00Z`), plannedSessionId: link ? list.data.sessions[0].id : null }).returning();
+      await db.insert(workoutSets).values({ sessionId: s.id, exerciseId: bike, setNumber: 1, actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: 60 * MIN, rpe: 3 });
+      const r = await longer(user, p);
+      expect(r.isError).toBe(true);
+      return JSON.parse(r.raw).brokenLimits[0].numbers.weeks[0].plannedLoad as number;
+    };
+    expect(await loadOf(false)).toBe(await loadOf(true));
+  });
+
+  it("3: a session week far ahead is projected with the sessions before it", async () => {
+    await history(me, 60);
+    const p = await dailyRides(me);
+    await mcpTools(registerPlannedSessionTools, me)("list_planned_sessions", { from: TODAY, to: "2026-12-13" });
+    const [c] = await db.select().from(trainingCycles).where(eq(trainingCycles.userId, me));
+    const tenHours = { v: 1, sport: "bike", name: "Very long ride", steps: [{ type: "work", end: { type: "time", seconds: 36_000 }, target: { metric: "power", anchor: "ftp", low: 60, high: 70 } }] };
+    const r = await mcpTools(registerPlannedSessionTools, me)("manage_planned_session", { operation: "add", cycleId: c.id, date: "2026-12-08", workout: tenHours, position: 2, reason: "Camp" });
+    expect(r.isError).toBe(true);
+    // Fitness holds near 40 on the daily rides; projecting the gap as empty days would decay it to about 24.
+    const starts = ctlStarts(JSON.parse(r.raw).brokenLimits.find((b: { rule: string }) => b.rule === "weekly_load_ramp").numbers);
+    expect(starts.length).toBeGreaterThan(0);
+    for (const s of starts) expect(s).toBeGreaterThan(35);
+    expect(p.programId).toBeGreaterThan(0);
+  });
+
+  it("5: a returning athlete with old history is checked, not calibrating", async () => {
+    for (let i = 200; i >= 121; i--) {
+      const date = new Date(Date.parse(`${TODAY}T00:00:00Z`) - i * 86_400_000).toISOString().slice(0, 10);
+      const [s] = await db.insert(workoutSessions).values({ userId: me, date, isCompleted: true, startTime: new Date(`${date}T07:00:00Z`) }).returning();
+      await db.insert(workoutSets).values({ sessionId: s.id, exerciseId: bike, setNumber: 1, actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: 60 * MIN, rpe: 3 });
+    }
+    await history(me, 10);
+    const p = await dailyRides(me);
+    const [row] = await db.select({ v: programs.version }).from(programs).where(eq(programs.id, p.programId));
+    const r = await mcpTools(registerProgramTools, me)("edit_program_exercise", {
+      operation: "update",
+      programExerciseId: p.programExerciseId,
+      sets: [{ id: p.setId, setNumber: 1, durationSeconds: 61 * MIN, targetHeartRateZone: 2 }],
+      reason: "A minute more",
+      expectedVersion: row.v,
+    });
+    expect(r.data?.limits?.checked ?? JSON.parse(r.raw).brokenLimits.map((b: { rule: string }) => b.rule)).toContain("weekly_load_ramp");
   });
 });

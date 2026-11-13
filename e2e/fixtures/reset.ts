@@ -18,6 +18,8 @@ import {
   exercisePrs,
   exercises,
   friendships,
+  garminConnections,
+  garminDailyMetrics,
   illnessPeriods,
   oauthConsents,
   planRevisions,
@@ -113,6 +115,9 @@ export async function resetE2EUser(email: string): Promise<void> {
     await tx.delete(userWeightEntries).where(eq(userWeightEntries.userId, userId));
     await tx.delete(oauthConsents).where(eq(oauthConsents.userId, userId));
     await tx.delete(exercises).where(eq(exercises.userId, userId));
+    // A spec may connect Garmin and make the account an admin (readiness-swap, garmin).
+    await tx.delete(garminDailyMetrics).where(eq(garminDailyMetrics.userId, userId));
+    await tx.delete(garminConnections).where(eq(garminConnections.userId, userId));
     await tx
       .delete(friendships)
       .where(or(eq(friendships.requesterId, userId), eq(friendships.addresseeId, userId)));
@@ -135,6 +140,7 @@ export async function resetE2EUser(email: string): Promise<void> {
         distanceUnit: "km",
         swimUnit: "m",
         enduranceEnabled: false,
+        role: "user",
       })
       .where(eq(users.id, userId));
   });

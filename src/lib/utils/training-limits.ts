@@ -321,7 +321,15 @@ export type PlacedCycle = { name: string; phaseType: string | null; blockStart: 
  * checked, `to` the last day; sessions up to two days before `from` are there
  * for heavy legs) or a template week that repeats (`loop`).
  */
-export type PlacedGroup = { loop: boolean; from: string; to: string; sessions: PlacedSession[]; cycles: Record<number, PlacedCycle> };
+export type PlacedGroup = {
+  loop: boolean;
+  from: string;
+  to: string;
+  sessions: PlacedSession[];
+  cycles: Record<number, PlacedCycle>;
+  /** The user's dated sessions from today to the day before `from` minus two: the load ramp projects through them. */
+  lead?: PlacedSession[];
+};
 
 const DAY_NAME = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -614,9 +622,9 @@ export function easyWorkout(sport: "swim" | "bike" | "run", plannedSeconds: numb
   };
 }
 
-export type SwapCandidate = { id: number; label: string; sport: "swim" | "bike" | "run" | null; hard: boolean; plannedDurationS: number | null; done: boolean };
+export type SwapCandidate = { id: number; label: string; sport: "swim" | "bike" | "run" | null; hard: boolean; plannedDurationS: number | null; done: boolean; version?: number };
 
-export type ReadinessSwap = { sessionId: number; label: string; workout: Workout; minutes: number; text: string; flag: ReadinessFlag };
+export type ReadinessSwap = { sessionId: number; label: string; workout: Workout; minutes: number; text: string; flag: ReadinessFlag; /** The session's version, sent back with the tap (T9). */ version?: number };
 
 export const TAPER_NOTE = "In a taper HRV often drops. If you feel well, keep the plan.";
 
@@ -635,6 +643,7 @@ export function readinessSwap(input: { flag: ReadinessFlag | null; today: string
   return {
     sessionId: s.id,
     label: s.label,
+    version: s.version,
     workout: easyWorkout(s.sport, s.plannedDurationS),
     minutes,
     flag,
@@ -672,9 +681,12 @@ export function plannedDayLoads(start: RampStart, sessions: PlacedSession[]): { 
   const loads = new Map<string, number>([[start.today, start.doneToday]]);
   const partial = new Map<string, number>();
   for (const s of sessions) {
-    if (s.date < start.today || s.done || s.sport == null) continue;
-    loads.set(s.date, (loads.get(s.date) ?? 0) + (s.plannedLoad ?? 0));
-    if (s.plannedLoad == null || s.loadPartial) partial.set(s.date, (partial.get(s.date) ?? 0) + 1);
+    if (s.date < start.today || s.done) continue;
+    // A session with an estimate counts, whatever its sport (a run plus core
+    // work has no single sport; review item 4). An endurance session with no
+    // estimate counts as partial; a strength session has neither.
+    if (s.plannedLoad != null) loads.set(s.date, (loads.get(s.date) ?? 0) + s.plannedLoad);
+    if ((s.plannedLoad == null && s.sport != null) || (s.plannedLoad != null && s.loadPartial)) partial.set(s.date, (partial.get(s.date) ?? 0) + 1);
   }
   return { loads, partial };
 }

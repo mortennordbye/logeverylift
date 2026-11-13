@@ -63,7 +63,7 @@ describe("weeklyRamps", () => {
     expect(weeklyRamps(start(45), [], [TODAY]).get(TODAY)!.limit).toBe(RAMP_LIMIT_LOW);
   });
 
-  it("counts today's done load, skips done and past sessions, and counts sessions with no estimate", () => {
+  it("counts today's done load, skips done and past sessions, and counts a session with no estimate as partial and a mixed program by its estimate", () => {
     const { loads, partial } = plannedDayLoads(start(50, 30), [
       ride(TODAY, 40),
       ride(TODAY, 60, { done: true }),
@@ -74,10 +74,12 @@ describe("weeklyRamps", () => {
     ]);
     expect(loads.get(TODAY)).toBe(70);
     expect(loads.has("2026-11-15")).toBe(false);
-    expect(loads.get("2026-11-17")).toBe(0);
+    expect(loads.has("2026-11-17")).toBe(false);
     expect(partial.get("2026-11-17")).toBe(1);
     expect(partial.get("2026-11-18")).toBe(1);
-    expect(loads.has("2026-11-19")).toBe(false);
+    // A mixed program (a ride plus core work) has an estimate and no single sport: it counts (review item 4).
+    expect(loads.get("2026-11-19")).toBe(50);
+    expect(partial.has("2026-11-19")).toBe(false);
   });
 });
 

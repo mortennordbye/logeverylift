@@ -134,20 +134,37 @@ async function rampStart(userId: string, today: string): Promise<{ load: RampSta
   const { getTrainingLoad } = await import("@/lib/training-load");
   const series = await getTrainingLoad(userId, 60);
   const days = series.days.filter((d) => d.tracks?.total);
-  // History starts at the first day with any load: none in 60 days is no
-  // data, and under 42 days of it is still calibrating (a new user's fitness
-  // starts from 0, so any plan would read as a steep ramp).
-  const first = days.findIndex((d) => (d.tracks.total?.load ?? 0) > 0);
-  if (first < 0) return { load: null, why: NO_LOAD };
-  const last = days.at(-1)!;
-  const history = days.length - first;
-  if (last.calibrating || (first > 0 && history < 42)) return { load: null, why: CALIBRATING(history) };
+  // History starts at the source's first day with any load, however long ago
+  // (review item 5): none at all is no data, and under 42 days is still
+  // calibrating (a new user's fitness starts from 0, so any plan would read
+  // as a steep ramp).
+  const first = await firstLoadDay(userId, series.source);
+  if (first == null || !days.length) return { load: null, why: NO_LOAD };
+  const history = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${first}T00:00:00Z`)) / 86_400_000);
+  if (days.at(-1)!.calibrating || history < 42) return { load: null, why: CALIBRATING(history) };
   const endurance = (d: (typeof days)[number], k: "ctl" | "load") => (["swim", "bike", "run"] as const).reduce((a, sp) => a + (d.tracks[sp]?.[k] ?? 0), 0);
   const past = days.filter((d) => d.date < today);
   const pastCtl = new Map(past.map((d) => [d.date, endurance(d, "ctl")]));
   const todayRow = days.find((d) => d.date === today);
   const ctlYesterday = past.length ? endurance(past.at(-1)!, "ctl") : 0;
   return { load: { today, ctlYesterday, pastCtl, doneToday: todayRow ? endurance(todayRow, "load") : 0 }, why: null };
+}
+
+/** The first day the user's fitness source has any load: a Garmin day with load, or a logged session. */
+async function firstLoadDay(userId: string, source: "garmin" | "app"): Promise<string | null> {
+  const { sql } = await import("drizzle-orm");
+  if (source === "garmin") {
+    const [r] = await db
+      .select({ day: sql<string | null>`min(${garminDailyMetrics.day})::text` })
+      .from(garminDailyMetrics)
+      .where(and(eq(garminDailyMetrics.userId, userId), sql`coalesce((${garminDailyMetrics.metrics}->'pmc'->'total'->>'load')::float8, 0) > 0`));
+    return r?.day ?? null;
+  }
+  const [r] = await db
+    .select({ day: sql<string | null>`min(${workoutSessions.date})::text` })
+    .from(workoutSessions)
+    .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, true), inArray(workoutSessions.source, ["app", "assistant"])));
+  return r?.day ?? null;
 }
 
 const NO_PHASE = "Strength sessions per week not checked: the cycle has no phase type, so one template runs the whole block.";
@@ -219,7 +236,7 @@ async function appRuns(userId: string, from: string, today: string): Promise<Pas
     const run = bySession.get(r.sessionId) ?? { day: r.day, durationS: 0, distanceM: null, indoor: false };
     run.durationS += r.durationSeconds ?? 0;
     if (r.distanceMeters != null) run.distanceM = (run.distanceM ?? 0) + r.distanceMeters;
-    if (r.inclinePercent != null) run.indoor = true;
+    if ((r.inclinePercent ?? 0) > 0) run.indoor = true;
     bySession.set(r.sessionId, run);
   }
   return [...bySession.values()].filter((r) => r.durationS > 0 || (r.distanceM ?? 0) > 0);
@@ -397,7 +414,7 @@ async function datedCycleWeeks(ex: Executor, cycleId: number): Promise<{ thisMon
 }
 
 /** The weekday cycles among these that have dated sessions. */
-async function datedCycles(ex: Executor, cycleIds: number[]): Promise<Set<number>> {
+export async function datedCycles(ex: Executor, cycleIds: number[]): Promise<Set<number>> {
   if (cycleIds.length === 0) return new Set();
   const rows = await ex
     .select({ id: trainingCycles.id })
@@ -529,6 +546,12 @@ async function thresholdsOn(ex: Executor, userId: string) {
   return Object.fromEntries(Object.entries(currentThresholds(rows)).map(([k, r]) => [k, r!.value]));
 }
 
+/** The total time of planned steps, or null when none has a time. */
+function plannedSeconds(steps: { seconds: number | null }[]): number | null {
+  const known = steps.filter((s) => s.seconds != null);
+  return known.length ? Math.round(known.reduce((a, s) => a + s.seconds!, 0)) : null;
+}
+
 /** D1's planned load of a workout, or none when it cannot be estimated. */
 function workoutLoad(estimate: () => { load: number; partial: boolean }): { plannedLoad: number | null; loadPartial: boolean } {
   try {
@@ -569,7 +592,7 @@ async function weekShares(ex: Executor, rows: PlaceRow[]): Promise<WeekShare> {
  * hard, its planned time, its heavy leg sets and its strength sets, read on
  * this connection (inside the write's transaction).
  */
-async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promise<PlacedSession[]> {
+async function placeRows(ex: Executor, userId: string, rows: PlaceRow[], fixedShare: number | null = null): Promise<PlacedSession[]> {
   const ids = [...new Set(rows.map((r) => r.programId).filter((id): id is number => id != null))];
   const sets = ids.length
     ? await ex
@@ -607,7 +630,7 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promis
   const { loadAnchors, workoutPlannedLoad } = await import("@/lib/utils/step-results");
   const { DEFAULT_IF, plannedLoad } = await import("@/lib/utils/training-load");
   const anchors = loadAnchors(thresholds);
-  const share = await weekShares(ex, rows);
+  const share: WeekShare = fixedShare != null ? () => fixedShare : await weekShares(ex, rows);
 
   return rows.map((r): PlacedSession => {
     const base = { ref: r.ref, date: r.date, position: r.position, storedPriority: r.priority, cycleId: r.cycleId, done: r.done ?? false };
@@ -654,7 +677,9 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promis
       hard: isHardSession(
         mine.map((s) => ({ discipline: s.discipline, sessionRole: s.sessionRole === "work" ? "work" : null, targetHeartRateZone: s.targetHeartRateZone })),
       ),
-      plannedDurationS: sport ? mine.reduce((a, s) => a + (s.durationSeconds ?? 0), 0) || null : null,
+      // A distance-only run or swim gets its time from the threshold speed (programSteps),
+      // so a long run planned by distance can read as key (review nit).
+      plannedDurationS: sport ? plannedSeconds(programSteps(loadSets.filter((s) => s.discipline === sport), anchors, DEFAULT_IF)) : null,
       heavyLegSets: legSets.filter(isHeavyLegSet).length,
       strengthSets: legSets.filter(isStrengthSet).length,
       plannedLoad: load,
@@ -664,7 +689,7 @@ async function placeRows(ex: Executor, userId: string, rows: PlaceRow[]): Promis
 }
 
 /** A weekday cycle's template week, dated from TEMPLATE_MONDAY, as a loop. Null for a rotation cycle. */
-async function templateGroup(ex: Executor, cycleId: number): Promise<PlacedGroup | null> {
+async function templateGroup(ex: Executor, cycleId: number, share: number | null = null): Promise<PlacedGroup | null> {
   const { addDaysStr } = await import("@/lib/utils/planned-sessions");
   const [c] = await ex
     .select({ userId: trainingCycles.userId, name: trainingCycles.name, phaseType: trainingCycles.phaseType, scheduleType: trainingCycles.scheduleType })
@@ -701,7 +726,8 @@ async function templateGroup(ex: Executor, cycleId: number): Promise<PlacedGroup
     loop: true,
     from: TEMPLATE_MONDAY,
     to: addDaysStr(TEMPLATE_MONDAY, 6),
-    sessions: await placeRows(ex, c.userId, rows),
+    // A start reads the block's first week at its share of peak (review item 1).
+    sessions: await placeRows(ex, c.userId, rows, share),
     cycles: { [cycleId]: { name: c.name, phaseType: c.phaseType, blockStart: null, blockEnd: null } },
   };
 }
@@ -732,9 +758,10 @@ async function datedRows(ex: Executor, userId: string, from: string, to: string,
       priority: plannedSessions.priority,
       label: plannedSessions.label,
       cycleId: plannedSessions.cycleId,
+      garminActivityId: plannedSessions.garminActivityId,
     })
     .from(plannedSessions)
-    .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), isNull(trainingCycles.deletedAt)))
+    .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), liveCycles))
     .where(
       and(
         eq(plannedSessions.userId, userId),
@@ -753,7 +780,16 @@ async function datedRows(ex: Executor, userId: string, from: string, to: string,
         .where(and(inArray(workoutSessions.plannedSessionId, rows.map((r) => r.id)), eq(workoutSessions.isCompleted, true)))
     : [];
   const done = new Set(linked.map((l) => l.id));
-  return rows.map((r) => ({ ...r, ref: `p:${r.id}`, date: r.date!, done: done.has(r.id) }));
+  // Today's sessions done another way: a picked Garmin activity, or C5's match
+  // to a logged workout or a Garmin activity. Their load is in the series
+  // already, so the ramp must not add the plan again (review item 2).
+  const today = await todayOn(ex, userId);
+  for (const r of rows) if (r.garminActivityId != null) done.add(r.id);
+  if (rows.some((r) => r.date === today && !done.has(r.id))) {
+    const { sessionCompliance } = await import("@/lib/session-compliance");
+    for (const c of await sessionCompliance(userId, today, today)) if (c.state === "done") done.add(c.id);
+  }
+  return rows.map((r) => ({ id: r.id, position: r.position, programId: r.programId, workout: r.workout, priority: r.priority, label: r.label, cycleId: r.cycleId, ref: `p:${r.id}`, date: r.date!, done: done.has(r.id) }));
 }
 
 /** A dated cycle's sessions from this week (or its first week) to its last day, with the two days before. */
@@ -771,6 +807,7 @@ async function datedCycleGroup(ex: Executor, cycleId: number): Promise<PlacedGro
     loop: false,
     from,
     to,
+    lead: await leadSessions(ex, c.userId, today, addDaysStr(from, -3)),
     sessions: await placeRows(ex, c.userId, rows),
     cycles: { [cycleId]: { name: c.name, phaseType: c.phaseType, blockStart: block.start, blockEnd: to } },
   };
@@ -782,7 +819,25 @@ async function weekGroup(ex: Executor, userId: string, monday: string): Promise<
   const to = addDaysStr(monday, 6);
   const rows = await datedRows(ex, userId, addDaysStr(monday, -2), to);
   const cycleIds = [...new Set(rows.map((r) => r.cycleId).filter((id): id is number => id != null))];
-  return { loop: false, from: monday, to, sessions: await placeRows(ex, userId, rows), cycles: await placedCycles(ex, cycleIds) };
+  const today = await todayOn(ex, userId);
+  return {
+    loop: false,
+    from: monday,
+    to,
+    lead: await leadSessions(ex, userId, today, addDaysStr(monday, -3)),
+    sessions: await placeRows(ex, userId, rows),
+    cycles: await placedCycles(ex, cycleIds),
+  };
+}
+
+/**
+ * The user's dated sessions from today to `to`: the weekly load ramp projects
+ * fitness through them to a group's first week, instead of empty days that
+ * would decay it (review item 3). None when the group starts within two days.
+ */
+async function leadSessions(ex: Executor, userId: string, today: string, to: string): Promise<PlacedSession[]> {
+  if (to < today) return [];
+  return placeRows(ex, userId, await datedRows(ex, userId, today, to));
 }
 
 /**
@@ -791,7 +846,7 @@ async function weekGroup(ex: Executor, userId: string, monday: string): Promise<
  * get_training_cycle. Empty when it broke none or has not run this week.
  */
 export async function syncLimitWarnings(userId: string, cycleId: number, week: number | null): Promise<{ rule: string; message: string; evidence: string }[]> {
-  if (week == null) return [];
+  if (week == null || !(await enduranceEnabledFor(userId))) return [];
   const { planRevisions } = await import("@/db/schema");
   const { desc } = await import("drizzle-orm");
   const [rev] = await db
@@ -902,7 +957,7 @@ export async function planFacts(
   const labels = new Map<string, string>();
   const placed = new Map<string, PlacedGroup>();
   for (const id of scope.cycleIds) {
-    const group = dated.has(id) ? await datedCycleGroup(ex, id) : await templateGroup(ex, id);
+    const group = dated.has(id) ? await datedCycleGroup(ex, id) : await templateGroup(ex, id, share);
     if (group) placed.set(`c:${id}`, group);
     if (!dated.has(id)) {
       weeks.set(`c:${id}`, await cycleWeekSessions(ex, id));
@@ -964,7 +1019,7 @@ function rampHit(start: RampStart, before: ReadonlyMap<string, PlacedGroup>, aft
     if (!g.loop) {
       const mondays: string[] = [];
       for (let m = mondayOfDay(g.from); m <= g.to; m = addDay(m, 7)) if (addDay(m, 6) >= start.today) mondays.push(m);
-      return { sessions: g.sessions, mondays };
+      return { sessions: [...(g.lead ?? []), ...g.sessions], mondays };
     }
     const next = addDay(thisMonday, 7);
     const sessions = [thisMonday, next].flatMap((m) =>

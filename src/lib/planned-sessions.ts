@@ -745,7 +745,9 @@ export type SessionOp =
       notes?: string | null;
     }
   // Structured workouts and answers (docs/plans/workouts-and-compliance.md, 5 and 6).
-  | { op: "set_workout"; id: number; workout?: unknown; workoutId?: number; expectedVersion?: number }
+  | { op: "set_workout"; id: number; workout?: unknown; workoutId?: number; expectedVersion?: number; /** null clears a stored priority in the same write (the readiness swap). */ priority?: null;
+      /** Apply only if the session still runs this program or workout, read under its row lock (the readiness swap: app writers keep the version). */
+      ifStill?: { programId: number | null; workout: unknown; message: string } }
   | { op: "clear_workout"; id: number; programId: number; expectedVersion?: number }
   | { op: "update_from_library"; id: number; expectedVersion?: number }
   | { op: "set_priority"; id: number; priority: SessionPriority | null; expectedVersion?: number }
@@ -998,10 +1000,14 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     case "set_workout":
     case "update_from_library": {
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
+      if (input.op === "set_workout" && input.ifStill) {
+        const same = row.programId === input.ifStill.programId && JSON.stringify(row.workout ?? null) === JSON.stringify(input.ifStill.workout ?? null);
+        if (!same) throw new SessionInputError(input.ifStill.message);
+      }
       const source = input.op === "set_workout" ? input : { workoutId: row.workoutId ?? undefined };
       if (input.op === "update_from_library" && row.workoutId == null) throw new SessionInputError("This session's workout is not from the library.");
       const wk = await resolveWorkoutInput(tx, ctx.userId, source);
-      set = { workout: wk.workout, workoutId: wk.workoutId, programId: null };
+      set = { workout: wk.workout, workoutId: wk.workoutId, programId: null, ...(input.op === "set_workout" && input.priority === null && { priority: null }) };
       break;
     }
     case "clear_workout":
