@@ -817,3 +817,53 @@ Decided by the hub on 2026-11-13, owner may change. The hub took every recommend
   a far time zone (UTC+14) with a console check for hydration errors.
 - **Plan corrections:** C4 and C5 are `done` (PR #231) and C6 and D1 `done` with this PR, in
   `triathlon-coach-plan.md` and the README.
+
+## 19. Review fixes (2026-11-13)
+
+Two independent reviews of the build. Each code fix came with a test that failed first.
+
+1. **A run warm-up inside a gym session counted twice** in the Garmin series: the strength path
+   already counts such a session whole, matched or not. App endurance rows from sessions with
+   strength sets are left out, so these days read as in model v2. Unit test "a strength session
+   with a run warm-up gives the same series as v2" (`src/__tests__/garmin-analytics.test.ts`).
+2. **Distance from a set with no time raised the pace.** Only sets with a time give distance.
+   Integration test "2: distance from a set with no time does not raise the pace"
+   (`src/__tests__/integration/endurance-app.test.ts`, as the rest unless named).
+3. **Swim moving time was not capped.** It counts only when every swum step has a time, and never
+   above the logged time. Unit test "swim: moving time is capped at the logged time"
+   (`src/__tests__/training-load.test.ts`); integration test "3: swim moving time ...".
+4. **A new user's ramp read 0.** It is null until a week after the first day with data. Test "4".
+5. **A Garmin activity with no start time never paired.** It pairs by sport and day, after the
+   timed ones. Unit test "pairs with a Garmin activity that has no start or end time".
+6. **`log_step_results` dropped the distance on an attached session.** It goes on the first set
+   when no set has one; never an overwrite. Test "6".
+7. **`list_planned_sessions` computed load for lifters.** Only with the endurance switch. Test "7".
+8. **A done session logged on another day had no load.** Load is read by the linked session ids.
+   Test "8".
+9. **A finished, unsaved run expired after 24 hours.** Only an unfinished run expires, in the
+   player and in the home card's link. Unit test "never expires a finished, unsaved run"
+   (`src/__tests__/workout-player.test.ts`); component test "hides an expired unfinished run, and
+   keeps a finished one of any age" (`src/__tests__/components/endurance-today.test.tsx`).
+10. **A new Start could replace a finished, unsaved run.** The ready screen names it, links to its
+    results, and blocks Start until it is saved or discarded with "Discard it". The results form
+    still fills from it after the workout was edited. Component tests "a finished, unsaved run of
+    another session blocks Start ...", "... of this session's older workout routes to its results"
+    (`src/__tests__/components/guided-player.test.tsx`) and "fills from a finished run of an older
+    version of the workout" (`src/__tests__/components/step-results.test.tsx`). This replaces the
+    first bullet of section 18 for finished runs.
+11. **A second save overwrote the run's details.** The source, client key, times and pauses stay
+    unless the save brings new ones. A new column, `wrote_session` (migration 0088 regenerated, not
+    yet on `main`), marks a session the results path wrote: a later save may change its RPE and
+    distance; a session someone else logged only gets missing values filled. The form shows the
+    saved distance and sends no run details from a hand save. Tests "11: a second save keeps ..."
+    and "shows the saved distance and sends no run details from a hand save".
+12. **Wake lock handles leaked.** The old handle is released when a new one arrives; a handle that
+    arrives after the run ended, or after the screen closed, is released at once; a reload during a
+    run asks for it again. Component tests "releases the old wake lock on each resync ..." and "asks
+    for the wake lock after a reload during a run".
+13. **A double tap on Skip or Lap closed two steps.** Each tap names the step on screen; a tap for a
+    step already closed does nothing. Component test "a double tap on Skip skips one step".
+14. **Pause after a step ended played no cue,** and **the app showed the assistant's duplicate
+    message.** Pause now runs the same catch-up as the clock, with its cue; the app shows "This
+    session is already logged for that day." Component test "Pause after a step ended plays the
+    change cue"; unit test `src/__tests__/step-results-messages.test.ts`.

@@ -101,7 +101,9 @@ export function sessionLoad(s: SessionLoadInput, anchors: LoadAnchors): SessionL
     if (p) return { load: p.load, method: "run_pace" };
   }
   if (s.sport === "swim") {
-    const p = swimCssLoad({ seconds: s.movingSeconds && s.movingSeconds > 0 ? s.movingSeconds : s.seconds, meters }, anchors.swimCss);
+    // Moving time leaves the wall rest out; it is never longer than the logged time (review fix 3).
+    const seconds = s.movingSeconds && s.movingSeconds > 0 ? Math.min(s.movingSeconds, s.seconds) : s.seconds;
+    const p = swimCssLoad({ seconds, meters }, anchors.swimCss);
     if (p) return { load: p.load, method: "swim_css" };
   }
   const r = srpeLoad(s.seconds / 60, s.rpe);
@@ -187,7 +189,8 @@ export function plannedLoad(sport: EnduranceSport, steps: PlannedStep[], anchors
 
 // ── Garmin pairing and the series (endurance-app.md 6.4) ─────────────────────
 
-export type PairItem = { id: number; sport: EnduranceSport; date: string; durationS: number };
+/** durationS null: a Garmin activity with no start or end time; it pairs by sport and day, after the timed ones. */
+export type PairItem = { id: number; sport: EnduranceSport; date: string; durationS: number | null };
 
 /**
  * Pair app endurance sessions with Garmin activities one to one: same sport,
@@ -198,7 +201,9 @@ export function pairWithGarmin(app: PairItem[], garmin: PairItem[]): Map<number,
   const candidates: { a: PairItem; g: PairItem; diff: number }[] = [];
   for (const a of app) {
     for (const g of garmin) {
-      if (a.sport === g.sport && a.date === g.date) candidates.push({ a, g, diff: Math.abs(a.durationS - g.durationS) });
+      if (a.sport !== g.sport || a.date !== g.date) continue;
+      const diff = a.durationS === null || g.durationS === null ? Number.MAX_SAFE_INTEGER : Math.abs(a.durationS - g.durationS);
+      candidates.push({ a, g, diff });
     }
   }
   candidates.sort((x, y) => x.diff - y.diff || x.a.id - y.a.id || x.g.id - y.g.id);

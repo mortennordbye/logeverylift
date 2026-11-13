@@ -9,6 +9,7 @@ import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { REVISION_RULES, assistantContext, planErrorResult, reasonArg } from "@/lib/mcp/revisions";
 import { applyRotationOp, applySessionOp, listPlanned, WorkoutSchemaError, type SessionOp } from "@/lib/planned-sessions";
 import { moveSuggestion } from "@/lib/session-answers";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { sessionCompliance, thresholdValues } from "@/lib/session-compliance";
 import { appSessionLoads, type SessionLoadRow } from "@/lib/training-load";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
@@ -45,7 +46,7 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         "A weekday cycle makes one dated session per program slot for the whole block, and a day can hold up to three (position 1-3). Each can be moved, skipped or changed alone; a template edit rewrites the sessions nobody changed (touched: false) from this week's Monday on. Done sessions, changed ones and earlier weeks never change.",
         "A rotation cycle has no fixed dates: its sessions are worked out from the walk (a missed session repeats the next day), so they have rotationPosition and an id only when you or the user stored a skip or a change for that position.",
         "Each entry: id, cycleId, date, position, programId, programName, label, notes, status (planned; done with loggedSessionId; missed = a past day not done; skipped with skipReason), autoComplete (a day tracked outside the app), touched, templateDate, version.",
-        "Weekday sessions also carry: sport, priority (stored or derived: key = hard, or the longest bike or run of its week at 90 minutes or more), hard, workoutSummary, brickParentId, planned and done (durationSeconds, distanceMeters), state (planned, done, missed, unconfirmed = a past endurance session with no match and no answer, illness, sick, skipped), matchedBy (link, pick, app, garmin), ratio and band (green, yellow, orange, red, done, illness), missedReason, illnessId, and suggestedMoveTo for a confirmed missed key session. Matching to Garmin activities is for admins only. A session with a workout also has plannedLoad ({value, partial}: an estimate from its targets, 100 = one hour at threshold; partial when a step had no power or pace target). A done session has load ({value, method}: run_pace, swim_css, srpe or strength_srpe; null with reason needs_rpe when nothing measured it). Garmin load is not shown here; read get_training_load.",
+        "Weekday sessions also carry: sport, priority (stored or derived: key = hard, or the longest bike or run of its week at 90 minutes or more), hard, workoutSummary, brickParentId, planned and done (durationSeconds, distanceMeters), state (planned, done, missed, unconfirmed = a past endurance session with no match and no answer, illness, sick, skipped), matchedBy (link, pick, app, garmin), ratio and band (green, yellow, orange, red, done, illness), missedReason, illnessId, and suggestedMoveTo for a confirmed missed key session. Matching to Garmin activities is for admins only. A session with a workout also has plannedLoad ({value, partial}: an estimate from its targets, 100 = one hour at threshold; partial when a step had no power or pace target). With endurance features on, a done session has load ({value, method}: run_pace, swim_css, srpe or strength_srpe; null with reason needs_rpe when nothing measured it). Garmin load is not shown here; read get_training_load.",
       ].join(" "),
       inputSchema: { from: dateArg, to: dateArg, cycleId: z.number().int().positive().optional() },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -58,7 +59,10 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         const sessions = await listPlanned(userId, from, to, cycleId);
         const facts = new Map((await sessionCompliance(userId, from, to, { cycleId })).map((s) => [s.id, s]));
         // Load (docs/plans/endurance-app.md, 7): planned from a workout's targets, done from what was logged.
-        const [anchors, logged] = await Promise.all([thresholdValues(userId), appSessionLoads(userId, from, to)]);
+        // Endurance switch only (review fix 7); by the linked sessions' ids, so one logged on another day counts (review fix 8).
+        const endurance = await enduranceEnabledFor(userId);
+        const linked = [...facts.values()].flatMap((f) => (f.loggedSessionId != null ? [f.loggedSessionId] : []));
+        const [anchors, logged] = endurance ? await Promise.all([thresholdValues(userId), appSessionLoads(userId, null, null, { sessionIds: linked })]) : [{}, []];
         const out = [];
         for (const s of sessions) {
           const f = s.id != null ? facts.get(s.id) : undefined;
@@ -83,8 +87,8 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
             band: f.band,
             missedReason: f.missedReason,
             illnessId: f.illnessId,
-            ...(f.workout && { plannedLoad: roundLoad(workoutPlannedLoad(f.workout, anchors)) }),
-            ...(f.loggedSessionId != null && { load: doneLoad(logged, f.loggedSessionId, f.sport) }),
+            ...(endurance && f.workout && { plannedLoad: roundLoad(workoutPlannedLoad(f.workout, anchors)) }),
+            ...(endurance && f.loggedSessionId != null && { load: doneLoad(logged, f.loggedSessionId, f.sport) }),
             ...(suggestion && { suggestedMoveTo: suggestion }),
           });
         }

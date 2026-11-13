@@ -31,6 +31,21 @@ describe("EnduranceTodayCard", () => {
     expect(screen.queryByRole("link", { name: "Start guided" })).toBeNull();
   });
 
+  // Review fix 9: an unfinished run expires after 24 h; a finished, unsaved one never does.
+  it("hides an expired unfinished run, and keeps a finished one of any age", async () => {
+    const old = Date.now() - 25 * 3600_000;
+    const run = (status: string) => JSON.stringify({ v: 1, plannedSessionId: 41, workoutHash: "h", clientKey: "k", status, index: 1, stepStartedAt: status === "finished" ? null : old, stepPausedMs: 0, pausedAt: null, pausedTotalMs: 0, extendSeconds: 0, startedAt: old, finishedAt: status === "finished" ? old + 1000 : null, runs: [] });
+    localStorage.setItem(PLAYER_STORAGE_KEY, run("running"));
+    const { unmount } = render(<EnduranceTodayCard rows={[ride]} />);
+    await act(async () => {});
+    expect(screen.queryByTestId("saved-run")).toBeNull();
+    unmount();
+    localStorage.setItem(PLAYER_STORAGE_KEY, run("finished"));
+    render(<EnduranceTodayCard rows={[ride]} />);
+    await act(async () => {});
+    expect(screen.getByTestId("saved-run").textContent).toBe("Save results");
+  });
+
   it("shows Resume for a run saved on this phone, after mount", async () => {
     localStorage.setItem(PLAYER_STORAGE_KEY, JSON.stringify({ plannedSessionId: 41, status: "paused" }));
     render(<EnduranceTodayCard rows={[ride]} />);

@@ -6,7 +6,7 @@
  * the server render and the first client render agree.
  */
 
-import { PLAYER_STORAGE_KEY } from "@/lib/utils/workout-player";
+import { PLAYER_STORAGE_KEY, runExpired } from "@/lib/utils/workout-player";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
@@ -14,9 +14,10 @@ export function savedRunFor(plannedSessionId: number): "running" | "finished" | 
   try {
     const raw = localStorage.getItem(PLAYER_STORAGE_KEY);
     if (!raw) return null;
-    const s = JSON.parse(raw) as { plannedSessionId?: number; status?: string };
+    const s = JSON.parse(raw) as { plannedSessionId?: number; status?: string; startedAt?: number | null };
     if (s.plannedSessionId !== plannedSessionId) return null;
-    if (s.status === "running" || s.status === "paused") return "running";
+    // An unfinished run expires as the player's restore does; a finished one waits for its save (review fix 9).
+    if (s.status === "running" || s.status === "paused") return runExpired({ status: s.status, startedAt: s.startedAt ?? null }, Date.now()) ? null : "running";
     if (s.status === "finished") return "finished";
     return null;
   } catch {

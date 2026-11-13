@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { GuidedPlayer } from "@/components/features/guided/GuidedPlayer";
 import { toPlaySteps, type PlayerSession, type PlayerStepView } from "@/components/features/guided/types";
-import { PLAYER_STORAGE_KEY, initialState, serializePlayerState, start } from "@/lib/utils/workout-player";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { PLAYER_STORAGE_KEY, finish, initialState, serializePlayerState, start } from "@/lib/utils/workout-player";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -84,7 +84,8 @@ beforeEach(() => {
   playCue.mockReset().mockReturnValue(true);
   unlockAudio.mockReset().mockReturnValue(true);
   release.mockReset().mockResolvedValue(undefined);
-  requestWakeLock.mockReset().mockResolvedValue({ release });
+  // A new handle on each request, as the browser gives.
+  requestWakeLock.mockReset().mockImplementation(async () => ({ release }));
   wakeLockSupported = true;
   push.mockReset();
 });
@@ -198,6 +199,92 @@ describe("GuidedPlayer", () => {
     await advance(300);
     expect(stepCount()).toBe("Step 2 of 3");
     expect(time()).toBe("00:03");
+  });
+
+  // Review fix 10: a finished, unsaved run is never replaced by a new Start without an explicit Discard.
+  it("a finished, unsaved run of another session blocks Start until it is saved or discarded", async () => {
+    const steps = toPlaySteps(session.steps);
+    let other = start(initialState({ plannedSessionId: 77, workoutHash: "zzz00000", clientKey: "key77777" }), steps, T0 - 60_000);
+    other = finish(other, steps, T0 - 30_000);
+    localStorage.setItem(PLAYER_STORAGE_KEY, serializePlayerState(other));
+    render(<GuidedPlayer session={session} />);
+    await act(async () => {});
+    expect(screen.getByRole("link", { name: "Save its results" }).getAttribute("href")).toBe("/planned/77/results?from=player");
+    expect((screen.getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Discard it" }));
+    expect(localStorage.getItem(PLAYER_STORAGE_KEY)).toBeNull();
+    expect((screen.getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("a finished, unsaved run of this session's older workout routes to its results", async () => {
+    const steps = toPlaySteps(session.steps);
+    let s = start(initialState({ plannedSessionId: 41, workoutHash: "old00000", clientKey: "key12345" }), steps, T0 - 60_000);
+    s = finish(s, steps, T0 - 30_000);
+    localStorage.setItem(PLAYER_STORAGE_KEY, serializePlayerState(s));
+    render(<GuidedPlayer session={session} />);
+    await act(async () => {});
+    expect(screen.getByRole("link", { name: "Save its results" }).getAttribute("href")).toBe("/planned/41/results?from=player");
+    expect((screen.getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  // Review fix 12: one wake lock at a time.
+  it("releases the old wake lock on each resync, releases a late one after finish, and asks again after a reload", async () => {
+    await startPlayer();
+    for (let i = 0; i < 3; i++) {
+      await act(async () => {
+        Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+        document.dispatchEvent(new Event("visibilitychange"));
+      });
+    }
+    expect(requestWakeLock).toHaveBeenCalledTimes(4);
+    expect(release).toHaveBeenCalledTimes(3);
+
+    // A request that resolves after the run finished is released at once.
+    let resolveLate: (h: { release: () => Promise<void> }) => void = () => {};
+    const lateRelease = vi.fn().mockResolvedValue(undefined);
+    requestWakeLock.mockImplementationOnce(() => new Promise((r) => (resolveLate = r)));
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Finish" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Finish" }));
+    expect(push).toHaveBeenCalledWith("/planned/41/results?from=player");
+    await act(async () => {
+      resolveLate({ release: lateRelease });
+    });
+    expect(lateRelease).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks for the wake lock after a reload during a run", async () => {
+    const steps = toPlaySteps(session.steps);
+    const s = start(initialState({ plannedSessionId: 41, workoutHash: "abc12345", clientKey: "key12345" }), steps, T0 - 2_000);
+    localStorage.setItem(PLAYER_STORAGE_KEY, serializePlayerState(s));
+    render(<GuidedPlayer session={session} />);
+    await act(async () => {});
+    expect(requestWakeLock).toHaveBeenCalledTimes(1);
+  });
+
+  // Review fix 13: a double tap closes one step.
+  it("a double tap on Skip skips one step", async () => {
+    await startPlayer();
+    const skip = screen.getByRole("button", { name: "Skip" });
+    // Two taps before React renders again: both run the handler of the same screen.
+    await act(async () => {
+      skip.click();
+      skip.click();
+    });
+    expect(stepCount()).toBe("Step 2 of 3");
+  });
+
+  // Review fix 14: a step that ended before Pause still cues.
+  it("Pause after a step ended plays the change cue", async () => {
+    await startPlayer();
+    playCue.mockClear();
+    vi.setSystemTime(T0 + 10_100);
+    fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+    await act(async () => {});
+    expect(stepCount()).toBe("Step 2 of 3");
+    expect(playCue).toHaveBeenCalledWith("work");
   });
 
   it("a saved run of an older workout is not resumed, and says so", async () => {

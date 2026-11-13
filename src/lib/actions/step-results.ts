@@ -6,9 +6,7 @@
  */
 
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { DuplicateSession } from "@/lib/logged-sessions";
-import { PlanStateError } from "@/lib/plan-revisions";
-import { StepResultsError, saveStepResults } from "@/lib/step-results";
+import { appErrorMessage, saveStepResults } from "@/lib/step-results";
 import { requireSession } from "@/lib/utils/session";
 import { saveStepResultsSchema } from "@/lib/validators/step-results";
 import type { ActionResult } from "@/types/workout";
@@ -42,7 +40,8 @@ export async function saveStepResultsAction(data: unknown): Promise<ActionResult
     revalidatePath("/history");
     return { success: true, data: { workoutSessionId: r.workoutSessionId } };
   } catch (e) {
-    if (e instanceof StepResultsError || e instanceof PlanStateError || e instanceof DuplicateSession) return { success: false, error: e.message };
+    const msg = appErrorMessage(e);
+    if (msg) return { success: false, error: msg };
     console.error("[saveStepResults] failed", { plannedSessionId: d.plannedSessionId });
     return { success: false, error: "Failed to save the results" };
   }

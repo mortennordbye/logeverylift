@@ -15,7 +15,7 @@
 
 import { db } from "@/db";
 import { plannedSessions, workoutSessions, workoutSets, workoutStepResults } from "@/db/schema";
-import { writeLoggedSession } from "@/lib/logged-sessions";
+import { DuplicateSession, writeLoggedSession } from "@/lib/logged-sessions";
 import { PlanStateError } from "@/lib/plan-revisions";
 import { sportExerciseId } from "@/lib/session-answers";
 import { storedWorkout, thresholdValues } from "@/lib/session-compliance";
@@ -34,13 +34,24 @@ import {
 } from "@/lib/utils/step-results";
 import { localDateStr } from "@/lib/utils/user-date";
 import type { ThresholdValues, Workout } from "@/lib/utils/workout-steps";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 
 /** The results do not fit the workout; carries every problem with its path. */
 export class StepResultsError extends Error {
   constructor(readonly errors: { path: string; message: string }[]) {
     super(`Step results refused: ${errors.map((e) => `${e.path || "results"}: ${e.message}`).join("; ")}`);
   }
+}
+
+/**
+ * The text the app shows for a refused save (review fix 14). DuplicateSession's own
+ * message is written for the MCP assistant ("Read recent_workouts"), so the app
+ * says it in the user's terms. Null for an unexpected error.
+ */
+export function appErrorMessage(e: unknown): string | null {
+  if (e instanceof DuplicateSession) return "This session is already logged for that day. Open it in History to change it.";
+  if (e instanceof StepResultsError || e instanceof PlanStateError) return e.message;
+  return null;
 }
 
 export type SaveStepResultsInput = {
@@ -109,16 +120,44 @@ export async function saveStepResults(userId: string, input: SaveStepResultsInpu
     )
     .limit(1);
   if (linked) {
-    const [row] = await db
-      .insert(workoutStepResults)
-      .values({ ...values, workoutSessionId: linked.id })
-      .onConflictDoUpdate({ target: workoutStepResults.workoutSessionId, set: { ...values, updatedAt: new Date() } })
-      .returning({ id: workoutStepResults.id });
-    // The session RPE fills sets that have none; it never overwrites a logged one.
-    if (input.sessionRpe != null) {
-      await db.update(workoutSets).set({ rpe: input.sessionRpe }).where(and(eq(workoutSets.sessionId, linked.id), isNull(workoutSets.rpe)));
-    }
-    return { workoutSessionId: linked.id, resultId: row.id, created: "attached" };
+    const resultId = await db.transaction(async (tx) => {
+      const [existing] = await tx.select().from(workoutStepResults).where(eq(workoutStepResults.workoutSessionId, linked.id)).for("update");
+      let id: number;
+      if (existing) {
+        // A later save changes the results; the run's own details stay unless it brings new ones (review fix 11).
+        await tx
+          .update(workoutStepResults)
+          .set({
+            workout: planned.workout,
+            anchors,
+            steps: checked.steps,
+            clientKey: input.clientKey ?? existing.clientKey,
+            startedAt: input.startedAt ?? existing.startedAt,
+            finishedAt: input.finishedAt ?? existing.finishedAt,
+            pausedSeconds: input.pausedSeconds ?? existing.pausedSeconds,
+            updatedAt: new Date(),
+          })
+          .where(eq(workoutStepResults.id, existing.id));
+        id = existing.id;
+      } else {
+        [{ id }] = await tx.insert(workoutStepResults).values({ ...values, workoutSessionId: linked.id }).returning({ id: workoutStepResults.id });
+      }
+      const sets = await tx.select({ id: workoutSets.id, distanceMeters: workoutSets.distanceMeters }).from(workoutSets).where(eq(workoutSets.sessionId, linked.id)).orderBy(asc(workoutSets.setNumber));
+      if (existing?.wroteSession) {
+        // The session this path wrote has one set: the results screen may change its RPE and distance.
+        const patch = { ...(input.sessionRpe != null && { rpe: input.sessionRpe }), ...(input.distanceMeters != null && { distanceMeters: Math.round(input.distanceMeters) }) };
+        if (Object.keys(patch).length) await tx.update(workoutSets).set(patch).where(eq(workoutSets.sessionId, linked.id));
+      } else {
+        // A session the user or the assistant logged: the RPE fills sets that have none, the
+        // distance goes on the first set when no set has one (review fix 6). Never an overwrite.
+        if (input.sessionRpe != null) await tx.update(workoutSets).set({ rpe: input.sessionRpe }).where(and(eq(workoutSets.sessionId, linked.id), isNull(workoutSets.rpe)));
+        if (input.distanceMeters != null && input.distanceMeters > 0 && sets.length && !sets.some((x) => (x.distanceMeters ?? 0) > 0)) {
+          await tx.update(workoutSets).set({ distanceMeters: Math.round(input.distanceMeters) }).where(eq(workoutSets.id, sets[0].id));
+        }
+      }
+      return id;
+    });
+    return { workoutSessionId: linked.id, resultId, created: "attached" };
   }
 
   if (!(totals.activeSeconds > 0)) throw new PlanStateError("No time recorded for this session");
@@ -152,7 +191,7 @@ export async function saveStepResults(userId: string, input: SaveStepResultsInpu
       ],
     },
     async (tx, sessionId) => {
-      const [row] = await tx.insert(workoutStepResults).values({ ...values, workoutSessionId: sessionId }).returning({ id: workoutStepResults.id });
+      const [row] = await tx.insert(workoutStepResults).values({ ...values, workoutSessionId: sessionId, wroteSession: true }).returning({ id: workoutStepResults.id });
       resultId = row.id;
     },
   );

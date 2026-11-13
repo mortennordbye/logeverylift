@@ -221,6 +221,12 @@ describe("persistence", () => {
     expect(restorePlayerState(JSON.stringify({ ...started(), name: "x" }), expect0)).toEqual({ state: null, reason: "corrupt" });
   });
 
+  // Review fix 9: a finished run waits for its save, however old.
+  it("never expires a finished, unsaved run", () => {
+    const done = finish(started(), steps, T0 + s(30));
+    expect(restorePlayerState(serializePlayerState(done), { ...expect0, now: T0 + 25 * 3600_000 })).toEqual({ state: done });
+  });
+
   it("refuses another session, an expired run, and reports a changed workout", () => {
     const raw = serializePlayerState(started());
     expect(restorePlayerState(raw, { ...expect0, plannedSessionId: 8 })).toMatchObject({ state: null, reason: "other_session" });

@@ -150,11 +150,14 @@ export function buildDailyMetrics(input: {
   // An app endurance session that a Garmin activity of the same sport and day
   // recorded adds nothing: Garmin measured it. One to one, closest duration
   // first (decision 16). Unpaired ones add their app load.
-  const app = (input.appEndurance ?? []).filter((s) => s.day >= start && s.day <= end);
+  // A session with strength sets already counts whole on the strength path above
+  // (matched to a Garmin activity or not), so its endurance sets add nothing here:
+  // a warm-up run inside a gym session must not count twice (review fix 1).
+  const strengthIds = new Set(input.strengthSessions.map((s) => s.sessionId));
+  const app = (input.appEndurance ?? []).filter((s) => s.day >= start && s.day <= end && !strengthIds.has(s.sessionId));
   const garminEndurance = input.activities
-    .filter((a): a is ActivityInput & { sport: "swim" | "bike" | "run"; startMs: number; endMs: number } =>
-      (a.sport === "swim" || a.sport === "bike" || a.sport === "run") && a.startMs !== null && a.endMs !== null)
-    .map((a) => ({ id: a.garminActivityId, sport: a.sport, date: a.day, durationS: (a.endMs - a.startMs) / 1000 }));
+    .filter((a): a is ActivityInput & { sport: "swim" | "bike" | "run" } => a.sport === "swim" || a.sport === "bike" || a.sport === "run")
+    .map((a) => ({ id: a.garminActivityId, sport: a.sport, date: a.day, durationS: a.startMs !== null && a.endMs !== null ? (a.endMs - a.startMs) / 1000 : null }));
   const paired = pairWithGarmin(app.map((s) => ({ id: s.sessionId, sport: s.sport, date: s.day, durationS: s.durationS })), garminEndurance);
   for (const s of app) {
     if (paired.has(s.sessionId) || s.load === null) continue;

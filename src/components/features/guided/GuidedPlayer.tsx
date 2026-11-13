@@ -28,7 +28,7 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
   const router = useRouter();
   const steps = useMemo(() => toPlaySteps(session.steps), [session.steps]);
   const resultsHref = `/planned/${session.plannedSessionId}/results?from=player`;
-  const { state, now, restored, notice, passed, flashKey, soundOff, wakeLockOk, actions } = useGuidedPlayer({
+  const { state, now, restored, notice, blocked, passed, flashKey, soundOff, wakeLockOk, actions } = useGuidedPlayer({
     plannedSessionId: session.plannedSessionId,
     workoutHash: session.workoutHash,
     steps,
@@ -53,11 +53,32 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
           {session.steps.length} steps. First: {first?.text}
           {first?.targetText ? ` · ${first.targetText}` : ""}
         </p>
-        {notice === "workout_changed" && (
+        {notice?.kind === "workout_changed" && (
           <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm">A saved run was for an older version of this workout. It was not resumed.</p>
         )}
-        {notice === "other_session" && (
+        {notice?.kind === "other_session" && (
           <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm">A run of another session is saved on this phone. Starting this one replaces it.</p>
+        )}
+        {notice?.kind === "unsaved" && (
+          <div className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm flex flex-col gap-2" data-testid="unsaved-run">
+            <p>
+              {notice.plannedSessionId === session.plannedSessionId
+                ? "A finished run of an older version of this workout is not saved yet."
+                : "A finished run of another session is not saved yet."}{" "}
+              Save its results or discard it before you start.
+            </p>
+            <div className="flex gap-2">
+              <a
+                href={`/planned/${notice.plannedSessionId}/results?from=player`}
+                className="flex-1 min-h-11 inline-flex items-center justify-center rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground active:opacity-80"
+              >
+                Save its results
+              </a>
+              <button type="button" onClick={actions.discardSaved} className="flex-1 min-h-11 rounded-xl border border-border px-3 text-sm font-medium active:opacity-70">
+                Discard it
+              </button>
+            </div>
+          </div>
         )}
         {initialSoundHint && (
           <ul className="text-sm text-muted-foreground list-disc pl-5 flex flex-col gap-1">
@@ -76,7 +97,8 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
           <button
             type="button"
             onClick={actions.start}
-            className="min-h-14 rounded-2xl bg-primary px-4 py-4 text-lg font-semibold text-primary-foreground active:scale-95 transition-all"
+            disabled={blocked}
+            className="min-h-14 rounded-2xl bg-primary px-4 py-4 text-lg font-semibold text-primary-foreground disabled:opacity-50 active:scale-95 transition-all"
           >
             Start
           </button>
@@ -179,7 +201,7 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
           </button>
         )}
         {remaining === null ? (
-          <button type="button" onClick={actions.lap} className="min-h-16 rounded-2xl bg-muted text-base font-semibold active:scale-95 transition-all">
+          <button type="button" onClick={() => actions.lap(current.key)} className="min-h-16 rounded-2xl bg-muted text-base font-semibold active:scale-95 transition-all">
             Lap
           </button>
         ) : (
@@ -187,7 +209,7 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
             +30 s
           </button>
         )}
-        <button type="button" onClick={actions.skip} className="min-h-16 rounded-2xl bg-muted text-base font-semibold active:scale-95 transition-all">
+        <button type="button" onClick={() => actions.skip(current.key)} className="min-h-16 rounded-2xl bg-muted text-base font-semibold active:scale-95 transition-all">
           Skip
         </button>
         <button type="button" onClick={() => setConfirm("finish")} className="col-span-4 min-h-11 rounded-2xl border border-border text-sm font-medium active:opacity-70">

@@ -119,7 +119,7 @@ export function registerEnduranceAppTools(server: McpServer, userId: string) {
       description: [
         "Log the per-step results of a structured session, for example from what the athlete tells you.",
         "plannedSessionId and steps (keys from get_step_results or get_workout: the step id, plus #n for round n of a repeat). Optional sessionRpe (1-10; without it and without a threshold the session has no load), distanceMeters, notes.",
-        "When the session is not logged yet, this writes it as a completed session linked to the planned one, with the total active time. When it is, the results attach to it and replace earlier ones. Step results are logged data: they make no revision.",
+        "When the session is not logged yet, this writes it as a completed session linked to the planned one, with the total active time. When it is, the results attach to it and replace earlier ones; sessionRpe fills only sets with no RPE, and distanceMeters goes on the session only when it has no distance. Step results are logged data: they make no revision.",
         "Requires reason.",
       ].join(" "),
       inputSchema: {

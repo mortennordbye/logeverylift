@@ -9,7 +9,7 @@
  */
 
 import { sql } from "drizzle-orm";
-import { index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { plannedSessions } from "./planned-sessions";
 import { users } from "./users";
 import { workoutSessions } from "./workout-sessions";
@@ -39,6 +39,10 @@ export const workoutStepResults = pgTable(
     startedAt: timestamp("started_at"),
     finishedAt: timestamp("finished_at"),
     pausedSeconds: integer("paused_seconds").notNull().default(0),
+    // True when this save wrote the logged session (not attached to one the
+    // user or the assistant logged): a later save may then change its RPE and
+    // distance; otherwise it only fills them when missing.
+    wroteSession: boolean("wrote_session").notNull().default(false),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

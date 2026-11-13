@@ -84,6 +84,13 @@ describe("sessionLoad", () => {
     expect(withMoving.load!).toBeGreaterThan(without.load!);
     expect(sessionLoad({ sport: "swim", seconds: 1800, meters: 1500, rpe: 6 }, {}).method).toBe("srpe");
   });
+  // Review fix 3: moving time can never be longer than the logged time.
+  it("swim: moving time is capped at the logged time", () => {
+    const capped = sessionLoad({ sport: "swim", seconds: 1800, movingSeconds: 3600, meters: 1700, rpe: 6 }, anchors);
+    const logged = sessionLoad({ sport: "swim", seconds: 1800, meters: 1700, rpe: 6 }, anchors);
+    expect(capped).toEqual(logged);
+  });
+
   it("bike: sRPE only", () => {
     expect(sessionLoad({ sport: "bike", seconds: 3600, meters: 30000, rpe: 7 }, { ...anchors, ftp: 250 }).method).toBe("srpe");
   });
@@ -142,6 +149,14 @@ describe("pairWithGarmin", () => {
       { id: 12, sport: "swim" as const, date: "2027-05-01", durationS: 3600 },
     ];
     expect([...pairWithGarmin(app, garmin)].sort()).toEqual([[1, 11], [2, 10]]);
+  });
+
+  // Review fix 5: an activity with no duration still pairs by sport and day, after the timed ones.
+  it("pairs an activity with no duration by sport and day", () => {
+    const app = [{ id: 1, sport: "run" as const, date: "d", durationS: 3000 }];
+    expect([...pairWithGarmin(app, [{ id: 9, sport: "run", date: "d", durationS: null }])]).toEqual([[1, 9]]);
+    const two = [...app, { id: 2, sport: "run" as const, date: "d", durationS: 600 }];
+    expect([...pairWithGarmin(two, [{ id: 9, sport: "run", date: "d", durationS: null }, { id: 8, sport: "run", date: "d", durationS: 610 }])].sort()).toEqual([[1, 9], [2, 8]]);
   });
 
   it("uses each activity once; the farther session stays unpaired", () => {

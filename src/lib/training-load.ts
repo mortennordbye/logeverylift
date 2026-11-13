@@ -36,13 +36,15 @@ const ENDURANCE: readonly string[] = ["swim", "bike", "run"];
  * sport in the session (a session with a run and strength sets gives two).
  * Auto rows have no numbers and are left out.
  */
-export async function appSessionLoads(userId: string, from: string | null, to: string): Promise<SessionLoadRow[]> {
+export async function appSessionLoads(userId: string, from: string | null, to: string | null, opts: { sessionIds?: number[] } = {}): Promise<SessionLoadRow[]> {
+  if (opts.sessionIds && opts.sessionIds.length === 0) return [];
   const where = and(
     eq(workoutSessions.userId, userId),
     eq(workoutSessions.isCompleted, true),
     inArray(workoutSessions.source, ["app", "assistant"]),
-    lte(workoutSessions.date, to),
+    to ? lte(workoutSessions.date, to) : undefined,
     from ? gte(workoutSessions.date, from) : undefined,
+    opts.sessionIds ? inArray(workoutSessions.id, opts.sessionIds) : undefined,
   );
   const rows = await db
     .select({
@@ -74,8 +76,10 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
     .where(and(eq(workoutStepResults.userId, userId), inArray(workoutStepResults.workoutSessionId, ids)));
   for (const r of results) {
     const restKeys = restStepKeys(r.workout);
-    const steps = (r.steps as { key: string; activeSeconds?: number }[]) ?? [];
-    moving.set(r.sessionId, steps.reduce((a, s) => a + (restKeys.has(s.key.split("#")[0]) ? 0 : (s.activeSeconds ?? 0)), 0));
+    const steps = ((r.steps as { key: string; status: string; activeSeconds?: number }[]) ?? []).filter((s) => !restKeys.has(s.key.split("#")[0]));
+    // Moving time only when every step that was swum has its time; otherwise the logged time counts (review fix 3).
+    const complete = steps.every((s) => s.status === "skipped" || s.status === "not_done" || s.activeSeconds !== undefined);
+    if (complete) moving.set(r.sessionId, steps.reduce((a, s) => a + (s.activeSeconds ?? 0), 0));
   }
   const anchors = loadAnchors(await thresholdValues(userId));
 
@@ -94,7 +98,8 @@ export async function appSessionLoads(userId: string, from: string | null, to: s
     for (const [sport, g] of groups) {
       if (sport === "strength") continue;
       const seconds = g.reduce((a, s) => a + (s.durationSeconds ?? 0), 0);
-      const meters = g.reduce((a, s) => a + (s.distanceMeters ?? 0), 0);
+      // Distance only from sets with a time, so a set with no time cannot raise the pace (review fix 2).
+      const meters = g.reduce((a, s) => a + (s.durationSeconds && s.durationSeconds > 0 ? (s.distanceMeters ?? 0) : 0), 0);
       enduranceSeconds += seconds;
       const incline = Math.max(0, ...g.map((s) => s.inclinePercent ?? 0));
       const rpe = weightedRpe(g);
@@ -161,7 +166,7 @@ export async function getTrainingLoad(userId: string, days = 90): Promise<Traini
       .where(and(eq(garminDailyMetrics.userId, userId), gte(garminDailyMetrics.day, addDaysStr(from, -7)), lte(garminDailyMetrics.day, today)))
       .orderBy(asc(garminDailyMetrics.day));
     const all = rows.map((r) => ({ date: r.day, calibrating: Boolean(r.calibrating), tracks: r.pmc }));
-    return withRamp("garmin", all, from, [], {});
+    return withRamp("garmin", all, from, [], {}, all[0]?.date ?? null);
   }
 
   const sessions = await appSessionLoads(userId, null, today);
@@ -170,12 +175,15 @@ export async function getTrainingLoad(userId: string, days = 90): Promise<Traini
   const start = sessions.length ? (sessions[0].date < from ? sessions[0].date : from) : from;
   const { days: pmc } = appPmc(sessions, start, today);
   const noLoad = sessions.filter((s) => s.load === null && s.date >= from).map((s) => ({ id: s.id, date: s.date, sport: s.sport, reason: s.reason ?? null }));
-  return withRamp("app", pmc.map((d) => ({ date: d.date, calibrating: d.calibrating, tracks: d.tracks })), from, noLoad, methods);
+  return withRamp("app", pmc.map((d) => ({ date: d.date, calibrating: d.calibrating, tracks: d.tracks })), from, noLoad, methods, sessions[0]?.date ?? null);
 }
 
-function withRamp(source: TrainingLoad["source"], all: LoadDayView[], from: string, noLoad: TrainingLoad["noLoad"], methods: TrainingLoad["methods"]): TrainingLoad {
+/** The ramp needs a week of data since the first day with any: null before that (review fix 4). */
+function withRamp(source: TrainingLoad["source"], all: LoadDayView[], from: string, noLoad: TrainingLoad["noLoad"], methods: TrainingLoad["methods"], firstDay: string | null): TrainingLoad {
   const last = all.at(-1);
   const weekAgo = all.length >= 8 ? all[all.length - 8] : null;
+  const enough = firstDay !== null && weekAgo !== null && weekAgo.date >= firstDay;
+  if (!enough) return { source, days: all.filter((d) => d.date >= from), ramp: null, rampBand: null, noLoad, methods };
   const ramp = last && weekAgo ? last.tracks.total.ctl - weekAgo.tracks.total.ctl : null;
   return { source, days: all.filter((d) => d.date >= from), ramp, rampBand: ramp === null ? null : rampBand(ramp), noLoad, methods };
 }

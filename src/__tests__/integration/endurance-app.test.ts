@@ -277,3 +277,95 @@ describe("migration, export and delete", () => {
     expect(await db.select().from(workoutStepResults).where(and(eq(workoutStepResults.userId, me)))).toHaveLength(0);
   });
 });
+
+describe("review fixes (2026-11-13)", () => {
+  async function loggedSession(date: string, sets: { exerciseId: number; durationSeconds: number | null; distanceMeters?: number | null; rpe?: number | null }[], plannedSessionId: number | null = null) {
+    const [s] = await db
+      .insert(workoutSessions)
+      .values({ userId: me, date, startTime: new Date(`${date}T07:00:00Z`), endTime: new Date(`${date}T08:00:00Z`), isCompleted: true, plannedSessionId })
+      .returning();
+    await db.insert(workoutSets).values(sets.map((x, i) => ({ sessionId: s.id, exerciseId: x.exerciseId, setNumber: i + 1, actualReps: 0, weightKg: "0", restTimeSeconds: 0, durationSeconds: x.durationSeconds, distanceMeters: x.distanceMeters ?? null, rpe: x.rpe ?? null })));
+    return s.id;
+  }
+
+  it("2: distance from a set with no time does not raise the pace", async () => {
+    const runEx = (await sportExerciseId("run"))!;
+    await db.insert(athleteThresholds).values({ userId: me, kind: "run_threshold_pace", value: 4, measuredOn: "2026-10-01", source: "manual" });
+    await loggedSession(TODAY, [
+      { exerciseId: runEx, durationSeconds: 3600, distanceMeters: 12000, rpe: 5 },
+      { exerciseId: runEx, durationSeconds: null, distanceMeters: 5000 },
+    ]);
+    const [row] = await appSessionLoads(me, TODAY, TODAY);
+    // 12 km in 1 h at a 4 m/s threshold: IF 0.833, load 69.4. With the 5 km it would read 1.18 and 140.
+    expect(row.method).toBe("run_pace");
+    expect(row.load!).toBeCloseTo(100 * (12000 / 3600 / 4) ** 2, 3);
+  });
+
+  it("3: swim moving time from step results counts only when every non-rest step has a time", async () => {
+    const swimEx = (await sportExerciseId("swim"))!;
+    await db.insert(athleteThresholds).values({ userId: me, kind: "swim_css", value: 1, measuredOn: "2026-10-01", source: "manual" });
+    const swim = parse({ v: 1, sport: "swim", name: "Swim", steps: [{ type: "work", end: { type: "distance", meters: 1000 } }, { type: "rest", end: { type: "time", seconds: 300 } }, { type: "work", end: { type: "distance", meters: 1000 } }] });
+    const id = await plannedWith(me, swim);
+    const sessionId = await loggedSession(TODAY, [{ exerciseId: swimEx, durationSeconds: 2700, distanceMeters: 2000 }], id);
+    // One work step has no time: the moving time is unknown, so the logged time counts.
+    await saveStepResults(me, { plannedSessionId: id, steps: [{ key: "s1", status: "done", activeSeconds: 1000 }, { key: "s2", status: "done", activeSeconds: 300 }, { key: "s3", status: "done" }] }, "manual");
+    const [partial] = (await appSessionLoads(me, TODAY, TODAY)).filter((r) => r.id === sessionId);
+    expect(partial.load!).toBeCloseTo((2700 / 3600) * (2000 / 2700) ** 3 * 100, 3);
+    await saveStepResults(me, { plannedSessionId: id, steps: [{ key: "s1", status: "done", activeSeconds: 1000 }, { key: "s2", status: "done", activeSeconds: 300 }, { key: "s3", status: "done", activeSeconds: 1100 }] }, "manual");
+    const [full] = (await appSessionLoads(me, TODAY, TODAY)).filter((r) => r.id === sessionId);
+    expect(full.load!).toBeCloseTo((2100 / 3600) * (2000 / 2100) ** 3 * 100, 3);
+  });
+
+  it("4: a new user's ramp is null until a week after the first session", async () => {
+    const bikeEx = (await sportExerciseId("bike"))!;
+    await loggedSession(TODAY, [{ exerciseId: bikeEx, durationSeconds: 3600, rpe: 6 }]);
+    expect((await getTrainingLoad(me, 30)).ramp).toBeNull();
+    await loggedSession("2026-10-20", [{ exerciseId: bikeEx, durationSeconds: 3600, rpe: 6 }]);
+    expect((await getTrainingLoad(me, 30)).ramp).not.toBeNull();
+  });
+
+  it("6: log_step_results sets the distance of an attached session that has none, and never overwrites one", async () => {
+    const bikeEx = (await sportExerciseId("bike"))!;
+    const id = await plannedWith(me, ride);
+    const sessionId = await loggedSession(TODAY, [{ exerciseId: bikeEx, durationSeconds: 1800 }], id);
+    await mcpTools((s, u) => registerEnduranceAppTools(s, u), me)("log_step_results", { plannedSessionId: id, steps: runResults, distanceMeters: 15000, reason: "x" });
+    const dist = async () => (await db.select({ d: workoutSets.distanceMeters }).from(workoutSets).where(eq(workoutSets.sessionId, sessionId)))[0].d;
+    expect(await dist()).toBe(15000);
+    await saveStepResults(me, { plannedSessionId: id, steps: runResults, distanceMeters: 9000 }, "assistant");
+    expect(await dist()).toBe(15000);
+  });
+
+  it("7: list_planned_sessions adds no load fields for a lifter", async () => {
+    const id = await plannedWith(me, ride);
+    await saveStepResults(me, { plannedSessionId: id, steps: runResults, sessionRpe: 6 }, "manual");
+    await db.update(users).set({ enduranceEnabled: false }).where(eq(users.id, me));
+    const list = await mcpTools(registerPlannedSessionTools, me)("list_planned_sessions", { from: TODAY, to: TODAY });
+    const entry = list.data.sessions.find((x: { id: number }) => x.id === id);
+    expect(entry).not.toHaveProperty("load");
+    expect(entry).not.toHaveProperty("plannedLoad");
+  });
+
+  it("8: a done session logged on a later day still gets its load", async () => {
+    const bikeEx = (await sportExerciseId("bike"))!;
+    const id = await plannedWith(me, ride, "2026-11-03");
+    await loggedSession(TODAY, [{ exerciseId: bikeEx, durationSeconds: 3600, rpe: 6 }], id);
+    const list = await mcpTools(registerPlannedSessionTools, me)("list_planned_sessions", { from: "2026-11-03", to: "2026-11-03" });
+    const entry = list.data.sessions.find((x: { id: number }) => x.id === id);
+    expect(entry.load).toEqual({ value: Math.round(60 * 6 * 0.22), method: "srpe" });
+  });
+
+  it("11: a second save keeps the run's details and changes RPE and distance of the session it wrote", async () => {
+    const id = await plannedWith(me, ride);
+    const first = await saveStepResults(
+      me,
+      { plannedSessionId: id, steps: runResults, sessionRpe: 6, distanceMeters: 20000, clientKey: "run-key-0011", startedAt: new Date(`${TODAY}T06:00:00Z`), finishedAt: new Date(`${TODAY}T07:00:00Z`), pausedSeconds: 40 },
+      "player",
+    );
+    await saveStepResults(me, { plannedSessionId: id, steps: runResults, sessionRpe: 8, distanceMeters: 21000 }, "manual");
+    const [row] = await db.select().from(workoutStepResults).where(eq(workoutStepResults.workoutSessionId, first.workoutSessionId));
+    expect(row).toMatchObject({ source: "player", clientKey: "run-key-0011", pausedSeconds: 40, wroteSession: true });
+    expect(row.startedAt?.toISOString()).toBe(`${TODAY}T06:00:00.000Z`);
+    const [set] = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, first.workoutSessionId));
+    expect(set).toMatchObject({ rpe: 8, distanceMeters: 21000 });
+  });
+});

@@ -113,6 +113,33 @@ describe("StepResultsForm", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  // Review fix 10: the workout was edited after the run; its finished run still fills the form.
+  it("fills from a finished run of an older version of the workout", async () => {
+    const steps = toPlaySteps(session.steps);
+    const t0 = Date.now() - 3_600_000;
+    let s = start(initialState({ plannedSessionId: 41, workoutHash: "old00000", clientKey: "key12345" }), steps, t0);
+    s = tick(s, steps, t0 + 900_000).state;
+    s = finish(s, steps, t0 + 960_000);
+    localStorage.setItem(PLAYER_STORAGE_KEY, serializePlayerState(s));
+    render(<StepResultsForm session={session} units={units} existing={null} fromPlayer />);
+    await act(async () => {});
+    expect(screen.getAllByTestId("result-step")[2].textContent).toContain("done 01:00");
+    expect(screen.getByTestId("step-results").textContent).toContain("The workout changed after this run");
+  });
+
+  // Review fix 11: the saved distance shows, and a hand save sends no run details.
+  it("shows the saved distance and sends no run details from a hand save", async () => {
+    render(<StepResultsForm session={session} units={units} existing={{ steps: [{ key: "s1", status: "done", activeSeconds: 600 }], sessionRpe: 6, distanceMeters: 21500 }} fromPlayer={false} />);
+    expect((screen.getByLabelText("Distance in km") as HTMLInputElement).value).toBe("21.5");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    });
+    const sent = saveStepResultsAction.mock.calls[0][0] as Record<string, unknown>;
+    expect(sent.pausedSeconds).toBeUndefined();
+    expect(sent.distanceMeters).toBe(21500);
+    expect(sent.sessionRpe).toBe(6);
+  });
+
   it("a step can be marked skipped, and a work step takes a measured value", async () => {
     render(<StepResultsForm session={session} units={units} existing={null} fromPlayer={false} />);
     fireEvent.change(screen.getByLabelText("Status of step s1"), { target: { value: "skipped" } });

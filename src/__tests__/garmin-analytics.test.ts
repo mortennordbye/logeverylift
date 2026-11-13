@@ -360,6 +360,23 @@ describe("buildDailyMetrics", () => {
       expect(day.pmc.total.load).toBe(130);
     });
 
+    // Review fix 1: a gym session with a run warm-up already counts whole as strength (matched or not).
+    it("a strength session with a run warm-up gives the same series as v2", () => {
+      const warmup = { sessionId: session.sessionId, day: "2026-11-02", sport: "run" as const, durationS: 600, load: 12, method: "srpe" as const };
+      for (const activities of [[strengthActivity], []]) {
+        const v3 = buildDailyMetrics({ start: "2026-11-02", end: "2026-11-02", activities, strengthSessions: [session], appEndurance: [warmup], days });
+        const v2 = buildDailyMetrics({ start: "2026-11-02", end: "2026-11-02", activities, strengthSessions: [session], days });
+        expect(v3).toEqual(v2);
+      }
+    });
+
+    // Review fix 5: an activity with no start time still pairs by sport and day.
+    it("pairs with a Garmin activity that has no start or end time", () => {
+      const noTimes: ActivityInput = { ...run, startMs: null, endMs: null };
+      const [day] = buildDailyMetrics({ start: "2026-11-02", end: "2026-11-02", activities: [noTimes], strengthSessions: [], appEndurance: [appRun], days });
+      expect(day.entries.map((e) => [e.source, e.id])).toEqual([["garmin", 2]]);
+    });
+
     it("never adds an app session with no load, and keeps lifters' days as before", () => {
       const [day] = buildDailyMetrics({ start: "2026-11-02", end: "2026-11-02", activities: [], strengthSessions: [session], appEndurance: [{ ...appRun, load: null, method: "none" }], days });
       const [before] = buildDailyMetrics({ start: "2026-11-02", end: "2026-11-02", activities: [], strengthSessions: [session], days });

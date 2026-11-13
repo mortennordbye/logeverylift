@@ -282,6 +282,11 @@ export function serializePlayerState(s: PlayerState): string {
   return JSON.stringify(s);
 }
 
+/** An unfinished run older than PLAYER_TTL_MS. A finished run never expires: its results are not saved yet. */
+export function runExpired(s: Pick<PlayerState, "status" | "startedAt">, now: number): boolean {
+  return s.status !== "finished" && s.startedAt !== null && now - s.startedAt > PLAYER_TTL_MS;
+}
+
 export type RestoreResult =
   | { state: PlayerState }
   | { state: null; reason: "none" | "corrupt" | "expired" | "other_session" | "workout_changed"; stored?: PlayerState };
@@ -303,8 +308,8 @@ export function restorePlayerState(raw: string | null, expect: { plannedSessionI
   if (!r.success) return { state: null, reason: "corrupt" };
   const s = r.data as PlayerState;
   if (s.plannedSessionId !== expect.plannedSessionId) return { state: null, reason: "other_session", stored: s };
-  const since = s.startedAt ?? s.finishedAt;
-  if (since !== null && expect.now - since > PLAYER_TTL_MS) return { state: null, reason: "expired" };
+  // Only an unfinished run expires; a finished one waits for its save, however old (review fix 9).
+  if (runExpired(s, expect.now)) return { state: null, reason: "expired" };
   if (s.workoutHash !== expect.workoutHash) return { state: null, reason: "workout_changed", stored: s };
   return { state: s };
 }

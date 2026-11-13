@@ -14,7 +14,7 @@ import { saveStepResultsAction } from "@/lib/actions/step-results";
 import { formatTime } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { compareStep, resultsAsPlanned, resultsFromRun, type PlannedRow, type StepResult } from "@/lib/utils/step-results";
-import { fieldToMeters, fieldUnit, type Units } from "@/lib/utils/units";
+import { fieldToMeters, fieldUnit, metersToField, type Units } from "@/lib/utils/units";
 import { PLAYER_STORAGE_KEY, restorePlayerState, type PlayerState } from "@/lib/utils/workout-player";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -44,7 +44,9 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
   const [results, setResults] = useState<StepResult[]>(() => existing?.steps ?? resultsAsPlanned(rows));
   const [rpe, setRpe] = useState<number | null>(existing?.sessionRpe ?? null);
   const unit = fieldUnit(session.sport === "swim" ? "m" : "km", units);
-  const [distance, setDistance] = useState("");
+  // The saved distance shows, so a second save does not lose it (review fix 11).
+  const [distance, setDistance] = useState(existing?.distanceMeters ? String(metersToField(existing.distanceMeters, unit)) : "");
+  const [olderWorkout, setOlderWorkout] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,10 +59,14 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
       raw = null;
     }
     const r = restorePlayerState(raw, { plannedSessionId: session.plannedSessionId, workoutHash: session.workoutHash, now: Date.now() });
-    if (r.state?.status === "finished") {
+    // A finished run of an older version of this workout still holds what was done; step ids
+    // stay on edit, so its steps fill the ones that still exist (review fix 10).
+    const finished = r.state?.status === "finished" ? r.state : r.state === null && r.reason === "workout_changed" && r.stored?.status === "finished" ? r.stored : null;
+    if (finished) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- filling the form from the run saved in localStorage
-      setRun(r.state);
-      setResults(resultsFromRun(r.state, toPlaySteps(session.steps)));
+      setRun(finished);
+      setResults(resultsFromRun(finished, toPlaySteps(session.steps)));
+      setOlderWorkout(finished.workoutHash !== session.workoutHash);
     }
   }, [session]);
 
@@ -83,12 +89,12 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
         plannedSessionId: session.plannedSessionId,
         steps: results,
         sessionRpe: rpe,
-        distanceMeters: typed !== null && Number.isFinite(typed) && typed > 0 ? fieldToMeters(typed, unit) : null,
+        distanceMeters: typed !== null && Number.isFinite(typed) && typed > 0 ? fieldToMeters(typed, unit, existing?.distanceMeters) : null,
         source: run ? "player" : "manual",
         clientKey: run?.clientKey ?? null,
         startedAt: run?.startedAt ?? null,
         finishedAt: run?.finishedAt ?? null,
-        pausedSeconds: run ? Math.round(run.pausedTotalMs / 1000) : 0,
+        pausedSeconds: run ? Math.round(run.pausedTotalMs / 1000) : undefined,
       }),
     );
     setSaving(false);
@@ -125,6 +131,7 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
         <p className="text-sm text-muted-foreground">
           {fromPlayer || run ? "From the guided run" : "As planned; change what was different"} · {formatTime(total)}
         </p>
+        {olderWorkout && <p className="mt-1 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">The workout changed after this run. Steps it no longer has are left out.</p>}
       </div>
 
       <div className="px-4 pb-3">

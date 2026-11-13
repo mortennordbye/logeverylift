@@ -11,6 +11,7 @@ CREATE TABLE "workout_step_results" (
 	"started_at" timestamp,
 	"finished_at" timestamp,
 	"paused_seconds" integer DEFAULT 0 NOT NULL,
+	"wrote_session" boolean DEFAULT false NOT NULL,
 	"created_at" timestamp DEFAULT now() NOT NULL,
 	"updated_at" timestamp DEFAULT now() NOT NULL
 );
