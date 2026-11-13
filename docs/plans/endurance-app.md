@@ -741,3 +741,31 @@ without saying so.
 22. **Missing data in load?** Recommend: no defaults for endurance; count and list the sessions
     with no load. Strength keeps its existing defaults.
 23. **Who sees the load card and tools?** Recommend: the endurance switch only (D18), Garmin or not.
+
+### Decisions
+
+Decided by the hub on 2026-11-13, owner may change. The hub took every recommendation above.
+
+1. The player is built beside the timers; `WorkoutSetsList` and the workout context are not touched.
+2. The step editor ships in a follow-up PR (C6b); the BACKLOG entry stays.
+3. Views: an extra home card for sessions with a workout, `/week`, and `/planned/[id]` with `play`, `pool` and `results`.
+4. Cues are Web Audio oscillator beeps, unlocked in the Start tap, audio session `transient` where it exists, with a Test sound button.
+5. No spoken cues in version 1.
+6. Wake lock fallback is a plain hint line; no hidden-video trick.
+7. No offline cold start in version 1; the run and its save work offline once the page is open.
+8. Step results live in their own table, one row per logged session.
+9. A run becomes a logged session through C5's module, attached to an existing linked session when there is one; Garmin wins on load.
+10. Session RPE is asked first, not required; no RPE and no anchor gives "no load".
+11. The run logger's RPE 6-10 does not change in this PR; BACKLOG note.
+12. Load order: run pace, then sRPE; CSS, then sRPE; bike sRPE; strength as today.
+13. One sRPE scale for all sports: the 0.22 strength factor.
+14. No pace or CSS load for Garmin runs and swims in this PR; BACKLOG.
+15. Assistant-logged sessions count for endurance load in both paths; the Garmin strength filter stays `app` only; BACKLOG.
+16. Pairing: one to one, same sport, same local date, closest duration; Garmin wins.
+17. Compliance stays on duration, then distance; load shows beside it.
+18. The player may run while a strength workout is open, with a note.
+19. Step results can be added by hand for sessions done without the player.
+20. The three load models ship labelled Inference, with a BACKLOG entry for a research pass.
+21. Planned load is an estimate for the week totals and detail only.
+22. No defaults for missing endurance data; sessions with no load are counted and listed.
+23. The load card and tools need the endurance switch.
