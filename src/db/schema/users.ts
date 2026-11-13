@@ -1,4 +1,5 @@
-import { boolean, integer, pgTable, real, text, timestamp, type AnyPgColumn } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, pgTable, real, text, timestamp, type AnyPgColumn } from "drizzle-orm/pg-core";
+import type { StoredHomeLayout } from "../../lib/home/stored-layout";
 import { gyms } from "./gyms";
 
 export const users = pgTable("user", {
@@ -54,6 +55,10 @@ export const users = pgTable("user", {
   // Run pace and speed follow distanceUnit; swim pace follows swimUnit.
   distanceUnit: text("distance_unit").$type<"km" | "mi">().notNull().default("km"),
   swimUnit: text("swim_unit").$type<"m" | "yd">().notNull().default("m"),
+  // The user's home screen layout (docs/home-widgets-audit.md). Null means the
+  // default for their user type (src/lib/home/layout.ts). Order, size, hidden and
+  // per-widget options only; never free text.
+  homeLayout: jsonb("home_layout").$type<StoredHomeLayout>(),
   // The endurance add-on (decisions D15 and D18): the triathlon plan, the race
   // on a cycle, and every later endurance feature. Only an admin can turn it on
   // for now (setUserEndurance). Gate on this, never on the role.
