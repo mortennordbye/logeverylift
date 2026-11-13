@@ -21,7 +21,7 @@ import {
 import { localDateStr } from "@/lib/utils/user-date";
 import { liveCycles, livePlannedSessions, livePrograms } from "@/lib/plan-live";
 import { PlanNotFoundError, PlanStateError, lockCycleRows, planWrite, type PlanWriteContext, type PlanWriteSession, type Tx } from "@/lib/plan-revisions";
-import { withLimits, type LimitContext, type LimitOverride, type LimitScope } from "@/lib/training-limits";
+import { withLimits, type LimitContext, type LimitMode, type LimitOverride, type LimitScope } from "@/lib/training-limits";
 import type { LimitCheck, LimitRule } from "@/lib/utils/training-limits";
 import { userToday } from "@/lib/user-settings";
 import { cycleLengthDays, parseDateStr, projectRotation, toDateStr } from "@/lib/utils/cycle-position";
@@ -745,7 +745,9 @@ export type SessionOp =
       notes?: string | null;
     }
   // Structured workouts and answers (docs/plans/workouts-and-compliance.md, 5 and 6).
-  | { op: "set_workout"; id: number; workout?: unknown; workoutId?: number; expectedVersion?: number }
+  | { op: "set_workout"; id: number; workout?: unknown; workoutId?: number; expectedVersion?: number; /** null clears a stored priority in the same write (the readiness swap). */ priority?: null;
+      /** Apply only if the session still runs this program or workout, read under its row lock (the readiness swap: app writers keep the version). */
+      ifStill?: { programId: number | null; workout: unknown; message: string } }
   | { op: "clear_workout"; id: number; programId: number; expectedVersion?: number }
   | { op: "update_from_library"; id: number; expectedVersion?: number }
   | { op: "set_priority"; id: number; priority: SessionPriority | null; expectedVersion?: number }
@@ -882,7 +884,7 @@ export async function applySessionOp(
   ctx: PlanWriteContext,
   input: SessionOp,
   /** An assistant's write runs the training limits around it (D3); the app's never does (D4). */
-  limits?: { lc: LimitContext; override: LimitOverride },
+  limits?: { lc: LimitContext; override: LimitOverride; mode?: LimitMode },
 ): Promise<{ row: PlannedRow; version: number; limits: { check: LimitCheck; unusedOverrides: LimitRule[] } | null }> {
   const today = toDateStr(await userToday(ctx.userId));
   const { result, versions } = await planWrite(ctx, async (w) => {
@@ -896,7 +898,7 @@ export async function applySessionOp(
       // An added workout session's run counts in the facts after the write (review 2).
       if (input.op === "add" && row.workout != null && scope.sessionWeeks) scope.sessionWeeks.sessionIds = [row.id];
       return row;
-    });
+    }, limits.mode);
     return { row: result, limits: { check, unusedOverrides } };
   });
   return { row: result.row, limits: result.limits, version: versions.get(`planned_session:${result.row.id}`) ?? result.row.version };
@@ -998,10 +1000,14 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
     case "set_workout":
     case "update_from_library": {
       if (row.date != null && row.date < today) throw new SessionInputError("A past session cannot be changed; move it to a coming day first.");
+      if (input.op === "set_workout" && input.ifStill) {
+        const same = row.programId === input.ifStill.programId && JSON.stringify(row.workout ?? null) === JSON.stringify(input.ifStill.workout ?? null);
+        if (!same) throw new SessionInputError(input.ifStill.message);
+      }
       const source = input.op === "set_workout" ? input : { workoutId: row.workoutId ?? undefined };
       if (input.op === "update_from_library" && row.workoutId == null) throw new SessionInputError("This session's workout is not from the library.");
       const wk = await resolveWorkoutInput(tx, ctx.userId, source);
-      set = { workout: wk.workout, workoutId: wk.workoutId, programId: null };
+      set = { workout: wk.workout, workoutId: wk.workoutId, programId: null, ...(input.op === "set_workout" && input.priority === null && { priority: null }) };
       break;
     }
     case "clear_workout":
@@ -1319,7 +1325,7 @@ export async function skipAutoDay(
   const statusOn = toDateStr(await userToday(ctx.userId));
   await planWrite(ctx, async (w) => {
     const rows = await w.tx
-      .select({ id: plannedSessions.id })
+      .select({ id: plannedSessions.id, cycleId: plannedSessions.cycleId })
       .from(plannedSessions)
       .where(
         and(
@@ -1332,6 +1338,11 @@ export async function skipAutoDay(
         ),
       )
       .orderBy(asc(plannedSessions.id));
+    // Cycles first, as every plan write and the e2e reset lock them: holding
+    // the planned session and the auto row while waiting on the cycle could
+    // deadlock with a writer that holds the cycle and then deletes the user's
+    // sessions (review item 2).
+    await lockCycleRows(w.tx, rows.map((r) => r.cycleId).filter((id): id is number => id != null));
     for (const r of rows) {
       await w.touch({ type: "planned_session", id: r.id });
       await w.tx.update(plannedSessions).set({ status: "skipped", statusOn, touchedAt: new Date(), updatedAt: new Date() }).where(eq(plannedSessions.id, r.id));

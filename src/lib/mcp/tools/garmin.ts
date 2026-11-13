@@ -24,6 +24,7 @@ import {
   getVolumeData,
 } from "@/lib/garmin/queries";
 import { fail, failInternal, ok } from "@/lib/mcp/result";
+import { readinessSwapFor } from "@/lib/readiness-swap";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
@@ -35,7 +36,7 @@ export function registerGarminTools(server: McpServer, userId: string) {
     "get_garmin_status",
     {
       description:
-        "The athlete's state today from Garmin and LogEveryLift: readiness and its contributors, body signals against their own normal (sleep, HRV, resting HR, VO2 max, body battery, weight), fitness, fatigue and form, this week's hours per sport against the plan, the race and its demands checklist, and the current insights. Use it to coach the next sessions.",
+        "The athlete's state today from Garmin and LogEveryLift: readiness and its contributors, body signals against their own normal (sleep, HRV, resting HR, VO2 max, body battery, weight), fitness, fatigue and form, this week's hours per sport against the plan, the race and its demands checklist, and the current insights, and readinessSwap: today's hard session to make easy on a low-readiness morning (endurance features on). Use it to coach the next sessions.",
       inputSchema: {},
       annotations: READ_ONLY,
     },
@@ -43,7 +44,7 @@ export function registerGarminTools(server: McpServer, userId: string) {
       try {
         const today = await garminToday(userId);
         const [o, volume, series] = await Promise.all([getOverviewData(userId, today), getVolumeData(userId, today), getLoadSeries(userId)]);
-        const [session, race] = await Promise.all([getSessionInsights(userId, volume, today), getRaceProjection(userId, series.series, today)]);
+        const [session, race, swap] = await Promise.all([getSessionInsights(userId, volume, today), getRaceProjection(userId, series.series, today), readinessSwapFor(userId)]);
         const last = o.pmc.dates.length - 1;
         return ok({
           date: o.date,
@@ -64,6 +65,8 @@ export function registerGarminTools(server: McpServer, userId: string) {
             : null,
           demands: volume.checklist.map((d) => ({ item: d.label, best: d.best, target: d.target, met: d.met, nextStep: d.next })),
           insights: rankInsights([...o.insights, ...session]).map((i) => ({ severity: i.severity, text: i.text })),
+          // D4: the same suggestion as list_planned_sessions and the home screen.
+          readinessSwap: swap ? { plannedSessionId: swap.sessionId, session: swap.label, minutes: swap.minutes, text: swap.text, apply: "manage_planned_session operation='apply_readiness_swap'" } : null,
         });
       } catch (e) {
         return failInternal("garmin_status", e);

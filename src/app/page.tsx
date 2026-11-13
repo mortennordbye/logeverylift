@@ -4,6 +4,7 @@ import { DidYouDoItCard, IllnessBanner } from "@/components/features/DidYouDoIt"
 import { EnduranceTodayCard, type EnduranceTodayRow } from "@/components/features/guided/EnduranceTodayCard";
 import { answerSession } from "@/components/features/answer-session";
 import { PolicyUpdateNotice } from "@/components/features/PolicyUpdateNotice";
+import { ReadinessSwapCard } from "@/components/features/ReadinessSwapCard";
 import { SharePromptLoader } from "@/components/features/SharePromptLoader";
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
 import { TodaySessionsList } from "@/components/features/TodaySessionsList";
@@ -21,6 +22,7 @@ import { sessionCompliance } from "@/lib/session-compliance";
 import { distanceLabel } from "@/lib/planned-view";
 import { getUserSettings } from "@/lib/user-settings";
 import { homeWeekPlanned } from "@/lib/home-week";
+import { readinessSwapFor } from "@/lib/readiness-swap";
 import { weekDayMarks } from "@/lib/utils/planned-sessions";
 import { userToday } from "@/lib/user-settings";
 import { parseDateStr } from "@/lib/utils/cycle-position";
@@ -71,7 +73,9 @@ async function enduranceHome(userId: string, today: string) {
     const [home, todayRows] = await Promise.all([homeEndurance(userId), enduranceToday(userId, today)]);
     const info = home.returnInfo;
     const sick = info?.phase === "sick" ? ((await listIllness(userId)).find((p) => p.id === info.periodId) ?? null) : null;
+    const swap = await readinessSwapFor(userId);
     return {
+      readinessSwap: swap ? { sessionId: swap.sessionId, label: swap.label, minutes: swap.minutes, text: swap.text, version: swap.version } : null,
       unconfirmed: home.unconfirmed.map(answerSession),
       missedKey: home.missedKey.map((m) => ({
         session: answerSession(m.session),
@@ -292,6 +296,8 @@ export default async function Home() {
 
         {/* ── Endurance today (endurance switch only) ── */}
         {endurance && <EnduranceTodayCard rows={endurance.today} />}
+        {/* ── Readiness swap (endurance switch and Garmin only) ── */}
+        {endurance?.readinessSwap && <ReadinessSwapCard swap={endurance.readinessSwap} />}
 
         {/* ── Did you do these? (endurance switch only) ── */}
         {endurance && <DidYouDoItCard unconfirmed={endurance.unconfirmed} missedKey={endurance.missedKey} today={todayStr} />}

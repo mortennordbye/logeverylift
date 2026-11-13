@@ -295,9 +295,9 @@ a session relates to a program.
 | ID | Package | Needs | Status |
 |---|---|---|---|
 | D1 | Load without Garmin, swim and run-pace load | C3, C5 | done ([`endurance-app.md`](endurance-app.md)) |
-| D2 | Training limits engine (warn the AI) | B1, C1, C2, D1 | todo; part 1 done ([`ai-coach.md`](ai-coach.md)) |
-| D3 | Strength by phase and heavy-legs placement | C1, C3, D2 | todo |
-| D4 | Readiness-based session suggestions | C2, D2 | todo |
+| D2 | Training limits engine (warn the AI) | B1, C1, C2, D1 | building ([`limits-strength-readiness.md`](limits-strength-readiness.md)); part 1 done ([`ai-coach.md`](ai-coach.md)) |
+| D3 | Strength by phase and heavy-legs placement | C1, C3, D2 | building ([`limits-strength-readiness.md`](limits-strength-readiness.md)) |
+| D4 | Readiness-based session suggestions | C2, D2 | building ([`limits-strength-readiness.md`](limits-strength-readiness.md)) |
 
 **D1. Load without Garmin.** Session-RPE load for endurance sessions logged in the app, run-pace
 load, swim load from CSS. Fitness, fatigue and form from these when there is no Garmin data.

@@ -6,6 +6,8 @@ import { getCompletedSessions } from "@/lib/actions/workout-sets";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { listPlanned } from "@/lib/planned-sessions";
 import { sessionCompliance } from "@/lib/session-compliance";
+import { heavyLegsNotes } from "@/lib/training-limits";
+import { heavyLegsLines } from "@/lib/utils/training-limits";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
 import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
@@ -55,6 +57,8 @@ export default async function CalendarPage() {
   const complianceById: Record<number, CalendarCompliance> | undefined = endurance
     ? Object.fromEntries(compliance.map((c) => [c.id, { ...answerSession(c), state: c.state, band: c.band }]))
     : undefined;
+  // D3: heavy leg work 1-2 days before a key bike or run, by the limits' own rule.
+  const heavyLegs = endurance && range ? heavyLegsLines(await heavyLegsNotes(session.user.id, range.from, range.to)) : undefined;
   for (const p of planned) if (p.programId) programIds.add(p.programId);
 
   // Pre-fetch all referenced programs in a single batched query
@@ -80,6 +84,7 @@ export default async function CalendarPage() {
         programsMap={programsMap}
         planned={planned}
         compliance={complianceById}
+        heavyLegs={heavyLegs}
         library={endurance ? library.map((w) => ({ id: w.id, name: w.name, sport: w.sport, summary: w.summary })) : undefined}
       />
     </div>

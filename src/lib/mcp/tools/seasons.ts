@@ -30,7 +30,13 @@ import {
   updateSeason,
   type SeasonDetail,
 } from "@/lib/seasons";
-import { startDueScheduledCycle } from "@/lib/plan-revisions";
+import { db } from "@/db";
+import { seasons } from "@/db/schema";
+import { LIMITS_TEXT, limitRefusal, limitSummary, overrideArgs, overrideFrom } from "@/lib/mcp/limits";
+import { seasonPhases, startDueScheduledCycle } from "@/lib/plan-revisions";
+import { LimitRefusedError, startCheck } from "@/lib/training-limits";
+import { nextPhase, seasonTimeline } from "@/lib/utils/seasons";
+import { and, eq, isNull } from "drizzle-orm";
 import { TAPER_DAYS_DEFAULT, TAPER_DAYS_LONG_RUN, TAPER_DAYS_TRI } from "@/lib/utils/seasons";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -44,6 +50,16 @@ const cycleVersionArg = z
   .describe("The version of the cycle the phase operation changes (from get_season or get_training_cycle).");
 
 const TAPER_TEXT = `A taper phase with no length gets the A race's default: full ${TAPER_DAYS_TRI.full} days, half ${TAPER_DAYS_TRI.half}, olympic and sprint ${TAPER_DAYS_TRI.olympic}, a run of 30 km or more ${TAPER_DAYS_LONG_RUN}, others ${TAPER_DAYS_DEFAULT}.`;
+
+/** The cycle resume would start or schedule, or null (the season is missing or has no phase left). */
+async function nextPhaseId(userId: string, seasonId: number): Promise<number | null> {
+  const [season] = await db
+    .select({ startDate: seasons.startDate })
+    .from(seasons)
+    .where(and(eq(seasons.id, seasonId), eq(seasons.userId, userId), isNull(seasons.deletedAt)));
+  if (!season) return null;
+  return nextPhase(seasonTimeline(season.startDate, await seasonPhases(db, seasonId)))?.id ?? null;
+}
 
 function seasonOut(d: SeasonDetail) {
   return {
@@ -154,7 +170,8 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
         "operation='create': name, startDate, endDate; optional goal and nextGoal. operation='update': any of those. operation='delete': the season is soft deleted (the user can restore it for 90 days); its cycles stay and act as cycles with no season. operation='clear_replan': after you re-planned for a race change.",
         `Phases are training cycles in order. operation='add_phase': cycleId (an existing cycle in no season; cycleVersion required) or name (a new empty draft cycle; fill it with edit_cycle_slot), optional position (1-based, default last), phaseType (${PHASE_TYPES.join(", ")}; endurance features only) and a length: durationWeeks (1-${PHASE_MAX_WEEKS}) or durationDays (1-${PHASE_MAX_DAYS}). A cycle's own race moves to the season. ${TAPER_TEXT} At most ${SEASON_MAX_PHASES} phases.`,
         "operation='remove_phase' (cycleId): the cycle leaves the season and runs its whole block curve again. operation='move_phase': cycleId and position. operation='set_phase': cycleId and any of phaseType (null clears), durationWeeks, durationDays.",
-        "operation='fit_taper': lengthens or shortens the phase before the taper so the taper ends on the A race day. operation='resume': starts or schedules the next phase after the chain was paused.",
+        "operation='fit_taper': lengthens or shortens the phase before the taper so the taper ends on the A race day. operation='resume': starts or schedules the next phase after the chain was paused; the training limits check the next phase's first week.",
+        LIMITS_TEXT,
         "Phase curves: general, base and build ramp from 0.80 to 1.00 of each set's peak with recovery weeks by athlete level; peak holds 1.00; taper falls from 0.60 to 0.35; transition holds 0.50 and leaves zone and rest alone; no phase type runs the cycle's whole block curve. When a phase starts, the next one is scheduled for the day after it ends.",
         `Every operation requires reason; all but create also require expectedVersion (the season's version), and phase operations on an existing cycle take cycleVersion. The result has the new versions. ${REVISION_RULES}`,
       ].join(" "),
@@ -175,6 +192,7 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
         durationDays: z.number().int().min(1).max(PHASE_MAX_DAYS).optional(),
         reason: reasonArg,
         expectedVersion: expectedVersionArg.optional(),
+        ...overrideArgs,
       },
     },
     async (args) => {
@@ -253,11 +271,25 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
             });
           case "fit_taper":
             return ok({ fitted: true, ...(await fitTaper(ctx, seasonId, ev)) });
-          case "resume":
-            return ok({ resumed: true, ...(await resumeSeason(ctx, seasonId, ev)) });
+          case "resume": {
+            // The training limits on the next phase's first week, as a start
+            // is checked (docs/plans/limits-strength-readiness.md, 6).
+            const override = overrideFrom(args);
+            if (typeof override === "string") return fail(override);
+            const nextId = await nextPhaseId(userId, seasonId);
+            let limits: ReturnType<typeof limitSummary> | undefined;
+            if (nextId != null) {
+              const { blocking, check, unusedOverrides } = await startCheck(userId, nextId, override);
+              if (blocking.length) throw new LimitRefusedError(blocking);
+              ctx.limitCheck = check;
+              limits = limitSummary(check, unusedOverrides);
+            }
+            return ok({ resumed: true, ...(await resumeSeason(ctx, seasonId, ev)), ...(limits && { limits }) });
+          }
         }
       } catch (e) {
         if (e instanceof ArgError) return fail(e.message);
+        if (e instanceof LimitRefusedError) return limitRefusal(e);
         return (await planErrorResult(userId, e)) ?? failInternal("seasons", e);
       }
     },

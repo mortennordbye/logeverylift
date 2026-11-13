@@ -11,9 +11,10 @@ import { applyRotationOp, applySessionOp, listPlanned, WorkoutSchemaError, type 
 import { moveSuggestion } from "@/lib/session-answers";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { sessionCompliance, thresholdValues } from "@/lib/session-compliance";
+import { applyReadinessSwap, readinessSwapFor } from "@/lib/readiness-swap";
 import { appSessionLoads, type SessionLoadRow } from "@/lib/training-load";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
-import { LimitRefusedError, limitContext } from "@/lib/training-limits";
+import { LimitRefusedError, heavyLegsNotes, limitContext } from "@/lib/training-limits";
 import { PLANNED_RANGE_MAX_DAYS, addDaysStr } from "@/lib/utils/planned-sessions";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -47,6 +48,7 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         "A rotation cycle has no fixed dates: its sessions are worked out from the walk (a missed session repeats the next day), so they have rotationPosition and an id only when you or the user stored a skip or a change for that position.",
         "Each entry: id, cycleId, date, position, programId, programName, label, notes, status (planned; done with loggedSessionId; missed = a past day not done; skipped with skipReason), autoComplete (a day tracked outside the app), touched, templateDate, version.",
         "Weekday sessions also carry: sport, priority (stored or derived: key = hard, or the longest bike or run of its week at 90 minutes or more), hard, workoutSummary, brickParentId, planned and done (durationSeconds, distanceMeters), state (planned, done, missed, unconfirmed = a past endurance session with no match and no answer, illness, sick, skipped), matchedBy (link, pick, app, garmin), ratio and band (green, yellow, orange, red, done, illness), missedReason, illnessId, and suggestedMoveTo for a confirmed missed key session. Matching to Garmin activities is for admins only. A session with a workout also has plannedLoad ({value, partial}: an estimate from its targets, 100 = one hour at threshold; partial when a step had no power or pace target). With endurance features on, a done session has load ({value, method}: run_pace, swim_css, srpe or strength_srpe; null with reason needs_rpe when nothing measured it). Garmin load is not shown here; read get_training_load.",
+        "With endurance features on: readinessSwap on today's session when this morning is a low-readiness day (HRV below the athlete's band two days and resting HR up, from Garmin): the reason, the easy session it would become, and that apply_readiness_swap makes it easy; and heavyLegsBeforeKey on a strength session with heavy leg work 1-2 days before a key bike or run session, or earlier the same day (the rule heavy_legs_before_key), with heavyLegsBeforeKeyOf on the key session.",
       ].join(" "),
       inputSchema: { from: dateArg, to: dateArg, cycleId: z.number().int().positive().optional() },
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -63,6 +65,9 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         const endurance = await enduranceEnabledFor(userId);
         const linked = [...facts.values()].flatMap((f) => (f.loggedSessionId != null ? [f.loggedSessionId] : []));
         const [anchors, logged] = endurance ? await Promise.all([thresholdValues(userId), appSessionLoads(userId, null, null, { sessionIds: linked })]) : [{}, []];
+        // D3 and D4 (docs/plans/limits-strength-readiness.md): the same rule and suggestion the app shows.
+        const swap = endurance ? await readinessSwapFor(userId) : null;
+        const legs = endurance ? await heavyLegsNotes(userId, from, to) : [];
         const out = [];
         for (const s of sessions) {
           const f = s.id != null ? facts.get(s.id) : undefined;
@@ -90,6 +95,15 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
             ...(endurance && f.workout && { plannedLoad: roundLoad(workoutPlannedLoad(f.workout, anchors)) }),
             ...(endurance && f.loggedSessionId != null && { load: doneLoad(logged, f.loggedSessionId, f.sport) }),
             ...(suggestion && { suggestedMoveTo: suggestion }),
+            ...(swap?.sessionId === f.id && {
+              readinessSwap: { why: swap.flag.text, numbers: swap.flag.numbers, becomes: swap.workout, minutes: swap.minutes, text: swap.text, apply: "manage_planned_session operation='apply_readiness_swap'" },
+            }),
+            ...(legs.some((l) => l.liftId === f.id) && {
+              heavyLegsBeforeKey: legs.filter((l) => l.liftId === f.id).map((l) => ({ keySessionId: l.keyId, key: l.keyLabel, keyDate: l.keyDate, daysBefore: l.daysBefore })),
+            }),
+            ...(legs.some((l) => l.keyId === f.id) && {
+              heavyLegsBeforeKeyOf: legs.filter((l) => l.keyId === f.id).map((l) => ({ liftSessionId: l.liftId, lift: l.liftLabel, liftDate: l.liftDate, daysBefore: l.daysBefore })),
+            }),
           });
         }
         return ok({ sessions: out });
@@ -111,11 +125,12 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
         `Every operation requires reason; all but add, and the first change to a rotation position, require expectedVersion (the session's version). ${REVISION_RULES}`,
         `On move, change, add, unskip and reset: ${LIMITS_TEXT} Hard sessions are counted in each Monday-to-Sunday week the change touches.`,
         "With endurance features on (docs: logeverylift://docs/workout-steps): 'set_workout' (workout JSON, or workoutId to copy a library workout: the session gets its own copy and runs it instead of a program), 'clear_workout' (programId to run instead), 'update_from_library' (copy the library workout again), 'set_priority' (priority key, support, optional, or null for derived), 'link_brick' (brickParentId: the ride before this run, same day, earlier position), 'unlink_brick'. 'add' also takes workout or workoutId instead of programId, priority and brickParentId. Moving the first session of a brick moves the brick; its later session cannot move alone. set_workout and add run the limits too. A workout that breaks the schema check is refused with every problem and its path, and that check cannot be overridden.",
+        "operation='apply_readiness_swap' (id, expectedVersion, endurance features on): make today's hard session the easy one that readinessSwap in list_planned_sessions shows. The app reads the suggestion again and refuses when it no longer holds. The revision keeps the session as it was, so it can be restored.",
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },
       inputSchema: {
         ...overrideArgs,
-        operation: z.enum(["move", "skip", "unskip", "change", "reset", "remove", "add", "set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick"]),
+        operation: z.enum(["move", "skip", "unskip", "change", "reset", "remove", "add", "set_workout", "clear_workout", "update_from_library", "set_priority", "link_brick", "unlink_brick", "apply_readiness_swap"]),
         workout: z.unknown().optional(),
         workoutId: z.number().int().positive().optional(),
         priority: z.enum(["key", "support", "optional"]).nullable().optional(),
@@ -155,6 +170,13 @@ export function registerPlannedSessionTools(server: McpServer, userId: string, c
           });
           audit("manage_planned_session", { userId, op: args.operation, id: row.id });
           return ok({ session: row, version, limits: { notChecked: [{ rule: "hard_sessions_per_week", why: "Rotation cycles have no fixed week." }] } });
+        }
+        if (args.operation === "apply_readiness_swap") {
+          if (args.id == null) return fail("apply_readiness_swap requires id");
+          if (args.expectedVersion == null) return fail("expectedVersion is required: read the session with list_planned_sessions");
+          const { row, version, limits } = await applyReadinessSwap(ctx, args.id, override, args.expectedVersion);
+          audit("manage_planned_session", { userId, op: args.operation, id: row.id });
+          return ok({ session: row, version, ...(limits && { limits: limitSummary(limits.check, limits.unusedOverrides) }) });
         }
         if (args.operation === "add") {
           if (args.cycleId == null || args.date == null) return fail("add requires cycleId and date");

@@ -3,9 +3,9 @@
  * (docs/plans/athlete-profile.md, 2.5; decisions D10 and D21).
  *
  * A default, not a rule: the assistant may plan another count if it gives
- * the reason, which the revision stores (D21). The check that refuses another
- * count until the assistant overrides it belongs to package D3, once seasons
- * store phases as cycles (owner, 2026-11-12).
+ * the reason, which the revision stores (D21). The training limit
+ * `strength_per_week` (src/lib/utils/training-limits.ts, package D3) refuses
+ * another count on a phase until the assistant overrides it.
  *
  * Research: docs/research/endurance-training-reference.md:214-222 (strength
  * by phase; Study for load and frequency, coach convention for the set/rep
