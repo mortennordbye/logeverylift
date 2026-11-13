@@ -11,6 +11,7 @@ import type { StrengthGoal } from "@/db/schema/athlete-profile";
 import { hoursLabel, kmLabel } from "@/lib/garmin/analytics/demands";
 import { addDaysStr, dowOf, mondayOf } from "@/lib/utils/planned-sessions";
 import { effectivePriorities } from "@/lib/utils/session-compliance";
+import { shortDay } from "@/lib/utils/seasons";
 import { STRENGTH_GOAL_LABEL, strengthDefault, type StrengthPhase } from "@/lib/utils/strength-goal";
 import type { Workout } from "@/lib/utils/workout-steps";
 
@@ -396,6 +397,23 @@ export function heavyLegsBeforeKey(before: ReadonlyMap<string, PlacedGroup>, aft
     evidence: HEAVY_LEGS_EVIDENCE,
     source: `${REFERENCE} (Placement matters more than the program)`,
   };
+}
+
+/** One heavy-legs conflict between two dated sessions, by id (the D3 lines in the app). */
+export type HeavyLegsPair = { liftId: number; keyId: number; liftLabel: string; keyLabel: string; liftDate: string; keyDate: string; daysBefore: number };
+
+/**
+ * The line each session of a heavy-legs conflict shows in the calendar (D3),
+ * by planned session id. Dates as "Tue 11 May" (shortDay), built on the server.
+ */
+export function heavyLegsLines(pairs: HeavyLegsPair[]): Record<number, string[]> {
+  const out: Record<number, string[]> = {};
+  const when = (days: number) => (days === 0 ? "earlier the same day as" : `${days} day${days === 1 ? "" : "s"} before`);
+  for (const p of pairs) {
+    (out[p.liftId] ??= []).push(`Heavy legs ${when(p.daysBefore)} key "${p.keyLabel}" (${shortDay(p.keyDate)}). Move it or make it upper body.`);
+    (out[p.keyId] ??= []).push(`Heavy legs before this key session: "${p.liftLabel}" (${shortDay(p.liftDate)}).`);
+  }
+  return out;
 }
 
 // ── Strength sessions per week by phase (D21) ───────────────────────────────

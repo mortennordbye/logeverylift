@@ -12,6 +12,7 @@ import { getPrograms } from "@/lib/actions/programs";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { requireSession } from "@/lib/utils/session";
 import { seasonOfCycle } from "@/lib/seasons";
+import { syncLimitWarnings } from "@/lib/training-limits";
 import { dayLabel } from "@/lib/utils/seasons";
 import { ChevronLeftIcon } from "lucide-react";
 import Link from "next/link";
@@ -38,6 +39,8 @@ export default async function CycleDetailPage({
   const cycle = cycleResult.data;
   // A phase of a season shows where it sits and the season's races (D8).
   const season = await seasonOfCycle(auth.user.id, cycle);
+  // T4: limits this week's sync broke (only an endurance user's sync stores any).
+  const limitWarnings = cycle.status === "active" ? await syncLimitWarnings(auth.user.id, cycle.id, cycle.lastSyncedWeek) : [];
   const programs = programsResult.success ? programsResult.data : [];
   const periodization = periodizationResult.success ? periodizationResult.data : null;
 
@@ -109,6 +112,17 @@ export default async function CycleDetailPage({
             ))}
             {season.replan.flagged && <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Race changed, plan not updated</p>}
           </Link>
+        )}
+
+        {limitWarnings.length > 0 && (
+          <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 px-4 py-3" data-testid="sync-limit-warning">
+            <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">This week breaks a training limit</p>
+            {limitWarnings.map((w) => (
+              <p key={w.rule} className="text-sm">
+                {w.message}
+              </p>
+            ))}
+          </div>
         )}
 
         {/* Periodization summary (triathlon cycles) */}

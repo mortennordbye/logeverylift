@@ -214,7 +214,15 @@ lasts only until that writer runs again.
     strength goal.
 
   The last three run when the write touches a weekday cycle's days; on rotation cycles they do
-  not run.
+  not run. `list_planned_sessions` marks a strength session in a heavy-legs conflict
+  (`heavyLegsBeforeKey`), as the app's calendar does.
+- **Readiness swap.** On a low-readiness morning (Garmin, admins only for now) the app suggests
+  making today's first hard session an easy zone 2 session of the same sport, at most 60 minutes.
+  The user taps; you see the same suggestion as `readinessSwap` in `list_planned_sessions` and
+  `get_garmin_status`, and can apply it with `manage_planned_session`
+  `operation='apply_readiness_swap'`. The hard session is not moved; the revision keeps it.
+- **Warnings on the app's own writes.** `get_training_cycle` returns `limitWarnings` when this
+  week's sync broke a limit.
 
   Checked writes: program set edits, slot changes, starting or scheduling a cycle, `set_volume`,
   a change to the active cycle's length, goal or level (they rescale this week's targets), and a

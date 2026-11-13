@@ -45,6 +45,7 @@ import {
   TEMPLATE_MONDAY,
   hardAfterLowReadiness,
   hardSessionsPerWeek,
+  heavyLegConflicts,
   heavyLegsBeforeKey,
   isHeavyLegSet,
   isStrengthSet,
@@ -63,6 +64,7 @@ import {
   type LimitCheck,
   type LimitNotChecked,
   type LimitRule,
+  type HeavyLegsPair,
   type PastRun,
   type PlannedRun,
   type ReadinessDay,
@@ -247,6 +249,18 @@ export async function limitContext(userId: string): Promise<LimitContext> {
     readinessWhy: fresh ? null : STALE_READINESS,
     strengthGoal,
   };
+}
+
+/**
+ * Today's readiness flag from Garmin, for the readiness swap (D4): null for
+ * a user without Garmin data, or when there is no flag. The caller checks
+ * the endurance switch.
+ */
+export async function readinessToday(userId: string, today: string): Promise<ReadinessFlag | null> {
+  if (!(await garminAllowedFor(userId))) return null;
+  const [conn] = await db.select({ lastSyncedAt: garminConnections.lastSyncedAt }).from(garminConnections).where(eq(garminConnections.userId, userId));
+  if (!conn?.lastSyncedAt) return null;
+  return readinessFlag(await readinessDays(userId, today), today);
 }
 
 // ── Plan facts ──────────────────────────────────────────────────────────────
@@ -659,6 +673,59 @@ async function weekGroup(ex: Executor, userId: string, monday: string): Promise<
   const rows = await datedRows(ex, userId, addDaysStr(monday, -2), to);
   const cycleIds = [...new Set(rows.map((r) => r.cycleId).filter((id): id is number => id != null))];
   return { loop: false, from: monday, to, sessions: await placeRows(ex, userId, rows), cycles: await placedCycles(ex, cycleIds) };
+}
+
+/**
+ * The training limits this week's sync (or applied Garmin suggestion) broke
+ * on a cycle, from its stored revision (T4): shown on the cycle page and in
+ * get_training_cycle. Empty when it broke none or has not run this week.
+ */
+export async function syncLimitWarnings(userId: string, cycleId: number, week: number | null): Promise<{ rule: string; message: string; evidence: string }[]> {
+  if (week == null) return [];
+  const { planRevisions } = await import("@/db/schema");
+  const { desc } = await import("drizzle-orm");
+  const [rev] = await db
+    .select({ limitCheck: planRevisions.limitCheck })
+    .from(planRevisions)
+    .where(
+      and(
+        eq(planRevisions.userId, userId),
+        eq(planRevisions.objectType, "cycle"),
+        eq(planRevisions.objectId, cycleId),
+        inArray(planRevisions.changeSetId, [`sync:${cycleId}:${week}`, `apply:${cycleId}:${week}`]),
+      ),
+    )
+    .orderBy(desc(planRevisions.id))
+    .limit(1);
+  const warnings = (rev?.limitCheck as Partial<LimitCheck> | null)?.warnings ?? [];
+  return warnings.map((w) => ({ rule: w.rule, message: w.message, evidence: w.evidence }));
+}
+
+export type HeavyLegsNote = HeavyLegsPair;
+
+/**
+ * Heavy leg work 1-2 days before a key bike or run session, or earlier the
+ * same day, among the user's dated sessions around [from, to] (D3: the
+ * calendar and session detail show it with the rule the limits use; no
+ * second rule). The caller checks the endurance switch.
+ */
+export async function heavyLegsNotes(userId: string, from: string, to: string): Promise<HeavyLegsNote[]> {
+  const { addDaysStr } = await import("@/lib/utils/planned-sessions");
+  const rows = await datedRows(db, userId, addDaysStr(from, -2), addDaysStr(to, 2));
+  const sessions = await placeRows(db, userId, rows);
+  const group: PlacedGroup = { loop: false, from: addDaysStr(from, -2), to: addDaysStr(to, 2), sessions, cycles: {} };
+  const id = (ref: string) => Number(ref.slice(2));
+  return heavyLegConflicts(group)
+    .filter((c) => (c.lift.date >= from && c.lift.date <= to) || (c.key.date >= from && c.key.date <= to))
+    .map((c) => ({
+      liftId: id(c.lift.ref),
+      keyId: id(c.key.ref),
+      liftLabel: c.lift.label,
+      keyLabel: c.key.label,
+      liftDate: c.lift.date,
+      keyDate: c.key.date,
+      daysBefore: c.days,
+    }));
 }
 
 /**

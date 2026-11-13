@@ -21,7 +21,7 @@ import {
 import { localDateStr } from "@/lib/utils/user-date";
 import { liveCycles, livePlannedSessions, livePrograms } from "@/lib/plan-live";
 import { PlanNotFoundError, PlanStateError, lockCycleRows, planWrite, type PlanWriteContext, type PlanWriteSession, type Tx } from "@/lib/plan-revisions";
-import { withLimits, type LimitContext, type LimitOverride, type LimitScope } from "@/lib/training-limits";
+import { withLimits, type LimitContext, type LimitMode, type LimitOverride, type LimitScope } from "@/lib/training-limits";
 import type { LimitCheck, LimitRule } from "@/lib/utils/training-limits";
 import { userToday } from "@/lib/user-settings";
 import { cycleLengthDays, parseDateStr, projectRotation, toDateStr } from "@/lib/utils/cycle-position";
@@ -882,7 +882,7 @@ export async function applySessionOp(
   ctx: PlanWriteContext,
   input: SessionOp,
   /** An assistant's write runs the training limits around it (D3); the app's never does (D4). */
-  limits?: { lc: LimitContext; override: LimitOverride },
+  limits?: { lc: LimitContext; override: LimitOverride; mode?: LimitMode },
 ): Promise<{ row: PlannedRow; version: number; limits: { check: LimitCheck; unusedOverrides: LimitRule[] } | null }> {
   const today = toDateStr(await userToday(ctx.userId));
   const { result, versions } = await planWrite(ctx, async (w) => {
@@ -896,7 +896,7 @@ export async function applySessionOp(
       // An added workout session's run counts in the facts after the write (review 2).
       if (input.op === "add" && row.workout != null && scope.sessionWeeks) scope.sessionWeeks.sessionIds = [row.id];
       return row;
-    });
+    }, limits.mode);
     return { row: result, limits: { check, unusedOverrides } };
   });
   return { row: result.row, limits: result.limits, version: versions.get(`planned_session:${result.row.id}`) ?? result.row.version };

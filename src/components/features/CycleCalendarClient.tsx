@@ -48,6 +48,12 @@ type Props = {
   compliance?: Record<number, CalendarCompliance>;
   /** The workouts library; only with the endurance switch on. */
   library?: LibraryRow[];
+  /**
+   * Heavy leg work 1-2 days before a key bike or run, by planned session id
+   * (D3, docs/plans/limits-strength-readiness.md, 4); only with the endurance
+   * switch on. Lines are built on the server.
+   */
+  heavyLegs?: Record<number, string[]>;
 };
 
 function toDateStr(d: Date): string {
@@ -183,7 +189,7 @@ function formatSheetDate(dateStr: string): string {
   return `${WEEKDAY_NAMES[date.getDay()]}, ${MONTH_NAMES[m - 1]} ${d}, ${y}`;
 }
 
-export function CycleCalendarClient({ cycles, completedDates, programsMap, planned = [], compliance, library }: Props) {
+export function CycleCalendarClient({ cycles, completedDates, programsMap, planned = [], compliance, library, heavyLegs }: Props) {
   const router = useRouter();
   const [answering, setAnswering] = useState<AnswerSession | null>(null);
   const [picking, setPicking] = useState<CalendarCompliance | null>(null);
@@ -424,6 +430,12 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
                             {name}
                           </p>
                         )}
+                        {p.id != null &&
+                          heavyLegs?.[p.id]?.map((line) => (
+                            <p key={line} data-testid="heavy-legs-line" className="px-4 pt-3 text-xs font-medium text-amber-700 dark:text-amber-300">
+                              {line}
+                            </p>
+                          ))}
                         {c && (
                           <div className="px-4 pt-3 pb-1 space-y-2">
                             {c.summary && <p className="text-xs text-muted-foreground">{c.summary}</p>}

@@ -6,6 +6,7 @@ import {
   hardAfterLowReadiness,
   heavyLegConflicts,
   heavyLegsBeforeKey,
+  heavyLegsLines,
   isHeavyLegSet,
   isStrengthSet,
   readinessFlag,
@@ -310,5 +311,17 @@ describe("readiness swap", () => {
     }
     expect((easyWorkout("run", 40 * 60).steps[0] as { end: { seconds: number } }).end.seconds).toBe(40 * 60);
     expect((easyWorkout("run", null).steps[0] as { end: { seconds: number } }).end.seconds).toBe(EASY_MAX_SECONDS);
+  });
+});
+
+describe("heavyLegsLines (the D3 calendar lines)", () => {
+  it("gives the lift and the key session each a line, dates as short days", () => {
+    const lines = heavyLegsLines([{ liftId: 1, keyId: 2, liftLabel: "Leg day", keyLabel: "Long run", liftDate: "2027-05-10", keyDate: "2027-05-11", daysBefore: 1 }]);
+    expect(lines).toEqual({
+      1: ['Heavy legs 1 day before key "Long run" (Tue 11 May). Move it or make it upper body.'],
+      2: ['Heavy legs before this key session: "Leg day" (Mon 10 May).'],
+    });
+    const same = heavyLegsLines([{ liftId: 1, keyId: 2, liftLabel: "Legs", keyLabel: "Intervals", liftDate: "2027-05-11", keyDate: "2027-05-11", daysBefore: 0 }]);
+    expect(same[1][0]).toContain("earlier the same day as key");
   });
 });

@@ -27,6 +27,7 @@ import {
   NO_FACTS,
   cycleScope,
   evaluateLimits,
+  syncLimitWarnings,
   limitContext,
   planFacts,
   withLimits,
@@ -102,7 +103,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     "get_training_cycle",
     {
       description:
-        "Get one training cycle with its slots (each slot's assigned program included), its version, and touchedFutureSessions: how many dated sessions from today on were moved, skipped or changed, which a slot change leaves alone. Pass the version as expectedVersion when you change it. A cycle with seasonId is a phase of that season (phaseOrder, phaseType, durationDays); its race is the season's A race, returned as race. Change phases with manage_season.",
+        "Get one training cycle with its slots (each slot's assigned program included), its version, and touchedFutureSessions: how many dated sessions from today on were moved, skipped or changed, which a slot change leaves alone. Pass the version as expectedVersion when you change it. A cycle with seasonId is a phase of that season (phaseOrder, phaseType, durationDays); its race is the season's A race, returned as race. Change phases with manage_season. limitWarnings (when there are any): the training limits this week's weekly sync or applied Garmin suggestion broke; the app never refuses its own writes, so check them with the athlete.",
       inputSchema: { cycleId: z.number().int().positive() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -123,7 +124,9 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         // Dated sessions from today on that the user or an assistant changed:
         // a template edit leaves these alone (docs/plans/sessions.md, T7).
         const touchedFutureSessions = await countTouchedFuture(userId, cycle.id);
-        return ok({ ...cycle, race, slots: cycle.slots.map(liveSlotProgram), touchedFutureSessions });
+        // T4: what this week's sync broke, stored on its revision (docs/plans/limits-strength-readiness.md, 6).
+        const limitWarnings = cycle.status === "active" ? await syncLimitWarnings(userId, cycle.id, cycle.lastSyncedWeek) : [];
+        return ok({ ...cycle, race, slots: cycle.slots.map(liveSlotProgram), touchedFutureSessions, ...(limitWarnings.length && { limitWarnings }) });
       } catch (e) {
         return failInternal("cycles", e);
       }

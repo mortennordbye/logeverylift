@@ -641,7 +641,16 @@ Stage 1 of the build (2026-11-13) shipped everything that does not need D1's API
   allowed on a swim, and max heart rate fits every sport.
 - **Heavy legs:** an exercise with no equipment set counts as loaded.
 
-Still to build: the weekly load ramp (waits for D1); the readiness swap's server function,
-Server Action, home card, `apply_readiness_swap` and the `readinessSwap` fields over MCP; the D3
-lines in the calendar and session detail and `heavyLegsBeforeKey` over MCP; the sync warning
-line on the cycle page and `limitWarnings` in `get_training_cycle`; the data inventory text.
+Stage 2 (2026-11-13) shipped the readiness swap (server module, Server Action, home card,
+`apply_readiness_swap`, `readinessSwap` in `list_planned_sessions` and `get_garmin_status`), the
+D3 heavy-legs lines and `heavyLegsBeforeKey` over MCP, the sync warning line on the cycle page
+with `limitWarnings` in `get_training_cycle`, and the data inventory text. Differences:
+
+- **The calendar day sheet is the session detail.** The app has no separate page for a planned
+  session; the day sheet lists each session with its actions, so the heavy-legs line shows there,
+  on both the lift and the key session. The lines are built on the server (`shortDay`).
+- **No component test for the calendar line:** the calendar has no component test harness; the
+  e2e spec covers the line, and a unit test covers its text.
+- **Readiness swap card placement:** after the today card, before "Did you do these?".
+
+Still to build: the weekly load ramp (waits for D1).
