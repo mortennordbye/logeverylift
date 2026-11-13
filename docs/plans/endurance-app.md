@@ -867,3 +867,19 @@ Two independent reviews of the build. Each code fix came with a test that failed
     message.** Pause now runs the same catch-up as the clock, with its cue; the app shows "This
     session is already logged for that day." Component test "Pause after a step ended plays the
     change cue"; unit test `src/__tests__/step-results-messages.test.ts`.
+
+Re-review (2026-11-13):
+
+- **Discard took one tap** next to "Save its results". It now asks first ("Discard the run").
+  Component test "a finished, unsaved run of another session blocks Start ..." (updated).
+- **A run whose step ids all changed** saved nothing ("No time recorded") while the banner said
+  only some steps were left out. The form now says that no step matches and offers "Save as one
+  session" with the run's total active time (`durationSeconds` on the save, used only when the
+  steps hold no time). Tests "says plainly when no step of the run matches ..."
+  (`src/__tests__/components/step-results.test.tsx`) and "re-review 2: with no step time ...".
+- **A value could not be cleared** on a session the results path wrote, and its time did not
+  follow the steps. Null now clears RPE and distance there (left out keeps them, as MCP sends),
+  and the set's time and the session's end follow the steps. A session someone else logged is
+  never cleared. Tests "re-review 3: ..." (two).
+- **Mixed sessions in the Garmin series:** BACKLOG "Per-sport split of mixed app sessions in the
+  Garmin series", and the comment at the top of `src/lib/garmin/analytics/daily.ts`.

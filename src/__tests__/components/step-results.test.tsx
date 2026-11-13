@@ -127,6 +127,47 @@ describe("StepResultsForm", () => {
     expect(screen.getByTestId("step-results").textContent).toContain("The workout changed after this run");
   });
 
+  // Re-review 2: an edit changed every step id, so no step of the run is in the workout now.
+  it("says plainly when no step of the run matches, and saves it as one session with its total time", async () => {
+    const oldSteps = toPlaySteps([view("x1", "warmup", 600), view("x2", "work", 300)]);
+    const t0 = Date.now() - 3_600_000;
+    let s = start(initialState({ plannedSessionId: 41, workoutHash: "old00000", clientKey: "key12345" }), oldSteps, t0);
+    s = tick(s, oldSteps, t0 + 900_000).state;
+    localStorage.setItem(PLAYER_STORAGE_KEY, serializePlayerState(s));
+    render(<StepResultsForm session={session} units={units} existing={null} fromPlayer />);
+    await act(async () => {});
+    expect(screen.getByTestId("no-step-match").textContent).toContain("None of this run's steps are in the workout now");
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save as one session" }));
+    });
+    expect(saveStepResultsAction).toHaveBeenCalledWith(
+      expect.objectContaining({
+        durationSeconds: 900,
+        source: "player",
+        clientKey: "key12345",
+        steps: [
+          { key: "s1", status: "not_done" },
+          { key: "s2", status: "not_done" },
+          { key: "s3", status: "not_done" },
+        ],
+      }),
+    );
+  });
+
+  // Re-review 3: an empty RPE is sent as null, so a session the results wrote can be cleared.
+  it("sends a cleared RPE and distance as null", async () => {
+    render(<StepResultsForm session={session} units={units} existing={{ steps: [{ key: "s1", status: "done", activeSeconds: 600 }], sessionRpe: 6, distanceMeters: 21500 }} fromPlayer={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "6" }));
+    fireEvent.change(screen.getByLabelText("Distance in km"), { target: { value: "" } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    });
+    const sent = saveStepResultsAction.mock.calls[0][0] as Record<string, unknown>;
+    expect(sent.sessionRpe).toBeNull();
+    expect(sent.distanceMeters).toBeNull();
+  });
+
   // Review fix 11: the saved distance shows, and a hand save sends no run details.
   it("shows the saved distance and sends no run details from a hand save", async () => {
     render(<StepResultsForm session={session} units={units} existing={{ steps: [{ key: "s1", status: "done", activeSeconds: 600 }], sessionRpe: 6, distanceMeters: 21500 }} fromPlayer={false} />);

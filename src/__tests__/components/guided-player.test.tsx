@@ -211,7 +211,14 @@ describe("GuidedPlayer", () => {
     await act(async () => {});
     expect(screen.getByRole("link", { name: "Save its results" }).getAttribute("href")).toBe("/planned/77/results?from=player");
     expect((screen.getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(true);
+    // Re-review 1: one tap only asks; the run goes on the confirm.
     fireEvent.click(screen.getByRole("button", { name: "Discard it" }));
+    expect(localStorage.getItem(PLAYER_STORAGE_KEY)).not.toBeNull();
+    expect((screen.getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Keep it" }));
+    expect(screen.queryByRole("button", { name: "Discard the run" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Discard it" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard the run" }));
     expect(localStorage.getItem(PLAYER_STORAGE_KEY)).toBeNull();
     expect((screen.getByRole("button", { name: "Start" }) as HTMLButtonElement).disabled).toBe(false);
   });

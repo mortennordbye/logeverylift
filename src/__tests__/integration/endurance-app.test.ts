@@ -354,6 +354,38 @@ describe("review fixes (2026-11-13)", () => {
     expect(entry.load).toEqual({ value: Math.round(60 * 6 * 0.22), method: "srpe" });
   });
 
+  // Re-review 3: on a session the results path wrote, an empty RPE or distance clears it, and the time follows the steps.
+  it("re-review 3: a later save can clear RPE and distance and updates the time of the session it wrote", async () => {
+    const id = await plannedWith(me, ride);
+    const first = await saveStepResults(me, { plannedSessionId: id, steps: runResults, sessionRpe: 6, distanceMeters: 20000 }, "manual");
+    await saveStepResults(me, { plannedSessionId: id, steps: [{ key: "s1", status: "done", activeSeconds: 900 }], sessionRpe: null, distanceMeters: null }, "manual");
+    const [set] = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, first.workoutSessionId));
+    expect(set).toMatchObject({ rpe: null, distanceMeters: null, durationSeconds: 900 });
+    // Left out (undefined) keeps the value, as MCP sends it.
+    await saveStepResults(me, { plannedSessionId: id, steps: runResults, sessionRpe: 7 }, "assistant");
+    await saveStepResults(me, { plannedSessionId: id, steps: runResults }, "assistant");
+    const [kept] = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, first.workoutSessionId));
+    expect(kept).toMatchObject({ rpe: 7, durationSeconds: 1620 });
+  });
+
+  it("re-review 3: an empty RPE never clears a session someone else logged", async () => {
+    const bikeEx = (await sportExerciseId("bike"))!;
+    const id = await plannedWith(me, ride);
+    const sessionId = await loggedSession(TODAY, [{ exerciseId: bikeEx, durationSeconds: 1800, distanceMeters: 10000, rpe: 5 }], id);
+    await saveStepResults(me, { plannedSessionId: id, steps: runResults, sessionRpe: null, distanceMeters: null }, "manual");
+    const [set] = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, sessionId));
+    expect(set).toMatchObject({ rpe: 5, distanceMeters: 10000, durationSeconds: 1800 });
+  });
+
+  // Re-review 2: a run whose steps no longer match the workout saves as one session with its total time.
+  it("re-review 2: with no step time, the run's total time logs the session", async () => {
+    const id = await plannedWith(me, ride);
+    const r = await saveStepResults(me, { plannedSessionId: id, steps: [{ key: "s1", status: "not_done" }], durationSeconds: 2400 }, "player");
+    const [set] = await db.select().from(workoutSets).where(eq(workoutSets.sessionId, r.workoutSessionId));
+    expect(set.durationSeconds).toBe(2400);
+    await expect(saveStepResults(me, { plannedSessionId: await plannedWith(me, ride), steps: [{ key: "s1", status: "not_done" }] }, "manual")).rejects.toThrow("No time recorded");
+  });
+
   it("11: a second save keeps the run's details and changes RPE and distance of the session it wrote", async () => {
     const id = await plannedWith(me, ride);
     const first = await saveStepResults(

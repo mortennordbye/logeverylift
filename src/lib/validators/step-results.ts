@@ -13,4 +13,5 @@ export const saveStepResultsSchema = z.object({
   startedAt: z.number().int().positive().nullable().optional(),
   finishedAt: z.number().int().positive().nullable().optional(),
   pausedSeconds: z.number().int().min(0).max(86_400).optional(),
+  durationSeconds: z.number().int().min(1).max(86_400).nullable().optional(),
 });

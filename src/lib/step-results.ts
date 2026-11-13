@@ -64,6 +64,12 @@ export type SaveStepResultsInput = {
   startedAt?: Date | null;
   finishedAt?: Date | null;
   pausedSeconds?: number;
+  /**
+   * The run's total active time, for a run whose steps no longer match the
+   * workout (all `not_done`): the session is logged with it (re-review 2).
+   * Used only when the steps hold no time.
+   */
+  durationSeconds?: number | null;
 };
 
 export type SaveStepResultsResult = { workoutSessionId: number; resultId: number; created: "session" | "attached" | "repeat" };
@@ -144,9 +150,19 @@ export async function saveStepResults(userId: string, input: SaveStepResultsInpu
       }
       const sets = await tx.select({ id: workoutSets.id, distanceMeters: workoutSets.distanceMeters }).from(workoutSets).where(eq(workoutSets.sessionId, linked.id)).orderBy(asc(workoutSets.setNumber));
       if (existing?.wroteSession) {
-        // The session this path wrote has one set: the results screen may change its RPE and distance.
-        const patch = { ...(input.sessionRpe != null && { rpe: input.sessionRpe }), ...(input.distanceMeters != null && { distanceMeters: Math.round(input.distanceMeters) }) };
+        // The session this path wrote has one set: a later save may change or clear (null) its RPE
+        // and distance; left out (undefined) keeps them. Its time follows the steps (re-review 3).
+        const seconds = totals.activeSeconds > 0 ? totals.activeSeconds : (input.durationSeconds ?? 0);
+        const patch = {
+          ...(input.sessionRpe !== undefined && { rpe: input.sessionRpe }),
+          ...(input.distanceMeters !== undefined && { distanceMeters: input.distanceMeters === null ? null : Math.round(input.distanceMeters) }),
+          ...(seconds > 0 && { durationSeconds: seconds }),
+        };
         if (Object.keys(patch).length) await tx.update(workoutSets).set(patch).where(eq(workoutSets.sessionId, linked.id));
+        if (seconds > 0) {
+          const [ws] = await tx.select({ start: workoutSessions.startTime }).from(workoutSessions).where(eq(workoutSessions.id, linked.id));
+          await tx.update(workoutSessions).set({ endTime: new Date(ws.start.getTime() + Math.max(1, Math.round(seconds / 60)) * 60_000) }).where(eq(workoutSessions.id, linked.id));
+        }
       } else {
         // A session the user or the assistant logged: the RPE fills sets that have none, the
         // distance goes on the first set when no set has one (review fix 6). Never an overwrite.
@@ -160,7 +176,8 @@ export async function saveStepResults(userId: string, input: SaveStepResultsInpu
     return { workoutSessionId: linked.id, resultId, created: "attached" };
   }
 
-  if (!(totals.activeSeconds > 0)) throw new PlanStateError("No time recorded for this session");
+  const activeSeconds = totals.activeSeconds > 0 ? totals.activeSeconds : (input.durationSeconds ?? 0);
+  if (!(activeSeconds > 0)) throw new PlanStateError("No time recorded for this session");
   const exerciseId = await sportExerciseId(planned.workout.sport);
   if (exerciseId == null) throw new PlanStateError("No built-in exercise for this sport");
   const { timeZone } = await getUserSettings(userId);
@@ -177,14 +194,14 @@ export async function saveStepResults(userId: string, input: SaveStepResultsInpu
       start,
       programId: null,
       plannedSessionId: planned.id,
-      durationMinutes: Math.max(1, Math.round(totals.activeSeconds / 60)),
+      durationMinutes: Math.max(1, Math.round(activeSeconds / 60)),
       notes: input.notes ?? null,
       source: source === "assistant" ? "assistant" : "app",
       sets: [
         {
           exerciseId,
           setNumber: 1,
-          durationSeconds: totals.activeSeconds,
+          durationSeconds: activeSeconds,
           ...(distance != null && distance > 0 && { distanceMeters: Math.round(distance) }),
           ...(input.sessionRpe != null && { rpe: input.sessionRpe }),
         },

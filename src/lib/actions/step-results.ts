@@ -31,6 +31,7 @@ export async function saveStepResultsAction(data: unknown): Promise<ActionResult
         startedAt: d.startedAt ? new Date(d.startedAt) : null,
         finishedAt: d.finishedAt ? new Date(d.finishedAt) : null,
         pausedSeconds: d.pausedSeconds,
+        durationSeconds: d.durationSeconds,
       },
       d.source,
     );

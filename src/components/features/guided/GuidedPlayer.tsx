@@ -35,6 +35,7 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
     onFinished: () => router.push(resultsHref),
   });
   const [confirm, setConfirm] = useState<"leave" | "finish" | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const live = state.status === "running" || state.status === "paused";
   const current = session.steps[state.index];
   const next = session.steps[state.index + 1];
@@ -74,10 +75,31 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
               >
                 Save its results
               </a>
-              <button type="button" onClick={actions.discardSaved} className="flex-1 min-h-11 rounded-xl border border-border px-3 text-sm font-medium active:opacity-70">
+              <button type="button" onClick={() => setConfirmDiscard(true)} className="flex-1 min-h-11 rounded-xl border border-border px-3 text-sm font-medium active:opacity-70">
                 Discard it
               </button>
             </div>
+            {confirmDiscard && (
+              // A finished run is real training: throwing it away takes a second, explicit tap (re-review 1).
+              <div role="dialog" aria-label="Discard the saved run" className="flex flex-col gap-2 rounded-xl bg-background p-3">
+                <p>Discard this run? Its times are lost and the session stays not logged.</p>
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => setConfirmDiscard(false)} className="flex-1 min-h-11 rounded-xl border border-border px-3 text-sm font-medium active:opacity-70">
+                    Keep it
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmDiscard(false);
+                      actions.discardSaved();
+                    }}
+                    className="flex-1 min-h-11 rounded-xl bg-destructive px-3 text-sm font-semibold text-white active:opacity-80"
+                  >
+                    Discard the run
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
         {initialSoundHint && (

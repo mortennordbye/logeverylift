@@ -3,6 +3,12 @@
  * activities plus LogEveryLift strength sessions, each counted once), fitness,
  * fatigue and form, HRV state, resting HR trend, sleep debt and regularity.
  * Pure: the worker passes plain rows in and stores what comes out.
+ *
+ * A LogEveryLift session with strength sets counts whole as strength here, as in
+ * model v2, even when it also holds a run or a ride: its endurance sets add no
+ * load of their own (docs/plans/endurance-app.md, review fix 1). The app series
+ * for users without Garmin (src/lib/training-load.ts) splits such a session by
+ * sport instead. BACKLOG: "Per-sport split of mixed app sessions in the Garmin series".
  */
 
 import { overlapShare, strengthLoad, type LoadMethod } from "./load";

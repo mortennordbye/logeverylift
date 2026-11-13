@@ -81,6 +81,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** An owner yes. Then add `assistant` to the source filter in `strengthSessions` and bump `DAILY_MODEL_VERSION`.
 - **Touchpoints:** `src/lib/garmin/metrics-job.ts` (`strengthSessions`).
 
+### Per-sport split of mixed app sessions in the Garmin series
+- **What:** In the Garmin series, an app session with strength sets counts whole as strength (wall time × session RPE), as in model v2, even when it also holds a run or a ride, such as a warm-up run in a gym session. The app series for users without Garmin splits such a session by sport (the endurance sets by their own method, strength on the rest of the time).
+- **Why deferred:** Review fix 1 in `docs/plans/endurance-app.md` (section 19): adding the endurance sets on top double counted the warm-up, and splitting would change the owner's stored strength numbers. Leaving them out keeps the series as in v2.
+- **Unblocked by:** An owner yes. Then give the strength path the wall time minus the endurance sets' time, as `appSessionLoads` does, add those sets as app endurance entries, and bump `DAILY_MODEL_VERSION`.
+- **Touchpoints:** `src/lib/garmin/analytics/daily.ts` (`buildDailyMetrics`), `src/lib/garmin/metrics-job.ts` (`strengthSessions`), `src/lib/training-load.ts` (`appSessionLoads`).
+
 ### Load: the Garmin series waits for the next sync after an app log
 - **What:** For a Garmin user, an endurance session logged in the app (a guided run, "Yes, I did it") reaches fitness and fatigue only when the Garmin worker rebuilds the daily series, which happens after new Garmin data arrives. Users without Garmin see it at once.
 - **Why deferred:** Rebuilding the series from a Server Action would put Garmin work on the logging path.

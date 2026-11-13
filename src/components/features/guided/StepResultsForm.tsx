@@ -80,6 +80,10 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
       }),
     );
 
+  // An edit that changed every step id leaves no step of the run in the workout (re-review 2).
+  const runTotal = run ? run.runs.reduce((a, r) => a + r.activeSeconds, 0) : 0;
+  const noMatch = run !== null && run.runs.length > 0 && !run.runs.some((r) => rows.some((p) => p.key === r.key));
+
   const save = async () => {
     setSaving(true);
     setError(null);
@@ -87,7 +91,8 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
     const res = await callAction(
       saveStepResultsAction({
         plannedSessionId: session.plannedSessionId,
-        steps: results,
+        steps: noMatch ? rows.map((p) => ({ key: p.key, status: "not_done" as const })) : results,
+        ...(noMatch && { durationSeconds: runTotal }),
         sessionRpe: rpe,
         distanceMeters: typed !== null && Number.isFinite(typed) && typed > 0 ? fieldToMeters(typed, unit, existing?.distanceMeters) : null,
         source: run ? "player" : "manual",
@@ -131,7 +136,7 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
         <p className="text-sm text-muted-foreground">
           {fromPlayer || run ? "From the guided run" : "As planned; change what was different"} · {formatTime(total)}
         </p>
-        {olderWorkout && <p className="mt-1 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">The workout changed after this run. Steps it no longer has are left out.</p>}
+        {olderWorkout && !noMatch && <p className="mt-1 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">The workout changed after this run. Steps it no longer has are left out.</p>}
       </div>
 
       <div className="px-4 pb-3">
@@ -245,6 +250,11 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
       </ol>
 
       <div className="sticky bottom-0 mt-auto bg-background px-4 pt-3 pb-6 flex flex-col gap-2">
+        {noMatch && (
+          <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm" data-testid="no-step-match">
+            None of this run&apos;s steps are in the workout now: it was changed after the run. Save it as one session of {formatTime(runTotal)}, with no step results.
+          </p>
+        )}
         {error && (
           <p className="text-sm text-destructive" role="alert" data-testid="results-error">
             Not saved yet: {error}
@@ -256,7 +266,7 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
           disabled={saving}
           className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-base font-semibold text-primary-foreground disabled:opacity-60 active:opacity-80"
         >
-          {saving ? "Saving" : error ? "Retry" : "Save"}
+          {saving ? "Saving" : error ? "Retry" : noMatch ? "Save as one session" : "Save"}
         </button>
       </div>
     </div>
