@@ -82,8 +82,12 @@ async function findDuplicate(tx: Tx, userId: string, input: LoggedSessionInput, 
   return null;
 }
 
-/** Write the session and its sets in one transaction. Throws DuplicateSession when it repeats one. */
-export async function writeLoggedSession(userId: string, input: LoggedSessionInput) {
+/**
+ * Write the session and its sets in one transaction. Throws DuplicateSession
+ * when it repeats one. `after` runs in the same transaction, for rows that
+ * belong to the new session (the step results, docs/plans/endurance-app.md 5.2).
+ */
+export async function writeLoggedSession(userId: string, input: LoggedSessionInput, after?: (tx: Tx, sessionId: number) => Promise<void>) {
   const exerciseIds = [...new Set(input.sets.map((s) => s.exerciseId))];
   return db.transaction(async (tx) => {
     // One log per user and day at a time, so a retried call cannot
@@ -149,6 +153,7 @@ export async function writeLoggedSession(userId: string, input: LoggedSessionInp
       await lockRecords(tx, userId, exerciseId);
       await rebuildPRsFrom(tx, userId, exerciseId, start);
     }
+    if (after) await after(tx, row.id);
     return row;
   });
 }

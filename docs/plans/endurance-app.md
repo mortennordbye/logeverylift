@@ -13,8 +13,9 @@ compliance, sick periods) is built in parallel on `feat/workouts-c4-c5`; its bri
 `docs/plans/workouts-and-compliance.md` on that branch. This brief builds on its API. Section 13
 lists what depends on its final code.
 
-Status: brief, 2026-11-13. The findings describe `main` at 0eceb0b (after PR #230); every
-`file:line` in them was opened then. Code starts only after C4 and C5 merge.
+Status: built, 2026-11-13, on `main` after C4 and C5 (PR #231). The findings describe `main` at
+0eceb0b (after PR #230); every `file:line` in them was opened then. Section 13 records the check
+against C4 and C5's merged code, and section 18 where the build differs from this brief.
 
 ## 0. Goal
 
@@ -650,6 +651,25 @@ Before any code, after they merge, check and fix this brief where the code diffe
 6. The migration number, so this one follows theirs.
 7. Whether C5 adds the "Step editor" BACKLOG entry, which open question 2 keeps.
 
+**Checked against PR #231 (2026-11-13).** What held and what changed:
+
+1. Held. The schema check, resolver, estimate, summary and hard rule are as 1.6 says. Ids fill
+   as `s1`, `s2`, ... and stay on edit; the limit is 400 expanded steps; a time step is at least
+   5 s. The player's play-step keys and the results' keys come from one function, so they match.
+2. Changed. C2's home read skips sessions with no program, so a workout session never reached
+   `TodaySessionsList`; C5 shows past ones in "Did you do these?" and left a BACKLOG entry
+   ("Today's card for workout sessions"). The endurance card reads today's sessions with a
+   workout through C5's `sessionCompliance`. Nothing shows twice. The week strip stays as it is.
+3. Held, with one addition. `writeLoggedSession` takes a session input with its sets; the
+   built-in exercise per sport is C5's `sportExerciseId`. It gained an optional callback that
+   runs in its transaction, so the results row is written with the session (5.2).
+4. Held. The week view reads `sessionCompliance` for states and bands; the per-step band is
+   `complianceBand`. C5's `pairGarmin` pairs planned sessions with activities; the load pairing
+   pairs logged app sessions with activities, so it is its own pure function with the same rule.
+5. Held. Both tools gained `plannedLoad`; `list_planned_sessions` gained `load` on done entries.
+6. This migration is 0088.
+7. Kept. The entry now names the follow-up PR C6b.
+
 ## 14. Risks
 
 - **Critical flows.** The timers are not touched; their e2e specs must pass unchanged. The home
@@ -769,3 +789,31 @@ Decided by the hub on 2026-11-13, owner may change. The hub took every recommend
 21. Planned load is an estimate for the week totals and detail only.
 22. No defaults for missing endurance data; sessions with no load are counted and listed.
 23. The load card and tools need the endurance switch.
+
+## 18. Where the build differs from the brief
+
+- **No hold on 00:00.** The exercise timer holds 00:00 for 600 ms before it completes a set. A
+  guided step ends exactly on time instead: the next step shows at its start, with its cue, and
+  the countdown beeps at 3, 2 and 1. A component test pins this ("the next step starts exactly
+  on time"). 3.1 listed the hold as reused; it is not.
+- **A changed workout is not resumed.** 3.8 offered "Finish with what was recorded" for a saved
+  run of an older version of the workout. The ready screen says the run was not resumed instead,
+  and starting replaces it. A run of another session saved on the phone is also named on the
+  ready screen.
+- **`clearLocalUserData` needed no change.** It already empties every localStorage key except
+  the display settings, so `guidedWorkout` goes on sign-out. The inventory names the key.
+- **Attaching results fills a missing RPE.** When the session is already logged, a session RPE
+  from the results screen fills the sets that have none; it never overwrites a logged one.
+- **The send-off clock is the player** on the same route (`/planned/[id]/play`), with the swim
+  layout ("Rep 3 of 10", "to the next send-off").
+- **Cardio with no discipline** (rowing, an elliptical) counts in the app series as sport
+  `other`, with session RPE only. Strength in a mixed session gets the wall time minus the
+  endurance time, at most 180 minutes.
+- **The app series starts at the first logged session,** so fitness on the first shown day is
+  right; the window only cuts what is returned.
+- **Garmin's `LoadMethod`** gained `run_pace` and `swim_css`, for the app sessions the series now
+  holds. Garmin activities keep their methods (decision 14).
+- **The e2e spec uses Playwright's clock** to move time on (no sleeps), and runs the browser in
+  a far time zone (UTC+14) with a console check for hydration errors.
+- **Plan corrections:** C4 and C5 are `done` (PR #231) and C6 and D1 `done` with this PR, in
+  `triathlon-coach-plan.md` and the README.

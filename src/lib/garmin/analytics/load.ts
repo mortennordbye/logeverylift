@@ -7,7 +7,8 @@
  * are not counted (Garmin's smart recording writes a sample every 1 to 5 s).
  */
 
-export type LoadMethod = "power" | "trimp" | "zones" | "srpe" | "garmin_tss" | "none";
+/** run_pace and swim_css come only from sessions logged in the app (docs/plans/endurance-app.md, 6.4). */
+export type LoadMethod = "power" | "trimp" | "zones" | "srpe" | "garmin_tss" | "run_pace" | "swim_css" | "none";
 
 /** A sample gap longer than this is a pause. */
 export const MAX_GAP_S = 10;

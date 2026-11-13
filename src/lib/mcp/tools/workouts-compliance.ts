@@ -23,8 +23,15 @@ import { toDateStr } from "@/lib/utils/cycle-position";
 import { addDaysStr } from "@/lib/utils/seasons";
 import { CONSISTENCY_WEEKS, RETURN_RULE, SEE_DOCTOR_RULE, consistency, mondayOf, returnInfo } from "@/lib/utils/session-compliance";
 import { estimateWorkout, resolveWorkout } from "@/lib/utils/workout-steps";
+import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+
+/** Planned load (docs/plans/endurance-app.md, 6.2): an estimate, 100 = one hour at threshold. */
+function plannedLoadOut(w: Parameters<typeof workoutPlannedLoad>[0], t: Parameters<typeof workoutPlannedLoad>[1]) {
+  const p = workoutPlannedLoad(w, t);
+  return { value: Math.round(p.load), partial: p.partial };
+}
 
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 const versionArg = z.number().int().positive().describe("The object's version from your last read or write. A write based on an older version is refused as a conflict.");
@@ -67,7 +74,7 @@ export function registerWorkoutLibraryTools(server: McpServer, userId: string, c
     "get_workout",
     {
       description:
-        "One workout, from the library (workoutId) or a dated session (plannedSessionId): the JSON, the one-line summary, each step's target in the user's own numbers (watts, bpm, pace in their units) from their current thresholds, the estimate, and missingAnchors (thresholds the workout needs that the user has not set).",
+        "One workout, from the library (workoutId) or a dated session (plannedSessionId): the JSON, the one-line summary, each step's target in the user's own numbers (watts, bpm, pace in their units) from their current thresholds, the estimate, missingAnchors (thresholds the workout needs that the user has not set), and plannedLoad ({value, partial}: an estimate from the targets, 100 = one hour at threshold; partial when a step had no power or pace target, inference).",
       inputSchema: { workoutId: z.number().int().positive().optional(), plannedSessionId: z.number().int().positive().optional() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -79,14 +86,14 @@ export function registerWorkoutLibraryTools(server: McpServer, userId: string, c
           const w = await getLibraryWorkout(userId, workoutId);
           if (!w) return fail("Workout not found");
           const r = resolveWorkout(w.workout, thresholds, units);
-          return ok({ ...w, resolvedSteps: r.steps, missingAnchors: r.missingAnchors, estimate: estimateWorkout(w.workout, thresholds) });
+          return ok({ ...w, resolvedSteps: r.steps, missingAnchors: r.missingAnchors, estimate: estimateWorkout(w.workout, thresholds), plannedLoad: plannedLoadOut(w.workout, thresholds) });
         }
         const s = await oneSession(userId, plannedSessionId!);
         if (!s) return fail("Planned session not found");
         if (!s.workout) return fail("That session runs a program, not a workout");
         const workout = storedWorkout(s.workout, s.id)!;
         const r = resolveWorkout(workout, thresholds, units);
-        return ok({ plannedSessionId: s.id, date: s.date, workout, summary: s.workoutSummary, resolvedSteps: r.steps, missingAnchors: r.missingAnchors, estimate: estimateWorkout(workout, thresholds) });
+        return ok({ plannedSessionId: s.id, date: s.date, workout, summary: s.workoutSummary, resolvedSteps: r.steps, missingAnchors: r.missingAnchors, estimate: estimateWorkout(workout, thresholds), plannedLoad: plannedLoadOut(workout, thresholds) });
       } catch (e) {
         return failInternal("get_workout", e);
       }

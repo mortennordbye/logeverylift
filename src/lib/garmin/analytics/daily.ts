@@ -12,8 +12,10 @@ import { regularityIndex, sleepDebt, sleepTiming, type SleepNight, type SleepTim
 import type { Sport } from "./sport";
 import { readiness, type Readiness } from "./readiness";
 import { EMPTY_BANDS, addBands, type Bands } from "./zones";
+import { pairWithGarmin } from "@/lib/utils/training-load";
 
-export const DAILY_MODEL_VERSION = 2;
+// v3: app endurance sessions Garmin did not record count too (docs/plans/endurance-app.md, 6.4).
+export const DAILY_MODEL_VERSION = 3;
 
 /** Overlap needed for a Garmin strength activity and a LogEveryLift session to be one session. */
 const SAME_SESSION_SHARE = 0.5;
@@ -36,6 +38,16 @@ export type StrengthSessionInput = {
   endMs: number | null;
   setRpes: (number | null)[];
   feeling: string | null;
+};
+
+/** An endurance session logged in the app, with its app load (src/lib/training-load.ts). */
+export type AppEnduranceInput = {
+  sessionId: number;
+  day: string;
+  sport: "swim" | "bike" | "run";
+  durationS: number;
+  load: number | null;
+  method: LoadMethod;
 };
 
 export type DayInputs = {
@@ -103,6 +115,8 @@ export function buildDailyMetrics(input: {
   end: string;
   activities: ActivityInput[];
   strengthSessions: StrengthSessionInput[];
+  /** Since model v3. */
+  appEndurance?: AppEnduranceInput[];
   days: DayInputs[];
 }): DailyMetrics[] {
   const { start, end } = input;
@@ -131,6 +145,20 @@ export function buildDailyMetrics(input: {
     if (matchedSessionIds.has(s.sessionId) || s.endMs === null || s.day < start || s.day > end) continue;
     const l = strengthLoad((s.endMs - s.startMs) / 60_000, s.setRpes, s.feeling);
     if (l) push(s.day, { source: "logeverylift", id: s.sessionId, sport: "strength", load: l.load, method: "srpe" });
+  }
+
+  // An app endurance session that a Garmin activity of the same sport and day
+  // recorded adds nothing: Garmin measured it. One to one, closest duration
+  // first (decision 16). Unpaired ones add their app load.
+  const app = (input.appEndurance ?? []).filter((s) => s.day >= start && s.day <= end);
+  const garminEndurance = input.activities
+    .filter((a): a is ActivityInput & { sport: "swim" | "bike" | "run"; startMs: number; endMs: number } =>
+      (a.sport === "swim" || a.sport === "bike" || a.sport === "run") && a.startMs !== null && a.endMs !== null)
+    .map((a) => ({ id: a.garminActivityId, sport: a.sport, date: a.day, durationS: (a.endMs - a.startMs) / 1000 }));
+  const paired = pairWithGarmin(app.map((s) => ({ id: s.sessionId, sport: s.sport, date: s.day, durationS: s.durationS })), garminEndurance);
+  for (const s of app) {
+    if (paired.has(s.sessionId) || s.load === null) continue;
+    push(s.day, { source: "logeverylift", id: s.sessionId, sport: s.sport, load: s.load, method: s.method });
   }
 
   const loads: Record<string, Partial<Record<Sport, number>>> = {};

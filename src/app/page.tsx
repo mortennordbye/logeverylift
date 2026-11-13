@@ -1,6 +1,7 @@
 import { AiCheckinCard } from "@/components/features/AiCheckinCard";
 import { DeclineMakeupButton } from "@/components/features/DeclineMakeupButton";
 import { DidYouDoItCard, IllnessBanner } from "@/components/features/DidYouDoIt";
+import { EnduranceTodayCard, type EnduranceTodayRow } from "@/components/features/guided/EnduranceTodayCard";
 import { answerSession } from "@/components/features/answer-session";
 import { PolicyUpdateNotice } from "@/components/features/PolicyUpdateNotice";
 import { SharePromptLoader } from "@/components/features/SharePromptLoader";
@@ -16,6 +17,9 @@ import { needsPolicyNotice, needsTermsConsent } from "@/lib/consent";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { listIllness } from "@/lib/illness";
 import { homeEndurance } from "@/lib/session-answers";
+import { sessionCompliance } from "@/lib/session-compliance";
+import { distanceLabel } from "@/lib/planned-view";
+import { getUserSettings } from "@/lib/user-settings";
 import { homeWeekPlanned } from "@/lib/home-week";
 import { weekDayMarks } from "@/lib/utils/planned-sessions";
 import { userToday } from "@/lib/user-settings";
@@ -46,10 +50,25 @@ function dowLabel(dateStr: string): string {
  * The endurance part of home (docs/plans/workouts-and-compliance.md, 7): null
  * for a lifter, so their home renders nothing new. A failed read hides it.
  */
-async function enduranceHome(userId: string) {
+/** Today's sessions with a structured workout (docs/plans/endurance-app.md, 4.1). */
+async function enduranceToday(userId: string, today: string): Promise<EnduranceTodayRow[]> {
+  const [sessions, { units }] = await Promise.all([sessionCompliance(userId, today, today), getUserSettings(userId)]);
+  return sessions
+    .filter((s) => s.workout && s.sport && s.status === "planned")
+    .map((s) => {
+      const a = answerSession(s);
+      const parts = [
+        s.planned.durationSeconds ? `${Math.round(s.planned.durationSeconds / 60)} min` : null,
+        s.planned.distanceMeters ? distanceLabel(s.planned.distanceMeters, s.sport!, units) : null,
+      ].filter(Boolean);
+      return { id: s.id, name: a.name, sport: s.sport!, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done" };
+    });
+}
+
+async function enduranceHome(userId: string, today: string) {
   if (!(await enduranceEnabledFor(userId))) return null;
   try {
-    const home = await homeEndurance(userId);
+    const [home, todayRows] = await Promise.all([homeEndurance(userId), enduranceToday(userId, today)]);
     const info = home.returnInfo;
     const sick = info?.phase === "sick" ? ((await listIllness(userId)).find((p) => p.id === info.periodId) ?? null) : null;
     return {
@@ -61,6 +80,7 @@ async function enduranceHome(userId: string) {
       })),
       sick: sick ? { id: sick.id, startedOn: sick.startedOn } : null,
       returning: info?.phase === "returning" ? info.rule : null,
+      today: todayRows,
     };
   } catch (e) {
     console.error("[Home] endurance_read_failed", { error: e instanceof Error ? e.name : "unknown" });
@@ -101,7 +121,7 @@ export default async function Home() {
       : Promise.resolve(undefined),
     getPendingCheckin(),
     needsPolicyNotice(session),
-    enduranceHome(session.user.id),
+    enduranceHome(session.user.id, todayStr),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
 
@@ -269,6 +289,9 @@ export default async function Home() {
             )}
           </div>
         ) : null}
+
+        {/* ── Endurance today (endurance switch only) ── */}
+        {endurance && <EnduranceTodayCard rows={endurance.today} />}
 
         {/* ── Did you do these? (endurance switch only) ── */}
         {endurance && <DidYouDoItCard unconfirmed={endurance.unconfirmed} missedKey={endurance.missedKey} today={todayStr} />}

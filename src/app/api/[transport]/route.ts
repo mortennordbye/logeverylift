@@ -30,6 +30,7 @@ import { MCP_SCOPES, scopedServer } from "@/lib/mcp/scopes";
 import { registerAthletePrompts, registerAthleteProfileTools } from "@/lib/mcp/tools/athlete-profile";
 import { registerCoachMemoryTools } from "@/lib/mcp/tools/coach-memory";
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
+import { registerEnduranceAppTools } from "@/lib/mcp/tools/endurance-app";
 import { registerExerciseTools } from "@/lib/mcp/tools/exercises";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerProfileTools } from "@/lib/mcp/tools/profile";
@@ -124,6 +125,8 @@ async function serve(req: Request, claims: { sub?: string; azp?: unknown; scope?
       registerAthleteProfileTools(server, userId, clientId, { endurance });
       // Structured workouts, answers and sick periods only with the endurance switch on (D18).
       if (endurance) registerWorkoutLibraryTools(server, userId, clientId);
+      // Training load and step results (docs/plans/endurance-app.md, 7).
+      if (endurance) registerEnduranceAppTools(server, userId);
       registerComplianceTools(server, userId);
       if (garmin) registerGarminTools(server, userId);
       registerResources(mcpServer, docs);

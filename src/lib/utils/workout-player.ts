@@ -24,11 +24,11 @@ export type PlayableWorkout = { steps: (PlayInputStep | PlayInputRepeat)[] };
 /** The C4 limit on steps once repeats are expanded. */
 export const PLAY_STEPS_MAX = 400;
 
-export type PlayStep<S extends PlayInputStep = PlayInputStep> = {
+export type PlayStep = {
   /** Step id, plus "#n" for round n of a repeat: "s3#2". */
   key: string;
   /** The original step, with its target, note and swim fields. */
-  step: S;
+  step: PlayInputStep;
   type: PlayStepType;
   round: { index: number; of: number } | null;
   /** Planned seconds for a time step, or the send-off of a swim rep; null waits for Lap. */
@@ -36,9 +36,9 @@ export type PlayStep<S extends PlayInputStep = PlayInputStep> = {
 };
 
 /** Expand repeats into one flat list. A step without an id gets one from its place ("n3"). */
-export function flattenWorkout<S extends PlayInputStep>(w: { steps: (S | (Omit<PlayInputRepeat, "steps"> & { steps: S[] }))[] }): PlayStep<S>[] {
-  const out: PlayStep<S>[] = [];
-  const one = (s: S, id: string, round: PlayStep["round"]): PlayStep<S> => ({
+export function flattenWorkout(w: PlayableWorkout): PlayStep[] {
+  const out: PlayStep[] = [];
+  const one = (s: PlayInputStep, id: string, round: PlayStep["round"]): PlayStep => ({
     key: round ? `${id}#${round.index}` : id,
     step: s,
     type: s.type,
@@ -47,13 +47,11 @@ export function flattenWorkout<S extends PlayInputStep>(w: { steps: (S | (Omit<P
   });
   w.steps.forEach((n, i) => {
     if (n.type === "repeat") {
-      const r = n as Omit<PlayInputRepeat, "steps"> & { steps: S[] };
-      for (let k = 1; k <= r.count; k++) {
-        r.steps.forEach((s, j) => out.push(one(s, s.id ?? `n${i + 1}.${j + 1}`, { index: k, of: r.count })));
+      for (let k = 1; k <= n.count; k++) {
+        n.steps.forEach((s, j) => out.push(one(s, s.id ?? `n${i + 1}.${j + 1}`, { index: k, of: n.count })));
       }
     } else {
-      const s = n as S;
-      out.push(one(s, s.id ?? `n${i + 1}`, null));
+      out.push(one(n, n.id ?? `n${i + 1}`, null));
     }
   });
   if (out.length > PLAY_STEPS_MAX) throw new RangeError(`${out.length} steps; at most ${PLAY_STEPS_MAX}`);
