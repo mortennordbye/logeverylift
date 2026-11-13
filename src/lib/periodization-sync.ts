@@ -11,6 +11,7 @@ import { userToday } from "@/lib/user-settings";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-live";
 import { planWrite, startDueScheduledCycle, type PlanWriteContext } from "@/lib/plan-revisions";
+import { NO_OVERRIDE, limitContext, withLimits } from "@/lib/training-limits";
 import { programs } from "@/db/schema";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import {
@@ -283,6 +284,11 @@ export async function syncPeriodizedTargets(
   const adaptation = adaptationOverride ?? (await computeCycleAdaptation(userId, programIds, currentWeek, cycleId));
   const effective = multiplier * (adaptation.pct / 100);
 
+  // The app's own rewrite (sync or Garmin apply) runs the training limits as
+  // warnings (T4, docs/plans/limits-strength-readiness.md, 6). An assistant's
+  // set_volume was checked before this call.
+  const lc = typeof writer === "object" ? null : await limitContext(userId);
+
   // One change set per cycle-week, so the history groups a week's rewrite.
   await planWrite(
     typeof writer === "object"
@@ -294,6 +300,7 @@ export async function syncPeriodizedTargets(
           changeSetId: `${writer}:${cycleId}:${currentWeek}`,
         },
     async (w) => {
+  const rewrite = async () => {
   const tx = w.tx;
   // Cycle first, then programs: the lock order every plan write uses.
   await w.touch({ type: "cycle", id: cycleId }, { expectedVersion });
@@ -349,6 +356,9 @@ export async function syncPeriodizedTargets(
       adaptationNote: adaptation.note || null,
     })
     .where(eq(trainingCycles.id, cycleId));
+  };
+  if (lc) await withLimits(w, lc, { programIds, cycleIds: [cycleId] }, NO_OVERRIDE, rewrite, "warn");
+  else await rewrite();
     },
   );
   return adaptation;

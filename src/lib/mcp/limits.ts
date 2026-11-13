@@ -15,7 +15,7 @@ export const overrideArgs = {
     .max(LIMIT_RULES.length)
     .optional()
     .describe(
-      "Only after a refusal: the training limits you go past on purpose (long_run_cap, hard_sessions_per_week). Needs overrideReason.",
+      `Only after a refusal: the training limits you go past on purpose (${LIMIT_RULES.join(", ")}). Needs overrideReason.`,
     ),
   overrideReason: z
     .string()
@@ -26,7 +26,7 @@ export const overrideArgs = {
 };
 
 export const LIMITS_TEXT =
-  "Training limits (long_run_cap, hard_sessions_per_week) are checked on this write for users with endurance features on; a write that breaks one is refused with the numbers, and you may send it again with overrideLimits and overrideReason.";
+  `Training limits (${LIMIT_RULES.join(", ")}) are checked on this write for users with endurance features on; a write that breaks one is refused with the numbers, and you may send it again with overrideLimits and overrideReason.`;
 
 /** The override from a tool's arguments, or an error message when it is incomplete. */
 export function overrideFrom(args: { overrideLimits?: LimitRule[]; overrideReason?: string }): LimitOverride | string {

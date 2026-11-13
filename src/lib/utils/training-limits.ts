@@ -7,9 +7,20 @@
  * edit. User edits in the app are never checked (D4).
  */
 
+import type { StrengthGoal } from "@/db/schema/athlete-profile";
 import { hoursLabel, kmLabel } from "@/lib/garmin/analytics/demands";
+import { addDaysStr, dowOf, mondayOf } from "@/lib/utils/planned-sessions";
+import { effectivePriorities } from "@/lib/utils/session-compliance";
+import { STRENGTH_GOAL_LABEL, strengthDefault, type StrengthPhase } from "@/lib/utils/strength-goal";
+import type { Workout } from "@/lib/utils/workout-steps";
 
-export const LIMIT_RULES = ["long_run_cap", "hard_sessions_per_week"] as const;
+export const LIMIT_RULES = [
+  "long_run_cap",
+  "hard_sessions_per_week",
+  "hard_after_low_readiness",
+  "heavy_legs_before_key",
+  "strength_per_week",
+] as const;
 export type LimitRule = (typeof LIMIT_RULES)[number];
 
 /** Where the rules come from: the research resource the assistant can read. */
@@ -224,5 +235,386 @@ export function limitOverrideLine(stored: unknown): string | null {
   if (c?.warnings?.length) return `Breaks a training limit: ${c.warnings.map((w) => w.message).join(" ")}`;
   if (!c?.overridden?.length) return null;
   return overrideLine(c.overridden, c.overrideReason ?? "none given");
+}
+
+// ── Sessions placed on days (D2 part 2, D3, D4) ─────────────────────────────
+//
+// docs/plans/limits-strength-readiness.md. The rules below read the sessions
+// of a weekday cycle by date. A cycle with no dated sessions yet is read from
+// its template: one week, dated from TEMPLATE_MONDAY, that repeats (a loop).
+
+/** A Monday the template week is dated on, so the same date code serves both. */
+export const TEMPLATE_MONDAY = "2001-01-01";
+
+/** What one planned set says, for the heavy-leg and strength tests. */
+export type LegSet = {
+  category: "strength" | "cardio" | "flexibility" | null;
+  discipline: "swim" | "bike" | "run" | null;
+  bodyArea: string | null;
+  movementPattern: string | null;
+  equipment: string | null;
+  /** The resolved type: the program's override, else the exercise's own. */
+  exerciseType: string | null;
+  setType: string | null;
+  targetReps: number | null;
+  repRangeMax: number | null;
+};
+
+/** Heavy leg sets that make a heavy-legs session (inference, decision 13). */
+export const HEAVY_LEG_SETS = 3;
+/** More reps than this is light "toning" work, not the heavy stimulus (research, Study). */
+export const HEAVY_MAX_REPS = 12;
+/** Working strength sets that make a strength session (decision 18). */
+export const STRENGTH_SETS = 3;
+
+const isWorking = (s: Pick<LegSet, "setType">) => (s.setType ?? "working") === "working";
+
+/**
+ * A heavy leg set (decision 13): a working set on a strength exercise that is a
+ * loaded squat or hinge on the lower or whole body, or a lower-body jump, at
+ * 12 reps or fewer (or no reps given). Leg curls, leg extensions and calf
+ * raises are not squats or hinges, so they never count.
+ */
+export function isHeavyLegSet(s: LegSet): boolean {
+  if (!isWorking(s) || s.category !== "strength" || s.discipline != null) return false;
+  const reps = s.repRangeMax ?? s.targetReps;
+  if (reps != null && reps > HEAVY_MAX_REPS) return false;
+  if (s.exerciseType === "plyometric" && s.bodyArea === "lower_body") return true;
+  const pattern = s.movementPattern === "squat" || s.movementPattern === "hinge";
+  const body = s.bodyArea === "lower_body" || s.bodyArea === "full_body";
+  const loaded = s.equipment !== "bodyweight" && s.equipment !== "bands";
+  return pattern && body && loaded;
+}
+
+/** A working set on a strength exercise (decision 18). */
+export function isStrengthSet(s: Pick<LegSet, "category" | "discipline" | "setType">): boolean {
+  return isWorking(s) && s.category === "strength" && s.discipline == null;
+}
+
+export type PlacedSession = {
+  /** A stable id inside the facts: `p:<planned session id>` or `t:<slot id>`. */
+  ref: string;
+  label: string;
+  date: string;
+  position: number;
+  sport: "swim" | "bike" | "run" | null;
+  hard: boolean;
+  plannedDurationS: number | null;
+  storedPriority: "key" | "support" | "optional" | null;
+  heavyLegSets: number;
+  strengthSets: number;
+  cycleId: number | null;
+};
+
+/** `blockEnd` is the block's last day. */
+export type PlacedCycle = { name: string; phaseType: string | null; blockStart: string | null; blockEnd: string | null };
+
+/**
+ * One reading of sessions by day: a dated range (`from` is the first Monday
+ * checked, `to` the last day; sessions up to two days before `from` are there
+ * for heavy legs) or a template week that repeats (`loop`).
+ */
+export type PlacedGroup = { loop: boolean; from: string; to: string; sessions: PlacedSession[]; cycles: Record<number, PlacedCycle> };
+
+const DAY_NAME = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+function dayLabel(g: Pick<PlacedGroup, "loop">, date: string) {
+  return g.loop ? DAY_NAME[dowOf(date) - 1] : `${DAY_NAME[dowOf(date) - 1]} ${date}`;
+}
+
+const daysApart = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
+
+// ── Heavy legs before a key session ─────────────────────────────────────────
+//
+// "Long run, long ride, brick or interval run within 48 h: no heavy
+// lower-body lifting; upper-body/pull is fine" — Study (running economy down
+// 24-48 h after a lower-body session) plus inference. "Key endurance session
+// in the same day: lift after it" — Study. Which sessions count is inference
+// (decisions 13-16). docs/research/endurance-training-reference.md,
+// "Placement matters more than the program".
+
+const HEAVY_LEGS_EVIDENCE = "Study (running economy down 24-48 h after lower-body lifting) plus Inference (which sessions count)";
+
+export type LegConflict = { lift: PlacedSession; key: PlacedSession; days: number };
+
+/** Heavy-legs sessions 1-2 days before a key bike or run, or earlier the same day. */
+export function heavyLegConflicts(g: PlacedGroup): LegConflict[] {
+  const own = g.sessions;
+  const priorities = effectivePriorities(
+    own.map((s, i) => ({ id: i, date: s.date, sport: s.sport, hard: s.hard, plannedDurationS: s.plannedDurationS, stored: s.storedPriority })),
+  );
+  const keys = own.filter((s, i) => (s.sport === "bike" || s.sport === "run") && priorities.get(i) === "key" && (g.loop || s.date >= g.from));
+  // A template week repeats: last week's lifts sit before this week's keys.
+  const lifts = own.filter((s) => s.heavyLegSets >= HEAVY_LEG_SETS);
+  const allLifts = g.loop ? [...lifts, ...lifts.map((s) => ({ ...s, date: addDaysStr(s.date, -7) }))] : lifts;
+  const out: LegConflict[] = [];
+  for (const key of keys) {
+    for (const lift of allLifts) {
+      const days = daysApart(lift.date, key.date);
+      if (days === 1 || days === 2 || (days === 0 && lift.position < key.position)) out.push({ lift, key, days });
+    }
+  }
+  return out;
+}
+
+const conflictId = (c: LegConflict) => `${c.lift.ref}|${c.lift.date}|${c.key.ref}|${c.key.date}`;
+
+function conflictText(g: PlacedGroup, c: LegConflict) {
+  const when = c.days === 0 ? "earlier the same day as" : `${c.days} day${c.days === 1 ? "" : "s"} before`;
+  return `"${c.lift.label}" on ${dayLabel(g, c.lift.date)} (${c.lift.heavyLegSets} heavy leg sets) is ${when} the key session "${c.key.label}" on ${dayLabel(g, c.key.date)}.`;
+}
+
+export function heavyLegsBeforeKey(before: ReadonlyMap<string, PlacedGroup>, after: ReadonlyMap<string, PlacedGroup>): BrokenLimit | null {
+  const hits: { text: string; numbers: Record<string, unknown> }[] = [];
+  for (const [k, g] of after) {
+    const now = heavyLegConflicts(g);
+    const was = before.get(k);
+    const old = was ? heavyLegConflicts(was) : [];
+    if (now.length <= old.length) continue;
+    const known = new Set(old.map(conflictId));
+    for (const c of now.filter((x) => !known.has(conflictId(x)))) {
+      hits.push({
+        text: conflictText(g, c),
+        numbers: {
+          lift: c.lift.label,
+          liftDay: g.loop ? dowOf(c.lift.date) : c.lift.date,
+          heavyLegSets: c.lift.heavyLegSets,
+          key: c.key.label,
+          keyDay: g.loop ? dowOf(c.key.date) : c.key.date,
+          daysBefore: c.days,
+        },
+      });
+    }
+  }
+  if (!hits.length) return null;
+  const shown = hits.slice(0, 3).map((h) => h.text);
+  if (hits.length > 3) shown.push(`And ${hits.length - 3} more.`);
+  return {
+    rule: "heavy_legs_before_key",
+    message: `${shown.join(" ")} No heavy legs within 48 h before a key run or ride; upper body is fine.`,
+    numbers: { conflicts: hits.map((h) => h.numbers), maxDaysBefore: 2 },
+    evidence: HEAVY_LEGS_EVIDENCE,
+    source: `${REFERENCE} (Placement matters more than the program)`,
+  };
+}
+
+// ── Strength sessions per week by phase (D21) ───────────────────────────────
+//
+// "Competition / peak: 1/wk minimum to maintain; never less than weekly" —
+// Study; the rest of the strength-by-phase table is coach convention. The
+// default per goal and phase is strengthDefault (src/lib/utils/strength-goal.ts).
+// docs/research/endurance-training-reference.md, "Placement matters more than
+// the program".
+
+const STRENGTH_EVIDENCE = "Study for frequency (2/wk to build, 1/wk to keep); phase table Coach convention";
+
+export type StrengthWeek = { cycleId: number; monday: string; count: number; dates: string[] };
+
+/**
+ * Strength sessions per week of each phase cycle in a group: the template
+ * week, or each full calendar week inside the block from the first Monday
+ * checked. A partial first or last week is not counted. Cycles with no
+ * phase type are left out (decision 17).
+ */
+export function strengthWeeks(g: PlacedGroup): Map<string, StrengthWeek> {
+  const out = new Map<string, StrengthWeek>();
+  for (const [idStr, c] of Object.entries(g.cycles)) {
+    const cycleId = Number(idStr);
+    if (!c.phaseType) continue;
+    const mine = g.sessions.filter((s) => s.cycleId === cycleId);
+    const mondays: string[] = [];
+    if (g.loop) mondays.push(TEMPLATE_MONDAY);
+    else if (c.blockStart && c.blockEnd) {
+      for (let m = mondayOf(g.from); addDaysStr(m, 6) <= g.to; m = addDaysStr(m, 7)) {
+        if (m >= c.blockStart && addDaysStr(m, 6) <= c.blockEnd) mondays.push(m);
+      }
+    }
+    for (const monday of mondays) {
+      const week = mine.filter((s) => s.date >= monday && s.date <= addDaysStr(monday, 6) && s.strengthSets >= STRENGTH_SETS);
+      out.set(`${cycleId}|${monday}`, { cycleId, monday, count: week.length, dates: week.map((s) => s.date).sort() });
+    }
+  }
+  return out;
+}
+
+export function strengthPerWeek(
+  before: ReadonlyMap<string, PlacedGroup>,
+  after: ReadonlyMap<string, PlacedGroup>,
+  goal: StrengthGoal,
+): BrokenLimit | null {
+  const hits: { text: string; numbers: Record<string, unknown> }[] = [];
+  for (const [k, g] of after) {
+    const was = before.get(k);
+    const old = was ? strengthWeeks(was) : new Map<string, StrengthWeek>();
+    for (const [wk, w] of strengthWeeks(g)) {
+      const c = g.cycles[w.cycleId];
+      const phase = c.phaseType as StrengthPhase;
+      const target = strengthDefault(goal, phase).sessionsPerWeek;
+      // A week that was not there before is held to the default itself.
+      const prev = old.get(wk)?.count ?? target;
+      if (Math.abs(w.count - target) <= Math.abs(prev - target)) continue;
+      const days = w.dates.map((d) => DAY_NAME[dowOf(d) - 1]);
+      const when = g.loop ? "a week" : `in the week of ${w.monday}`;
+      hits.push({
+        text: `${phase[0].toUpperCase()}${phase.slice(1)} phase "${c.name}" would hold ${w.count} strength session${w.count === 1 ? "" : "s"} ${when}${days.length ? ` (${days.join(", ")})` : ""}. The default for "${STRENGTH_GOAL_LABEL[goal]}" in ${phase} is ${target}.`,
+        numbers: { cycleId: w.cycleId, phase, week: g.loop ? null : w.monday, sessions: w.count, before: prev, default: target, goal },
+      });
+    }
+  }
+  if (!hits.length) return null;
+  const shown = hits.slice(0, 3).map((h) => h.text);
+  if (hits.length > 3) shown.push(`And ${hits.length - 3} more weeks.`);
+  return {
+    rule: "strength_per_week",
+    message: `${shown.join(" ")} Override with a reason if the athlete wants another count (for example 2 a week to keep muscle).`,
+    numbers: hits.length === 1 ? hits[0].numbers : { weeks: hits.map((h) => h.numbers) },
+    evidence: STRENGTH_EVIDENCE,
+    source: `${REFERENCE} (Placement matters more than the program)`,
+  };
+}
+
+// ── Readiness: the flag, the limit and the swap (D2, D4) ────────────────────
+//
+// "7-day mean below mean - 0.5 SD for 2+ days AND one other marker agrees
+// (resting HR up, ...): replace the next intensity session with Z1-Z2 or
+// rest" — Study for the method; thresholds are coach convention. "Never act
+// on one bad day; require two agreeing signals for any downgrade" — Study
+// plus inference. The resting HR threshold is Inference.
+// docs/research/endurance-training-reference.md, "Readiness signals change the
+// next session, not the plan". The app's HRV band is ±0.75 SD (stricter).
+
+const READINESS_EVIDENCE = "Study (HRV-guided method); thresholds Coach convention; resting HR threshold Inference";
+
+/** One Garmin daily row, as the readiness flag reads it. */
+export type ReadinessDay = {
+  date: string;
+  hrvMs: number | null;
+  hrvState: string | null;
+  hrvMean7: number | null;
+  bandLow: number | null;
+  bandHigh: number | null;
+  rhrFlag: boolean;
+  rhrMean7: number | null;
+  rhrBaseline: number | null;
+};
+
+export type ReadinessFlag = {
+  /** The low-readiness day: today or yesterday. */
+  day: string;
+  text: string;
+  numbers: {
+    hrvMean7: number | null;
+    bandLow: number | null;
+    bandHigh: number | null;
+    rhrMean7: number | null;
+    rhrBaseline: number | null;
+    rhrOver: number | null;
+  };
+};
+
+const LOW_HRV = new Set(["fatigued", "strained"]);
+const r0 = (n: number | null) => (n == null ? null : Math.round(n));
+const r1 = (n: number | null) => (n == null ? null : Math.round(n * 10) / 10);
+
+/**
+ * The low-readiness day (decision 5): HRV below the band on the day and the
+ * day before, and the resting HR flag on the day. A day decides only when the
+ * watch measured HRV that night. Today's reading wins when there is one;
+ * else yesterday's. Null when that day is not a low-readiness day.
+ */
+export function readinessFlag(days: ReadinessDay[], today: string): ReadinessFlag | null {
+  const by = new Map(days.map((d) => [d.date, d]));
+  const day = by.get(today)?.hrvMs != null ? today : addDaysStr(today, -1);
+  const d = by.get(day);
+  const prev = by.get(addDaysStr(day, -1));
+  if (!d || d.hrvMs == null || !LOW_HRV.has(d.hrvState ?? "") || !prev || !LOW_HRV.has(prev.hrvState ?? "") || !d.rhrFlag) return null;
+  const over = d.rhrMean7 != null && d.rhrBaseline != null ? r1(d.rhrMean7 - d.rhrBaseline) : null;
+  const band = d.bandLow != null && d.bandHigh != null ? ` (${r0(d.bandLow)}-${r0(d.bandHigh)})` : "";
+  const hrv = d.hrvMean7 != null ? `HRV 7-day mean ${r0(d.hrvMean7)} ms is below your band${band} for 2 days` : "HRV is below your band for 2 days";
+  const rhr = over != null ? `resting HR is ${over} bpm over your normal ${r0(d.rhrBaseline)}` : "resting HR is up";
+  return {
+    day,
+    text: `${hrv} and ${rhr}`,
+    numbers: { hrvMean7: r0(d.hrvMean7), bandLow: r0(d.bandLow), bandHigh: r0(d.bandHigh), rhrMean7: r1(d.rhrMean7), rhrBaseline: r0(d.rhrBaseline), rhrOver: over },
+  };
+}
+
+/** The days a low-readiness day keeps hard sessions off: that day and the next, from today on (decision 8). */
+export function readinessWindow(flag: Pick<ReadinessFlag, "day">, today: string): string[] {
+  return [flag.day, addDaysStr(flag.day, 1)].filter((d) => d >= today);
+}
+
+export function hardAfterLowReadiness(
+  before: ReadonlyMap<string, PlacedGroup>,
+  after: ReadonlyMap<string, PlacedGroup>,
+  flag: ReadinessFlag,
+  today: string,
+): BrokenLimit | null {
+  const window = new Set(readinessWindow(flag, today));
+  const hardIn = (g: PlacedGroup | undefined) => (g && !g.loop ? g.sessions.filter((s) => s.hard && window.has(s.date)) : []);
+  const added: PlacedSession[] = [];
+  for (const [k, g] of after) {
+    const now = hardIn(g);
+    const was = hardIn(before.get(k));
+    if (now.length <= was.length) continue;
+    const known = new Set(was.map((s) => `${s.ref}|${s.date}`));
+    added.push(...now.filter((s) => !known.has(`${s.ref}|${s.date}`)));
+  }
+  if (!added.length) return null;
+  const which = flag.day === today ? `Today (${today})` : `Yesterday (${flag.day})`;
+  return {
+    rule: "hard_after_low_readiness",
+    message: `${which} is a low-readiness day: ${flag.text}. This change puts a hard session on ${added.map((s) => `${s.date} ("${s.label}")`).join(", ")}. Make the next intensity session easy (zone 1-2) or rest.`,
+    numbers: { lowReadinessDay: flag.day, ...flag.numbers, hardSessions: added.map((s) => ({ date: s.date, label: s.label })) },
+    evidence: READINESS_EVIDENCE,
+    source: `${REFERENCE} (Readiness signals change the next session, not the plan)`,
+  };
+}
+
+/** The easy session a hard one becomes (decision 10): the planned time, at most 60 minutes. Inference. */
+export const EASY_MAX_SECONDS = 60 * 60;
+
+/**
+ * An easy steady session of one sport: one step at 60-70% of max heart rate
+ * (about zone 2), so it fits every sport the schema allows and never reads as
+ * hard. With no planned time it is 60 minutes.
+ */
+export function easyWorkout(sport: "swim" | "bike" | "run", plannedSeconds: number | null): Workout {
+  const planned = plannedSeconds && plannedSeconds > 0 ? plannedSeconds : EASY_MAX_SECONDS;
+  const seconds = Math.round(Math.max(5 * 60, Math.min(planned, EASY_MAX_SECONDS)));
+  return {
+    v: 1,
+    sport,
+    name: `Easy ${sport} (readiness)`,
+    steps: [{ type: "work", end: { type: "time", seconds }, target: { metric: "hr", anchor: "max_hr", low: 60, high: 70 } }],
+  };
+}
+
+export type SwapCandidate = { id: number; label: string; sport: "swim" | "bike" | "run" | null; hard: boolean; plannedDurationS: number | null; done: boolean };
+
+export type ReadinessSwap = { sessionId: number; label: string; workout: Workout; minutes: number; text: string; flag: ReadinessFlag };
+
+export const TAPER_NOTE = "In a taper HRV often drops. If you feel well, keep the plan.";
+
+/**
+ * D4: on a low-readiness morning, make today's first hard session (in day
+ * order) easy. Only this morning's reading counts. Null when there is nothing
+ * to suggest. One answer for the app and the assistant.
+ */
+export function readinessSwap(input: { flag: ReadinessFlag | null; today: string; sessions: SwapCandidate[]; taper: boolean }): ReadinessSwap | null {
+  const { flag, today, sessions, taper } = input;
+  if (!flag || flag.day !== today) return null;
+  const s = sessions.find((x) => x.hard && !x.done && x.sport != null);
+  if (!s || !s.sport) return null;
+  const planned = s.plannedDurationS && s.plannedDurationS > 0 ? s.plannedDurationS : EASY_MAX_SECONDS;
+  const minutes = Math.round(Math.max(5 * 60, Math.min(planned, EASY_MAX_SECONDS)) / 60);
+  return {
+    sessionId: s.id,
+    label: s.label,
+    workout: easyWorkout(s.sport, s.plannedDurationS),
+    minutes,
+    flag,
+    text: `Low readiness today: ${flag.text}. Make "${s.label}" an easy ${minutes} min zone 2 session?${taper ? ` ${TAPER_NOTE}` : ""}`,
+  };
 }
 

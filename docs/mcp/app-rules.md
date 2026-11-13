@@ -191,14 +191,30 @@ lasts only until that writer runs again.
   it since, the write is refused with what changed; read it again and redo the change.
 - **Deletes can be undone.** Deleted programs, cycles, seasons, library workouts and sick periods
   stay restorable for 90 days.
-- **Two training limits in code** (`src/lib/utils/training-limits.ts`), for users with
+- **Five training limits in code** (`src/lib/utils/training-limits.ts`), for users with
   endurance features on, on assistant plan writes only (the user's own edits are never checked):
   - `long_run_cap`: no planned run more than 1.10x the longest run in the last 30 days (Study,
-    large cohort). Needs Garmin data; without it the cap is not checked, and the result says so.
+    large cohort). The longest run comes from Garmin and from runs logged in the app; with
+    neither, the cap is not checked, and the result says so.
   - `hard_sessions_per_week`: at most 3 interval sessions (a `work` set or zone 4-5 on an
     endurance set) in a weekday cycle's week (Coach convention; what counts as hard is
     Inference): the active cycle and a draft scheduled to start. Rotation cycles have no fixed
     week and are not counted.
+  - `hard_after_low_readiness`: no hard session added on a low-readiness day or the day after.
+    A low-readiness day has HRV below the athlete's band on that day and the day before, and
+    resting HR up on that day (two agreeing signals; Study for the method, thresholds Coach
+    convention). Needs a fresh Garmin reading (today or yesterday); otherwise not checked.
+  - `heavy_legs_before_key`: no heavy leg session (3 or more working sets of loaded squats or
+    hinges, or lower-body jumps, at 12 reps or fewer) 1-2 days before a key bike or run session,
+    or earlier the same day (Study for the 24-48 h cost; which sessions count is Inference).
+    Planned and done sessions count; key means the stored priority or the derived one.
+  - `strength_per_week`: a phase (a cycle with a phase type) holds the default strength sessions
+    a week for the athlete's strength goal (`get_athlete_profile`); a write that moves a week
+    further from the default is refused until you override it with a reason (D21). Needs a
+    strength goal.
+
+  The last three run when the write touches a weekday cycle's days; on rotation cycles they do
+  not run.
 
   Checked writes: program set edits, slot changes, starting or scheduling a cycle, `set_volume`,
   a change to the active cycle's length, goal or level (they rescale this week's targets), and a
@@ -208,9 +224,11 @@ lasts only until that writer runs again.
 
   A limit blocks only a write that makes things worse. A refused write changes nothing; send it
   again with `overrideLimits` and `overrideReason` if it still fits, and the revision stores the
-  override for the user to see. A restore you make is never refused, but the result warns.
-  The weekly load ramp, the low-readiness rule and heavy legs within 48 h of a key session are
-  not in code yet: check them against the endurance training reference
+  override for the user to see. A restore you make (one revision or a whole change set) is never
+  refused, but the result warns. `manage_season` `resume` is checked like a start. The app's own
+  writes (the weekly sync, an applied Garmin suggestion, a scheduled or chained start) are never
+  refused either; their warnings are stored on the revision for the user and you to see.
+  The weekly load ramp is not in code yet: check it against the endurance training reference
   (`logeverylift://docs/endurance-training-reference`) and name the rule and its evidence label.
 - **Time:** "today", the cycle week, the weekly sync and the date a workout is logged on follow
   the user's time zone (`timeZone` in `get_profile`; `src/lib/periodization-sync.ts:54`). With

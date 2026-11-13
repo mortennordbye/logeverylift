@@ -16,13 +16,11 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Being accepted into the Garmin Connect Developer Program and moving from per-user Personal API keys to its OAuth flow. Then: decide whether GPS tracks in `garmin_activity_streams` need their own opt-in (decision G-2 in `docs/plans/garmin-deep-data.md`); follow the `privacy-compliance` checklist (policy text from `docs/privacy/data-inventory.md`, including the AI tools' Garmin metrics, `garmin_fuel_logs`, the population ratings from profile gender and age, and the opt-in weight sync whose copies stay when Garmin data is deleted), bump `LEGAL_VERSION`, raise `CONSENT_VERSION` because these are new health-data categories; then widen `garminAllowed`.
 - **Touchpoints:** `src/lib/garmin/access.ts`, `src/lib/actions/garmin.ts`, `src/lib/garmin/`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`.
 
-### Seasons: limits and Garmin views across phases
-- **What:** Two gaps left by the seasons package (C1, `docs/plans/seasons.md`):
-  - The training limits do not run on the season tools. The chained start of the next phase (writer `sync`) and `manage_season` `resume` start a cycle without the limit check that `manage_training_cycle` `start` runs.
-  - The Garmin race views read the A race from the season, but the fitness projection to race day uses only the active phase's curve. Phases after it are not projected.
-- **Why deferred:** The chained start is a sync write, and T4 (warnings on sync output) is package D2's work. The projection across phases needs the timeline of every later phase and its programs, which belongs with D2's load model.
-- **Unblocked by:** D2: run the limits as warnings on the chained start and as a check on `resume`. Then build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
-- **Touchpoints:** `src/lib/plan-revisions.ts` (`chainSeason`), `src/lib/seasons.ts` (`resumeSeason`), `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
+### Seasons: fitness projection across phases
+- **What:** The Garmin race views read the A race from the season, but the fitness projection to race day uses only the active phase's curve. Phases after it are not projected. (The other gap of the seasons package, limits on the chained start and on `resume`, closed with D2 part 2: `docs/plans/limits-strength-readiness.md`.)
+- **Why deferred:** The projection across phases needs the timeline of every later phase and its programs, which belongs with D2's load model.
+- **Unblocked by:** The weekly load ramp of D2 part 2 (after D1). Then build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
+- **Touchpoints:** `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
 
 ### Dated sessions: what C2 left for later
 - **What:** Three gaps left by the session model (C2, `docs/plans/sessions.md`):
@@ -153,11 +151,11 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Package C4 (structured endurance workouts) is built, with C1's seasons, so the assistant can build a plan from parts (`docs/plans/workouts-and-compliance.md`). It still needs the owner's yes. Then delete the page, form, action and blueprint with their tests, and drop the cycles-list entry.
 - **Touchpoints:** `src/lib/utils/triathlon-plan.ts`, `src/lib/actions/triathlon-plan.ts`, `src/components/features/TriathlonPlanForm.tsx`, `src/app/cycles/triathlon/page.tsx`, `src/components/features/CyclesListClient.tsx` (the "Triathlon plan" entry), `src/__tests__/triathlon-plan.test.ts`.
 
-### Training-limit warnings on a change-set undo over MCP
-- **What:** `restore_revision` with one `revisionId` runs the training limits as warnings (T4) and stores them on the restore. With a `changeSetId` (undo a whole review) it runs none, so an undo that brings back a long run or a fourth hard session does not warn the assistant or the user.
-- **Why deferred:** A change set can touch several programs, cycles and memory entries; the scope for the before and after read needs every touched object, and the AI coach PR (`docs/plans/ai-coach.md`, section 13) kept to the one-object case. The weekly sync's own output is checked in package D2, not here.
-- **Unblocked by:** Package D2 (sync-output warnings), which needs the same multi-object scope. Then build the scope from `restoreChangeSet`'s targets and reuse `evaluateLimits`.
-- **Touchpoints:** `src/lib/mcp/revisions.ts` (`restore_revision`), `src/lib/training-limits.ts`, `src/lib/plan-revisions.ts` (`restoreChangeSet`).
+### Readiness without Garmin
+- **What:** The readiness flag (HRV below the band two days and resting HR up) and the rule `hard_after_low_readiness` read Garmin daily rows only. A user with no Garmin data gets "not checked", and no readiness swap is suggested.
+- **Why deferred:** Hub decision 6 in `docs/plans/limits-strength-readiness.md`: the app has no other morning HRV or resting HR source, and the 1-5 readiness at the start of a workout comes too late for a morning decision. Garmin stays admin-only for licence reasons.
+- **Unblocked by:** A morning entry of resting HR (and HRV if the user has it) in the app, or another wearable source. Then feed it to `readinessFlag` with the same two-signal rule.
+- **Touchpoints:** `src/lib/utils/training-limits.ts` (`readinessFlag`), `src/lib/training-limits.ts` (`limitContext`).
 
 ### Discipline on the custom-exercise form inside a program
 - **What:** The custom-exercise form on `/exercises` shows the discipline field (swim, bike or run) when the endurance switch is on. The same form opened from a program's "Add exercise" picker does not, because the picker does not pass the switch.

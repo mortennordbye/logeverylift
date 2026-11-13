@@ -23,13 +23,17 @@ import {
 import { limitSummary } from "@/lib/mcp/limits";
 import {
   NO_FACTS,
+  NO_OVERRIDE,
+  asWarnings,
   limitCyclesWith,
   cycleScope,
   evaluateLimits,
   limitContext,
   planFacts,
+  type LimitContext,
   type LimitScope,
 } from "@/lib/training-limits";
+import type { LimitCheck } from "@/lib/utils/training-limits";
 import { diffSnapshots, type PlanSnapshot } from "@/lib/utils/plan-revisions";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, asc, eq, gt, isNull, lt, ne, desc, max } from "drizzle-orm";
@@ -127,6 +131,70 @@ async function restoreScope(userId: string, type: PlanObjectType, id: number, re
   return null;
 }
 
+/** The limit scope of a whole change set: the union of each touched object's scope. */
+async function changeSetScope(userId: string, changeSetId: string): Promise<LimitScope | null> {
+  const revs = await db
+    .select({ id: planRevisions.id, objectType: planRevisions.objectType, objectId: planRevisions.objectId })
+    .from(planRevisions)
+    .where(and(eq(planRevisions.userId, userId), eq(planRevisions.changeSetId, changeSetId)))
+    .orderBy(asc(planRevisions.id));
+  const first = new Map<string, (typeof revs)[number]>();
+  for (const r of revs) if (!first.has(`${r.objectType}:${r.objectId}`)) first.set(`${r.objectType}:${r.objectId}`, r);
+  const programIds = new Set<number>();
+  const cycleIds = new Set<number>();
+  const mondays = new Set<string>();
+  for (const r of first.values()) {
+    const s = await restoreScope(userId, r.objectType, r.objectId, r.id);
+    if (!s) continue;
+    s.programIds.forEach((id) => programIds.add(id));
+    s.cycleIds.forEach((id) => cycleIds.add(id));
+    s.sessionWeeks?.mondays.forEach((m) => mondays.add(m));
+  }
+  if (!programIds.size && !cycleIds.size && !mondays.size) return null;
+  return {
+    programIds: [...programIds].sort((a, b) => a - b),
+    cycleIds: [...cycleIds].sort((a, b) => a - b),
+    ...(mondays.size && { sessionWeeks: { userId, mondays: [...mondays].sort() } }),
+  };
+}
+
+/**
+ * Run a restore with the limits around it as warnings (T4): the plan before
+ * and after, and the check stored on this restore's revisions so the user
+ * sees the warning too. Null when the restore found nothing.
+ */
+async function restoreWithWarnings<T extends object>(
+  userId: string,
+  clientId: string | undefined,
+  lc: LimitContext,
+  scope: LimitScope | null,
+  restore: () => Promise<T | null>,
+): Promise<{ done: T; check: LimitCheck | null } | null> {
+  const before = scope ? await planFacts(db, scope) : NO_FACTS;
+  const [{ last }] = await db.select({ last: max(planRevisions.id) }).from(planRevisions).where(eq(planRevisions.userId, userId));
+  const done = await restore();
+  if (!done) return null;
+  if (!scope) return { done, check: null };
+  const after = await planFacts(db, scope);
+  const { blocking, check } = evaluateLimits(lc, before, after, NO_OVERRIDE);
+  const warned = asWarnings(check, blocking);
+  await db
+    .update(planRevisions)
+    .set({ limitCheck: warned })
+    .where(
+      and(
+        eq(planRevisions.userId, userId),
+        gt(planRevisions.id, last ?? 0),
+        // Only this restore's rows: a restore by this client, not
+        // another assistant's write that landed meanwhile.
+        eq(planRevisions.writer, "assistant"),
+        eq(planRevisions.action, "restore"),
+        clientId ? eq(planRevisions.clientId, clientId) : isNull(planRevisions.clientId),
+      ),
+    );
+  return { done, check: warned };
+}
+
 /** Object types of the endurance add-on: listed and restored only with the switch on (D18). */
 const ENDURANCE_TYPES = new Set<string>(["athlete", "injury", "workout", "illness"]);
 
@@ -201,36 +269,18 @@ export function registerRevisionTools(server: McpServer, userId: string, clientI
           // The limits as warnings (T4): read the plan around the restore.
           const lc = await limitContext(userId);
           const scope = lc.endurance ? await restoreScope(userId, rev.objectType, rev.objectId, revisionId) : null;
-          const before = scope ? await planFacts(db, scope) : NO_FACTS;
-          const [{ last }] = await db.select({ last: max(planRevisions.id) }).from(planRevisions).where(eq(planRevisions.userId, userId));
-          const done = await restoreRevision(ctx, revisionId);
-          if (!done) return fail("Revision not found");
-          if (!scope) return ok({ restored: true, ...done });
-          const after = await planFacts(db, scope);
-          const { blocking, check } = evaluateLimits(lc, before, after, { rules: [], reason: null });
-          check.warnings = blocking;
-          check.passed = check.checked.filter((r) => !blocking.some((b) => b.rule === r));
-          // Stored on the restore's revisions, so the user sees the warning too.
-          await db
-            .update(planRevisions)
-            .set({ limitCheck: check })
-            .where(
-              and(
-                eq(planRevisions.userId, userId),
-                gt(planRevisions.id, last ?? 0),
-                // Only this restore's rows: a restore by this client, not
-                // another assistant's write that landed meanwhile.
-                eq(planRevisions.writer, "assistant"),
-                eq(planRevisions.action, "restore"),
-                clientId ? eq(planRevisions.clientId, clientId) : isNull(planRevisions.clientId),
-              ),
-            );
-          return ok({ restored: true, ...done, limits: limitSummary(check) });
+          const out = await restoreWithWarnings(userId, clientId, lc, scope, () => restoreRevision(ctx, revisionId));
+          if (!out) return fail("Revision not found");
+          return ok({ restored: true, ...out.done, ...(out.check && { limits: limitSummary(out.check) }) });
         }
         if (changeSetId) {
-          const done = await restoreChangeSet(ctx, changeSetId);
-          if (!done) return fail("Change set not found");
-          return ok({ restored: true, ...done });
+          // The limits as warnings on a whole undo too: the scope is every
+          // program, cycle and dated session the change set touched.
+          const lc = await limitContext(userId);
+          const scope = lc.endurance ? await changeSetScope(userId, changeSetId) : null;
+          const out = await restoreWithWarnings(userId, clientId, lc, scope, () => restoreChangeSet(ctx, changeSetId));
+          if (!out) return fail("Change set not found");
+          return ok({ restored: true, ...out.done, ...(out.check && { limits: limitSummary(out.check) }) });
         }
         return fail("Provide revisionId or changeSetId");
       } catch (e) {

@@ -1044,7 +1044,18 @@ async function startOneDueCycle(userId: string): Promise<boolean> {
     .orderBy(desc(trainingCycles.scheduledStartDate))
     .limit(1);
   if (!due?.day) return false;
-  const started = await activateCycleIf({ userId, writer: "sync", reason: "Scheduled start" }, due.id, undefined, due.day, due.day);
+  // The start is the app's own write: the training limits run on the block's
+  // first week as warnings, never a block (T4; a season's chained phase, or a
+  // start the assistant scheduled; docs/plans/limits-strength-readiness.md, 6).
+  const { limitStartWarnings } = await import("@/lib/training-limits");
+  const limitCheck = await limitStartWarnings(userId, due.id);
+  const started = await activateCycleIf(
+    { userId, writer: "sync", reason: "Scheduled start", ...(limitCheck && { limitCheck }) },
+    due.id,
+    undefined,
+    due.day,
+    due.day,
+  );
   return started != null;
 }
 

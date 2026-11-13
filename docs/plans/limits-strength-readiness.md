@@ -126,7 +126,7 @@ Never changes:
 
 - Priority: stored `key`, `support`, `optional`, or derived: key when hard, or when it is the
   longest bike or run of its week at 90 minutes or more; strength reads `support`
-  (`effectivePriorities`, `src/lib/utils/session-compliance.ts:436-475`).
+  (`effectivePriorities`, `src/lib/utils/session-compliance.ts:436-472`).
 - `suggestMoveDay` already keeps a moved key session off days next to a key or hard day
   (`src/lib/utils/session-compliance.ts:257-284`).
 - Exercises carry `bodyArea`, `muscleGroup`, `movementPattern` and `exerciseType`
@@ -621,3 +621,27 @@ Decided by the hub on 2026-11-13, owner may change. The hub took every recommend
 23. Rotation cycles are not checked for the ramp, heavy legs, strength or readiness; the swap needs a weekday cycle.
 24. The D3 lines show in the cycle calendar and the session detail; home gets only the readiness card.
 25. The long-run cap uses the longest of Garmin and app runs.
+
+## 18. Where the build differs from the brief
+
+Stage 1 of the build (2026-11-13) shipped everything that does not need D1's API.
+
+- **New rules are listed only when they have days to read.** `heavy_legs_before_key`,
+  `hard_after_low_readiness` and `strength_per_week` run, or say "not checked", only when the
+  write touches a weekday cycle's days. A program in no cycle or a rotation cycle gets no line
+  for them, so the part 1 results stay the same. The brief said each rule always has a reason.
+- **Long-run cap with no data at all.** With no Garmin data and no run logged in the app in 30
+  days, the cap stays "not checked" (as part 1), instead of "no run" (broken on a rise). A user
+  with app runs is checked.
+- **Today's reading wins.** When the watch measured HRV last night, only today decides the
+  readiness flag; a flagged yesterday followed by a normal today is no flag.
+- **Every scheduled start warns.** The warning on a start the app makes runs for any scheduled
+  start (writer `sync`), not only a season's chained phase.
+- **The easy workout** targets 60-70% of max heart rate: heart-rate zones on LTHR are not
+  allowed on a swim, and max heart rate fits every sport.
+- **Heavy legs:** an exercise with no equipment set counts as loaded.
+
+Still to build: the weekly load ramp (waits for D1); the readiness swap's server function,
+Server Action, home card, `apply_readiness_swap` and the `readinessSwap` fields over MCP; the D3
+lines in the calendar and session detail and `heavyLegsBeforeKey` over MCP; the sync warning
+line on the cycle page and `limitWarnings` in `get_training_cycle`; the data inventory text.
