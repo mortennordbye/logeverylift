@@ -1,0 +1,820 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Home Redesign Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!--
+====================================================================================
+NEW TOKENS (add to src/app/globals.css; the app already uses Inter as --font-sans)
+====================================================================================
+Colour (light :root  /  dark .dark)
+  --home-bg            #f2f2f7   / #0a0a0d     page behind the widgets (iOS grouped bg)
+  --widget             #ffffff   / #16161b     widget surface
+  --widget-2           #f2f2f6   / #1f1f26     inner rows, tracks, chips
+  --hairline           rgb(0 0 0 / .06) / rgb(255 255 255 / .06)   1px inset ring
+  --sheet              #f7f7fa   / #1c1c22     bottom sheets
+  --acc-train          #2563eb   / #4d8dff     training (Today, Week, Load)
+  --acc-pr             #c98a00   / #f7bd45     PRs
+  --acc-recovery       #16a34a   / #3ed48a     readiness, body
+  --acc-social         #7c3aed   / #a983ff     friends
+  --acc-streak         #ea580c   / #ff8a3d     streak flame
+  --acc-missed         #dc2626   / #ff6b6b     missed day
+  --hero-from/--hero-to  #3b7bff→#1f4fd1 / #1e46a8→#0f1d45   Today hero gradient
+Radius
+  --radius-widget 24px (rounded-[24px], add as --radius-widget in @theme)
+  --radius-inner  14px  (rows, buttons inside a widget)
+  sheets 28px top corners; pills rounded-full
+Type scale (Inter, tabular-nums for numbers)
+  display 44/1 800 -0.03em   (score, streak, PR weight)   -> text-[44px] font-extrabold tracking-tight
+  title   32/1.1 800         (header "LogEveryLift")      -> text-[32px] font-extrabold
+  hero    26/1.15 800        (Today program name)
+  num-lg  30/1 800           (S widget numbers)
+  body    15/1.35 500 ; label 13 600 (accent colour, sentence case) ; caption 12 500 muted
+Motion
+  --ease-spring cubic-bezier(.16,1,.3,1) (already in @theme)
+  enter: count-up 900ms, ring fill 1100ms, bars grow 700ms staggered 25ms, line draw 1000ms
+  ambient: flame flicker 1.6s, today-dot pulse 2s, PR shimmer 2 sweeps, confetti once
+  edit: jiggle 280ms alternate; all of it off under prefers-reduced-motion (motion-safe:)
+
+====================================================================================
+PER WIDGET: Tailwind classes / tokens a developer needs
+====================================================================================
+Shared card   rounded-[24px] bg-widget p-3.5 ring-1 ring-inset ring-hairline relative overflow-hidden
+              active:scale-[.98] transition-transform ; accent tint = bg-[radial-gradient(140%_90%_at_100%_0%,color-mix(in_oklab,var(--acc)_16%,transparent),transparent_55%)]
+              label: text-[13px] font-semibold text-(--acc) flex items-center gap-1.5
+Today (S/M/L) bg-linear-160 from-hero-from to-hero-to text-white ; Start: h-13 rounded-2xl bg-white text-acc-train
+              font-bold shadow-[0_8px_24px_-8px_rgb(0_0_0/.5)] ; rows: bg-white/10 rounded-[14px]
+              cycle bar: 8 segments flex gap-1 h-1.5 rounded-full bg-white/20, done bg-white
+Week (M/L)    goal ring = pure SVG (2 circles, stroke-dasharray) ; day dot size-8 rounded-full:
+              done bg-acc-train text-white, missed bg-acc-missed/15 text-acc-missed, today ring-2 ring-acc-train,
+              planned border border-dashed border-muted-foreground/50, rest size-1.5 bg-muted-foreground/40
+Streak (S/M)  flame SVG with motion-safe:animate-[flicker_1.6s_ease-in-out_infinite_alternate]; number text-[44px]
+Recent PRs    trophy chip bg-acc-pr/15 text-acc-pr ; "+2.5 kg" pill bg-acc-pr/15 with shimmer ::after ;
+ (S/M)        confetti = 14 absolutely placed <i> with one keyframe (no library)
+Readiness     score ring SVG (stroke acc-recovery) ; mini bars h-1.5 rounded-full bg-widget-2 with fill
+ (S/M)
+Body weight   sparkline SVG polyline + gradient area, vector-effect non-scaling-stroke ; end dot as a span
+ (S/M)
+Friends (M/L) avatar size-9 rounded-full bg-linear-135 (two stops per user) ; reaction button min-h-11 min-w-11
+              rounded-full bg-widget-2, active state bg-acc-social/20
+Training load bars + 7-day line + optimal band in one SVG (preserveAspectRatio none); status pill bg-acc-recovery/15
+ (M/L)
+Edit mode     motion-safe:animate-[jiggle_.28s_ease-in-out_infinite] (odd/even delay) ; remove badge size-[26px]
+              rounded-full bg-zinc-500 with before:-inset-[9px] for a 44px hit area ; sheets fixed bottom rounded-t-[28px]
+No new chart library is needed: every chart here is hand-written SVG.
+-->
+<style>
+:root{
+  --page:#e9e9ee; --page-fg:#1b1b20; --page-muted:#6b6b76; --page-card:#fff;
+  --ease-spring:cubic-bezier(.16,1,.3,1);
+  font-family:Inter,-apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){--page:#050507;--page-fg:#ececf1;--page-muted:#8e8e98;--page-card:#121216}
+}
+:root[data-theme="dark"]{--page:#050507;--page-fg:#ececf1;--page-muted:#8e8e98;--page-card:#121216}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:var(--page);color:var(--page-fg);min-height:100vh}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer;padding:0}
+
+/* ---------- page layout ---------- */
+.stage{display:flex;gap:40px;justify-content:center;align-items:flex-start;padding:32px 16px 48px;flex-wrap:wrap}
+.panel{width:300px;max-width:100%;display:flex;flex-direction:column;gap:14px}
+.panel h1{font-size:22px;margin:0;font-weight:800;letter-spacing:-.02em}
+.panel p{margin:0;color:var(--page-muted);font-size:14px;line-height:1.45}
+.ctl{background:var(--page-card);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:10px}
+.ctl-row{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:14px;font-weight:600}
+.seg{display:flex;background:color-mix(in oklab,var(--page-fg) 8%,transparent);border-radius:11px;padding:2px}
+.seg button{min-height:36px;padding:0 12px;border-radius:9px;font-size:13px;font-weight:600;color:var(--page-muted)}
+.seg button[aria-pressed="true"]{background:var(--page-card);color:var(--page-fg);box-shadow:0 1px 3px rgb(0 0 0/.15)}
+.pbtn{min-height:44px;border-radius:12px;background:color-mix(in oklab,var(--page-fg) 8%,transparent);font-weight:600;font-size:14px}
+.pbtn:active{opacity:.6}
+.swatches{display:flex;gap:8px;flex-wrap:wrap}
+.sw{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--page-muted)}
+.sw i{width:14px;height:14px;border-radius:5px;display:block}
+
+/* ---------- device ---------- */
+.device{padding:12px;background:#000;border-radius:66px;box-shadow:0 0 0 2px #2a2a30,0 40px 80px -20px rgb(0 0 0/.45)}
+.screen{
+  /* app tokens: dark is the default here */
+  --bg:#0a0a0d; --fg:#f5f5f7; --muted:#8e8e98; --widget:#16161b; --widget-2:#22222a; --hairline:rgb(255 255 255/.06);
+  --sheet:#1c1c22; --nav:rgb(18 18 22/.78);
+  --acc-train:#4d8dff; --acc-pr:#f7bd45; --acc-recovery:#3ed48a; --acc-social:#a983ff; --acc-streak:#ff8a3d; --acc-missed:#ff6b6b;
+  --hero-from:#1e46a8; --hero-to:#0f1d45; --hero-glow:rgb(90 150 255/.45);
+  --r-widget:24px; --r-inner:14px;
+  width:390px;height:844px;border-radius:54px;overflow:hidden;position:relative;background:var(--bg);color:var(--fg);
+  display:flex;flex-direction:column;font-feature-settings:"cv11","ss01";
+}
+.screen[data-theme="light"]{
+  --bg:#f2f2f7; --fg:#111114; --muted:#6b6b76; --widget:#fff; --widget-2:#f0f0f4; --hairline:rgb(0 0 0/.06);
+  --sheet:#f7f7fa; --nav:rgb(249 249 251/.82);
+  --acc-train:#2563eb; --acc-pr:#c98a00; --acc-recovery:#16a34a; --acc-social:#7c3aed; --acc-streak:#ea580c; --acc-missed:#dc2626;
+  --hero-from:#3b7bff; --hero-to:#1f4fd1; --hero-glow:rgb(160 200 255/.55);
+}
+.status{height:50px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:0 34px 0 40px;font-size:16px;font-weight:600}
+.status .island{position:absolute;left:50%;top:11px;width:122px;height:35px;margin-left:-61px;border-radius:20px;background:#000}
+.status-r{display:flex;gap:6px;align-items:center}
+.status-r svg{width:18px;height:12px}
+
+.header{flex:none;display:flex;align-items:flex-end;justify-content:space-between;padding:4px 16px 10px 20px}
+.eyebrow{font-size:13px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+.title{font-size:32px;font-weight:800;letter-spacing:-.025em;line-height:1.1;margin:2px 0 0}
+.hbtns{display:flex;gap:8px;align-items:center}
+.hbtn{min-height:44px;min-width:44px;padding:0 16px;border-radius:22px;background:var(--widget-2);font-size:15px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;transition:transform .15s}
+.hbtn:active{transform:scale(.94);opacity:.8}
+.hbtn.primary{background:var(--acc-train);color:#fff}
+.hbtn.round{padding:0;width:44px}
+.hbtn svg{width:20px;height:20px}
+
+.scroll{flex:1;overflow-y:auto;padding:4px 16px 116px;scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.screen.has-pin .scroll{padding-bottom:186px}
+
+/* ---------- grid + widgets ---------- */
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;grid-auto-rows:minmax(164px,auto)}
+.cell{position:relative;grid-column:span 1;min-width:0}
+.cell.m{grid-column:span 2}
+.cell.l{grid-column:span 2;grid-row:span 2}
+.w{height:100%;border-radius:var(--r-widget);background:var(--widget);padding:14px;position:relative;overflow:hidden;
+  box-shadow:inset 0 0 0 1px var(--hairline);display:flex;flex-direction:column;transition:transform .2s var(--ease-spring);cursor:pointer}
+.w:active{transform:scale(.975)}
+.w.tint{background:radial-gradient(140% 90% at 100% 0%,color-mix(in oklab,var(--acc) 15%,transparent),transparent 58%),var(--widget)}
+.acc-train{--acc:var(--acc-train)} .acc-pr{--acc:var(--acc-pr)} .acc-rec{--acc:var(--acc-recovery)}
+.acc-soc{--acc:var(--acc-social)} .acc-streak{--acc:var(--acc-streak)}
+.lbl{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--acc);min-height:18px}
+.lbl svg{width:15px;height:15px;flex:none}
+.lbl .more{margin-left:auto;color:var(--muted);font-weight:500;display:flex;align-items:center;gap:2px}
+.lbl .more svg{width:13px;height:13px}
+.num{font-variant-numeric:tabular-nums;font-weight:800;letter-spacing:-.03em;line-height:1}
+.n44{font-size:44px}.n30{font-size:30px}.n22{font-size:22px}
+.unit{font-size:15px;font-weight:600;color:var(--muted);letter-spacing:0;margin-left:3px}
+.cap{font-size:12px;font-weight:500;color:var(--muted)}
+.sub{font-size:14px;font-weight:600}
+.spacer{flex:1}
+
+/* Today hero */
+.hero{color:#fff;padding:16px;
+  background:radial-gradient(90% 70% at 100% 0%,var(--hero-glow),transparent 60%),linear-gradient(160deg,var(--hero-from),var(--hero-to));
+  box-shadow:inset 0 0 0 1px rgb(255 255 255/.08),0 18px 40px -18px var(--hero-glow)}
+.hero .cyc{display:flex;justify-content:space-between;font-size:13px;font-weight:600;opacity:.9}
+.segs{display:flex;gap:4px;margin:8px 0 14px}
+.segs i{flex:1;height:5px;border-radius:3px;background:rgb(255 255 255/.18);overflow:hidden;position:relative}
+.segs i.done{background:#fff}
+.segs i.now::after{content:"";position:absolute;inset:0;width:55%;background:#fff;border-radius:3px}
+.hero .kick{font-size:13px;font-weight:600;opacity:.75;text-transform:uppercase;letter-spacing:.05em}
+.hero h2{font-size:26px;font-weight:800;letter-spacing:-.02em;margin:2px 0 4px;line-height:1.15}
+.hero .meta{font-size:14px;opacity:.8;font-weight:500}
+.tip{display:inline-flex;align-items:center;gap:6px;margin-top:10px;padding:6px 10px 6px 8px;border-radius:999px;background:rgb(255 255 255/.14);font-size:13px;font-weight:600;align-self:flex-start}
+.tip b{color:#ffd77a}
+.tip svg{width:15px;height:15px;color:#ffd77a}
+.exs{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.ex{display:flex;align-items:center;gap:10px;background:rgb(255 255 255/.09);border-radius:var(--r-inner);padding:9px 10px}
+.ex-n{width:26px;height:26px;border-radius:9px;background:rgb(255 255 255/.16);display:grid;place-items:center;font-size:12px;font-weight:700;flex:none}
+.ex-t{display:flex;flex-direction:column;min-width:0;flex:1}
+.ex-t b{font-size:15px;font-weight:600}
+.ex-t span{font-size:12px;opacity:.72}
+.ex-up{font-size:12px;font-weight:700;color:#ffd77a;background:rgb(255 215 122/.14);padding:3px 8px;border-radius:999px}
+.ex-more{font-size:13px;opacity:.7;padding:2px 4px;font-weight:500}
+.start{min-height:54px;border-radius:18px;background:#fff;color:#1f4fd1;font-size:17px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:0 10px 24px -10px rgb(0 0 0/.55);transition:transform .15s}
+.start:active{transform:scale(.97)}
+.start svg{width:18px;height:18px}
+.ghost{min-height:44px;font-size:15px;font-weight:600;color:rgb(255 255 255/.85);display:flex;align-items:center;justify-content:center;gap:4px;margin-top:4px}
+.ghost:active{opacity:.6}
+.hero.s .start{min-height:48px;font-size:15px}
+
+/* no cycle */
+.empty-hero{background:radial-gradient(80% 60% at 50% 0%,color-mix(in oklab,var(--acc-train) 22%,transparent),transparent 70%),var(--widget);align-items:center;text-align:center;justify-content:center;padding:20px}
+.empty-hero h2{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:14px 0 6px}
+.empty-hero p{margin:0 0 18px;color:var(--muted);font-size:15px;line-height:1.4;max-width:270px}
+.btn{min-height:50px;border-radius:16px;padding:0 22px;background:var(--acc-train);color:#fff;font-size:16px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:transform .15s}
+.btn:active{transform:scale(.97)}
+.btn.soft{background:color-mix(in oklab,var(--acc) 16%,transparent);color:var(--acc);min-height:44px;font-size:15px}
+.btn.full{width:100%}
+.link{min-height:44px;color:var(--acc-train);font-weight:600;font-size:15px;display:inline-flex;align-items:center}
+.link:active{opacity:.6}
+
+/* Week */
+.week{display:flex;align-items:center;gap:14px;flex:1}
+.ringwrap{position:relative;flex:none;display:grid;place-items:center}
+.ringwrap svg{transform:rotate(-90deg);display:block}
+.ringwrap .in{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring-bg{stroke:var(--widget-2)}
+.ring-fg{transition:stroke-dashoffset 1.1s var(--ease-spring)}
+.days{flex:1;display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+.day{display:flex;flex-direction:column;align-items:center;gap:6px}
+.day small{font-size:11px;font-weight:600;color:var(--muted)}
+.dot{width:32px;height:32px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;position:relative}
+.dot svg{width:15px;height:15px}
+.dot.done{background:var(--acc-train);color:#fff;box-shadow:0 4px 12px -4px var(--acc-train)}
+.dot.missed{background:color-mix(in oklab,var(--acc-missed) 16%,transparent);color:var(--acc-missed)}
+.dot.today{box-shadow:inset 0 0 0 2px var(--acc-train);color:var(--acc-train)}
+.dot.today::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--acc-train);opacity:0;animation:pulse 2s ease-out infinite}
+.dot.planned{box-shadow:inset 0 0 0 1.5px color-mix(in oklab,var(--muted) 55%,transparent);color:var(--muted)}
+.dot.rest::before{content:"";width:5px;height:5px;border-radius:50%;background:color-mix(in oklab,var(--muted) 45%,transparent)}
+.wk-foot{display:flex;gap:8px;margin-top:10px}
+.mini{flex:1;background:var(--widget-2);border-radius:var(--r-inner);padding:10px}
+.mini .num{font-size:20px}
+.legend{display:flex;gap:12px;margin-top:10px}
+.legend span{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);font-weight:500}
+.legend i{width:8px;height:8px;border-radius:50%}
+
+/* Streak */
+.flame{width:46px;height:56px;flex:none;filter:drop-shadow(0 6px 14px rgb(255 120 40/.45))}
+.flame .fo{transform-origin:50% 100%;transform-box:fill-box;animation:flicker 1.6s ease-in-out infinite alternate}
+.flame .fi{transform-origin:50% 100%;transform-box:fill-box;animation:flicker2 1.1s ease-in-out infinite alternate}
+.streak-weeks{display:flex;gap:4px;align-items:flex-end;height:36px;margin-top:auto}
+.streak-weeks i{flex:1;border-radius:4px;background:linear-gradient(to top,var(--acc-streak),#ffc35a)}
+
+/* PRs */
+.trophy{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;background:color-mix(in oklab,var(--acc-pr) 18%,transparent);color:var(--acc-pr)}
+.trophy svg{width:22px;height:22px}
+.gain{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:3px;padding:3px 9px;border-radius:999px;font-size:13px;font-weight:700;
+  background:color-mix(in oklab,var(--acc-pr) 18%,transparent);color:var(--acc-pr)}
+.gain::after{content:"";position:absolute;inset:0;transform:translateX(-120%);background:linear-gradient(100deg,transparent 20%,rgb(255 255 255/.55) 50%,transparent 80%);animation:shimmer 1.6s .8s ease-in-out 2}
+.confetti{position:absolute;left:30px;top:30px;pointer-events:none}
+.confetti i{position:absolute;width:6px;height:9px;border-radius:2px;opacity:0;animation:burst 1.3s .45s cubic-bezier(.2,.7,.3,1) forwards}
+.pr-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-top:1px solid var(--hairline)}
+.pr-row:first-of-type{border-top:0}
+.pr-row b{font-size:14px;font-weight:600;flex:1}
+
+/* Readiness */
+.bars{display:flex;flex-direction:column;gap:7px}
+.bar{display:grid;grid-template-columns:36px 1fr 44px;align-items:center;gap:8px;font-size:12px;font-weight:600}
+.bar span:first-child{color:var(--muted)}
+.bar span:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.track{height:6px;border-radius:3px;background:var(--widget-2);overflow:hidden}
+.track i{display:block;height:100%;border-radius:3px;background:var(--acc-recovery);transform-origin:left;animation:growx .9s .2s var(--ease-spring) both}
+.track i.warn{background:var(--acc-pr)}
+.band{display:inline-flex;align-items:center;gap:5px;font-size:14px;font-weight:700;color:var(--acc-recovery)}
+
+/* sparkline */
+.spark{position:relative;height:46px;margin-top:auto}
+.spark svg{width:100%;height:100%;display:block;overflow:visible}
+.spark .end{position:absolute;right:-3px;width:8px;height:8px;border-radius:50%;background:var(--acc);box-shadow:0 0 0 3px color-mix(in oklab,var(--acc) 30%,transparent);transform:translateY(-50%)}
+.reveal{animation:reveal 1.1s .15s ease-out both}
+.fade{animation:fade .8s .6s ease both}
+.grow{transform-box:fill-box;transform-origin:50% 100%;animation:grow .7s var(--ease-spring) both;animation-delay:calc(var(--i,0) * 25ms)}
+
+/* Friends */
+.feed{display:flex;flex-direction:column;margin-top:4px}
+.fr{display:flex;align-items:center;gap:10px;padding:6px 0}
+.fr + .fr{border-top:1px solid var(--hairline)}
+.av{width:38px;height:38px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:13px;font-weight:700;color:#fff;position:relative}
+.av .badge{position:absolute;right:-3px;bottom:-3px;width:18px;height:18px;border-radius:50%;background:var(--widget);display:grid;place-items:center;font-size:10px}
+.fr-t{flex:1;min-width:0;font-size:14px;line-height:1.3}
+.fr-t b{font-weight:700}
+.fr-t div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.react{min-width:44px;min-height:44px;border-radius:22px;display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:0 10px;background:var(--widget-2);font-size:13px;font-weight:700;font-variant-numeric:tabular-nums;transition:transform .2s var(--ease-spring),background .2s}
+.react .e{font-size:17px;line-height:1;display:inline-block}
+.react.mine{background:color-mix(in oklab,var(--acc-social) 22%,transparent);color:var(--acc-social)}
+.react.pop .e{animation:pop .45s var(--ease-spring)}
+.react:active{transform:scale(.9)}
+.avstack{display:flex;margin:6px 0 10px}
+.avstack .av{width:42px;height:42px;border:3px solid var(--widget);margin-left:-10px}
+.avstack .av:first-child{margin-left:0}
+.avstack .av.ghosty{background:var(--widget-2);color:var(--muted);border-style:dashed;border-color:color-mix(in oklab,var(--muted) 50%,transparent)}
+
+/* load chart */
+.chart{height:64px;position:relative;margin-top:10px}
+.chart.tall{height:210px}
+.chart svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.pill{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:700;background:color-mix(in oklab,var(--acc-recovery) 18%,transparent);color:var(--acc-recovery)}
+.pill i{width:6px;height:6px;border-radius:50%;background:currentColor}
+
+/* ---------- pinned bar + nav ---------- */
+.pin{position:absolute;left:16px;right:16px;bottom:96px;z-index:5}
+.pin .btn{width:100%;min-height:54px;font-size:17px;box-shadow:0 12px 28px -10px color-mix(in oklab,var(--acc-train) 70%,transparent)}
+.nav{position:absolute;left:0;right:0;bottom:0;height:86px;padding:8px 8px 0;display:grid;grid-template-columns:repeat(4,1fr);
+  background:var(--nav);backdrop-filter:blur(20px) saturate(1.6);-webkit-backdrop-filter:blur(20px) saturate(1.6);border-top:1px solid var(--hairline);z-index:6}
+.nav button{display:flex;flex-direction:column;align-items:center;gap:3px;min-height:48px;font-size:11px;font-weight:600;color:var(--muted)}
+.nav button.on{color:var(--acc-train)}
+.nav svg{width:26px;height:26px}
+.home-ind{position:absolute;bottom:8px;left:50%;width:134px;height:5px;margin-left:-67px;border-radius:3px;background:var(--fg);opacity:.85;z-index:7}
+
+/* ---------- edit mode ---------- */
+.editing .cell{animation:jiggle .28s ease-in-out infinite alternate;cursor:grab}
+.editing .cell:nth-child(even){animation-delay:-.14s;animation-direction:alternate-reverse}
+.editing .cell.l{animation-name:jiggle-sm}
+.editing .w{cursor:inherit}
+.editing .w *{pointer-events:none}
+.cell.drag-over .w{box-shadow:inset 0 0 0 2px var(--acc-train)}
+.cell.dragging{opacity:.4}
+.rm{position:absolute;top:-7px;left:-7px;width:26px;height:26px;border-radius:50%;background:#8e8e93;color:#fff;display:none;place-items:center;z-index:3;
+  box-shadow:0 2px 6px rgb(0 0 0/.3)}
+.rm::before{content:"";position:absolute;inset:-9px}
+.rm svg{width:14px;height:14px}
+.editing .rm{display:grid}
+.size-tag{position:absolute;right:10px;bottom:10px;z-index:3;display:none;font-size:11px;font-weight:700;padding:3px 8px;border-radius:999px;background:rgb(0 0 0/.55);color:#fff;backdrop-filter:blur(6px)}
+.editing .size-tag{display:block}
+.edit-hint{display:none;text-align:center;font-size:13px;color:var(--muted);padding:6px 0 12px}
+.editing-hint .edit-hint{display:block}
+
+/* ---------- sheets + toast ---------- */
+.backdrop{position:absolute;inset:0;background:rgb(0 0 0/.45);z-index:20;animation:fade .25s ease both}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:21;background:var(--sheet);border-radius:28px 28px 0 0;padding:8px 16px 34px;
+  max-height:78%;overflow-y:auto;animation:up .38s var(--ease-spring) both;box-shadow:0 -10px 40px rgb(0 0 0/.3)}
+.grab{width:36px;height:5px;border-radius:3px;background:color-mix(in oklab,var(--muted) 50%,transparent);margin:0 auto 10px}
+.sheet h3{margin:0;font-size:20px;font-weight:800;letter-spacing:-.01em}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.sizes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+.sz{min-height:96px;border-radius:16px;background:var(--widget);box-shadow:inset 0 0 0 1px var(--hairline);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:600}
+.sz[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--acc-train);color:var(--acc-train)}
+.sz:disabled{opacity:.35;cursor:not-allowed}
+.sz .glyph{display:grid;grid-template-columns:1fr 1fr;gap:3px;width:44px}
+.sz .glyph i{height:14px;border-radius:4px;background:color-mix(in oklab,var(--muted) 30%,transparent)}
+.sz .glyph i.on{background:var(--muted)}
+.sz[aria-pressed="true"] .glyph i.on{background:currentColor}
+.sz .glyph i.span2{grid-column:span 2}
+.sz .glyph i.tall{height:31px}
+.rowbtns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.sbtn{min-height:48px;border-radius:14px;background:var(--widget);box-shadow:inset 0 0 0 1px var(--hairline);font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px}
+.sbtn:active{opacity:.6}
+.sbtn:disabled{opacity:.35}
+.sbtn.danger{color:var(--acc-missed);width:100%}
+.gal{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.gi{background:var(--widget);border-radius:20px;padding:10px;box-shadow:inset 0 0 0 1px var(--hairline);display:flex;flex-direction:column;gap:8px}
+.gi .prev{height:112px;border-radius:14px;overflow:hidden;position:relative;background:var(--bg);pointer-events:none}
+.gi .prev > div{position:absolute;left:0;top:0;transform-origin:0 0}
+.gi b{font-size:14px}
+.gi .btn{min-height:44px;font-size:14px;border-radius:12px}
+.toast{position:absolute;top:56px;left:50%;transform:translateX(-50%);z-index:30;background:color-mix(in oklab,var(--fg) 92%,transparent);color:var(--bg);font-size:14px;font-weight:600;
+  padding:10px 16px;border-radius:999px;white-space:nowrap;animation:toast 2s ease both;pointer-events:none}
+
+/* ---------- keyframes ---------- */
+@keyframes jiggle{from{rotate:-1.1deg}to{rotate:1.1deg}}
+@keyframes jiggle-sm{from{rotate:-.35deg}to{rotate:.35deg}}
+@keyframes pulse{0%{opacity:.7;transform:scale(.9)}100%{opacity:0;transform:scale(1.35)}}
+@keyframes flicker{0%{transform:scale(1,1) skewX(0)}50%{transform:scale(.96,1.04) skewX(-2deg)}100%{transform:scale(1.03,.95) skewX(2deg)}}
+@keyframes flicker2{0%{transform:scale(1,1)}100%{transform:scale(.88,1.1) translateY(-1px)}}
+@keyframes shimmer{to{transform:translateX(120%)}}
+@keyframes burst{0%{opacity:1;transform:translate(0,0) rotate(0)}100%{opacity:0;transform:translate(var(--x),var(--y)) rotate(var(--r))}}
+@keyframes reveal{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes grow{from{transform:scaleY(0)}}
+@keyframes growx{from{transform:scaleX(0)}}
+@keyframes fade{from{opacity:0}}
+@keyframes up{from{transform:translateY(100%)}}
+@keyframes pop{0%{transform:scale(1)}40%{transform:scale(1.6) rotate(-12deg)}100%{transform:scale(1)}}
+@keyframes toast{0%{opacity:0;transform:translate(-50%,-8px)}12%,82%{opacity:1;transform:translate(-50%,0)}100%{opacity:0;transform:translate(-50%,-8px)}}
+
+/* entry animations off for re-renders inside edit mode */
+.no-anim .reveal,.no-anim .grow,.no-anim .fade,.no-anim .track i,.no-anim .confetti i,.no-anim .gain::after{animation:none!important}
+.no-anim .ring-fg{transition:none}
+
+/* reduced motion: system setting, and the panel toggle that mirrors it */
+@media (prefers-reduced-motion:reduce){
+  .screen *,.screen *::before,.screen *::after{animation:none!important;transition:none!important}
+}
+.screen.reduce *,.screen.reduce *::before,.screen.reduce *::after{animation:none!important;transition:none!important}
+</style>
+</head>
+<body>
+<div class="stage">
+  <aside class="panel">
+    <div>
+      <h1>Home, redesigned</h1>
+      <p>Clickable mockup. Tap widgets, the Start button and the reactions. Use Edit (top right) to rearrange.</p>
+    </div>
+    <div class="ctl">
+      <div class="ctl-row">Theme <div class="seg" data-ctl="theme"><button data-v="dark" aria-pressed="true">Dark</button><button data-v="light">Light</button></div></div>
+      <div class="ctl-row">Cycle <div class="seg" data-ctl="cycle"><button data-v="1" aria-pressed="true">Active</button><button data-v="0">None</button></div></div>
+      <div class="ctl-row">Friends <div class="seg" data-ctl="friends"><button data-v="1" aria-pressed="true">Some</button><button data-v="0">None</button></div></div>
+      <div class="ctl-row">Motion <div class="seg" data-ctl="motion"><button data-v="full" aria-pressed="true">Full</button><button data-v="reduce">Reduced</button></div></div>
+      <button class="pbtn" id="replay">Replay load animations</button>
+      <button class="pbtn" id="toggleEdit">Toggle edit mode</button>
+    </div>
+    <div class="ctl">
+      <div class="ctl-row">Accent colours</div>
+      <div class="swatches">
+        <span class="sw"><i style="background:#4d8dff"></i>Training</span>
+        <span class="sw"><i style="background:#f7bd45"></i>PRs</span>
+        <span class="sw"><i style="background:#3ed48a"></i>Recovery</span>
+        <span class="sw"><i style="background:#a983ff"></i>Social</span>
+        <span class="sw"><i style="background:#ff8a3d"></i>Streak</span>
+      </div>
+      <p>Tokens and per-widget Tailwind notes are in the comment block at the top of this file.</p>
+    </div>
+  </aside>
+
+  <div class="device">
+    <div class="screen" id="screen" data-theme="dark">
+      <div class="status"><span>9:41</span><span class="island"></span>
+        <span class="status-r">
+          <svg viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5" width="3" height="7" rx="1"/><rect x="10" y="2.5" width="3" height="9.5" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+          <svg viewBox="0 0 26 12" style="width:26px"><rect x=".5" y=".5" width="22" height="11" rx="3.5" fill="none" stroke="currentColor" opacity=".4"/><rect x="2" y="2" width="16" height="8" rx="2" fill="currentColor"/><rect x="23.5" y="4" width="1.5" height="4" rx=".75" fill="currentColor" opacity=".4"/></svg>
+        </span>
+      </div>
+      <header class="header">
+        <div>
+          <div class="eyebrow">Friday, 13 November</div>
+          <h1 class="title">LogEveryLift</h1>
+        </div>
+        <div class="hbtns" id="hbtns"></div>
+      </header>
+      <main class="scroll" id="scroll">
+        <div class="edit-hint">Drag to reorder. Tap a widget to change its size.</div>
+        <div class="grid" id="grid"></div>
+      </main>
+      <div class="pin" id="pin" hidden><button class="btn" data-act="toast" data-msg="Empty workout started"><span style="width:18px;height:18px;display:inline-flex" data-icon="play"></span>Start a Workout</button></div>
+      <nav class="nav">
+        <button class="on" data-act="toast" data-msg="You are on Workout"><span data-icon="dumbbell"></span>Workout</button>
+        <button data-act="toast" data-msg="Opens Cycles"><span data-icon="cycle"></span>Cycles</button>
+        <button data-act="toast" data-msg="Opens Programs"><span data-icon="list"></span>Programs</button>
+        <button data-act="toast" data-msg="Opens More"><span data-icon="more"></span>More</button>
+      </nav>
+      <div class="home-ind"></div>
+      <div id="layer"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ---------------- icons ---------------- */
+const S = (p, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${p}</svg>`;
+const I = {
+  play: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5.2v13.6a1 1 0 0 0 1.5.86l11-6.8a1 1 0 0 0 0-1.72l-11-6.8A1 1 0 0 0 7 5.2z"/></svg>',
+  check: S('<path d="M5 12.5l4.5 4.5L19 7.5"/>', 'stroke-width="3"'),
+  x: S('<path d="M7 7l10 10M17 7L7 17"/>', 'stroke-width="3"'),
+  minus: S('<path d="M6 12h12"/>', 'stroke-width="3.2"'),
+  plus: S('<path d="M12 5v14M5 12h14"/>', 'stroke-width="2.4"'),
+  chev: S('<path d="M9 6l6 6-6 6"/>', 'stroke-width="2.4"'),
+  up: S('<path d="M12 19V5M6 11l6-6 6 6"/>', 'stroke-width="2.6"'),
+  down: S('<path d="M12 5v14M6 13l6 6 6-6"/>', 'stroke-width="2.6"'),
+  trophy: S('<path d="M8 4h8v5a4 4 0 0 1-8 0V4z"/><path d="M8 6H5a3 3 0 0 0 3.5 4M16 6h3a3 3 0 0 1-3.5 4M12 13v3M9 20h6M10 16h4v4h-4z"/>'),
+  heart: S('<path d="M3 12h4l2-4 3 8 2-4h7"/>'),
+  scale: S('<rect x="4" y="4" width="16" height="16" rx="5"/><path d="M9 9.5a4 4 0 0 1 6 0M12 12l1.5-2.5"/>'),
+  users: S('<circle cx="9" cy="8.5" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0M16 5.6a3 3 0 0 1 0 5.8M17.5 14.2A5.5 5.5 0 0 1 20.5 19"/>'),
+  bolt: S('<path d="M13 3L5 14h6l-1 7 8-11h-6l1-7z"/>'),
+  cal: S('<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/>'),
+  sparkle: S('<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18"/>'),
+  flag: S('<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>'),
+  layers: S('<path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/>'),
+  swap: S('<path d="M7 7h12l-3-3M17 17H5l3 3"/>'),
+  dumbbell: S('<path d="M6.5 7v10M17.5 7v10M3.5 9.5v5M20.5 9.5v5M6.5 12h11"/>', 'stroke-width="2.2"'),
+  cycle: S('<path d="M20 12a8 8 0 0 1-14 5.3M4 12a8 8 0 0 1 14-5.3"/><path d="M18 3v3.7h-3.7M6 21v-3.7h3.7"/>'),
+  list: S('<path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.5" cy="6.5" r=".6"/><circle cx="4.5" cy="12" r=".6"/><circle cx="4.5" cy="17.5" r=".6"/>', 'stroke-width="2.2"'),
+  more: '<svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>',
+};
+const FLAME = `<svg class="flame" viewBox="0 0 32 40"><defs><linearGradient id="flg" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff4d1f"/><stop offset=".6" stop-color="#ff8a2e"/><stop offset="1" stop-color="#ffc24a"/></linearGradient></defs>
+  <path class="fo" d="M16 1.5c1.2 6.5 9.5 10.5 9.5 20a9.5 9.5 0 0 1-19 0c0-4.6 2.2-7.8 4.6-10 0 3.4 1.2 5.6 3.4 6.8C13.6 12 14.6 6.6 16 1.5z" fill="url(#flg)"/>
+  <path class="fi" d="M16 19c3.4 3 5.6 5.6 5.6 9.4a5.6 5.6 0 0 1-11.2 0c0-3 1.8-5 3.2-6.2 0 2 .9 3.2 2.2 3.4-.2-2.2-.2-4.4.2-6.6z" fill="#ffe7a3"/></svg>`;
+
+/* ---------------- sample data ---------------- */
+const weightSeries = [83.1,83.0,83.2,82.9,83.0,82.8,82.9,83.0,82.7,82.8,82.9,82.6,82.7,82.8,82.6,82.5,82.7,82.6,82.4,82.6,82.5,82.6,82.4,82.3,82.5,82.4,82.3,82.5,82.4,82.4];
+const loadSeries = [62,0,48,70,0,55,0,66,0,52,74,0,58,0,71,0,60,80,0,64,0,0,68,0,72,59,0,0];
+const PRS = [
+  {lift:'Bench Press', w:'82.5', d:'+2.5 kg', when:'2 days ago'},
+  {lift:'Romanian Deadlift', w:'120', d:'+5 kg', when:'Mon'},
+  {lift:'Pull-up', w:'+15', d:'+2.5 kg', when:'Last week'},
+  {lift:'Overhead Press', w:'50', d:'+2.5 kg', when:'Last week'},
+];
+const FRIENDS = [
+  {n:'Ola', i:'ON', g:'#8b5cf6,#ec4899', t:'finished <b>Upper Body</b>', s:'12 sets · 9,450 kg · 2h ago', e:'🔥', c:3, badge:'💪'},
+  {n:'Ingrid', i:'IS', g:'#06b6d4,#3b82f6', t:'set a PR on <b>Squat</b>', s:'100 kg · +5 kg · 5h ago', e:'🏆', c:7, badge:'🏆'},
+  {n:'Jonas', i:'JB', g:'#f97316,#eab308', t:'ran <b>10.2 km</b>', s:'52:10 · 5:07 /km · yesterday', e:'👏', c:2, badge:'🏃'},
+  {n:'Sara', i:'SL', g:'#22c55e,#14b8a6', t:'finished <b>Legs</b>', s:'18 sets · 14,200 kg · yesterday', e:'🔥', c:5, badge:'💪'},
+];
+const WEEK = [
+  {d:'M', s:'done'}, {d:'T', s:'done'}, {d:'W', s:'rest'}, {d:'T', s:'missed'},
+  {d:'F', s:'today'}, {d:'S', s:'planned'}, {d:'S', s:'rest'},
+];
+
+/* ---------------- state ---------------- */
+const state = {
+  cycle: true, friends: true, edit: false, animate: true,
+  layout: [
+    {id:'today', size:'l'}, {id:'week', size:'m'}, {id:'streak', size:'s'}, {id:'prs', size:'s'},
+    {id:'readiness', size:'s'}, {id:'weight', size:'s'}, {id:'friends', size:'m'}, {id:'load', size:'m'},
+  ],
+  reacted: {},
+};
+
+/* ---------------- helpers ---------------- */
+function ring(size, stroke, pct, color, inner) {
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r;
+  return `<div class="ringwrap" style="width:${size}px;height:${size}px">
+    <svg width="${size}" height="${size}"><circle class="ring-bg" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke-width="${stroke}"/>
+    <circle class="ring-fg" cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${color}" stroke-width="${stroke}" stroke-linecap="round"
+      stroke-dasharray="${c}" stroke-dashoffset="${c*(1-pct)}" data-c="${c}" data-off="${c*(1-pct)}"/></svg>
+    <div class="in">${inner}</div></div>`;
+}
+const count = (v, dec = 0) => `<span data-count="${v}" data-dec="${dec}">${Number(v).toFixed(dec)}</span>`;
+function sparkline(vals, accVar, h = 46) {
+  const min = Math.min(...vals) - .1, max = Math.max(...vals) + .1, n = vals.length;
+  const pts = vals.map((v, i) => [(i / (n - 1)) * 100, h - ((v - min) / (max - min)) * (h - 6) - 3]);
+  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(2) + ' ' + p[1].toFixed(2)).join(' ');
+  const id = 'sg' + Math.random().toString(36).slice(2, 7);
+  const endY = (pts[n - 1][1] / h) * 100;
+  return `<div class="spark" style="height:${h}px"><svg class="reveal" viewBox="0 0 100 ${h}" preserveAspectRatio="none">
+    <defs><linearGradient id="${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(${accVar})" stop-opacity=".35"/><stop offset="1" stop-color="var(${accVar})" stop-opacity="0"/></linearGradient></defs>
+    <path class="fade" d="${line} L100 ${h} L0 ${h} Z" fill="url(#${id})"/>
+    <path d="${line}" fill="none" stroke="var(${accVar})" stroke-width="2.2" vector-effect="non-scaling-stroke" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg><span class="end" style="top:${endY}%"></span></div>`;
+}
+const label = (icon, text, more) => `<div class="lbl">${I[icon]}${text}${more ? `<span class="more">${more}${I.chev}</span>` : ''}</div>`;
+
+/* ---------------- widgets ---------------- */
+const W = {
+  today: {
+    name: 'Today', desc: 'Your session and the Start button', sizes: ['s','m','l'], fixed: true, dest: 'Starts Upper Body A',
+    render(size) {
+      if (!state.cycle) return todayEmpty(size);
+      const cyc = `<div class="cyc"><span>Hypertrophy Block</span><span>Week 4 of 8</span></div>
+        <div class="segs">${[1,1,1,2,0,0,0,0].map(s => `<i class="${s === 1 ? 'done' : s === 2 ? 'now' : ''}"></i>`).join('')}</div>`;
+      const head = `<div class="kick">Today · Day 2</div><h2>Upper Body A</h2>
+        <div class="meta">6 exercises · 24 sets · about 55 min</div>`;
+      const start = `<button class="start" data-act="toast" data-msg="Starting Upper Body A">${I.play}Start Workout</button>`;
+      if (size === 's') return `<div class="w hero s"><div class="kick">Today</div><h2 style="font-size:20px">Upper Body A</h2><div class="meta" style="font-size:12px">6 exercises · 55 min</div><div class="spacer"></div>${start.replace('Start Workout','Start')}</div>`;
+      if (size === 'm') return `<div class="w hero">${head}<div class="spacer" style="min-height:12px"></div>
+        <div style="display:flex;gap:10px;align-items:center"><div style="flex:1">${start}</div>
+        <button class="ghost" style="margin:0;padding:0 8px" data-act="toast" data-msg="Pick a different program">${I.swap.replace('<svg','<svg style="width:20px;height:20px"')}</button></div></div>`;
+      return `<div class="w hero">${cyc}${head}
+        <span class="tip">${I.bolt}Bench Press: try <b>82.5 kg</b> today</span>
+        <div class="exs">
+          <div class="ex"><span class="ex-n">1</span><div class="ex-t"><b>Bench Press</b><span>4 × 6–8 · 80 kg</span></div><span class="ex-up">↑ 82.5</span></div>
+          <div class="ex"><span class="ex-n">2</span><div class="ex-t"><b>Barbell Row</b><span>4 × 8 · 70 kg</span></div></div>
+          <div class="ex"><span class="ex-n">3</span><div class="ex-t"><b>Overhead Press</b><span>3 × 8 · 47.5 kg</span></div></div>
+          <div class="ex-more">+ 3 more: Pull-up, Lateral Raise, Triceps Pushdown</div>
+        </div>
+        <div class="spacer"></div>${start}
+        <button class="ghost" data-act="toast" data-msg="Pick a different program">Different program</button></div>`;
+    }
+  },
+  week: {
+    name: 'Week', desc: 'Days done and your weekly goal', sizes: ['m','l'], acc: 'acc-train', dest: 'Opens History',
+    render(size) {
+      const days = state.cycle ? WEEK : WEEK.map(d => ({d: d.d, s: d.s === 'done' ? 'done' : d.s === 'today' ? 'today' : 'rest'}));
+      const goal = 4, done = 2;
+      const dots = days.map(d => `<div class="day"><small>${d.d}</small><span class="dot ${d.s}">${d.s === 'done' ? I.check : d.s === 'missed' ? I.x : d.s === 'today' ? '13' : ''}</span></div>`).join('');
+      const r = ring(68, 8, done / goal, 'var(--acc-train)', `<span class="num n22">${count(done)}</span><span class="cap" style="font-size:11px">of ${goal}</span>`);
+      let out = `<div class="w tint acc-train">${label('cal', 'This week', state.cycle ? '2 to go' : '')}
+        <div class="week" style="margin-top:8px">${r}<div class="days">${dots}</div></div>`;
+      if (size === 'l') out += `<div class="legend"><span><i style="background:var(--acc-train)"></i>Done</span><span><i style="background:var(--acc-missed)"></i>Missed</span><span><i style="box-shadow:inset 0 0 0 1.5px var(--muted)"></i>Planned</span></div>
+        <div class="wk-foot"><div class="mini"><div class="cap">Sets</div><div class="num">${count(46)}</div></div><div class="mini"><div class="cap">Volume</div><div class="num">${count(18.2,1)}<span class="unit">t</span></div></div><div class="mini"><div class="cap">Time</div><div class="num">2:05<span class="unit">h</span></div></div></div>`;
+      return out + '</div>';
+    }
+  },
+  streak: {
+    name: 'Streak', desc: 'Weeks in a row on goal', sizes: ['s','m'], acc: 'acc-streak', dest: 'Opens Progress',
+    render(size) {
+      const head = `<div style="display:flex;align-items:flex-end;gap:10px;margin-top:6px">${FLAME}<div><div class="num n44">${count(9)}</div></div></div>`;
+      if (size === 's') return `<div class="w tint acc-streak">${label('bolt', 'Streak')}${head}<div class="spacer"></div>
+        <div class="sub">weeks in a row</div><div class="cap">Best is 14. Keep it lit.</div></div>`;
+      const wk = [3,4,4,3,4,5,4,2];
+      return `<div class="w tint acc-streak">${label('bolt', 'Streak', 'Best 14')}
+        <div style="display:flex;gap:16px;flex:1;align-items:stretch"><div>${head}<div class="sub" style="margin-top:6px">weeks in a row</div></div>
+        <div style="flex:1;display:flex;flex-direction:column"><div class="streak-weeks" style="height:auto;flex:1">${wk.map((v,i) => `<i class="grow" style="--i:${i};height:${v*20}%;${i===7?'opacity:.45':''}"></i>`).join('')}</div>
+        <div class="cap" style="display:flex;justify-content:space-between;margin-top:4px"><span>8 wk ago</span><span>Now</span></div></div></div></div>`;
+    }
+  },
+  prs: {
+    name: 'Recent PRs', desc: 'Your newest personal records', sizes: ['s','m','l'], acc: 'acc-pr', dest: 'Opens Progress, Records',
+    render(size) {
+      const colors = ['#f7bd45','#ff8a3d','#4d8dff','#3ed48a','#a983ff','#ff6b9a'];
+      const conf = Array.from({length: 14}, (_, i) => {
+        const a = (i / 14) * Math.PI * 2, d = 40 + (i % 3) * 18;
+        return `<i style="background:${colors[i % 6]};--x:${(Math.cos(a)*d).toFixed(0)}px;--y:${(Math.sin(a)*d - 10).toFixed(0)}px;--r:${(i*67)%360}deg"></i>`;
+      }).join('');
+      const p = PRS[0];
+      if (size === 's') return `<div class="w tint acc-pr"><div class="confetti">${conf}</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start"><span class="trophy">${I.trophy}</span><span class="cap">${p.when}</span></div>
+        <div class="spacer"></div><div class="cap" style="color:var(--acc-pr);font-weight:600">New PR</div>
+        <div class="sub" style="margin:1px 0 4px">${p.lift}</div>
+        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span class="num n30">${count(82.5,1)}<span class="unit">kg</span></span></div>
+        <div style="margin-top:6px"><span class="gain">${I.up.replace('<svg','<svg style="width:11px;height:11px"')}2.5 kg</span></div></div>`;
+      const rows = PRS.slice(0, size === 'l' ? 4 : 3).map((r, i) => `<div class="pr-row"><span class="trophy" style="width:30px;height:30px;border-radius:10px">${I.trophy.replace('<svg','<svg style="width:16px;height:16px"')}</span>
+        <b>${r.lift}<div class="cap">${r.when}</div></b><span class="num" style="font-size:17px">${r.w}<span class="unit" style="font-size:12px">kg</span></span>${i === 0 ? `<span class="gain">${r.d}</span>` : `<span class="cap" style="min-width:52px;text-align:right">${r.d}</span>`}</div>`).join('');
+      return `<div class="w tint acc-pr"><div class="confetti" style="left:auto;right:60px;top:60px">${conf}</div>${label('trophy', 'Recent PRs', 'All')}<div style="margin-top:6px">${rows}</div></div>`;
+    }
+  },
+  readiness: {
+    name: 'Readiness', desc: 'Garmin score, HRV and resting HR', sizes: ['s','m'], acc: 'acc-rec', dest: 'Opens Garmin, Today',
+    render(size) {
+      const inner = `<span class="num" style="font-size:${size==='s'?24:30}px">${count(68)}</span>`;
+      const bars = (rows) => `<div class="bars">${rows.map(r => `<div class="bar"><span>${r[0]}</span><span class="track"><i class="${r[3]||''}" style="width:${r[1]}%"></i></span><span>${r[2]}</span></div>`).join('')}</div>`;
+      if (size === 's') return `<div class="w tint acc-rec">${label('heart', 'Readiness')}
+        <div style="display:flex;align-items:center;gap:10px;margin:8px 0 10px">${ring(62, 7, .68, 'var(--acc-recovery)', inner)}<div><div class="band">Good</div><div class="cap">Ready to lift</div></div></div>
+        <div class="spacer"></div>${bars([['HRV',72,'58'],['RHR',60,'49']])}</div>`;
+      return `<div class="w tint acc-rec">${label('heart', 'Readiness', 'Garmin')}
+        <div style="display:flex;align-items:center;gap:16px;flex:1;margin-top:6px">${ring(96, 9, .68, 'var(--acc-recovery)', inner + '<span class="band" style="font-size:12px">Good</span>')}
+        <div style="flex:1">${bars([['HRV',72,'58 ms'],['RHR',60,'49 bpm'],['Sleep',81,'7:42'],['Stress',42,'31','warn']])}</div></div></div>`;
+    }
+  },
+  weight: {
+    name: 'Body weight', desc: '30-day trend', sizes: ['s','m'], acc: 'acc-rec', dest: 'Opens Body weight',
+    render(size) {
+      return `<div class="w tint acc-rec">${label('scale', 'Body weight', size === 'm' ? '30 days' : '')}
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:8px"><span class="num n30">${count(82.4,1)}<span class="unit">kg</span></span>${size==='m'?'<span class="cap">Low 82.3 · High 83.2</span>':''}</div>
+        <div class="cap" style="margin-top:4px">↓ 0.7 kg in 30 days</div>
+        <div style="height:10px"></div>${sparkline(weightSeries, '--acc', size === 'm' ? 54 : 44)}</div>`;
+    }
+  },
+  friends: {
+    name: 'Friends', desc: 'What your friends trained', sizes: ['m','l'], acc: 'acc-soc', dest: 'Opens Friends',
+    render(size) {
+      if (!state.friends) return `<div class="w tint acc-soc">${label('users', 'Friends')}
+        <div style="display:flex;align-items:center;gap:14px;flex:1">
+          <div class="avstack"><span class="av" style="background:linear-gradient(135deg,#8b5cf6,#ec4899);font-size:11px">You</span><span class="av ghosty">${I.plus.replace('<svg','<svg style="width:18px;height:18px"')}</span><span class="av ghosty">${I.plus.replace('<svg','<svg style="width:18px;height:18px"')}</span></div>
+          <div style="flex:1"><div class="sub">Train together</div><div class="cap" style="margin:2px 0 8px">See each other's sessions and cheer on PRs.</div>
+          <button class="btn soft" data-act="toast" data-msg="Share sheet with your invite link">Invite a friend</button></div></div></div>`;
+      const list = FRIENDS.slice(0, size === 'l' ? 4 : 2).map((f, i) => {
+        const mine = state.reacted[i];
+        return `<div class="fr"><span class="av" style="background:linear-gradient(135deg,${f.g})">${f.i}<span class="badge">${f.badge}</span></span>
+          <div class="fr-t"><div><b>${f.n}</b> ${f.t}</div><div class="cap">${f.s}</div></div>
+          <button class="react ${mine ? 'mine' : ''}" data-act="react" data-i="${i}" aria-pressed="${!!mine}" aria-label="React to ${f.n}"><span class="e">${f.e}</span>${f.c + (mine ? 1 : 0)}</button></div>`;
+      }).join('');
+      return `<div class="w tint acc-soc">${label('users', 'Friends', 'See all')}<div class="feed">${list}</div></div>`;
+    }
+  },
+  load: {
+    name: 'Training load', desc: 'Load and form over 4 weeks', sizes: ['m','l'], acc: 'acc-train', dest: 'Opens Progress, Load',
+    render(size) {
+      const H = 100, n = loadSeries.length, bw = 100 / n;
+      const bars = loadSeries.map((v, i) => v ? `<rect class="grow" style="--i:${i}" x="${(i*bw+bw*.2).toFixed(2)}" y="${H - v}" width="${(bw*.6).toFixed(2)}" height="${v}" rx=".8" fill="var(--acc-train)" opacity="${i >= n-7 ? .9 : .38}"/>` : '').join('');
+      const avg = loadSeries.map((_, i) => { const s = loadSeries.slice(Math.max(0, i-6), i+1); return s.reduce((a,b)=>a+b,0) / 7 * 1.6; });
+      const line = avg.map((v, i) => (i ? 'L' : 'M') + (i*bw+bw/2).toFixed(2) + ' ' + (H - v).toFixed(2)).join(' ');
+      const svg = `<svg class="reveal" viewBox="0 0 100 ${H}" preserveAspectRatio="none">
+        <rect x="0" y="${H-70}" width="100" height="25" fill="var(--acc-recovery)" opacity=".1"/>
+        <line x1="0" x2="100" y1="${H-70}" y2="${H-70}" stroke="var(--acc-recovery)" stroke-opacity=".35" stroke-dasharray="1.5 1.5" vector-effect="non-scaling-stroke"/>
+        <line x1="0" x2="100" y1="${H-45}" y2="${H-45}" stroke="var(--acc-recovery)" stroke-opacity=".35" stroke-dasharray="1.5 1.5" vector-effect="non-scaling-stroke"/>
+        ${bars}<path d="${line}" fill="none" stroke="var(--fg)" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+      return `<div class="w tint acc-train">${label('layers', 'Training load', '4 weeks')}
+        <div style="display:flex;align-items:center;gap:10px;margin-top:8px"><span class="num n30">+${count(6)}</span><div><div class="sub" style="font-size:13px">Form · Fresh</div><div class="cap">Load ${count(412)} this week</div></div><span style="margin-left:auto" class="pill"><i></i>Productive</span></div>
+        <div class="chart ${size==='l'?'tall':''}">${svg}</div>
+        ${size==='l'?'<div class="legend"><span><i style="background:var(--acc-train)"></i>Daily load</span><span><i style="background:var(--fg)"></i>7-day trend</span><span><i style="background:var(--acc-recovery);opacity:.5"></i>Sweet spot</span></div>':''}</div>`;
+    }
+  },
+  volume: {
+    name: 'Weekly sets', desc: 'Sets this week vs target', sizes: ['s'], acc: 'acc-train', dest: 'Opens Progress, Volume',
+    render() {
+      const m = [['Chest',10,12],['Back',12,14],['Legs',6,16],['Arms',8,10]];
+      return `<div class="w tint acc-train">${label('chart' in I ? 'chart' : 'layers', 'Weekly sets')}
+        <div class="num n30" style="margin-top:8px">${count(38)}<span class="unit">/ 60</span></div><div class="spacer"></div>
+        <div class="bars">${m.map(r => `<div class="bar" style="grid-template-columns:38px 1fr"><span>${r[0]}</span><span class="track"><i style="width:${r[1]/r[2]*100}%;background:var(--acc-train)"></i></span></div>`).join('')}</div></div>`;
+    }
+  },
+  race: {
+    name: 'Race countdown', desc: 'Days to your next race', sizes: ['s'], acc: 'acc-streak', dest: 'Opens Season',
+    render() {
+      return `<div class="w tint acc-streak">${label('flag', 'Next race')}<div class="spacer"></div>
+        <div class="num n44">${count(23)}</div><div class="sub">days to go</div><div class="cap">Oslo Half · 6 Dec</div></div>`;
+    }
+  },
+};
+
+function todayEmpty(size) {
+  const art = `<svg width="${size === 'l' ? 132 : 84}" viewBox="0 0 132 96" fill="none" aria-hidden="true">
+    <rect x="18" y="14" width="96" height="74" rx="16" fill="var(--widget-2)"/>
+    <rect x="18" y="14" width="96" height="20" rx="10" fill="var(--acc-train)" opacity=".9"/>
+    <rect x="18" y="26" width="96" height="8" fill="var(--acc-train)" opacity=".9"/>
+    ${[0,1,2,3].map(c => [0,1].map(r => `<rect x="${30+c*20}" y="${44+r*20}" width="12" height="12" rx="4" fill="${(c+r*4) < 3 ? 'var(--acc-train)' : 'color-mix(in oklab,var(--muted) 30%,transparent)'}" opacity="${(c+r*4)<3?.85:1}"/>`).join('')).join('')}
+    <circle cx="112" cy="16" r="13" fill="var(--acc-pr)"/><path d="M112 9.5v13M105.5 16h13" stroke="#1a1a1a" stroke-width="2.6" stroke-linecap="round"/>
+    <path d="M10 60l3 3M8 70h4" stroke="var(--acc-social)" stroke-width="2.4" stroke-linecap="round"/></svg>`;
+  if (size === 's') return `<div class="w empty-hero" style="padding:12px">${art}<div class="sub" style="margin:8px 0">Plan your first block</div><button class="btn full" style="min-height:44px;font-size:14px" data-act="toast" data-msg="Opens cycle setup">Plan</button></div>`;
+  return `<div class="w empty-hero">${art}<h2>Plan your first block</h2>
+    <p>Pick a program and the days you train. We plan your weeks and suggest the next weight.</p>
+    <button class="btn" data-act="toast" data-msg="Opens cycle setup">${I.sparkle.replace('<svg','<svg style="width:18px;height:18px"')}Plan a cycle</button>
+    ${size === 'l' ? '<button class="link" data-act="toast" data-msg="Opens Programs">Browse programs</button>' : ''}</div>`;
+}
+
+/* ---------------- render ---------------- */
+const screen = document.getElementById('screen');
+const grid = document.getElementById('grid');
+const reduceMQ = matchMedia('(prefers-reduced-motion: reduce)');
+const reduced = () => reduceMQ.matches || screen.classList.contains('reduce');
+
+function render({anim = false} = {}) {
+  grid.classList.toggle('no-anim', !anim);
+  grid.innerHTML = state.layout.map(({id, size}) => {
+    const w = W[id];
+    return `<div class="cell ${size}" data-id="${id}" ${state.edit ? 'draggable="true"' : ''}>
+      ${w.fixed ? '' : `<button class="rm" data-act="remove" aria-label="Remove ${w.name}">${I.minus}</button>`}
+      ${w.render(size).replace('class="w', `data-acc class="w`)}
+      <span class="size-tag">${size.toUpperCase()}</span></div>`;
+  }).join('');
+  grid.classList.toggle('editing', state.edit);
+  screen.classList.toggle('editing-hint', state.edit);
+  const showPin = !state.cycle && !state.edit;
+  document.getElementById('pin').hidden = !showPin;
+  screen.classList.toggle('has-pin', showPin);
+  document.getElementById('hbtns').innerHTML = state.edit
+    ? `<button class="hbtn round" data-act="gallery" aria-label="Add widget">${I.plus}</button><button class="hbtn primary" data-act="edit">Done</button>`
+    : `<button class="hbtn" data-act="edit">Edit</button>`;
+  hydrateIcons();
+  if (anim) runEntry(grid);
+}
+
+function runEntry(root) {
+  const r = reduced();
+  root.querySelectorAll('[data-count]').forEach(el => {
+    const to = parseFloat(el.dataset.count), dec = +el.dataset.dec;
+    if (r) { el.textContent = to.toFixed(dec); return; }
+    const t0 = performance.now(), dur = 900;
+    const step = t => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = (to * e).toFixed(dec); if (p < 1) requestAnimationFrame(step); };
+    el.textContent = (0).toFixed(dec); requestAnimationFrame(step);
+  });
+  if (r) return;
+  const rings = root.querySelectorAll('.ring-fg');
+  rings.forEach(c => { c.style.transition = 'none'; c.style.strokeDashoffset = c.dataset.c; });
+  root.getBoundingClientRect();
+  requestAnimationFrame(() => rings.forEach(c => { c.style.transition = ''; c.style.strokeDashoffset = c.dataset.off; }));
+}
+
+function hydrateIcons() {
+  document.querySelectorAll('[data-icon]').forEach(el => { if (!el.innerHTML) el.innerHTML = I[el.dataset.icon]; });
+}
+
+/* ---------------- sheets + toast ---------------- */
+const layer = document.getElementById('layer');
+function closeSheet() { layer.innerHTML = ''; }
+function toast(msg) {
+  const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg;
+  screen.querySelectorAll('.toast').forEach(x => x.remove()); screen.appendChild(t);
+  setTimeout(() => t.remove(), reduced() ? 1600 : 2000);
+}
+const glyph = s => s === 's' ? '<i class="on"></i><i></i>' : s === 'm' ? '<i class="on span2"></i>' : '<i class="on span2 tall"></i>';
+
+function sizeSheet(id) {
+  const w = W[id], idx = state.layout.findIndex(x => x.id === id), cur = state.layout[idx].size;
+  layer.innerHTML = `<div class="backdrop" data-act="close"></div><div class="sheet" role="dialog" aria-label="${w.name} options">
+    <div class="grab"></div><div class="sheet-head"><h3>${w.name}</h3><button class="hbtn" data-act="close">Done</button></div>
+    <div class="cap" style="margin-bottom:8px">Size</div>
+    <div class="sizes">${['s','m','l'].map(s => `<button class="sz" data-act="size" data-id="${id}" data-s="${s}" aria-pressed="${s===cur}" ${w.sizes.includes(s)?'':'disabled'}>
+      <span class="glyph">${glyph(s)}</span>${{s:'Small',m:'Medium',l:'Large'}[s]}${w.sizes.includes(s)?'':'<span class="cap" style="font-size:10px">Not offered</span>'}</button>`).join('')}</div>
+    <div class="rowbtns"><button class="sbtn" data-act="move" data-id="${id}" data-d="-1" ${idx===0?'disabled':''}>${I.up.replace('<svg','<svg style="width:16px;height:16px"')}Move up</button>
+    <button class="sbtn" data-act="move" data-id="${id}" data-d="1" ${idx===state.layout.length-1?'disabled':''}>${I.down.replace('<svg','<svg style="width:16px;height:16px"')}Move down</button></div>
+    ${w.fixed ? '<div class="cap" style="text-align:center;padding:6px">Today is always on your home. You can move and resize it.</div>' : `<button class="sbtn danger" data-act="remove" data-id="${id}">Remove widget</button>`}</div>`;
+}
+
+function gallery() {
+  const shown = new Set(state.layout.map(x => x.id));
+  const items = Object.keys(W).filter(id => !shown.has(id));
+  const body = items.length ? `<div class="gal">${items.map(id => {
+    const w = W[id], s = w.sizes[0], width = s === 's' ? 171 : 358, height = s === 'l' ? 340 : 164;
+    const scale = Math.min(150 / width, 104 / height), left = (150 - width * scale) / 2;
+    return `<div class="gi"><div class="prev"><div style="width:${width}px;height:${height}px;left:${left}px;top:4px;transform:scale(${scale})"><div class="cell ${s}" style="height:100%">${w.render(s)}</div></div></div>
+      <div><b>${w.name}</b><div class="cap">${w.desc}</div></div><button class="btn full" data-act="add" data-id="${id}">Add</button></div>`;
+  }).join('')}</div>` : '<p class="cap" style="text-align:center;padding:24px 0">Every widget is on your home.</p>';
+  layer.innerHTML = `<div class="backdrop" data-act="close"></div><div class="sheet" role="dialog" aria-label="Add a widget">
+    <div class="grab"></div><div class="sheet-head"><h3>Add a widget</h3><button class="hbtn" data-act="close">Close</button></div>${body}</div>`;
+}
+
+/* ---------------- events ---------------- */
+screen.addEventListener('click', e => {
+  const a = e.target.closest('[data-act]');
+  const cell = e.target.closest('.cell');
+  if (a) {
+    const act = a.dataset.act, id = a.dataset.id || cell?.dataset.id;
+    if (act === 'edit') { state.edit = !state.edit; closeSheet(); render({anim: !state.edit}); return; }
+    if (act === 'gallery') return gallery();
+    if (act === 'close') return closeSheet();
+    if (act === 'toast') { if (!state.edit) toast(a.dataset.msg); return; }
+    if (act === 'remove') { state.layout = state.layout.filter(x => x.id !== id); closeSheet(); render(); return; }
+    if (act === 'add') { state.layout.push({id, size: W[id].sizes.includes('s') ? 's' : W[id].sizes[0]}); closeSheet(); render(); toast(`${W[id].name} added`); return; }
+    if (act === 'size') { state.layout.find(x => x.id === id).size = a.dataset.s; render(); sizeSheet(id); return; }
+    if (act === 'move') { const i = state.layout.findIndex(x => x.id === id), j = i + +a.dataset.d;
+      [state.layout[i], state.layout[j]] = [state.layout[j], state.layout[i]]; render(); sizeSheet(id); return; }
+    if (act === 'react') { const i = a.dataset.i; state.reacted[i] = !state.reacted[i];
+      a.classList.toggle('mine', state.reacted[i]); a.setAttribute('aria-pressed', state.reacted[i]);
+      a.lastChild.textContent = FRIENDS[i].c + (state.reacted[i] ? 1 : 0);
+      a.classList.remove('pop'); void a.offsetWidth; if (state.reacted[i]) a.classList.add('pop'); return; }
+  }
+  if (cell && grid.contains(cell)) {
+    if (state.edit) sizeSheet(cell.dataset.id);
+    else toast(W[cell.dataset.id].dest);
+  }
+});
+
+let dragId = null;
+grid.addEventListener('dragstart', e => { const c = e.target.closest('.cell'); if (!c) return; dragId = c.dataset.id; c.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
+grid.addEventListener('dragend', () => { dragId = null; grid.querySelectorAll('.cell').forEach(c => c.classList.remove('dragging', 'drag-over')); });
+grid.addEventListener('dragover', e => { const c = e.target.closest('.cell'); if (!dragId || !c) return; e.preventDefault();
+  grid.querySelectorAll('.drag-over').forEach(x => x !== c && x.classList.remove('drag-over')); if (c.dataset.id !== dragId) c.classList.add('drag-over'); });
+grid.addEventListener('drop', e => { const c = e.target.closest('.cell'); if (!dragId || !c) return; e.preventDefault();
+  const from = state.layout.findIndex(x => x.id === dragId), item = state.layout.splice(from, 1)[0];
+  const to = state.layout.findIndex(x => x.id === c.dataset.id);
+  state.layout.splice(from <= to ? to + 1 : to, 0, item); dragId = null; render(); });
+
+/* panel controls */
+document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  seg.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b));
+  const v = b.dataset.v, k = seg.dataset.ctl;
+  if (k === 'theme') { screen.dataset.theme = v; document.documentElement.dataset.theme = v; return; }
+  if (k === 'motion') { screen.classList.toggle('reduce', v === 'reduce'); render({anim: true}); return; }
+  if (k === 'cycle') state.cycle = v === '1';
+  if (k === 'friends') state.friends = v === '1';
+  closeSheet(); render({anim: !state.edit});
+}));
+document.getElementById('replay').onclick = () => { state.edit = false; closeSheet(); render({anim: true}); };
+document.getElementById('toggleEdit').onclick = () => { state.edit = !state.edit; closeSheet(); render({anim: !state.edit}); };
+document.documentElement.dataset.theme = 'dark';
+
+render({anim: true});
+</script>
+</body>
+</html>
