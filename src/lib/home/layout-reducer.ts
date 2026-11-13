@@ -21,7 +21,9 @@ export type EditAction =
   | { type: "show"; id: WidgetId }
   | { type: "add"; id: WidgetId }
   | { type: "reset"; items: ResolvedItem[] }
-  | { type: "undo" };
+  | { type: "undo" }
+  /** Start over from these items with an empty undo stack (entering edit mode, Cancel). */
+  | { type: "load"; items: ResolvedItem[] };
 
 export function initEdit(items: ResolvedItem[]): EditState {
   return { items, past: [] };
@@ -99,6 +101,8 @@ export function editReducer(state: EditState, action: EditAction): EditState {
     }
     case "reset":
       return commit(state, action.items);
+    case "load":
+      return initEdit(action.items);
     case "undo": {
       const prev = state.past.at(-1);
       return prev ? { items: prev, past: state.past.slice(0, -1) } : state;

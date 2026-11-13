@@ -8,8 +8,9 @@ import { closeStaleOpenSessions } from "@/lib/actions/workout-sessions";
 import { needsTermsConsent } from "@/lib/consent";
 import { garminAllowed } from "@/lib/garmin/access";
 import { activeCycle, loadHomeCore, type HomeContext } from "@/lib/home/core";
-import { parseStoredLayout, resolveLayout } from "@/lib/home/layout";
+import { defaultLayout, layoutKey, parseStoredLayout, resolveLayout } from "@/lib/home/layout";
 import { widgetDef, type WidgetId } from "@/lib/home/widgets";
+import type { WidgetSize } from "@/lib/home/widgets/types";
 import { getUserSettings } from "@/lib/user-settings";
 import { requireSession } from "@/lib/utils/session";
 import { todayIn } from "@/lib/utils/user-date";
@@ -43,7 +44,8 @@ export default async function Home() {
   // -- reads (the week read in here can still make a cycle's sessions) --
   const core = await loadHomeCore(session, settings, today, cycleResult);
   const audience = { endurance: core.enduranceEnabled, garmin: garminAllowed(session.user.role) };
-  const items = resolveLayout(parseStoredLayout(settings.homeLayout, session.user.id), audience);
+  const stored = parseStoredLayout(settings.homeLayout, session.user.id);
+  const items = resolveLayout(stored, audience);
   const ctx: HomeContext = { userId: session.user.id, role: session.user.role ?? null, today: core.todayStr };
 
   // Only visible widgets render; a hidden streamed widget runs no query.
@@ -58,17 +60,29 @@ export default async function Home() {
         : renderStreamedWidget(item.id, r, ctx, item.size, item.settings);
   }
 
+  // Static previews for edit mode and the gallery: every size of every widget
+  // this user can have. No data, no query.
+  const previews: Partial<Record<WidgetId, Partial<Record<WidgetSize, ReactNode>>>> = {};
+  for (const item of items) {
+    const r = renderers[item.id];
+    if (r) previews[item.id] = Object.fromEntries(widgetDef(item.id).sizes.map((size) => [size, r.Preview({ size })]));
+  }
+
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <HomeGrid
+        key={`${layoutKey(items)}@${stored?.updatedAt ?? "default"}`}
         items={items}
+        defaultItems={defaultLayout(audience)}
+        baseUpdatedAt={stored?.updatedAt ?? null}
         title={slots.title}
         slots={slots}
+        previews={previews}
         topNotices={<Notices slot="top" core={core} />}
         afterTraining={<Notices slot="afterTraining" core={core} />}
+        endNotices={<Notices slot="end" core={core} />}
         startBar={core.info ? null : <StartBar />}
       />
-      <Notices slot="end" core={core} />
     </div>
   );
 }
