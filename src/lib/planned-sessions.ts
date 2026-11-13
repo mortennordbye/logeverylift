@@ -1325,7 +1325,7 @@ export async function skipAutoDay(
   const statusOn = toDateStr(await userToday(ctx.userId));
   await planWrite(ctx, async (w) => {
     const rows = await w.tx
-      .select({ id: plannedSessions.id })
+      .select({ id: plannedSessions.id, cycleId: plannedSessions.cycleId })
       .from(plannedSessions)
       .where(
         and(
@@ -1338,6 +1338,11 @@ export async function skipAutoDay(
         ),
       )
       .orderBy(asc(plannedSessions.id));
+    // Cycles first, as every plan write and the e2e reset lock them: holding
+    // the planned session and the auto row while waiting on the cycle could
+    // deadlock with a writer that holds the cycle and then deletes the user's
+    // sessions (review item 2).
+    await lockCycleRows(w.tx, rows.map((r) => r.cycleId).filter((id): id is number => id != null));
     for (const r of rows) {
       await w.touch({ type: "planned_session", id: r.id });
       await w.tx.update(plannedSessions).set({ status: "skipped", statusOn, touchedAt: new Date(), updatedAt: new Date() }).where(eq(plannedSessions.id, r.id));

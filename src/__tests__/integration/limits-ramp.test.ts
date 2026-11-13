@@ -114,7 +114,7 @@ describe("weekly_load_ramp", () => {
     const q = await dailyRides(fresh);
     const none = await longer(fresh, q);
     expect(none.isError, none.raw).toBe(false);
-    expect(none.data.limits.notChecked).toContainEqual(expect.objectContaining({ rule: "weekly_load_ramp", why: expect.stringContaining("no training load yet") }));
+    expect(none.data.limits.notChecked).toContainEqual(expect.objectContaining({ rule: "weekly_load_ramp", why: expect.stringContaining("no endurance training load yet") }));
 
     const user = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
     await history(user, 60);
@@ -176,6 +176,19 @@ describe("weekly_load_ramp review fixes", () => {
     expect(starts.length).toBeGreaterThan(0);
     for (const s of starts) expect(s).toBeGreaterThan(35);
     expect(p.programId).toBeGreaterThan(0);
+  });
+
+  it("4b: a long-time lifter who turns endurance on is not checked until there is endurance load", async () => {
+    const squat = (await createExercise({ name: `Squat ${Math.random()}` })).id;
+    for (let i = 100; i >= 1; i--) {
+      const date = new Date(Date.parse(`${TODAY}T00:00:00Z`) - i * 86_400_000).toISOString().slice(0, 10);
+      const [s] = await db.insert(workoutSessions).values({ userId: me, date, isCompleted: true, startTime: new Date(`${date}T07:00:00Z`), endTime: new Date(`${date}T08:00:00Z`) }).returning();
+      await db.insert(workoutSets).values({ sessionId: s.id, exerciseId: squat, setNumber: 1, actualReps: 5, weightKg: "100", restTimeSeconds: 0, rpe: 8 });
+    }
+    const p = await dailyRides(me);
+    const r = await longer(me, p);
+    expect(r.isError, r.raw).toBe(false);
+    expect(r.data.limits.notChecked).toContainEqual(expect.objectContaining({ rule: "weekly_load_ramp", why: expect.stringContaining("no endurance training load yet") }));
   });
 
   it("5: a returning athlete with old history is checked, not calibrating", async () => {

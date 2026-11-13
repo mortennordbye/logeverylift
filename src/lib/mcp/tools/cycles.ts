@@ -299,8 +299,8 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
             const lc = await limitContext(userId);
             const scoped = await cycleScope(cycleId, week, pct, settings);
             const old = running ? null : await cycleScope(cycleId, 1, 100);
-            const before = lc.endurance && scoped ? await planFacts(db, scoped.scope, old?.share ?? null) : NO_FACTS;
-            const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
+            const before = lc.endurance && scoped ? await planFacts(db, scoped.scope, old?.share ?? null, new Set(), lc.doneToday) : NO_FACTS;
+            const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share, new Set(), lc.doneToday) : NO_FACTS;
             const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
             if (blocking.length) throw new LimitRefusedError(blocking);
             ctx.limitCheck = check;
@@ -344,8 +344,8 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
           if (isOver) return fail("The cycle is over");
           const lc = await limitContext(userId);
           const scoped = await cycleScope(cycleId, currentWeek, pct);
-          const before = lc.endurance && scoped ? await planFacts(db, scoped.scope) : NO_FACTS;
-          const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
+          const before = lc.endurance && scoped ? await planFacts(db, scoped.scope, null, new Set(), lc.doneToday) : NO_FACTS;
+          const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share, new Set(), lc.doneToday) : NO_FACTS;
           const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
           if (blocking.length) throw new LimitRefusedError(blocking);
           await syncPeriodizedTargets(
@@ -375,7 +375,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
         // The block's first week, as it will run: before, nothing of it is planned.
         const lc = await limitContext(userId);
         const scoped = await cycleScope(cycleId, 1);
-        const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
+        const after = lc.endurance && scoped ? await planFacts(db, scoped.scope, scoped.share, new Set(), lc.doneToday) : NO_FACTS;
         const { blocking, check, unusedOverrides } = evaluateLimits(lc, NO_FACTS, after, override);
         if (blocking.length) throw new LimitRefusedError(blocking);
         const checked = { ...ctx, limitCheck: check };

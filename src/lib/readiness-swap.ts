@@ -62,17 +62,28 @@ export const STALE_SWAP = "Readiness changed: there is no swap to make for this 
  * assistant writes as `assistant` with the limits checked like any session
  * change. A revision of the session holds the program or workout before.
  */
-export async function applyReadinessSwap(ctx: PlanWriteContext, sessionId: number, override: LimitOverride = NO_OVERRIDE, expectedVersion?: number) {
-  const swap = await readinessSwapFor(ctx.userId);
-  if (!swap || swap.sessionId !== sessionId) throw new PlanStateError(STALE_SWAP);
-  const lc = await limitContext(ctx.userId);
-  // A stored key priority goes with the hard content, so the easy session is
-  // not read as key (heavy legs); a brick keeps its link (review nit).
+export async function applyReadinessSwap(
+  ctx: PlanWriteContext,
+  sessionId: number,
+  override: LimitOverride = NO_OVERRIDE,
+  expectedVersion?: number,
+  /** Tests only: runs after the suggestion is read, so a second tap can land in between. */
+  afterRead?: () => Promise<void>,
+) {
+  // What the session runs, read BEFORE the suggestion: the write checks it
+  // under the row lock, so a tap that read the suggestion while the session
+  // was hard is refused once another tap made it easy (review item 1). A
+  // stored key priority goes with the hard content, so the easy session is
+  // not read as key (heavy legs); a brick keeps its link.
   const [row] = await db
     .select({ priority: plannedSessions.priority, programId: plannedSessions.programId, workout: plannedSessions.workout })
     .from(plannedSessions)
     .where(and(eq(plannedSessions.id, sessionId), eq(plannedSessions.userId, ctx.userId), livePlannedSessions));
   if (!row) throw new PlanStateError(STALE_SWAP);
+  const swap = await readinessSwapFor(ctx.userId);
+  if (!swap || swap.sessionId !== sessionId) throw new PlanStateError(STALE_SWAP);
+  const lc = await limitContext(ctx.userId);
+  if (afterRead) await afterRead();
   const done = await applySessionOp(
     { ...ctx, reason: ctx.reason ?? `Readiness: ${swap.flag.text}; hard session made easy` },
     {

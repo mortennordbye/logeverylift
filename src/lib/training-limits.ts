@@ -112,6 +112,12 @@ export type LimitContext = {
   strengthGoal?: StrengthGoal | null;
   /** Endurance fitness to project the weekly load ramp from, or not set with `loadWhy`. */
   load?: RampStart | null;
+  /**
+   * Today's planned sessions C5 reads as done (a logged workout, a Garmin
+   * match or pick): read once per call, before the write's transaction, so
+   * the facts never need a second connection (review item 3).
+   */
+  doneToday?: ReadonlySet<number>;
   loadWhy?: string | null;
 };
 
@@ -121,7 +127,7 @@ const NO_GARMIN =
 const NO_READINESS = "Hard session after a low-readiness day not checked: no HRV and resting HR data (needs Garmin).";
 const STALE_READINESS = "Hard session after a low-readiness day not checked: no HRV reading from Garmin today or yesterday.";
 const NO_STRENGTH_GOAL = "Strength sessions per week not checked: no strength goal in the athlete profile.";
-const NO_LOAD = "Weekly load ramp not checked: no training load yet (no Garmin data and no session logged in the app).";
+const NO_LOAD = "Weekly load ramp not checked: no endurance training load yet (no swim, bike or run in Garmin data or logged in the app).";
 const CALIBRATING = (n: number) =>
   `Weekly load ramp not checked: fitness is still calibrating (${Math.min(n, 42)} of 42 days of history). Check the change against the ramp rule in logeverylift://docs/endurance-training-reference yourself.`;
 
@@ -150,20 +156,35 @@ async function rampStart(userId: string, today: string): Promise<{ load: RampSta
   return { load: { today, ctlYesterday, pastCtl, doneToday: todayRow ? endurance(todayRow, "load") : 0 }, why: null };
 }
 
-/** The first day the user's fitness source has any load: a Garmin day with load, or a logged session. */
+/**
+ * The first day the user's fitness source has any ENDURANCE load (a Garmin
+ * day with swim, bike or run load, or a logged session with an endurance set):
+ * the rule reads endurance CTL, so a lifter's strength history is not
+ * endurance history (review item 4).
+ */
 async function firstLoadDay(userId: string, source: "garmin" | "app"): Promise<string | null> {
   const { sql } = await import("drizzle-orm");
   if (source === "garmin") {
+    const track = (sp: string) => sql`coalesce((${garminDailyMetrics.metrics}->'pmc'->${sp}->>'load')::float8, 0)`;
     const [r] = await db
       .select({ day: sql<string | null>`min(${garminDailyMetrics.day})::text` })
       .from(garminDailyMetrics)
-      .where(and(eq(garminDailyMetrics.userId, userId), sql`coalesce((${garminDailyMetrics.metrics}->'pmc'->'total'->>'load')::float8, 0) > 0`));
+      .where(and(eq(garminDailyMetrics.userId, userId), sql`${track("swim")} + ${track("bike")} + ${track("run")} > 0`));
     return r?.day ?? null;
   }
   const [r] = await db
     .select({ day: sql<string | null>`min(${workoutSessions.date})::text` })
     .from(workoutSessions)
-    .where(and(eq(workoutSessions.userId, userId), eq(workoutSessions.isCompleted, true), inArray(workoutSessions.source, ["app", "assistant"])));
+    .innerJoin(workoutSets, eq(workoutSets.sessionId, workoutSessions.id))
+    .innerJoin(exercises, eq(exercises.id, workoutSets.exerciseId))
+    .where(
+      and(
+        eq(workoutSessions.userId, userId),
+        eq(workoutSessions.isCompleted, true),
+        inArray(workoutSessions.source, ["app", "assistant"]),
+        isNotNull(exercises.discipline),
+      ),
+    );
   return r?.day ?? null;
 }
 
@@ -289,6 +310,7 @@ export async function limitContext(userId: string): Promise<LimitContext> {
       readinessWhy: NO_READINESS,
       strengthGoal,
       ...(await rampStart(userId, today).then((r) => ({ load: r.load, loadWhy: r.why }))),
+      doneToday: await doneTodayIds(userId, today),
     };
   }
   const days = await readinessDays(userId, today);
@@ -304,7 +326,14 @@ export async function limitContext(userId: string): Promise<LimitContext> {
     readinessWhy: fresh ? null : STALE_READINESS,
     strengthGoal,
     ...(await rampStart(userId, today).then((r) => ({ load: r.load, loadWhy: r.why }))),
+    doneToday: await doneTodayIds(userId, today),
   };
+}
+
+/** Today's planned sessions in C5's done state. */
+async function doneTodayIds(userId: string, today: string): Promise<ReadonlySet<number>> {
+  const { sessionCompliance } = await import("@/lib/session-compliance");
+  return new Set((await sessionCompliance(userId, today, today)).filter((c) => c.state === "done").map((c) => c.id));
 }
 
 /**
@@ -747,7 +776,7 @@ async function placedCycles(ex: Executor, cycleIds: number[]): Promise<Record<nu
 }
 
 /** Dated sessions (planned or done; not skipped or missed) in [from, to], of one cycle or of all the user's live cycles. */
-async function datedRows(ex: Executor, userId: string, from: string, to: string, cycleId?: number): Promise<PlaceRow[]> {
+async function datedRows(ex: Executor, userId: string, from: string, to: string, cycleId?: number, doneToday: ReadonlySet<number> = new Set()): Promise<PlaceRow[]> {
   const rows = await ex
     .select({
       id: plannedSessions.id,
@@ -783,17 +812,12 @@ async function datedRows(ex: Executor, userId: string, from: string, to: string,
   // Today's sessions done another way: a picked Garmin activity, or C5's match
   // to a logged workout or a Garmin activity. Their load is in the series
   // already, so the ramp must not add the plan again (review item 2).
-  const today = await todayOn(ex, userId);
-  for (const r of rows) if (r.garminActivityId != null) done.add(r.id);
-  if (rows.some((r) => r.date === today && !done.has(r.id))) {
-    const { sessionCompliance } = await import("@/lib/session-compliance");
-    for (const c of await sessionCompliance(userId, today, today)) if (c.state === "done") done.add(c.id);
-  }
+  for (const r of rows) if (r.garminActivityId != null || doneToday.has(r.id)) done.add(r.id);
   return rows.map((r) => ({ id: r.id, position: r.position, programId: r.programId, workout: r.workout, priority: r.priority, label: r.label, cycleId: r.cycleId, ref: `p:${r.id}`, date: r.date!, done: done.has(r.id) }));
 }
 
 /** A dated cycle's sessions from this week (or its first week) to its last day, with the two days before. */
-async function datedCycleGroup(ex: Executor, cycleId: number): Promise<PlacedGroup | null> {
+async function datedCycleGroup(ex: Executor, cycleId: number, doneToday?: ReadonlySet<number>): Promise<PlacedGroup | null> {
   const { addDaysStr, mondayOf } = await import("@/lib/utils/planned-sessions");
   const { cycleBlock } = await import("@/lib/planned-sessions");
   const [c] = await ex.select().from(trainingCycles).where(and(eq(trainingCycles.id, cycleId), liveCycles));
@@ -802,29 +826,29 @@ async function datedCycleGroup(ex: Executor, cycleId: number): Promise<PlacedGro
   const today = await todayOn(ex, c.userId);
   const from = mondayOf(block.start > today ? block.start : today);
   const to = addDaysStr(block.end, -1);
-  const rows = await datedRows(ex, c.userId, addDaysStr(from, -2), to, cycleId);
+  const rows = await datedRows(ex, c.userId, addDaysStr(from, -2), to, cycleId, doneToday);
   return {
     loop: false,
     from,
     to,
-    lead: await leadSessions(ex, c.userId, today, addDaysStr(from, -3)),
+    lead: await leadSessions(ex, c.userId, today, addDaysStr(from, -3), doneToday),
     sessions: await placeRows(ex, c.userId, rows),
     cycles: { [cycleId]: { name: c.name, phaseType: c.phaseType, blockStart: block.start, blockEnd: to } },
   };
 }
 
 /** One calendar week of the user's dated sessions, with the two days before. */
-async function weekGroup(ex: Executor, userId: string, monday: string): Promise<PlacedGroup> {
+async function weekGroup(ex: Executor, userId: string, monday: string, doneToday?: ReadonlySet<number>): Promise<PlacedGroup> {
   const { addDaysStr } = await import("@/lib/utils/planned-sessions");
   const to = addDaysStr(monday, 6);
-  const rows = await datedRows(ex, userId, addDaysStr(monday, -2), to);
+  const rows = await datedRows(ex, userId, addDaysStr(monday, -2), to, undefined, doneToday);
   const cycleIds = [...new Set(rows.map((r) => r.cycleId).filter((id): id is number => id != null))];
   const today = await todayOn(ex, userId);
   return {
     loop: false,
     from: monday,
     to,
-    lead: await leadSessions(ex, userId, today, addDaysStr(monday, -3)),
+    lead: await leadSessions(ex, userId, today, addDaysStr(monday, -3), doneToday),
     sessions: await placeRows(ex, userId, rows),
     cycles: await placedCycles(ex, cycleIds),
   };
@@ -835,9 +859,9 @@ async function weekGroup(ex: Executor, userId: string, monday: string): Promise<
  * fitness through them to a group's first week, instead of empty days that
  * would decay it (review item 3). None when the group starts within two days.
  */
-async function leadSessions(ex: Executor, userId: string, today: string, to: string): Promise<PlacedSession[]> {
+async function leadSessions(ex: Executor, userId: string, today: string, to: string, doneToday?: ReadonlySet<number>): Promise<PlacedSession[]> {
   if (to < today) return [];
-  return placeRows(ex, userId, await datedRows(ex, userId, today, to));
+  return placeRows(ex, userId, await datedRows(ex, userId, today, to, undefined, doneToday));
 }
 
 /**
@@ -952,12 +976,14 @@ export async function planFacts(
   share: number | null = null,
   /** Cycles checked on their dated calendar week; the rest on the template's week. */
   dated: ReadonlySet<number> = new Set(),
+  /** Today's planned sessions already done (LimitContext.doneToday). */
+  doneToday?: ReadonlySet<number>,
 ): Promise<PlanFacts> {
   const weeks = new Map<string, WeekSession[] | null>();
   const labels = new Map<string, string>();
   const placed = new Map<string, PlacedGroup>();
   for (const id of scope.cycleIds) {
-    const group = dated.has(id) ? await datedCycleGroup(ex, id) : await templateGroup(ex, id, share);
+    const group = dated.has(id) ? await datedCycleGroup(ex, id, doneToday) : await templateGroup(ex, id, share);
     if (group) placed.set(`c:${id}`, group);
     if (!dated.has(id)) {
       weeks.set(`c:${id}`, await cycleWeekSessions(ex, id));
@@ -975,7 +1001,7 @@ export async function planFacts(
   const thisMonday = sessionUser ? await mondayToday(ex, sessionUser) : null;
   for (const monday of scope.sessionWeeks?.mondays ?? []) {
     weeks.set(`s:${monday}`, await calendarWeekSessions(ex, sessionUser!, monday));
-    placed.set(`s:${monday}`, await weekGroup(ex, sessionUser!, monday));
+    placed.set(`s:${monday}`, await weekGroup(ex, sessionUser!, monday, doneToday));
     if (monday !== thisMonday) labels.set(`s:${monday}`, monday);
   }
   const runs = await programRuns(ex, scope.programIds, share);
@@ -1164,7 +1190,7 @@ export function evaluateLimits(
 export async function startCheck(userId: string, cycleId: number, override: LimitOverride) {
   const lc = await limitContext(userId);
   const scoped = lc.endurance ? await cycleScope(cycleId, 1) : null;
-  const after = scoped ? await planFacts(db, scoped.scope, scoped.share) : NO_FACTS;
+  const after = scoped ? await planFacts(db, scoped.scope, scoped.share, new Set(), lc.doneToday) : NO_FACTS;
   return { lc, ...evaluateLimits(lc, NO_FACTS, after, override) };
 }
 
@@ -1216,10 +1242,10 @@ export async function withLimits<T>(
       return { result, check: evaluateLimits(lc, NO_FACTS, NO_FACTS, NO_OVERRIDE).check, unusedOverrides: [] };
     }
     const dated = await datedCycles(w.tx, scope.cycleIds);
-    const before = await planFacts(w.tx, scope, null, dated);
+    const before = await planFacts(w.tx, scope, null, dated, lc.doneToday);
     const result = await write();
     if (dated.size) await w.regenerateSessions();
-    const after = await planFacts(w.tx, scope, null, dated);
+    const after = await planFacts(w.tx, scope, null, dated, lc.doneToday);
     const { blocking, check } = evaluateLimits(lc, before, after, NO_OVERRIDE);
     const warned = asWarnings(check, blocking);
     w.ctx.limitCheck = warned;
@@ -1228,12 +1254,12 @@ export async function withLimits<T>(
   // A cycle that has dated sessions is checked on them, before and after
   // (review 21); one that has none yet, on its template's week.
   const dated = lc.endurance ? await datedCycles(w.tx, scope.cycleIds) : new Set<number>();
-  const before = lc.endurance ? await planFacts(w.tx, scope, null, dated) : NO_FACTS;
+  const before = lc.endurance ? await planFacts(w.tx, scope, null, dated, lc.doneToday) : NO_FACTS;
   const result = await write();
   // The dated sessions follow a template change before the plan is read
   // again, in the same transaction.
   if (dated.size) await w.regenerateSessions();
-  const after = lc.endurance ? await planFacts(w.tx, scope, null, dated) : NO_FACTS;
+  const after = lc.endurance ? await planFacts(w.tx, scope, null, dated, lc.doneToday) : NO_FACTS;
   const { blocking, check, unusedOverrides } = evaluateLimits(lc, before, after, override);
   if (blocking.length) throw new LimitRefusedError(blocking);
   w.ctx.limitCheck = check;

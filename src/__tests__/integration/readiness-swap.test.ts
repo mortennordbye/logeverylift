@@ -5,7 +5,7 @@ import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerGarminTools } from "@/lib/mcp/tools/garmin";
 import { registerPlannedSessionTools } from "@/lib/mcp/tools/planned-sessions";
 import { syncPeriodizedTargets } from "@/lib/periodization-sync";
-import { readinessSwapFor } from "@/lib/readiness-swap";
+import { applyReadinessSwap, readinessSwapFor } from "@/lib/readiness-swap";
 import { buildDailyMetrics } from "@/lib/garmin/analytics/daily";
 import { addDays } from "@/lib/garmin/dates";
 import { and, desc, eq } from "drizzle-orm";
@@ -207,6 +207,22 @@ describe("review fixes", () => {
     const results = await Promise.all([tap(), tap()]);
     expect(results.filter((r) => r.success)).toHaveLength(1);
     expect(results.find((r) => !r.success)).toEqual({ success: false, error: "Readiness changed: there is no swap to make for this session now." });
+    const revs = await db
+      .select()
+      .from(planRevisions)
+      .where(and(eq(planRevisions.objectType, "planned_session"), eq(planRevisions.objectId, session.id), eq(planRevisions.writer, "apply")));
+    expect(revs).toHaveLength(1);
+  });
+
+  it("7b: a second tap that read the suggestion before the first one committed is refused", async () => {
+    await readings(me, true);
+    const { session } = await hardToday();
+    const ctx = { userId: me, writer: "apply" as const };
+    // Tap 2 reads the suggestion while the session is hard; tap 1 then commits in full.
+    const second = applyReadinessSwap(ctx, session.id, undefined, session.version, async () => {
+      await applyReadinessSwap(ctx, session.id, undefined, session.version);
+    });
+    await expect(second).rejects.toThrow("Readiness changed: there is no swap to make for this session now.");
     const revs = await db
       .select()
       .from(planRevisions)

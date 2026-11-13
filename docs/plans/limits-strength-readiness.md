@@ -717,3 +717,17 @@ the key rule; sync warnings need the endurance switch; a session with a workout 
 left out of the swap; the swap clears a stored key priority (a brick keeps its link); the reset
 also clears Garmin rows and the role. A `SessionInputError` was already mapped (it is a
 `PlanStateError`).
+
+Re-review (2026-11-13):
+
+- **The double-tap guard read the session after the suggestion.** It now reads what the session
+  runs before the suggestion and compares it under the row lock. Test "7b: a second tap that read
+  the suggestion before the first one committed is refused" (`readiness-swap.test.ts`).
+- **"I skipped it" on an auto day locked its cycle last** (at the revision's version write), while
+  holding the planned session and the deleted auto row: a deadlock with a writer that holds the
+  cycle and then deletes the sessions (the e2e reset). It now locks the cycles first. Test
+  `src/__tests__/integration/skip-auto-locks.test.ts`.
+- **Today's done sessions are read once per call**, in the limit context before the write's
+  transaction, and passed to the facts; the facts no longer open a second connection.
+- **History counts from the first endurance load day**, so a lifter who turns endurance on is not
+  checked at CTL near 0. Test "4b: a long-time lifter who turns endurance on".
