@@ -1,4 +1,4 @@
-import { eq, or } from "drizzle-orm";
+import { eq, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import { assertTestDatabase } from "../../scripts/lib/test-database";
@@ -74,6 +74,23 @@ export async function resetE2EUser(email: string): Promise<void> {
   const userId = user.id;
 
   await db.transaction(async (tx) => {
+    // The previous spec's last write can still be running on the server when
+    // this reset starts. Take the locks that write takes, in its order, before
+    // deleting anything, so one waits for the other instead of deadlocking:
+    // a set write takes the per-exercise records lock (lockRecords) first and
+    // then writes sets and records across this user's sessions; deleting the
+    // sessions first could lock one it needed while it held another
+    // ("deadlock detected while deleting tuple in relation workout_sessions").
+    // A plan write locks cycles, then programs (planWrite), so those next.
+    const exerciseIds = await tx.execute<{ id: number }>(sql`
+      SELECT ws.exercise_id AS id FROM workout_sets ws JOIN workout_sessions s ON s.id = ws.session_id WHERE s.user_id = ${userId}
+      UNION SELECT exercise_id FROM exercise_prs WHERE user_id = ${userId}
+      ORDER BY 1`);
+    for (const { id } of exerciseIds.rows) {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${userId}), ${id})`);
+    }
+    await tx.execute(sql`SELECT id FROM training_cycles WHERE user_id = ${userId} ORDER BY id FOR UPDATE`);
+    await tx.execute(sql`SELECT id FROM programs WHERE user_id = ${userId} ORDER BY id FOR UPDATE`);
     // Sessions first: their sets reference program slots.
     await tx.delete(workoutSessions).where(eq(workoutSessions.userId, userId));
     await tx.delete(exercisePrs).where(eq(exercisePrs.userId, userId));
