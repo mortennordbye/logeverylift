@@ -206,8 +206,8 @@ lasts only until that writer runs again.
 
 ## Not in the app yet
 
-- The step editor for structured workouts, and a screen for the workout library. You create
-  and change workouts.
+- The step editor for structured workouts. You create and change workouts; the app's library
+  screen only lists, duplicates, renames, deletes and restores them, and puts one on a day.
 - The guided player that runs a workout step by step on the phone.
 - A dated session that runs a workout, not a program, does not show on the home screen's
   today card or week strip yet.

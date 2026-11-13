@@ -1,11 +1,15 @@
-import { CycleCalendarClient } from "@/components/features/CycleCalendarClient";
+import { answerSession } from "@/components/features/answer-session";
+import { CycleCalendarClient, type CalendarCompliance } from "@/components/features/CycleCalendarClient";
 import { getProgramsWithExercises } from "@/lib/actions/programs";
 import { getAllCyclesWithSlots } from "@/lib/actions/training-cycles";
 import { getCompletedSessions } from "@/lib/actions/workout-sets";
+import { enduranceEnabledFor } from "@/lib/endurance";
 import { listPlanned } from "@/lib/planned-sessions";
+import { sessionCompliance } from "@/lib/session-compliance";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
 import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
+import { listWorkouts } from "@/lib/workouts";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 
@@ -36,16 +40,21 @@ export default async function CalendarPage() {
   // moved and skipped sessions show where they are. Rotation days stay as before.
   const dated = cycles.filter((c) => c.scheduleType === "day_of_week" && (c.startDate || c.scheduledStartDate) && c.status !== "completed");
   const starts = dated.map((c) => (c.status === "active" ? c.startDate! : c.scheduledStartDate ?? c.startDate!));
-  const planned =
+  const range =
     dated.length > 0
-      ? (
-          await listPlanned(
-            session.user.id,
-            starts.reduce((a, b) => (a < b ? a : b)),
-            dated.map((c, i) => addDaysStr(starts[i], cycleLengthDays(c))).reduce((a, b) => (a > b ? a : b)),
-          )
-        ).filter((p) => p.rotationPosition == null && p.id != null)
-      : [];
+      ? { from: starts.reduce((a, b) => (a < b ? a : b)), to: dated.map((c, i) => addDaysStr(starts[i], cycleLengthDays(c))).reduce((a, b) => (a > b ? a : b)) }
+      : null;
+  const planned = range ? (await listPlanned(session.user.id, range.from, range.to)).filter((p) => p.rotationPosition == null && p.id != null) : [];
+
+  // Endurance users see each session's band and answer past ones here
+  // (docs/plans/workouts-and-compliance.md, 7). Lifters get neither.
+  const endurance = range != null && (await enduranceEnabledFor(session.user.id));
+  const [compliance, library] = endurance
+    ? await Promise.all([sessionCompliance(session.user.id, range.from, range.to), listWorkouts(session.user.id)])
+    : [[], []];
+  const complianceById: Record<number, CalendarCompliance> | undefined = endurance
+    ? Object.fromEntries(compliance.map((c) => [c.id, { ...answerSession(c), state: c.state, band: c.band }]))
+    : undefined;
   for (const p of planned) if (p.programId) programIds.add(p.programId);
 
   // Pre-fetch all referenced programs in a single batched query
@@ -65,7 +74,14 @@ export default async function CalendarPage() {
         <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
       </div>
 
-      <CycleCalendarClient cycles={cycles} completedDates={completedDates} programsMap={programsMap} planned={planned} />
+      <CycleCalendarClient
+        cycles={cycles}
+        completedDates={completedDates}
+        programsMap={programsMap}
+        planned={planned}
+        compliance={complianceById}
+        library={endurance ? library.map((w) => ({ id: w.id, name: w.name, sport: w.sport, summary: w.summary })) : undefined}
+      />
     </div>
   );
 }

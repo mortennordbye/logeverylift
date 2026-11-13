@@ -989,3 +989,36 @@ Decided by the hub on 2026-11-13, owner may change. The hub took every recommend
 19. A missed key session with no free day gets no suggestion: skip it.
 20. "Did you do it?" covers the last 7 days.
 21. `confirm_session` refuses sessions with a sport when the switch is on.
+
+## 19. Where the build differs from the brief
+
+Checked against C2 as merged (PR #229, migration 0086). This package's migration is 0087.
+
+- **C2's API held.** Table and column names, `matchPlanned`, `regenerationPlan`, the
+  `planWrite` hook, the session operations and the MCP tools were as section 12 assumed. Two C2
+  rules changed what this package does:
+  - Regeneration edits untouched sessions from this week's **Monday** (C2 decision 19), not from
+    today. A library edit follows the same rule, so this week's untouched past days take the new
+    copy too.
+  - The cap of three counts sessions with status `planned` only. A confirmed miss does not hold a
+    place. It is always on a past day, so no new day can be filled by it.
+- **The strict match wraps C2's matcher, it does not replace it.** With the switch off,
+  `sessionCompliance` calls `matchPlanned` exactly. With it on, `matchEndurance` adds the
+  discipline rule. The home card's "done today" chip still uses C2's matcher. The strict rule
+  applies to past sessions, the prompt, compliance and the weekly sync.
+- **Workout sessions do not show on today's home card or the week strip.** C2's home read skips
+  sessions with no program. They show in the calendar, over MCP and on the "Did you do these?"
+  card once the day has passed. BACKLOG: "Today's card for workout sessions".
+- **Garmin activities that a logged workout already covers:** the build marks the first activity
+  of the same sport and day as taken. It does not compare start and end times.
+- **Picked activity ids** reference `garmin_activities.id`, the app's row id, not Garmin's own id.
+- **Restore of a deleted workout or sick period** reuses `restoreDeletedAthleteRow`, which C3
+  wrote for thresholds and injuries. It now takes `workout` and `illness` and needs the endurance
+  switch for both.
+- **The library edit runs no training limits.** Only the session operations (`set_workout`, `add`,
+  `clear_workout`, `update_from_library`) run them. BACKLOG: "Training limits on a library
+  workout edit".
+- **App UI left out:** "Update from library" and "Link as brick" in the calendar, the Garmin pick
+  list in the "Yes" sheet, and Recently deleted for sick periods. The server and MCP have them.
+  BACKLOG: "Brick, library and Garmin controls in the app".
+- **e2e reset** (`e2e/fixtures/reset.ts`) also clears `illness_periods` and `workouts`.
