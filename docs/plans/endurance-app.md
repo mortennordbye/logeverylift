@@ -124,9 +124,9 @@ training limits that use load (D2).
 ### 1.4 Home, week and units
 
 - The home card lists several sessions today with `TodaySessionsList`
-  (`src/app/page.tsx:85-87`); each row starts a program workout
+  (`src/components/features/home/widgets/today/View.tsx:99`); each row starts a program workout
   (`src/components/features/TodaySessionsList.tsx:30`). The week strip reads the dated sessions
-  (`src/app/page.tsx:120-126`). The calendar is `/more/calendar`
+  (`src/lib/home/core.ts:167`). The calendar is `/more/calendar`
   (`src/app/more/calendar/page.tsx:12`). The planned-session read shape is `PlannedView`
   (`src/lib/planned-sessions.ts:306-324`).
 - Units: `Units` is `{ distance, swim }` with km and m as the default

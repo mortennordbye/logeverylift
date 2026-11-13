@@ -54,6 +54,20 @@ describe("update_profile", () => {
   });
 });
 
+describe("get_profile", () => {
+  it("returns the stored home layout, or the default flag, and nothing of another user's", async () => {
+    const call = mcpTools(registerProfileTools, me);
+    expect((await call("get_profile")).data.homeLayout).toEqual({ isDefault: true, items: null });
+    const items = [{ id: "today", size: "s" as const, hidden: false }];
+    await db.update(users).set({ homeLayout: { v: 1, updatedAt: "2026-11-13T10:00:00.000Z", items } }).where(eq(users.id, me));
+    await db
+      .update(users)
+      .set({ homeLayout: { v: 1, updatedAt: "2026-11-13T10:00:00.000Z", items: [{ id: "week", size: "m", hidden: true }] } })
+      .where(eq(users.id, other));
+    expect((await call("get_profile")).data.homeLayout).toEqual({ isDefault: false, items });
+  });
+});
+
 describe("manage_weight", () => {
   it("logs an entry and moves the profile's weight", async () => {
     const result = await mcpTools(registerProfileTools, me)("manage_weight", { operation: "log", weightKg: 78.5 });

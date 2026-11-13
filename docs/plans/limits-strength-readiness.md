@@ -152,7 +152,7 @@ Never changes:
 - The MCP tool's operations and which of them run limits: `src/lib/mcp/tools/planned-sessions.ts:96`,
   `:146`.
 - Home: today's sessions (`TodaySessionsList`, `src/components/features/TodaySessionsList.tsx:10`)
-  and the endurance-only "Did you do these?" card (`src/app/page.tsx:274`).
+  and the endurance-only "Did you do these?" card (`src/components/features/home/Notices.tsx:75`).
 
 ## 2. Design overview
 

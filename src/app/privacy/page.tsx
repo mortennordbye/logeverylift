@@ -81,7 +81,8 @@ export default function PrivacyPage() {
         <li>
           <strong>Settings:</strong> your time zone (taken from your browser the first time you open the app, so
           that &quot;today&quot; is your own day), the units you want distances shown in, whether missed-workout
-          reminders are on, and whether endurance features are turned on for your account.
+          reminders are on, whether endurance features are turned on for your account, and which parts of the home
+          screen you show, in which order and size.
         </li>
         <li>
           <strong>AI Setup:</strong> the plans you build, the change you ask for and your answers to check-ins.
@@ -210,7 +211,7 @@ export default function PrivacyPage() {
       </p>
       <p>
         <strong>AI assistants you connect yourself</strong> (MCP) get the access you choose when you connect them:
-        read only, or read and change. They can read your profile, body weight, time zone, display units, whether endurance features are
+        read only, or read and change. They can read your profile, body weight, time zone, display units, how your home screen is arranged, whether endurance features are
         on, programs, cycles and their dated sessions with planned versus done, structured workouts with step results and training load, seasons and their races, coach memory, thresholds, the athlete profile with injuries and sick periods, fuel logs, fuel products, sweat tests and race plans, and workout history: sets, weights, heart rate zones, effort, how you felt, your readiness and the
         notes you write on workouts, sets and exercises. If Garmin is on for your account, they can also read data from it. With read and change
         access they can also change your profile, body weight, time zone, display units, programs, cycles, dated sessions, structured workouts, seasons and races, see and restore earlier

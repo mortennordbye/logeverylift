@@ -10,6 +10,7 @@
 import { db } from "@/db";
 import { users } from "@/db/schema/users";
 import { userWeightEntries } from "@/db/schema/weight-history";
+import { parseStoredLayout } from "@/lib/home/layout";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
 import { GOAL_VALUES, parseUserGoals } from "@/lib/utils/goals";
 import { distanceUnitSchema, swimUnitSchema, timeZoneSchema } from "@/lib/validators/user-settings";
@@ -22,7 +23,7 @@ export function registerProfileTools(server: McpServer, userId: string) {
     "get_profile",
     {
       description:
-        "Get the current user's profile (name, gender, birth year, height, weight, goals, experience level), their settings, and recent weight history. Settings: timeZone, the IANA zone that decides which day is today for the plan; distanceUnit and swimUnit, the units the app shows; enduranceEnabled, whether the endurance add-on (triathlon plans, race on a cycle) is on, which only an admin can change. Every number this server takes or returns is metric, whatever the display units.",
+        "Get the current user's profile (name, gender, birth year, height, weight, goals, experience level), their settings, and recent weight history. Settings: timeZone, the IANA zone that decides which day is today for the plan; distanceUnit and swimUnit, the units the app shows; enduranceEnabled, whether the endurance add-on (triathlon plans, race on a cycle) is on, which only an admin can change; homeLayout, the home screen the user arranged (widget ids in order with size and hidden; isDefault true and items null when the user never changed it), read only. Every number this server takes or returns is metric, whatever the display units.",
       inputSchema: {},
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -52,6 +53,11 @@ export function registerProfileTools(server: McpServer, userId: string) {
           distanceUnit: user.distanceUnit,
           swimUnit: user.swimUnit,
           enduranceEnabled: user.enduranceEnabled,
+          // As stored, not resolved against the cycle: that needs the cookie session and writes.
+          homeLayout: (() => {
+            const layout = parseStoredLayout(user.homeLayout, userId);
+            return { isDefault: layout === null, items: layout?.items ?? null };
+          })(),
           weightHistory: weightHistory.map((w) => ({
             id: w.id,
             weightKg: w.weightKg,

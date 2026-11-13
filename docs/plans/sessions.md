@@ -109,7 +109,7 @@ inserts auto sessions (`:277`, `:335`).
   auto row of the same program and date (`src/lib/actions/workout-sessions.ts:181-192`).
 
 **Make-up.**
-- "Make up" links to `/programs/{id}/workout?makeup=YYYY-MM-DD` (`src/app/page.tsx:227`). The
+- "Make up" links to `/programs/{id}/workout?makeup=YYYY-MM-DD` (`src/components/features/home/Notices.tsx:47`). The
   initializer reads the date (`src/components/features/WorkoutSessionInitializer.tsx:33-36`) and
   `createWorkoutSession` stores it as `intendedDate` (`src/lib/actions/workout-sessions.ts:75-86`,
   column at `src/db/schema/workout-sessions.ts:65`). History shows "Make-up for"

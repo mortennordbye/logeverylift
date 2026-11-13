@@ -2,9 +2,10 @@
 
 <!-- doc-claims: skip — a point-in-time audit; its file:line refs describe the code as measured on 2026-11-13 (main at 0c8e29d), and the build rewrites most of src/app/page.tsx. -->
 
-Status: ready to build. The open questions in section 9 were decided by the hub on
-2026-11-13; the owner may change any of them. Two review passes attacked the first draft;
-section 6 and 7 fold in their findings. Build section 6 as **one PR**.
+Status: phase 1 built (section 6, one PR, branch `feat/home-widgets`). Section 12 lists
+where the build differs from this brief and why. The open questions in section 9 were
+decided by the hub on 2026-11-13; the owner may change any of them. Two review passes
+attacked the first draft; section 6 and 7 fold in their findings.
 
 The request: let each user decide what the home screen (the "Workout" tab, `/`) shows, in
 which order, and how big each part is. The whole screen is in scope: the "LogEveryLift"
@@ -25,6 +26,7 @@ Contents:
 9. Decisions
 10. Sources
 11. Changes after review
+12. Build notes
 
 ## 1. Summary
 
@@ -177,18 +179,18 @@ Cost is the extra server work for one home load when the widget is visible: **no
 (one indexed query), **medium** (an aggregate or several queries), **high** (a large read;
 only from stored series).
 
-Phase: **1** = this PR (section 6), **2** = next batch, **3** = later, **no** = do not build.
+Phase: **1** = this PR (section 6; "built" once merged code has it), **2** = next batch, **3** = later, **no** = do not build.
 
 ### 4.1 Training
 
 | Widget | S | M | L | Data source (exists) | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
-| Title (header) | - | "LogEveryLift" (default) | Title, date, cycle week | none | all | none | 1 |
-| **Today** (cycle and no-cycle variants) | Name, primary action, "More" menu with every other action (6.3) | Card without the cycle header | Card as now (default) | as now | all | as now | 1 |
-| Cycle progress | Week x/y | Name, week, bar, end date | - | `getActiveCycleForUser` (page data) | all; empty state without a cycle | none | 1 |
-| Endurance today | - | Rows as now (default) | Rows with step summary | `sessionCompliance`, `answerSession` | endurance | as now | 1 |
-| **Week** | - | Strip only | Strip and goal ring (default, as now) | as now; variants for day-of-week, rotation, no cycle | all | as now | 1 |
-| Weekly goal | Ring and count | Ring and label | - | `getWorkoutStats`, `weeklyGoal` | all | none | 1 |
+| Title (header) | - | "LogEveryLift" (default) | Title, date, cycle week | none | all | none | 1, built |
+| **Today** (cycle and no-cycle variants) | Name, primary action, "More" menu with every other action (6.3) | Card without the cycle header | Card as now (default) | as now | all | as now | 1, built |
+| Cycle progress | Week x/y | Name, week, bar, end date | - | `getActiveCycleForUser` (page data) | all; empty state without a cycle | none | 1, built |
+| Endurance today | - | Rows as now (default) | Rows with step summary | `sessionCompliance`, `answerSession` | endurance | as now | 1, built |
+| **Week** | - | Strip only | Strip and goal ring (default, as now) | as now; variants for day-of-week, rotation, no cycle | all | as now | 1, built |
+| Weekly goal | Ring and count | Ring and label | - | `getWorkoutStats`, `weeklyGoal` | all | none | 1, built |
 | Next session | Name and day | Name, day, summary, start link | - | cycle info, planned sessions | cycle | low | 2 |
 | Season phase | Phase, week x of y | Plus phase bar | - | `listSeasons` (`src/lib/seasons.ts:83`) | endurance with a season | low | 2 |
 | Race countdown | Days to race | Race, date, days, phase | - | `listSeasons`; `training_cycles.race_date` | users with a race | low | 2 |
@@ -200,7 +202,7 @@ Phase: **1** = this PR (section 6), **2** = next batch, **3** = later, **no** = 
 
 | Widget | S | M | L | Data source | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
-| **Recent PRs** | Newest PR | Last 3 (default) | Last 6 | `getRecentPRs(limit)` (`src/lib/actions/metrics.ts:1160`) | all; empty state without PRs | low | 1 |
+| **Recent PRs** | Newest PR | Last 3 (default) | Last 6 | `getRecentPRs(limit)` (`src/lib/actions/metrics.ts:1160`) | all; empty state without PRs | low | 1, built |
 | PR of the week | Best PR this week | Plus the lift's trend line | - | `getRecentPRs`, filtered to the user's week | all | low | 2 |
 | Near-PR alert | "1 rep from a PR on Bench" | Up to 3 lifts in today's program close to a PR | - | **new**: today's program targets vs `exercise_prs` | cycle | medium | 3 |
 
@@ -224,7 +226,7 @@ Garmin access is on only for admin accounts where the key is set
 
 | Widget | S | M | L | Data source | Cost | Phase |
 |---|---|---|---|---|---|---|
-| **Readiness** | Score and word | Score with contributor bars (default) | - | `getTodayData(...).metrics`; view `ReadinessCard` (`src/components/features/GarminTodayTab.tsx:97`) | medium (stored daily series) | 1 |
+| **Readiness** | Score and word | Score with contributor bars (default) | - | `getTodayData(...).metrics`; view `ReadinessCard` (`src/components/features/GarminTodayTab.tsx:97`) | medium (stored daily series) | 1, built |
 | HRV | Last night vs baseline | 7-day dots | - | `getTodayData` (`hrvNight`, `metrics`) | medium | 2 |
 | Sleep | Hours and score | Stages bar | 7 nights | `getTodayData(...).sleep`; `getSleepData` (`src/lib/garmin/queries.ts:317`) | medium | 2 |
 | Body battery | At wake and now | High, low, charged, drained | - | `getTodayData(...).summary.bb*` | medium | 2 |
@@ -245,7 +247,7 @@ reach the widget.
 
 | Widget | S | M | L | Data source | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
-| **Friends' activity** | Newest friend workout | Last 3 (default) | Last 6 | `getFriendsActivityFeed` (`src/lib/actions/friends.ts:400`, 14 days) | all; empty state without friends | medium | 1 |
+| **Friends' activity** | Newest friend workout | Last 3 (default) | Last 6 | `getFriendsActivityFeed` (`src/lib/actions/friends.ts:400`, 14 days) | all; empty state without friends | medium | 1, built |
 | Reactions to my workouts | Count this week | Last 3 reactions | - | `getReactionsToMyWorkouts` (`:992`) | all | low | 2 |
 | Friends' streaks | Top streak | Top 3 by streak, worked out today | - | `getFriends` (`:293`) | all | medium | 2 |
 | Weekly leaderboard | My place | Top 5 | - | `getFriendsLeaderboard` (`:747`) | all | medium | 3, after its week start uses the user's zone (`:752-756` use the server clock) |
@@ -863,3 +865,35 @@ Two review passes on 2026-11-13. Each finding was checked against the code first
   marks.
 - The first draft's 2-column sortable grid with `rectSortingStrategy` is replaced by a vertical
   list in edit mode.
+
+## 12. Build notes
+
+Where the build differs from sections 6 and 7, and why. The code is the reference.
+
+- **Readiness swap notice.** Main gained `ReadinessSwapCard` (package D4) after this audit.
+  It is a notice, id `readinessSwap`, in slot `afterTraining` before `didYouDoIt`, where the
+  old page rendered it (`src/lib/home/notices.ts`).
+- **Endurance today renders nothing on a day without a structured session**, as the old card
+  did, instead of an empty line. An empty line would change the home of every endurance user
+  on a rest day. Edit mode shows the static preview, so the widget can still be moved.
+- **T2 harness.** The statement count spies on `pool.query` and `pool.connect` and renders the
+  page with `await Home()`, per user type, twice (first render writes, second is steady).
+  It lives in `src/__tests__/integration/home-queries.test.ts`, written in commit 1 and
+  unchanged since. Under Vitest React's `cache()` does not dedupe, so the page reads the
+  settings once directly (`getUserSettings`, then `todayIn`) instead of adding a call.
+- **Core widgets** are wrapped in a Suspense boundary whose fallback is the widget's error
+  state. Nothing in them suspends; the boundary only lets a server component that throws
+  deep in a view show its error state instead of failing the page.
+- **Garmin readiness** reads one row of `garmin_daily_metrics` (the newest up to today) rather
+  than `getTodayData`, which reads the whole Today tab. The value is the same.
+- **The size menu** is a native `select` with only the allowed sizes, not a custom menu.
+- **The title row** cannot be moved, only resized or hidden: a header is always first.
+- **A save drops widgets the user cannot have** from the client's list instead of refusing
+  the save; `mergeForSave` keeps the stored ones. The conflict check is part of the UPDATE.
+- **Reset** saves `null` at once after its confirm, and leaves edit mode.
+- **`UserSettingsLoader`** passes only the zone and units to the client, so the layout is
+  not sent to every page.
+- **Screenshots.** No `toHaveScreenshot` baselines: they need a Linux CI job. The fallback in
+  6.2 applies: manual before and after screenshots, per user type, light and dark.
+- **U5** is in `src/__tests__/home-layout.test.ts`, and the U4 renderer check in
+  `src/__tests__/integration/home-widgets.test.ts` (importing the renderers needs the env).
