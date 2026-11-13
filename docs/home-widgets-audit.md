@@ -1,9 +1,10 @@
 # Home screen widgets: audit, catalogue and build brief
 
-<!-- doc-claims: skip — a point-in-time audit; its file:line refs describe the code as measured on 2026-11-13 (main at 0c8e29d), and phase 1 rewrites most of src/app/page.tsx. -->
+<!-- doc-claims: skip — a point-in-time audit; its file:line refs describe the code as measured on 2026-11-13 (main at 0c8e29d), and the build rewrites most of src/app/page.tsx. -->
 
-Status: proposal. Nothing here is built. The owner settles the open questions in section 9,
-then a build agent builds phase 1 from section 6 with no conversation history.
+Status: ready to build. The open questions in section 9 were decided by the hub on
+2026-11-13; the owner may change any of them. Two review passes attacked the first draft;
+section 6 and 7 fold in their findings. Build section 6 as **one PR**.
 
 The request: let each user decide what the home screen (the "Workout" tab, `/`) shows, in
 which order, and how big each part is. The whole screen is in scope: the "LogEveryLift"
@@ -18,40 +19,45 @@ Contents:
 3. Design: one registry, four kinds
 4. Widget catalogue
 5. Risks
-6. Build brief (phase 1, then phases 2 and 3)
+6. Build brief (one PR)
 7. Test plan
 8. Privacy and MCP
-9. Open questions
+9. Decisions
 10. Sources
+11. Changes after review
 
 ## 1. Summary
 
 - Today the home screen is one Server Component (`src/app/page.tsx`, 510 lines). It reads
-  all data in one `Promise.all` and renders a fixed list of cards in a fixed viewport that
-  does not scroll. No part of it is configurable, except that the `missedWorkoutsEnabled`
-  setting hides "Missed this week".
+  all data up front and renders a fixed list of cards in a fixed viewport that does not
+  scroll. Only the `missedWorkoutsEnabled` setting changes what it shows.
 - Build **one widget registry** that holds every part of the screen. Each entry has a
   **kind**: `header` (the title row), `widget` (what the user arranges), `notice` (cards that
-  ask the user to act; they show on top when they have something, and the layout cannot hide
-  them) and `pinned` (the no-cycle "Start a Workout" bar). One contract, one render path.
-- **Today** holds "Start Today's Workout". The user can move and resize it, but cannot hide
-  it. The bottom nav reaches only a workout that is already open, so without Today a user has
-  no way to start the planned workout.
-- Store the layout as one nullable `jsonb` column, `user.home_layout`. `null` means "the
-  default". The default is computed in code per user type. A user who never edits sees
-  exactly today's home, and later changes to the default reach them too.
-- Sizes: S (half width), M (full width), L (full width, taller). Two S widgets in a row
-  share it. Reading order is layout order.
-- Edit mode starts from an "Edit" button. Reorder with @dnd-kit (the same sensors as the
-  workout lists) plus "Move up" and "Move down" buttons (WCAG 2.5.7). Resize with an S/M/L
-  control, hide with a minus button, add from a gallery sheet. Cancel, Undo, Reset.
-- Each widget is an async Server Component in its own `Suspense` and its own error guard.
-  A hidden widget runs no query. A failing widget shows "Couldn't load", not the error page.
-- Adding a widget is: one registry entry, one loader, one view, one render-map line, tests.
-  Section 6.5 is the recipe.
-- Phase 1 builds the system, turns all of today's home into widgets, and adds three new
-  widgets: **Recent PRs**, **Friends' activity** and **Garmin readiness** (admins only).
-- The AI coach gets read access to the layout through `get_profile`. No write tool.
+  ask the user to act; they render in fixed slots when they have something, and the layout
+  cannot hide them) and `pinned` (the no-cycle "Start a Workout" bar).
+- **Today** (with its cycle and no-cycle variants) and **Endurance today** hold the start
+  buttons. The user can move and resize them, but cannot hide them. Each has an error state
+  that still links to `/new-workout`.
+- **Reads only below the page.** `getActiveCycleForUser` writes (scheduled cycle start, block
+  end, auto sessions, planned-session rows). The page runs every write before any `Suspense`
+  boundary. Widget loaders only read.
+- Store the layout in `user.home_layout jsonb`. `null` means "the default", computed in code
+  per user type, so existing users see exactly today's home until they change it. It is read
+  in the `getUserSettings` select the page already runs, so the default adds no query.
+- Sizes: S (half width), M (full width), L (full width, taller). Outside edit mode two S
+  widgets share a row. In edit mode every widget is a full-width row.
+- Edit mode starts from an "Edit" button. Reorder with @dnd-kit (vertical list) plus "Move
+  up" and "Move down" buttons (WCAG 2.5.7). Size from a per-row menu. Hide, add from a gallery,
+  Undo, Reset, Cancel. The edit bar covers the bottom nav until Done or Cancel.
+- Today's widgets render from page data with no skeleton. Only new widgets stream, each in
+  its own `Suspense` and error boundary, and a hidden one runs no query.
+- Adding a widget: one def file, one folder with `load.ts` and `View.tsx`, two one-line index
+  edits, tests. Section 6.6 is the recipe.
+- First commit of the PR: an e2e spec that pins today's home order per user type, run against
+  the current code. It must pass unchanged after the rewrite.
+- New widgets in this PR: **Recent PRs**, **Friends' activity** and **Garmin readiness**
+  (admins only). All hidden by default.
+- The AI coach reads the stored layout through `get_profile`. No write tool.
 
 ## 2. Audit: the home screen today
 
@@ -63,17 +69,18 @@ finishing a workout) and must never disappear by mistake.
 
 | What | Where | Note for widgets |
 |---|---|---|
-| Terms gate: redirect to `/consent` | `:95` | Stays before any widget renders. |
-| `closeStaleOpenSessions()` sweep | `:98` | Stays page level. It must run once, not once per widget. |
-| Today in the user's zone, week dates | `:101-108` | Shared by several widgets. Compute once into a home context. |
-| `getActiveCycleForUser()` | `:111` (`src/lib/actions/training-cycles.ts:146`) | Read by Cycle, Today, Missed, Week. Wrap in React `cache()`. |
-| One `Promise.all`: stats, sessions, insight, check-in, policy, endurance | `:116-123` | Splits per widget. |
-| Fixed viewport: `h-[100dvh] ... overflow-hidden`; content `flex-1 ... overflow-hidden` | `:197`, `:205` | **The home does not scroll today.** The week card uses `flex-1` (`:332`, `:382`, `:447`) to fill the rest of the screen. Added and larger widgets need a scroll area (risk R2). |
-| Title row "LogEveryLift" (`h1`) | `:200-202` | Becomes the `header` widget. `e2e/auth.setup.ts:35` and `e2e/consent.spec.ts:55` find this heading. |
-| Bare skeleton | `src/app/loading.tsx` | Title only. Already finding B2 in `docs/ui-polish-audit.md`. |
+| Terms gate: redirect to `/consent` | `:95` | Stays before anything renders. |
+| `closeStaleOpenSessions()` sweep (writes) | `:98` | Page level, before any `Suspense`. |
+| Today in the user's zone (`userToday`, which calls `getUserSettings`) | `:101`; `src/lib/user-settings.ts:33-35` | The settings select is where `home_layout` is read (6.3). |
+| `getActiveCycleForUser()` (**writes**, see 2.4) | `:111`; `src/lib/actions/training-cycles.ts:146` | Page level, before any `Suspense`. Its result feeds `getWorkoutInsight` (`src/lib/actions/workout-sets.ts:1581`, `prefetchedCycleResult`). |
+| One `Promise.all`: stats, sessions, insight, check-in, policy, endurance | `:116-123` | Stays one `Promise.all` in the page (6.4). |
+| Fixed viewport: `h-[100dvh] ... overflow-hidden`; content `flex-1 ... overflow-hidden` | `:197`, `:205` | **The home does not scroll; content past the screen is clipped.** The week card uses `flex-1` (`:332`, `:382`, `:447`) to fill what is left. Larger and added widgets need a scroll area (R2). |
+| Title row "LogEveryLift" (`h1`) | `:200-202` | Becomes the `header` widget. `e2e/auth.setup.ts:35` and `e2e/consent.spec.ts:55` expect this heading to be visible. |
+| No `data-testid` on the today card or the week strip | whole file | The first commit adds them (6.2). |
+| Bare skeleton | `src/app/loading.tsx` | Title only. Finding B2 in `docs/ui-polish-audit.md`. |
 | Bottom nav "Workout" tab: the open workout if any, else `/` | `src/components/ui/bottom-nav.tsx:115-117` | "Continue workout" stays reachable from the nav. "Start" lives only on home. |
 
-### 2.2 Parts of the screen
+### 2.2 Parts of the screen, in render order
 
 | # | Part | Component and place | Data | Who sees it | How it goes away today | Critical |
 |---|---|---|---|---|---|---|
@@ -82,16 +89,19 @@ finishing a workout) and must never disappear by mistake.
 | N2 | AI check-in | `AiCheckinCard` (`src/components/features/AiCheckinCard.tsx:14`), `:209` | `getPendingCheckin()` | users with a pending check-in | answer "fits" or "dismissed" | no |
 | N3 | Sick or returning banner | `IllnessBanner` (`src/components/features/DidYouDoIt.tsx:120`), `:211` | `enduranceHome` | endurance switch on | "I'm better" | no |
 | W1 | Cycle header (name, week x/y, bar, end date) | Inline `:215-224`, inside the today card | cycle info | users with an active cycle | never | no |
-| W2 | **Today** (program, done chip, overdue chip, insight, sessions list, Start, Do Again, Different Program, Skip auto day) | Inline `:226-290`; `WorkoutInsightBanner` (`:244`), `TodaySessionsList` (`:247`), `SkipAutoDayButton` (`:274`) | today slot and sessions, completed dates, auto session, insight | users with an active cycle | never | **yes**: "Start Today's Workout" (`:271`), per-session starts |
+| W2 | **Today** (program, done chip, overdue chip, insight, sessions list, Start, Do Again or Log in app, Different Program, Skip auto day) | Inline `:226-290`; `WorkoutInsightBanner` (`:244`), `TodaySessionsList` (`:247`), `SkipAutoDayButton` (`:274`) | today slot and sessions, completed dates, auto session, insight | users with an active cycle | never | **yes**: "Start Today's Workout" (`:271`), per-session starts, Different Program |
 | W3 | Endurance today | `EnduranceTodayCard` (`src/components/features/guided/EnduranceTodayCard.tsx:21`), `:294` | `sessionCompliance` for today, units | endurance switch on, with a structured session today | null with no rows (`:22`) | **yes** for endurance: the guided player starts here |
 | N4 | Did you do these? and missed key sessions | `DidYouDoItCard` (`src/components/features/DidYouDoIt.tsx:23`), `:297` | unconfirmed and missed key sessions | endurance switch on | null when nothing is open (`:29`) | no, but it answers planned vs done |
 | N5 | Missed this week, Make up, Decline | Inline `:299-328`, `DeclineMakeupButton` (`:321`) | `info.missedSlots` | day-of-week cycles with a missed day | setting `missedWorkoutsEnabled` (`src/db/schema/users.ts:46`, read in `src/lib/actions/training-cycles.ts:211-214`) | "Make up" starts a workout |
 | W4a | Week strip and weekly goal ring | Inline `:330-378`, `WeeklyGoalProgress` (`:375`) | week dates, `homeWeekPlanned`, completed dates, `stats.thisWeekWorkouts`, `weeklyGoal` | day-of-week cycles | never | no |
 | W4b | Rotation strip and goal ring | Inline `:380-403` | cycle slots, today slot, stats | rotation cycles | never | no |
-| W1' | No-cycle preview with "Set up a Cycle" | Inline `:405-440` | none | users with no cycle | a cycle exists | no |
+| W2' | No-cycle preview with "Set up a Cycle" | Inline `:405-440` | none | users with no cycle | a cycle exists | no |
 | W4c | No-cycle week strip and goal ring | Inline `:442-487` | completed dates, stats | users with no cycle | a cycle exists | no |
 | P1 | Pinned "Start a Workout" bar | Inline `:491-502` | none | users with no cycle | a cycle exists | **yes**: the only start without a cycle |
 | N6 | Share prompt | `SharePromptLoader` in `Suspense` (`:504-506`; `src/components/features/SharePromptLoader.tsx:5`) | `isSharePromptDue()`, friend code | due users | answered | no |
+
+Note the order: N4 and N5 render **between** Endurance today and the week strip, not on top.
+The default layout must keep that (6.4, T1).
 
 ### 2.3 Planned for the home area
 
@@ -103,7 +113,25 @@ finishing a workout) and must never disappear by mistake.
 | Endurance app, resume a guided run (`docs/plans/endurance-app.md:259`) | "Resume" on the endurance card | part of Endurance today |
 | Garmin readiness today (`ReadinessCard`, `src/components/features/GarminTodayTab.tsx:97`) | only on `/more/garmin` now | widget |
 
-### 2.4 Settings that touch home
+### 2.4 Writes inside the home's reads
+
+`getActiveCycleForUser` (`src/lib/actions/training-cycles.ts:146`) is a read by name but
+writes:
+
+- `startDueScheduledCycle(userId)` at the start (`:152`).
+- Marks a cycle that ended as `completed` (`:188-190`).
+- `syncPeriodizedTargets(...)` (`:201`).
+- For day-of-week cycles, `weekdayToday` (`src/lib/planned-sessions.ts:504`) calls
+  `ensureCycleSessions` (`:513`) and inserts auto sessions (`:561`).
+- For rotation cycles, `insertAutoSessions(userId, due)` (`src/lib/actions/training-cycles.ts:281`).
+
+`getCompletedSessions` must run after these, or the week strip misses today's auto session
+while the Today card shows "Done · automatic". The page does this today: the cycle read
+comes first (`:111`), the `Promise.all` after it (`:116`). Streaming widgets in parallel
+would break it. Rule for the build: **every write runs at page level before any `Suspense`
+boundary; loaders only read** (6.4, T3).
+
+### 2.5 Settings that touch home
 
 - `missedWorkoutsEnabled` on `user` hides N5 and the rotation "days overdue" chip
   (`src/components/features/SettingsClient.tsx:309`).
@@ -111,26 +139,34 @@ finishing a workout) and must never disappear by mistake.
   (`src/components/ui/theme-provider.tsx:51`, `:72`, `:123`). It does not sync across devices.
 - `useUserSettings()` (`src/contexts/user-settings-context.tsx:50`) is a small external store,
   not a context: a context provider in the root layout made the cacheComponents shell render
-  each page twice (`docs/plans/foundations.md`, A2, "Client settings"). Any home edit-mode
-  state must live inside the page, not in the root layout.
+  each page twice (`docs/plans/foundations.md`, A2, "Client settings"). Edit-mode state must
+  live inside the page, not in the root layout.
 
 ## 3. Design: one registry, four kinds
 
 | Kind | Members | Placement | Can the user... |
 |---|---|---|---|
-| `header` | Title | Always first, full width | change size (M title, L title with date and cycle week), hide it. The `h1` stays in the DOM (visually hidden) when hidden. |
-| `widget` | Cycle, Today, Endurance today, Week, Weekly goal, and all new widgets | The user's order | move, resize, hide, add. Today: move and resize only. |
-| `notice` | N1 to N6, later D4 swaps and the push prompt | Under the header, above widgets, fixed order, only when they have content | nothing through the layout. Each keeps its own dismiss path and setting. |
-| `pinned` | P1 | Above the bottom nav | nothing. It shows when the user has no cycle. |
+| `header` | Title | Always first, full width | change size (M title, L title with date and cycle week), hide it. The `h1` stays in the DOM as `sr-only` when hidden. |
+| `widget` | Today, Cycle, Endurance today, Week, Weekly goal, and all new widgets | The user's order | move, resize, hide, add. Today and Endurance today: move and resize only. |
+| `notice` | N1 to N6, later D4 swaps and the push prompt | A fixed **slot**: `top` (under the header), `afterTraining` (after the later of Today and Endurance today in the user's order), or `end` (share prompt, as now) | nothing through the layout. Each keeps its own dismiss path and setting. |
+| `pinned` | P1 | Above the bottom nav | nothing. It shows when the user has no cycle, outside edit mode. |
+
+Slots, with today's page as the proof:
+
+| Slot | Notices | Matches today's page |
+|---|---|---|
+| `top` | policy, checkin, illness | `:207-211`, above the today card |
+| `afterTraining` | didYouDoIt, missed | `:297-328`, after Endurance today and before the week strip |
+| `end` | share | `:504-506` |
+
+With the default order (Today, Endurance today, Week) `afterTraining` lands exactly where
+N4 and N5 are now. If the user moves Week above Today, the two notices still follow the
+training widgets, which is what they are about.
 
 Why notices are not user-placed: a notice exists because the app needs an answer (consent,
 compliance, a check-in). If a user hides it once, the app loses that answer for good. Garmin
 Connect users report this problem with "My Day": dismissed cards come back and the order
-resets, and they read it as a bug (sources in section 10). Notices still use the same
-registry, contract, loader and error guard as widgets.
-
-Why "Missed this week" is a notice and not a widget: it already has its own on/off setting,
-and "Make up" is a start entry. It stays where it is (open question 3).
+resets, and they read it as a bug (section 10).
 
 ## 4. Widget catalogue
 
@@ -138,27 +174,25 @@ Sizes: **S** = half width, about 160x150 px on a 375 px phone. **M** = full widt
 height. **L** = full width, about twice as tall. A dash means the size is not offered.
 
 Cost is the extra server work for one home load when the widget is visible: **none**, **low**
-(one indexed query), **medium** (an aggregate or several queries; cache it), **high** (a large
-read; only from stored series).
+(one indexed query), **medium** (an aggregate or several queries), **high** (a large read;
+only from stored series).
 
-Phase: **1** = build now (section 6), **2** = next batch, **3** = later, **no** = do not build.
+Phase: **1** = this PR (section 6), **2** = next batch, **3** = later, **no** = do not build.
 
 ### 4.1 Training
 
 | Widget | S | M | L | Data source (exists) | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
 | Title (header) | - | "LogEveryLift" (default) | Title, date, cycle week | none | all | none | 1 |
-| Cycle progress | Week x/y | Name, week, bar, end date (as the top of today's card) | - | `getActiveCycleForUser` | cycle | none (shared) | 1 |
-| **Today** | Program and Start | Today card without the cycle header | Today card with the cycle header (default, as now) | as now | cycle | as now | 1 |
-| Cycle setup (no cycle) | - | The no-cycle preview (default) | - | none | no cycle | none | 1 |
+| **Today** (cycle and no-cycle variants) | Name, primary action, "More" menu with every other action (6.3) | Card without the cycle header | Card as now (default) | as now | all | as now | 1 |
+| Cycle progress | Week x/y | Name, week, bar, end date | - | `getActiveCycleForUser` (page data) | all; empty state without a cycle | none | 1 |
 | Endurance today | - | Rows as now (default) | Rows with step summary | `sessionCompliance`, `answerSession` | endurance | as now | 1 |
 | **Week** | - | Strip only | Strip and goal ring (default, as now) | as now; variants for day-of-week, rotation, no cycle | all | as now | 1 |
-| Weekly goal | Ring and count | Ring and label | - | `getWorkoutStats`, `weeklyGoal` | all | none (shared) | 1 |
-| Next session | Name and day | Name, day, short summary, start link | - | `getActiveCycleForUser`, planned sessions | cycle | low | 2 |
+| Weekly goal | Ring and count | Ring and label | - | `getWorkoutStats`, `weeklyGoal` | all | none | 1 |
+| Next session | Name and day | Name, day, summary, start link | - | cycle info, planned sessions | cycle | low | 2 |
 | Season phase | Phase, week x of y | Plus phase bar | - | `listSeasons` (`src/lib/seasons.ts:83`) | endurance with a season | low | 2 |
 | Race countdown | Days to race | Race, date, days, phase | - | `listSeasons`; `training_cycles.race_date` | users with a race | low | 2 |
-| Missed this week | - | - | - | notice N5 | | | 1 (notice) |
-| Make-up | - | - | - | part of N5 | | | 1 (notice) |
+| Missed this week, Make up | - | - | - | notice N5 | | | 1 (notice) |
 | Did you do these? | - | - | - | notice N4 | | | 1 (notice) |
 | Readiness swap | - | - | - | notice, package D4 | endurance | | with D4 |
 
@@ -166,26 +200,27 @@ Phase: **1** = build now (section 6), **2** = next batch, **3** = later, **no** 
 
 | Widget | S | M | L | Data source | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
-| **Recent PRs** | Newest PR | Last 3 (default) | Last 6 | `getRecentPRs(limit)` (`src/lib/actions/metrics.ts:1160`) | lifter | low | 1 |
-| PR of the week | Best PR this week | Plus the lift's trend line | - | `getRecentPRs`, filtered to the user's week | lifter | low | 2 |
-| Near-PR alert | "1 rep from a PR on Bench" | Up to 3 lifts in today's program close to a PR | - | **new**: compare today's program targets to `exercise_prs` | lifter with a cycle | medium | 3 |
+| **Recent PRs** | Newest PR | Last 3 (default) | Last 6 | `getRecentPRs(limit)` (`src/lib/actions/metrics.ts:1160`) | all; empty state without PRs | low | 1 |
+| PR of the week | Best PR this week | Plus the lift's trend line | - | `getRecentPRs`, filtered to the user's week | all | low | 2 |
+| Near-PR alert | "1 rep from a PR on Bench" | Up to 3 lifts in today's program close to a PR | - | **new**: today's program targets vs `exercise_prs` | cycle | medium | 3 |
 
 ### 4.3 Stats
 
 | Widget | S | M | L | Data source | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
 | Training streak | Weeks in a row | Plus last 8 weeks | - | `getSummaryStats` (`src/lib/actions/metrics.ts:1369`, streak at `:1430`) | all | medium | 2 |
-| Weekly volume | Sets this week | Top muscles vs target | All muscle bars | `getWeeklyMuscleVolume` (`src/lib/actions/metrics.ts:1113`) | lifter | medium | 2 |
+| Weekly volume | Sets this week | Top muscles vs target | All muscle bars | `getWeeklyMuscleVolume` (`src/lib/actions/metrics.ts:1113`) | all | medium | 2 |
 | Body weight | Latest and change | 30-day line | 90-day line | `getWeightHistory` (`src/lib/actions/profile.ts:65`) | users who log weight | low | 2 |
 | Consistency | Weeks goal met, last 8 | Heatmap, 12 weeks | Heatmap, 26 weeks | `getHeatmapData` (`src/lib/actions/metrics.ts:1083`) | all | medium | 2 |
 | Compliance | Planned vs done this week | Per sport | - | `sessionCompliance` (`src/lib/session-compliance.ts:217`) | endurance | medium | 2 |
-| Summary totals | Workouts, sets | Workouts, sets, reps | - | `getWorkoutStats` | all | none (shared) | 3 |
+| Summary totals | Workouts, sets | Workouts, sets, reps | - | `getWorkoutStats` | all | none | 3 |
 
 ### 4.4 Garmin (admins only today, `garminAllowed`)
 
 Garmin access is on only for admin accounts where the key is set
-(`src/lib/garmin/access.ts:15-17`). Each Garmin widget has `available: garminAllowed(role)`,
-and an empty state "Connect Garmin" when there is no connection.
+(`src/lib/garmin/access.ts:15-17`). Each Garmin widget is available only with
+`garminAllowed(role)`, its loader checks it again before it reads (6.5), and it shows
+"Connect Garmin" when there is no connection.
 
 | Widget | S | M | L | Data source | Cost | Phase |
 |---|---|---|---|---|---|---|
@@ -194,28 +229,26 @@ and an empty state "Connect Garmin" when there is no connection.
 | Sleep | Hours and score | Stages bar | 7 nights | `getTodayData(...).sleep`; `getSleepData` (`src/lib/garmin/queries.ts:317`) | medium | 2 |
 | Body battery | At wake and now | High, low, charged, drained | - | `getTodayData(...).summary.bb*` | medium | 2 |
 | Training load and form | Form and band | 6-week fitness, fatigue, form | Per sport | `getLoadSeries` (`src/lib/garmin/queries.ts:50`); without Garmin, `getTrainingLoad` (`src/lib/training-load.ts:149`) | medium | 2 |
-| Today's activity | Steps | Steps, active kcal, intensity min, today's activities | - | `getTodayData(...).summary`, `.activities` | medium | 2 |
+| Today's activity | Steps | Steps, active kcal, intensity min, activities | - | `getTodayData(...).summary`, `.activities` | medium | 2 |
 | VO2 max | Latest value | 180-day line | - | `getOverviewData` (`src/lib/garmin/queries.ts:638`, VO2 rows at `:660-668`) | medium | 3 |
 | Recent activities | Last one | Last 3 | Last 6 | `getActivitiesData(userId, limit)` (`src/lib/garmin/queries.ts:389`) | low | 2 |
-| Race predictor | Projected time | Projection and checklist | - | `getRaceProjection` (`src/lib/garmin/queries.ts:1050`) | high (uses the load series) | 3 |
-
-Training load without Garmin also exists for endurance users (`getTrainingLoad`), so that
-widget can serve both groups with one view.
+| Race predictor | Projected time | Projection and checklist | - | `getRaceProjection` (`src/lib/garmin/queries.ts:1050`) | high | 3 |
 
 ### 4.5 Friends
 
-Friend data is another person's data. Every friends widget must read through the existing
-friend actions, which already filter on `users.showActivityToFriends`
-(`src/lib/actions/friends.ts:317`, `:347`, `:433`), and must never query `workout_sessions`
-of other users directly. Widgets show names, program name, date and set count. They do not
-show `feeling` or notes, even where the friends page might.
+Friend data is another person's data. Every friends widget reads through the existing friend
+actions, which filter on `users.showActivityToFriends` (`src/lib/actions/friends.ts:317`,
+`:347`, `:433`), and never queries other users' `workout_sessions` directly. Each loader maps
+rows to an explicit narrow shape (6.5). `getFriendsActivityFeed` selects `feeling`,
+`exerciseCount` and `totalVolumeKg` (`src/lib/actions/friends.ts:420-424`); none of these
+reach the widget.
 
 | Widget | S | M | L | Data source | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
-| **Friends' activity** | Newest friend workout | Last 3 (default), with react button | Last 6 | `getFriendsActivityFeed` (`src/lib/actions/friends.ts:400`, 14 days) | users with friends | medium | 1 |
-| Reactions to my workouts | Count this week | Last 3 reactions | - | `getReactionsToMyWorkouts` (`:992`) | users with friends | low | 2 |
-| Friends' streaks | Top streak | Top 3 friends by streak, worked out today | - | `getFriends` (`:293`) | users with friends | medium | 2 |
-| Weekly leaderboard | My place | Top 5 | - | `getFriendsLeaderboard` (`:747`) | users with friends | medium | 3 (its week start uses the server's clock, `:752-756`, not the user's zone; fix first) |
+| **Friends' activity** | Newest friend workout | Last 3 (default) | Last 6 | `getFriendsActivityFeed` (`src/lib/actions/friends.ts:400`, 14 days) | all; empty state without friends | medium | 1 |
+| Reactions to my workouts | Count this week | Last 3 reactions | - | `getReactionsToMyWorkouts` (`:992`) | all | low | 2 |
+| Friends' streaks | Top streak | Top 3 by streak, worked out today | - | `getFriends` (`:293`) | all | medium | 2 |
+| Weekly leaderboard | My place | Top 5 | - | `getFriendsLeaderboard` (`:747`) | all | medium | 3, after its week start uses the user's zone (`:752-756` use the server clock) |
 
 Empty state for all: "Add friends to see their workouts" with a link to `/more/friends`.
 
@@ -223,11 +256,11 @@ Empty state for all: "Add friends to see their workouts" with a link to `/more/f
 
 | Widget | S | M | L | Data source | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
-| Start a workout | "New workout" button | Plus "Different program" | - | none; link `/new-workout` | all | none | 2 |
-| Quick start | One favourite program | Two or three programs | - | programs list | lifter | low | 3 (second start entry; needs its own e2e) |
+| Start a workout | "New workout" button | Plus "Different program" | - | link `/new-workout` | all | none | 2 |
+| Quick start | One favourite program | Two or three programs | - | programs list | all | low | 3, with its own e2e spec |
 | Log body weight | Number field and Save | Plus last value | - | `logWeightEntry` (`src/lib/actions/profile.ts:91`) | all | none | 2 |
 | Quick log (run or quick workout) | Button | - | - | the C2b quick workout when it exists | all | none | 3 |
-| Rest timer | - | - | - | - | - | - | **no**: the rest timer belongs to an open workout and is on the workout screen; the nav dot already marks an open workout. A home copy adds a second entry to a critical flow. |
+| Rest timer | - | - | - | - | - | - | **no** (decision 9) |
 
 ### 4.7 Coach
 
@@ -240,70 +273,62 @@ Empty state for all: "Add friends to see their workouts" with a link to `/more/f
 
 | # | Risk | Mitigation |
 |---|---|---|
-| R1 | **The user hides the way to start a workout.** | Today has `hideable: false`. `resolveLayout` and the Server Action's schema both refuse a hidden Today. The no-cycle start stays a pinned bar. Tests for each. |
-| R2 | **The home stops being one screen.** It is a fixed `100dvh` view that never scrolls, and the week card stretches to fill it. | The content area becomes `overflow-y-auto`. The last widget keeps its `flex-1` stretch when its def says `stretch: true` (Week), so the default home looks the same. Screenshots in both themes at 375x667 and 430x932, before and after. |
-| R3 | **Hydration errors.** `toLocale*` and `Intl` in client labels differ between server and browser; React #418 has failed on Linux WebKit before (`e2e/finish-reload.spec.ts:8`, `e2e/guided-workout.spec.ts:80`). | Widgets are Server Components and pass formatted strings to client parts. Edit-mode labels are static. The e2e fixture fails on page exceptions. |
-| R4 | **Drag on touch fights scroll.** | Drag only from a handle with `touch-none`, 8 px activation. Move up and down buttons are the main touch path. |
-| R5 | **Server cost.** | Hidden widgets cost nothing. Shared reads use `cache()`. The default layout must add no query over today's page. Garmin widgets read the stored daily series. |
-| R6 | **One widget fails and takes the page down.** An RSC error inside `Suspense` goes to `error.tsx`. | Every loader runs through `safeLoad` (6.4), which logs `[homeWidget] load_failed` with the widget id and returns an error state. |
-| R7 | **Critical-flow regression from the page rewrite.** `e2e/cycle-day.spec.ts`, `e2e/did-you-do-it.spec.ts`, `e2e/guided-workout.spec.ts`, `e2e/planned-sessions.spec.ts` open home. | Move JSX into widget components unchanged. Those specs must pass unchanged. |
-| R8 | **Two devices save different layouts.** | Last write wins. Low value data. |
-| R9 | **Friend data leak.** | Friends widgets use only the existing friend actions (4.5). An integration test: a friend with `showActivityToFriends = false` never shows. |
-| R10 | **The header heading disappears for tests and screen readers.** | When the user hides the title, the `h1` stays as `sr-only`. Check `e2e/auth.setup.ts:35` still passes with the default layout (it does: the title is visible by default). |
-| R11 | **Bundle growth.** `docs/plans/garmin-insights-design.md:501` asks that the home and workout bundles do not grow. | Widgets are Server Components. Charts are plain SVG. Only `HomeGrid`, the toolbar and the gallery sheet ship as client code, and @dnd-kit is already in the app bundle. |
+| R1 | **The user loses the way to start a workout** by hiding, by an audience change, or by a load error. | Today and Endurance today are not hideable; `resolveLayout` inserts a missing critical widget visible; their error state keeps a link to `/new-workout`; the no-cycle start stays a pinned bar. Tests T5, T6, U1. |
+| R2 | **The home stops being one screen.** It is a fixed `100dvh` view, content past the screen is clipped, and the week card stretches to fill it. | The content area becomes `overflow-y-auto`. The last widget keeps its `flex-1` stretch when its def says `stretch: true` (Week), so the default looks the same. T1 and the screenshot step in 6.2. |
+| R3 | **Hydration errors.** `toLocale*` and `Intl` in client labels; dnd-kit's generated ids. React #418 has failed on Linux WebKit before (`e2e/finish-reload.spec.ts:8`, `e2e/guided-workout.spec.ts:80`). | Widgets are Server Components and pass formatted strings. `DndContext` mounts only after Edit, with a fixed `id`. The e2e fixture fails on page exceptions. |
+| R4 | **Writes race with reads** (2.4). | Writes at page level before any `Suspense`; loaders read only. T3. |
+| R5 | **Drag on touch fights scroll; mixed sizes drag badly in a grid.** | Edit mode is a vertical list of full-width rows, drag from a `touch-none` handle, 8 px activation, Move up and down buttons. |
+| R6 | **Server cost.** | Today's widgets use page data. Hidden streamed widgets run nothing. `home_layout` rides in the existing settings select. T2. |
+| R7 | **One widget fails and takes the page down.** | `safeLoad` (with `unstable_rethrow` first) for loaders, and a client `WidgetErrorBoundary` per streamed slot for views. T4. |
+| R8 | **Critical-flow regression from the rewrite.** `e2e/cycle-day.spec.ts`, `e2e/did-you-do-it.spec.ts`, `e2e/guided-workout.spec.ts`, `e2e/planned-sessions.spec.ts` open home. | JSX moves unchanged. The order spec from the first commit and those specs pass unchanged. |
+| R9 | **Two devices save different layouts.** | The stored JSON carries `updatedAt`; a save from an older base returns a conflict (6.8). |
+| R10 | **Friend data leak.** | Existing filtered actions only, narrow shape, payload test. |
+| R11 | **The title heading disappears for tests and screen readers.** | The default shows it. When hidden, the `h1` stays as `sr-only`. |
+| R12 | **Bundle growth** (`docs/plans/garmin-insights-design.md:501` asks that the home bundle does not grow). | Widgets are Server Components, charts plain SVG. Client code: `HomeGrid`, the edit list, the gallery sheet. @dnd-kit is already in the app. |
 
-## 6. Build brief
+## 6. Build brief (one PR)
 
-This section is written to be built in a fresh session. Read `CLAUDE.md`, `TESTING.md`, and
-sections 2 to 5 above first. Trust the code over this text if they disagree, fix this doc in
-the same PR, and say so in the PR body.
+Written to be built in a fresh session. Read `CLAUDE.md`, `TESTING.md`, and sections 2 to 5
+first. Trust the code over this text if they disagree; fix this doc in the same PR and say so
+in the PR body. Branch off `main`. Schema change: yes. Critical flow: yes (home start entries).
 
-### 6.1 Packages
+### 6.1 Commit order inside the PR
 
-| PR | Scope | Schema | Critical flow |
-|---|---|---|---|
-| **1a** | Registry, layout model, column and migration, Server Action, page rewrite into widgets (all of today's home), `HomeGrid` with edit mode: reorder, resize, hide, show, Cancel, Undo, Reset | yes | yes (home start entries) |
-| **1b** | Gallery sheet ("Add widget"), versioning (`seen`, `since`), and the first three new widgets: Recent PRs, Friends' activity, Garmin readiness | no | no |
-| 2 | Catalogue rows marked phase 2, in batches of 3 to 5 widgets per PR | no | no |
-| 3 | Rows marked phase 3, after the open questions on them are settled | maybe | Quick start: yes |
+1. **Pin today's home.** Add `data-testid`s to the current page only (no other change):
+   `home-title`, `today-card`, `week-strip`, `rotation-strip`, `cycle-setup`, `missed-week`,
+   `start-bar` (the existing `endurance-today`, `did-you-do-it`, `missed-key` stay). Add
+   `e2e/home-default.spec.ts` (6.2). It must pass on this commit.
+2. Schema, migration, `homeLayout: null` in the e2e reset (6.3).
+3. Registry, layout functions, reducer, unit tests (6.5, 6.7).
+4. Page rewrite into kinds and widgets, reading as in 6.4. `home-default.spec.ts` and the
+   existing home specs pass unchanged.
+5. Edit mode and the Server Action (6.8, 6.9).
+6. The three new widgets and the gallery.
+7. Privacy inventory, MCP field, `CLAUDE.md` smoke line, this doc's status.
 
-1a and 1b are the phase 1 asked for now. 1a ships alone because it changes the home for
-every user; 1b only adds.
+### 6.2 Proof that the default is unchanged
 
-### 6.2 Phase 1 widget set
+`e2e/home-default.spec.ts`, written in commit 1 against the current code, WebKit and Chromium.
+For each user type it sets up the account with `testDb()` and asserts the **order** of the
+`data-testid`s inside the home content:
 
-| id | Kind | Sizes (default) | Hideable | Default visible | Source of the view |
-|---|---|---|---|---|---|
-| `title` | header | M, L (M) | yes (h1 stays sr-only) | all | `:200-202` |
-| `policy` | notice | - | no | when due | `PolicyUpdateNotice` |
-| `checkin` | notice | - | no | when pending | `AiCheckinCard` |
-| `illness` | notice | - | no | endurance, when sick or returning | `IllnessBanner` |
-| `didYouDoIt` | notice | - | no | endurance, when open | `DidYouDoItCard` |
-| `missed` | notice | - | setting `missedWorkoutsEnabled` | day-of-week, when missed | `:299-328` |
-| `share` | notice | - | no | when due | `SharePromptLoader` |
-| `cycle` | widget | S, M (M) | yes | **no** (Today L already shows it) | `:215-224` |
-| `today` | widget | S, M, L (L) | **no** | cycle users | `:213-291` |
-| `cycleSetup` | widget | M (M) | yes | no-cycle users | `:405-440` |
-| `enduranceToday` | widget | M (M) | yes | endurance | `EnduranceTodayCard` |
-| `week` | widget | M, L (L) | yes | all | `:330-403`, `:442-487` (three variants) |
-| `weeklyGoal` | widget | S, M (S) | yes | **no** (Week L already shows it) | `WeeklyGoalProgress` |
-| `startBar` | pinned | - | no | no-cycle users | `:491-502` |
-| `recentPrs` (1b) | widget | S, M, L (M) | yes | **no** | new view; `getRecentPRs` |
-| `friendsActivity` (1b) | widget | S, M, L (M) | yes | **no** | new view; `getFriendsActivityFeed` |
-| `garminReadiness` (1b) | widget | S, M (M) | yes | **no**; `available` only with `garminAllowed` | `ReadinessCard` |
-
-The default layout, by user type (this order is today's page order):
-
-| User | Default widgets in order |
+| User type | Expected order |
 |---|---|
-| Lifter, cycle | title M, today L, week L |
-| Endurance, cycle | title M, today L, enduranceToday M, week L |
-| No cycle | title M, cycleSetup M, week L (no-cycle variant), plus `startBar` |
-| Endurance, no cycle | title M, cycleSetup M, enduranceToday M, week L, plus `startBar` |
+| Lifter, day-of-week cycle, a missed day | `home-title`, `today-card`, `missed-week`, `week-strip` |
+| Lifter, rotation cycle | `home-title`, `today-card`, `rotation-strip` |
+| No cycle | `home-title`, `cycle-setup`, `week-strip`, then `start-bar` outside the content |
+| Endurance, day-of-week cycle, a session today and an unconfirmed one | `home-title`, `today-card`, `endurance-today`, `did-you-do-it`, `week-strip` |
 
-Today S: program name and the primary start button only. Today M: the card without the cycle
-header. Today L: the card as now. Week M: the strip only. Week L: strip and goal ring, as now.
-Rotation and no-cycle variants follow the same rule.
+Screenshots: there is no `toHaveScreenshot` in the repo yet. Baselines are per platform
+(CI runs Linux), and the home shows the current date (the week ring, "ends" date). So:
+take `toHaveScreenshot` per user type, light and dark, at 375x667, with `mask` on the week
+strip day row and the "ends" text; create the baselines in CI's Linux run (`--update-snapshots`
+in a one-off CI job, committed with commit 1). If they are not stable across two CI runs on
+different days, delete them and attach manual before and after screenshots to the PR body
+instead. The order spec stays either way.
+
+Note: the content area clips today (`:205`), so at 375x667 a long home is cut off now and
+scrolls after the rewrite. The spec checks order, not that every part is in view.
 
 ### 6.3 Data model and migration
 
@@ -311,263 +336,341 @@ Schema, `src/db/schema/users.ts`, next to the other display settings:
 
 ```ts
 // The user's home screen layout (docs/home-widgets-audit.md). Null means the
-// default for their user type, computed in src/lib/home/layout.ts. Only order,
-// size, hidden and per-widget options; never free text.
+// default for their user type (src/lib/home/layout.ts). Order, size, hidden and
+// per-widget options only; never free text.
 homeLayout: jsonb("home_layout").$type<StoredHomeLayout>(),
 ```
 
-Migration: run `pnpm db:generate`, answer "create column". The SQL is one line:
+Migration: `pnpm db:generate`, answer "create column":
 
 ```sql
 ALTER TABLE "user" ADD COLUMN "home_layout" jsonb;
 ```
 
-It is nullable with no default, so it rewrites no rows and needs no backfill. Commit the
-SQL and the `drizzle/meta/` snapshot with the schema change.
+Nullable, no default: no row rewrite, no backfill. Commit the SQL and `drizzle/meta/`.
 
 Rollback:
 - **Code rollback** (revert the PR): safe without touching the database. Old code never
-  reads the column. Users who saved a layout get the old home back, and get their layout back
-  if the PR is re-applied.
-- **Schema rollback** (only if the column must go): drizzle has no down migrations, so write a
-  new forward migration `ALTER TABLE "user" DROP COLUMN IF EXISTS "home_layout";` in a later
-  PR, after the code that reads it is gone. Saved layouts are lost; nothing else is.
+  reads the column. Re-applying the PR brings saved layouts back.
+- **Schema rollback**, only if the column must go: drizzle has no down migrations. Write a
+  later forward migration `ALTER TABLE "user" DROP COLUMN IF EXISTS "home_layout";` after
+  the code that reads it is gone. Only saved layouts are lost.
+
+e2e reset: add `homeLayout: null` to the `users` update in `e2e/fixtures/reset.ts:106-122`,
+so every spec starts from the default.
 
 Stored JSON:
 
 ```ts
 type StoredHomeLayout = {
-  v: 1;              // shape version of this JSON
-  seen: number;      // REGISTRY_VERSION the user last saved against
+  v: 1;                 // shape version
+  updatedAt: string;    // ISO time of the save, for the conflict check (6.8)
   items: { id: string; size: "s" | "m" | "l"; hidden: boolean; settings?: Record<string, unknown> }[];
 };
 ```
 
-Only `header` and `widget` kinds appear in `items`. Notices and pinned parts are never stored.
+Only `header` and `widget` kinds appear in `items`.
 
-### 6.4 Registry and widget contract
+Read path: add `homeLayout: users.homeLayout` to the select in `getUserSettings`
+(`src/lib/user-settings.ts:16-30`) and return it as `homeLayout: unknown`. The page already
+calls it through `userToday` (`:33-35`) and it is wrapped in React `cache()`, so the home
+adds **no query**. Parse it with `parseStoredLayout` in the page only.
 
-`src/lib/home/widgets.ts` (*new*): pure data, no React, so the reducer, the Server Action,
-MCP and the tests can import it.
+### 6.4 Page data flow
+
+```
+src/app/page.tsx (Server)
+  session = requireSession(); consent gate                      as now
+  -- writes, before any Suspense, in this order --
+  await closeStaleOpenSessions()
+  cycleResult = await activeCycle()            cache() around getActiveCycleForUser
+  -- reads --
+  core = await loadHomeCore(session, cycleResult)   one Promise.all as today:
+        stats, completed sessions (from monday), insight (getWorkoutInsight(id, cycleResult)),
+        checkin, policyNotice, endurance, weekPlanned, settings (with homeLayout)
+  audience = { endurance: core.endurance !== null || enduranceEnabled, garmin: garminAllowed(role) }
+  layout = resolveLayout(parseStoredLayout(core.settings.homeLayout), audience)
+  render:
+    header widget (or sr-only h1)
+    notices slot "top"                         from core, no Suspense (as now)
+    <HomeGrid layout ...>                      client
+      core widgets (today, cycle, enduranceToday, week, weeklyGoal)
+                                               render from core, no Suspense, no skeleton
+      notices slot "afterTraining"             placed after the later of today/enduranceToday
+      streamed widgets (recentPrs, friendsActivity, garminReadiness)
+                                               <WidgetErrorBoundary><Suspense fallback=Skeleton>
+                                               <StreamedWidget/> (safeLoad(load(ctx)))
+    "Edit home" button at the end of the list
+  <StartBar/> when no cycle and not editing
+  <Suspense><SharePromptLoader/></Suspense>    slot "end", as now
+```
+
+Rules:
+
+- **Writes first.** Nothing below `loadHomeCore` writes. A streamed loader that needs cycle
+  data takes it from `ctx.core`, never by calling `getActiveCycleForUser` again.
+- **Today has no skeleton.** Today, Cycle, Endurance today, Week and Weekly goal render from
+  `core`, so the start button is in the first HTML, as now.
+- **`cache()` keys.** Shared wrappers in `src/lib/home/core.ts` take no arguments or only
+  primitives (`activeCycle()`, `completedSince(mondayStr)`), so React `cache()` dedupes them.
+  Pass `cycleResult` into `getWorkoutInsight` (`src/lib/actions/workout-sets.ts:1581`, second
+  parameter), as the page does now.
+- **Audience** is `{ endurance: boolean; garmin: boolean }`. It does not depend on the cycle:
+  Today switches between its cycle and no-cycle variants by data, and Cycle progress shows an
+  empty state without a cycle. So the Server Action can compute it from the user row alone.
+- `src/app/loading.tsx` shows a neutral skeleton (title, one card, one strip): it cannot know
+  the user type. This also closes `docs/ui-polish-audit.md` B2.
+
+### 6.5 Registry and widget contract
+
+Folder layout, so two widgets added in parallel never touch the same lines:
+
+```
+src/lib/home/widgets/<id>.ts                      pure def, no React
+src/lib/home/widgets/index.ts                     one import line per widget -> WIDGETS
+src/components/features/home/widgets/<id>/load.ts streamed widgets only
+src/components/features/home/widgets/<id>/View.tsx View, Empty, Skeleton (and Error if special)
+src/components/features/home/widgets/index.ts     one import line per widget -> RENDERERS
+```
+
+Def (`src/lib/home/widgets/types.ts`):
 
 ```ts
-export const REGISTRY_VERSION = 1;
-
 export type WidgetSize = "s" | "m" | "l";
-export type WidgetKind = "header" | "widget" | "notice" | "pinned";
+export type WidgetKind = "header" | "widget";
 export type WidgetGroup = "training" | "prs" | "stats" | "garmin" | "friends" | "actions" | "coach";
-
-export type Audience = {
-  endurance: boolean;          // enduranceEnabledFor(userId)
-  garmin: boolean;             // garminAllowed(role)
-  cycle: "day_of_week" | "rotation" | null;
-};
+export type Audience = { endurance: boolean; garmin: boolean };
 
 export type WidgetDef = {
-  id: WidgetId;                // stable, never reused; retired ids stay listed in RETIRED_IDS
+  id: string;                  // stable, never reused; retired ids go to RETIRED_IDS
   kind: WidgetKind;
   group: WidgetGroup;
-  title: string;               // edit mode and gallery label
+  title: string;
   description: string;         // one line in the gallery
   sizes: readonly WidgetSize[];
   defaultSize: WidgetSize;
-  hideable: boolean;           // false for today
+  critical: boolean;           // holds a start entry: not hideable, re-inserted if missing
   stretch?: boolean;           // may fill leftover height when last (week)
-  available: (a: Audience) => boolean;     // false: never rendered, not in the gallery
+  source: "core" | "stream";
+  available: (a: Audience) => boolean;
   defaultVisible: (a: Audience) => boolean;
-  since: number;               // REGISTRY_VERSION that added it
-  settings?: z.ZodType;        // per-widget options; ids and numbers only, never free text
+  settings?: z.ZodType;        // ids and numbers only
 };
-
-export const WIDGETS = { title: {...}, today: {...}, ... } satisfies Record<WidgetId, WidgetDef>;
 ```
 
-`src/components/features/home/render.tsx` (*new*): the render map. Its type is
-`Record<WidgetId, WidgetRender>`, so a registry id without a view fails `tsc`.
+`src/lib/home/widgets/index.ts`:
 
 ```ts
-export type HomeContext = {
-  userId: string;
-  role: string | null;
-  today: Date;                 // userToday()
-  todayStr: string;
-  weekDates: string[];
-  audience: Audience;
-};
-
-export type WidgetRender<D = unknown> = {
-  load: (ctx: HomeContext, settings: unknown) => Promise<D | null>;  // null = empty state
-  View: (p: { data: D; size: WidgetSize; settings: unknown }) => React.ReactNode;
-  Empty: (p: { size: WidgetSize }) => React.ReactNode;  // one line and a link; never renders nothing
-  Skeleton: (p: { size: WidgetSize }) => React.ReactNode;  // the real height for that size
-};
+import { today } from "./today";
+import { week } from "./week";
+// ...one line per widget
+export const WIDGETS = { today, week /* ... */ } as const;
+export type WidgetId = keyof typeof WIDGETS;
+export const RETIRED_IDS: readonly string[] = [];
 ```
+
+Notices live in `src/lib/home/notices.ts` (id, slot, render) and are not part of `WIDGETS`.
+
+Render side (`src/components/features/home/define-widget.tsx`):
+
+```ts
+export function defineWidget<D>(w: {
+  select?: (core: HomeCore) => D | null;              // source "core"
+  load?: (ctx: HomeContext) => Promise<D | null>;     // source "stream": reads only
+  View: (p: { data: D; size: WidgetSize; settings: unknown }) => React.ReactNode;
+  Empty: (p: { size: WidgetSize }) => React.ReactNode;
+  Skeleton: (p: { size: WidgetSize }) => React.ReactNode;
+  Preview: (p: { size: WidgetSize }) => React.ReactNode;   // static, for the gallery and edit rows
+  Error?: (p: { size: WidgetSize }) => React.ReactNode;    // default: "Couldn't load this."
+}) { return w; }
+
+// src/components/features/home/widgets/index.ts
+export const RENDERERS = { today, week /* ... */ } satisfies Record<WidgetId, Renderer>;
+```
+
+`satisfies Record<WidgetId, Renderer>` makes `tsc` fail when a def has no renderer.
 
 States every widget has:
 
 | State | Rule |
 |---|---|
-| Loading | `Skeleton` for the stored size, in the widget's own `Suspense`. Same height as the real view (fixed heights for new widgets: S and M `h-36`, L `h-72`; today's widgets keep their current geometry). |
-| Empty | `load` returns `null`. `Empty` shows one line and a link ("No PRs yet. Log a workout."). Notices are the exception: a notice with no data renders nothing. |
-| Error | `safeLoad(id, fn)` (in `src/lib/home/safe-load.ts`) catches, logs `console.error("[homeWidget] load_failed", { id, error: e.name })` (ids only, per `CLAUDE.md`), and the widget shows "Couldn't load this." with no stack and no user data. |
-| Data | `View`. Server Component. Any client part gets formatted strings only (no `Intl` or `toLocale*` on the client). Every tap target 44x44. Tap feedback with `:active`. Theme tokens only. Links to the full page (`/more/metrics`, `/more/garmin`, `/more/friends`). |
-| Permission | `available(audience)` gates render and the gallery. `load` still filters by `ctx.userId` in every query, or calls an existing action that does (`requireSession` inside). Never a `userId` from the client. |
+| Loading | Streamed only: `Skeleton` for the stored size (S and M `h-36`, L `h-72`). Core widgets never show a skeleton. |
+| Empty | `select` or `load` returns `null`: `Empty` shows one line and a link. Never renders nothing, or edit mode could not show it. |
+| Error | Loader: `safeLoad(id, fn)` (`src/lib/home/safe-load.ts`) calls `unstable_rethrow(e)` first (so Next's redirect, not-found and dynamic-usage signals pass through), then logs `console.error("[homeWidget] load_failed", { id, error: e instanceof Error ? e.name : "unknown" })` and returns the error state. View: a client `WidgetErrorBoundary` around each streamed slot. **Today and Endurance today** have their own `Error` that still shows "Start a Workout" linking to `/new-workout`. |
+| Data | `View`. Server Component; client parts get formatted strings only. Tap targets 44x44, `:active` feedback, theme tokens, a link to the full page. |
+| Permission | `available(audience)` gates render and gallery. Loaders filter by `ctx.userId` or call an existing action that runs `requireSession`. Never a `userId` from the client. Garmin loaders call `garminAllowed(ctx.role)` again and return `null` when false. |
+| Privacy | A loader returns an explicit narrow type, built field by field, never a spread of a DB row. Friends' activity returns `{ name, image, date, programName, setCount, sessionId }[]` and nothing else. |
 
-A widget does not render while the user is in edit mode with a hidden state; edit mode shows
-hidden widgets as a title row only, so no load runs for them.
+### 6.6 How to add a widget (the recipe)
 
-### 6.5 How to add a widget (the recipe)
+1. `src/lib/home/widgets/<id>.ts`: the `WidgetDef`. `defaultVisible: () => false` unless the
+   owner asked for it on every home. `critical: true` only if it holds a start entry.
+2. One import line in `src/lib/home/widgets/index.ts`.
+3. `src/components/features/home/widgets/<id>/load.ts` (streamed) or a `select` (core).
+   Read only. Reuse existing queries or actions. Return a narrow, serializable shape or `null`.
+4. `src/components/features/home/widgets/<id>/View.tsx`: `defineWidget({...})` with View,
+   Empty, Skeleton, Preview for each size in `sizes`.
+5. One import line in `src/components/features/home/widgets/index.ts`.
+6. Tests:
+   - Component: View at each size, Empty, error (`src/__tests__/components/home-widgets/<id>.test.tsx`).
+   - Unit: the loader's shaping if it does more than pass rows through.
+   - Integration: only for new SQL, with an ownership check; for another person's data, a
+     payload test of the exact keys.
+   - e2e: none per widget. `e2e/home-widgets.spec.ts` loops over the registry.
+7. Privacy: if the widget shows a kind of data home did not show before, or another person's
+   data, run the `privacy-compliance` skill.
+8. Docs: mark the row in section 4 as built.
 
-One widget is one PR of about five files. Nothing else in the home changes.
+Gallery "New" marks are out of scope for this PR (everything ships together). Later, add
+`addedOn: "YYYY-MM-DD"` to the def and mark widgets added after the user's last save.
 
-1. **Registry.** Add the id to `WidgetId` and an entry to `WIDGETS` in
-   `src/lib/home/widgets.ts`. Bump `REGISTRY_VERSION` by one and set `since` to the new value.
-   Set `defaultVisible` to `() => false` unless the owner asked for it on every home.
-2. **Loader.** `src/lib/home/loaders/<id>.ts`: `load(ctx, settings)`. Reuse an existing query
-   or action; filter by `ctx.userId`; return a small serializable shape or `null`. Shared reads
-   go through the `cache()` helpers in `src/lib/home/context.ts`.
-3. **View.** `src/components/features/home/widgets/<Name>Widget.tsx`: `View`, `Empty`,
-   `Skeleton` for each size in `sizes`.
-4. **Render map.** One line in `src/components/features/home/render.tsx`.
-5. **Gallery preview.** A static preview per size (no data) in the same file as the view.
-6. **Tests.**
-   - Unit: the loader's shaping, if it does more than pass rows through
-     (`src/__tests__/home-widgets/<id>.test.ts`).
-   - Component: `View` at each size, `Empty`, and the error state
-     (`src/__tests__/components/home-widgets.test.tsx`, one `describe` per widget).
-   - Integration: only if the loader adds new SQL; include an ownership check (another
-     user's rows never appear).
-   - e2e: none per widget. `e2e/home-widgets.spec.ts` loops over the registry and adds every
-     widget available to the e2e user, at each size, and fails on any console error.
-7. **Privacy.** If the widget shows a kind of data the home did not show before, or another
-   person's data, run the `privacy-compliance` skill. Most widgets show data the user can
-   already see elsewhere in the app and need no inventory change.
-8. **Docs.** Add the row to section 4 of this doc, or move it to phase "done".
+### 6.7 Layout resolution and defaults
 
-### 6.6 Layout resolution, defaults and versioning
+`src/lib/home/layout.ts`, pure functions.
 
-`src/lib/home/layout.ts` (*new*), pure functions:
+Phase 1 registry:
 
-- `defaultLayout(audience)`: the table in 6.2, as a `ResolvedLayout`.
-- `parseStoredLayout(json)`: Zod. Bad JSON gives `null` and logs `[homeLayout] invalid`
-  with the user id.
-- `resolveLayout(stored, audience)`: returns the list to render, in order.
-  - `stored === null`: `defaultLayout(audience)`.
-  - Drop unknown and retired ids. Drop duplicates (keep the first).
-  - A size not in `sizes` falls back to `defaultSize`.
-  - `today` hidden: set visible. `today` missing: insert it first after `title`.
-  - Widgets with `since > stored.seen` that are not in `items`: append as `hidden: true`, so
-    the gallery can mark them "New". New things never appear on a home the user arranged.
-  - Widgets whose `available` is false are filtered from the result but kept in the stored
-    list on the next save (`mergeForSave`), so they come back if the audience changes (the
-    endurance switch goes on again).
-- **Existing users:** no data migration. Every row is `null`, which renders the default,
-  which is today's page. A characterization test (section 7) proves it per user type.
-- **Default is code.** Never write the default into the column. Reset writes `null`.
+| id | Kind | Sizes (default) | critical | source | available | defaultVisible |
+|---|---|---|---|---|---|---|
+| `title` | header | M, L (M) | no | core | all | all |
+| `today` | widget | S, M, L (L) | **yes** | core | all | all |
+| `cycle` | widget | S, M (M) | no | core | all | none (Today L shows it) |
+| `enduranceToday` | widget | M (M) | **yes** | core | endurance | endurance |
+| `week` | widget | M, L (L), `stretch` | no | core | all | all |
+| `weeklyGoal` | widget | S, M (S) | no | core | all | none (Week L shows it) |
+| `recentPrs` | widget | S, M, L (M) | no | stream | all | none |
+| `friendsActivity` | widget | S, M, L (M) | no | stream | all | none |
+| `garminReadiness` | widget | S, M (M) | no | stream | garmin | none |
 
-### 6.7 Server Action
+Notices: `policy`, `checkin`, `illness` (slot `top`); `didYouDoIt`, `missed` (slot
+`afterTraining`); `share` (slot `end`). Pinned: `startBar`.
 
-`src/lib/actions/home-layout.ts` (*new*), copied from the canonical template in `CLAUDE.md`:
+`defaultLayout(audience)` gives `title M, today L, enduranceToday M (endurance only), week L`.
+With the slots in section 3, this renders the same parts in the same order as today for
+every user type in the 6.2 table.
+
+Today per size and state (every size keeps every action; the S "More" menu is a 44x44 button
+that opens a sheet):
+
+| State | S | M | L |
+|---|---|---|---|
+| One program, not done | name, "Start" (`/programs/<id>/workout`); More: Different Program | card without the cycle header | as now |
+| Done (manual or auto) | name and Done chip, "Do Again" or "Log in app"; More: Skip (auto day), Different Program | same | as now |
+| Several sessions | "N sessions today", the first open session's start; More: every other session's start, Different Program | same | as now |
+| Rest day or no program | "Rest Day" or "No program today", "Start a Workout" (`/new-workout`) | same | as now |
+| No cycle | "Set up a Cycle" (`/cycles`); the pinned bar stays | prompt and link, no placeholder | preview as now |
+
+`resolveLayout(stored, audience)`:
+
+- `stored === null`: `defaultLayout(audience)`.
+- Zod `.strict()` parse; bad JSON gives `null` and logs `[homeLayout] invalid` with the user
+  id only.
+- Drop unknown and retired ids, and duplicates (keep the first).
+- A size not in `sizes` falls back to `defaultSize`.
+- A `critical` widget that is hidden becomes visible.
+- A `critical` widget that is missing and whose `defaultVisible(audience)` is true is inserted
+  visible at its default position (Today after `title`; Endurance today after Today). This
+  covers a user who saved a layout and later gets the endurance switch.
+- Other missing widgets are appended `hidden: true`, so the gallery lists them.
+- Widgets whose `available` is false are left out of the result. They stay in the stored row
+  (6.8), so they come back when the audience changes.
+
+Existing users: no data migration. Every row is `null`, which renders the default. Reset
+writes `null`. The default is never written into the column.
+
+### 6.8 Server Action
+
+`src/lib/actions/home-layout.ts`, from the canonical template in `CLAUDE.md`:
 
 ```ts
-export async function saveHomeLayout(data: unknown): Promise<ActionResult<null>>
+export async function saveHomeLayout(data: unknown): Promise<ActionResult<{ updatedAt: string | null }>>
 ```
 
-- `requireSession()`, then Zod: `{ layout: StoredHomeLayout | null }`. The schema is built
-  from the registry: ids must be known, sizes allowed, `today` not hidden, settings parsed by
-  each widget's own schema, at most 60 items.
-- `db.update(users).set({ homeLayout }).where(eq(users.id, auth.user.id))`.
-- `revalidatePath("/")`.
-- Errors: `console.error("[saveHomeLayout] failed", { userId })`, return
+- `requireSession()`. Zod, `.strict()`: `{ items: Item[] | null, baseUpdatedAt: string | null, force: boolean }`.
+  Ids must be known and unique, `items.length <= Object.keys(WIDGETS).length`, sizes allowed,
+  no critical widget hidden, settings parsed by each widget's schema.
+- Read the stored row for `auth.user.id`. If its `updatedAt` is not `baseUpdatedAt` and
+  `force` is false, return `{ success: false, error: "conflict" }`.
+- `mergeForSave(stored, items, audience)`: compute the audience from the user row (endurance
+  flag, role), then append to `items` the stored items whose widget is not available now, in
+  their stored order. So turning endurance off and saving does not lose the endurance widgets.
+- `items === null` (Reset): write `null`.
+- `db.update(users).set({ homeLayout }).where(eq(users.id, auth.user.id))`, then
+  `revalidatePath("/")`.
+- Errors: `console.error("[saveHomeLayout] failed", { userId })`; return
   `{ success: false, error: "Couldn't save your home layout" }`.
-- Client calls it through `callAction()` (`src/lib/utils/stale-bundle.ts`). It does **not**
-  go through the offline replay queue: a lost layout save loses no training data, and
-  replaying an old layout over a newer one from another device is worse.
+- Client calls it through `callAction()`. Not through the offline replay queue.
 
-### 6.8 Rendering
+### 6.9 Edit mode
 
-```
-src/app/page.tsx (Server)
-  requireSession, consent gate, closeStaleOpenSessions
-  ctx = homeContext(session)              today, week, audience
-  layout = resolveLayout(await getHomeLayout(userId), ctx.audience)
-  <HomeShell>                             fixed header area + scroll area
-    <HeaderWidget size>                   or sr-only h1 when hidden
-    <Notices ctx/>                        each notice in its own Suspense
-    <HomeGrid layout={layout} defs={...}> Client: rows, edit mode, dnd
-      {layout.map(item =>
-        <Suspense key=item.id fallback={<Skeleton size/>}>
-          <WidgetSlot id size settings ctx/>   async: safeLoad + View/Empty/error
-        </Suspense>)}
-    </HomeGrid>
-    "Edit home" button at the end of the list
-  </HomeShell>
-  <StartBar/> when no cycle
-  <SharePromptLoader/> as now
-```
+`src/components/features/home/HomeGrid.tsx` (client) renders the grid outside edit mode and
+`HomeEditList.tsx` inside it. State: `src/lib/home/layout-reducer.ts` (pure: `move`, `moveUp`,
+`moveDown`, `resize`, `hide`, `show`, `add`, `reset`, `undo`) with `useReducer`. Key
+`HomeGrid` on a hash of the server layout (`key={layoutHash}`), so `revalidatePath` after a
+save, or a save from another tab, resets the reducer to the new server state.
 
-- `HomeGrid` is a Client Component. It receives the server-rendered widgets as children,
-  keyed by id, and the layout list. Edit mode moves and wraps them; it never refetches.
-- Rows: consecutive S widgets pair into a two-column row. A lone S takes half a row; edit
-  mode shows the empty half as a dashed slot. M and L take a full row. No CSS grid `dense`
-  packing: visual order must equal DOM order for screen readers and dnd.
-- `getHomeLayout(userId)` in `src/lib/home/layout-read.ts`: React `cache()`, one indexed read
-  of `user.home_layout`. Keep it out of `getUserSettings`, which many pages call.
-- `src/lib/home/context.ts`: `homeContext()`, plus `cache()` wrappers for shared reads:
-  `activeCycle()`, `weekSessions()` (from `getCompletedSessions(monday)`), `workoutStats()`,
-  `enduranceHome()` (moved out of `page.tsx:68-89`).
-- `src/app/loading.tsx`: draw the lifter default layout's skeletons (title, today L, week L).
-  This also closes `docs/ui-polish-audit.md` B2.
-- Resizing in edit mode shows the new size's skeleton until Done; Done saves, revalidates,
-  and the server renders the new size. Do not render every size up front.
+Outside edit mode:
+- Rows: consecutive S widgets pair in a two-column row; a lone S takes half a row; M and L
+  take a full row. No CSS grid `dense`: visual order equals DOM order.
+- The last widget stretches when its def has `stretch` (Week), as the page does now.
 
-### 6.9 Edit mode UX
+Enter:
+- "Edit" text button at the right of the title row (44x44) and "Edit home" at the end of the
+  list (stays when the title is hidden). No long-press.
+- On enter, announce "Editing home. Drag or use Move up and Move down to reorder." in a polite
+  live region, and move focus to the first row's handle.
 
-1. **Enter.** An "Edit" text button at the right of the title row (44x44), and an "Edit
-   home" button at the end of the list, which stays when the title is hidden. No long-press
-   in phase 1: on home a long press lands on links, fights with scroll, and on iOS opens the
-   link preview.
-2. **In edit mode:**
-   - The title row shows "Cancel" left and "Done" right.
-   - Notices hide while editing.
-   - Each widget gets a dashed `border-border` outline and a toolbar row above its content:
-     drag handle, title, size control (segmented S/M/L, only the allowed sizes), "Move up",
-     "Move down", and a minus button (hide). Today shows a lock icon in place of the minus,
-     with the label "Today can't be hidden". Each control is 44x44, which is why the toolbar is
-     its own row and not laid over an S widget (about 160 px wide).
-   - Widget content is `inert`. Links and buttons inside do nothing.
-   - Hidden widgets list under the grid in a "Hidden" section, each with a plus button.
-   - A pinned bottom bar above the nav: "Add widget" (1b), "Undo", "Reset".
-3. **Reorder.** @dnd-kit `DndContext` and `SortableContext` with `rectSortingStrategy`.
-   Sensors as `src/components/features/WorkoutExerciseList.tsx:66-71`: `PointerSensor` with
-   `activationConstraint: { distance: 8 }`, and `KeyboardSensor` with
-   `sortableKeyboardCoordinates`. Drag listeners on the handle only, which has `touch-none`.
-   Screen reader announcements name the widget title and position ("Week moved to position
-   2 of 4").
-4. **Move without dragging.** "Move up" and "Move down" are the single-pointer alternative
-   WCAG 2.2 SC 2.5.7 requires; keyboard support alone does not meet it. e2e tests use them.
-5. **Resize.** Tap a size. The widget shows that size's skeleton.
-6. **Hide and show.** Minus moves the widget to "Hidden". Plus puts it back at its old place
-   and size.
-7. **Add (1b).** "Add widget" opens a bottom sheet with the app's sheet pattern. It lists
-   available widgets that are not visible, grouped by `group`, each with a static preview, its
-   sizes, a "New" mark when `since > seen`, and "Add". Add puts it last at `defaultSize` and
-   scrolls to it.
-8. **Undo.** The reducer keeps a history stack for the edit session. Undo steps back once.
-9. **Reset.** Confirm "Reset home to the default layout?", then save `null`.
-10. **Done.** `saveHomeLayout` through `callAction()`. Success: leave edit mode. Failure: stay,
-    keep the draft, show the error. Offline: "You're offline. Try again when connected."
-11. **Cancel.** Drop the draft. If there are changes, ask "Discard changes?".
+In edit mode:
+- The page shows **a vertical list of full-width rows**, one per visible widget, then a
+  "Hidden" section. Each row: drag handle, the widget's static `Preview` at its current size,
+  title, a size button that opens a menu with only the allowed sizes, "Move up", "Move down",
+  and hide (minus). Critical rows show a lock with the label "Can't be hidden".
+- Notices and the pinned start bar are not shown. Widget content is not rendered, so no link
+  inside a widget can fire.
+- **The edit bar covers the bottom nav**: fixed at the bottom, same height as the nav, higher
+  z-index, with "Add widget", "Undo", "Reset". The nav is not reachable until Done or Cancel,
+  so a client navigation cannot drop the draft. A `beforeunload` handler warns on reload or
+  close while the draft has changes. Pad the list by the bar's height.
+- The title row shows "Cancel" (left) and "Done" (right).
+
+Reorder:
+- Mount `DndContext` only in edit mode, with `id="home-edit"`, so its generated ids never
+  meet server HTML.
+- `SortableContext` with `verticalListSortingStrategy`. Sensors as
+  `src/components/features/WorkoutExerciseList.tsx:66-71`: `PointerSensor` with
+  `activationConstraint: { distance: 8 }`, `KeyboardSensor` with `sortableKeyboardCoordinates`.
+  Listeners on the handle only, which has `touch-none`.
+- Announcements name the widget and position ("Week moved to position 2 of 4").
+- "Move up" and "Move down" are the single-pointer alternative WCAG 2.5.7 requires.
+
+Resize: pick a size in the row's menu. The row's `Preview` changes at once. The server
+renders the real widget at that size after Done.
+
+Hide and show: minus moves the row to "Hidden"; plus puts it back at its old place and size.
+
+Add: "Add widget" opens a bottom sheet with available, not-visible widgets, grouped by
+`group`, each with its `Preview` and sizes. Add puts it last at `defaultSize` and focuses its
+row.
+
+Focus rules:
+- After a move, focus stays on the moved row's control that was used.
+- After hide, focus moves to the next row's handle (or the previous row if it was last).
+- Enter on a row does nothing; Enter in the title row's "Done" saves.
+- After Done or Cancel, focus returns to the "Edit" button that opened edit mode.
+
+Undo steps back one change. Reset asks "Reset home to the default layout?" and saves `null`.
+
+Done:
+- `saveHomeLayout({ items, baseUpdatedAt, force: false })` through `callAction()`.
+- Success: leave edit mode.
+- `conflict`: "Your home was changed on another device." with "Reload" and "Save mine" (`force: true`).
+- Other failure, or offline: stay in edit mode, keep the draft, show the error
+  ("You're offline. Try again when connected." when `navigator.onLine` is false).
+
+Cancel: drop the draft; ask "Discard changes?" if there are any.
 
 Look: theme tokens only (`bg-muted`, `border-border`, `text-muted-foreground`,
-`ring-primary`), so light and dark need no extra work. No wobble animation. dnd-kit's own
-transform during drag. Entering edit mode adds toolbars above widgets; keep the widget the
-user was looking at in place by scrolling by the added height (`scrollIntoView({ block:
-"nearest" })` on the first visible widget).
-
-State: `src/lib/home/layout-reducer.ts` (*new*, pure): actions `move`, `moveUp`, `moveDown`,
-`resize`, `hide`, `show`, `add`, `reset`, `undo`. `HomeGrid` uses it with `useReducer`.
-No context provider in the root layout (see 2.4).
+`ring-primary`), so light and dark need no extra work. No wobble animation.
 
 ### 6.10 Files
 
@@ -575,146 +678,153 @@ Create:
 
 | File | What |
 |---|---|
-| `src/lib/home/widgets.ts` | registry, types, `REGISTRY_VERSION`, `RETIRED_IDS` |
+| `e2e/home-default.spec.ts` | 6.2, commit 1 |
+| `e2e/home-layout.spec.ts` | 7, e2e rows |
+| `e2e/home-widgets.spec.ts` | 7, e2e rows |
+| `src/lib/home/widgets/types.ts`, `index.ts`, and one `<id>.ts` per widget | registry |
+| `src/lib/home/notices.ts` | notice ids and slots |
 | `src/lib/home/layout.ts` | `defaultLayout`, `parseStoredLayout`, `resolveLayout`, `mergeForSave`, Zod schemas |
 | `src/lib/home/layout-reducer.ts` | edit reducer |
-| `src/lib/home/layout-read.ts` | `getHomeLayout` (cached read) |
-| `src/lib/home/context.ts` | `homeContext`, shared `cache()` reads, `enduranceHome` moved from the page |
+| `src/lib/home/core.ts` | `activeCycle()`, `loadHomeCore()`, `HomeCore`, `HomeContext`; `enduranceHome` and `enduranceToday` moved from `page.tsx:53-89` |
 | `src/lib/home/safe-load.ts` | `safeLoad` |
-| `src/lib/home/loaders/*.ts` | one per widget that needs more than the shared reads |
 | `src/lib/actions/home-layout.ts` | `saveHomeLayout` |
-| `src/components/features/home/render.tsx` | render map |
-| `src/components/features/home/HomeGrid.tsx` | client: rows, edit mode, dnd |
-| `src/components/features/home/WidgetToolbar.tsx` | client: handle, size, move, hide |
-| `src/components/features/home/WidgetGallerySheet.tsx` (1b) | client: add sheet |
-| `src/components/features/home/Notices.tsx` | the six notices, each in `Suspense` |
-| `src/components/features/home/widgets/TitleWidget.tsx` | header |
-| `src/components/features/home/widgets/CycleWidget.tsx` | cycle progress |
-| `src/components/features/home/widgets/TodayWidget.tsx` | the today card, moved unchanged, plus S and M |
-| `src/components/features/home/widgets/CycleSetupWidget.tsx` | no-cycle preview, moved |
-| `src/components/features/home/widgets/EnduranceTodayWidget.tsx` | wraps `EnduranceTodayCard` |
-| `src/components/features/home/widgets/WeekWidget.tsx` | three variants, moved, plus M |
-| `src/components/features/home/widgets/WeeklyGoalWidget.tsx` | wraps `WeeklyGoalProgress` |
-| `src/components/features/home/widgets/RecentPrsWidget.tsx` (1b) | new |
-| `src/components/features/home/widgets/FriendsActivityWidget.tsx` (1b) | new |
-| `src/components/features/home/widgets/GarminReadinessWidget.tsx` (1b) | reuses `ReadinessCard` |
+| `src/components/features/home/define-widget.tsx` | `defineWidget`, `Renderer` |
+| `src/components/features/home/HomeGrid.tsx` | client: rows, edit toggle, reducer |
+| `src/components/features/home/HomeEditList.tsx` | client: sortable rows, toolbar, edit bar, focus |
+| `src/components/features/home/WidgetGallerySheet.tsx` | client: add sheet |
+| `src/components/features/home/WidgetErrorBoundary.tsx` | client error boundary |
+| `src/components/features/home/Notices.tsx` | the notices by slot |
 | `src/components/features/home/StartBar.tsx` | pinned bar, moved |
-| `drizzle/<next>_home_layout.sql` and `drizzle/meta/*` | generated |
+| `src/components/features/home/widgets/<id>/View.tsx` (and `load.ts` for streamed) for `title`, `today`, `cycle`, `enduranceToday`, `week`, `weeklyGoal`, `recentPrs`, `friendsActivity`, `garminReadiness` | widgets; today's JSX moved unchanged for the L size |
+| `src/components/features/home/widgets/index.ts` | `RENDERERS` |
+| `drizzle/<next>_home_layout.sql`, `drizzle/meta/*` | generated |
 | tests in section 7 | |
 
 Change:
 
 | File | Change |
 |---|---|
+| `src/app/page.tsx` | commit 1: `data-testid`s only; commit 4: the shell in 6.4 |
+| `src/app/loading.tsx` | neutral skeleton |
 | `src/db/schema/users.ts` | `homeLayout` column |
-| `src/app/page.tsx` | becomes the shell in 6.8 (well under 150 lines) |
-| `src/app/loading.tsx` | default-layout skeletons |
-| `src/lib/mcp/tools/profile.ts` | `get_profile` returns `homeLayout`: visible widget ids and sizes, resolved; update the description |
-| `docs/privacy/data-inventory.md` | Settings row: add `home_layout` |
-| `docs/plans/README.md` | status of this brief |
-| `CLAUDE.md` | smoke pass step 2 still checks the "LogEveryLift" header; add one line under step 3: "Edit home, move Week up, Done, reload, order kept" |
+| `src/lib/user-settings.ts` | select and return `homeLayout` |
+| `e2e/fixtures/reset.ts` | `homeLayout: null` in the reset |
+| `src/lib/mcp/tools/profile.ts` | `get_profile` returns `homeLayout` (8.2) |
+| `docs/privacy/data-inventory.md` | Settings row: `home_layout` |
+| `docs/plans/README.md` | status |
+| `CLAUDE.md` | smoke pass: after step 3, "Edit home, Move up on Week, Done, reload, order kept" |
 
-Do not change: `WorkoutSetsList`, timers, set editing, or the workout routes.
+Do not change: `WorkoutSetsList`, timers, set editing, the workout routes, `bottom-nav.tsx`.
 
 ### 6.11 Acceptance criteria
 
-1a:
-- A user who never edits sees the same home as before, for each user type in 6.2, in light
-  and dark, at 375x667 and 430x932. Screenshots before and after in the PR.
-- Today cannot be hidden through the UI, the Server Action, or a hand-written JSON value.
-- Order, size and hidden state persist across reload and across two browser contexts.
-- A loader that throws shows "Couldn't load this." in that widget only.
-- Reorder works with drag (Chromium, WebKit), with Move up and down, and with the keyboard.
+- `e2e/home-default.spec.ts` passes on commit 1 and, unchanged, on the final commit.
+- Today and Endurance today cannot be hidden through the UI, the Server Action, or a
+  hand-written JSON value, and come back visible after an audience change.
+- A throwing Today loader or view still shows a link to `/new-workout`.
+- Order, size and hidden state persist across reload and across two browser contexts; a
+  stale save gets the conflict prompt.
+- A throwing streamed loader or view shows "Couldn't load this." in that widget only.
+- Reorder works by drag (Chromium, WebKit), by Move up and down, and by keyboard.
 - Every edit-mode control is at least 44x44 and has an accessible name.
-- The default layout runs no more queries than today's page (count in the integration test
-  or a query log in the PR).
-- Existing home specs pass unchanged. `pnpm verify`, `make e2e`, smoke pass green.
-
-1b:
-- The gallery lists only widgets `available` for the user, grouped, with "New" marks.
-- Recent PRs, Friends' activity and Garmin readiness render data, empty and error states at
-  each size.
+- The default layout runs the same number of queries as today's page (T2).
 - Garmin readiness never appears for a non-admin, in the grid or the gallery.
-- A friend with `showActivityToFriends = false` never appears in Friends' activity.
-- The home JS bundle grows only by `HomeGrid`, the toolbar and the sheet (no chart library).
+- No friend with `showActivityToFriends = false` appears, and the payload has only the
+  narrow keys.
+- No hydration error on WebKit or Chromium, before or after entering edit mode.
+- The home JS bundle grows only by the home client components.
+- Existing home specs pass unchanged. `pnpm verify`, `make e2e`, the 9-step smoke pass green.
 
 ## 7. Test plan
 
-Per `TESTING.md`: pick the layer by what can break. Home is the entry to critical flows, so
-1a ships with an e2e spec, and the bug-fix rule (failing test first) applies to fixes found
-on the way.
+Per `TESTING.md`: pick the layer by what can break. Home is the entry to critical flows.
 
-| Layer | File (*new*) | Test | PR |
+| Id | Layer | File | Test |
 |---|---|---|---|
-| Unit | `src/__tests__/home-layout.test.ts` | `resolveLayout`: null gives the default per user type; unknown and retired ids dropped; duplicate dropped; bad size falls back; hidden Today made visible; missing Today inserted; `since > seen` appended hidden; unavailable widget filtered but kept by `mergeForSave` | 1a |
-| Unit | same | **Characterization:** for the four user types in 6.2, the default renders the same parts in the same order as today's page | 1a |
-| Unit | `src/__tests__/home-layout-reducer.test.ts` | move, moveUp and moveDown at the ends, hide, show to the old place, resize to a disallowed size refused, add, undo stack, reset | 1a |
-| Unit | `src/__tests__/home-widgets-registry.test.ts` | every id has a render entry (also `tsc`); every `defaultSize` is in `sizes`; `today.hideable === false`; ids unique; no id in both `WIDGETS` and `RETIRED_IDS` | 1a |
-| Component | `src/__tests__/components/home-grid.test.tsx` | Edit shows toolbars; content is `inert`; Cancel restores; Done calls the action once; a failed save keeps edit mode and the draft; keyboard reorder and the announcement text | 1a |
-| Component | `src/__tests__/components/home-widgets.test.tsx` | each widget's View at each size, Empty, error state; Today S still has "Start Today's Workout" with the right `href` | 1a, 1b |
-| Integration | `src/__tests__/integration/home-layout.test.ts` | `saveHomeLayout` writes only the caller's row; refuses hidden Today, unknown id, bad size, free-text settings; `null` resets; the column is in `collectUserData`; Friends' activity loader leaves out a friend with activity hidden; Garmin loader returns nothing for a non-admin | 1a, 1b |
-| e2e | `e2e/home-layout.spec.ts` | Edit, Move up on Week, hide Weekly goal, resize Today to M, Done, reload: state persists (check with `testDb()`); "Start Today's Workout" still starts the workout; Reset restores the default. WebKit and Chromium | 1a |
-| e2e | `e2e/home-widgets.spec.ts` | add each available widget from the gallery at each size; no console errors; reload persists | 1b |
-| e2e | existing | `cycle-day`, `did-you-do-it`, `guided-workout`, `planned-sessions`, `consent`, `auth.setup` pass unchanged | every PR |
+| T1 | e2e | `e2e/home-default.spec.ts` | Default order per user type (6.2), including `did-you-do-it` and `missed-week` between the training widgets and the week strip. Commit 1, then unchanged. |
+| U1 | Unit | `src/__tests__/home-layout.test.ts` | `resolveLayout`: null gives the default per audience; unknown, retired and duplicate ids dropped; bad size falls back; hidden critical made visible; missing critical inserted visible when `defaultVisible`; other missing appended hidden; unavailable left out. `mergeForSave` keeps unavailable stored items in order. `.strict()` rejects extra keys and free-text settings. |
+| U2 | Unit | same | The default for each 6.2 user type, with the notice slots, lists the same parts in the same order as T1. |
+| U3 | Unit | `src/__tests__/home-layout-reducer.test.ts` | move, moveUp and moveDown at the ends, hide, show to the old place, resize to a disallowed size refused, add, undo stack, reset |
+| U4 | Unit | `src/__tests__/home-widgets-registry.test.ts` | ids unique; `defaultSize` in `sizes`; `today` and `enduranceToday` critical; no id also in `RETIRED_IDS`; every streamed widget has `load`, every core widget `select` |
+| U5 | Unit | `src/__tests__/home-plan.test.ts` | The streamed widgets the page renders are exactly the visible ones; a hidden one is never passed to `load`. |
+| C1 | Component | `src/__tests__/components/home-today.test.tsx` | For each state in the 6.7 table, the set of action `href`s and buttons at S (including the More sheet) equals the set at L. The `Error` state links to `/new-workout`. Same for Endurance today's error. |
+| C2 | Component | `src/__tests__/components/home-edit.test.tsx` | Edit renders the list and no widget content; Cancel restores; Done calls the action once; a failed save keeps edit mode and the draft; conflict shows the prompt; keyboard reorder and announcement text; focus rules from 6.9; `DndContext` absent before Edit. |
+| C3 | Component | `src/__tests__/components/home-widgets/*.test.tsx` | Each widget's View at each size, Empty, error. Garmin readiness renders from a fixture (e2e accounts are not Garmin users by default). |
+| T4 | Component | `src/__tests__/components/home-error-boundary.test.tsx` | A throwing View inside `WidgetErrorBoundary` shows "Couldn't load this." and the rest of the list stays. `safeLoad` rethrows a `redirect()` and catches a plain error. |
+| T2 | Integration | `src/__tests__/integration/home-layout.test.ts` | Count statements through a test-only Drizzle logger: `loadHomeCore` for the default layout runs the same count as the pre-rewrite page reads (record the number in commit 1 with the same harness around the current reads); with all streamed widgets hidden, no streamed loader runs. |
+| T3 | Integration | same | On an auto-complete day (a cycle slot with `autoComplete`), `loadHomeCore` returns today as done in both the Today data and the week's completed dates. |
+| I1 | Integration | same | `saveHomeLayout` writes only the caller's row; refuses hidden critical, unknown id, bad size, extra keys, too many items; `null` resets; conflict without `force`; `force` overwrites; `mergeForSave` keeps endurance items when the switch is off; the column appears in `collectUserData`. |
+| I2 | Integration | same | Friends' activity loader: a friend with activity hidden never appears; each row has exactly `name, image, date, programName, setCount, sessionId`. Garmin readiness loader returns `null` for a non-admin. |
+| E1 | e2e | `e2e/home-layout.spec.ts` | Edit, Move up on Week, **hide Week**, resize Today to S, Done, reload: state persists (check with `testDb()`); Today S "Start" opens the workout; Reset restores the default. |
+| E2 | e2e | same | No-cycle user: after a layout change, `start-bar` is still visible outside edit mode. |
+| E3 | e2e | same | Endurance user: move Endurance today below Week, Done; "Start guided" still opens the player. |
+| E4 | e2e | same | Offline (`context.setOffline(true)`): Done shows the offline message and keeps the draft; back online, Done saves. |
+| E5 | e2e | `e2e/home-widgets.spec.ts` | Add every widget available to the e2e user from the gallery at each size; no console errors; reload persists. Garmin can be covered the way `e2e/garmin.spec.ts` does (it makes the account an admin; the e2e server sets `GARMIN_KEY_ENCRYPTION_KEY`, `playwright.config.ts:73`), but C3 and I2 are enough. |
+| - | e2e | existing | `cycle-day`, `did-you-do-it`, `guided-workout`, `planned-sessions`, `consent`, `auth.setup` pass unchanged. |
 
-Then `pnpm verify`, `make e2e`, and the 9-step smoke pass in `CLAUDE.md`.
+All e2e on WebKit and Chromium. Then `pnpm verify`, `make e2e`, the 9-step smoke pass.
 
 ## 8. Privacy and MCP
 
 ### 8.1 Privacy steps
 
-Storage choice: **`user.home_layout`**, not localStorage and not a new table.
+Storage: **`user.home_layout`**, not localStorage and not a new table.
 
 | Option | For | Against |
 |---|---|---|
-| Column on `user` (chosen) | Syncs across devices. The server renders the right layout on first paint: no flash, no hydration risk. `collectUserData` selects the whole `user` row (`src/lib/account-data.ts:74`), so export and deletion need no new code. | A migration. |
+| Column on `user` (chosen) | Syncs across devices. Server renders the right layout on first paint. `collectUserData` selects the whole `user` row (`src/lib/account-data.ts:74`), so export and deletion need no new code. Read in an existing select. | A migration. |
 | New table | Clean for per-device layouts. | Must join the export list and the cascade test. No current need. |
-| localStorage | No migration, works offline. | No sync; first paint shows the default, then jumps; not in the export; `clearLocalUserData` removes it on sign-out. `weeklyGoal` already shows the cost. |
+| localStorage | No migration, works offline. | No sync; first paint shows the default, then jumps; not in the export; removed on sign-out. `weeklyGoal` already shows the cost. |
 
-Steps in PR 1a:
-1. Run the `privacy-compliance` skill (new column with user data).
+Steps in the PR:
+1. Run the `privacy-compliance` skill (new column with user data; friend data shown in a new
+   place).
 2. `docs/privacy/data-inventory.md`, Settings row: add `home_layout` (which home widgets the
-   user shows, in which order and size). Legal basis Art. 6(1)(b), retention until deletion,
-   like `distanceUnit`. It is a display preference, not health data by itself.
-3. No new browser storage, no new recipient, so no policy text change and no `LEGAL_VERSION`
-   bump. Confirm with the skill.
-4. Widget settings hold ids and numbers only, never free text (the Zod schema enforces it).
-5. Friends widgets (1b): no new data flow. They show data the Friends page already shows,
-   through the same filtered actions. Confirm with the skill that showing it on home needs no
-   policy change.
+   user shows, in which order and size). Art. 6(1)(b), until deletion, like `distanceUnit`.
+3. No new browser storage, no new recipient. Confirm with the skill that no policy text change
+   and no `LEGAL_VERSION` bump is needed.
+4. Widget settings hold ids and numbers only (`.strict()` Zod).
+5. Friends' activity shows less than the Friends page: name, picture, date, program, set
+   count. No feeling, notes or volume.
 
 ### 8.2 MCP decision
 
-**Read only.**
+**Read only.** `get_profile` (`src/lib/mcp/tools/profile.ts:22`) adds:
 
-- `get_profile` (`src/lib/mcp/tools/profile.ts:22`) adds `homeLayout`: the resolved list of
-  visible widget ids and sizes. It tells the coach what the user watches (for example body
-  weight or readiness). One field, no new tool.
-- **No write tool.** The layout is the user's own space. A coach that rearranges it would
-  surprise the user, would need the revisions and undo machinery (A4) for a low-value change,
-  and could only make the start path worse. If the coach thinks a widget would help, it says
-  so in chat. If a coach feature must put something on home, it is a notice (like the AI
-  check-in), not a layout change.
+```ts
+homeLayout: { isDefault: boolean; items: StoredHomeLayout["items"] | null }
+```
 
-## 9. Open questions
+It returns the stored row as parsed by `parseStoredLayout`, with `isDefault: true` and
+`items: null` when the column is null. It does **not** resolve the layout against the cycle:
+`getActiveCycleForUser` needs a cookie session (`requireSession`) and writes (2.4). Update the
+tool description in one sentence.
 
-| # | Question | Recommendation |
+No write tool. The layout is the user's own space; a coach that rearranges it would surprise
+the user and would need the revisions machinery (A4) for a low-value change. If a coach
+feature must put something on home, it is a notice.
+
+## 9. Decisions
+
+Decided by the hub on 2026-11-13; the owner may change any of them.
+
+| # | Question | Decision |
 |---|---|---|
-| 1 | Can the user hide Today? | No. Move and resize only. It is the only start for a planned workout. |
-| 2 | Can the user hide the title row? | Yes. The `h1` stays for screen readers, and "Edit home" stays at the end of the list. |
-| 3 | Can the user hide or move notices (policy, check-in, sick, "Did you do these?", missed, share)? | No. They keep their own dismiss paths. "Missed this week" keeps its existing setting. |
+| 1 | Can the user hide Today? | No. Move and resize only. Same for Endurance today. |
+| 2 | Can the user hide the title row? | Yes. The `h1` stays as `sr-only`, and "Edit home" stays at the end of the list. |
+| 3 | Can the user hide or move notices? | No. They render in fixed slots and keep their own dismiss paths; "Missed this week" keeps its setting. |
 | 4 | Where is the layout stored? | `user.home_layout jsonb`; null means default. |
-| 5 | May the home scroll? | Yes, it must once widgets can grow. The default still fits one screen. |
-| 6 | Do new widgets appear on homes users already arranged? | No. They appear in the gallery with a "New" mark. Users with the default layout get a new widget only if we change the default. |
-| 7 | Phase 1 new widgets: Recent PRs, Friends' activity, Garmin readiness. Visible by default? | No, hidden by default, so 1a and 1b change nobody's home. Owner may opt in for himself. |
-| 8 | Move `weeklyGoal` from localStorage into the account? | Yes, in phase 2, as a setting of the Weekly goal widget, read from localStorage once as the start value. |
+| 5 | May the home scroll? | Yes. The default still looks the same. |
+| 6 | Do new widgets appear on homes users already arranged? | No. They are appended hidden and listed in the gallery. |
+| 7 | Are the new widgets (Recent PRs, Friends' activity, Garmin readiness) visible by default? | No. Nobody's home changes with this PR. |
+| 8 | Move `weeklyGoal` from localStorage into the account? | Yes, in phase 2, as a Weekly goal setting, seeded once from localStorage. |
 | 9 | Rest timer widget? | No. It belongs to an open workout. |
-| 10 | Quick start (favourite programs) widget? | Phase 3, with its own e2e spec, since it is a second start entry. |
-| 11 | Should the AI coach change the layout? | No. Read only through `get_profile`. |
-| 12 | Long-press to enter edit mode? | Not in phase 1. Revisit after use. |
-| 13 | One layout per account, or per device? | One per account. |
-| 14 | Endurance users: endurance today above the strength card by default? | Not now. Keep today's order so nothing changes; revisit with the owner's own use. |
-| 15 | Weekly leaderboard widget? | Only after `getFriendsLeaderboard` uses the user's week, not the server's (`src/lib/actions/friends.ts:752-756`). |
+| 10 | Quick start widget? | Phase 3, with its own e2e spec. |
+| 11 | Can the AI coach change the layout? | No. Read only through `get_profile`. |
+| 12 | Long-press to enter edit mode? | No, an "Edit" button. Revisit after use. |
+| 13 | One layout per account or per device? | Per account. |
+| 14 | Endurance today above the strength card by default? | No. Keep today's order. |
+| 15 | Weekly leaderboard widget? | Only after `getFriendsLeaderboard` uses the user's week. |
 
 ## 10. Sources
 
@@ -730,3 +840,26 @@ Steps in PR 1a:
   <https://forums.garmin.com/apps-software/mobile-apps-web/f/garmin-connect-mobile-ios/267089/why-do-my-day-cards-keep-rearranging-and-removed-ones-keep-coming-back>,
   <https://forums.garmin.com/apps-software/mobile-apps-web/f/garmin-connect-mobile-ios/148606/my-day-resets-to-defaults>,
   <https://forums.garmin.com/apps-software/mobile-apps-web/f/garmin-connect-mobile-ios/116591/choose-or-rearrange-the-my-day-widgets>
+
+## 11. Changes after review
+
+Two review passes on 2026-11-13. Each finding was checked against the code first.
+
+- Writes inside `getActiveCycleForUser` and `weekdayToday` are real (2.4). The reviewers
+  cited `insertAutoSessions` at `training-cycles.ts:258`; it is at `:281`.
+- "Did you do these?" and "Missed this week" sit between Endurance today and the week strip;
+  the first draft put them on top. Fixed with notice slots.
+- e2e accounts **can** see Garmin: `e2e/garmin.spec.ts` makes the account an admin and the
+  e2e server sets the key (`playwright.config.ts:73`). Component and integration tests still
+  carry the Garmin coverage, as asked.
+- The current page has no `data-testid` on the today card or week strip, so commit 1 adds them
+  before the order spec.
+- The repo has no `toHaveScreenshot` yet, and the home shows today's date; 6.2 says how to make
+  screenshots stable or fall back to manual ones.
+- The `lifter` audience flag was not added: Recent PRs is available to all with an empty
+  state, and a cycle-free audience lets the Server Action compute availability from the user
+  row.
+- `REGISTRY_VERSION`, `seen` and `since` are gone; a later `addedOn` date can drive "New"
+  marks.
+- The first draft's 2-column sortable grid with `rectSortingStrategy` is replaced by a vertical
+  list in edit mode.
