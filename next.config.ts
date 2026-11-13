@@ -39,6 +39,13 @@ const nextConfig: NextConfig = {
   // real chrome immediately instead of a loading boundary.
   cacheComponents: true,
 
+  // The PR feed lives on the Records tab of Progress now; keep old links working.
+  // A config redirect, not a page that calls redirect(): in dev, cacheComponents'
+  // instant validation reports a page's redirect as a render error.
+  async redirects() {
+    return [{ source: "/more/prs", destination: "/more/metrics?tab=records", permanent: false }];
+  },
+
   // Cache dynamic page payloads in the client-side router cache for 30 seconds.
   // Navigating back to a recently visited tab shows data instantly without
   // hitting the server again.
