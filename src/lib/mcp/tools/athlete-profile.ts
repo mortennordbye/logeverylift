@@ -100,7 +100,7 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
     {
       description: [
         "The user's thresholds: the current value per kind (ftp W; lthr_bike, lthr_run, max_hr bpm; run_threshold_pace and swim_css in m/s, with the pace in seconds per km or per 100 m), its date, source (manual, test, garmin), age in weeks and a stale flag after 8 weeks. history true adds every stored value.",
-        "With endurance features on, also: the athlete profile (endurance level, available days 1 = Monday, hours per week, longest day, strength goal), the race, injuries (past ones with includePast), the strength default for the active cycle's phase and the whole table, and the intake interview: whether it is complete, which steps have no answer, and the coach memory entries to offer for moving.",
+        "With endurance features on, also: the athlete profile (endurance level, available days 1 = Monday, hours per week, longest day, strength goal), the race, injuries (past ones with includePast), sick periods (the open one and the last 90 days, each with its version) with returnInfo and the return rule, the strength default for the active cycle's phase and the whole table, and the intake interview: whether it is complete, which steps have no answer, and the coach memory entries to offer for moving.",
         "Garmin estimates appear as suggestions only where Garmin is enabled; they are not stored until you or the user take one. Read this before planning, after get_coach_memory. Health data: use it for coaching only.",
       ].join(" "),
       inputSchema: { history: z.boolean().default(false), includePast: z.boolean().default(false) },
@@ -122,12 +122,14 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
           ...(suggestions.length ? { garminSuggestions: suggestions } : {}),
         };
         if (!endurance) return ok(base);
-        const [profile, injuries, race, memory, phase] = await Promise.all([
+        const { illnessForProfile } = await import("@/lib/mcp/tools/workouts-compliance");
+        const [profile, injuries, race, memory, phase, illness] = await Promise.all([
           getAthleteProfile(userId),
           listInjuries(userId, includePast),
           interviewRace(userId),
           memoryToOffer(userId),
           activeCyclePhase(userId),
+          illnessForProfile(userId),
         ]);
         const goal = profile?.strengthGoal ?? null;
         return ok({
@@ -156,6 +158,8 @@ export function registerAthleteProfileTools(server: McpServer, userId: string, c
             endedOn: i.endedOn,
             version: i.version,
           })),
+          // Sick periods (the open one and the last 90 days) and the IOC 2022 return rule (D20).
+          ...illness,
           strength: goal
             ? {
                 goal,

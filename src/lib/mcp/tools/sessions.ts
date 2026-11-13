@@ -193,6 +193,16 @@ export function registerSessionTools(server: McpServer, userId: string) {
         if (args.date == null || args.programId == null) return fail("Send date and programId, or plannedSessionId");
         const date = args.date;
         const programId = args.programId;
+        // With endurance features on, an endurance session is answered with
+        // its numbers, so an auto row cannot hide a miss (decision 21,
+        // docs/plans/workouts-and-compliance.md).
+        const { enduranceEnabledFor } = await import("@/lib/endurance");
+        if (await enduranceEnabledFor(userId)) {
+          const { programSports } = await import("@/lib/session-compliance");
+          if ((await programSports([programId])).get(programId)) {
+            return fail("This is an endurance session: use confirm_planned_session with its time (or a Garmin activity), or mark it missed.");
+          }
+        }
         // A block scheduled for today becomes the active one first.
         await startDueScheduledCycle(userId);
         const cycle = await db.query.trainingCycles.findFirst({

@@ -23,4 +23,12 @@ export const MCP_RESOURCE_DOCS = [
     description:
       "How the app's data fits together, which writer owns which field, and what the app cannot do yet. Read before the first change in a conversation.",
   },
+  {
+    name: "workout-steps",
+    uri: "logeverylift://docs/workout-steps",
+    path: "docs/mcp/workout-steps.md",
+    title: "Workout step syntax",
+    description:
+      "The JSON shape of a structured endurance workout (steps, repeats, end conditions, targets relative to thresholds, swim send-offs) and every rule the app checks, with examples. Read before creating or changing a workout.",
+  },
 ] as const;

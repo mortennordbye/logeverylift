@@ -28,6 +28,48 @@ export const plannedSessionOpSchema = z.discriminatedUnion("op", [
     label: z.string().max(100).nullable().optional(),
     notes: z.string().max(500).nullable().optional(),
   }),
+  // Structured workouts and answers, endurance features only (docs/plans/workouts-and-compliance.md, 7).
+  z.object({ op: z.literal("set_workout"), id, workoutId: id }),
+  z.object({ op: z.literal("update_from_library"), id }),
+  z.object({ op: z.literal("link_brick"), id, brickParentId: id }),
+  z.object({ op: z.literal("unlink_brick"), id }),
+  z.object({ op: z.literal("miss"), id, reason: z.string().trim().max(200).nullable().optional() }),
+  z.object({ op: z.literal("unmiss"), id }),
+  z.object({ op: z.literal("pick"), id, garminActivityId: id }),
+]);
+
+/** "Yes, I did it" from the app (docs/plans/workouts-and-compliance.md, 6.5). */
+export const confirmDoneSchema = z.object({
+  plannedSessionId: id,
+  durationSeconds: z.number().int().min(60).max(86_400),
+  distanceMeters: z.number().int().min(0).max(1_000_000).nullable().optional(),
+  rpe: z.number().int().min(1).max(10).nullable().optional(),
+  notes: z.string().trim().max(500).nullable().optional(),
+});
+
+const severity = z.enum(["mild", "moderate", "severe"]);
+
+/** One change to a sick period from the app (docs/plans/workouts-and-compliance.md, 6.7). */
+export const illnessOpSchema = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("add"), startedOn: day, endedOn: day.nullable().optional(), severity: severity.nullable().optional(), notes: z.string().trim().max(500).nullable().optional() }),
+  z.object({
+    op: z.literal("update"),
+    id,
+    startedOn: day.optional(),
+    endedOn: day.nullable().optional(),
+    severity: severity.nullable().optional(),
+    notes: z.string().trim().max(500).nullable().optional(),
+  }),
+  z.object({ op: z.literal("end"), id, endedOn: day }),
+  z.object({ op: z.literal("delete"), id }),
+]);
+
+/** One change to a library workout from the app: the step editor waits for C6. */
+export const workoutOpSchema = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("duplicate"), id }),
+  z.object({ op: z.literal("rename"), id, name: z.string().trim().min(1).max(80) }),
+  z.object({ op: z.literal("delete"), id }),
+  z.object({ op: z.literal("restore"), id }),
 ]);
 
 export const plannedRangeSchema = z.object({ from: day, to: day, cycleId: id.optional() });

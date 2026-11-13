@@ -13,7 +13,7 @@
 import { MCP_RESOURCE_DOCS } from "@/lib/mcp/resource-docs";
 import type { McpAccess } from "@/lib/mcp/scopes";
 
-const [REFERENCE, RULES] = MCP_RESOURCE_DOCS;
+const [REFERENCE, RULES, STEPS] = MCP_RESOURCE_DOCS;
 
 const SECTIONS = {
   app: `LogEveryLift is a training log, strength first, with endurance sessions too.
@@ -21,6 +21,9 @@ const SECTIONS = {
 - Training cycles: a template that runs programs for some weeks, by weekday (up to three slots a day, daySlot 1-3, for example strength in the morning and a run in the evening) or as a rotation, with a periodization curve and a weekly sync of the active cycle. A cycle in no season can hold a race, a goal and an athlete level (endurance features only), and a draft can be scheduled to start on a later day.
 - Seasons: a long goal above cycles (list_seasons, get_season, manage_season), for every user. A season holds races with priority A, B or C (manage_race, endurance features only) and its phases: training cycles in order, each with an optional phase type (general, base, build, peak, taper, transition) and a length in weeks or days. When a phase starts, the next one is scheduled for the day after it ends. A cycle in a season stores no race; it reads the season's A race. The taper is placed from the A race: get_season says whether it ends on race day, and fit_taper fixes it. When a race date or an A race changes, the season is flagged for a re-plan; the app never reshapes the phases itself, so re-plan them and clear the flag (clear_replan).
 - Dated sessions: a weekday cycle makes one dated session per slot for the whole block. Each can be moved, skipped or changed alone (list_planned_sessions, manage_planned_session); a template edit rewrites the sessions nobody changed from this week's Monday on, and done ones, changed ones and those of earlier weeks never change. Done and missed are matched from logged workouts. A rotation cycle has no fixed dates (a missed session repeats the next day), so its sessions are worked out from the walk and you can only skip, unskip or change one that is still to come, by its rotationPosition.
+- Structured workouts (endurance features only): a dated session runs a program or its own copy of a structured workout (steps, repeats, targets as a share of the user's thresholds), never both. The library holds reusable ones (list_workouts, get_workout, manage_workout); manage_planned_session set_workout puts one on a day, and edit_cycle_slot workoutId on a weekday slot. A brick is two sessions on one day, the run linked to the ride (link_brick). The weekly sync never changes a workout: to change a session's volume, edit the session. Read ${STEPS.uri} before your first workout write; a workout that breaks its schema is refused, with no override.
+- Planned vs done: each dated session has a state. With endurance features on, an endurance session is matched to a logged workout of its sport or, for admins, a Garmin activity of that day; a past one with no match is 'unconfirmed' until the user (or you, with confirm_planned_session) answers: done with its time, or missed. A missed easy session is skipped and the plan goes on. A missed key session gets suggestedMoveTo, a free day in the same week next to no hard day: the user taps it in the app, or you move it if they agree (D19). Never stack sessions. get_compliance gives the share of weeks with at least 80% of the planned sessions done.
+- Sick periods (endurance features only): one entry each (manage_illness; get_athlete_profile lists them). Sessions inside read as missed by illness. After one, give the return rule (IOC 2022): a 10-20 minute test at 60-70% of normal intensity before moderate or hard training; stop and see a doctor on symptoms. Do not plan intensity until the athlete reports a normal test, and change the plan only when the user asks.
 - Exercises: the built-in library and the user's own custom exercises. Find one with search_exercises; make a custom one with create_exercise (set its discipline swim, bike or run on an endurance exercise).
 - Workout sessions: what the user logged, set by set, with the user's notes. You can read them. You can log a session done outside the app (log_session) and mark a planned day of the active cycle as done (confirm_session). You cannot edit or delete a session.
 - Profile and body weight history.
@@ -47,7 +50,7 @@ const SECTIONS = {
 5. After each write, say what changed, from what, to what, and why.
 6. Save each agreed change as a decision entry in coach memory, with the date and the reason.`,
 
-  resources: `Resources: ${REFERENCE.uri} (training rules with evidence labels) and ${RULES.uri} (how the app works and its limits). Read the rules before your first change in a conversation.`,
+  resources: `Resources: ${REFERENCE.uri} (training rules with evidence labels), ${RULES.uri} (how the app works and its limits) and ${STEPS.uri} (the structured workout syntax). Read the rules before your first change in a conversation.`,
 };
 
 const ACCESS: Record<McpAccess, string> = {
