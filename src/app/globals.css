@@ -383,3 +383,26 @@ select {
 .maplibregl-map .maplibregl-ctrl-attrib-button {
   filter: invert(1);
 }
+
+/* Home edit mode: widgets jiggle a little, as on the iPhone home screen.
+   Off for anyone who asks for less motion. */
+@keyframes home-jiggle {
+  0%, 100% { transform: rotate(-0.6deg); }
+  50% { transform: rotate(0.6deg); }
+}
+.home-jiggle {
+  animation: home-jiggle 0.28s ease-in-out infinite;
+  transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-jiggle {
+    animation: none;
+  }
+}
+/* A long press on a home widget enters edit mode: no link preview or text
+   selection callout on top of it. */
+[data-widget] {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}

@@ -28,6 +28,7 @@ when the brief was written.
 | 7 | [Web push and reminders](web-push-and-reminders.md) | todo | yes | yes (rest timer) |
 | 8 | [Garmin deep data](garmin-deep-data.md) | phase 1 merged to main (#208, #215) | yes | no |
 | 9 | [MCP access: scopes, revoke, instructions, resources](mcp-access.md) (endurance plan B2, B3) | done | data migration only | no |
+| 10 | [Home screen widgets](../home-widgets-audit.md) (audit, catalogue and build brief; section 6 is the brief, one PR) | phases 1a and 1b built (registry, edit mode, Recent PRs, Friends' activity, Garmin readiness); phase 2 widgets todo | yes | yes (home start entries) |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.
@@ -63,7 +64,7 @@ brief here before code. Inputs: the audit (`docs/triathlon-coach-audit.md`) and 
 | A4 | [Revisions, stable ids and plan versions](revisions.md) | done |
 | B1, B4, D2 part 1 | [AI coach: MCP parity, coach memory, first training limits](ai-coach.md) | done |
 | C1 | [Seasons, races and phases](seasons.md) | done |
-| C2 (the quick workout follows as C2b) | [Session model: several slots a day, dated sessions](sessions.md) | building |
+| C2 (the quick workout follows as C2b) | [Session model: several slots a day, dated sessions](sessions.md) | done (#229) |
 | C3 | [Athlete profile, thresholds and intake interview](athlete-profile.md) | done |
 | C4, C5 | [Structured workouts, planned vs done, missed sessions and sick periods](workouts-and-compliance.md) | done |
 | C6, D1 (the step editor follows as C6b) | [Endurance in the app (views, guided player, pool view, step results) and load without Garmin](endurance-app.md) | done |

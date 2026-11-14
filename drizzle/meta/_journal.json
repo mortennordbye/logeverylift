@@ -631,6 +631,13 @@
       "when": 1794575787092,
       "tag": "0089_nutrition_race_plans",
       "breakpoints": true
+    },
+    {
+      "idx": 90,
+      "version": "7",
+      "when": 1794582514542,
+      "tag": "0090_home_layout",
+      "breakpoints": true
     }
   ]
 }

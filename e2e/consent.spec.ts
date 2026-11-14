@@ -50,6 +50,8 @@ test("a user on an old consent version gets a clean consent page and returns hom
   await page.waitForURL((url) => url.pathname === "/consent");
   await expect(page.getByRole("heading", { name: "Updated terms" })).toBeVisible();
   await expect(page.getByText(/injuries, sick periods/)).toBeVisible();
+  // Again let the prefetches finish before Continue navigates away from them.
+  await page.waitForLoadState("networkidle");
   expect(errors, "while the consent page loaded").toEqual([]);
   await page.getByRole("checkbox", { name: /I accept the terms of use/ }).check();
   await page.getByRole("checkbox", { name: /I consent to LogEveryLift storing/ }).check();

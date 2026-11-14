@@ -8,7 +8,7 @@ T7), `CLAUDE.md`, `TESTING.md`, the draft brief [`quick-workout-and-swap.md`](qu
 [`revisions.md`](revisions.md), [`ai-coach.md`](ai-coach.md), [`seasons.md`](seasons.md) (C1) and
 [`athlete-profile.md`](athlete-profile.md) (C3).
 
-Status: built on `feat/sessions-c2`, 2026-11-13, on top of C1 (#227) and C3 (#226). The hub
+Status: done, merged in #229. Built on `feat/sessions-c2`, 2026-11-13, on top of C1 (#227) and C3 (#226). The hub
 decided the open questions (section 14, "Decisions"). The characterization tests (8.1) merged
 first (#225) and pass unchanged after the build. Section 19 says where the build differs from
 this brief, and section 11 what C1 changed. The **Findings** describe `main` at 2bdac35 (after
@@ -109,7 +109,7 @@ inserts auto sessions (`:277`, `:335`).
   auto row of the same program and date (`src/lib/actions/workout-sessions.ts:181-192`).
 
 **Make-up.**
-- "Make up" links to `/programs/{id}/workout?makeup=YYYY-MM-DD` (`src/app/page.tsx:227`). The
+- "Make up" links to `/programs/{id}/workout?makeup=YYYY-MM-DD` (`src/components/features/home/Notices.tsx:47`). The
   initializer reads the date (`src/components/features/WorkoutSessionInitializer.tsx:33-36`) and
   `createWorkoutSession` stores it as `intendedDate` (`src/lib/actions/workout-sessions.ts:75-86`,
   column at `src/db/schema/workout-sessions.ts:65`). History shows "Make-up for"

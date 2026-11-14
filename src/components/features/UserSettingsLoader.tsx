@@ -9,7 +9,8 @@ import { getOptionalSession } from "@/lib/utils/session";
 export async function UserSettingsLoader() {
   const session = await getOptionalSession();
   if (!session) return <UserSettingsHydrator settings={null} fillTimeZone={false} />;
-  const settings = await getUserSettings(session.user.id);
+  const { timeZone, units } = await getUserSettings(session.user.id);
   // An admin viewing as the user must not fill in the admin's own zone.
-  return <UserSettingsHydrator settings={settings} fillTimeZone={!session.session.impersonatedBy} />;
+  // Only the zone and units go to the client, not the home layout.
+  return <UserSettingsHydrator settings={{ timeZone, units }} fillTimeZone={!session.session.impersonatedBy} />;
 }

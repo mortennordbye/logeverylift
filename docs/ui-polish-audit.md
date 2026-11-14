@@ -415,12 +415,15 @@ count. Screenshot: `audit-13-exercises.png`.
 **Fix:** give `/exercises` its own `loading.tsx`; leave `ExercisePickerSkeleton` to the
 two `add-exercise` routes it was written for.
 
-### [ ] B2 · **P2** · Dashboard skeleton is a bare header
+### [x] B2 · **P2** · Dashboard skeleton is a bare header
 
 `src/app/loading.tsx` renders the title and nothing else; the real `/`
 (`src/app/page.tsx:112-390`) fills the viewport. The most-visited route pops from empty
 to full. Mirror the today card and the week-strip card — both have data-independent
 geometry. Same issue, lower traffic: `src/app/new-workout/loading.tsx`.
+
+Fixed for `/` by the home widgets build: a neutral title, card and strip skeleton
+(docs/home-widgets-audit.md, 6.4). `src/app/new-workout/loading.tsx` is unchanged.
 
 ### [ ] B3 · **P2** · Metrics skeleton puts the tab bar in the wrong layer
 

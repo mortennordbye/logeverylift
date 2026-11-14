@@ -87,7 +87,9 @@ export default defineConfig({
     {
       name: "chromium",
       dependencies: ["setup"],
-      use: { ...devices["Pixel 7"] },
+      // The guided player's Web Audio cues would play through the speakers.
+      // WebKit has no such flag; e2e/fixtures/test.ts silences it there.
+      use: { ...devices["Pixel 7"], launchOptions: { args: ["--mute-audio"] } },
     },
   ],
 });
