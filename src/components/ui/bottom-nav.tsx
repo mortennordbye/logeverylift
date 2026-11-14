@@ -107,6 +107,8 @@ export function BottomNav() {
         pathname.startsWith("/exercises")
       );
     }
+    // Seasons live in the Plan tab.
+    if (label === "Plan") return pathname.startsWith(href) || pathname.startsWith("/seasons");
     return pathname.startsWith(href);
   };
 
@@ -131,6 +133,7 @@ export function BottomNav() {
               href={href}
               prefetch={true}
               suppressHydrationWarning
+              aria-current={active ? "page" : undefined}
               className={`
                 flex flex-col items-center justify-center gap-1 flex-1 h-full
                 transition-colors
