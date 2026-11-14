@@ -237,7 +237,7 @@ describe("the Plan list", () => {
     expect(card.textContent!.replace(/\u00a0/g, " ")).toContain("Race in 288 days");
     expect(within(card).getByRole("img", { name: /Phase bar/ })).toBeTruthy();
     expect(within(card).getByRole("link", { name: /Longer ride and run.*Base\s· 12\swk\s· 11\sJan\s– 4\sApr/ }).getAttribute("href")).toBe("/cycles/22");
-    expect(within(card).getByText(/^Starts Mon\s16\sNov$/)).toBeTruthy();
+    expect(within(card).getByText(/^Starts 16\sNov$/)).toBeTruthy();
     expect(within(card).getByRole("link", { name: /Jevnaker Halv Full Distanse.*A race\s· 29\sAug/ }).getAttribute("href")).toBe("/seasons/9");
   });
 

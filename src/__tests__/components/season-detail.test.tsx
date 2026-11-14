@@ -500,8 +500,10 @@ describe("the phase bar and badges match the Plan list (fix round 6)", () => {
     expect(tones()).toEqual(["next", "grey", "grey"]);
   });
 
-  it("gives a start inside the week with its date (J4-17)", () => {
+  it("gives a start inside the week in the same date format as a later one (J4-17, round 8)", () => {
     render(<SeasonDetailClient {...base} />);
-    expect(screen.getAllByTestId("phase-row")[0].textContent?.replace(/\u00a0/g, " ")).toContain("Starts Mon 16 Nov");
+    const text = screen.getAllByTestId("phase-row")[0].textContent?.replace(/\u00a0/g, " ");
+    expect(text).toContain("Starts 16 Nov");
+    expect(text).not.toContain("Mon");
   });
 });

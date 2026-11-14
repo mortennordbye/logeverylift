@@ -34,12 +34,11 @@ export function phaseSub(p: Pick<TimelinePhase, "phaseType" | "lengthDays" | "st
   return [p.phaseType ? PHASE_TYPE_LABELS[p.phaseType] : null, runLength(p), rangeLabel(p.start, p.end)].filter(Boolean).join(" · ");
 }
 
-/** "Starts today", "Starts tomorrow", "Starts Mon 16 Nov" inside a week, else "Starts 21 Dec". A weekday never comes without its date (J4-17). */
+/** "Starts today", "Starts tomorrow", else "Starts 21 Dec": one date format for every badge, short enough for a 320 px row (round 8). */
 export function startsLabel(today: string, start: string): string {
   const n = daysBetweenStr(today, start);
   if (n <= 0) return "Starts today";
   if (n === 1) return "Starts tomorrow";
-  if (n <= 6) return `Starts ${shortDay(start)}`;
   return `Starts ${dayMonth(start)}`;
 }
 

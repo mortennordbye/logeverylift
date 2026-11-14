@@ -706,16 +706,29 @@ function PhaseRow({ phase, sub, warn, badge, onOpen }: { phase: SeasonPhaseView;
           <circle cx="15" cy="18" r="1.6" />
         </svg>
       </button>
-      <button type="button" onClick={onOpen} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2.5 pr-3 text-left active:opacity-80">
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span data-testid="phase-name" className={`text-[15px] font-medium ${phase.state === "done" ? "text-muted-foreground" : ""}`}>
+      {/* Below 360 px the badge goes under the name, so the name keeps the row's width (round 8). */}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="grid min-h-11 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 py-2.5 pr-3 text-left active:opacity-80 min-[360px]:grid-cols-[minmax(0,1fr)_auto_auto]"
+      >
+        <span className="col-start-1 row-start-1 flex min-w-0 flex-col gap-0.5">
+          <span data-testid="phase-name" className={`break-words text-[15px] font-medium ${phase.state === "done" ? "text-muted-foreground" : ""}`}>
             {phase.name}
           </span>
-          <span className="text-[13px] text-muted-foreground">{keepDates(sub)}</span>
+          <span data-testid="phase-sub" className="text-[13px] text-muted-foreground">{keepDates(sub)}</span>
           {warn && <span className="mt-1 text-[13px]">{keepDates(warn)}</span>}
         </span>
-        {badge && <span className={`shrink-0 text-xs font-semibold ${badgeAccent(badge) ? "text-primary" : "text-muted-foreground"}`}>{keepDates(badge)}</span>}
-        <Chevron />
+        {badge && (
+          <span
+            className={`col-start-1 row-start-2 justify-self-start text-xs font-semibold min-[360px]:col-start-2 min-[360px]:row-start-1 min-[360px]:justify-self-auto ${badgeAccent(badge) ? "text-primary" : "text-muted-foreground"}`}
+          >
+            {keepDates(badge)}
+          </span>
+        )}
+        <span className="col-start-2 row-span-2 row-start-1 min-[360px]:col-start-3 min-[360px]:row-span-1">
+          <Chevron />
+        </span>
       </button>
     </li>
   );

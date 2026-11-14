@@ -219,3 +219,35 @@ test("at 320 px counts stay whole, no line can start with a dot, and long names 
   expect(await breakableJoins(confirm)).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("delete-confirm-320.png") });
 });
+
+/** How many lines each element matched by `selector` in `root` is drawn over. */
+function lineCounts(root: Locator, selector: string): Promise<{ text: string; lines: number }[]> {
+  return root.evaluate(
+    (el, sel) =>
+      [...el.querySelectorAll<HTMLElement>(sel)].map((n) => {
+        const range = document.createRange();
+        range.selectNodeContents(n);
+        const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+        return { text: n.textContent!, lines: lines.size };
+      }),
+    selector,
+  );
+}
+
+test("at 320 px a season page phase row keeps its name to two lines, the badge out of its way (round 8)", async ({ page }, testInfo) => {
+  const { seasonId } = await plan(testInfo.parallelIndex);
+  const db = testDb();
+  await db.update(trainingCycles).set({ name: "Swim, intervals and long bricks on Sundays" }).where(and(eq(trainingCycles.seasonId, seasonId), eq(trainingCycles.phaseOrder, 2)));
+  // The next phase is scheduled, so its badge is a start day.
+  await db.update(trainingCycles).set({ scheduledStartDate: dayStr(7 * 7) }).where(and(eq(trainingCycles.seasonId, seasonId), eq(trainingCycles.phaseOrder, 2)));
+
+  await page.goto(`/seasons/${seasonId}`);
+  const rows = page.getByTestId("season-phases");
+  await expect(page.getByTestId("phase-row")).toHaveCount(3);
+  await expect(rows).toContainText("Starts");
+  const names = await lineCounts(rows, "[data-testid=phase-name]");
+  expect(names.filter((n) => n.lines > 2)).toEqual([]);
+  const subs = await lineCounts(rows, "[data-testid=phase-sub]");
+  expect(subs.filter((n) => n.lines > 2)).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("season-phases-320.png") });
+});
