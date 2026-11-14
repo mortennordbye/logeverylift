@@ -35,7 +35,9 @@ const sizeIn = (id: WidgetId, round: number) => {
 test("every available widget, at every size, from the gallery", async ({ page }, testInfo) => {
   const consoleErrors: string[] = [];
   page.on("console", (msg) => {
-    if (msg.type() === "error") consoleErrors.push(msg.text());
+    // Linux WebKit (CI) reports the app-wide viewport meta's `interactive-widget` key as a
+    // console error; it is not from the home, as in consent.spec.ts.
+    if (msg.type() === "error" && !msg.text().includes('"interactive-widget" not recognized')) consoleErrors.push(msg.text());
   });
   const user = await testDb().query.users.findFirst({ where: eq(users.email, e2eUser(testInfo.parallelIndex).email) });
   const layout = async () =>
