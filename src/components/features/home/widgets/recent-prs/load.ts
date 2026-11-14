@@ -1,7 +1,7 @@
 import { formatPrValue, prTypeLabel } from "@/components/features/PrFeedList";
 import { getRecentPRs } from "@/lib/actions/metrics";
 import type { HomeContext } from "@/lib/home/core";
-import { shortDay } from "@/lib/home/labels";
+import { dayMonth } from "@/lib/home/labels";
 import { getUserSettings } from "@/lib/user-settings";
 import { localDateStr } from "@/lib/utils/user-date";
 
@@ -18,6 +18,6 @@ export async function loadRecentPrs(ctx: HomeContext): Promise<RecentPr[] | null
     exercise: pr.exerciseName,
     value: formatPrValue(pr, units),
     kind: prTypeLabel(pr),
-    date: shortDay(localDateStr(new Date(pr.achievedAt), timeZone)),
+    date: dayMonth(localDateStr(new Date(pr.achievedAt), timeZone)),
   }));
 }

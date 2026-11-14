@@ -7,7 +7,7 @@
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /** "2026-11-13" as "13 Nov". */
-export function shortDay(dateStr: string): string {
+export function dayMonth(dateStr: string): string {
   const [, m, d] = dateStr.split("-").map(Number);
   return `${d} ${MONTHS[m - 1]}`;
 }

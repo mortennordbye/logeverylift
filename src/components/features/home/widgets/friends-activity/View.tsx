@@ -1,6 +1,6 @@
 import { defineWidget } from "@/components/features/home/define-widget";
 import { PreviewBox, WidgetCard, WidgetSkeleton } from "@/components/features/home/widget-ui";
-import { shortDay } from "@/lib/home/labels";
+import { dayMonth } from "@/lib/home/labels";
 import Link from "next/link";
 import { loadFriendsActivity, type FriendWorkout } from "./load";
 
@@ -35,7 +35,7 @@ export const friendsActivityWidget = defineWidget<FriendWorkout[]>({
             <span className="text-sm font-semibold truncate">{w.name}</span>
           </span>
           <span className="text-xs text-muted-foreground truncate">
-            {what(w)} · {shortDay(w.date)}
+            {what(w)} · {dayMonth(w.date)}
           </span>
         </Link>
       );
@@ -50,7 +50,7 @@ export const friendsActivityWidget = defineWidget<FriendWorkout[]>({
                 <span className="block text-sm font-medium truncate">{w.name}</span>
                 <span className="block text-xs text-muted-foreground truncate">{what(w)}</span>
               </span>
-              <span className="text-xs text-muted-foreground shrink-0">{shortDay(w.date)}</span>
+              <span className="text-xs text-muted-foreground shrink-0">{dayMonth(w.date)}</span>
             </li>
           ))}
         </ul>
