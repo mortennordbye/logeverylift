@@ -13,12 +13,12 @@ import { liveCycles } from "@/lib/plan-live";
 import { ensureCycleSessions, listPlanned } from "@/lib/planned-sessions";
 import { getSeasonDetail, listSeasons } from "@/lib/seasons";
 import { sessionCompliance } from "@/lib/session-compliance";
+import { dayMonth } from "@/lib/home/labels";
 import { userToday } from "@/lib/user-settings";
 import { blockWeeks, dayLabels, weekDays as blockWeekDays, rotationRows, weekIndexOf, type RotationWalkDay } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, toDateStr } from "@/lib/utils/cycle-position";
 import {
   blockEnd,
-  dayMonth,
   heroLabel,
   pastEnd,
   pastRow,
