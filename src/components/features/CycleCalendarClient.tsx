@@ -13,6 +13,7 @@ import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
 import { useUserSettings } from "@/contexts/user-settings-context";
 import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { todayIn } from "@/lib/utils/user-date";
+import { dateLabel } from "@/lib/utils/date-label";
 import type { ProgramWithExercises, TrainingCycleWithSlots } from "@/types/workout";
 import { ChevronLeftIcon, ChevronRight, ChevronRightIcon } from "lucide-react";
 import Link from "next/link";
@@ -338,7 +339,9 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
               <div key={cycle.id} className="flex items-center gap-2">
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${colors?.dot}`} />
                 <span className="text-sm font-medium">{cycle.name}</span>
-                <span className="text-xs text-muted-foreground capitalize">· {cycle.status}</span>
+                <span className={`text-xs text-muted-foreground ${cycle.status === "draft" ? "" : "capitalize"}`}>
+                  · {cycle.status === "draft" && cycle.startDate ? `starts ${dateLabel(cycle.startDate, "MMM d", { utc: true })}` : cycle.status}
+                </span>
               </div>
             );
           })}

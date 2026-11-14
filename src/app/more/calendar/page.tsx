@@ -5,6 +5,8 @@ import { getAllCyclesWithSlots } from "@/lib/actions/training-cycles";
 import { getCompletedSessions } from "@/lib/actions/workout-sets";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { listPlanned } from "@/lib/planned-sessions";
+import { getSeasonDetail } from "@/lib/seasons";
+import { withPlannedStarts } from "@/lib/utils/calendar-cycles";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { heavyLegsNotes } from "@/lib/training-limits";
 import { heavyLegsLines } from "@/lib/utils/training-limits";
@@ -25,7 +27,15 @@ export default async function CalendarPage() {
     getCompletedSessions(oneYearAgo),
   ]);
 
-  const cycles = cyclesResult.success ? cyclesResult.data : [];
+  // Drafts show on the days they will run: a scheduled one from its day, a
+  // later season phase from the season's timeline.
+  const allCycles = cyclesResult.success ? cyclesResult.data : [];
+  const seasonIds = [...new Set(allCycles.filter((c) => c.status === "draft" && c.seasonId != null).map((c) => c.seasonId!))];
+  const phaseStarts = new Map<number, string>();
+  for (const detail of await Promise.all(seasonIds.map((id) => getSeasonDetail(session.user.id, id)))) {
+    for (const p of detail?.phases ?? []) phaseStarts.set(p.id, p.start);
+  }
+  const cycles = withPlannedStarts(allCycles, phaseStarts);
   const completedDates = sessionsResult.success
     ? sessionsResult.data.map((s) => s.date)
     : [];
@@ -40,7 +50,8 @@ export default async function CalendarPage() {
 
   // The dated sessions of weekday cycles with dates (docs/plans/sessions.md, 5):
   // moved and skipped sessions show where they are. Rotation days stay as before.
-  const dated = cycles.filter((c) => c.scheduleType === "day_of_week" && (c.startDate || c.scheduledStartDate) && c.status !== "completed");
+  // Only cycles with dated sessions (active or scheduled), not the timeline dates above.
+  const dated = allCycles.filter((c) => c.scheduleType === "day_of_week" && (c.startDate || c.scheduledStartDate) && c.status !== "completed");
   const starts = dated.map((c) => (c.status === "active" ? c.startDate! : c.scheduledStartDate ?? c.startDate!));
   const range =
     dated.length > 0
