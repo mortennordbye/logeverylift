@@ -7,6 +7,7 @@ import { startTrainingCycle } from "@/lib/actions/training-cycles";
 import { loadPlanList } from "@/lib/plan-list";
 import { getSeasonDetail } from "@/lib/seasons";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
+import { todayIn } from "@/lib/utils/user-date";
 import { dayMonth } from "@/lib/home/labels";
 import { eq } from "drizzle-orm";
 import { isValidElement, type ReactNode } from "react";
@@ -19,7 +20,9 @@ import { asUser } from "./setup";
  * season whose chain another block interrupted (fix round 6, J4-18, J8-09).
  */
 
-const day = (offset: number) => toDateStr(addDays(new Date(), offset));
+// Days in the user's zone (UTC), as the app counts them. The runtime's own
+// date is a day off near midnight wherever the local date is not the UTC one.
+const day = (offset: number) => toDateStr(addDays(todayIn("UTC"), offset));
 let me: string;
 
 beforeEach(async () => {

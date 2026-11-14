@@ -4,6 +4,7 @@ import { addPhaseAction, createSeasonAction } from "@/lib/actions/seasons";
 import { deleteManyTrainingCycles, startTrainingCycle } from "@/lib/actions/training-cycles";
 import { getSeasonDetail } from "@/lib/seasons";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
+import { todayIn } from "@/lib/utils/user-date";
 import { seasonPaused } from "@/lib/utils/seasons";
 import { eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -16,7 +17,9 @@ import { asUser } from "./setup";
  * from the season start two weeks ago.
  */
 
-const day = (offset: number) => toDateStr(addDays(new Date(), offset));
+// Days in the user's zone (UTC), as the app counts them. The runtime's own
+// date is a day off near midnight wherever the local date is not the UTC one.
+const day = (offset: number) => toDateStr(addDays(todayIn("UTC"), offset));
 let me: string;
 
 beforeEach(async () => {
