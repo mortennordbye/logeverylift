@@ -109,6 +109,9 @@ describe("weightSummary", () => {
     const s = weightSummary([e("2026-08-01", 85)], "2026-11-14")!;
     expect(s.latestKg).toBe(85);
     expect(s.series).toEqual([]);
+    expect(s.oldDate).toBe("2026-08-01");
+    expect(weightSummary([e("2026-10-16", 85)], "2026-11-14")!.oldDate).toBeNull();
+    expect(weightSummary([e("2026-10-15", 85)], "2026-11-14")!.oldDate).toBe("2026-10-15");
   });
 });
 

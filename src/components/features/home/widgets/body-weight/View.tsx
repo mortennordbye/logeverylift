@@ -1,11 +1,16 @@
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { SAMPLE_WEIGHT } from "@/components/features/home/samples";
 import { Cap, Card, Label, Num, PreviewBox, Spark, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { dayMonth } from "@/lib/home/labels";
 import type { WeightSummary } from "@/lib/home/widget-data";
 import { Scale } from "lucide-react";
 import { loadBodyWeight } from "./load";
 
-/** Body weight: the latest entry and a 30-day sparkline; M adds the low and high. Opens Progress, where weight is logged. */
+/**
+ * Body weight: the latest entry and a 30-day sparkline; M adds the low and
+ * high. An entry older than 30 days says its date. Opens Progress, where
+ * weight is logged.
+ */
 
 const HREF = "/more/metrics";
 const kg = (n: number) => (Number.isInteger(n) ? n.toFixed(1) : String(n));
@@ -33,7 +38,7 @@ export const bodyWeightWidget: Renderer<WeightSummary> = defineWidget<WeightSumm
           </Cap>
         )}
       </div>
-      <Cap className="mt-1">{change(data.changeKg)}</Cap>
+      <Cap className="mt-1">{data.oldDate ? `${kg(data.latestKg)} kg on ${dayMonth(data.oldDate)}` : change(data.changeKg)}</Cap>
       <div className="h-2.5 shrink-0" />
       <Spark values={data.series} height={size === "m" ? 54 : 44} id={`home-weight-${size}`} />
     </Card>

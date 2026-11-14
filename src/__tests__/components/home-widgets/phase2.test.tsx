@@ -51,7 +51,7 @@ describe("Streak", () => {
 });
 
 describe("Body weight", () => {
-  const data = { latestKg: 82.4, changeKg: -0.7, lowKg: 82.3, highKg: 83.1, series: [83.1, 82.3, 82.4] };
+  const data = { latestKg: 82.4, changeKg: -0.7, lowKg: 82.3, highKg: 83.1, series: [83.1, 82.3, 82.4], oldDate: null };
   it("S: the latest weight, the change and a sparkline; M adds low and high", () => {
     const s = render(<>{bodyWeightWidget.View({ data, size: "s" })}</>);
     expect(screen.getByText("82.4")).toBeTruthy();
@@ -62,6 +62,12 @@ describe("Body weight", () => {
     s.unmount();
     render(<>{bodyWeightWidget.View({ data, size: "m" })}</>);
     expect(screen.getByText("Low 82.3 · High 83.1")).toBeTruthy();
+  });
+  it("an entry older than 30 days shows its date, not a change", () => {
+    render(<>{bodyWeightWidget.View({ data: { ...data, changeKg: null, series: [], oldDate: "2026-09-03" }, size: "s" })}</>);
+    expect(screen.getByText("82.4")).toBeTruthy();
+    expect(screen.getByText("82.4 kg on 3 Sep")).toBeTruthy();
+    expect(screen.queryByText(/in 30 days/)).toBeNull();
   });
   it("one entry: no sparkline, says so", () => {
     const r = render(<>{bodyWeightWidget.View({ data: { ...data, changeKg: null, series: [82.4] }, size: "s" })}</>);
