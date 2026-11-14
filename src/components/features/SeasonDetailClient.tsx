@@ -205,7 +205,7 @@ export function SeasonDetailClient(p: Props) {
     setBusy(false);
     if (!result.success) {
       setError(result.error);
-      setErrorField(result.fieldErrors?.raceDate ? "raceDate" : null);
+      setErrorField("fieldErrors" in result && result.fieldErrors?.raceDate ? "raceDate" : null);
       return false;
     }
     after?.();
