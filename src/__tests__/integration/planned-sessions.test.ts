@@ -264,6 +264,23 @@ describe("changing one session", () => {
     expect(restored).toMatchObject({ date: "2026-11-11", status: "skipped", skipReason: "Travel" });
   });
 
+  it("a program swap drops the label the template gave, and keeps one the user set", async () => {
+    const id = await cycle();
+    await db.update(trainingCycleSlots).set({ label: "Workout B / Run" }).where(eq(trainingCycleSlots.trainingCycleId, id));
+    await active();
+    const [mon, nextMon] = (await rows(id)).filter((x) => x.date === "2026-11-09" || x.date === "2026-11-16");
+    expect(mon.label).toBe("Workout B / Run");
+
+    expect((await updatePlannedSession({ op: "change", id: mon.id, programId: strength })).success).toBe(true);
+    const [swapped] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, mon.id));
+    expect(swapped).toMatchObject({ programId: strength, label: null });
+
+    expect((await updatePlannedSession({ op: "change", id: nextMon.id, label: "Heavy day" })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "change", id: nextMon.id, programId: strength })).success).toBe(true);
+    const [kept] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, nextMon.id));
+    expect(kept).toMatchObject({ programId: strength, label: "Heavy day" });
+  });
+
   it("a skipped missed session leaves the missed list", async () => {
     const id = await cycle();
     expect((await active()).missedSlots.map((m) => m.date)).toEqual(["2026-11-02"]);

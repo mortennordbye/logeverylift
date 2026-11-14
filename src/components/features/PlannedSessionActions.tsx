@@ -5,6 +5,7 @@ import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
 import { type DetailSession, dayMonth, sessionDayLabel, weekdayShort } from "@/lib/utils/cycle-detail";
+import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -253,6 +254,9 @@ export function PlannedSessionSheet({
   const canReset = s != null && s.touched && s.templateDate != null && s.templateDate >= today;
   const otherKeys = keyDates.filter((d) => d !== s?.date);
   const anyPast = week.some((d) => d < today);
+  // A missed key session: the day home suggests, or why there is none (D19).
+  const moveDay = s?.moveTo?.date ?? null;
+  const moveReason = s?.moveTo && s.moveTo.date === null ? s.moveTo.reason : null;
   const moveNote = [
     otherKeys.length ? `${otherKeys.map(weekdayShort).join(", ")} ${otherKeys.length === 1 ? "has a key session" : "have key sessions"}.` : null,
     anyPast ? "You cannot pick a day in the past." : null,
@@ -280,6 +284,17 @@ export function PlannedSessionSheet({
 
           {view === "main" && (
             <>
+              {moveDay && (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => run({ op: "move", id: s.id, date: moveDay })}
+                  className="flex h-[52px] items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50"
+                >
+                  Move to {shortDay(moveDay)}
+                </button>
+              )}
+              {moveReason && <p className="text-sm text-muted-foreground">{moveReason}</p>}
               {isToday && s.status === "planned" && exercises && exercises.length > 0 && <ExerciseList exercises={exercises} />}
               {isToday && s.status === "planned" && s.programId != null && (
                 <Link

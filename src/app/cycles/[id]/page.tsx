@@ -14,10 +14,12 @@ import { HOME_UI } from "@/components/features/home/fonts";
 import { BackLink } from "@/components/ui/BackLink";
 import { getProgramsWithExercises } from "@/lib/actions/programs";
 import { getPrograms } from "@/lib/actions/programs";
-import { getActiveCycleForUser, getCyclePeriodization, getTrainingCycles, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
+import { getActiveCycleForUser, getCyclePeriodization, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
+import { cycleStartContext } from "@/lib/cycle-start";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { listPlanned } from "@/lib/planned-sessions";
 import { seasonOfCycle } from "@/lib/seasons";
+import { moveSuggestion } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { syncLimitWarnings } from "@/lib/training-limits";
 import { userToday } from "@/lib/user-settings";
@@ -25,6 +27,7 @@ import { type DetailSession, blockWeeks, dayMonth, rotationRows, weekIndexOf } f
 import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
+import { mondayOf } from "@/lib/utils/session-compliance";
 import { PHASE_TYPE_LABELS, lengthLabel, shortDay } from "@/lib/utils/seasons";
 import { requireSession } from "@/lib/utils/session";
 import { listWorkouts } from "@/lib/workouts";
@@ -88,6 +91,12 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   const showEndurance = endurance && weekday && blockStart != null && lastDay != null && cycle.status !== "completed";
   const [compliance, library] = showEndurance ? await Promise.all([sessionCompliance(userId, blockStart, lastDay, { cycleId: cycle.id }), listWorkouts(userId)]) : [[], []];
   const complianceById = new Map(compliance.map((c) => [c.id, c]));
+  // A missed key session of this week gets the day home suggests for it (D19).
+  const moveTo = new Map(
+    await Promise.all(
+      compliance.filter((c) => c.priority === "key" && c.status === "missed" && c.date >= mondayOf(today)).map(async (c) => [c.id, await moveSuggestion(userId, c)] as const),
+    ),
+  );
   const sessions: DetailSession[] = dated.map((p) => {
     const c = complianceById.get(p.id!);
     return {
@@ -106,17 +115,18 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
       key: c?.priority === "key",
       brick: c?.brickParentId != null,
       answer: c?.state === "unconfirmed" ? answerSession(c) : null,
+      moveTo: moveTo.get(p.id!) ?? null,
     };
   });
 
+  // A start names what it ends or drops: the running cycle and the draft scheduled next.
+  const { running, scheduled } = await cycleStartContext(userId, today);
+  const otherRunning = running && running.id !== cycle.id ? running : null;
+  const otherScheduled = scheduled && scheduled.id !== cycle.id ? scheduled : null;
   // A completed cycle names the cycle scheduled next, if there is one.
   let next: NextCycle | null = null;
-  if (cycle.status === "completed") {
-    const all = await getTrainingCycles();
-    const scheduled = (all.success ? all.data : []).find((c) => c.id !== cycle.id && c.status === "draft" && c.scheduledStartDate != null);
-    if (scheduled?.scheduledStartDate) {
-      next = { id: scheduled.id, name: scheduled.name, startsLabel: shortDay(scheduled.scheduledStartDate), startsTomorrow: scheduled.scheduledStartDate <= addDaysStr(today, 1) };
-    }
+  if (cycle.status === "completed" && otherScheduled) {
+    next = { id: otherScheduled.id, name: otherScheduled.name, startsLabel: shortDay(otherScheduled.day), startsTomorrow: otherScheduled.day <= addDaysStr(today, 1) };
   }
   const plannedLast = cycle.startDate ? addDaysStr(cycle.startDate, lengthDays - 1) : null;
   const endedLabel = plannedLast && plannedLast < today ? `ended ${dayMonth(plannedLast)}` : "ended early";
@@ -131,7 +141,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
     <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
       <header className="flex items-center justify-between px-4 pt-4 shrink-0">
         <BackLink fallback={{ href: "/cycles", label: "Plan" }} />
-        <CycleMenu cycle={cycle} />
+        <CycleMenu cycle={cycle} running={otherRunning} />
       </header>
 
       <div className="flex flex-col gap-4 px-4 pt-2 pb-nav-safe">
@@ -176,7 +186,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
 
         {cycle.status === "completed" && (
           <>
-            <CycleCompletionBanner cycle={cycle} lengthLabel={lengthLabel(cycle)} endedLabel={endedLabel} next={next} />
+            <CycleCompletionBanner cycle={cycle} lengthLabel={lengthLabel(cycle)} endedLabel={endedLabel} next={next} running={otherRunning} />
             {slotPrograms.length > 0 && (
               <section className="flex flex-col gap-2">
                 <h2 className="mx-1 text-xs font-semibold tracking-[1px] uppercase text-muted-foreground">Programs in this cycle</h2>
@@ -193,7 +203,15 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
           </>
         )}
 
-        {cycle.status === "draft" && <StartCycleButton cycle={cycle} skippedPhases={season?.skippedPhases ?? 0} scheduledFor={cycle.scheduledStartDate} />}
+        {cycle.status === "draft" && (
+          <StartCycleButton
+            cycle={cycle}
+            skippedPhases={season?.skippedPhases ?? 0}
+            scheduledFor={cycle.scheduledStartDate}
+            running={otherRunning}
+            otherScheduled={otherScheduled}
+          />
+        )}
 
         {!weekday && cycle.status === "active" && currentWeek != null && (
           <div className="flex flex-col gap-2 rounded-[20px] bg-widget p-4" data-testid="cycle-progress">

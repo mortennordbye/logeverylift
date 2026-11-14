@@ -14,7 +14,8 @@ import { ensureCycleSessions, listPlanned } from "@/lib/planned-sessions";
 import { getSeasonDetail, listSeasons } from "@/lib/seasons";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { userToday } from "@/lib/user-settings";
-import { toDateStr } from "@/lib/utils/cycle-position";
+import { blockWeeks, weekDays as blockWeekDays, rotationRows, weekIndexOf, type RotationWalkDay } from "@/lib/utils/cycle-detail";
+import { cycleLengthDays, toDateStr } from "@/lib/utils/cycle-position";
 import {
   blockEnd,
   dayMonth,
@@ -32,7 +33,6 @@ import {
   type WeekSession,
 } from "@/lib/utils/plan-list";
 import { addDaysStr } from "@/lib/utils/seasons";
-import { weekDatesOf } from "@/lib/utils/user-date";
 import { and, asc, eq } from "drizzle-orm";
 
 type Cycle = typeof trainingCycles.$inferSelect;
@@ -54,13 +54,15 @@ export type PlanListData = {
 
 async function weekHero(userId: string, c: Cycle, today: string, active: boolean, endurance: boolean): Promise<HeroView> {
   const start = active ? c.startDate! : c.scheduledStartDate!;
-  const dates = weekDatesOf(active ? today : start);
+  // The block week that holds today, from the block's start day: the 7 days the cycle detail shows.
+  const weeks = blockWeeks(start, cycleLengthDays(c));
+  const dates = blockWeekDays(weeks[weekIndexOf(weeks, today)]);
   let sessions: WeekSession[] = [];
   // Reading can write (the first read makes the dated sessions), so a failure
   // shows an empty week instead of taking the list down, as on home.
   try {
     await ensureCycleSessions(userId, c.id);
-    const rows = await sessionCompliance(userId, dates[0], dates[6], { cycleId: c.id });
+    const rows = await sessionCompliance(userId, dates[0], dates[dates.length - 1], { cycleId: c.id });
     sessions = rows.map((r) => ({
       date: r.date,
       name: r.programName ?? r.label ?? r.workout?.name ?? null,
@@ -89,23 +91,22 @@ async function rotationHero(userId: string, c: Cycle, today: string, active: boo
   const start = active ? c.startDate! : c.scheduledStartDate!;
   const withSlots = await getTrainingCycleWithSlots(c.id);
   const slots = withSlots.success
-    ? withSlots.data.slots.map((s) => ({ id: s.id, orderIndex: s.orderIndex, name: s.programId != null ? (s.program?.name ?? s.label ?? "Session") : null }))
+    ? withSlots.data.slots.map((s) => ({ id: s.id, orderIndex: s.orderIndex ?? null, programId: s.programId ?? null, label: s.label ?? null, programName: s.program?.name ?? null }))
     : [];
-  let lastDone: number | null = null;
-  let next: { slotId: number | null; name: string | null } | null = null;
+  // The walk, as the cycle detail reads it: a swapped session shows its program, a skipped one its mark.
+  let walk: RotationWalkDay[] = [];
   if (active) {
     try {
-      const days = await listPlanned(userId, addDaysStr(today, -14), addDaysStr(today, slots.length + 7), c.id);
-      const done = days.filter((d) => d.date < today && d.status === "done").at(-1);
-      const upcoming = days.find((d) => d.date >= today && d.status === "planned");
-      lastDone = done?.slotId ?? null;
-      next = upcoming ? { slotId: upcoming.slotId, name: upcoming.programName } : null;
+      walk = (await listPlanned(userId, addDaysStr(today, -14), addDaysStr(today, slots.length + 7), c.id)).filter((d) => d.rotationPosition != null);
     } catch (e) {
       console.error("[planList] rotation failed", { cycleId: c.id }, e instanceof Error ? e.message : "unknown");
     }
-  } else {
-    const first = [...slots].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)).find((s) => s.name != null);
-    next = first ? { slotId: first.id, name: first.name } : null;
+  }
+  let rows = rotationRows(slots, walk, today);
+  if (!active) {
+    // A block that has not started begins at its first session.
+    const first = rows.find((r) => !r.rest);
+    rows = rows.map((r) => (r === first ? { ...r, mark: "next" } : r));
   }
   return {
     kind: "rotation",
@@ -113,8 +114,8 @@ async function rotationHero(userId: string, c: Cycle, today: string, active: boo
     name: c.name,
     label: heroLabel(c, today, active),
     ends: `Ends ${dayMonth(blockEnd(start, c))}`,
-    chips: rotationChips(slots, lastDone, next?.slotId ?? null),
-    next: next?.name ?? null,
+    chips: rotationChips(rows),
+    next: rows.find((r) => r.mark === "next")?.name ?? null,
   };
 }
 
@@ -129,7 +130,10 @@ export async function loadPlanList(userId: string, endurance: boolean): Promise<
     listSeasons(userId),
   ]);
 
-  const liveSeasons = seasonList.filter((s) => s.status !== "done");
+  // The running season first, then the rest by start day.
+  const liveSeasons = seasonList
+    .filter((s) => s.status !== "done")
+    .sort((a, b) => Number(b.status === "active") - Number(a.status === "active") || a.startDate.localeCompare(b.startDate) || a.id - b.id);
   const details = (await Promise.all(liveSeasons.map((s) => getSeasonDetail(userId, s.id)))).filter((d) => d != null);
   const seasons = details.map((d) => seasonCard(d.season, d.phases, d.aRace, today));
   const inCard = new Set(details.flatMap((d) => d.phases.map((p) => p.id)));

@@ -84,13 +84,14 @@ function HeroCard({ hero }: { hero: HeroView }) {
               key={d.date}
               className={`flex flex-col items-center gap-1.5 rounded-[10px] py-2 ${d.rest ? "" : "bg-widget-2"} ${d.key ? "ring-2 ring-inset ring-brand" : ""}`}
             >
-              <span className={`text-[11px] ${d.today ? "font-semibold text-brand" : "text-muted-foreground"}`}>{d.day}</span>
-              <span className={`h-2 w-2 rounded-full ${d.key ? "bg-brand" : d.rest ? "bg-foreground/15" : "bg-foreground"}`} aria-hidden />
-              <span className={`max-w-full truncate px-0.5 text-[11px] font-semibold ${d.rest ? "text-muted-foreground" : ""}`}>{d.short}</span>
-              <span className="sr-only">
-                {d.names}
-                {d.key ? ", key session" : ""}
+              <span aria-hidden className={`text-[11px] ${d.today ? "font-semibold text-brand" : "text-muted-foreground"}`}>
+                {d.day}
               </span>
+              <span className={`h-2 w-2 rounded-full ${d.key ? "bg-brand" : d.rest ? "bg-foreground/15" : "bg-foreground"}`} aria-hidden />
+              <span aria-hidden className={`max-w-full truncate px-0.5 text-[11px] font-semibold ${d.rest ? "text-muted-foreground" : ""}`}>
+                {d.short}
+              </span>
+              <span className="sr-only">{`${d.day}, ${d.names}${d.key ? ", key session" : ""}`}</span>
             </li>
           ))}
         </ul>
@@ -104,7 +105,9 @@ function HeroCard({ hero }: { hero: HeroView }) {
               }`}
             >
               {c.tag && <span className={`text-[11px] font-semibold ${c.tag === "Next" ? "text-brand" : "text-muted-foreground"}`}>{c.tag}</span>}
-              <span className={`text-sm font-semibold ${c.tag === "Done" || c.rest ? "text-muted-foreground" : ""}`}>{c.name}</span>
+              <span className={`text-sm font-semibold ${c.tag === "Done" || c.tag === "Skipped" || c.rest ? "text-muted-foreground" : ""} ${c.tag === "Skipped" ? "line-through" : ""}`}>
+                {c.name}
+              </span>
             </li>
           ))}
         </ul>
@@ -113,7 +116,13 @@ function HeroCard({ hero }: { hero: HeroView }) {
         {hero.kind === "week" ? (
           <span>{hero.summary}</span>
         ) : (
-          <span>{hero.next && <>Next: <span className="text-foreground">{hero.next}</span></>}</span>
+          <span>
+            {hero.next && (
+              <>
+                <span className="text-foreground">{hero.next}</span> is next
+              </>
+            )}
+          </span>
         )}
         <span>{hero.ends}</span>
       </div>

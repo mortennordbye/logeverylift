@@ -1,9 +1,10 @@
 import { db } from "@/db";
 import { programs, seasons, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { updateRotationSession } from "@/lib/actions/planned-sessions";
 import { loadPlanList } from "@/lib/plan-list";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSession, createUser } from "./factories";
 import { asUser } from "./setup";
 
@@ -87,5 +88,70 @@ describe("loadPlanList", () => {
     expect(later.seasons).toEqual([]);
     expect(later.pastSeasons.map((s) => s.name)).toEqual(["Half 2027"]);
     expect(later.upNext.map((r) => r.name)).toEqual(["Build"]);
+  });
+
+  it("rotation chips show a swapped session's program and mark a skipped one, as the footer does", async () => {
+    const upperA = await program("Upper A");
+    const lowerA = await program("Lower A");
+    const upperB = await program("Upper B");
+    const lowerB = await program("Lower B");
+    const [rotation] = await db
+      .insert(trainingCycles)
+      .values({ userId, name: "Upper / Lower", durationWeeks: 6, scheduleType: "rotation", status: "active", startDate: day(-3) })
+      .returning();
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: rotation.id, orderIndex: 1, programId: upperA },
+      { trainingCycleId: rotation.id, orderIndex: 2, programId: lowerA },
+      { trainingCycleId: rotation.id, orderIndex: 3, programId: upperB },
+      { trainingCycleId: rotation.id, orderIndex: 4, programId: null },
+    ]);
+    await createSession(userId, upperA, { date: day(-3), isCompleted: true });
+    // Position 2 (index 1) swapped to Lower B, position 3 skipped.
+    expect((await updateRotationSession({ op: "change", cycleId: rotation.id, rotationPosition: 1, programId: lowerB })).success).toBe(true);
+    expect((await updateRotationSession({ op: "skip", cycleId: rotation.id, rotationPosition: 2 })).success).toBe(true);
+
+    const data = await loadPlanList(userId, false);
+    expect(data.hero).toMatchObject({ kind: "rotation", next: "Lower B" });
+    expect(data.hero?.kind === "rotation" && data.hero.chips.map((c) => [c.name, c.tag])).toEqual([
+      ["Upper A", "Done"],
+      ["Lower B", "Next"],
+      ["Upper B", "Skipped"],
+      ["Rest", null],
+    ]);
+  });
+
+  it("lists the running season above one that has not started", async () => {
+    await db.insert(seasons).values([
+      { userId, name: "Later", startDate: day(100), endDate: day(300) },
+      { userId, name: "Now", startDate: day(-10), endDate: day(90) },
+      { userId, name: "Much later", startDate: day(400), endDate: day(500) },
+    ]);
+    const data = await loadPlanList(userId, false);
+    expect(data.seasons.map((s) => s.name)).toEqual(["Now", "Later", "Much later"]);
+  });
+});
+
+describe("the hero week strip", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("is the block week from the cycle's start day, the same 7 days the detail shows", async () => {
+    // Sat 14 Nov 2026: the block starts today, a Saturday, with a session on Mondays.
+    const me = (await createUser({ timeZone: "UTC" })).id;
+    asUser(me);
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+    const [p] = await db.insert(programs).values({ userId: me, name: "Strength A" }).returning();
+    const [c] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Block", durationWeeks: 4, status: "active", startDate: "2026-11-14" })
+      .returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: c.id, dayOfWeek: 1, programId: p.id });
+
+    const data = await loadPlanList(me, false);
+    const hero = data.hero?.kind === "week" ? data.hero : null;
+    expect(hero?.days.map((d) => d.date)).toEqual(["2026-11-14", "2026-11-15", "2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20"]);
+    expect(hero?.days.map((d) => d.day)).toEqual(["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"]);
+    expect(hero?.days.filter((d) => !d.rest).map((d) => d.date)).toEqual(["2026-11-16"]);
+    expect(hero?.summary).toBe("1 session");
   });
 });

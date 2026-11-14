@@ -47,8 +47,10 @@ The look every Plan screen follows. The mockups in this folder (J*.dc.html) are 
 
 ## Plan list (final = A structure + C hero)
 1. Hero card = the running (or next) cycle: label "Week 3 of 6 · Rotation" / "Starts Mon 16 Nov · Week 1 of 8";
-   cycle name; weekday cycle → 7-day strip (day, dot, short label, key day outlined in accent);
-   rotation cycle → rotation chips (Done / Next / …). Footer: "Ends 20 Dec" (inclusive last day).
+   cycle name; weekday cycle → 7-day strip of the block week that holds today, from the block's start weekday
+   (the same 7 days as the cycle detail; day, dot, short label, key day outlined in accent);
+   rotation cycle → rotation chips from the detail's order (Done / Next / Skipped, a swapped session shows its program).
+   Footer: "Lower A is next" and "Ends 20 Dec" (inclusive last day).
 2. Season card (only when a season exists): name, race countdown "Race in 288 days" (goal season: "Goal by 1 Jun"),
    phase bar, then the phase rows inline (dot, name, "Base · 12 wk · 11 Jan – 4 Apr", "Starts Mon" on the next one),
    last row = the A race with a flag icon.
@@ -63,6 +65,9 @@ Use a workout, Did you do it? (unconfirmed), Complete automatically.
 - Selected tint comes from the accent: `color-mix(in oklab, var(--brand) 18%, transparent)`, never a fixed blue.
 - Missed key session: a move is suggested only inside the same Monday to Sunday week (`suggestMoveDay`); otherwise "No free day this week" and the plan goes on.
 - "Did you do it?" opens as a sheet from a past unconfirmed row on cycle detail, and stays as the Home notice card.
-- Cycle complete: no "Start now instead" when the next cycle starts the next day; show "Next: <cycle> starts <day>" with a link to it.
+- Cycle complete: no "Start now instead" when the next cycle starts the next day or another cycle is running; show "Next: <cycle> starts <day>" with a link to it.
+- A start that ends the running cycle asks first in a confirm sheet that names it ("This ends Upper / Lower hypertrophy at week 3 of 6."), and names a scheduled start it drops ("Strength peak no longer starts Mon 23 Nov.").
+- A missed key session's sheet on the cycle detail offers the same suggested day as home.
+- Every Plan sheet closes on Escape and has a 44px Close button.
 - Detail screens (cycle and season) all keep the tab bar, put Restart/Delete in the ⋯ menu with a confirm sheet, and use a 34px title.
 - "After current cycle" start chip is shown only when a cycle is running.
