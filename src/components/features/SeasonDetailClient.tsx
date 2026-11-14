@@ -256,8 +256,10 @@ export function SeasonDetailClient(p: Props) {
     leaveDeleted("/cycles", [`/seasons/${p.season.id}`]);
   }
 
+  const paused = seasonPaused(p.next, phases, p.today);
   const fit = p.taperFit;
-  const misfit = fit.status === "early" || fit.status === "late";
+  // A paused chain's dates assume a Resume today, so they raise no taper warning (J8-12).
+  const misfit = !paused && (fit.status === "early" || fit.status === "late");
   const fitLine = misfit ? `Taper ends ${fit.days} day${fit.days === 1 ? "" : "s"} ${fit.status === "early" ? "before" : "after"} the race` : null;
   const showBanner = p.replan != null || (misfit && showRaces);
   const bannerTitle = p.replan
@@ -268,7 +270,6 @@ export function SeasonDetailClient(p: Props) {
 
   const countdownTo = aRace?.raceDate ?? p.season.endDate;
   const daysLeft = daysBetweenStr(p.today, countdownTo);
-  const paused = seasonPaused(p.next, phases, p.today);
 
   // Resume starts the next phase today when its day has come, else schedules
   // it: either way the running cycle ends then and another start is dropped.

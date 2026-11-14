@@ -38,6 +38,7 @@ import {
   replanReason,
   seasonARace,
   seasonTimeline,
+  shownTimeline,
   taperDaysFor,
   taperFit,
   type RaceLike,
@@ -157,8 +158,8 @@ export async function getSeasonDetail(userId: string, seasonId: number): Promise
     .orderBy(asc(seasonRaces.raceDate), asc(seasonRaces.id));
   const rows = await seasonPhases(db, seasonId);
   const versions = new Map(rows.map((r) => [r.id, r.version]));
-  // The scheduled start ends a running phase the day before (J4-18).
-  const timeline = seasonTimeline(season.startDate, rows, await scheduledStartDay(userId)).map((p) => ({ ...p, version: versions.get(p.id) ?? 1 }));
+  // The scheduled start ends a running phase the day before; a paused chain is dated from Resume (J4-18).
+  const timeline = shownTimeline(season.startDate, rows, await scheduledStartDay(userId), day).map((p) => ({ ...p, version: versions.get(p.id) ?? 1 }));
   const aRace = seasonARace(races, day);
   const next = nextPhase(timeline);
   return {

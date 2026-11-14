@@ -4,7 +4,7 @@ import CycleDetailPage from "@/app/cycles/[id]/page";
 import NewCyclePage from "@/app/cycles/new/page";
 import { CreateCycleForm } from "@/components/features/CreateCycleForm";
 import { StartCycleButton } from "@/components/features/CycleDetailClient";
-import { addPhaseAction, createSeasonAction } from "@/lib/actions/seasons";
+import { addPhaseAction, addRaceAction, createSeasonAction } from "@/lib/actions/seasons";
 import { startTrainingCycle } from "@/lib/actions/training-cycles";
 import { getSeasonDetail } from "@/lib/seasons";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
@@ -90,5 +90,36 @@ describe("a standalone draft takes the scheduled start from a season", () => {
     expect((await startTrainingCycle(peak, day(3))).success).toBe(true);
     expect(await scheduledOf(one)).toBeNull();
     expect(await pausedWithResume(seasonId)).toEqual({ scheduled: false, paused: true });
+  });
+});
+
+describe("a paused season's later phases (J4-18, J8-12)", () => {
+  it("are dated from the day Resume would start them, so the taper fit does not warn on the other block's start", async () => {
+    me = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+    asUser(me);
+    const s = await createSeasonAction({ name: "Jevnaker Half 2027", startDate: day(0), endDate: day(200) });
+    if (!s.success) throw new Error(s.error);
+    const seasonId = s.data.id;
+    const race = await addRaceAction({ seasonId, name: "Jevnaker", raceDate: day(62), discipline: "triathlon", distance: "half", priority: "A" });
+    expect(race.success).toBe(true);
+    const base = await addPhaseAction({ seasonId, name: "Base", durationWeeks: 4 });
+    const build = await addPhaseAction({ seasonId, name: "Build", durationWeeks: 4 });
+    const taper = await addPhaseAction({ seasonId, name: "Taper", phaseType: "taper", durationDays: 7 });
+    if (!base.success || !build.success || !taper.success) throw new Error("phase");
+    await startTrainingCycle(base.data.cycleId);
+    expect((await getSeasonDetail(me, seasonId))!.taperFit.status).toBe("fits");
+
+    // Another block takes the one scheduled start in a week: Base ends the day before and the chain pauses.
+    expect((await startTrainingCycle(await draft("Oslo base"), day(7))).success).toBe(true);
+    const detail = (await getSeasonDetail(me, seasonId))!;
+    expect(seasonPaused(detail.next!, detail.phases, day(0))).toBe(true);
+    expect(detail.phases.map((p) => [p.name, p.start, p.end])).toEqual([
+      ["Base", day(0), day(6)],
+      // Resume schedules Build for the day Base was planned to end, not for the other block's start.
+      ["Build", day(28), day(55)],
+      ["Taper", day(56), day(62)],
+    ]);
+    expect(detail.next).toMatchObject({ cycleId: build.data.cycleId, plannedStart: day(28), scheduled: false });
+    expect(detail.taperFit.status).toBe("fits");
   });
 });

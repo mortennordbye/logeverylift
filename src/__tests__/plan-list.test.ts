@@ -72,7 +72,8 @@ describe("plan list words", () => {
       "2026-11-16",
     );
     expect(card.phases[0].sub).toBe("Base · 1 wk · 9 – 15 Nov");
-    expect(card.phases[1].sub).toBe("Build · 10 days · 16 – 25 Nov");
+    // The chain is paused, so Build is dated from the day Resume gives it, not from the other start (J4-18).
+    expect(card.phases[1].sub).toBe("Build · 10 days · 28 Dec – 6 Jan");
   });
 
   it("labels the hero of a running and of a scheduled block", () => {

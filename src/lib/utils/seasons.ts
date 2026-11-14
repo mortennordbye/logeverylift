@@ -199,6 +199,26 @@ export function seasonPaused(
   return phases.some((p) => p.state !== "planned") || next.plannedStart > today;
 }
 
+/**
+ * The timeline the screens show (J4-18). While the chain is paused, the other
+ * block's start does not date the season's next phase: that phase starts on
+ * the day Resume gives it (resumeSeason), today when its planned day on the
+ * chain without the other start has come, else that day. Later phases follow
+ * it, so the taper fit is never read from the other block's start.
+ */
+export function shownTimeline(seasonStart: string, phases: PhaseLike[], otherStart: string | null, today: string): TimelinePhase[] {
+  const timeline = seasonTimeline(seasonStart, phases, otherStart);
+  const next = nextPhase(timeline);
+  if (!next || !seasonPaused({ scheduled: next.scheduledStartDate != null, plannedStart: next.start }, timeline, today)) return timeline;
+  const planned = nextPhase(seasonTimeline(seasonStart, phases))!.start;
+  const resumeDay = planned <= today ? today : planned;
+  return seasonTimeline(
+    seasonStart,
+    phases.map((p) => (p.id === next.id ? { ...p, scheduledStartDate: resumeDay } : p)),
+    otherStart,
+  ).map((p) => (p.id === next.id ? { ...p, scheduledStartDate: null } : p));
+}
+
 /** How many planned phases before this one a start today skips: 0 for the next phase, or a phase that is not planned. */
 export function phasesSkippedBy(timeline: TimelinePhase[], cycleId: number): number {
   const next = nextPhase(timeline);
