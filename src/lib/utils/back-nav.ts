@@ -40,7 +40,11 @@ const LABELS: [string, string][] = [
   ["/more/metrics", "Progress"],
   ["/more/calendar", "Calendar"],
   ["/more/friends", "Friends"],
+  // Exact routes first: they also match the pattern below them.
+  ["/more/friends/search", "Add friends"],
+  ["/more/friends/shared-programs", "Shared programs"],
   ["/more/friends/*", "Profile"],
+  ["/more/friends/*/sessions/*", "Workout"],
   ["/more/garmin", "Garmin"],
   ["/more/garmin/activity/*", "Activity"],
   ["/more/garmin/race", "Race"],
@@ -53,6 +57,19 @@ const LABELS: [string, string][] = [
   ["/more/thresholds", "Thresholds"],
   ["/more/nutrition", "Nutrition"],
   ["/more/workouts", "Workouts"],
+  ["/more/feedback", "Feedback"],
+  ["/more/coach-memory", "Coach memory"],
+  ["/more/ai-setup", "AI setup"],
+  ["/more/install", "Add to iPhone"],
+  ["/more/assistants/changes", "Assistant changes"],
+  ["/more/admin/*", "Admin"],
+  ["/cycles/*/history", "History"],
+  ["/programs/*/history", "History"],
+  ["/seasons/*/history", "History"],
+  ["/planned/*/pool", "Pool view"],
+  ["/privacy", "Privacy"],
+  ["/terms", "Terms"],
+  ["/new-workout", "New workout"],
 ];
 
 /** Routes Back never returns to: sign-in and one-off screens. */
@@ -94,6 +111,8 @@ function isAppPath(url: string): boolean {
 function isForm(path: string): boolean {
   const parts = segments(path);
   if (FORM_ENDINGS.has(parts[parts.length - 1])) return true;
+  // The triathlon plan form: it ends in a name, not "new".
+  if (path === "/cycles/triathlon") return true;
   // The set editor: .../sets/new and .../sets/<id>.
   return parts[parts.length - 2] === "sets";
 }

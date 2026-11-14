@@ -38,6 +38,22 @@ describe("backLabelFor", () => {
     ["/more/thresholds", "Thresholds"],
     ["/more/nutrition", "Nutrition"],
     ["/more/workouts", "Workouts"],
+    ["/more/friends/search", "Add friends"],
+    ["/more/friends/shared-programs", "Shared programs"],
+    ["/more/friends/abc/sessions/4", "Workout"],
+    ["/more/feedback", "Feedback"],
+    ["/more/coach-memory", "Coach memory"],
+    ["/more/ai-setup", "AI setup"],
+    ["/more/install", "Add to iPhone"],
+    ["/more/assistants/changes", "Assistant changes"],
+    ["/more/admin/users", "Admin"],
+    ["/cycles/3/history", "History"],
+    ["/programs/5/history", "History"],
+    ["/seasons/2/history", "History"],
+    ["/planned/7/pool", "Pool view"],
+    ["/privacy", "Privacy"],
+    ["/terms", "Terms"],
+    ["/new-workout", "New workout"],
   ])("%s is %s", (path, label) => {
     expect(backLabelFor(path)).toBe(label);
   });
@@ -100,6 +116,7 @@ describe("resolveBack", () => {
     "/programs/5/exercises/9/sets/44",
     "/more/athlete/interview",
     "/planned/7/play",
+    "/cycles/triathlon",
   ])("does not go back into the form %s", (prev) => {
     expect(resolveBack(prev, "/cycles/3", { href: "/cycles", label: "Cycles" }).kind).toBe("link");
   });
