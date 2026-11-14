@@ -103,7 +103,8 @@ export function CreateCycleForm({
   const weeks = moreLengths ? Number(customWeeks) : durationWeeks;
   const weeksOk = Number.isInteger(weeks) && weeks >= MIN_CYCLE_WEEKS && weeks <= MAX_CYCLE_WEEKS;
   const [choice, setChoice] = useState<StartChoice>(() => {
-    const c = start ? choiceFor(start, days) : "today";
+    // While a cycle runs, a new one starts after it unless the user picks Today.
+    const c = start ? choiceFor(start, days) : days.afterCurrent ? "after" : "today";
     return c === "after" && !days.afterCurrent ? "today" : c;
   });
   const [picked, setPicked] = useState(start && choiceFor(start, days) === "date" ? start : "");
@@ -159,7 +160,7 @@ export function CreateCycleForm({
             value={name}
             maxLength={100}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Upper / Lower hypertrophy"
+            placeholder="Cycle name"
             className="h-12 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand placeholder:text-muted-foreground"
           />
         </label>

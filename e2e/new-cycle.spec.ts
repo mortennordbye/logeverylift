@@ -46,7 +46,7 @@ test("a new rotation is reordered by drag and Move up, and Cancel discards it", 
   // A chip only shows as pressed once React runs, so typing after it sticks (WebKit hydrates late and would reset the name).
   await page.getByRole("button", { name: "6 weeks" }).click();
   await expect(page.getByRole("button", { name: "6 weeks" })).toHaveAttribute("aria-pressed", "true");
-  await page.getByPlaceholder("Upper / Lower hypertrophy").fill("PPL rotation");
+  await page.getByLabel("Name").fill("PPL rotation");
   await page.getByText("Rotation", { exact: true }).click();
   await page.getByRole("button", { name: "Put the sessions in order" }).click();
   await settle();
