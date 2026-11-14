@@ -20,6 +20,7 @@ import type { WeeklySetsData } from "./widgets/weekly-sets/load";
 const CYCLE = { name: "Hypertrophy Block", currentWeek: 4, durationWeeks: 8, progressPct: 37.5, endFormatted: "Dec 4" };
 
 export const SAMPLE_TODAY: TodayData = {
+  upcoming: null,
   cycle: CYCLE,
   todayProgram: { id: 0, name: "Upper Body A" },
   todaySessions: [],

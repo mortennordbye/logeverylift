@@ -15,7 +15,10 @@ import { asUser } from "./setup";
  * exception, by owner decision A (2026-11-14): on a day with one program,
  * Today reads that program's exercises and sets in one more statement
  * (`readTodayPlan` in src/lib/home/core.ts). It shows here as +2, the
- * query and the pool checkout it makes.
+ * query and the pool checkout it makes. A second, by the owner (2026-11-14,
+ * "it should still show I have a season and the cycle which are coming up"):
+ * with no active cycle, Today reads the block scheduled to start next
+ * (`upcomingCycle` in src/lib/home/core.ts), +2 the same way.
  *
  * A statement is a `pool.query` call or a `pool.connect` (a transaction). The
  * page runs twice per user: the first render writes the cycle's sessions, the
@@ -98,7 +101,7 @@ describe("statements per home render (T2)", () => {
   it("no cycle", async () => {
     const first = await countHome();
     const steady = await countHome();
-    expect({ first, steady }).toEqual({ first: 24, steady: 24 });
+    expect({ first, steady }).toEqual({ first: 26, steady: 26 });
   });
 
   it("endurance, weekday cycle with a session today and one to confirm", async () => {
