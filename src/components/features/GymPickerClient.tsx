@@ -5,13 +5,13 @@ import { searchGyms, setPrimaryGym } from "@/lib/actions/gyms";
 import type { GymResult } from "@/lib/utils/osm-gyms";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Loader2, LocateFixed, MapPin, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useReturnTo } from "@/components/ui/BackLink";
 import { useState } from "react";
 
 type CurrentGym = { name: string; address: string | null } | null;
 
 export function GymPickerClient({ current }: { current: CurrentGym }) {
-  const router = useRouter();
+  const returnTo = useReturnTo();
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GymResult[] | null>(null);
   const [searching, setSearching] = useState<false | "name" | "near">(false);
@@ -60,7 +60,7 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
       return;
     }
     setPicked(null);
-    router.replace(gym ? "/more/gyms" : "/more/account");
+    returnTo(gym ? "/more/gyms" : "/more/account");
   }
 
   return (

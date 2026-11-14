@@ -106,3 +106,13 @@ export function resolveBack(prev: string | null, current: string, fallback: Back
   if (prevPath === pathOf(fallback.href)) return { kind: "pop", label: fallback.label };
   return { kind: "pop", label: backLabelFor(prev) ?? "Back" };
 }
+
+/**
+ * After a save or a delete, whether returning to `target` should pop history
+ * (the page before is the target) rather than replace this entry with it.
+ * Replacing then would leave the target twice in a row, and Back or the edge
+ * swipe would land on the stale copy.
+ */
+export function returnsByPop(prev: string | null, target: string): boolean {
+  return !!prev && isAppPath(prev) && pathOf(prev) === pathOf(target);
+}

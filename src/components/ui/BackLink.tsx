@@ -1,6 +1,6 @@
 "use client";
 
-import { type BackDecision, type BackTarget, resolveBack } from "@/lib/utils/back-nav";
+import { type BackDecision, type BackTarget, resolveBack, returnsByPop } from "@/lib/utils/back-nav";
 import { readPrevEntry } from "@/lib/utils/nav-history";
 import { markProgrammaticBack } from "@/lib/utils/nav-intent";
 import { ChevronLeft } from "lucide-react";
@@ -83,4 +83,27 @@ export function BackLink({ fallback }: { fallback: BackTarget }) {
 export function BackLabel({ fallback = { href: "", label: "Back" } }: { fallback?: BackTarget }) {
   const back = useBack(fallback);
   return <>{back.label}</>;
+}
+
+/**
+ * Leaves a form or a deleted page for `target`. When the page before is the
+ * target, pops back to it; otherwise replaces this entry with the target and
+ * refreshes it.
+ *
+ * The pop needs no refresh: the Server Action's `revalidatePath` has already
+ * marked the page stale, and it comes back with the change (e2e/back-nav.spec.ts,
+ * a season edit and a session delete). A refresh fired on the popstate raced
+ * the router's traverse and refetched the deleted page, which threw.
+ */
+export function useReturnTo(): (target: string) => void {
+  const router = useRouter();
+  return (target) => {
+    if (returnsByPop(readPrevEntry(), target)) {
+      markProgrammaticBack();
+      router.back();
+    } else {
+      router.replace(target);
+      router.refresh();
+    }
+  };
 }

@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
-import { exercisePrs, exercises, users, workoutSessions } from "../src/db/schema";
+import { exercisePrs, exercises, seasons, users, workoutSessions } from "../src/db/schema";
 import type { StoredHomeItem } from "../src/lib/home/stored-layout";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
@@ -196,5 +196,47 @@ test("a deep link to a child, then Back twice, reaches the grandparent instead o
   // The parent replaced the child, so its own Back goes up, not back down.
   await expect(back(page)).toHaveText("More");
   await back(page).click();
+  await page.waitForURL(atPath("/more"));
+});
+
+test("Edit season > Save returns to the season without a duplicate entry", async ({ page }, testInfo) => {
+  const settle = trackActions(page);
+  const email = e2eUser(testInfo.parallelIndex).email;
+  await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.email, email));
+  const user = await testDb().query.users.findFirst({ where: eq(users.email, email) });
+  const [season] = await testDb()
+    .insert(seasons)
+    .values({ userId: user!.id, name: "Edit back test", startDate: "2027-01-04", endDate: "2027-05-02" })
+    .returning({ id: seasons.id });
+  await page.goto("/cycles");
+  await page.getByRole("link", { name: /Edit back test/ }).click();
+  await page.waitForURL(atPath(`/seasons/${season.id}`));
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await page.waitForURL(atPath(`/seasons/${season.id}/edit`));
+  await page.getByLabel("Name").fill("Edited back test");
+  await page.getByRole("button", { name: "Save" }).click();
+  await settle();
+  await page.waitForURL(atPath(`/seasons/${season.id}`));
+  await expect(page.getByRole("heading", { name: "Edited back test" })).toBeVisible();
+  // The platform's Back (the iOS swipe) leaves the season, not a stale copy of it.
+  await page.goBack();
+  await page.waitForURL(atPath("/cycles"));
+});
+
+test("deleting a session returns to History, and Back does not reopen the deleted page", async ({ page }) => {
+  const settle = trackActions(page);
+  await openMore(page);
+  await page.getByRole("link", { name: /History/ }).first().click();
+  await page.waitForURL(atPath("/history"));
+  const row = page.locator('a[href^="/history/"]').first();
+  const href = (await row.getAttribute("href"))!;
+  await row.click();
+  await page.waitForURL(atPath(href));
+  await page.getByRole("button", { name: "Delete workout", exact: true }).click();
+  await page.getByRole("button", { name: "Delete Workout", exact: true }).click();
+  await settle();
+  await page.waitForURL(atPath("/history"));
+  await expect(page.locator(`a[href="${href}"]`).filter({ visible: true })).toHaveCount(0);
+  await page.goBack();
   await page.waitForURL(atPath("/more"));
 });

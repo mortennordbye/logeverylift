@@ -5,7 +5,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const back = vi.fn();
 const replace = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ back, replace, push: vi.fn(), prefetch: vi.fn() }) }));
+const refresh = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ back, replace, refresh, push: vi.fn(), prefetch: vi.fn() }) }));
 const markProgrammaticBack = vi.fn();
 vi.mock("@/lib/utils/nav-intent", () => ({ markProgrammaticBack: () => markProgrammaticBack() }));
 
@@ -41,6 +42,7 @@ async function load() {
 beforeEach(() => {
   back.mockClear();
   replace.mockClear();
+  refresh.mockClear();
   markProgrammaticBack.mockClear();
 });
 
@@ -101,6 +103,30 @@ describe("useBack", () => {
     const { result } = renderHook(() => useBack({ href: "/history", label: "History" }));
     act(() => result.current.go());
     expect(replace).toHaveBeenCalledWith("/history");
+    expect(back).not.toHaveBeenCalled();
+  });
+});
+
+describe("useReturnTo", () => {
+  it("pops back to the target when it is the page before", async () => {
+    const { useReturnTo } = await load();
+    at("/seasons/2/edit", "/seasons/2");
+    const { result } = renderHook(() => useReturnTo());
+    act(() => result.current("/seasons/2"));
+    expect(markProgrammaticBack).toHaveBeenCalledTimes(1);
+    expect(back).toHaveBeenCalledTimes(1);
+    expect(replace).not.toHaveBeenCalled();
+    // No refresh: it would race the pop and refetch the page being left.
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("replaces with the target otherwise", async () => {
+    const { useReturnTo } = await load();
+    at("/seasons/new", "/cycles");
+    const { result } = renderHook(() => useReturnTo());
+    act(() => result.current("/seasons/9"));
+    expect(replace).toHaveBeenCalledWith("/seasons/9");
+    expect(refresh).toHaveBeenCalledTimes(1);
     expect(back).not.toHaveBeenCalled();
   });
 });

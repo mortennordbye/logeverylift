@@ -3,9 +3,8 @@
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BackLink } from "@/components/ui/BackLink";
+import { BackLink, useReturnTo } from "@/components/ui/BackLink";
 
 // Duration presets stored as whole weeks (the cycle/progression engine works in
 // weeks) but labelled in months — Ironman builds commonly run 6–12 months.
@@ -46,7 +45,7 @@ export function TriathlonPlanForm({
   restNote?: string | null;
   strengthGoal?: string | null;
 }) {
-  const router = useRouter();
+  const returnTo = useReturnTo();
   const [goal, setGoal] = useState<"build" | "maintain">("build");
   const [level, setLevel] = useState<Level>(initialLevel);
   const [weeks, setWeeks] = useState(12);
@@ -78,7 +77,7 @@ export function TriathlonPlanForm({
       ...(restDays.length > 0 ? { restDays } : {}),
     }));
     if (result.success) {
-      router.replace(`/cycles/${result.data.cycleId}`);
+      returnTo(`/cycles/${result.data.cycleId}`);
     } else {
       setError(result.error);
       setSaving(false);

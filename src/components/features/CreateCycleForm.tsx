@@ -10,7 +10,7 @@
 import { createTrainingCycle } from "@/lib/actions/training-cycles";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
-import { useRouter } from "next/navigation";
+import { useReturnTo } from "@/components/ui/BackLink";
 import { useState } from "react";
 
 const DURATION_OPTIONS = CYCLE_DURATION_WEEKS;
@@ -25,7 +25,7 @@ const END_ACTION_OPTIONS = [
 type EndAction = "none" | "deload" | "new_cycle" | "rest";
 
 export function CreateCycleForm() {
-  const router = useRouter();
+  const returnTo = useReturnTo();
   const [name, setName] = useState("");
   const [durationWeeks, setDurationWeeks] = useState(8);
   const [scheduleType, setScheduleType] = useState<"day_of_week" | "rotation">(
@@ -52,7 +52,7 @@ export function CreateCycleForm() {
 
     setLoading(false);
     if (result.success) {
-      router.replace(`/cycles/${result.data.id}`);
+      returnTo(`/cycles/${result.data.id}`);
     } else {
       setError(result.error);
     }

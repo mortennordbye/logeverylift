@@ -18,6 +18,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import type { TrainingCycle } from "@/types/workout";
 import { PlayIcon, RotateCcwIcon, Trash2Icon } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useReturnTo } from "@/components/ui/BackLink";
 import { useState } from "react";
 
 export function StartCycleButton({ cycle }: { cycle: TrainingCycle }) {
@@ -113,7 +114,7 @@ export function RestartCycleButton({ cycle }: { cycle: TrainingCycle }) {
 }
 
 export function DeleteCycleButton({ cycleId }: { cycleId: number }) {
-  const router = useRouter();
+  const returnTo = useReturnTo();
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -124,7 +125,7 @@ export function DeleteCycleButton({ cycleId }: { cycleId: number }) {
       setLoading(false);
       return;
     }
-    router.replace("/cycles");
+    returnTo("/cycles");
   }
 
   if (confirming) {

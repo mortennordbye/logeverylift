@@ -16,7 +16,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import { compareStep, resultsAsPlanned, resultsFromRun, type PlannedRow, type StepResult } from "@/lib/utils/step-results";
 import { fieldToMeters, fieldUnit, metersToField, type Units } from "@/lib/utils/units";
 import { PLAYER_STORAGE_KEY, restorePlayerState, type PlayerState } from "@/lib/utils/workout-player";
-import { useRouter } from "next/navigation";
+import { useReturnTo } from "@/components/ui/BackLink";
 import { useEffect, useMemo, useState } from "react";
 
 const BAND_TEXT: Record<string, string> = { green: "on plan", yellow: "partly", orange: "far off", red: "not done", done: "done" };
@@ -38,7 +38,7 @@ function rowsFrom(session: PlayerSession): PlannedRow[] {
 }
 
 export function StepResultsForm({ session, units, existing, fromPlayer }: { session: PlayerSession; units: Units; existing: ResultsExisting | null; fromPlayer: boolean }) {
-  const router = useRouter();
+  const returnTo = useReturnTo();
   const rows = useMemo(() => rowsFrom(session), [session]);
   const [run, setRun] = useState<PlayerState | null>(null);
   const [results, setResults] = useState<StepResult[]>(() => existing?.steps ?? resultsAsPlanned(rows));
@@ -114,8 +114,7 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
         // Nothing to clear.
       }
     }
-    router.replace(`/planned/${session.plannedSessionId}`);
-    router.refresh();
+    returnTo(`/planned/${session.plannedSessionId}`);
   };
 
   // Retry by itself when the phone comes back online (decision 7).

@@ -11,7 +11,7 @@ import type { SessionDetail, WorkoutSet } from "@/types/workout";
 import { ChevronRight, Dumbbell, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { BackLink } from "@/components/ui/BackLink";
+import { BackLink, useReturnTo } from "@/components/ui/BackLink";
 import { dateLabel } from "@/lib/utils/date-label";
 
 const FEELING_COLORS: Record<string, string> = {
@@ -39,6 +39,7 @@ const INPUT_CLASS =
 export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
   const units = useUnits();
   const router = useRouter();
+  const returnTo = useReturnTo();
   const { showToast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -79,7 +80,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
       showToast({ variant: "error", message: result.error });
       return;
     }
-    router.replace("/history");
+    returnTo("/history");
   }
 
   // Done saves the date and notes, as iOS does, so leaving edit mode never

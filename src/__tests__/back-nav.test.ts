@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backLabelFor, resolveBack } from "@/lib/utils/back-nav";
+import { backLabelFor, resolveBack, returnsByPop } from "@/lib/utils/back-nav";
 
 const MORE = { href: "/more", label: "More" };
 
@@ -107,5 +107,18 @@ describe("resolveBack", () => {
     expect(resolveBack("https://evil.example/", "/more/metrics", MORE).kind).toBe("link");
     expect(resolveBack("//evil.example/x", "/more/metrics", MORE).kind).toBe("link");
     expect(resolveBack("", "/more/metrics", MORE).kind).toBe("link");
+  });
+});
+
+describe("returnsByPop", () => {
+  it("pops when the page before is the target, so no duplicate entry is left", () => {
+    expect(returnsByPop("/seasons/2", "/seasons/2")).toBe(true);
+    expect(returnsByPop("/programs/5/workout?planned=3", "/programs/5/workout")).toBe(true);
+  });
+
+  it("replaces otherwise", () => {
+    expect(returnsByPop(null, "/seasons/2")).toBe(false);
+    expect(returnsByPop("/cycles", "/seasons/2")).toBe(false);
+    expect(returnsByPop("//evil.example/seasons/2", "/seasons/2")).toBe(false);
   });
 });
