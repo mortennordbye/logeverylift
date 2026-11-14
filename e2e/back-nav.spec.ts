@@ -279,3 +279,49 @@ test("a cold start on the set editor: Save goes to the exercise, not out of the 
   await cold.waitForURL(atPath(exercise));
   await cold.close();
 });
+
+/** A season for this worker's account, with the endurance add-on on. */
+async function seasonFor(workerIndex: number, name: string): Promise<number> {
+  const email = e2eUser(workerIndex).email;
+  await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.email, email));
+  const user = await testDb().query.users.findFirst({ where: eq(users.email, email) });
+  const [season] = await testDb()
+    .insert(seasons)
+    .values({ userId: user!.id, name, startDate: "2027-01-04", endDate: "2027-05-02" })
+    .returning({ id: seasons.id });
+  return season.id;
+}
+
+async function deleteSeason(page: Page) {
+  const settle = trackActions(page);
+  await page.getByRole("button", { name: "Delete season" }).click();
+  await page.getByRole("button", { name: "Delete season" }).last().click();
+  await settle();
+  await page.waitForURL(atPath("/cycles"));
+}
+
+test("deleting a season from its edit page leaves no deleted page behind Cycles", async ({ page }, testInfo) => {
+  const id = await seasonFor(testInfo.parallelIndex, "Delete back test");
+  await page.goto("/more");
+  await page.getByRole("link", { name: "Cycles", exact: true }).click();
+  await page.waitForURL(atPath("/cycles"));
+  await page.getByRole("link", { name: /Delete back test/ }).click();
+  await page.waitForURL(atPath(`/seasons/${id}`));
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await page.waitForURL(atPath(`/seasons/${id}/edit`));
+  await deleteSeason(page);
+  await expect(page.getByRole("link", { name: /Delete back test/ })).toHaveCount(0);
+  // The platform's Back from Cycles goes where Cycles came from, not to the deleted season.
+  await page.goBack();
+  await page.waitForURL(atPath("/more"));
+});
+
+test("a cold start on a season, then Edit and Delete, leaves no deleted page behind", async ({ page }, testInfo) => {
+  const id = await seasonFor(testInfo.parallelIndex, "Cold delete test");
+  await page.goto(`/seasons/${id}`);
+  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await page.waitForURL(atPath(`/seasons/${id}/edit`));
+  await deleteSeason(page);
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/seasons\//);
+});

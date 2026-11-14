@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { backLabelFor, resolveBack, returnsByPop } from "@/lib/utils/back-nav";
+import { backLabelFor, planLeave, resolveBack, returnsByPop } from "@/lib/utils/back-nav";
 
 const MORE = { href: "/more", label: "More" };
 
@@ -144,5 +144,32 @@ describe("returnsByPop", () => {
     expect(returnsByPop(null, "/seasons/2")).toBe(false);
     expect(returnsByPop("/cycles", "/seasons/2")).toBe(false);
     expect(returnsByPop("//evil.example/seasons/2", "/seasons/2")).toBe(false);
+  });
+});
+
+describe("planLeave", () => {
+  const SEASON = ["/seasons/5"];
+
+  it("steps back past every page of the deleted record to the page before them", () => {
+    // Cycles > season > Edit > Delete: back two, to Cycles.
+    expect(planLeave(["/seasons/5", "/cycles", "/more"], "/cycles", SEASON)).toEqual({ kind: "pop", steps: 2 });
+    // Home > Race countdown > season > Edit > Delete: back two, to the home.
+    expect(planLeave(["/seasons/5", "/"], "/cycles", SEASON)).toEqual({ kind: "pop", steps: 2 });
+  });
+
+  it("on a cold start at the record, pops to its oldest page and replaces it with the target", () => {
+    expect(planLeave(["/seasons/5"], "/cycles", SEASON)).toEqual({ kind: "popThenReplace", steps: 1 });
+    expect(planLeave(["/seasons/5", "/login"], "/cycles", SEASON)).toEqual({ kind: "popThenReplace", steps: 1 });
+  });
+
+  it("is a plain return when no page of the record is behind", () => {
+    expect(planLeave(["/cycles"], "/cycles", SEASON)).toEqual({ kind: "pop", steps: 1 });
+    expect(planLeave(["/"], "/cycles", SEASON)).toEqual({ kind: "replace" });
+    expect(planLeave([], "/cycles", SEASON)).toEqual({ kind: "replace" });
+  });
+
+  it("covers the pages under the record but not a record that shares a prefix", () => {
+    expect(planLeave(["/seasons/5/history", "/seasons/5", "/cycles"], "/cycles", SEASON)).toEqual({ kind: "pop", steps: 3 });
+    expect(planLeave(["/seasons/55", "/cycles"], "/cycles", SEASON)).toEqual({ kind: "replace" });
   });
 });

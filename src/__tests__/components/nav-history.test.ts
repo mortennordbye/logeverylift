@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeAll, describe, expect, it } from "vitest";
-import { HISTORY_TAG_SCRIPT, readPrevEntry } from "@/lib/utils/nav-history";
+import { HISTORY_TAG_SCRIPT, readPrevEntries, readPrevEntry } from "@/lib/utils/nav-history";
 
 /**
  * The pre-hydration script that tags each history entry with the URL it was
@@ -24,19 +24,28 @@ describe("history tag", () => {
   it("tags a push with the URL it came from, keeping the router's own fields", () => {
     window.history.replaceState(null, "", "/more?x=1");
     window.history.pushState({ __NA: true, tree: "t" }, "", "/more/metrics");
-    expect(state()).toEqual({ __NA: true, tree: "t", __lelPrev: "/more?x=1" });
+    expect(state()).toMatchObject({ __NA: true, tree: "t", __lelPrev: "/more?x=1" });
     expect(readPrevEntry()).toBe("/more?x=1");
   });
 
   it("keeps the tag when the router replaces the entry", () => {
     // Next replaces the current entry on every commit, with a fresh state object.
     window.history.replaceState({ __NA: true, tree: "u" }, "", "/more/metrics?tab=records");
-    expect(state()).toEqual({ __NA: true, tree: "u", __lelPrev: "/more?x=1" });
+    expect(state()).toMatchObject({ __NA: true, tree: "u", __lelPrev: "/more?x=1" });
+    expect(readPrevEntries()).toEqual(["/more?x=1"]);
   });
 
   it("tags a push with null data", () => {
     window.history.pushState(null, "", "/history");
     expect(readPrevEntry()).toBe("/more/metrics?tab=records");
+  });
+
+  it("keeps the entries before, newest first, up to ten", () => {
+    // Pushed so far: /more?x=1 > /more/metrics?tab=records > /history.
+    expect(readPrevEntries()).toEqual(["/more/metrics?tab=records", "/more?x=1"]);
+    for (let i = 0; i < 12; i++) window.history.pushState(null, "", `/p/${i}`);
+    expect(readPrevEntries()).toHaveLength(10);
+    expect(readPrevEntries()[0]).toBe("/p/10");
   });
 
   it("leaves non-object data alone", () => {

@@ -144,3 +144,37 @@ export function resolveBack(prev: string | null, current: string, fallback: Back
 export function returnsByPop(prev: string | null, target: string): boolean {
   return !!prev && isAppPath(prev) && pathOf(prev) === pathOf(target);
 }
+
+export type LeavePlan =
+  /** history.go(-steps): lands on the page before the deleted ones. */
+  | { kind: "pop"; steps: number }
+  /** history.go(-steps) to the oldest deleted page, then replace it with the target. */
+  | { kind: "popThenReplace"; steps: number }
+  | { kind: "replace" };
+
+/**
+ * How to leave a record that was just deleted, so no page of it stays in
+ * history. `prevs` are the entries before this one, newest first
+ * (nav-history.ts); `deleted` are the record's page paths (each also covers
+ * the pages under it, such as `/edit`).
+ *
+ * The entries just before this one that belong to the record are skipped. If
+ * an app page is behind them, pop to it, as Back would. If there is none (a
+ * cold start on the record), pop to the oldest of the record's pages and
+ * replace it with `target`. With no deleted page behind, it is a plain return
+ * (`returnsByPop`).
+ */
+export function planLeave(prevs: string[], target: string, deleted: string[]): LeavePlan {
+  const isDeleted = (url: string) => {
+    const path = pathOf(url);
+    return deleted.some((d) => path === d || path.startsWith(`${d}/`));
+  };
+  let k = 0;
+  while (k < prevs.length && isAppPath(prevs[k]) && isDeleted(prevs[k])) k++;
+  if (k === 0) return returnsByPop(prevs[0] ?? null, target) ? { kind: "pop", steps: 1 } : { kind: "replace" };
+  const behind = prevs[k];
+  if (behind && isAppPath(behind) && !NEVER.some((p) => pathOf(behind) === p || pathOf(behind).startsWith(`${p}/`))) {
+    return { kind: "pop", steps: k + 1 };
+  }
+  return { kind: "popThenReplace", steps: k };
+}

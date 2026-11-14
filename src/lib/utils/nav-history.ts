@@ -15,12 +15,14 @@
  * object for every write and calls the methods through `window.history`, so the
  * wrapper sees every router navigation. Re-check that on a Next major upgrade.
  *
- * - push: tag = the URL being left.
+ * - push: tag = the URL being left. `__lelPrevs` also keeps the entries
+ *   before that one, newest first, up to 10, so a delete can step back past
+ *   every page of the deleted record (`planLeave` in back-nav.ts).
  * - replace: keep the entry's tag. Next replaces the current entry on every
  *   commit, and `router.replace` takes the place of the entry, not a new step.
  * - Non-object data (never sent by Next) passes through untouched.
  */
-export const HISTORY_TAG_SCRIPT = `(function(){var h=window.history;if(h.__lelTagged)return;h.__lelTagged=true;var p=h.pushState,r=h.replaceState;function ok(d){return d===null||d===undefined||(typeof d==="object"&&!Array.isArray(d))}h.pushState=function(d,t,u){if(!ok(d))return p.call(h,d,t,u);var n=Object.assign({},d);n.__lelPrev=location.pathname+location.search;return p.call(h,n,t,u)};h.replaceState=function(d,t,u){if(!ok(d))return r.call(h,d,t,u);var n=Object.assign({},d);var s=h.state;if(s&&typeof s.__lelPrev==="string")n.__lelPrev=s.__lelPrev;else delete n.__lelPrev;return r.call(h,n,t,u)}})()`;
+export const HISTORY_TAG_SCRIPT = `(function(){var h=window.history;if(h.__lelTagged)return;h.__lelTagged=true;var p=h.pushState,r=h.replaceState;function ok(d){return d===null||d===undefined||(typeof d==="object"&&!Array.isArray(d))}h.pushState=function(d,t,u){if(!ok(d))return p.call(h,d,t,u);var n=Object.assign({},d);var s=h.state;var here=location.pathname+location.search;n.__lelPrev=here;n.__lelPrevs=[here].concat(s&&Array.isArray(s.__lelPrevs)?s.__lelPrevs:[]).slice(0,10);return p.call(h,n,t,u)};h.replaceState=function(d,t,u){if(!ok(d))return r.call(h,d,t,u);var n=Object.assign({},d);var s=h.state;if(s&&typeof s.__lelPrev==="string")n.__lelPrev=s.__lelPrev;else delete n.__lelPrev;if(s&&Array.isArray(s.__lelPrevs))n.__lelPrevs=s.__lelPrevs;else delete n.__lelPrevs;return r.call(h,n,t,u)}})()`;
 
 /** The app URL the current entry was pushed from, or null. Client only. */
 export function readPrevEntry(): string | null {
@@ -31,4 +33,15 @@ export function readPrevEntry(): string | null {
     return typeof prev === "string" ? prev : null;
   }
   return null;
+}
+
+/** The app URLs before the current entry, newest first (up to 10). Client only. */
+export function readPrevEntries(): string[] {
+  if (typeof window === "undefined") return [];
+  const state: unknown = window.history.state;
+  if (state && typeof state === "object" && "__lelPrevs" in state) {
+    const prevs = (state as { __lelPrevs: unknown }).__lelPrevs;
+    if (Array.isArray(prevs)) return prevs.filter((u): u is string => typeof u === "string");
+  }
+  return [];
 }

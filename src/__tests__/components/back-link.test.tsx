@@ -137,3 +137,32 @@ describe("useReturnTo", () => {
     expect(back).not.toHaveBeenCalled();
   });
 });
+
+describe("useLeaveDeleted", () => {
+  it("steps back past the deleted record's pages", async () => {
+    const { useLeaveDeleted } = await load();
+    window.history.replaceState({ __lelPrev: "/seasons/5", __lelPrevs: ["/seasons/5", "/cycles"] }, "", "/seasons/5/edit");
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    const { result } = renderHook(() => useLeaveDeleted());
+    act(() => result.current("/cycles", ["/seasons/5"]));
+    expect(go).toHaveBeenCalledWith(-2);
+    expect(markProgrammaticBack).toHaveBeenCalledTimes(1);
+    expect(replace).not.toHaveBeenCalled();
+    go.mockRestore();
+  });
+
+  it("on a cold start, replaces the record's oldest page with the target once the pop lands", async () => {
+    const { useLeaveDeleted } = await load();
+    window.history.replaceState({ __lelPrev: "/seasons/5", __lelPrevs: ["/seasons/5"] }, "", "/seasons/5/edit");
+    const go = vi.spyOn(window.history, "go").mockImplementation(() => {});
+    const { result } = renderHook(() => useLeaveDeleted());
+    act(() => result.current("/cycles", ["/seasons/5"]));
+    expect(go).toHaveBeenCalledWith(-1);
+    expect(replace).not.toHaveBeenCalled();
+    act(() => {
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    expect(replace).toHaveBeenCalledWith("/cycles");
+    go.mockRestore();
+  });
+});

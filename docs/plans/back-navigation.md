@@ -111,6 +111,13 @@ Not changed: the pool view's text "Back", the interview's Cancel, `/week` arrows
   target and replaces otherwise, so neither the form nor a duplicate of the target stays in history.
   The pop needs no refresh: the action's `revalidatePath` brings the page back with the change. A
   refresh on the popstate raced the router and refetched the deleted page.
+- Deleting a record leaves no page of it in history. The tag also keeps up to ten entries before
+  the current one (`__lelPrevs`), and `planLeave()` steps back past every page of the deleted record
+  (`useLeaveDeleted()`): a season deleted from its edit page goes back two entries, to where the
+  season was opened from. On a cold start at the record it pops to the record's oldest page and
+  replaces it with the target. The other deletes (a session, a cycle) run on the record's own page,
+  where `useReturnTo()` already leaves nothing deleted behind; no delete runs from a program,
+  workout or planned-session edit page.
 - The exercise picker's Back and the set editor's Save use `useBack().go()`, so a cold start at
   those URLs goes to the workout or the exercise instead of out of the app.
 - Progress writes its tab to `?tab=` with `history.replaceState`, which Next syncs with its router.
@@ -125,7 +132,8 @@ push. Back now pops, and the Progress tab is also in the URL for reloads and lin
 
 ## 6. Tests
 
-- Unit: `src/__tests__/back-nav.test.ts` (labels; every rule of the decision; `returnsByPop`),
+- Unit: `src/__tests__/back-nav.test.ts` (labels; every rule of the decision; `returnsByPop`;
+  `planLeave`),
   `src/__tests__/page-transition.test.ts` (programmatic back slides back),
   `src/__tests__/home-labels.test.ts`.
 - Component: `src/__tests__/components/nav-history.test.ts` (the script in jsdom),
@@ -136,7 +144,8 @@ push. Back now pops, and the Progress tab is also in the URL for reloads and lin
   pop and is never painted "More"; More > Progress > More; deep link; reload; two levels from More and
   from the home; the Progress tab through Back, a reload and the bottom nav; a saved season form not
   left in history; a deep link to a child, Back, Back reaches the grandparent; season edit and
-  session delete leave no duplicate; adding an exercise does not leave the picker; cold starts on the
+  session delete leave no duplicate; a season deleted from its edit page, also after a cold start,
+  leaves no deleted page behind; adding an exercise does not leave the picker; cold starts on the
   picker and the set editor), a new case in `e2e/page-transition.spec.ts` (Back to a tab root slides), and the
   updated `e2e/exercise-detail.spec.ts`, `e2e/weight-stack.spec.ts`, `e2e/friends.spec.ts`.
 - e2e specs find the control with `backLink()` in `e2e/helpers.ts`: Next keeps recent pages mounted

@@ -1,7 +1,7 @@
 "use client";
 
-import { type BackDecision, type BackTarget, resolveBack, returnsByPop } from "@/lib/utils/back-nav";
-import { readPrevEntry } from "@/lib/utils/nav-history";
+import { type BackDecision, type BackTarget, planLeave, resolveBack, returnsByPop } from "@/lib/utils/back-nav";
+import { readPrevEntries, readPrevEntry } from "@/lib/utils/nav-history";
 import { markProgrammaticBack } from "@/lib/utils/nav-intent";
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
@@ -107,5 +107,28 @@ export function useReturnTo(): (target: string) => void {
       router.replace(target);
       router.refresh();
     }
+  };
+}
+
+/**
+ * Leaves a record that was just deleted for `target`, stepping back past every
+ * page of it in history (`planLeave`), so neither Back nor the edge swipe can
+ * reach a deleted page. `deleted` are the record's page paths.
+ */
+export function useLeaveDeleted(): (target: string, deleted: string[]) => void {
+  const router = useRouter();
+  return (target, deleted) => {
+    const plan = planLeave(readPrevEntries(), target, deleted);
+    if (plan.kind === "replace") {
+      router.replace(target);
+      router.refresh();
+      return;
+    }
+    if (plan.kind === "popThenReplace") {
+      // Lands on the deleted record's oldest page; swap it for the target.
+      window.addEventListener("popstate", () => router.replace(target), { once: true });
+    }
+    markProgrammaticBack();
+    window.history.go(-plan.steps);
   };
 }
