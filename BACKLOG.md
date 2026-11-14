@@ -262,6 +262,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## Codebase hygiene (deferred long-term)
 
+### September dates can break hydration on WebKit
+- **What:** Node's ICU formats an en-GB short month for September as "Sept", WebKit as "Sep". A client component that formats a date with `toLocaleDateString("en-GB", { month: "short" })` renders different text on the server and in WebKit, which is React error #418 on every WebKit load that shows a September date. Progress's week labels were fixed on `fix/back-navigation` (they now use `dayMonth`). The shared `formatDateShort` in `src/lib/utils/format.ts` and the inline calls in `ProgramDetailClient` and `WorkoutSessionClient` (the last session's date) still use the locale formatter.
+- **Why deferred:** Found while building back navigation; out of its scope, and the workout screen is a critical flow that wants its own test.
+- **Unblocked by:** Nothing. Make `formatDateShort` use fixed month names like `dayMonth` (a unit test with "2026-09-21" fails today), switch the two inline calls to it, and check the other `toLocaleDateString` calls in client components the same way.
+- **Touchpoints:** `src/lib/utils/format.ts` (`formatDateShort`), `src/lib/home/labels.ts` (`dayMonth`), `src/components/features/ProgramDetailClient.tsx`, `src/components/features/WorkoutSessionClient.tsx`.
+
 ### Deploy during the day without disturbing an active workout
 - **What:** Find a way to ship to prod during the day without any effect on users who are in the middle of a workout. Today the rule is "do not merge while someone trains": before each merge the operator checks prod for open workout sessions with a set in the last 30 minutes and waits. On 2026-11-13 a merge waited more than an hour for another user to finish. Every deploy changes all Server Action IDs (`CLAUDE.md`, "Server Action stability across deploys"), so an open app must reload once; the client keeps queued sets through that reload (`src/lib/utils/stale-bundle.ts`), but a reload mid-set, a lost rest timer, or a slow pod switch still disturbs the lifter.
 - **Why deferred:** The owner asked to look at this later (2026-11-13). The current wait rule is safe, just slow.
