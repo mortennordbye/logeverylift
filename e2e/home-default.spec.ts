@@ -116,6 +116,9 @@ test("no cycle: the setup prompt, the week, and the pinned start bar", async ({ 
 
   await page.goto("/");
   await expect(page.getByTestId("cycle-setup")).toBeVisible();
+  // A part React has not placed yet sits in a hidden container at the end of
+  // the document, so wait for it before reading the order.
+  await expect(page.getByTestId("week-strip")).toBeVisible();
   // Pinned above the nav: in view without scrolling.
   await expect(page.getByTestId("start-bar")).toBeInViewport();
   await expect(page.getByTestId("start-bar").getByRole("link", { name: "Start a Workout" })).toHaveAttribute("href", "/new-workout");
