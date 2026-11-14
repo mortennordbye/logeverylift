@@ -96,7 +96,7 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   await expect(page.getByRole("button", { name: "Start cycle" })).toBeVisible();
   await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("button", { name: "Delete cycle" }).click();
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Delete cycle" }).last().click();
   await page.waitForURL("/cycles");
 
   await page.goto("/programs");

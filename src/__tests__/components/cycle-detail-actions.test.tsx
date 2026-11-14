@@ -40,7 +40,7 @@ describe("cycle actions show a refused write", () => {
     fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete cycle" }));
     expect(deleteTrainingCycle).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete cycle" }).at(-1)!);
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe(openWorkout));
     expect(returnTo).not.toHaveBeenCalled();
   });
@@ -50,7 +50,9 @@ describe("cycle actions show a refused write", () => {
     render(<CycleMenu cycle={cycle} />);
     fireEvent.click(screen.getByRole("button", { name: "More actions" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete cycle" }));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    // The confirm says what it deletes and for how long it can come back, as the season's does (J8-06).
+    expect(screen.getByText("It goes to Recently deleted. You can restore it for 90 days.")).toBeTruthy();
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete cycle" }).at(-1)!);
     await waitFor(() => expect(returnTo).toHaveBeenCalledWith("/cycles"));
     expect(deleteTrainingCycle).toHaveBeenCalledWith(3);
   });
