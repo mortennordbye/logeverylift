@@ -359,6 +359,25 @@ describe("rotation builder", () => {
     );
   });
 
+  it("fast adds each take their own place, before the page has refreshed (round 8 B12)", async () => {
+    // The writes stay open, so the slots on screen do not change between taps.
+    const pending: (() => void)[] = [];
+    vi.mocked(upsertCycleSlot).mockImplementation(
+      () => new Promise((resolve) => pending.push(() => resolve({ success: true, data: {} as never }))),
+    );
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    const rest = screen.getByRole("button", { name: "+ Add rest day" });
+    fireEvent.click(rest);
+    fireEvent.click(rest);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add session" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Pick a program" })).getByRole("button", { name: /^Lower A/ }));
+    fireEvent.click(rest);
+    await waitFor(() => expect(upsertCycleSlot).toHaveBeenCalledTimes(4));
+    const orders = vi.mocked(upsertCycleSlot).mock.calls.map((c) => (c[0] as { orderIndex: number }).orderIndex);
+    expect(orders).toEqual([4, 5, 6, 7]);
+    pending.forEach((done) => done());
+  });
+
   it("moves a session up from its options", async () => {
     render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
     fireEvent.click(screen.getByRole("button", { name: "Options for Lower A" }));

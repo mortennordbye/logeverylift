@@ -86,3 +86,25 @@ test("a new rotation is reordered by drag and Move up, and Cancel discards it", 
   const [cycle] = await testDb().select({ deletedAt: trainingCycles.deletedAt }).from(trainingCycles).where(eq(trainingCycles.id, cycleId));
   expect(cycle.deletedAt).not.toBeNull();
 });
+
+test("fast taps on + Add rest day each add a rest day (round 8 B12)", async ({ page }, testInfo) => {
+  const settle = trackActions(page);
+  const [user] = await testDb().select({ id: users.id }).from(users).where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
+  const [draft] = await testDb()
+    .insert(trainingCycles)
+    .values({ userId: user.id, name: "Fast taps", durationWeeks: 4, status: "draft", scheduleType: "rotation" })
+    .returning();
+  const today = new Date();
+  const day = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+
+  await page.goto(`/cycles/new?cycle=${draft.id}&start=${day}`);
+  const rest = page.getByRole("button", { name: "+ Add rest day" });
+  await expect(page.getByRole("heading", { name: "Rotation order" })).toBeVisible();
+  // The button works only once React runs: wait until React owns it, then tap three times at once.
+  await expect.poll(() => rest.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
+  await rest.click();
+  await rest.click();
+  await rest.click();
+  await settle();
+  await expect.poll(() => savedOrder(draft.id)).toEqual(["Rest", "Rest", "Rest"]);
+});
