@@ -164,3 +164,37 @@ export function StepProgress({ step, of }: { step: number; of: number }) {
     </div>
   );
 }
+
+/**
+ * The Custom length field of the cycle forms: "1 to 52 weeks", the field and
+ * an error line. A text field with a number keypad, not type="number", whose
+ * spin buttons are about 16 px, under the 44 px minimum.
+ */
+export function WeeksField({ value, onChange, ok, min, max }: { value: string; onChange: (v: string) => void; ok: boolean; min: number; max: number }) {
+  return (
+    <label className="-mt-2 flex flex-col gap-2">
+      <span className="text-[13px] text-muted-foreground">
+        {min} to {max} weeks
+      </span>
+      <span className="flex items-center gap-3">
+        <input
+          type="text"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          value={value}
+          onChange={(e) => onChange(e.target.value.replace(/\D/g, ""))}
+          aria-label="Length in weeks"
+          aria-invalid={!ok}
+          aria-describedby={ok ? undefined : "length-error"}
+          className={`${FIELD} !w-24 aria-[invalid=true]:border-[#ff6b5a]`}
+        />
+        <span className="text-base text-muted-foreground">weeks</span>
+      </span>
+      {!ok && (
+        <span id="length-error" className="text-[13px] text-[#ff6b5a]">
+          Pick {min} to {max} weeks.
+        </span>
+      )}
+    </label>
+  );
+}

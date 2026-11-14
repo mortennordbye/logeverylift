@@ -41,6 +41,15 @@ describe("the cycle length on the edit form", () => {
     await waitFor(() => expect(updateTrainingCycle).toHaveBeenCalledWith(expect.objectContaining({ id: 3, durationWeeks: 9 })));
   });
 
+  it("the Custom field has no native spin buttons, which are under 44 px: a text field with a number keypad (round 8)", () => {
+    render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
+    const weeks = screen.getByLabelText("Length in weeks") as HTMLInputElement;
+    expect(weeks.type).toBe("text");
+    expect(weeks.inputMode).toBe("numeric");
+    fireEvent.change(weeks, { target: { value: "1x2" } });
+    expect(weeks.value).toBe("12");
+  });
+
   it("will not save a length outside 1 to 52", () => {
     render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
     fireEvent.change(screen.getByLabelText("Length in weeks"), { target: { value: "53" } });

@@ -16,7 +16,7 @@
 
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, FormHeader, PinnedBar, StepProgress } from "@/components/features/season-ui";
+import { ButtonReason, Chip, FormHeader, LABEL, PinnedBar, StepProgress, WeeksField } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
@@ -217,34 +217,7 @@ export function CreateCycleForm({
           ))}
           <Chip pressed={moreLengths} onClick={() => setMoreLengths(true)}>Custom</Chip>
         </ChipGroup>
-        {moreLengths && (
-          <label className="flex flex-col gap-2 -mt-2">
-            <span className="text-[13px] text-muted-foreground">
-              {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks
-            </span>
-            <span className="flex items-center gap-3">
-              <input
-                type="number"
-                inputMode="numeric"
-                min={MIN_CYCLE_WEEKS}
-                max={MAX_CYCLE_WEEKS}
-                step={1}
-                value={customWeeks}
-                onChange={(e) => setCustomWeeks(e.target.value)}
-                aria-label="Length in weeks"
-                aria-invalid={!weeksOk}
-                aria-describedby={weeksOk ? undefined : "length-error"}
-                className="h-12 w-24 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand aria-[invalid=true]:border-[#ff6b5a]"
-              />
-              <span className="text-base text-[#c4c4c9]">weeks</span>
-            </span>
-            {!weeksOk && (
-              <span id="length-error" className="text-[13px] text-[#ff6b5a]">
-                Pick {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks.
-              </span>
-            )}
-          </label>
-        )}
+        {moreLengths && <WeeksField value={customWeeks} onChange={setCustomWeeks} ok={weeksOk} min={MIN_CYCLE_WEEKS} max={MAX_CYCLE_WEEKS} />}
 
         <ChipGroup label="Start">
           <Chip pressed={choice === "today"} onClick={() => setChoice("today")}>Today</Chip>
@@ -254,7 +227,7 @@ export function CreateCycleForm({
         </ChipGroup>
         {choice === "date" && (
           <label className="flex flex-col gap-2 -mt-2">
-            <span className="text-[13px] text-muted-foreground">Start day</span>
+            <span className={LABEL}>Start day</span>
             <input
               type="date"
               value={picked}
@@ -265,8 +238,8 @@ export function CreateCycleForm({
             />
           </label>
         )}
-        {choice === "after" && days.afterCurrent && (
-          <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(days.afterCurrent)}</p>
+        {(choice === "after" || choice === "date") && startDay && (
+          <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(startDay)}</p>
         )}
         {endsLine && <p className="-mt-2 text-[13px] text-muted-foreground">{endsLine}</p>}
         {dropsLine && <p className="-mt-2 text-[13px] text-muted-foreground">{dropsLine}</p>}

@@ -90,6 +90,25 @@ describe("step 1: the basics", () => {
     await waitFor(() => expect(createTrainingCycle).toHaveBeenCalledWith(expect.objectContaining({ name: "Odd block", durationWeeks: 7 })));
   });
 
+  it("the Custom field has no native spin buttons, which are under 44 px: a text field with a number keypad (round 8)", () => {
+    render(<CreateCycleForm days={days} />);
+    fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+    const weeks = screen.getByLabelText("Length in weeks") as HTMLInputElement;
+    expect(weeks.type).toBe("text");
+    expect(weeks.inputMode).toBe("numeric");
+    fireEvent.change(weeks, { target: { value: "1x2" } });
+    expect(weeks.value).toBe("12");
+  });
+
+  it("labels Start day as the other fields are, and says the picked day in words (round 8)", () => {
+    render(<CreateCycleForm days={days} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
+    const label = screen.getByText("Start day");
+    expect(label.className).toContain("uppercase");
+    fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-07" } });
+    expect(screen.getByText("Starts Mon 7 Dec")).toBeTruthy();
+  });
+
   it("needs a day for Pick a date, and offers After current cycle only while a cycle runs", async () => {
     const { unmount } = render(<CreateCycleForm days={days} />);
     expect(screen.queryByRole("button", { name: "After current cycle" })).toBeNull();

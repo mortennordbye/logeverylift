@@ -7,7 +7,7 @@
  * sessions are built for it.
  */
 
-import { ButtonReason, Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
+import { ButtonReason, Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, WeeksField } from "@/components/features/season-ui";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
@@ -189,34 +189,7 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
                 Custom
               </Chip>
             </ChipGroup>
-            {custom && (
-              <label className="-mt-2 flex flex-col gap-2">
-                <span className="text-[13px] text-muted-foreground">
-                  {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks
-                </span>
-                <span className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={MIN_CYCLE_WEEKS}
-                    max={MAX_CYCLE_WEEKS}
-                    step={1}
-                    value={customWeeks}
-                    onChange={(e) => setCustomWeeks(e.target.value)}
-                    aria-label="Length in weeks"
-                    aria-invalid={!weeksOk}
-                    aria-describedby={weeksOk ? undefined : "length-error"}
-                    className={`${FIELD} !w-24 aria-[invalid=true]:border-[#ff6b5a]`}
-                  />
-                  <span className="text-base text-muted-foreground">weeks</span>
-                </span>
-                {!weeksOk && (
-                  <span id="length-error" className="text-[13px] text-[#ff6b5a]">
-                    Pick {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks.
-                  </span>
-                )}
-              </label>
-            )}
+            {custom && <WeeksField value={customWeeks} onChange={setCustomWeeks} ok={weeksOk} min={MIN_CYCLE_WEEKS} max={MAX_CYCLE_WEEKS} />}
             {durationWarning && <p className="-mt-2 text-[13px] text-[#ff6b5a]">{durationWarning}</p>}
           </>
         )}
