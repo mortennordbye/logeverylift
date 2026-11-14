@@ -74,7 +74,7 @@ function MissedKeyItem({ row }: { row: MissedKeyRow }) {
     if (pending) return;
     setPending(true);
     setError(null);
-    const r = await callAction(updatePlannedSession({ op: "move", id: row.session.id, date }));
+    const r = await callAction(updatePlannedSession({ op: "move", id: row.session.id, date, suggested: true }));
     setPending(false);
     if (!r.success) {
       setError(r.error);

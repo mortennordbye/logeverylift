@@ -10,7 +10,8 @@ import { db } from "@/db";
 import { plannedSessions } from "@/db/schema";
 import { livePlannedSessions } from "@/lib/plan-live";
 import { PlanConflictError, PlanNotFoundError, PlanStateError } from "@/lib/plan-revisions";
-import { applyRotationOp, applySessionOp, listPlanned, type PlannedView } from "@/lib/planned-sessions";
+import { checkSuggestedMove } from "@/lib/session-answers";
+import { applyRotationOp,applySessionOp, listPlanned, type PlannedView } from "@/lib/planned-sessions";
 import { addDaysStr, PLANNED_RANGE_MAX_DAYS } from "@/lib/utils/planned-sessions";
 import { requireSession } from "@/lib/utils/session";
 import { plannedRangeSchema, plannedSessionOpSchema, rotationSessionOpSchema } from "@/lib/validators/planned-sessions";
@@ -43,7 +44,9 @@ export async function updatePlannedSession(data: unknown): Promise<ActionResult<
     return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
   }
   try {
-    const { row } = await applySessionOp({ userId: auth.user.id, writer: "user" }, parsed.data);
+    const input = parsed.data;
+    if (input.op === "move" && input.suggested) await checkSuggestedMove(auth.user.id, input.id, input.date);
+    const { row } = await applySessionOp({ userId: auth.user.id, writer: "user" }, input);
     revalidatePath("/");
     revalidatePath("/more/calendar");
     return { success: true, data: { id: row.id, date: row.date, status: row.status } };

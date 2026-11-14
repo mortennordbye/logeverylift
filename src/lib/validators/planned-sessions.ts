@@ -6,7 +6,8 @@ const position = z.number().int().min(1).max(3);
 
 /** One change to one dated session from the app (docs/plans/sessions.md, 5). */
 export const plannedSessionOpSchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("move"), id, date: day, position: position.optional() }),
+  // `suggested`: the day the app suggested for a missed key session (D19); the server checks it again.
+  z.object({ op: z.literal("move"), id, date: day, position: position.optional(), suggested: z.literal(true).optional() }),
   z.object({ op: z.literal("skip"), id, reason: z.string().max(200).nullable().optional() }),
   z.object({ op: z.literal("unskip"), id }),
   z.object({ op: z.literal("reset"), id }),

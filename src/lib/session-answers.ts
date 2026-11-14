@@ -17,7 +17,7 @@ import { athleteProfiles } from "@/db/schema";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { instantInZone } from "@/lib/utils/user-date";
-import { PROMPT_DAYS, mondayOf, returnInfo, suggestMoveDay, type MoveSuggestion, type ReturnInfo, type Sport } from "@/lib/utils/session-compliance";
+import { PROMPT_DAYS, canMoveTo, mondayOf, returnInfo, suggestMoveDay, type MoveSuggestion, type ReturnInfo, type Sport } from "@/lib/utils/session-compliance";
 import { addDaysStr } from "@/lib/utils/seasons";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
@@ -94,6 +94,27 @@ async function availableDays(userId: string): Promise<number[] | null> {
 
 /** The suggested day for a missed key session (D19), or null when it is not a missed key session. */
 export async function moveSuggestion(userId: string, s: SessionCompliance, week?: SessionCompliance[]): Promise<MoveSuggestion | null> {
+  const input = await moveInput(userId, s, week);
+  return input && suggestMoveDay(input);
+}
+
+export const STALE_MOVE = "That day is not free any more. Close this and open the session again for a new day.";
+
+/**
+ * A move to the suggested day, checked again on the server (D19): a screen
+ * opened before another session took the day still sends the old suggestion.
+ * Refuses when the session is no longer a missed key session or the day no
+ * longer fits, so two sessions never stack.
+ */
+export async function checkSuggestedMove(userId: string, id: number, date: string): Promise<void> {
+  const s = await oneSession(userId, id);
+  if (!s) return; // The move itself reports a missing session.
+  const input = await moveInput(userId, s);
+  if (!input || !canMoveTo(date, input)) throw new PlanStateError(STALE_MOVE);
+}
+
+/** What the D19 rule reads for a missed key session, or null when it is not one. */
+async function moveInput(userId: string, s: SessionCompliance, week?: SessionCompliance[]) {
   if (s.state !== "missed" || s.priority !== "key" || s.status !== "missed") return null;
   const today = toDateStr(await userToday(userId));
   const monday = mondayOf(s.date);
@@ -102,7 +123,7 @@ export async function moveSuggestion(userId: string, s: SessionCompliance, week?
   const load = sessions
     .filter((x) => x.id !== s.id && x.status === "planned")
     .map((x) => ({ date: x.date, keyOrHard: (x.state === "planned" || x.state === "done" || x.state === "unconfirmed") && (x.priority === "key" || x.hard) }));
-  return suggestMoveDay({ missedDate: s.date, today, load, availableDays: await availableDays(userId), illness: await illnessOf(userId) });
+  return { missedDate: s.date, today, load, availableDays: await availableDays(userId), illness: await illnessOf(userId) };
 }
 
 export type HomeEndurance = {
