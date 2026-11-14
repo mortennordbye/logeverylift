@@ -36,7 +36,10 @@ what it describes, that package updates this file and the server instructions in
   peak holds 1.00; taper falls from 0.60 to 0.35; transition holds 0.50 and leaves zone and
   rest alone. A phase with no type runs the cycle's whole block curve. When a phase starts, the
   next phase is scheduled for the day after it ends (writer `sync`). If the user starts a cycle
-  outside the season, the chain pauses until `resume`. The taper must end on the A race day:
+  outside the season, the chain pauses until `resume`. A season's first phase takes the one
+  scheduled start only with `add_phase` `takeStart=true`: the running cycle then ends on the
+  season's start day and any other scheduled start (another season's next phase) is dropped.
+  Ask the user before you send it; without it the season waits (`chainPaused`). The taper must end on the A race day:
   `get_season` shows the fit, and `fit_taper` changes the length of the phase before it. A
   date change of any race, or an A race added, removed or changed in priority, flags the season
   for a re-plan; the app never moves phases itself. Re-plan, then `clear_replan`. Deleting a
