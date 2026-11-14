@@ -33,6 +33,24 @@ export function weekCounts(days: { date: string; sessionCount: number }[], today
   return out;
 }
 
+/**
+ * Weeks in a row with a session, Monday to Sunday in the user's calendar,
+ * counted back from the week holding `today`. A week not trained yet does
+ * not break the streak: it starts from last week then.
+ */
+export function streakWeeks(days: { date: string; sessionCount: number }[], today: string): number {
+  const WEEK = 7 * DAY_MS;
+  const trained = new Set(days.filter((d) => d.sessionCount > 0 && d.date <= today).map((d) => mondayOf(d.date)));
+  let week = mondayOf(today);
+  if (!trained.has(week)) week -= WEEK;
+  let n = 0;
+  while (trained.has(week)) {
+    n++;
+    week -= WEEK;
+  }
+  return n;
+}
+
 export type WeightSummary = {
   latestKg: number;
   /** Latest minus the first entry in the window; null with fewer than two entries in it. */

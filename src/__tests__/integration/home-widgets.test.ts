@@ -11,6 +11,7 @@ import { db } from "@/db";
 import { exercisePrs, friendships, garminConnections, garminDailyMetrics, seasonRaces, seasons, userWeightEntries, workoutSets } from "@/db/schema";
 import { readTodayPlan } from "@/lib/home/core";
 import { WIDGETS } from "@/lib/home/widgets";
+import { localDateStr, weekDatesOf } from "@/lib/utils/user-date";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
@@ -166,6 +167,41 @@ describe("phase 2 loaders read only the caller's data", () => {
 
   it("Training load: null with no load in four weeks", async () => {
     expect(await loadTrainingLoad(ctx())).toBeNull();
+  });
+});
+
+describe("weeks in the user's zone (review 2026-11-14, finding 4)", () => {
+  const shift = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+  async function setsOn(userId: string, date: string, startTime: Date) {
+    const lift = await createExercise({ muscleGroup: "chest" });
+    const s = await createSession(userId, null, { date, startTime, isCompleted: true, endTime: startTime });
+    await db.insert(workoutSets).values([1, 2].map((n) => ({ sessionId: s.id, exerciseId: lift.id, setNumber: n, actualReps: 5, weightKg: "100", restTimeSeconds: 90, isCompleted: true })));
+  }
+
+  it("Weekly sets: a New York user on Sunday 20:00 sees that week's sets, though the server's week has turned", async () => {
+    // Last week's Sunday stands in for "Sunday evening in New York": by then
+    // the server's UTC clock is in the next week.
+    const sunday = shift(weekDatesOf(localDateStr(new Date(), "America/New_York"))[0], -1);
+    const ny = await createUser({ timeZone: "America/New_York" });
+    asUser(ny.id);
+    await setsOn(ny.id, sunday, new Date(`${sunday}T18:00:00Z`));
+    expect(await loadWeeklySets({ userId: ny.id, role: "user", today: sunday })).toMatchObject({ total: 2 });
+    // The Monday after starts a new week.
+    expect(await loadWeeklySets({ userId: ny.id, role: "user", today: shift(sunday, 1) })).toBeNull();
+  });
+
+  it("Streak: an Oslo session at Monday 00:30 counts in the new week", async () => {
+    const today = localDateStr(new Date(), "Europe/Oslo");
+    const monday = weekDatesOf(today)[0];
+    const oslo = await createUser({ timeZone: "Europe/Oslo" });
+    asUser(oslo.id);
+    // Last Wednesday, and this Monday at 00:30 in Oslo (still Sunday in UTC).
+    await setsOn(oslo.id, shift(monday, -5), new Date(`${shift(monday, -5)}T17:00:00Z`));
+    await setsOn(oslo.id, monday, new Date(`${monday}T00:30:00+01:00`));
+    const streak = await loadStreak({ userId: oslo.id, role: "user", today });
+    expect(streak!.weeks).toBe(2);
+    expect(streak!.perWeek.slice(-2)).toEqual([1, 1]);
   });
 });
 

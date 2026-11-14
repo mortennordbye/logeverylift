@@ -1,5 +1,5 @@
 import { bars, ringDash, slotLine, sparkline } from "@/lib/home/charts";
-import { daysUntil, weekCounts, weightSummary } from "@/lib/home/widget-data";
+import { daysUntil, streakWeeks, weekCounts, weightSummary } from "@/lib/home/widget-data";
 import { describe, expect, it } from "vitest";
 
 /** The home widgets' SVG geometry and data shaping (src/lib/home/charts.ts, widget-data.ts). */
@@ -67,6 +67,22 @@ describe("weekCounts", () => {
       { date: "2026-09-01", sessionCount: 5 }, // too old
     ];
     expect(weekCounts(days, "2026-11-14", 4)).toEqual([0, 0, 1, 3]);
+  });
+});
+
+describe("streakWeeks", () => {
+  const d = (date: string, sessionCount = 1) => ({ date, sessionCount });
+  it("counts weeks in a row back from this week, in the user's own dates", () => {
+    // 2026-11-16 is a Monday: a session on it starts the new week.
+    expect(streakWeeks([d("2026-11-15"), d("2026-11-16")], "2026-11-16")).toBe(2);
+    expect(streakWeeks([d("2026-10-28"), d("2026-11-04"), d("2026-11-15")], "2026-11-15")).toBe(3);
+  });
+  it("this week not trained yet keeps last week's streak; a gap ends it", () => {
+    expect(streakWeeks([d("2026-10-28"), d("2026-11-04")], "2026-11-14")).toBe(2);
+    expect(streakWeeks([d("2026-10-21"), d("2026-11-04")], "2026-11-14")).toBe(1);
+    expect(streakWeeks([d("2026-10-28")], "2026-11-14")).toBe(0);
+    expect(streakWeeks([d("2026-11-04", 0)], "2026-11-14")).toBe(0);
+    expect(streakWeeks([], "2026-11-14")).toBe(0);
   });
 });
 
