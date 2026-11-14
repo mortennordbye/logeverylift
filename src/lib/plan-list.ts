@@ -14,7 +14,7 @@ import { ensureCycleSessions, listPlanned } from "@/lib/planned-sessions";
 import { getSeasonDetail, listSeasons } from "@/lib/seasons";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { userToday } from "@/lib/user-settings";
-import { blockWeeks, weekDays as blockWeekDays, rotationRows, weekIndexOf, type RotationWalkDay } from "@/lib/utils/cycle-detail";
+import { blockWeeks, dayLabels, weekDays as blockWeekDays, rotationRows, weekIndexOf, type RotationWalkDay } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, toDateStr } from "@/lib/utils/cycle-position";
 import {
   blockEnd,
@@ -58,10 +58,14 @@ async function weekHero(userId: string, c: Cycle, today: string, active: boolean
   const weeks = blockWeeks(start, cycleLengthDays(c));
   const dates = blockWeekDays(weeks[weekIndexOf(weeks, today)]);
   let sessions: WeekSession[] = [];
+  // Days the template names with no session, such as "Mobility".
+  let labels: Record<number, string> = {};
   // Reading can write (the first read makes the dated sessions), so a failure
   // shows an empty week instead of taking the list down, as on home.
   try {
     await ensureCycleSessions(userId, c.id);
+    const withSlots = await getTrainingCycleWithSlots(c.id);
+    if (withSlots.success) labels = dayLabels(withSlots.data.slots);
     const rows = await sessionCompliance(userId, dates[0], dates[dates.length - 1], { cycleId: c.id });
     sessions = rows.map((r) => ({
       date: r.date,
@@ -82,7 +86,7 @@ async function weekHero(userId: string, c: Cycle, today: string, active: boolean
     name: c.name,
     label: heroLabel(c, today, active),
     ends: `Ends ${dayMonth(blockEnd(start, c))}`,
-    days: weekDays(dates, sessions, today, endurance),
+    days: weekDays(dates, sessions, today, endurance, labels),
     summary: weekSummary(sessions),
   };
 }

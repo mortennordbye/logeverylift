@@ -1,4 +1,4 @@
-import { blockWeeks, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
+import { blockWeeks, dayLabels, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
 import { describe, expect, it } from "vitest";
 
 /** The cycle detail's pure parts (docs/plans/plan-tab-redesign.md, P2). */
@@ -49,7 +49,7 @@ describe("setsShort", () => {
 });
 
 describe("rowAction and sessionSub", () => {
-  const base = { summary: null, exercises: "Squat, Row", answer: null };
+  const base = { summary: null, exercises: "Squat, Row", answer: null, date: "2026-11-20", touched: false, templateDate: "2026-11-20" };
   it("opens the sheet for a coming or missed session, nothing for a done one or a past skip", () => {
     expect(rowAction({ status: "planned", date: "2026-11-20", answer: null }, "2026-11-19")).toBe("sheet");
     expect(rowAction({ status: "missed", date: "2026-11-18", answer: null }, "2026-11-19")).toBe("sheet");
@@ -68,6 +68,28 @@ describe("rowAction and sessionSub", () => {
     expect(sessionSub({ ...base, status: "planned" })).toBe("Squat, Row");
     expect(sessionSub({ ...base, status: "done" })).toBe("Done · Squat, Row");
     expect(sessionSub({ ...base, summary: "60 min", status: "skipped" })).toBe("Skipped · 60 min");
+  });
+
+  it("marks a session moved from its template day, or changed on its own day", () => {
+    expect(sessionSub({ ...base, status: "planned", touched: true, templateDate: "2026-11-17" })).toBe("Moved from Tue · Squat, Row");
+    expect(sessionSub({ ...base, status: "planned", touched: true })).toBe("Changed · Squat, Row");
+    // A skip touches the row too; Skipped says enough.
+    expect(sessionSub({ ...base, status: "skipped", touched: true })).toBe("Skipped · Squat, Row");
+    // A session added by hand has no template day and is not a change.
+    expect(sessionSub({ ...base, status: "planned", touched: true, templateDate: null })).toBe("Squat, Row");
+  });
+});
+
+describe("dayLabels", () => {
+  it("names a weekday whose only slots are labelled with no program, but not a plain Rest", () => {
+    const labels = dayLabels([
+      { dayOfWeek: 1, programId: 3, workoutId: null, label: "Strength" },
+      { dayOfWeek: 5, programId: null, workoutId: null, label: "Mobility, stretching and the long drive home" },
+      { dayOfWeek: 6, programId: null, workoutId: 8, label: "Long ride" },
+      { dayOfWeek: 7, programId: null, workoutId: null, label: "Rest" },
+      { dayOfWeek: 4, programId: null, workoutId: null, label: null },
+    ]);
+    expect(labels).toEqual({ 5: "Mobility, stretching and the long drive home" });
   });
 });
 
@@ -107,5 +129,18 @@ describe("rotationRows", () => {
     );
     expect(rows[0]).toMatchObject({ mark: "skipped", upcoming: { rotationPosition: 3 } });
     expect(rows[1]).toMatchObject({ mark: "next", name: "Full body", programId: 30 });
+  });
+
+  it("marks a coming swapped session as swapped, not with the last done day of its slot", () => {
+    const rows = rotationRows(
+      slots,
+      [
+        { date: "2026-11-12", slotId: 2, rotationPosition: 1, programId: 20, programName: "Lower A", status: "done" },
+        { date: "2026-11-17", slotId: 1, rotationPosition: 3, programId: 10, programName: "Upper A", status: "planned" },
+        { date: "2026-11-18", slotId: 2, rotationPosition: 4, programId: 30, programName: "Full body", status: "planned" },
+      ],
+      "2026-11-17",
+    );
+    expect(rows[1]).toMatchObject({ mark: "swapped", name: "Full body", programId: 30, lastDone: "2026-11-12" });
   });
 });

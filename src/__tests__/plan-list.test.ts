@@ -96,6 +96,12 @@ describe("the hero", () => {
     expect(days[6].names).toBe("Long ride, Run off bike");
   });
 
+  it("names a day with no session by its own label, apart from Rest", () => {
+    const days = weekDays(dates, week, TODAY, true, { 5: "Mobility, stretching and the long drive home" });
+    expect(days[4]).toMatchObject({ short: "Mobility", rest: true, names: "Mobility, stretching and the long drive home" });
+    expect(days[5]).toMatchObject({ short: "Rest", names: "Rest" });
+  });
+
   it("never calls a session with an endurance sport a lift", () => {
     const mixed = s("2026-11-16", { name: "Bike + swim", sports: ["bike", "swim"] });
     const liftAndRun = s("2026-11-17", { name: "Legs and a jog", sports: ["run"] });
@@ -118,7 +124,7 @@ describe("the hero", () => {
   });
 
   it("marks the last session done, the next one and a skipped one in the rotation", () => {
-    const row = (slotId: number, name: string, mark: "next" | "skipped" | "done" | null, lastDone: string | null = null) => ({ slotId, name, rest: name === "Rest", mark, lastDone });
+    const row = (slotId: number, name: string, mark: "next" | "skipped" | "swapped" | "done" | null, lastDone: string | null = null) => ({ slotId, name, rest: name === "Rest", mark, lastDone });
     const chips = rotationChips([
       row(10, "Lower B", "done", "2026-11-09"),
       row(11, "Upper A", "done", "2026-11-12"),
@@ -126,6 +132,7 @@ describe("the hero", () => {
       row(14, "Upper B", "skipped"),
       row(13, "Rest", null),
     ]);
+    expect(rotationChips([row(11, "Full body express", "swapped", "2026-11-12")])).toEqual([{ id: 11, name: "Full body express", rest: false, tag: "Swapped" }]);
     expect(chips).toEqual([
       { id: 10, name: "Lower B", rest: false, tag: null },
       { id: 11, name: "Upper A", rest: false, tag: "Done" },
