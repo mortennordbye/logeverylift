@@ -172,6 +172,40 @@ describe("the season card", () => {
       [null, false],
     ]);
   });
+
+  it("says Paused, as the season page does, when another block took the next phase's start (fix round 4)", () => {
+    const paused = seasonCard(
+      { id: 3, name: "Winter run base", startDate: "2026-11-02", endDate: "2027-02-07", replanFlaggedAt: null },
+      [
+        phase(1, "Base", "base", { w: 3 }, { status: "active", startDate: "2026-11-02" }),
+        // Due 23 Nov, but not scheduled: the chain is paused (seasonPaused).
+        phase(2, "Run build", "build", { w: 4 }),
+      ],
+      null,
+      TODAY,
+    );
+    expect(paused.phases.map((p) => p.badge)).toEqual(["Now", "Paused"]);
+  });
+
+  it("says Next, not a start day, for a season not started whose first phase is due and not scheduled", () => {
+    const due = seasonCard(
+      { id: 4, name: "Spring", startDate: "2026-11-10", endDate: "2027-02-07", replanFlaggedAt: null },
+      [phase(1, "General", "general", { w: 4 })],
+      null,
+      TODAY,
+    );
+    expect(due.phases[0].badge).toBe("Next");
+  });
+
+  it("writes a length in days that is whole weeks as weeks", () => {
+    const fitted = seasonCard(
+      { id: 5, name: "Fitted", startDate: "2026-11-16", endDate: "2027-08-29", replanFlaggedAt: null },
+      [phase(1, "Build", "build", { d: 105 }, { scheduledStartDate: "2026-11-16" })],
+      null,
+      TODAY,
+    );
+    expect(fitted.phases[0].sub).toBe("Build · 15 wk · 16 Nov – 28 Feb");
+  });
 });
 
 describe("the phase warning in select mode", () => {
