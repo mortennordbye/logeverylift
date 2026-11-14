@@ -7,8 +7,7 @@
 import { AddPhaseCancel, AddPhaseFinish } from "@/components/features/AddPhaseForm";
 import { CycleScheduleBuilder } from "@/components/features/CycleScheduleBuilder";
 import { HOME_UI } from "@/components/features/home/fonts";
-import { StepProgress } from "@/components/features/season-ui";
-import { BackLink } from "@/components/ui/BackLink";
+import { FormHeader, StepProgress } from "@/components/features/season-ui";
 import { getPrograms } from "@/lib/actions/programs";
 import { getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
 import { enduranceEnabledFor } from "@/lib/endurance";
@@ -49,14 +48,20 @@ export default async function AddPhaseWeekPage({ params }: { params: Promise<{ i
 
   return (
     <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
-      <header className="flex items-center justify-between px-4 pt-4 shrink-0">
-        <BackLink fallback={{ href: `/seasons/${seasonId}`, label: "Season" }} />
-        <AddPhaseCancel seasonId={seasonId} cycleId={cycleId} name={cycle.name} />
-      </header>
-      <div className="flex flex-col gap-4 px-4 pt-2 pb-40">
-        <div className="flex flex-col gap-2">
-          <h1 className="home-display text-[34px] leading-9 uppercase break-words">{weekday ? "Build the week" : "Rotation order"}</h1>
-          <StepProgress step={2} of={2} />
+      {/* The same header as New cycle step 2: Back, the title centred, Cancel. */}
+      <FormHeader
+        title="Add a phase"
+        left={
+          <Link replace href={`/seasons/${seasonId}`} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
+            ‹ Back
+          </Link>
+        }
+        right={<AddPhaseCancel seasonId={seasonId} cycleId={cycleId} name={cycle.name} />}
+      />
+      <div className="flex flex-col gap-[18px] px-4 pt-3 pb-40">
+        <StepProgress step={2} of={2} />
+        <div className="flex flex-col gap-1">
+          <h2 className="text-[22px] font-semibold">{weekday ? "Build the week" : "Rotation order"}</h2>
           <span className="text-sm text-foreground/75">
             {cycle.name}
             {endurance && cycle.phaseType ? ` · ${PHASE_TYPE_LABELS[cycle.phaseType]}` : ""}

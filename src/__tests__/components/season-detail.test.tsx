@@ -158,7 +158,7 @@ describe("a gym user's season", () => {
     render(<SeasonDetailClient {...base} enduranceEnabled={false} races={[]} aRaceId={null} />);
     expect(screen.queryByText("Races")).toBeNull();
     expect(screen.queryByRole("button", { name: "+ Add race" })).toBeNull();
-    expect(screen.getByTestId("season-hero").textContent).toContain("Goal by 17 Apr 2027");
+    expect(screen.getByTestId("season-hero").textContent!.replace(/\u00a0/g, " ")).toContain("Goal by 17 Apr 2027");
     expect(screen.getAllByTestId("phase-row")[0].textContent).not.toContain("General");
     fireEvent.click(within(screen.getAllByTestId("phase-row")[0]).getAllByRole("button")[1]);
     expect(screen.queryByRole("group", { name: "Phase type" })).toBeNull();
@@ -395,6 +395,6 @@ describe("the phase bar and badges match the Plan list (fix round 6)", () => {
 
   it("gives a start inside the week with its date (J4-17)", () => {
     render(<SeasonDetailClient {...base} />);
-    expect(screen.getAllByTestId("phase-row")[0].textContent).toContain("Starts Mon 16 Nov");
+    expect(screen.getAllByTestId("phase-row")[0].textContent?.replace(/\u00a0/g, " ")).toContain("Starts Mon 16 Nov");
   });
 });

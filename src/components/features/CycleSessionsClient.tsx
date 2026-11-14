@@ -35,6 +35,7 @@ import {
   weekRangeLabel,
 } from "@/lib/utils/cycle-detail";
 import { buildRunSetSummary } from "@/lib/utils/format";
+import { keepDates } from "@/lib/utils/keep-dates";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { Units } from "@/lib/utils/units";
@@ -119,7 +120,7 @@ export function CycleWeek({
           <span className="text-[15px] font-semibold">
             Week {index + 1} of {weeks.length}
           </span>
-          <span className="text-[13px] text-muted-foreground">{weekRangeLabel(week)}</span>
+          <span className="text-[13px] text-muted-foreground">{keepDates(weekRangeLabel(week))}</span>
         </div>
         <button type="button" aria-label="Next week" disabled={index === weeks.length - 1} onClick={() => setIndex(index + 1)} className={weekButton}>
           <ChevronRight className="w-[18px] h-[18px]" aria-hidden />
@@ -162,7 +163,8 @@ export function CycleWeek({
                 {s.brick && <Link2 role="img" aria-label="Brick, linked to the ride" className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1 min-w-0 flex flex-col">
                   <span className={`text-[15px] font-medium truncate ${s.status === "skipped" ? "text-muted-foreground line-through" : ""}`}>{s.name}</span>
-                  {sub && <span className="text-[13px] text-muted-foreground truncate">{sub}</span>}
+                  {/* Two lines, not one: a cut status line lost the sport at 320 px. */}
+                  {sub && <span className="text-[13px] text-muted-foreground line-clamp-2 break-words" data-testid="week-row-sub">{sub}</span>}
                 </span>
                 {s.key && <span className="shrink-0 rounded-full px-2.5 py-0.5 ring-1 ring-inset ring-brand text-brand text-xs font-semibold">Key</span>}
                 {action && chevron}

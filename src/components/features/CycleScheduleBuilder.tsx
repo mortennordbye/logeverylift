@@ -12,7 +12,7 @@
  *   row's options), add a session or a rest day.
  */
 
-import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SheetCloseButton } from "@/components/features/PlanSheetPanel";
 import { ButtonReason } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { createProgram } from "@/lib/actions/programs";
@@ -74,23 +74,14 @@ function SheetFrame({ title, onClose, children }: { title: string; onClose?: () 
   return (
     <section
       aria-label={title}
-      className="home-ui bg-widget rounded-t-[20px] px-4 pt-2 pb-6 max-h-[85dvh] overflow-y-auto flex flex-col gap-1"
+      data-plan-sheet=""
+      // Nothing shrinks, so the sheet scrolls as a whole (see PlanSheetPanel).
+      className="home-ui bg-widget rounded-t-[20px] px-4 pt-2 pb-6 max-h-[90dvh] overflow-y-auto overscroll-contain flex flex-col gap-1 [&>*]:shrink-0"
     >
-      <span aria-hidden className="self-center mb-2 h-[5px] w-10 rounded-full bg-[#3a3a3e]" />
+      <span aria-hidden className="self-center mb-2 h-[5px] w-10 rounded-full bg-muted-foreground/50" />
       <div className="flex items-center justify-between min-h-11">
         <h2 className="text-[17px] font-semibold">{title}</h2>
-        {onClose && (
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="h-11 w-11 rounded-full bg-widget-2 text-muted-foreground flex items-center justify-center active:opacity-70"
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
-        )}
+        {onClose && <SheetCloseButton onClick={onClose} />}
       </div>
       {children}
     </section>

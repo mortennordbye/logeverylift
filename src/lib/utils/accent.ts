@@ -51,15 +51,32 @@ export function customAccentTokens(hex: string, dark: boolean): { brand: string;
 /** The default custom colour, as in the theme provider. */
 export const DEFAULT_CUSTOM_ACCENT = "#5B8FFF";
 
+/** The app-wide `--primary` of each named accent, per theme (the tab bar, links, buttons outside `.home-ui`). */
+export const ACCENT_PRIMARY = {
+  blue: { light: "oklch(0.55 0.22 264.36)", dark: "oklch(0.70 0.19 264.36)" },
+  white: { light: "oklch(0.205 0 0)", dark: "oklch(0.922 0 0)" },
+  green: { light: "oklch(0.55 0.15 145)", dark: "oklch(0.70 0.18 145)" },
+  purple: { light: "oklch(0.55 0.20 300)", dark: "oklch(0.70 0.22 300)" },
+  orange: { light: "oklch(0.60 0.18 45)", dark: "oklch(0.75 0.20 45)" },
+} as const;
+
+/** The text on `--primary`, per theme. */
+export const ON_PRIMARY = { light: "oklch(0.985 0 0)", dark: "oklch(0.205 0 0)" } as const;
+
 /**
- * The script that runs before the first paint: the theme class, `data-accent`
- * and, for a custom accent, its tokens, read from the same localStorage keys
- * as the theme provider. Without it a non-blue accent paints blue first.
+ * The script that runs before the first paint: the theme class, `data-accent`,
+ * `--primary` and, for a custom accent, its tokens, read from the same
+ * localStorage keys as the theme provider. Without it a non-blue accent paints
+ * blue first, and until hydration the tab bar's active tab took the theme's
+ * default `--primary` (white in dark) on a slow load.
  */
 export function prePaintThemeScript(): string {
   return `(function(){try{var d=document.documentElement;var t=localStorage.getItem('theme');if(t!=='light'){d.classList.add('dark')}
+var m=t!=='light'?'dark':'light';var P=${JSON.stringify(ACCENT_PRIMARY)};var O=${JSON.stringify(ON_PRIMARY)};
 var a=localStorage.getItem('accentColor')||'blue';if(['blue','white','green','purple','orange','custom'].indexOf(a)<0){a='blue'}
-if(a==='custom'){var f=${customAccentTokens.toString()};var k=f(localStorage.getItem('customAccentHex')||'',t!=='light')||f('${DEFAULT_CUSTOM_ACCENT}',t!=='light');
+var p=a==='custom'?null:P[a][m];
+if(a==='custom'){var h=localStorage.getItem('customAccentHex')||'';if(!/^#[0-9a-fA-F]{6}$/.test(h)){h='${DEFAULT_CUSTOM_ACCENT}'}p=h;var f=${customAccentTokens.toString()};var k=f(h,m==='dark');
 d.style.setProperty('--brand-custom',k.brand);d.style.setProperty('--brand-fill-custom',k.fill);d.style.setProperty('--on-brand-custom',k.onBrand)}
+d.style.setProperty('--primary',p);d.style.setProperty('--primary-foreground',O[m]);
 d.dataset.accent=a}catch(e){}})()`;
 }

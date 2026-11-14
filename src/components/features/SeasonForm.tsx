@@ -3,10 +3,12 @@
 import { createSeasonAction, deleteSeasonAction, updateSeasonAction } from "@/lib/actions/seasons";
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { keepDates } from "@/lib/utils/keep-dates";
 import { PHASE_TYPE_LABELS, dayLabel, lengthShort, rangeLabel, shortDay, type RaceDiscipline, type RacePriority, type TriDistance } from "@/lib/utils/seasons";
 import { triathlonPhases } from "@/lib/utils/triathlon-phases";
 import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
+import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { useBack, useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
@@ -258,8 +260,9 @@ export function SeasonForm(props: Props) {
             <h2 id="race-label" className={LABEL}>
               Race (optional)
             </h2>
-            <div className="grid grid-cols-2 gap-2">
-              <input aria-label="Race name" value={raceName} maxLength={100} onChange={(e) => setRaceName(e.target.value)} placeholder="Race name" className={`${INNER_FIELD} col-span-2`} />
+            {/* One column below 360 px: a half-width date field cut the year. */}
+            <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2" data-testid="race-fields">
+              <input aria-label="Race name" value={raceName} maxLength={100} onChange={(e) => setRaceName(e.target.value)} placeholder="Race name" className={`${INNER_FIELD} min-[360px]:col-span-2`} />
               <input aria-label="Race date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={INNER_FIELD} />
               {discipline === "triathlon" ? (
                 <select aria-label="Distance" value={distance} onChange={(e) => setDistance(e.target.value as TriDistance)} className={INNER_FIELD}>
@@ -374,7 +377,7 @@ export function SeasonForm(props: Props) {
                     <ol aria-label="Planned phases" className="ml-[34px] flex flex-col gap-1 text-[13px] text-foreground/75">
                       {triPhases.map((p) => (
                         <li key={p.phaseType}>
-                          {PHASE_TYPE_LABELS[p.phaseType]} · {lengthShort(p)} · {rangeLabel(p.start, p.end)}
+                          {keepDates(`${PHASE_TYPE_LABELS[p.phaseType]} · ${lengthShort(p)} · ${rangeLabel(p.start, p.end)}`)}
                         </li>
                       ))}
                     </ol>
@@ -411,7 +414,7 @@ export function SeasonForm(props: Props) {
 
       {initial && (
         <BottomSheet open={confirmDelete} onClose={() => setConfirmDelete(false)}>
-          <div className="flex w-full flex-col gap-3 px-4 pb-8">
+          <PlanSheetPanel label="Delete this season?">
             <h2 className="text-lg font-semibold">Delete this season?</h2>
             <p className="text-sm text-muted-foreground">Its cycles stay. You can restore it from Recently deleted for 90 days.</p>
             <button type="button" onClick={handleDelete} disabled={loading} className="min-h-[52px] rounded-2xl bg-[#c23a2e] text-base font-semibold text-white active:opacity-80">
@@ -420,7 +423,7 @@ export function SeasonForm(props: Props) {
             <button type="button" onClick={() => setConfirmDelete(false)} className="min-h-11 text-sm font-medium active:opacity-70">
               Cancel
             </button>
-          </div>
+          </PlanSheetPanel>
         </BottomSheet>
       )}
       {create && (
@@ -467,7 +470,7 @@ function DateRow({
       <div className="flex min-h-[52px] items-center justify-between gap-3">
         <span className="text-[15px]">{label}</span>
         <span className="flex items-center gap-2.5">
-          <span className="text-[15px] text-foreground/75">{text}</span>
+          <span className="text-[15px] text-foreground/75">{keepDates(text)}</span>
           <button type="button" aria-expanded={open} aria-controls={id} aria-label={`Change ${label.toLowerCase()}`} onClick={onToggle} className="min-h-11 text-sm text-primary active:opacity-70">
             Change
           </button>

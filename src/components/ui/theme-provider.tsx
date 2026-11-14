@@ -1,6 +1,6 @@
 "use client";
 
-import { customAccentTokens, DEFAULT_CUSTOM_ACCENT } from "@/lib/utils/accent";
+import { ACCENT_PRIMARY, customAccentTokens, DEFAULT_CUSTOM_ACCENT, ON_PRIMARY } from "@/lib/utils/accent";
 import { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "light" | "dark";
@@ -21,28 +21,7 @@ interface ThemeContextValue {
 
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-const accentColors: Record<Exclude<AccentColor, "custom">, { light: string; dark: string }> = {
-  blue: {
-    light: "oklch(0.55 0.22 264.36)",
-    dark: "oklch(0.70 0.19 264.36)",
-  },
-  white: {
-    light: "oklch(0.205 0 0)",
-    dark: "oklch(0.922 0 0)",
-  },
-  green: {
-    light: "oklch(0.55 0.15 145)",
-    dark: "oklch(0.70 0.18 145)",
-  },
-  purple: {
-    light: "oklch(0.55 0.20 300)",
-    dark: "oklch(0.70 0.22 300)",
-  },
-  orange: {
-    light: "oklch(0.60 0.18 45)",
-    dark: "oklch(0.75 0.20 45)",
-  },
-};
+const accentColors: Record<Exclude<AccentColor, "custom">, { light: string; dark: string }> = ACCENT_PRIMARY;
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Start with server-safe defaults — localStorage is loaded after hydration in useEffect
@@ -59,8 +38,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         : currentTheme === "dark"
           ? accentColors[color as Exclude<AccentColor, "custom">].dark
           : accentColors[color as Exclude<AccentColor, "custom">].light;
-    const foreground =
-      currentTheme === "dark" ? "oklch(0.205 0 0)" : "oklch(0.985 0 0)";
+    const foreground = ON_PRIMARY[currentTheme];
     document.documentElement.style.setProperty("--primary", colorValue);
     document.documentElement.style.setProperty("--primary-foreground", foreground);
     // The home's brand colour follows the accent (globals.css, [data-accent]).

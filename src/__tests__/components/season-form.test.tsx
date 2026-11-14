@@ -126,7 +126,7 @@ describe("New season with the endurance switch", () => {
     fillRace();
     fireEvent.click(radio);
     const planned = screen.getByRole("list", { name: "Planned phases" });
-    expect(within(planned).getAllByRole("listitem").map((li) => li.textContent)).toEqual([
+    expect(within(planned).getAllByRole("listitem").map((li) => li.textContent!.replace(/\u00a0/g, " "))).toEqual([
       "General · 7 wk · 16 Nov – 3 Jan",
       "Base · 15 wk · 4 Jan – 18 Apr",
       "Build · 109 days · 19 Apr – 5 Aug",

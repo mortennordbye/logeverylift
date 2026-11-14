@@ -15,7 +15,8 @@ export default async function EditSeasonPage({ params }: { params: Promise<{ id:
   const auth = await requireSession();
   const detail = await getSeasonDetail(auth.user.id, seasonId);
   // Delete season renders this page again in its response.
-  if (!detail && (await ownDeletedSeason(auth.user.id, seasonId))) return <PlanItemDeleted what="season" />;
+  const deleted = detail ? null : await ownDeletedSeason(auth.user.id, seasonId);
+  if (deleted) return <PlanItemDeleted item={deleted} />;
   if (!detail) notFound();
   const s = detail.season;
   return (

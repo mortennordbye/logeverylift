@@ -128,10 +128,11 @@ export function StartCycleButton({
     <>
       {scheduledFor ? (
         <div className="flex flex-col gap-2 rounded-[20px] bg-widget px-4 py-3.5" data-testid="scheduled-start">
-          <div className="flex items-center justify-between gap-3">
+          {/* Wraps: on a narrow screen the button goes under the date instead of squeezing it. */}
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
             <div className="flex flex-col gap-0.5">
               <SectionLabel accent>Scheduled</SectionLabel>
-              <span className="text-base font-semibold">Starts {shortDay(scheduledFor)}</span>
+              <span className="text-base font-semibold whitespace-nowrap">Starts {shortDay(scheduledFor)}</span>
             </div>
             <button
               type="button"

@@ -61,7 +61,8 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
     getCyclePeriodization(cycleId),
   ]);
   // Delete in the menu renders this page again in its response.
-  if (!cycleResult.success && (await ownDeletedCycle(userId, cycleId))) return <PlanItemDeleted what="cycle" />;
+  const deleted = cycleResult.success ? null : await ownDeletedCycle(userId, cycleId);
+  if (deleted) return <PlanItemDeleted item={deleted} />;
   if (!cycleResult.success) notFound();
 
   const cycle = cycleResult.data;
