@@ -82,3 +82,51 @@ export function weightSummary(entries: { kg: number; date: string; at: number }[
     series,
   };
 }
+
+/** One day of the training load series: the day's load, 7-day fatigue (ATL) and form (TSB). */
+export type LoadDay = { date: string; load?: number; atl?: number; tsb?: number };
+
+export type LoadSummary = {
+  /** Daily load for the `n` days up to `today`, oldest first, rounded; a day without a row is 0. */
+  loads: number[];
+  /** The 7-day fatigue on the same days, never below 0. */
+  fatigue: number[];
+  /** Form on the newest day, rounded; null when the newest day is older than yesterday. */
+  form: number | null;
+  /** The load of the last 7 calendar days, today included. */
+  weekLoad: number;
+};
+
+/**
+ * The Training load widget's numbers from the series' days (any dates, oldest
+ * first). The `n` days are built by date, so a missing day is a 0 bar and not
+ * a shift of the days after it. A missing day's fatigue is the day before's,
+ * less one rest day of a 7-day average (x 6/7); days before the first row take
+ * its value. Form is today's state, so it is left out when the newest day
+ * with data is older than yesterday. Null when the `n` days hold no load.
+ */
+export function loadSummary(days: LoadDay[], today: string, n = 28): LoadSummary | null {
+  const byDate = new Map(days.filter((d) => d.date <= today).map((d) => [d.date, d]));
+  const dates = Array.from({ length: n }, (_, i) => new Date(utc(today) - (n - 1 - i) * DAY_MS).toISOString().slice(0, 10));
+  const loads = dates.map((d) => Math.max(0, Math.round(byDate.get(d)?.load ?? 0)));
+  if (!loads.some((l) => l > 0)) return null;
+
+  const firstAtl = dates.map((d) => byDate.get(d)?.atl).find((a) => a !== undefined) ?? 0;
+  let prev: number | null = null;
+  const fatigue = dates.map((d) => {
+    const atl = byDate.get(d)?.atl;
+    const v: number = atl !== undefined ? atl : prev === null ? firstAtl : prev * (6 / 7);
+    prev = v;
+    return Math.max(0, v);
+  });
+
+  const newest = [...byDate.keys()].sort().at(-1);
+  const recent = newest !== undefined && daysUntil(newest, today) <= 1;
+  const tsb = newest !== undefined ? byDate.get(newest)?.tsb : undefined;
+  return {
+    loads,
+    fatigue,
+    form: recent && tsb !== undefined ? Math.round(tsb) + 0 : null,
+    weekLoad: loads.slice(-7).reduce((a, b) => a + b, 0),
+  };
+}

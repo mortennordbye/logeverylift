@@ -80,7 +80,7 @@ describe("Training load", () => {
     const m = render(<>{trainingLoadWidget.View({ data, size: "m" })}</>);
     expect(screen.getByText("+6")).toBeTruthy();
     expect(screen.getByText("Form · Fresh")).toBeTruthy();
-    expect(screen.getByText("Load 100 this week")).toBeTruthy();
+    expect(screen.getByText("Load 100 in 7 days")).toBeTruthy();
     expect(screen.getByText("Steady build")).toBeTruthy();
     expect(m.container.querySelectorAll("rect")).toHaveLength(2);
     expect(screen.queryByText("7-day trend")).toBeNull();
@@ -88,6 +88,12 @@ describe("Training load", () => {
     m.unmount();
     render(<>{trainingLoadWidget.View({ data, size: "l" })}</>);
     expect(screen.getByText("7-day trend")).toBeTruthy();
+  });
+  it("no data for today or yesterday: the 7-day load, no form", () => {
+    render(<>{trainingLoadWidget.View({ data: { ...data, form: null, formLabel: null }, size: "m" })}</>);
+    expect(screen.getByText("100")).toBeTruthy();
+    expect(screen.getByText("Load, last 7 days")).toBeTruthy();
+    expect(screen.queryByText(/Form ·/)).toBeNull();
   });
   it("empty", () => {
     render(<>{trainingLoadWidget.Empty({ size: "m" })}</>);

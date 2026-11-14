@@ -6,7 +6,8 @@ import { Layers } from "lucide-react";
 import { loadTrainingLoad, type TrainingLoadData } from "./load";
 
 /**
- * Training load (endurance or Garmin): today's form and this week's load,
+ * Training load (endurance or Garmin): today's form and the last 7 days' load
+ * (the load alone when there is no data for today or yesterday),
  * with four weeks of daily load as bars and the 7-day fatigue as a line.
  * M a short chart, L a tall one with a legend. Opens the week page.
  */
@@ -49,11 +50,23 @@ export const trainingLoadWidget: Renderer<TrainingLoadData> = defineWidget<Train
         Training load
       </Label>
       <div className="mt-2 flex items-center gap-2.5">
-        <Num size={38}>{data.form > 0 ? `+${data.form}` : data.form}</Num>
-        <div className="min-w-0">
-          <p className="text-[13px] font-semibold">Form · {data.formLabel}</p>
-          <Cap>Load {data.weekLoad} this week</Cap>
-        </div>
+        {data.form === null ? (
+          <>
+            <Num size={38}>{data.weekLoad}</Num>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold">Load, last 7 days</p>
+              <Cap>No data today for form</Cap>
+            </div>
+          </>
+        ) : (
+          <>
+            <Num size={38}>{data.form > 0 ? `+${data.form}` : data.form}</Num>
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold">Form · {data.formLabel}</p>
+              <Cap>Load {data.weekLoad} in 7 days</Cap>
+            </div>
+          </>
+        )}
         {data.ramp && (
           <span
             className={`ml-auto inline-flex shrink-0 items-center gap-[5px] rounded-full px-[9px] py-[3px] text-xs font-bold ${

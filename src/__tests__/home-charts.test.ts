@@ -1,5 +1,5 @@
 import { bars, ringDash, slotLine, sparkline } from "@/lib/home/charts";
-import { daysUntil, streakWeeks, weekCounts, weightSummary } from "@/lib/home/widget-data";
+import { daysUntil, loadSummary, streakWeeks, weekCounts, weightSummary } from "@/lib/home/widget-data";
 import { describe, expect, it } from "vitest";
 
 /** The home widgets' SVG geometry and data shaping (src/lib/home/charts.ts, widget-data.ts). */
@@ -109,5 +109,47 @@ describe("weightSummary", () => {
     const s = weightSummary([e("2026-08-01", 85)], "2026-11-14")!;
     expect(s.latestKg).toBe(85);
     expect(s.series).toEqual([]);
+  });
+});
+
+describe("loadSummary", () => {
+  const today = "2026-11-14";
+  const day = (date: string, load: number, atl = 40, tsb = 5) => ({ date, load, atl, tsb });
+
+  it("builds the days by date: a missing day is 0, not a shift of the days after it", () => {
+    const s = loadSummary([day("2026-11-10", 50), day("2026-11-12", 60), day("2026-11-14", 70)], today, 7)!;
+    expect(s.loads).toEqual([0, 0, 50, 0, 60, 0, 70]);
+  });
+
+  it("rounds the loads and clamps them and the fatigue at 0", () => {
+    const s = loadSummary([day("2026-11-13", 49.6, -2), day("2026-11-14", -3, 10)], today, 3)!;
+    expect(s.loads).toEqual([0, 50, 0]);
+    expect(s.fatigue).toEqual([0, 0, 10]);
+  });
+
+  it("week load is the last 7 calendar days, today included", () => {
+    const s = loadSummary([day("2026-11-07", 100), day("2026-11-08", 10), day("2026-11-14", 20)], today, 28)!;
+    expect(s.loads).toHaveLength(28);
+    expect(s.weekLoad).toBe(30);
+  });
+
+  it("a missing day's fatigue decays from the day before; days before the first row take its value", () => {
+    const s = loadSummary([day("2026-11-12", 50, 42), day("2026-11-14", 10, 30)], today, 4)!;
+    expect(s.fatigue[0]).toBe(42);
+    expect(s.fatigue[1]).toBe(42);
+    expect(s.fatigue[2]).toBeCloseTo(36);
+    expect(s.fatigue[3]).toBe(30);
+  });
+
+  it("form from today or yesterday only, rounded", () => {
+    expect(loadSummary([day("2026-11-14", 50, 40, 6.4)], today)!.form).toBe(6);
+    expect(loadSummary([day("2026-11-13", 50, 40, -0.4)], today)!.form).toBe(0);
+    expect(loadSummary([day("2026-11-12", 50, 40, 6)], today)!.form).toBeNull();
+  });
+
+  it("no load in the days, or only future rows: null", () => {
+    expect(loadSummary([day("2026-11-14", 0)], today)).toBeNull();
+    expect(loadSummary([day("2026-11-15", 50)], today)).toBeNull();
+    expect(loadSummary([], today)).toBeNull();
   });
 });
