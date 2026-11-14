@@ -758,7 +758,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
           onClick={() => router.push(cycleCreated ? "/cycles" : "/programs")}
           className="inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground active:opacity-80"
         >
-          {cycleCreated ? "Go to Cycles" : "Go to Programs"}
+          {cycleCreated ? "Go to Plan" : "Go to Programs"}
         </button>
         <button
           type="button"

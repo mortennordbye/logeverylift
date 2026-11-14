@@ -80,7 +80,7 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
   await expect(page.getByText(/Created 2 programs and cycle "16-Week Upper\/Lower"/)).toBeVisible();
 
   // Clean up: the cycle (newest of that name), then its two programs.
-  await page.getByRole("button", { name: "Go to Cycles" }).click();
+  await page.getByRole("button", { name: "Go to Plan" }).click();
   await page.waitForURL("/cycles");
   const cycleLinks = page.getByRole("link", { name: /16-Week Upper\/Lower/ });
   await expect(cycleLinks.first()).toBeVisible();
