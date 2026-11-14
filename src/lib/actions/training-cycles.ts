@@ -67,7 +67,8 @@ export async function getTrainingCycles(): Promise<ActionResult<TrainingCycle[]>
       .orderBy(asc(trainingCycles.status), asc(trainingCycles.createdAt));
     return { success: true, data: rows };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[getTrainingCycles] failed", err);
+    return { success: false, error: "Failed to load the cycles" };
   }
 }
 
@@ -98,7 +99,8 @@ export async function getTrainingCycleWithSlots(
 
     return { success: true, data: { ...cycle, slots: cycle.slots.map(liveSlotProgram) } as TrainingCycleWithSlots };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[getTrainingCycleWithSlots] failed", err);
+    return { success: false, error: "Failed to load the cycle" };
   }
 }
 
@@ -120,7 +122,8 @@ export async function getAllCyclesWithSlots(): Promise<ActionResult<TrainingCycl
       data: rows.map((c) => ({ ...c, slots: c.slots.map(liveSlotProgram) })) as TrainingCycleWithSlots[],
     };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[getAllCyclesWithSlots] failed", err);
+    return { success: false, error: "Failed to load the cycles" };
   }
 }
 
@@ -303,7 +306,8 @@ export async function getActiveCycleForUser(): Promise<ActionResult<ActiveCycleI
       },
     };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[getActiveCycleForUser] failed", err);
+    return { success: false, error: "Failed to load the active cycle" };
   }
 }
 
@@ -524,7 +528,8 @@ export async function getCyclePeriodization(
       },
     };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[getCyclePeriodization] failed", err);
+    return { success: false, error: "Failed to load the periodization" };
   }
 }
 
@@ -554,13 +559,18 @@ export async function getProgramPeriodization(
     if (!slot) return { success: true, data: null };
     return getCyclePeriodization(slot.cycleId);
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[getProgramPeriodization] failed", err);
+    return { success: false, error: "Failed to load the periodization" };
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Mutations
 // ─────────────────────────────────────────────────────────────────────────────
+
+const cycleIdSchema = z.number().int().positive();
+const cycleIdsSchema = z.array(cycleIdSchema);
+const removeCycleSlotSchema = z.object({ slotId: z.number().int().positive(), cycleId: cycleIdSchema });
 
 /**
  * Run a write to one cycle inside the revision layer (docs/plans/revisions.md,
@@ -607,7 +617,8 @@ export async function createTrainingCycle(
     revalidatePath("/cycles");
     return { success: true, data: cycle };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[createTrainingCycle] failed", err);
+    return { success: false, error: "Failed to create the cycle" };
   }
 }
 
@@ -685,7 +696,8 @@ export async function updateTrainingCycle(
     revalidatePath(`/cycles/${id}`);
     return { success: true, data: cycle };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[updateTrainingCycle] failed", err);
+    return { success: false, error: "Failed to update the cycle" };
   }
 }
 
@@ -697,6 +709,7 @@ export async function deleteTrainingCycle(
   cycleId: number,
 ): Promise<ActionResult<void>> {
   const auth = await requireSession();
+  if (!cycleIdSchema.safeParse(cycleId).success) return { success: false, error: "Invalid input" };
 
   try {
     const [existing] = await db
@@ -711,21 +724,24 @@ export async function deleteTrainingCycle(
     revalidatePath("/programs");
     return { success: true, data: undefined };
   } catch (err) {
-    if (err instanceof OpenWorkoutError) return { success: false, error: err.message };
-    return { success: false, error: String(err) };
+    if (err instanceof OpenWorkoutError || err instanceof PlanStateError) return { success: false, error: err.message };
+    console.error("[deleteTrainingCycle] failed", err);
+    return { success: false, error: "Failed to delete the cycle" };
   }
 }
 
 export async function deleteManyTrainingCycles(
   cycleIds: number[],
 ): Promise<ActionResult<void>> {
-  if (cycleIds.length === 0) return { success: true, data: undefined };
   const auth = await requireSession();
+  const parsed = cycleIdsSchema.safeParse(cycleIds);
+  if (!parsed.success) return { success: false, error: "Invalid input" };
+  if (parsed.data.length === 0) return { success: true, data: undefined };
   try {
     const owned = await db
       .select({ id: trainingCycles.id })
       .from(trainingCycles)
-      .where(and(inArray(trainingCycles.id, cycleIds), eq(trainingCycles.userId, auth.user.id), liveCycles));
+      .where(and(inArray(trainingCycles.id, parsed.data), eq(trainingCycles.userId, auth.user.id), liveCycles));
     if (owned.length > 0) {
       await deleteCycles({ userId: auth.user.id, writer: "user" }, owned.map((c) => c.id));
     }
@@ -733,8 +749,9 @@ export async function deleteManyTrainingCycles(
     revalidatePath("/programs");
     return { success: true, data: undefined };
   } catch (err) {
-    if (err instanceof OpenWorkoutError) return { success: false, error: err.message };
-    return { success: false, error: String(err) };
+    if (err instanceof OpenWorkoutError || err instanceof PlanStateError) return { success: false, error: err.message };
+    console.error("[deleteManyTrainingCycles] failed", err);
+    return { success: false, error: "Failed to delete the cycles" };
   }
 }
 
@@ -743,6 +760,7 @@ export async function startTrainingCycle(
 ): Promise<ActionResult<TrainingCycle>> {
   const auth = await requireSession();
   const userId = auth.user.id;
+  if (!cycleIdSchema.safeParse(cycleId).success) return { success: false, error: "Invalid input" };
 
   try {
     // Only one active cycle at a time — any other active cycle completes.
@@ -754,7 +772,9 @@ export async function startTrainingCycle(
     return { success: true, data: cycle };
   } catch (err) {
     if (err instanceof PlanNotFoundError) return { success: false, error: "Training cycle not found" };
-    return { success: false, error: String(err) };
+    if (err instanceof PlanStateError) return { success: false, error: err.message };
+    console.error("[startTrainingCycle] failed", err);
+    return { success: false, error: "Failed to start the cycle" };
   }
 }
 
@@ -763,6 +783,7 @@ export async function restartTrainingCycle(
 ): Promise<ActionResult<TrainingCycle>> {
   const auth = await requireSession();
   const userId = auth.user.id;
+  if (!cycleIdSchema.safeParse(cycleId).success) return { success: false, error: "Invalid input" };
 
   try {
     // Deactivate any currently active cycle, then start this one today.
@@ -774,7 +795,9 @@ export async function restartTrainingCycle(
     return { success: true, data: cycle };
   } catch (err) {
     if (err instanceof PlanNotFoundError) return { success: false, error: "Cycle not found" };
-    return { success: false, error: String(err) };
+    if (err instanceof PlanStateError) return { success: false, error: err.message };
+    console.error("[restartTrainingCycle] failed", err);
+    return { success: false, error: "Failed to restart the cycle" };
   }
 }
 
@@ -825,6 +848,7 @@ export async function removeCycleSlot(
   cycleId: number,
 ): Promise<ActionResult<void>> {
   const auth = await requireSession();
+  if (!removeCycleSlotSchema.safeParse({ slotId, cycleId }).success) return { success: false, error: "Invalid input" };
   try {
     // A hard delete: nothing logged points at a slot, and the cycle's history
     // keeps it for a restore (docs/plans/revisions.md, 2.3).
@@ -864,7 +888,8 @@ export async function reorderCycleSlots(
     revalidatePath(`/cycles/${cycleId}`);
     return { success: true, data: undefined };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[reorderCycleSlots] failed", err);
+    return { success: false, error: "Failed to reorder the slots" };
   }
 }
 
@@ -933,7 +958,8 @@ export async function importCycle(
     revalidatePath("/");
     return { success: true, data: { cycleId, cycleName: cycleFields.name, unresolvedPrograms } };
   } catch (err) {
-    return { success: false, error: String(err) };
+    console.error("[importCycle] failed", err);
+    return { success: false, error: "Failed to import the cycle" };
   }
 }
 

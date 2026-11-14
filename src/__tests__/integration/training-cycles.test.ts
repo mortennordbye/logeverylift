@@ -4,15 +4,20 @@ import { updateProgramSet } from "@/lib/actions/programs";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
+  deleteManyTrainingCycles,
+  deleteTrainingCycle,
   getCyclePeriodization,
   removeCycleSlot,
+  restartTrainingCycle,
+  startTrainingCycle,
   syncActiveCyclePeriodization,
   upsertCycleSlot,
 } from "@/lib/actions/training-cycles";
+import * as session from "@/lib/utils/session";
 import { scaledDistance } from "@/lib/utils/periodization";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { asc, eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
 
@@ -277,6 +282,33 @@ describe("C9: weekly sync adherence counts sessions over program slots", () => {
     await logged(1);
     await logged(8);
     expect(await pct()).toBe(90);
+  });
+});
+
+describe("cycle actions check the caller and the input first", () => {
+  it("deleting no cycles still needs a session", async () => {
+    vi.spyOn(session, "requireSession").mockRejectedValueOnce(new Error("no session"));
+    await expect(deleteManyTrainingCycles([])).rejects.toThrow("no session");
+  });
+
+  it("refuses ids that are not whole positive numbers, and changes nothing", async () => {
+    for (const result of [
+      await deleteTrainingCycle("1; drop" as unknown as number),
+      await deleteManyTrainingCycles([cycleId, -1]),
+      await startTrainingCycle(1.5),
+      await restartTrainingCycle(0),
+      await removeCycleSlot("x" as unknown as number, cycleId),
+    ]) {
+      expect(result).toEqual({ success: false, error: "Invalid input" });
+    }
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId)))[0].deletedAt).toBeNull();
+  });
+
+  it("deleting another user's cycle changes nothing", async () => {
+    asUser((await createUser()).id);
+    expect((await deleteTrainingCycle(cycleId)).success).toBe(false);
+    expect((await deleteManyTrainingCycles([cycleId])).success).toBe(true);
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId)))[0].deletedAt).toBeNull();
   });
 });
 
