@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
+import type { HomeGridProps } from "@/components/features/home/HomeGrid";
 import type { ResolvedItem } from "@/lib/home/layout";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { Suspense, use, useState } from "react";
 import Link from "next/link";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -30,28 +32,58 @@ const ITEMS: ResolvedItem[] = [
   { id: "recentPrs", size: "m", hidden: true },
 ];
 
-function setup(items = ITEMS) {
+function setup(items = ITEMS, over: Partial<HomeGridProps> = {}) {
   return render(
     <div>
-      <HomeGrid
-        items={items}
-        defaultItems={ITEMS}
-        baseUpdatedAt={null}
-        title={<h1>LogEveryLift</h1>}
-        slots={{
-          title: <h1>LogEveryLift</h1>,
-          today: <Link href="/programs/1/workout">Start Today&apos;s Workout</Link>,
-          week: <p>Week content</p>,
-          cycle: <p>Cycle content</p>,
-        }}
-        previews={{ today: { s: <p>Today preview S</p> }, recentPrs: { m: <p>PRs preview</p> } }}
-        topNotices={<p>Policy notice</p>}
-        afterTraining={null}
-        endNotices={null}
-        startBar={<p>Start bar</p>}
-      />
+      <HomeGrid {...props(items)} {...over} />
     </div>,
   );
+}
+
+function props(items: ResolvedItem[]): HomeGridProps {
+  return {
+    items,
+    defaultItems: ITEMS,
+    baseUpdatedAt: null,
+    title: <h1>LogEveryLift</h1>,
+    slots: {
+      title: <h1>LogEveryLift</h1>,
+      today: <Link href="/programs/1/workout">Start Today&apos;s Workout</Link>,
+      week: <p>Week content</p>,
+      cycle: <p>Cycle content</p>,
+    },
+    previews: { today: { s: <p>Today preview S</p> }, recentPrs: { m: <p>PRs preview</p> } },
+    topNotices: <p>Policy notice</p>,
+    afterTraining: null,
+    endNotices: null,
+    startBar: <p>Start bar</p>,
+  };
+}
+
+/**
+ * A page that behaves like Next on `router.refresh()`: the refresh is a
+ * transition that waits for the server, then renders the new props, keyed on
+ * the layout as src/app/page.tsx does.
+ */
+function fakeRefresh(next: ResolvedItem[]) {
+  let land!: () => void;
+  const served = new Promise<void>((r) => (land = r));
+  function Wait() {
+    use(served);
+    return null;
+  }
+  function Page() {
+    const [refreshed, setRefreshed] = useState(false);
+    refresh.mockImplementation(() => setRefreshed(true));
+    const items = refreshed ? next : ITEMS;
+    return (
+      <Suspense fallback={<p>Loading</p>}>
+        {refreshed && <Wait />}
+        <HomeGrid key={items.map((i) => i.id).join()} {...props(items)} />
+      </Suspense>
+    );
+  }
+  return { Page, land: () => land() };
 }
 
 const edit = () => fireEvent.click(screen.getByRole("button", { name: "Edit home" }));
@@ -127,6 +159,22 @@ describe("entering edit mode", () => {
     expect(screen.queryByTestId("home-edit-grid")).toBeNull();
 
     const link = screen.getByRole("link", { name: "Start Today's Workout" });
+    fireEvent.pointerDown(link, { button: 0, clientX: 5, clientY: 5 });
+    fireEvent.pointerUp(link);
+    const click = new MouseEvent("click", { bubbles: true, cancelable: true });
+    link.dispatchEvent(click);
+    expect(click.defaultPrevented).toBe(false);
+  });
+
+  it("after a long press and Cancel, the next tap outside a widget still works", () => {
+    vi.useFakeTimers();
+    setup(ITEMS, { topNotices: <Link href="/legal/privacy">Read the policy</Link> });
+    fireEvent.pointerDown(screen.getByText("Week content"), { button: 0, clientX: 10, clientY: 10 });
+    act(() => vi.advanceTimersByTime(500));
+    expect(screen.getByTestId("home-edit-grid")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    const link = screen.getByRole("link", { name: "Read the policy" });
     fireEvent.pointerDown(link, { button: 0, clientX: 5, clientY: 5 });
     fireEvent.pointerUp(link);
     const click = new MouseEvent("click", { bubbles: true, cancelable: true });
@@ -297,6 +345,96 @@ describe("saving", () => {
     });
     expect(window.confirm).toHaveBeenCalledWith("Reset home to the default layout?");
     expect(save.mock.calls[0][0]).toEqual({ items: null, baseUpdatedAt: null, force: false });
+  });
+
+  it("a Reset that fails is sent again as a Reset by Done, not as a fixed layout", async () => {
+    save.mockResolvedValueOnce({ success: false, error: "Couldn't save your home layout" }).mockResolvedValueOnce({ success: true, data: { updatedAt: null } });
+    setup();
+    edit();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    });
+    expect(screen.getByTestId("home-save-error")).toBeTruthy();
+    await done();
+    expect(save.mock.calls[1][0]).toEqual({ items: null, baseUpdatedAt: null, force: false });
+  });
+
+  it("a Reset that conflicts is forced as a Reset by Save mine", async () => {
+    save.mockResolvedValueOnce({ success: false, error: "conflict" }).mockResolvedValueOnce({ success: true, data: { updatedAt: null } });
+    setup();
+    edit();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save mine" }));
+    });
+    expect(save.mock.calls[1][0]).toEqual({ items: null, baseUpdatedAt: null, force: true });
+  });
+
+  it("an edit after a failed Reset saves the new draft", async () => {
+    save.mockResolvedValueOnce({ success: false, error: "Couldn't save your home layout" }).mockResolvedValueOnce({ success: true, data: { updatedAt: null } });
+    setup();
+    edit();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Hide Week" }));
+    await done();
+    expect(save.mock.calls[1][0].items.find((i: { id: string }) => i.id === "week")).toEqual({ id: "week", size: "l", hidden: true });
+  });
+
+  it("while a save runs, Save mine and Cancel are disabled", async () => {
+    let finish!: (v: unknown) => void;
+    save.mockResolvedValueOnce({ success: false, error: "conflict" }).mockReturnValueOnce(new Promise((r) => (finish = r)));
+    setup();
+    edit();
+    fireEvent.click(screen.getByRole("button", { name: "Hide Week" }));
+    await done();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Save mine" }));
+    });
+    expect(screen.getByRole("button", { name: "Save mine" })).toHaveProperty("disabled", true);
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveProperty("disabled", true);
+    fireEvent.click(screen.getByRole("button", { name: "Save mine" }));
+    expect(save).toHaveBeenCalledTimes(2);
+    await act(async () => finish({ success: false, error: "conflict" }));
+    expect(screen.getByRole("button", { name: "Save mine" })).toHaveProperty("disabled", false);
+  });
+
+  it("after a save, the draft stays on screen until the refreshed layout arrives", async () => {
+    save.mockResolvedValue({ success: true, data: { updatedAt: "2026-11-13T10:00:00.000Z" } });
+    const moved = [ITEMS[0], ITEMS[2], ITEMS[1], ...ITEMS.slice(3)];
+    const page = fakeRefresh(moved);
+    render(<page.Page />);
+    edit();
+    fireEvent.click(tile("week"));
+    fireEvent.click(within(sheet()).getByRole("button", { name: "Move up" }));
+    fireEvent.click(within(sheet()).getByRole("button", { name: "Close" }));
+    await done();
+    expect(refresh).toHaveBeenCalledTimes(1);
+    // The server has not answered yet: the draft stays, not the old layout.
+    expect(tiles()).toEqual(["title", "week", "today", "cycle"]);
+    expect(screen.getByRole("button", { name: "Saving…" })).toHaveProperty("disabled", true);
+    await act(async () => page.land());
+    expect(screen.queryByTestId("home-edit-grid")).toBeNull();
+    const content = screen.getByTestId("home-content").textContent!;
+    expect(content.indexOf("Week content")).toBeLessThan(content.indexOf("Start Today's Workout"));
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit home" }));
+  });
+
+  it("a save that leaves the layout as it was (Reset from the default) still leaves edit mode once the refresh lands", async () => {
+    save.mockResolvedValue({ success: true, data: { updatedAt: null } });
+    const page = fakeRefresh(ITEMS);
+    render(<page.Page />);
+    edit();
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Reset" }));
+    });
+    expect(screen.getByTestId("home-edit-grid")).toBeTruthy();
+    await act(async () => page.land());
+    expect(screen.queryByTestId("home-edit-grid")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Edit home" }));
   });
 
   it("every edit-mode control is at least 44 px and has a name", () => {

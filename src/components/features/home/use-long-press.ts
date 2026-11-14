@@ -34,8 +34,10 @@ export function useLongPress(onLongPress: () => void, { ms = 500, tolerance = 8 
 
   return {
     onPointerDown(e: React.PointerEvent) {
-      if (e.button > 0 || !(e.target as Element).closest("[data-widget]")) return;
+      // Before the widget check: a long-press whose release click never came
+      // here (edit mode took the screen) must not swallow the next tap.
       fired.current = false;
+      if (e.button > 0 || !(e.target as Element).closest("[data-widget]")) return;
       start.current = { x: e.clientX, y: e.clientY };
       timer.current = setTimeout(() => {
         timer.current = null;

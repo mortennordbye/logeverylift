@@ -9,7 +9,7 @@ import { SIZE_LABEL } from "@/lib/home/widgets/types";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { Pencil, Plus, RotateCcw, Undo2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { Fragment, useEffect, useReducer, useRef, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useReducer, useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HomeEditGrid, type Previews } from "./HomeEditGrid";
 import { WidgetGallerySheet } from "./WidgetGallerySheet";
@@ -30,7 +30,9 @@ import { useLongPress } from "./use-long-press";
  * same grid with the widgets jiggling (HomeEditGrid). Notices and the start
  * bar are not shown, and a bar covers the bottom nav until Done or Cancel, so
  * a navigation cannot drop the draft. The page keys this component on the
- * saved layout, so a save resets it to the new layout.
+ * saved layout, so a save resets it to the new layout. Until the refreshed
+ * page arrives, the draft stays on screen with "Saving…", so the old layout
+ * never flashes back.
  */
 export type HomeGridProps = {
   items: ResolvedItem[];
@@ -78,14 +80,23 @@ export function HomeGrid(props: HomeGridProps) {
   const [sheetId, setSheetId] = useState<WidgetId | null>(null);
   const [status, setStatus] = useState<Status>(null);
   const [saving, setSaving] = useState(false);
+  // Saved; waiting for router.refresh() to bring the new layout.
+  const [saved, setSaved] = useState(false);
+  const [refreshing, startRefresh] = useTransition();
   const [say, setSay] = useState("");
   const pendingFocus = useRef<Focus>(null);
-  const openedFrom = useRef<"title" | "end" | "press">("title");
+  // What the last failed save sent (null is Reset), so a retry sends the same.
+  // Any edit after it drops it: the draft is what is sent then.
+  const retry = useRef<{ items: StoredHomeItem[] | null } | null>(null);
   const editTitleRef = useRef<HTMLButtonElement>(null);
   const editEndRef = useRef<HTMLButtonElement>(null);
   const focusEdit = useRef(false);
   const blockClicksUntil = useRef(0);
   const dirty = state.past.length > 0;
+  // A save that kept the layout (Reset from the default) does not remount
+  // this component: edit mode ends when the refresh has landed.
+  const inEdit = editing && !(saved && !refreshing);
+  const busy = saving || saved;
 
   // Focus after a change: the moved widget, the next widget after a hide.
   useEffect(() => {
@@ -103,31 +114,35 @@ export function HomeGrid(props: HomeGridProps) {
     }
   }, []);
   useEffect(() => {
-    if (!focusEdit.current) return;
+    const pencil = editTitleRef.current ?? editEndRef.current;
+    if (!focusEdit.current || !pencil) return;
     focusEdit.current = false;
-    (editTitleRef.current ?? editEndRef.current)?.focus();
+    focusEditOnMount = false;
+    pencil.focus();
   });
 
   // A reload or a closed tab would drop the draft: ask first.
   useEffect(() => {
-    if (!editing || !dirty) return;
+    if (!inEdit || !dirty || saved) return;
     const warn = (e: BeforeUnloadEvent) => e.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [editing, dirty]);
+  }, [inEdit, dirty, saved]);
 
   function act(action: EditAction, focus?: Focus, text?: string) {
     dispatch(action);
+    retry.current = null;
     pendingFocus.current = focus ?? null;
     if (text) setSay(text);
   }
 
   function enter(from: "title" | "end" | "press") {
-    openedFrom.current = from;
     // The release of a long-press must not open a widget's sheet.
     if (from === "press") blockClicksUntil.current = performance.now() + 600;
     dispatch({ type: "load", items });
     setStatus(null);
+    setSaved(false);
+    retry.current = null;
     setEditing(true);
     setSay(ENTER_TEXT);
     const first = movableItems(items)[0];
@@ -143,14 +158,19 @@ export function HomeGrid(props: HomeGridProps) {
   }
 
   async function save(next: StoredHomeItem[] | null, force: boolean) {
+    retry.current = { items: next };
     setSaving(true);
-    setStatus(null);
     const result = await callAction(saveHomeLayout({ items: next, baseUpdatedAt, force }));
     setSaving(false);
     if (result.success) {
+      retry.current = null;
       focusEditOnMount = true;
-      leave();
-      router.refresh();
+      setSaved(true);
+      setGalleryOpen(false);
+      setSheetId(null);
+      setStatus(null);
+      focusEdit.current = true;
+      startRefresh(() => router.refresh());
       return;
     }
     if (result.error === "conflict") return setStatus({ kind: "conflict" });
@@ -162,7 +182,7 @@ export function HomeGrid(props: HomeGridProps) {
 
   function done() {
     if (!dirty) return leave();
-    void save(toStored(state.items), false);
+    void save(retry.current ? retry.current.items : toStored(state.items), false);
   }
 
   function cancel() {
@@ -185,7 +205,7 @@ export function HomeGrid(props: HomeGridProps) {
     </p>
   );
 
-  if (editing) {
+  if (inEdit) {
     const hidden = state.items.filter((i) => i.hidden);
     const movable = movableItems(state.items);
     const titleOf = (id: WidgetId) => widgetDef(id).title;
@@ -208,12 +228,12 @@ export function HomeGrid(props: HomeGridProps) {
         {liveRegion}
         <div className="px-4 pt-4 shrink-0 space-y-1">
           <div className="flex items-center justify-between gap-2">
-            <button type="button" onClick={cancel} className={`${BAR_BTN} text-base text-muted-foreground`}>
+            <button type="button" onClick={cancel} disabled={busy} className={`${BAR_BTN} text-base text-muted-foreground`}>
               Cancel
             </button>
             <h1 className="text-lg font-semibold">Edit home</h1>
-            <button type="button" onClick={done} disabled={saving} className={`${BAR_BTN} text-base font-semibold text-primary`}>
-              {saving ? "Saving…" : "Done"}
+            <button type="button" onClick={done} disabled={busy} className={`${BAR_BTN} text-base font-semibold text-primary`}>
+              {busy ? "Saving…" : "Done"}
             </button>
           </div>
           <div className="flex items-center justify-center gap-1">
@@ -225,7 +245,7 @@ export function HomeGrid(props: HomeGridProps) {
               <Undo2 className="h-4 w-4" aria-hidden />
               Undo
             </button>
-            <button type="button" onClick={reset} disabled={saving} className={`${BAR_BTN} text-destructive`}>
+            <button type="button" onClick={reset} disabled={busy} className={`${BAR_BTN} text-destructive`}>
               <RotateCcw className="h-4 w-4" aria-hidden />
               Reset
             </button>
@@ -247,8 +267,9 @@ export function HomeGrid(props: HomeGridProps) {
                 </button>
                 <button
                   type="button"
-                  onClick={() => void save(toStored(state.items), true)}
-                  className="min-h-11 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground active:opacity-80"
+                  onClick={() => void save(retry.current ? retry.current.items : toStored(state.items), true)}
+                  disabled={busy}
+                  className="min-h-11 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground active:opacity-80 disabled:opacity-40"
                 >
                   Save mine
                 </button>
