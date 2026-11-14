@@ -423,16 +423,19 @@ select {
 /* The home's brand colour follows the accent picked in settings (owner
    decision C, 2026-11-14). The theme provider sets data-accent on <html>;
    blue, the default, keeps the tokens above. A fill carries white text, so
-   it is a darker step of the accent. --pos does not change. */
+   it is a darker step of the accent. Blue, green and orange are the locked
+   design's values; it has no white or purple, which are chosen to the same
+   4.5:1 rule. A custom accent's tokens are computed (src/lib/utils/accent.ts).
+   --pos does not change. */
 :root[data-accent="white"] { --brand: oklch(0.205 0 0); --brand-fill: oklch(0.205 0 0); }
-:root[data-accent="green"] { --brand: oklch(0.5 0.15 145); --brand-fill: oklch(0.5 0.15 145); }
+:root[data-accent="green"] { --brand: #21734f; --brand-fill: #21734f; }
 :root[data-accent="purple"] { --brand: oklch(0.52 0.2 300); --brand-fill: oklch(0.52 0.2 300); }
-:root[data-accent="orange"] { --brand: oklch(0.56 0.17 45); --brand-fill: oklch(0.56 0.17 45); }
-:root[data-accent="custom"] { --brand: var(--brand-custom); --brand-fill: var(--brand-custom); }
+:root[data-accent="orange"] { --brand: #c2410c; --brand-fill: #d0490c; }
+:root[data-accent="custom"] { --brand: var(--brand-custom); --brand-fill: var(--brand-fill-custom); }
 :root.dark[data-accent="white"] { --brand: oklch(0.922 0 0); --brand-fill: oklch(0.32 0 0); }
-:root.dark[data-accent="green"] { --brand: oklch(0.7 0.18 145); --brand-fill: oklch(0.5 0.15 145); }
+:root.dark[data-accent="green"] { --brand: #5fbf8f; --brand-fill: #2a7255; }
 :root.dark[data-accent="purple"] { --brand: oklch(0.7 0.22 300); --brand-fill: oklch(0.5 0.2 300); }
-:root.dark[data-accent="orange"] { --brand: oklch(0.75 0.2 45); --brand-fill: oklch(0.55 0.17 45); }
+:root.dark[data-accent="orange"] { --brand: #ff8a3d; --brand-fill: #c8501a; }
 
 /* The home screen's look (docs/design/home-redesign/home-locked.html).
    Scoped to the home page and its sheets: the app's shared tokens are mapped
@@ -459,6 +462,11 @@ select {
 /* A light blue on a dark surface needs dark text. */
 .dark .home-ui {
   --primary-foreground: #0b0b0c;
+}
+/* A custom accent can be light or dark in either theme: its text colour
+   comes from its luminance (customAccentTokens in src/lib/utils/accent.ts). */
+:root[data-accent="custom"] .home-ui {
+  --primary-foreground: var(--on-brand-custom);
 }
 /* Shared cards inside the home (notices, Endurance today) get the widget
    corner and hairline. */

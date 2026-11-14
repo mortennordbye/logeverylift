@@ -6,6 +6,7 @@ import { StaleWorkoutHealer } from "@/components/features/StaleWorkoutHealer";
 import { UserSettingsLoader } from "@/components/features/UserSettingsLoader";
 import { ViewportFix } from "@/components/features/ViewportFix";
 import { ThemeProvider } from "@/components/ui/theme-provider";
+import { prePaintThemeScript } from "@/lib/utils/accent";
 import { PendingQueueProvider } from "@/contexts/pending-queue-context";
 import { ToastProvider } from "@/contexts/toast-context";
 import { WorkoutSessionProvider } from "@/contexts/workout-session-context";
@@ -58,10 +59,12 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Prevent flash of light mode — runs before first paint */}
+        {/* Prevent flash of light mode and of the default accent — runs
+            before first paint. Sets the theme class and the home's accent
+            (data-accent, custom tokens) as the theme provider does. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){var s=localStorage.getItem('theme');if(s!=='light'){document.documentElement.classList.add('dark')}})()`,
+            __html: prePaintThemeScript(),
           }}
         />
         {/* Records that a route change came from the history stack — the iOS

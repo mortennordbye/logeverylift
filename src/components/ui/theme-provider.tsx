@@ -1,5 +1,6 @@
 "use client";
 
+import { customAccentTokens, DEFAULT_CUSTOM_ACCENT } from "@/lib/utils/accent";
 import { createContext, useContext, useEffect, useState } from "react";
 
 type Theme = "light" | "dark";
@@ -47,7 +48,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // Start with server-safe defaults — localStorage is loaded after hydration in useEffect
   const [theme, setTheme] = useState<Theme>("light");
   const [accentColor, setAccentColorState] = useState<AccentColor>("blue");
-  const [customAccentHex, setCustomAccentHexState] = useState("#5B8FFF");
+  const [customAccentHex, setCustomAccentHexState] = useState(DEFAULT_CUSTOM_ACCENT);
   const [weeklyGoal, setWeeklyGoalState] = useState(4);
   const [uiScale, setUiScaleState] = useState(1);
 
@@ -63,15 +64,22 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     document.documentElement.style.setProperty("--primary", colorValue);
     document.documentElement.style.setProperty("--primary-foreground", foreground);
     // The home's brand colour follows the accent (globals.css, [data-accent]).
+    // The pre-paint script in src/app/layout.tsx sets the same before the
+    // first paint (prePaintThemeScript); keep the two in step.
     document.documentElement.dataset.accent = color;
-    if (color === "custom") document.documentElement.style.setProperty("--brand-custom", colorValue);
+    if (color === "custom") {
+      const t = customAccentTokens(colorValue, currentTheme === "dark") ?? customAccentTokens(DEFAULT_CUSTOM_ACCENT, currentTheme === "dark")!;
+      document.documentElement.style.setProperty("--brand-custom", t.brand);
+      document.documentElement.style.setProperty("--brand-fill-custom", t.fill);
+      document.documentElement.style.setProperty("--on-brand-custom", t.onBrand);
+    }
   };
 
   // Load persisted preferences and apply to DOM after hydration
   useEffect(() => {
     const storedTheme = (localStorage.getItem("theme") as Theme | null) ?? "dark";
     const storedAccent = (localStorage.getItem("accentColor") as AccentColor | null) ?? "blue";
-    const storedCustomHex = localStorage.getItem("customAccentHex") ?? "#5B8FFF";
+    const storedCustomHex = localStorage.getItem("customAccentHex") ?? DEFAULT_CUSTOM_ACCENT;
     const storedGoal = localStorage.getItem("weeklyGoal");
     const storedUiScale = localStorage.getItem("uiScale");
 
@@ -114,11 +122,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== "undefined") {
       localStorage.setItem("customAccentHex", hex);
       localStorage.setItem("accentColor", "custom");
-      document.documentElement.style.setProperty("--primary", hex);
-      document.documentElement.dataset.accent = "custom";
-      document.documentElement.style.setProperty("--brand-custom", hex);
-      const foreground = theme === "dark" ? "oklch(0.205 0 0)" : "oklch(0.985 0 0)";
-      document.documentElement.style.setProperty("--primary-foreground", foreground);
+      applyAccentColor("custom", theme, hex);
     }
   };
 

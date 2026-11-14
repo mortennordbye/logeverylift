@@ -3,6 +3,7 @@ import { act, render } from "@testing-library/react";
 import { useEffect } from "react";
 import { describe, expect, it } from "vitest";
 import { ThemeProvider, useTheme } from "@/components/ui/theme-provider";
+import { customAccentTokens } from "@/lib/utils/accent";
 
 /**
  * Owner decision C (2026-11-14): the home's brand colour follows the accent.
@@ -31,6 +32,7 @@ describe("accent on <html>", () => {
     expect(document.documentElement.dataset.accent).toBe("orange");
     act(() => grabbed.api!.setCustomAccentHex("#ff0066"));
     expect(document.documentElement.dataset.accent).toBe("custom");
-    expect(document.documentElement.style.getPropertyValue("--brand-custom")).toBe("#ff0066");
+    // Dark theme (the default): lightened until it reads on the home's dark surfaces (accent.ts).
+    expect(document.documentElement.style.getPropertyValue("--brand-custom")).toBe(customAccentTokens("#ff0066", true)!.brand);
   });
 });
