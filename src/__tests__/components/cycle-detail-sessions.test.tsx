@@ -344,7 +344,7 @@ describe("a missed key session", () => {
     await act(async () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Move to Sat 21 Nov" }));
     });
-    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 7, date: "2026-11-21" });
+    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 7, date: "2026-11-21", suggested: true });
   });
 
   it("says why there is no day to move to", () => {
