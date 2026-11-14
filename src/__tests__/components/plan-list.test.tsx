@@ -275,8 +275,15 @@ describe("select mode", () => {
     );
     expect(screen.getByText("You can restore them for 90 days.")).toBeTruthy();
 
+    // Delete asks first, as the one-cycle delete does, and names what goes.
+    fireEvent.click(screen.getByRole("button", { name: "Delete 2 cycles" }));
+    expect(deleteManyTrainingCycles).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("region", { name: "Delete 2 cycles?" });
+    expect(confirm.textContent!.replace(/ /g, " ")).toContain(
+      "“Longer ride and run” and “Swim, intervals, bricks” go to Recently deleted. You can restore them for 90 days.",
+    );
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Delete 2 cycles" }));
+      fireEvent.click(within(confirm).getByRole("button", { name: "Delete 2 cycles" }));
     });
     expect(vi.mocked(deleteManyTrainingCycles).mock.calls[0][0].sort()).toEqual([22, 23]);
     await waitFor(() => expect(screen.getByRole("heading", { name: "Plan", level: 1 })).toBeTruthy());
@@ -289,10 +296,14 @@ describe("select mode", () => {
     fireEvent.click(screen.getByRole("button", { name: "Select" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Intro" }));
     expect(screen.queryByTestId("phase-warning")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Delete 1 cycle" }));
+    const confirm = screen.getByRole("region", { name: "Delete 1 cycle?" });
+    expect(confirm.textContent!.replace(/ /g, " ")).toContain("“Intro” goes to Recently deleted. You can restore it for 90 days.");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Delete 1 cycle" }));
+      fireEvent.click(within(confirm).getByRole("button", { name: "Delete 1 cycle" }));
     });
-    expect(screen.getByRole("alert").textContent).toBe("Finish the open workout first.");
+    expect(within(confirm).getByRole("alert").textContent).toBe("Finish the open workout first.");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Cancel" }));
     expect(screen.getByText("1 selected")).toBeTruthy();
   });
 

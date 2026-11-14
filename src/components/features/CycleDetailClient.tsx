@@ -28,7 +28,7 @@ import { useState } from "react";
 const sheetButton = "h-[52px] w-full rounded-2xl text-base font-semibold active:opacity-80 disabled:opacity-50";
 
 /** A confirm sheet: a question, a line on what happens, the action, and Cancel. */
-function ConfirmSheet({
+export function ConfirmSheet({
   open,
   title,
   body,
