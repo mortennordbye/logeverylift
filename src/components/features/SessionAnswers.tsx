@@ -18,9 +18,12 @@ import { confirmPlannedDone } from "@/lib/actions/workouts-compliance";
 import { normalizeDecimal } from "@/lib/utils/format";
 import type { ComplianceBand, SessionState } from "@/lib/utils/session-compliance";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { fieldToMeters, fieldUnit } from "@/lib/utils/units";
+import { fieldToMeters, fieldUnit, type FieldUnit } from "@/lib/utils/units";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+
+/** The distance unit in words, for a screen reader. */
+const UNIT_WORD: Record<FieldUnit, string> = { m: "metres", km: "kilometres", yd: "yards", mi: "miles" };
 
 /**
  * A typed time as seconds: whole minutes ("45") or hours and minutes
@@ -370,9 +373,21 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
                   <span className={LABEL}>Time (h:mm)</span>
                   <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="numeric" placeholder="1:05" className={field} />
                 </label>
+                {/* As short as the Time label, so both fields line up at 320 px; the unit sits in the field. */}
                 <label className={label}>
-                  <span className={LABEL}>Distance, {unit} (optional)</span>
-                  <input value={distance} onChange={(e) => setDistance(e.target.value)} inputMode="decimal" className={field} />
+                  <span className={LABEL}>Distance</span>
+                  <span className="relative">
+                    <input
+                      value={distance}
+                      onChange={(e) => setDistance(e.target.value)}
+                      inputMode="decimal"
+                      aria-label={`Distance in ${UNIT_WORD[unit]}`}
+                      className={`${field} pr-12`}
+                    />
+                    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-base text-muted-foreground">
+                      {unit}
+                    </span>
+                  </span>
                 </label>
               </div>
               {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or h:mm, such as 1:30.</p>}

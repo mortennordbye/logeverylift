@@ -322,6 +322,18 @@ describe("Did you do it? from a past row", () => {
     expect(confirmPlannedDone).not.toHaveBeenCalled();
   });
 
+  it("labels Distance as short as Time, with the unit in the field, so both fit one line at 320 px (round 8)", () => {
+    const swim = { ...answer, name: "Swim CSS", sport: "swim" as const };
+    renderWeek({ sessions: [session({ id: 1, date: "2026-11-16", name: "Swim CSS", programId: null, status: "missed", answer: swim })] });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Swim CSS/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    const field = within(sheet).getByLabelText("Distance in metres");
+    const label = field.closest("label")!;
+    expect(label.querySelector("span")!.textContent).toBe("Distance");
+    expect(within(label).getByText("m").getAttribute("aria-hidden")).toBe("true");
+  });
+
   it("says why Save is off for a negative distance", () => {
     renderWeek({ sessions: past });
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
