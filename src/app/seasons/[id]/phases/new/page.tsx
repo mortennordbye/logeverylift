@@ -40,6 +40,8 @@ export default async function AddPhasePage({ params }: { params: Promise<{ id: s
         today={today}
         running={running}
         scheduled={scheduled}
+        raceDate={detail.aRace?.raceDate ?? null}
+        seasonEnd={detail.season.endDate}
       />
     </div>
   );

@@ -226,15 +226,15 @@ describe("the Plan list", () => {
     expect(card.textContent).toContain("Race in 288 days");
     expect(within(card).getByRole("img", { name: /Phase bar/ })).toBeTruthy();
     expect(within(card).getByRole("link", { name: /Longer ride and run.*Base · 12 wk · 11 Jan – 4 Apr/ }).getAttribute("href")).toBe("/cycles/22");
-    expect(within(card).getByText("Starts Mon")).toBeTruthy();
+    expect(within(card).getByText("Starts Mon 16 Nov")).toBeTruthy();
     expect(within(card).getByRole("link", { name: /Jevnaker Halv Full Distanse.*A race · 29 Aug/ }).getAttribute("href")).toBe("/seasons/9");
   });
 
-  it("gym user with a goal season: goal date, weeks left, the running phase marked Now", () => {
+  it("gym user with a goal season: goal date, days left as the season page counts them, the running phase marked Now", () => {
     render(<CyclesListClient data={{ ...gym, seasons: [goalSeason] }} deletedCount={0} />);
     const card = screen.getByTestId("season-card");
     expect(within(card).getByText("Season · Goal by 7 Feb")).toBeTruthy();
-    expect(card.textContent).toContain("12weeks left");
+    expect(card.textContent).toContain("85days left");
     expect(within(card).getByText("Now").className).toContain("text-brand");
     expect(within(card).getByText("Starts 21 Dec").className).toContain("text-muted-foreground");
     expect(card.textContent).not.toContain("A race");

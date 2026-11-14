@@ -132,6 +132,17 @@ export type SeasonDetail = {
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
 /** One of the user's live seasons with its races, its phase timeline and the taper fit. Null if not found. */
+/** The day the user's scheduled draft starts, or null. That start completes the running cycle. */
+export async function scheduledStartDay(userId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ day: trainingCycles.scheduledStartDate })
+    .from(trainingCycles)
+    .where(and(eq(trainingCycles.userId, userId), liveCycles, eq(trainingCycles.status, "draft"), isNotNull(trainingCycles.scheduledStartDate)))
+    .orderBy(asc(trainingCycles.scheduledStartDate))
+    .limit(1);
+  return row?.day ?? null;
+}
+
 export async function getSeasonDetail(userId: string, seasonId: number): Promise<SeasonDetail | null> {
   const [season] = await db
     .select()
@@ -146,7 +157,8 @@ export async function getSeasonDetail(userId: string, seasonId: number): Promise
     .orderBy(asc(seasonRaces.raceDate), asc(seasonRaces.id));
   const rows = await seasonPhases(db, seasonId);
   const versions = new Map(rows.map((r) => [r.id, r.version]));
-  const timeline = seasonTimeline(season.startDate, rows).map((p) => ({ ...p, version: versions.get(p.id) ?? 1 }));
+  // The scheduled start ends a running phase the day before (J4-18).
+  const timeline = seasonTimeline(season.startDate, rows, await scheduledStartDay(userId)).map((p) => ({ ...p, version: versions.get(p.id) ?? 1 }));
   const aRace = seasonARace(races, day);
   const next = nextPhase(timeline);
   return {
@@ -213,6 +225,7 @@ export async function seasonOfCycle(userId: string, cycle: { id: number; seasonI
   const detail = await getSeasonDetail(userId, cycle.seasonId);
   if (!detail) return null;
   const position = detail.phases.findIndex((p) => p.id === cycle.id);
+  const following = position >= 0 ? detail.phases[position + 1] : undefined;
   return {
     id: detail.season.id,
     name: detail.season.name,
@@ -221,6 +234,8 @@ export async function seasonOfCycle(userId: string, cycle: { id: number; seasonI
     races: detail.races,
     replan: detail.replan,
     skippedPhases: phasesSkippedBy(detail.phases, cycle.id),
+    /** The phase after this one when it has not started: what a completed phase names as next. */
+    following: following && following.state === "planned" ? { id: following.id, name: following.name, day: following.scheduledStartDate } : null,
   };
 }
 

@@ -97,18 +97,32 @@ export function seasonARace<R extends Pick<RaceLike, "raceDate" | "priority">>(r
 // ── Timeline (2.4) ───────────────────────────────────────────────────────────
 
 /**
+ * The last day of a running block that starts on `start` and is planned to
+ * end on `end`: the day before `otherStart` when another block is scheduled
+ * to start inside it, since that start completes this one.
+ */
+export function cutByStart(start: string, end: string, otherStart: string | null): string {
+  return otherStart && otherStart > start && otherStart <= end ? addDaysStr(otherStart, -1) : end;
+}
+
+/**
  * Each phase's dates, forward from the season start: a started phase keeps
  * its real start, a scheduled one its scheduled day, and any other phase
  * starts the day after the one before it ends. Nothing stores these dates.
+ *
+ * `otherStart` is the day the user's scheduled draft starts, if one is: that
+ * start completes the running cycle (startDueScheduledCycle), so a running
+ * phase ends the day before it.
  */
-export function seasonTimeline(seasonStart: string, phases: PhaseLike[]): TimelinePhase[] {
+export function seasonTimeline(seasonStart: string, phases: PhaseLike[], otherStart: string | null = null): TimelinePhase[] {
   const ordered = [...phases].sort((a, b) => (a.phaseOrder ?? 0) - (b.phaseOrder ?? 0) || a.id - b.id);
   let cursor = seasonStart;
   return ordered.map((p) => {
     const started = p.status !== "draft" && p.startDate;
     const start = started ? p.startDate! : (p.scheduledStartDate ?? cursor);
-    const lengthDays = lengthOf(p);
-    const end = addDaysStr(start, lengthDays - 1);
+    const planned = addDaysStr(start, lengthOf(p) - 1);
+    const end = p.status === "active" ? cutByStart(start, planned, otherStart) : planned;
+    const lengthDays = daysBetweenStr(start, end) + 1;
     cursor = addDaysStr(end, 1);
     return { ...p, start, end, lengthDays, state: p.status === "completed" ? "done" : p.status === "active" ? "active" : "planned" };
   });
@@ -189,7 +203,8 @@ export function phasesSkippedBy(timeline: TimelinePhase[], cycleId: number): num
 
 // ── The re-plan flag (2.6, D17) ──────────────────────────────────────────────
 
-const raceLabel = (r: Pick<RaceLike, "name" | "priority">) => `${r.priority} race "${r.name}"`;
+// "the A race", so the priority does not read as the article "a" (J4-11).
+const raceLabel = (r: Pick<RaceLike, "name" | "priority">) => `the ${r.priority} race "${r.name}"`;
 
 /**
  * Why a change to a season's races needs a re-plan, or null. Flags a date
@@ -212,7 +227,22 @@ export function replanReason(before: RaceLike[], after: RaceLike[]): string | nu
     }
   }
   for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push(`${raceLabel(r)} on ${dayLabel(r.raceDate)} removed`);
-  return out.length ? out.join("; ") : null;
+  if (!out.length) return null;
+  const text = out.join("; ");
+  return text[0].toUpperCase() + text.slice(1);
+}
+
+/**
+ * A line for Add a phase when the new phase falls outside the plan: it starts
+ * after the A race, or it runs past the season end. Null when it fits.
+ * `lengthDays` is null for a cycle that keeps its own length.
+ */
+export function addPhaseWarning(p: { startsOn: string; lengthDays: number | null; raceDate: string | null; seasonEnd: string }): string | null {
+  if (p.raceDate && p.startsOn > p.raceDate) return `This phase starts after race day on ${dayLabel(p.raceDate)}.`;
+  if (p.startsOn > p.seasonEnd) return `This phase starts after the season ends on ${dayLabel(p.seasonEnd)}.`;
+  if (p.lengthDays == null) return null;
+  const over = daysBetweenStr(p.seasonEnd, addDaysStr(p.startsOn, p.lengthDays - 1));
+  return over > 0 ? `This phase runs ${over} day${over === 1 ? "" : "s"} past the season end on ${dayLabel(p.seasonEnd)}.` : null;
 }
 
 /** Race kinds in words, for lists and the assistant. */

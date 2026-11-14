@@ -19,6 +19,7 @@ import {
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
+import { nextPhaseBadge, phaseBarTone } from "@/lib/utils/plan-list";
 import { callAction } from "@/lib/utils/stale-bundle";
 import {
   PHASE_TYPE_LABELS,
@@ -274,14 +275,13 @@ export function SeasonDetailClient(p: Props) {
   const resumeLines = p.next ? takeStartLines({ seasonId: p.season.id, day: resumeDay, running: p.running, scheduled: p.scheduled }) : [];
   const resume = () => run(resumeSeasonAction({ seasonId: p.season.id }), () => setConfirmResume(false));
 
+  // The same badge as the Plan list (nextPhaseBadge): one answer to paused or next.
   function badge(ph: SeasonPhaseView): string {
     if (ph.state === "active") return "Now";
     if (p.next?.cycleId !== ph.id) return "";
-    const n = daysBetweenStr(p.today, ph.start);
-    // Not scheduled: the chain is paused, so the phase does not start by itself.
-    if (n < 0 || !p.next.scheduled) return "Next";
-    return n < 7 ? `Starts ${shortDay(ph.start).slice(0, 3)}` : `Starts ${shortDay(ph.start).slice(4)}`;
+    return nextPhaseBadge(p.next, phases, p.today);
   }
+  const anyActive = phases.some((ph) => ph.state === "active");
 
   // An open sheet covers the page, so its error shows in the sheet.
   const errorLine = error && (
@@ -356,13 +356,18 @@ export function SeasonDetailClient(p: Props) {
           </div>
           {phases.length > 0 && (
             <div className="flex h-2.5 gap-[3px]" aria-hidden="true" data-testid="phase-bar">
-              {phases.map((ph) => (
-                <div
-                  key={ph.id}
-                  style={{ flex: `${ph.lengthDays} 1 0` }}
-                  className={`min-w-2 rounded ${ph.state === "planned" && p.next?.cycleId !== ph.id ? "bg-[#707076]" : "bg-primary"} ${ph.state === "active" ? "outline-2 outline-offset-1 outline-primary" : ""}`}
-                />
-              ))}
+              {phases.map((ph) => {
+                // A phase that has not started is never filled (phaseBarTone), as on the Plan list.
+                const tone = phaseBarTone(ph.state, !anyActive && p.next?.cycleId === ph.id);
+                return (
+                  <div
+                    key={ph.id}
+                    data-tone={tone}
+                    style={{ flex: `${ph.lengthDays} 1 0` }}
+                    className={`min-w-2 rounded ${tone === "grey" || tone === "next" ? "bg-[#707076]" : "bg-primary"} ${tone === "current" || tone === "next" ? "outline-2 outline-offset-1 outline-primary" : ""}`}
+                  />
+                );
+              })}
             </div>
           )}
         </section>

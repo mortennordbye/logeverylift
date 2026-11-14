@@ -17,7 +17,7 @@ function PhaseBar({ season }: { season: SeasonCardView }) {
       {season.bar.map((b) => (
         <div
           key={b.id}
-          className={`min-w-2 rounded ${b.tone === "grey" ? "bg-[#707076]" : "bg-brand"} ${b.tone === "current" ? "ring-2 ring-brand ring-offset-2 ring-offset-widget" : ""}`}
+          className={`min-w-2 rounded ${b.tone === "grey" || b.tone === "next" ? "bg-[#707076]" : "bg-brand"} ${b.tone === "current" || b.tone === "next" ? "ring-2 ring-brand ring-offset-2 ring-offset-widget" : ""}`}
           style={{ flex: `${b.flex} 1 0` }}
         />
       ))}
@@ -52,8 +52,8 @@ export function SeasonCard({ season }: { season: SeasonCardView }) {
               <span className="text-lg font-semibold">{season.name}</span>
             </span>
             <span className="flex shrink-0 flex-col items-end">
-              <span className="home-display text-[40px] leading-[38px]">{season.weeksLeft}</span>
-              <span className="text-xs text-muted-foreground">{season.weeksLeft === 1 ? "week left" : "weeks left"}</span>
+              <span className="home-display text-[40px] leading-[38px]">{season.daysLeft}</span>
+              <span className="text-xs text-muted-foreground">{season.daysLeft === 1 ? "day left" : "days left"}</span>
             </span>
           </div>
         )}

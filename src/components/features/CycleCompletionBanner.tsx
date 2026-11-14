@@ -19,7 +19,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export type NextCycle = { id: number; name: string; startsLabel: string; startsTomorrow: boolean };
+/** `startsLabel` is null for a season's next phase that is not scheduled: the season is paused. */
+export type NextCycle = { id: number; name: string; startsLabel: string | null; startsTomorrow: boolean };
 
 const primary = "flex h-[52px] items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50";
 
@@ -58,7 +59,8 @@ export function CycleCompletionBanner({
   }
 
   const newCycle = !next && (cycle.endAction === "new_cycle" || cycle.endAction === "deload");
-  const canStartNext = next != null && !next.startsTomorrow && running == null;
+  // A paused phase starts from its own page, whose Start says what it drops.
+  const canStartNext = next != null && next.startsLabel != null && !next.startsTomorrow && running == null;
 
   return (
     <div className="flex flex-col gap-3.5 rounded-[20px] bg-widget p-[18px]" data-testid="cycle-complete">
@@ -76,8 +78,9 @@ export function CycleCompletionBanner({
           <Link href={`/cycles/${next.id}`} className="flex flex-col gap-0.5 active:opacity-70">
             <span className="text-xs font-semibold tracking-[1px] uppercase text-muted-foreground">Next</span>
             <span className="text-base font-medium">
-              {next.name} starts {next.startsLabel} <span className="text-brand">›</span>
+              {next.startsLabel ? `${next.name} starts ${next.startsLabel}` : next.name} <span className="text-brand">›</span>
             </span>
+            {!next.startsLabel && <span className="text-[13px] text-muted-foreground">Paused. It does not start by itself.</span>}
           </Link>
           {canStartNext && (
             <button type="button" onClick={startNext} disabled={loading} className={primary}>

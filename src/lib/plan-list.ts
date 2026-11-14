@@ -23,6 +23,7 @@ import {
   pastEnd,
   pastRow,
   rotationChips,
+  runningEnd,
   seasonCard,
   upNextRow,
   weekDays,
@@ -52,7 +53,7 @@ export type PlanListData = {
   select: { current: SelectRow[]; upNext: SelectRow[]; past: SelectRow[] };
 };
 
-async function weekHero(userId: string, c: Cycle, today: string, active: boolean, endurance: boolean): Promise<HeroView> {
+async function weekHero(userId: string, c: Cycle, today: string, active: boolean, endurance: boolean, ends: string): Promise<HeroView> {
   const start = active ? c.startDate! : c.scheduledStartDate!;
   // The block week that holds today, from the block's start day: the 7 days the cycle detail shows.
   const weeks = blockWeeks(start, cycleLengthDays(c));
@@ -85,14 +86,13 @@ async function weekHero(userId: string, c: Cycle, today: string, active: boolean
     id: c.id,
     name: c.name,
     label: heroLabel(c, today, active),
-    ends: `Ends ${dayMonth(blockEnd(start, c))}`,
+    ends,
     days: weekDays(dates, sessions, today, endurance, labels),
     summary: weekSummary(sessions),
   };
 }
 
-async function rotationHero(userId: string, c: Cycle, today: string, active: boolean): Promise<HeroView> {
-  const start = active ? c.startDate! : c.scheduledStartDate!;
+async function rotationHero(userId: string, c: Cycle, today: string, active: boolean, ends: string): Promise<HeroView> {
   const withSlots = await getTrainingCycleWithSlots(c.id);
   const slots = withSlots.success
     ? withSlots.data.slots.map((s) => ({ id: s.id, orderIndex: s.orderIndex ?? null, programId: s.programId ?? null, label: s.label ?? null, programName: s.program?.name ?? null }))
@@ -117,7 +117,7 @@ async function rotationHero(userId: string, c: Cycle, today: string, active: boo
     id: c.id,
     name: c.name,
     label: heroLabel(c, today, active),
-    ends: `Ends ${dayMonth(blockEnd(start, c))}`,
+    ends,
     chips: rotationChips(rows),
     next: rows.find((r) => r.mark === "next")?.name ?? null,
   };
@@ -139,7 +139,12 @@ export async function loadPlanList(userId: string, endurance: boolean): Promise<
     .filter((s) => s.status !== "done")
     .sort((a, b) => Number(b.status === "active") - Number(a.status === "active") || a.startDate.localeCompare(b.startDate) || a.id - b.id);
   const details = (await Promise.all(liveSeasons.map((s) => getSeasonDetail(userId, s.id)))).filter((d) => d != null);
-  const seasons = details.map((d) => seasonCard(d.season, d.phases, d.aRace, today));
+  // The scheduled start ends the running cycle the day before (J4-18).
+  const otherStart = cycles
+    .filter((c) => c.status === "draft" && c.scheduledStartDate)
+    .map((c) => c.scheduledStartDate!)
+    .sort()[0] ?? null;
+  const seasons = details.map((d) => seasonCard(d.season, d.phases, d.aRace, today, otherStart));
   const inCard = new Set(details.flatMap((d) => d.phases.map((p) => p.id)));
 
   const active = cycles.find((c) => c.status === "active") ?? null;
@@ -147,10 +152,12 @@ export async function loadPlanList(userId: string, endurance: boolean): Promise<
     .filter((c) => c.status === "draft" && c.scheduledStartDate)
     .sort((a, b) => a.scheduledStartDate!.localeCompare(b.scheduledStartDate!));
   const heroCycle = active ?? scheduled[0] ?? null;
+  const heroStart = heroCycle ? (heroCycle === active ? heroCycle.startDate! : heroCycle.scheduledStartDate!) : null;
+  const heroEnds = heroCycle && heroStart ? `Ends ${dayMonth(heroCycle === active ? runningEnd(heroStart, blockEnd(heroStart, heroCycle), otherStart) : blockEnd(heroStart, heroCycle))}` : "";
   const hero = heroCycle
     ? heroCycle.scheduleType === "rotation"
-      ? await rotationHero(userId, heroCycle, today, heroCycle === active)
-      : await weekHero(userId, heroCycle, today, heroCycle === active, endurance)
+      ? await rotationHero(userId, heroCycle, today, heroCycle === active, heroEnds)
+      : await weekHero(userId, heroCycle, today, heroCycle === active, endurance, heroEnds)
     : null;
 
   const drafts = cycles

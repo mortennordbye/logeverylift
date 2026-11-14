@@ -3,7 +3,10 @@ import {
   heroLabel,
   pastRow,
   phaseDeleteWarning,
+  nextPhaseBadge,
+  phaseBarTone,
   rotationChips,
+  runningEnd,
   seasonCard,
   startsLabel,
   upNextRow,
@@ -48,9 +51,16 @@ describe("plan list words", () => {
   it("writes date ranges and start days as the spec does", () => {
     expect(dateRange("2026-11-16", "2027-01-10")).toBe("16 Nov – 10 Jan");
     expect(dateRange("2027-08-20", "2027-08-29")).toBe("20 – 29 Aug");
-    expect(startsLabel(TODAY, "2026-11-16")).toBe("Starts Mon");
+    // A day inside the week names its date too (J4-17).
+    expect(startsLabel(TODAY, "2026-11-16")).toBe("Starts Mon 16 Nov");
     expect(startsLabel(TODAY, "2026-12-21")).toBe("Starts 21 Dec");
     expect(startsLabel(TODAY, TODAY)).toBe("Starts today");
+  });
+
+  it("gives the running block's last day, cut by another block's scheduled start (J4-18)", () => {
+    expect(runningEnd("2026-11-09", "2026-12-27", "2026-11-16")).toBe("2026-11-15");
+    expect(runningEnd("2026-11-09", "2026-12-27", "2026-12-28")).toBe("2026-12-27");
+    expect(runningEnd("2026-11-09", "2026-12-27", null)).toBe("2026-12-27");
   });
 
   it("labels the hero of a running and of a scheduled block", () => {
@@ -154,8 +164,45 @@ describe("the season card", () => {
       "Taper · 10 days · 20 – 29 Aug",
     ]);
     // Nothing runs yet: the next phase is the accent one.
-    expect(jevnaker.phases[0]).toMatchObject({ badge: "Starts Mon", badgeAccent: true, mark: "accent" });
-    expect(jevnaker.bar.map((b) => b.tone)).toEqual(["accent", "grey", "grey", "grey", "grey"]);
+    expect(jevnaker.phases[0]).toMatchObject({ badge: "Starts Mon 16 Nov", badgeAccent: true, mark: "accent" });
+    // Nothing has started, so nothing is filled: the next phase is only outlined (J4-13).
+    expect(jevnaker.bar.map((b) => b.tone)).toEqual(["next", "grey", "grey", "grey", "grey"]);
+  });
+
+  it("fills only the phases that have started (J4-13, J4-14, J6-02)", () => {
+    // A paused chain: phase 1 ended, phase 2 is next and not started.
+    const paused = seasonCard(
+      { id: 3, name: "Winter run base", startDate: "2026-09-21", endDate: "2027-02-07", replanFlaggedAt: null },
+      [
+        phase(1, "Aerobic base", "base", { w: 8 }, { status: "completed", startDate: "2026-09-21" }),
+        phase(2, "Run build", "build", { w: 4 }),
+      ],
+      null,
+      TODAY,
+    );
+    expect(paused.bar.map((b) => b.tone)).toEqual(["accent", "next"]);
+    // After Resume it is scheduled, and still not started.
+    const resumed = seasonCard(
+      { id: 3, name: "Winter run base", startDate: "2026-09-21", endDate: "2027-02-07", replanFlaggedAt: null },
+      [
+        phase(1, "Aerobic base", "base", { w: 8 }, { status: "completed", startDate: "2026-09-21" }),
+        phase(2, "Run build", "build", { w: 4 }, { scheduledStartDate: "2026-11-23" }),
+      ],
+      null,
+      TODAY,
+    );
+    expect(resumed.bar.map((b) => b.tone)).toEqual(["accent", "next"]);
+    expect(phaseBarTone("done", false)).toBe("accent");
+    expect(phaseBarTone("active", false)).toBe("current");
+    expect(phaseBarTone("planned", true)).toBe("next");
+    expect(phaseBarTone("planned", false)).toBe("grey");
+  });
+
+  it("gives the next phase one badge for the list and the season page (J8-12)", () => {
+    const timeline = [{ state: "active" as const }, { state: "planned" as const }];
+    expect(nextPhaseBadge({ scheduled: false, plannedStart: "2026-12-28" }, timeline, TODAY)).toBe("Paused");
+    expect(nextPhaseBadge({ scheduled: true, plannedStart: "2026-12-28" }, timeline, TODAY)).toBe("Starts 28 Dec");
+    expect(nextPhaseBadge({ scheduled: false, plannedStart: "2026-11-10" }, [{ state: "planned" as const }], TODAY)).toBe("Next");
   });
 
   it("outlines the running phase and greys the next one in a goal season", () => {
@@ -171,7 +218,8 @@ describe("the season card", () => {
     );
     expect(goal.race).toBeNull();
     expect(goal.goalBy).toBe("Goal by 7 Feb");
-    expect(goal.weeksLeft).toBe(12);
+    // Days, as the season page counts (J6-01).
+    expect(goal.daysLeft).toBe(85);
     expect(goal.bar.map((b) => b.tone)).toEqual(["current", "grey", "grey"]);
     expect(goal.phases.map((p) => [p.badge, p.badgeAccent])).toEqual([
       ["Now", true],
