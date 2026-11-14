@@ -10,4 +10,11 @@ describe("takeStartLines", () => {
     expect(takeStartLines({ seasonId: null, day: "2026-11-16", running, scheduled: null })).toEqual(["This ends Base block at week 1 of 7."]);
     expect(takeStartLines({ seasonId: null, day: "2026-11-18", running, scheduled: null })).toEqual(["This ends Base block at week 2 of 7."]);
   });
+
+  it("says nothing ends when the running block has ended before the start day (round 8)", () => {
+    // The block's last day is Sun 27 Dec.
+    expect(takeStartLines({ seasonId: null, day: "2026-12-28", running, scheduled: null })).toEqual([]);
+    expect(takeStartLines({ seasonId: null, day: "2027-01-04", running, scheduled: null })).toEqual([]);
+    expect(takeStartLines({ seasonId: null, day: "2026-12-27", running, scheduled: null })).toEqual(["This ends Base block at week 7 of 7."]);
+  });
 });
