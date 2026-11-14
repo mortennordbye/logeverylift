@@ -584,7 +584,10 @@ describe("completed cycle", () => {
 
   it("names the cycle that already followed it as started, with no start", () => {
     render(<CycleCompletionBanner cycle={done} lengthLabel="6 weeks" endedLabel="ended 20 Dec" next={{ id: 9, name: "Upper / Lower hypertrophy", startsLabel: "Mon 2 Nov", startsTomorrow: false, started: true }} />);
-    expect(screen.getByRole("link", { name: /Upper \/ Lower hypertrophy started Mon\s2\sNov/ }).getAttribute("href")).toBe("/cycles/9");
+    const link = screen.getByRole("link", { name: /Upper \/ Lower hypertrophy started Mon\s2\sNov/ });
+    expect(link.getAttribute("href")).toBe("/cycles/9");
+    // A 44 px tap target.
+    expect(link.className).toContain("min-h-11");
     expect(screen.queryByRole("button", { name: "Start now instead" })).toBeNull();
   });
 

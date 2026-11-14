@@ -78,7 +78,7 @@ export function CycleCompletionBanner({
       {next && (
         <>
           <div className="h-px bg-hairline" />
-          <Link href={`/cycles/${next.id}`} className="flex flex-col gap-0.5 active:opacity-70">
+          <Link href={`/cycles/${next.id}`} className="flex min-h-11 flex-col justify-center gap-0.5 active:opacity-70">
             <span className="text-xs font-semibold tracking-[1px] uppercase text-muted-foreground">Next</span>
             <span className="text-base font-medium">
               {/* The chevron stays with the last word, never on a line of its own. */}
