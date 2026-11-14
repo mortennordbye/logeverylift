@@ -34,7 +34,9 @@
     "test:coverage": "vitest run --coverage",
     "prepare": "lefthook install || true",
     "check:docs": "tsx scripts/check-doc-claims.ts",
-    "art": "tsx --no-deprecation scripts/exercise-art.ts"
+    "art": "tsx --no-deprecation scripts/exercise-art.ts",
+    "journeys": "tsx scripts/journeys/run.ts",
+    "journeys:page": "tsx scripts/journeys/review-page.ts"
   },
   "dependencies": {
     "@better-auth/mcp": "^1.7.17",
