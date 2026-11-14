@@ -28,12 +28,20 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Nothing now: D1's load and the weekly load ramp (D2 part 2) are in. Build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
 - **Touchpoints:** `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
 
+### Plan redesign: what the four packages left for later
+- **What:** Three gaps found while building the Plan tab (`docs/plans/plan-tab-redesign.md`):
+  - The triathlon plan gives every phase its own copy of the generator's programs, so Programs lists names like "Long Run" once per phase.
+  - Scheduling a draft for a later day clears any other cycle's scheduled start (only one can be scheduled), and the setup flow does not warn about it.
+  - Server Actions outside `src/lib/actions/training-cycles.ts` can still return `String(err)` to the client (the bug pass fixed only that file).
+- **Why deferred:** Out of the packages' scope; each needs its own decision (shared programs across phases, a warning text) or a sweep of every action file.
+- **Unblocked by:** An owner choice on shared vs per-phase programs; a confirm line in step 1 of the new cycle flow; a grep for `String(err)` and `String(e)` in `src/lib/actions/` with the canonical error pattern from `CLAUDE.md`.
+- **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/training-cycles.ts` (`startTrainingCycle`), `src/components/features/CreateCycleForm.tsx`, `src/lib/actions/`.
+
 ### Dated sessions: what C2 left for later
-- **What:** Three gaps left by the session model (C2, `docs/plans/sessions.md`):
+- **What:** Two gaps left by the session model (C2, `docs/plans/sessions.md`):
   - `dismissed_makeups` is still written when a whole day is declined, so an app from before C2 keeps hiding the day after a rollback (hub decision 13). Reads use the session's status only. Drop the writes and the table one release after C2.
   - The calendar shows no program on a rotation cycle's days (hub decision 14), though `listPlanned` can work them out.
-  - A rotation session can be skipped or changed over MCP only; the app has no button for it.
-- **Why deferred:** The first is a rollback safety net for one release. The other two were left out to keep the rotation lifter's screens unchanged in C2.
+- **Why deferred:** The first is a rollback safety net for one release. The calendar gap was left out to keep the rotation lifter's screens unchanged in C2. (Rotation skip and change now have app buttons on the cycle detail, Plan redesign P2.)
 - **Unblocked by:** One release of C2 in prod without a rollback (then a migration drops the table and `dismissIfDayClear` goes); and an owner choice on rotation days in the calendar.
 - **Touchpoints:** `src/lib/planned-sessions.ts` (`dismissIfDayClear`, `listPlanned`, `applyRotationOp`), `src/components/features/CycleCalendarClient.tsx` (`getDayInfo`), `src/db/schema/dismissed-makeups.ts`.
 
