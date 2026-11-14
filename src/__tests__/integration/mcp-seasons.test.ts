@@ -59,7 +59,7 @@ describe("manage_season and the read tools", () => {
     const stale = await call("manage_season", { operation: "update", seasonId: id, goal: "Other", reason: "Goal", expectedVersion: 1 });
     expect(stale.isError).toBe(true);
     expect(stale.raw).toContain("Conflict");
-    expect(stale.raw).toContain("name 2027 → 2027 season");
+    expect(stale.raw).toContain("Name changed from 2027 to 2027 season");
     expect(await seasonRow(id)).toMatchObject({ goal: "First half", version: 2 });
     expect((await call("manage_season", { operation: "update", seasonId: id, goal: "x", reason: "x" })).raw).toContain("expectedVersion is required");
   });

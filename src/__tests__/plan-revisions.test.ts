@@ -95,9 +95,9 @@ describe("snapshots", () => {
     const after = snap([set(1, 1, { weightKg: "82.50" }), set(3, 3)], "Push A");
     expect(diffSnapshots(before, after)).toEqual([
       'Renamed "Push" → "Push A"',
-      "Bench Press, set 1: weight 80 kg → 82.5 kg",
-      "Bench Press: added set 3",
-      "Bench Press: removed set 2",
+      "Bench Press, set 1, weight 80 kg → 82.5 kg",
+      "Bench Press, added set 3",
+      "Bench Press, removed set 2",
     ]);
     expect(diffSnapshots(null, after)).toEqual(['Created "Push A"']);
   });
