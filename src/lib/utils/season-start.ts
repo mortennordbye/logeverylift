@@ -5,8 +5,7 @@
  * the running cycle on that day and drops any other scheduled start now.
  */
 
-import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
-import { dropsScheduledLine, endsRunningLine, type ScheduledDraft } from "@/lib/utils/cycle-start";
+import { dropsScheduledLine, endsRunningLine, runningOn, type ScheduledDraft } from "@/lib/utils/cycle-start";
 
 /** The running cycle, with what it takes to say which week of it a later day falls in. */
 export type RunningBlock = {
@@ -36,14 +35,16 @@ export function takeStartLines(opts: {
   const joining = opts.joining ?? [];
   const { running, scheduled } = opts;
   if (running && joining.includes(running.id)) return [];
+  // A block that has ended by the start day is not ended by it (runningOn).
   const ends =
     running && (running.seasonId == null || running.seasonId !== opts.seasonId)
-      ? endsRunningLine(0, {
-          id: running.id,
-          name: running.name,
-          week: cycleWeek(parseDateStr(running.startDate), running.durationWeeks, parseDateStr(opts.day), running.durationDays).currentWeek,
-          totalWeeks: running.durationWeeks,
-        })
+      ? endsRunningLine(
+          0,
+          runningOn(
+            { id: running.id, name: running.name, week: 1, totalWeeks: running.durationWeeks, startDate: running.startDate, durationDays: running.durationDays },
+            opts.day,
+          ),
+        )
       : null;
   const drops = scheduled && !joining.includes(scheduled.id) ? dropsScheduledLine(null, scheduled, opts.seasonId) : null;
   return [ends, drops].filter((l): l is string => l != null);

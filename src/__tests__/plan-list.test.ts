@@ -41,7 +41,7 @@ const jevnakerPhases = [
   phase(5, "Taper", "taper", { d: 10 }),
 ];
 const jevnaker = seasonCard(
-  { id: 9, name: "Jevnaker Half 2027", startDate: "2026-11-16", endDate: "2027-08-29", replanFlaggedAt: null },
+  { id: 9, name: "Jevnaker Half 2027", startDate: "2026-11-16", endDate: "2027-08-29", replanFlaggedAt: null, goal: "Finish strong" },
   jevnakerPhases,
   { name: "Jevnaker Halv Full Distanse", raceDate: "2027-08-29" },
   TODAY,
@@ -49,8 +49,8 @@ const jevnaker = seasonCard(
 
 describe("plan list words", () => {
   it("writes start days as the spec does", () => {
-    // A day inside the week names its date too (J4-17).
-    expect(startsLabel(TODAY, "2026-11-16")).toBe("Starts Mon 16 Nov");
+    // One date format for every start badge, inside the week too (round 8).
+    expect(startsLabel(TODAY, "2026-11-16")).toBe("Starts 16 Nov");
     expect(startsLabel(TODAY, "2026-12-21")).toBe("Starts 21 Dec");
     expect(startsLabel(TODAY, TODAY)).toBe("Starts today");
   });
@@ -63,7 +63,7 @@ describe("plan list words", () => {
 
   it("a season row shows the length a phase runs when a scheduled start cuts it (fix round 7)", () => {
     const card = seasonCard(
-      { id: 9, name: "Winter", startDate: "2026-11-09", endDate: "2027-03-01", replanFlaggedAt: null },
+      { id: 9, name: "Winter", startDate: "2026-11-09", endDate: "2027-03-01", replanFlaggedAt: null, goal: "Finish strong" },
       [phase(1, "Base", "base", { w: 7 }, { status: "active", startDate: "2026-11-09" }), phase(2, "Build", "build", { d: 10 })],
       null,
       TODAY,
@@ -77,7 +77,7 @@ describe("plan list words", () => {
   it("dates the next phase from today when the phases before it were deleted (fix round 8)", () => {
     // The running phase and the one after it went to Recently deleted: only a draft is left, on a chain that starts in the past.
     const card = seasonCard(
-      { id: 9, name: "Winter", startDate: "2026-10-31", endDate: "2027-03-01", replanFlaggedAt: null },
+      { id: 9, name: "Winter", startDate: "2026-10-31", endDate: "2027-03-01", replanFlaggedAt: null, goal: "Finish strong" },
       [phase(3, "Peak and test", "peak", { w: 3 })],
       null,
       TODAY,
@@ -92,11 +92,11 @@ describe("plan list words", () => {
     expect(heroLabel(next, TODAY, false)).toBe("Starts Mon 16 Nov · Week 1 of 8");
   });
 
-  it("counts the hero's weeks to the day a scheduled start cuts the running block (fix round 7)", () => {
+  it("counts the hero's weeks of the whole block when a scheduled start cuts it; the Ends line gives the cut (round 8)", () => {
     const running = { id: 1, name: "Base", durationWeeks: 7, durationDays: null, scheduleType: "day_of_week" as const, startDate: "2026-11-09", scheduledStartDate: null };
-    expect(heroLabel(running, TODAY, true, "2026-11-16")).toBe("Week 1 of 1 · Same days each week");
-    expect(heroLabel(running, TODAY, true, "2026-11-24")).toBe("Week 1 of 3 · Same days each week");
-    expect(heroLabel(running, TODAY, true, null)).toBe("Week 1 of 7 · Same days each week");
+    // No "Week 1 of 1" for a 7 week block that a start on Mon 16 Nov cuts.
+    expect(heroLabel(running, TODAY, true)).toBe("Week 1 of 7 · Same days each week");
+    expect(runningEnd("2026-11-09", "2026-12-27", "2026-11-16")).toBe("2026-11-15");
   });
 
   it("writes up-next and past rows", () => {
@@ -189,11 +189,11 @@ describe("the season card", () => {
       "General · 8 wk · 16 Nov – 10 Jan",
       "Base · 12 wk · 11 Jan – 4 Apr",
       "Build · 12 wk · 5 Apr – 27 Jun",
-      "Build · 53 days · 28 Jun – 19 Aug",
+      "Build · 7 wk 4 days · 28 Jun – 19 Aug",
       "Taper · 10 days · 20 – 29 Aug",
     ]);
     // Nothing runs yet: the next phase is the accent one.
-    expect(jevnaker.phases[0]).toMatchObject({ badge: "Starts Mon 16 Nov", badgeAccent: true, mark: "accent" });
+    expect(jevnaker.phases[0]).toMatchObject({ badge: "Starts 16 Nov", badgeAccent: true, mark: "accent" });
     // Nothing has started, so nothing is filled: the next phase is only outlined (J4-13).
     expect(jevnaker.bar.map((b) => b.tone)).toEqual(["next", "grey", "grey", "grey", "grey"]);
   });
@@ -201,7 +201,7 @@ describe("the season card", () => {
   it("fills only the phases that have started (J4-13, J4-14, J6-02)", () => {
     // A paused chain: phase 1 ended, phase 2 is next and not started.
     const paused = seasonCard(
-      { id: 3, name: "Winter run base", startDate: "2026-09-21", endDate: "2027-02-07", replanFlaggedAt: null },
+      { id: 3, name: "Winter run base", startDate: "2026-09-21", endDate: "2027-02-07", replanFlaggedAt: null, goal: "Finish strong" },
       [
         phase(1, "Aerobic base", "base", { w: 8 }, { status: "completed", startDate: "2026-09-21" }),
         phase(2, "Run build", "build", { w: 4 }),
@@ -212,7 +212,7 @@ describe("the season card", () => {
     expect(paused.bar.map((b) => b.tone)).toEqual(["accent", "next"]);
     // After Resume it is scheduled, and still not started.
     const resumed = seasonCard(
-      { id: 3, name: "Winter run base", startDate: "2026-09-21", endDate: "2027-02-07", replanFlaggedAt: null },
+      { id: 3, name: "Winter run base", startDate: "2026-09-21", endDate: "2027-02-07", replanFlaggedAt: null, goal: "Finish strong" },
       [
         phase(1, "Aerobic base", "base", { w: 8 }, { status: "completed", startDate: "2026-09-21" }),
         phase(2, "Run build", "build", { w: 4 }, { scheduledStartDate: "2026-11-23" }),
@@ -232,11 +232,13 @@ describe("the season card", () => {
     expect(nextPhaseBadge({ scheduled: false, plannedStart: "2026-12-28" }, timeline, TODAY)).toBe("Paused");
     expect(nextPhaseBadge({ scheduled: true, plannedStart: "2026-12-28" }, timeline, TODAY)).toBe("Starts 28 Dec");
     expect(nextPhaseBadge({ scheduled: false, plannedStart: "2026-11-10" }, [{ state: "planned" as const }], TODAY)).toBe("Next");
+    // A season not started is not paused, even when its first phase lost its later start (round 8).
+    expect(nextPhaseBadge({ scheduled: false, plannedStart: "2027-01-04" }, [{ state: "planned" as const }], TODAY)).toBe("Next");
   });
 
   it("outlines the running phase and greys the next one in a goal season", () => {
     const goal = seasonCard(
-      { id: 3, name: "Bench 120 kg by February", startDate: "2026-11-09", endDate: "2027-02-07", replanFlaggedAt: null },
+      { id: 3, name: "Bench 120 kg by February", startDate: "2026-11-09", endDate: "2027-02-07", replanFlaggedAt: null, goal: "Finish strong" },
       [
         phase(1, "Upper / Lower hypertrophy", "build", { w: 6 }, { status: "active", startDate: "2026-11-09" }),
         phase(2, "Strength peak", "peak", { w: 4 }, { scheduledStartDate: "2026-12-21" }),
@@ -247,6 +249,9 @@ describe("the season card", () => {
     );
     expect(goal.race).toBeNull();
     expect(goal.goalBy).toBe("Goal by 7 Feb");
+    // A season with no goal has no "goal by" line, only its end (round 8).
+    const noGoal = seasonCard({ id: 4, name: "Restored season", startDate: "2026-11-09", endDate: "2027-01-10", replanFlaggedAt: null, goal: null }, [], null, TODAY);
+    expect(noGoal.goalBy).toBe("Ends 10 Jan");
     // Days, as the season page counts (J6-01).
     expect(goal.daysLeft).toBe(85);
     expect(goal.bar.map((b) => b.tone)).toEqual(["current", "grey", "grey"]);
@@ -264,7 +269,7 @@ describe("the season card", () => {
 
   it("says Paused, as the season page does, when another block took the next phase's start (fix round 4)", () => {
     const paused = seasonCard(
-      { id: 3, name: "Winter run base", startDate: "2026-11-02", endDate: "2027-02-07", replanFlaggedAt: null },
+      { id: 3, name: "Winter run base", startDate: "2026-11-02", endDate: "2027-02-07", replanFlaggedAt: null, goal: "Finish strong" },
       [
         phase(1, "Base", "base", { w: 3 }, { status: "active", startDate: "2026-11-02" }),
         // Due 23 Nov, but not scheduled: the chain is paused (seasonPaused).
@@ -278,7 +283,7 @@ describe("the season card", () => {
 
   it("says Next, not a start day, for a season not started whose first phase is due and not scheduled", () => {
     const due = seasonCard(
-      { id: 4, name: "Spring", startDate: "2026-11-10", endDate: "2027-02-07", replanFlaggedAt: null },
+      { id: 4, name: "Spring", startDate: "2026-11-10", endDate: "2027-02-07", replanFlaggedAt: null, goal: "Finish strong" },
       [phase(1, "General", "general", { w: 4 })],
       null,
       TODAY,
@@ -288,7 +293,7 @@ describe("the season card", () => {
 
   it("writes a length in days that is whole weeks as weeks", () => {
     const fitted = seasonCard(
-      { id: 5, name: "Fitted", startDate: "2026-11-16", endDate: "2027-08-29", replanFlaggedAt: null },
+      { id: 5, name: "Fitted", startDate: "2026-11-16", endDate: "2027-08-29", replanFlaggedAt: null, goal: "Finish strong" },
       [phase(1, "Build", "build", { d: 105 }, { scheduledStartDate: "2026-11-16" })],
       null,
       TODAY,

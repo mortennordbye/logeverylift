@@ -511,3 +511,29 @@ describe("retention", () => {
     expect(await cycleRow(c)).toMatchObject({ seasonId: null, deletedAt: null });
   });
 });
+
+describe("a season has one A race (round 8)", () => {
+  it("a new A race makes the old A race a B race", async () => {
+    const id = await newSeason(me);
+    const first = await addRaceAction({ seasonId: id, ...race, name: "R good", raceDate: day(100) });
+    const second = await addRaceAction({ seasonId: id, ...race, name: "Oslo", raceDate: day(50) });
+    if (!first.success || !second.success) throw new Error("race");
+    expect((await racesOf(id)).map((r) => [r.name, r.priority])).toEqual([
+      ["R good", "B"],
+      ["Oslo", "A"],
+    ]);
+    expect((await getSeasonDetail(me, id))!.aRace?.name).toBe("Oslo");
+  });
+
+  it("a race changed to A makes the old A race a B race", async () => {
+    const id = await newSeason(me);
+    await addRaceAction({ seasonId: id, ...race, name: "R good", raceDate: day(100) });
+    await addRaceAction({ seasonId: id, ...race, name: "Oslo", raceDate: day(50), priority: "B" });
+    const oslo = (await racesOf(id)).find((r) => r.name === "Oslo")!;
+    expect((await updateRaceAction({ seasonId: id, raceId: oslo.id, priority: "A" })).success).toBe(true);
+    expect((await racesOf(id)).map((r) => [r.name, r.priority])).toEqual([
+      ["R good", "B"],
+      ["Oslo", "A"],
+    ]);
+  });
+});

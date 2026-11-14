@@ -89,7 +89,7 @@ function renderWeek(extra: Partial<Parameters<typeof CycleWeek>[0]> = {}) {
       initialWeek={0}
       sessions={sessions}
       today={TODAY}
-      phaseLine="Phase 1 · General prep"
+      phaseLine="Phase 1 · General"
       programs={[
         { id: 1, name: "Strength A" },
         { id: 7, name: "Strength C" },

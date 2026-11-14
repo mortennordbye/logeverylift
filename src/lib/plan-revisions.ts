@@ -2295,15 +2295,23 @@ export async function purgePlanRevisions(now = new Date()) {
  * and a block ended early (another start took over) has no other trace.
  */
 export async function cycleCompletedAt(userId: string, cycleId: number): Promise<Date | null> {
+  return (await cyclesCompletedAt(userId, [cycleId])).get(cycleId) ?? null;
+}
+
+/** cycleCompletedAt for several cycles in one read; a cycle with no such revision is left out. */
+export async function cyclesCompletedAt(userId: string, cycleIds: number[]): Promise<Map<number, Date>> {
+  const out = new Map<number, Date>();
+  if (cycleIds.length === 0) return out;
   const rows = await db
-    .select({ status: sql<string | null>`${planRevisions.snapshot}->'cycle'->>'status'`, at: planRevisions.createdAt })
+    .select({ id: planRevisions.objectId, status: sql<string | null>`${planRevisions.snapshot}->'cycle'->>'status'`, at: planRevisions.createdAt })
     .from(planRevisions)
-    .where(and(eq(planRevisions.userId, userId), eq(planRevisions.objectType, "cycle"), eq(planRevisions.objectId, cycleId)))
+    .where(and(eq(planRevisions.userId, userId), eq(planRevisions.objectType, "cycle"), inArray(planRevisions.objectId, cycleIds)))
     .orderBy(desc(planRevisions.id));
-  let at: Date | null = null;
+  const stopped = new Set<number>();
   for (const r of rows) {
-    if (r.status !== "completed") break;
-    at = r.at;
+    if (stopped.has(r.id)) continue;
+    if (r.status !== "completed") stopped.add(r.id);
+    else out.set(r.id, r.at);
   }
-  return at;
+  return out;
 }

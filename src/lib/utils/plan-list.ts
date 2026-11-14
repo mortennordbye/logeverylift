@@ -16,7 +16,6 @@ import {
   nextPhase,
   rangeLabel,
   runLength,
-  runLengthDays,
   seasonPaused,
   seasonTimeline,
   shortDay,
@@ -35,12 +34,11 @@ export function phaseSub(p: Pick<TimelinePhase, "phaseType" | "lengthDays" | "st
   return [p.phaseType ? PHASE_TYPE_LABELS[p.phaseType] : null, runLength(p), rangeLabel(p.start, p.end)].filter(Boolean).join(" · ");
 }
 
-/** "Starts today", "Starts tomorrow", "Starts Mon 16 Nov" inside a week, else "Starts 21 Dec". A weekday never comes without its date (J4-17). */
+/** "Starts today", "Starts tomorrow", else "Starts 21 Dec": one date format for every badge, short enough for a 320 px row (round 8). */
 export function startsLabel(today: string, start: string): string {
   const n = daysBetweenStr(today, start);
   if (n <= 0) return "Starts today";
   if (n === 1) return "Starts tomorrow";
-  if (n <= 6) return `Starts ${shortDay(start)}`;
   return `Starts ${dayMonth(start)}`;
 }
 
@@ -51,7 +49,7 @@ export function startsLabel(today: string, start: string): string {
  */
 export function nextPhaseBadge(next: { scheduled: boolean; plannedStart: string }, timeline: { state: TimelinePhase["state"] }[], today: string): string {
   if (next.scheduled) return startsLabel(today, next.plannedStart);
-  return seasonPaused(next, timeline, today) ? "Paused" : "Next";
+  return seasonPaused(next, timeline) ? "Paused" : "Next";
 }
 
 /**
@@ -147,16 +145,15 @@ export type HeroView =
 
 /**
  * "Week 3 of 6 · Rotation", or "Starts Mon 16 Nov · Week 1 of 8" for a block
- * that has not started. A running block counts its weeks to the day another
- * block's scheduled start (`otherStart`) cuts it.
+ * that has not started. The weeks are the block's own, also when another
+ * block's scheduled start cuts it: the hero's Ends line gives that day
+ * (runningEnd), so a cut block never reads "Week 1 of 1" (round 8).
  */
-export function heroLabel(c: CycleLike, today: string, active: boolean, otherStart: string | null = null): string {
+export function heroLabel(c: CycleLike, today: string, active: boolean): string {
   const start = active ? c.startDate! : c.scheduledStartDate!;
   if (!active) return `Starts ${shortDay(start)} · Week 1 of ${c.durationWeeks}`;
-  const runDays = runLengthDays(start, cycleLengthDays(c), otherStart);
-  const weeks = runDays === cycleLengthDays(c) ? c.durationWeeks : Math.ceil(runDays / 7);
-  const week = Math.min(Math.floor(Math.max(daysBetweenStr(start, today), 0) / 7) + 1, weeks);
-  return `Week ${week} of ${weeks} · ${scheduleWords(c.scheduleType)}`;
+  const week = Math.min(Math.floor(Math.max(daysBetweenStr(start, today), 0) / 7) + 1, c.durationWeeks);
+  return `Week ${week} of ${c.durationWeeks} · ${scheduleWords(c.scheduleType)}`;
 }
 
 export type WeekSession = {
@@ -244,7 +241,7 @@ export type SeasonCardView = {
   replan: boolean;
   /** The A race; null makes it a goal season. */
   race: { name: string; when: string; daysLeft: number | null } | null;
-  /** "Goal by 7 Feb" and the days left, counted as the season page counts them, for a goal season. */
+  /** "Goal by 7 Feb", or "Ends 7 Feb" for a season with no goal, and the days left, counted as the season page counts them, for a season with no A race. */
   goalBy: string;
   daysLeft: number;
   bar: BarSegment[];
@@ -257,7 +254,7 @@ export type SeasonCardView = {
 };
 
 export function seasonCard(
-  s: { id: number; name: string; startDate: string; endDate: string; replanFlaggedAt: Date | null },
+  s: { id: number; name: string; startDate: string; endDate: string; replanFlaggedAt: Date | null; goal: string | null },
   phases: PhaseLike[],
   aRace: { name: string; raceDate: string } | null,
   today: string,
@@ -273,6 +270,7 @@ export function seasonCard(
     status: p.status,
     startDate: p.startDate,
     scheduledStartDate: p.scheduledStartDate,
+    lastDay: p.lastDay ?? null,
   }));
   const timeline = shownTimeline(s.startDate, phaseData, otherStart, today);
   const active = timeline.find((p) => p.state === "active");
@@ -302,7 +300,7 @@ export function seasonCard(
     race: aRace
       ? { name: aRace.name, when: dayMonth(aRace.raceDate), daysLeft: aRace.raceDate >= today ? daysBetweenStr(today, aRace.raceDate) : null }
       : null,
-    goalBy: `Goal by ${dayMonth(s.endDate)}`,
+    goalBy: `${s.goal ? "Goal by" : "Ends"} ${dayMonth(s.endDate)}`,
     daysLeft: Math.max(0, daysBetweenStr(today, s.endDate)),
     bar,
     barLabel,

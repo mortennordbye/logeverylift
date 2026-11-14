@@ -24,9 +24,11 @@ import { badgeAccent, nextPhaseBadge, phaseBarTone } from "@/lib/utils/plan-list
 import { callAction } from "@/lib/utils/stale-bundle";
 import {
   PHASE_TYPE_LABELS,
+  addDaysStr,
   dayLabel,
   daysBetweenStr,
   lengthField,
+  lengthReason,
   rangeLabel,
   runLength,
   seasonPaused,
@@ -198,6 +200,8 @@ export function SeasonDetailClient(p: Props) {
     if (!result.success) {
       setError(result.error);
       setErrorField("fieldErrors" in result && result.fieldErrors?.raceDate ? "raceDate" : null);
+      // The season may be gone (deleted in another tab): a reload shows its deleted page, or what changed.
+      router.refresh();
       return false;
     }
     after?.();
@@ -253,7 +257,7 @@ export function SeasonDetailClient(p: Props) {
     leaveDeleted("/cycles", [`/seasons/${p.season.id}`]);
   }
 
-  const paused = seasonPaused(p.next, phases, p.today);
+  const paused = seasonPaused(p.next, phases);
   const fit = p.taperFit;
   // A paused chain's dates assume a Resume today, so they raise no taper warning (J8-12).
   const misfit = !paused && (fit.status === "early" || fit.status === "late");
@@ -285,8 +289,15 @@ export function SeasonDetailClient(p: Props) {
   // An open sheet covers the page, so its error shows in the sheet.
   // Why Save race or Save phase is off.
   const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
-  const phaseReason = phase && !Number(phase.length) ? "Type a length." : null;
+  const phaseReason = phase ? lengthReason(phase.length, phase.unit) : null;
   const dateError = error != null && errorField === "raceDate";
+  // The sheet's dates follow the length as it is typed; an unchanged length keeps the phase's own end (a cut one too).
+  const sheetEnd = (() => {
+    if (!phase || lengthReason(phase.length, phase.unit)) return phase?.phase.end ?? "";
+    const days = Number(phase.length) * (phase.unit === "weeks" ? 7 : 1);
+    const planned = phase.phase.durationDays ?? phase.phase.durationWeeks * 7;
+    return days === planned ? phase.phase.end : addDaysStr(phase.phase.start, days - 1);
+  })();
   const errorLine = <ErrorLine error={error} />;
 
   return (
@@ -310,7 +321,12 @@ export function SeasonDetailClient(p: Props) {
           </span>
           {/* With no A race the hero card carries the goal. */}
           {p.season.goal && aRace && <span className="text-sm text-foreground/75">{p.season.goal}</span>}
-          {p.season.nextGoal && <span className="text-[13px] text-muted-foreground">Next goal is {p.season.nextGoal}</span>}
+          {/* The goal is the user's own words, set apart from the label (round 8). */}
+          {p.season.nextGoal && (
+            <span data-testid="next-goal" className="text-[13px] text-muted-foreground">
+              Next goal{" "}· {p.season.nextGoal}
+            </span>
+          )}
         </div>
 
         {race == null && phase == null && !confirmDelete && !confirmResume && errorLine}
@@ -337,7 +353,7 @@ export function SeasonDetailClient(p: Props) {
         <section data-testid="season-hero" className="flex flex-col gap-3.5 rounded-[20px] bg-widget px-[18px] py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-1">
-              <span className={LABEL}>{keepDates(aRace ? `${aRace.priority} race · ${dayLabel(aRace.raceDate)}` : `Goal by ${dayLabel(p.season.endDate)}`)}</span>
+              <span className={LABEL}>{keepDates(aRace ? `${aRace.priority} race · ${dayLabel(aRace.raceDate)}` : `${p.season.goal ? "Goal by" : "Ends"} ${dayLabel(p.season.endDate)}`)}</span>
               <span className="text-[17px] font-semibold break-words">{aRace ? aRace.name : (p.season.goal ?? p.season.name)}</span>
               {/* The race-day plan (docs/plans/nutrition-and-race-day.md, 6): half and full for now. */}
               {aRace && p.enduranceEnabled && aRace.discipline === "triathlon" && (aRace.distance === "half" || aRace.distance === "full") && (
@@ -570,6 +586,15 @@ export function SeasonDetailClient(p: Props) {
               </label>
             )}
             <RacePriorityRow value={race.priority} onChange={(v) => setRace({ ...race, priority: v })} />
+            {/* A season has one A race: saving this one as A makes the old one a B race (keepOneARace). */}
+            {race.priority === "A" &&
+              p.races
+                .filter((r) => r.priority === "A" && r.id !== race.id)
+                .map((r) => (
+                  <span key={r.id} className="text-[13px] text-muted-foreground">
+                    “{r.name}” becomes a B race.
+                  </span>
+                ))}
             <div>
               <button type="button" disabled={busy || raceReason != null} aria-describedby={raceReason ? "race-reason" : undefined} onClick={saveRace} className={PRIMARY_BUTTON}>
                 Save race
@@ -596,7 +621,7 @@ export function SeasonDetailClient(p: Props) {
           <PlanSheetPanel
             label={phase.phase.name}
             title={phase.phase.name}
-            sub={<span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, phase.phase.end))}</span>}
+            sub={<span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, sheetEnd))}</span>}
             footer={
               <>
                 <div>
@@ -717,16 +742,29 @@ function PhaseRow({ phase, sub, warn, badge, onOpen }: { phase: SeasonPhaseView;
           <circle cx="15" cy="18" r="1.6" />
         </svg>
       </button>
-      <button type="button" onClick={onOpen} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 py-2.5 pr-3 text-left active:opacity-80">
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span data-testid="phase-name" className={`text-[15px] font-medium ${phase.state === "done" ? "text-muted-foreground" : ""}`}>
+      {/* Below 360 px the badge goes under the name, so the name keeps the row's width (round 8). */}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="grid min-h-11 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 py-2.5 pr-3 text-left active:opacity-80 min-[360px]:grid-cols-[minmax(0,1fr)_auto_auto]"
+      >
+        <span className="col-start-1 row-start-1 flex min-w-0 flex-col gap-0.5">
+          <span data-testid="phase-name" className={`break-words text-[15px] font-medium ${phase.state === "done" ? "text-muted-foreground" : ""}`}>
             {phase.name}
           </span>
-          <span className="text-[13px] text-muted-foreground">{keepDates(sub)}</span>
+          <span data-testid="phase-sub" className="text-[13px] text-muted-foreground">{keepDates(sub)}</span>
           {warn && <span className="mt-1 text-[13px]">{keepDates(warn)}</span>}
         </span>
-        {badge && <span className={`shrink-0 text-xs font-semibold ${badgeAccent(badge) ? "text-primary" : "text-muted-foreground"}`}>{keepDates(badge)}</span>}
-        <Chevron />
+        {badge && (
+          <span
+            className={`col-start-1 row-start-2 justify-self-start text-xs font-semibold min-[360px]:col-start-2 min-[360px]:row-start-1 min-[360px]:justify-self-auto ${badgeAccent(badge) ? "text-primary" : "text-muted-foreground"}`}
+          >
+            {keepDates(badge)}
+          </span>
+        )}
+        <span className="col-start-2 row-span-2 row-start-1 min-[360px]:col-start-3 min-[360px]:row-span-1">
+          <Chevron />
+        </span>
       </button>
     </li>
   );

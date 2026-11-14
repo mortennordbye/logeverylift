@@ -43,6 +43,6 @@ describe("deleting a season's started phases", () => {
     const detail = (await getSeasonDetail(me, s.data.id))!;
     expect(detail.phases.map((p) => [p.name, p.start, p.end])).toEqual([["Peak and test", day(0), day(20)]]);
     expect(detail.next).toMatchObject({ scheduled: false, plannedStart: day(0) });
-    expect(seasonPaused(detail.next!, detail.phases, day(0))).toBe(false);
+    expect(seasonPaused(detail.next!, detail.phases)).toBe(false);
   });
 });

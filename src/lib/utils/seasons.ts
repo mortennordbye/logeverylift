@@ -32,6 +32,8 @@ export type PhaseLike = {
   status: "draft" | "active" | "completed";
   startDate: string | null;
   scheduledStartDate: string | null;
+  /** The real last day of a completed phase that ended before its planned end (earlyLastDay); null or absent otherwise. */
+  lastDay?: string | null;
 };
 
 export type TimelinePhase = PhaseLike & {
@@ -105,6 +107,17 @@ export function runLengthDays(start: string, lengthDays: number, otherStart: str
 }
 
 /**
+ * The last day a completed block ran when it ended before its planned last
+ * day: the day before the day it completed (another start took over that
+ * day), never before its start. Null when it ran its whole length.
+ */
+export function earlyLastDay(startDate: string | null, plannedLast: string | null, completedOn: string | null): string | null {
+  if (!completedOn || !plannedLast || completedOn > plannedLast) return null;
+  const before = addDaysStr(completedOn, -1);
+  return startDate && before < startDate ? startDate : before;
+}
+
+/**
  * Each phase's dates, forward from the season start: a started phase keeps
  * its real start, a scheduled one its scheduled day, and any other phase
  * starts the day after the one before it ends. Nothing stores these dates.
@@ -120,9 +133,11 @@ export function seasonTimeline(seasonStart: string, phases: PhaseLike[], otherSt
     const started = p.status !== "draft" && p.startDate;
     const start = started ? p.startDate! : (p.scheduledStartDate ?? cursor);
     const planned = addDaysStr(start, lengthOf(p) - 1);
-    const end = p.status === "active" ? cutByStart(start, planned, otherStart) : planned;
+    const end = p.status === "active" ? cutByStart(start, planned, otherStart) : p.status === "completed" && p.lastDay && p.lastDay >= start && p.lastDay < planned ? p.lastDay : planned;
     const lengthDays = daysBetweenStr(start, end) + 1;
-    cursor = addDaysStr(end, 1);
+    // A phase that ended early keeps the chain on its planned dates: Resume
+    // dates the next phase from the planned end (resumeSeason).
+    cursor = addDaysStr(p.status === "completed" ? planned : end, 1);
     return { ...p, start, end, lengthDays, state: p.status === "completed" ? "done" : p.status === "active" ? "active" : "planned" };
   });
 }
@@ -178,19 +193,15 @@ export function nextPhase(timeline: TimelinePhase[]): TimelinePhase | null {
 }
 
 /**
- * The season's chain is paused: its next phase is not scheduled although the
- * season is under way, or that phase was due to start on a later day. Another
- * block took the one scheduled start (scheduleCycle), and Resume picks the
- * chain up again. False when nothing has started and the next phase is due
- * today or earlier: that season is not started yet.
+ * The season's chain is paused: a phase has started and the next one is not
+ * scheduled, because another block took the one scheduled start
+ * (scheduleCycle). Resume picks the chain up again. A season where no phase
+ * has started is not started, never paused, even when its first phase lost a
+ * later start (round 8): Start schedules it again.
  */
-export function seasonPaused(
-  next: { scheduled: boolean; plannedStart: string } | null,
-  phases: { state: TimelinePhase["state"] }[],
-  today: string,
-): boolean {
+export function seasonPaused(next: { scheduled: boolean } | null, phases: { state: TimelinePhase["state"] }[]): boolean {
   if (!next || next.scheduled) return false;
-  return phases.some((p) => p.state !== "planned") || next.plannedStart > today;
+  return phases.some((p) => p.state !== "planned");
 }
 
 /**
@@ -208,7 +219,7 @@ export function shownTimeline(seasonStart: string, phases: PhaseLike[], otherSta
   const timeline = seasonTimeline(seasonStart, phases, otherStart);
   const next = nextPhase(timeline);
   if (!next || next.scheduledStartDate != null) return timeline;
-  const paused = seasonPaused({ scheduled: false, plannedStart: next.start }, timeline, today);
+  const paused = seasonPaused({ scheduled: false }, timeline);
   if (!paused && next.start >= today) return timeline;
   const planned = nextPhase(seasonTimeline(seasonStart, phases))!.start;
   const resumeDay = planned <= today ? today : planned;
@@ -312,7 +323,10 @@ export function shortDay(day: string): string {
  * weeks: a fitted 105 days is "15 wk".
  */
 export function lengthShort(p: { durationWeeks: number; durationDays: number | null }): string {
-  if (p.durationDays != null && p.durationDays % 7 !== 0) return `${p.durationDays} day${p.durationDays === 1 ? "" : "s"}`;
+  const d = p.durationDays;
+  // Over two weeks, days that are not whole weeks read as weeks and days: "16 wk 4 days", not "116 days" (round 8).
+  if (d != null && d > 14 && d % 7 !== 0) return `${Math.floor(d / 7)} wk ${d % 7} day${d % 7 === 1 ? "" : "s"}`;
+  if (d != null && d % 7 !== 0) return `${d} day${d === 1 ? "" : "s"}`;
   return `${p.durationDays != null ? p.durationDays / 7 : p.durationWeeks} wk`;
 }
 
@@ -333,16 +347,26 @@ export function runLength(p: { lengthDays: number }): string {
 export type LengthUnit = "weeks" | "days";
 
 /**
- * A phase length field moved to another unit, the length kept: 15 weeks is
- * 105 days, and days become weeks only when they are whole weeks. Otherwise
- * the field stays in days, with a note that says why.
+ * A phase length field moved to another unit: 15 weeks is 105 days, and whole
+ * weeks of days become weeks. Days that are not whole weeks round to the
+ * nearest week (at least 1), with a note that says so: the field always
+ * shows the unit it saves in (round 8).
  */
 export function switchLengthUnit(length: string, from: LengthUnit, to: LengthUnit): { length: string; unit: LengthUnit; note: string | null } {
   const n = Number(length);
   if (from === to || !length || !Number.isInteger(n) || n <= 0) return { length, unit: to, note: null };
   if (to === "days") return { length: String(n * 7), unit: "days", note: null };
   if (n % 7 === 0) return { length: String(n / 7), unit: "weeks", note: null };
-  return { length, unit: "days", note: `${n} days is not a whole number of weeks, so the length stays in days.` };
+  const weeks = Math.max(1, Math.round(n / 7));
+  return { length: String(weeks), unit: "weeks", note: `${n} days is not a whole number of weeks, so it is now ${weeks} week${weeks === 1 ? "" : "s"}.` };
+}
+
+/** Why a phase length cannot be saved, or null: the range the server takes (setPhaseSchema). */
+export function lengthReason(length: string, unit: LengthUnit): string | null {
+  const n = Number(length);
+  if (!length || n <= 0) return "Type a length.";
+  if (!Number.isInteger(n) || n > (unit === "days" ? 364 : 52)) return unit === "days" ? "Pick 1 to 364 days." : "Pick 1 to 52 weeks.";
+  return null;
 }
 
 /** How the phase sheet opens a length: in weeks when the days make whole weeks. */
@@ -351,10 +375,11 @@ export function lengthField(p: { durationWeeks: number; durationDays: number | n
   return { length: String(p.durationDays != null ? p.durationDays / 7 : p.durationWeeks), unit: "weeks" };
 }
 
-/** Two days as a range: "16 Nov – 10 Jan", or "17 – 26 Aug" in one month. */
+/** Two days as a range: "16 Nov – 10 Jan", "17 – 26 Aug" in one month, or "28 May" for one day. */
 export function rangeLabel(start: string, end: string): string {
   const a = shortDay(start).slice(4);
   const b = shortDay(end).slice(4);
+  if (start === end) return b;
   if (start.slice(0, 7) === end.slice(0, 7)) return `${a.split(" ")[0]} – ${b}`;
   return `${a} – ${b}`;
 }

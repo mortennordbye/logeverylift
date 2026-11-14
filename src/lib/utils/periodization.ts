@@ -253,7 +253,7 @@ const PHASE_LABELS: Record<TrainingPhase, string> = {
   peak: "Peak",
   taper: "Taper",
   maintain: "Maintain",
-  general: "General prep",
+  general: "General",
   transition: "Transition",
 };
 
@@ -420,7 +420,7 @@ export function formatPeriodizationSummary(
     note = "Endurance held steady; strength at maintenance.";
   } else if (p.weeksUntilPeak > 0) {
     const wk = p.weeksUntilPeak === 1 ? "wk" : "wks";
-    note = `Peak in ${p.weeksUntilPeak} ${wk} · this week ~${pct}% of peak volume.`;
+    note = `Peak in ${p.weeksUntilPeak} ${wk} · this week ${pct}% of peak volume.`;
   } else if (p.weeksUntilTaper > 0) {
     const wk = p.weeksUntilTaper === 1 ? "wk" : "wks";
     note = `At peak · taper in ${p.weeksUntilTaper} ${wk}.`;
@@ -431,7 +431,7 @@ export function formatPeriodizationSummary(
   } else {
     // A typed phase of a season (general, base, build, transition) has no
     // peak inside it to count down to: give this week's share only.
-    note = `This week ~${pct}% of peak volume.`;
+    note = `This week ${pct}% of peak volume.`;
   }
   // Append the no-wearable performance nudge when it adjusted this week's volume.
   if (p.adaptationNote) note = `${note} ${plainNote(p.adaptationNote)}`;

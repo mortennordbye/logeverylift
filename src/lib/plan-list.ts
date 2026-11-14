@@ -53,7 +53,7 @@ export type PlanListData = {
   select: { current: SelectRow[]; upNext: SelectRow[]; past: SelectRow[] };
 };
 
-async function weekHero(userId: string, c: Cycle, today: string, active: boolean, endurance: boolean, ends: string, otherStart: string | null): Promise<HeroView> {
+async function weekHero(userId: string, c: Cycle, today: string, active: boolean, endurance: boolean, ends: string): Promise<HeroView> {
   const start = active ? c.startDate! : c.scheduledStartDate!;
   // The block week that holds today, from the block's start day: the 7 days the cycle detail shows.
   const weeks = blockWeeks(start, cycleLengthDays(c));
@@ -85,14 +85,14 @@ async function weekHero(userId: string, c: Cycle, today: string, active: boolean
     kind: "week",
     id: c.id,
     name: c.name,
-    label: heroLabel(c, today, active, otherStart),
+    label: heroLabel(c, today, active),
     ends,
     days: weekDays(dates, sessions, today, endurance, labels),
     summary: weekSummary(sessions),
   };
 }
 
-async function rotationHero(userId: string, c: Cycle, today: string, active: boolean, ends: string, otherStart: string | null): Promise<HeroView> {
+async function rotationHero(userId: string, c: Cycle, today: string, active: boolean, ends: string): Promise<HeroView> {
   const withSlots = await getTrainingCycleWithSlots(c.id);
   const slots = withSlots.success
     ? withSlots.data.slots.map((s) => ({ id: s.id, orderIndex: s.orderIndex ?? null, programId: s.programId ?? null, label: s.label ?? null, programName: s.program?.name ?? null }))
@@ -116,7 +116,7 @@ async function rotationHero(userId: string, c: Cycle, today: string, active: boo
     kind: "rotation",
     id: c.id,
     name: c.name,
-    label: heroLabel(c, today, active, otherStart),
+    label: heroLabel(c, today, active),
     ends,
     chips: rotationChips(rows),
     next: rows.find((r) => r.mark === "next")?.name ?? null,
@@ -151,8 +151,8 @@ export async function loadPlanList(userId: string, endurance: boolean): Promise<
     Promise.all(liveSeasons.map((s) => getSeasonDetail(userId, s.id))),
     heroCycle
       ? heroCycle.scheduleType === "rotation"
-        ? rotationHero(userId, heroCycle, today, heroCycle === active, heroEnds, otherStart)
-        : weekHero(userId, heroCycle, today, heroCycle === active, endurance, heroEnds, otherStart)
+        ? rotationHero(userId, heroCycle, today, heroCycle === active, heroEnds)
+        : weekHero(userId, heroCycle, today, heroCycle === active, endurance, heroEnds)
       : null,
   ]);
   const details = seasonDetails.filter((d) => d != null);

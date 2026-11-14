@@ -162,11 +162,11 @@ describe("step 1: the basics", () => {
     expect(screen.getByText("Jevnaker Half 2027 pauses. Its next phase no longer starts Mon 16 Nov. You can resume it from the season.")).toBeTruthy();
   });
 
-  it("says the start ends the running cycle, at the week it is in on the start day (J2-01, J2-05)", () => {
+  it("says the start ends the running cycle, at the last week it runs (J2-01, J2-05, round 8)", () => {
     const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
     render(<CreateCycleForm days={{ ...days, afterCurrent: "2026-12-12" }} running={running} />);
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
-    expect(screen.getByText("This ends Upper / Lower hypertrophy at week 3 of 6.")).toBeTruthy();
+    expect(screen.getByText("This ends Upper / Lower hypertrophy at week 2 of 6.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
     fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-07" } });
     expect(screen.getByText("This ends Upper / Lower hypertrophy at week 6 of 6.")).toBeTruthy();
@@ -184,7 +184,7 @@ describe("step 1: the basics", () => {
     expect(screen.queryByText(/^This ends/)).toBeNull();
     // Today stays one tap away.
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
-    expect(screen.getByText("This ends Upper / Lower hypertrophy at week 3 of 6.")).toBeTruthy();
+    expect(screen.getByText("This ends Upper / Lower hypertrophy at week 2 of 6.")).toBeTruthy();
   });
 
   it("starts today by default when no cycle runs", () => {
@@ -269,7 +269,7 @@ describe("step 2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
     expect(startTrainingCycle).not.toHaveBeenCalled();
     const sheet = screen.getByRole("region", { name: "Start Push / Pull Sat 14 Nov?" });
-    expect(sheet.textContent!.replace(/ /g, " ")).toContain("This ends Upper / Lower hypertrophy at week 3 of 6.");
+    expect(sheet.textContent!.replace(/ /g, " ")).toContain("This ends Upper / Lower hypertrophy at week 2 of 6.");
     expect(sheet.textContent!.replace(/ /g, " ")).toContain("Strength peak no longer starts Mon 23 Nov.");
     fireEvent.click(within(sheet).getByRole("button", { name: "Create cycle" }));
     await waitFor(() => expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-14"));

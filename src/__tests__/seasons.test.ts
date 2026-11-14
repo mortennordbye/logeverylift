@@ -295,11 +295,17 @@ describe("season row words (docs/design/plan-redesign/spec.md)", () => {
   it("shows a range with the month once when both days share it", () => {
     expect(rangeLabel("2026-11-16", "2027-01-10")).toBe("16 Nov – 10 Jan");
     expect(rangeLabel("2027-08-17", "2027-08-26")).toBe("17 – 26 Aug");
+    // A one-day phase is one day, not "28 – 28 May" (round 8).
+    expect(rangeLabel("2027-05-28", "2027-05-28")).toBe("28 May");
   });
 
   it("shows a length as weeks or days", () => {
     expect(lengthShort({ durationWeeks: 8, durationDays: null })).toBe("8 wk");
-    expect(lengthShort({ durationWeeks: 8, durationDays: 53 })).toBe("53 days");
+    // A length over two weeks that is not whole weeks reads as weeks and days (round 8).
+    expect(lengthShort({ durationWeeks: 8, durationDays: 53 })).toBe("7 wk 4 days");
+    expect(lengthShort({ durationWeeks: 17, durationDays: 116 })).toBe("16 wk 4 days");
+    expect(lengthShort({ durationWeeks: 3, durationDays: 15 })).toBe("2 wk 1 day");
+    expect(lengthShort({ durationWeeks: 2, durationDays: 10 })).toBe("10 days");
     expect(lengthShort({ durationWeeks: 1, durationDays: 1 })).toBe("1 day");
     // Days that make whole weeks read as weeks (Fit the taper writes days).
     expect(lengthShort({ durationWeeks: 15, durationDays: 105 })).toBe("15 wk");
@@ -322,5 +328,23 @@ describe("season row words (docs/design/plan-redesign/spec.md)", () => {
     expect(runLengthDays("2026-11-09", 49, "2026-11-19")).toBe(10);
     expect(runLengthDays("2026-11-09", 49, "2026-12-28")).toBe(49);
     expect(runLengthDays("2026-11-09", 49, null)).toBe(49);
+  });
+});
+
+describe("a phase that ended early (round 8)", () => {
+  it("ends on its real last day; the chain after it keeps its planned dates", () => {
+    const t = seasonTimeline("2026-09-28", [
+      { id: 1, name: "Aerobic base", phaseOrder: 1, phaseType: "base", durationWeeks: 8, durationDays: null, status: "completed", startDate: "2026-09-28", scheduledStartDate: null, lastDay: "2026-11-01" },
+      { id: 2, name: "Run build", phaseOrder: 2, phaseType: "build", durationWeeks: 8, durationDays: null, status: "draft", startDate: null, scheduledStartDate: null },
+    ]);
+    expect(t[0]).toMatchObject({ start: "2026-09-28", end: "2026-11-01", lengthDays: 35 });
+    expect(t[1].start).toBe("2026-11-23");
+  });
+
+  it("keeps the planned end when it ran its whole length", () => {
+    const t = seasonTimeline("2026-09-28", [
+      { id: 1, name: "Aerobic base", phaseOrder: 1, phaseType: "base", durationWeeks: 8, durationDays: null, status: "completed", startDate: "2026-09-28", scheduledStartDate: null, lastDay: null },
+    ]);
+    expect(t[0].end).toBe("2026-11-22");
   });
 });

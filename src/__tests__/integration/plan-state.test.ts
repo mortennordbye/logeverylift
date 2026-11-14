@@ -68,6 +68,8 @@ describe("another block's scheduled start ends the running phase (J4-18)", () =>
 
     const list = await loadPlanList(me, false);
     expect(list.hero?.ends).toBe(`Ends ${dayMonth(day(2))}`);
+    // The weeks are the block's own; the Ends line says it is cut (round 8).
+    expect(list.hero?.label).toBe("Week 1 of 4 · Same days each week");
     const card = list.seasons.find((s) => s.id === seasonId)!;
     expect(card.phases[0].sub).toContain(dayMonth(day(2)));
     expect(card.phases[0].badge).toBe("Now");
@@ -114,5 +116,42 @@ describe("a phase another start ended early says the day it ended (J8-09)", () =
 
     const banner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await CycleDetailPage({ params: Promise.resolve({ id: String(one) }) }), CycleCompletionBanner)!;
     expect(banner.endedLabel).toBe(`ended early on ${dayMonth(day(0))}`);
+  });
+
+  it("the season page and the Plan list show the day it ended, not its planned end (round 8)", async () => {
+    const { seasonId, one } = await runningSeason();
+    // Base began ten days ago; another block starting today ends it yesterday.
+    await db.update(trainingCycles).set({ startDate: day(-10) }).where(eq(trainingCycles.id, one));
+    expect((await startTrainingCycle(await draft("Oslo base"))).success).toBe(true);
+
+    const detail = (await getSeasonDetail(me, seasonId))!;
+    expect(detail.phases[0]).toMatchObject({ state: "done", start: day(-10), end: day(-1), lengthDays: 10 });
+    const card = (await loadPlanList(me, false)).seasons.find((s) => s.id === seasonId)!;
+    expect(card.phases[0].sub).toContain(dayMonth(day(-1)));
+    expect(card.phases[0].sub).not.toContain(dayMonth(day(17)));
+  });
+});
+
+/** Every string drawn in a server tree, joined (props of client components left out). */
+function textOf(tree: ReactNode): string {
+  if (typeof tree === "string" || typeof tree === "number") return String(tree);
+  if (Array.isArray(tree)) return tree.map(textOf).join(" ");
+  if (!isValidElement(tree)) return "";
+  return textOf((tree.props as { children?: ReactNode }).children);
+}
+
+describe("a cycle cut by a scheduled start (round 8)", () => {
+  it("the cycle page counts the block's own weeks, as the Plan hero does", async () => {
+    const [rotation] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Upper lower", durationWeeks: 7, scheduleType: "rotation" })
+      .returning();
+    expect((await startTrainingCycle(rotation.id)).success).toBe(true);
+    expect((await startTrainingCycle(await draft("Oslo base"), day(3))).success).toBe(true);
+
+    const text = textOf(await CycleDetailPage({ params: Promise.resolve({ id: String(rotation.id) }) }));
+    expect(text).toContain("Week 1 of 7");
+    expect(text).not.toContain("Week 1 of 1");
+    expect((await loadPlanList(me, false)).hero?.label).toBe("Week 1 of 7 · Rotation");
   });
 });

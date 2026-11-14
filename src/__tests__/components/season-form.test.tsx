@@ -152,7 +152,7 @@ describe("New season with the endurance switch", () => {
     expect(within(planned).getAllByRole("listitem").map((li) => li.textContent!.replace(/\u00a0/g, " "))).toEqual([
       "General · 7 wk · 16 Nov – 3 Jan",
       "Base · 15 wk · 4 Jan – 18 Apr",
-      "Build · 109 days · 19 Apr – 5 Aug",
+      "Build · 15 wk 4 days · 19 Apr – 5 Aug",
       "Peak · 2 wk · 6 – 19 Aug",
       "Taper · 10 days · 20 – 29 Aug",
     ]);
@@ -188,7 +188,7 @@ describe("New season while another block holds the start (fix round 4)", () => {
     running: { id: 3, name: "Upper / Lower hypertrophy", startDate: "2026-11-02", durationWeeks: 6, durationDays: null, seasonId: null },
     scheduled: { id: 5, name: "Build", day: "2026-12-14", season: { id: 9, name: "Jevnaker Half 2027" } },
   };
-  const ends = "This ends Upper / Lower hypertrophy at week 3 of 6.";
+  const ends = "This ends Upper / Lower hypertrophy at week 2 of 6.";
   const drops = "Jevnaker Half 2027 pauses. Its next phase no longer starts Mon 14 Dec. You can resume it from the season.";
   const title = "Start this season Mon 16 Nov?";
 

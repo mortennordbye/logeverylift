@@ -18,6 +18,7 @@ import {
   PlanStateError,
   activateInSession,
   chainSeason,
+  cyclesCompletedAt,
   liveSeasonId,
   lockCycleRows,
   releaseSeasonPhases,
@@ -27,10 +28,13 @@ import {
   type PlanWriteContext,
   type PlanWriteSession,
 } from "@/lib/plan-revisions";
-import { userToday } from "@/lib/user-settings";
+import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr, weeksForDays } from "@/lib/utils/cycle-position";
+import { localDateStr } from "@/lib/utils/user-date";
 import {
+  addDaysStr,
   dayLabel,
+  earlyLastDay,
   fitTaperChange,
   nextPhase,
   phasesSkippedBy,
@@ -40,6 +44,7 @@ import {
   shownTimeline,
   taperDaysFor,
   taperFit,
+  type PhaseLike,
   type RaceLike,
   type TaperFit,
   type TimelinePhase,
@@ -130,6 +135,19 @@ export type SeasonDetail = {
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
 /** One of the user's live seasons with its races, its phase timeline and the taper fit. Null if not found. */
+/** Completed phases with the day they really ended when another start ended them early (earlyLastDay). */
+async function withLastDays<P extends PhaseLike>(userId: string, rows: P[]): Promise<P[]> {
+  const done = rows.filter((r) => r.status === "completed" && r.startDate);
+  if (done.length === 0) return rows;
+  const [completed, { timeZone }] = await Promise.all([cyclesCompletedAt(userId, done.map((r) => r.id)), getUserSettings(userId)]);
+  return rows.map((r) => {
+    const at = completed.get(r.id);
+    if (r.status !== "completed" || !r.startDate || !at) return r;
+    const plannedLast = addDaysStr(r.startDate, (r.durationDays ?? r.durationWeeks * 7) - 1);
+    return { ...r, lastDay: earlyLastDay(r.startDate, plannedLast, localDateStr(at, timeZone)) };
+  });
+}
+
 export async function getSeasonDetail(userId: string, seasonId: number): Promise<SeasonDetail | null> {
   const [season] = await db
     .select()
@@ -143,7 +161,7 @@ export async function getSeasonDetail(userId: string, seasonId: number): Promise
       .from(seasonRaces)
       .where(eq(seasonRaces.seasonId, seasonId))
       .orderBy(asc(seasonRaces.raceDate), asc(seasonRaces.id)),
-    seasonPhases(db, seasonId),
+    seasonPhases(db, seasonId).then((r) => withLastDays(userId, r)),
     // The day the scheduled draft starts: that start completes the running cycle.
     upcomingCycle(userId).then((c) => c?.startsOn ?? null),
   ]);
@@ -455,6 +473,14 @@ async function placeRaceDate(
   if (end !== season.endDate) await w.tx.update(seasons).set({ endDate: end, updatedAt: new Date() }).where(eq(seasons.id, seasonId));
 }
 
+/** A season has one A race (round 8): a race set to A makes any other A race of the season a B race. */
+async function keepOneARace(w: PlanWriteSession, seasonId: number, aRaceId: number) {
+  await w.tx
+    .update(seasonRaces)
+    .set({ priority: "B" })
+    .where(and(eq(seasonRaces.seasonId, seasonId), eq(seasonRaces.priority, "A"), ne(seasonRaces.id, aRaceId)));
+}
+
 export async function addRace(ctx: PlanWriteContext, seasonId: number, input: RaceInput, expectedVersion?: number) {
   return raceWrite(ctx, seasonId, expectedVersion, async (w) => {
     const existing = await w.tx.select({ id: seasonRaces.id }).from(seasonRaces).where(eq(seasonRaces.seasonId, seasonId));
@@ -464,6 +490,7 @@ export async function addRace(ctx: PlanWriteContext, seasonId: number, input: Ra
       .insert(seasonRaces)
       .values({ ...cleanRace(input), seasonId, userId: ctx.userId })
       .returning();
+    if (row.priority === "A") await keepOneARace(w, seasonId, row.id);
     return row;
   });
 }
@@ -496,6 +523,7 @@ export async function updateRace(
     });
     await placeRaceDate(w, seasonId, { id: raceId, raceDate: merged.raceDate, priority: merged.priority }, current);
     const [row] = await w.tx.update(seasonRaces).set(merged).where(eq(seasonRaces.id, raceId)).returning();
+    if (row.priority === "A") await keepOneARace(w, seasonId, row.id);
     return row;
   });
 }

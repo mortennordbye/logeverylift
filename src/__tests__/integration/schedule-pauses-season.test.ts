@@ -61,7 +61,7 @@ const scheduledOf = async (id: number) => (await db.select().from(trainingCycles
 
 async function pausedWithResume(seasonId: number) {
   const detail = (await getSeasonDetail(me, seasonId))!;
-  return { scheduled: detail.next!.scheduled, paused: seasonPaused(detail.next!, detail.phases, day(0)) };
+  return { scheduled: detail.next!.scheduled, paused: seasonPaused(detail.next!, detail.phases) };
 }
 
 describe("a standalone draft takes the scheduled start from a season", () => {
@@ -82,14 +82,14 @@ describe("a standalone draft takes the scheduled start from a season", () => {
     expect(await pausedWithResume(seasonId)).toEqual({ scheduled: false, paused: true });
   });
 
-  it("before the season starts: its first phase loses the start and the season shows paused with Resume", async () => {
+  it("before the season starts: its first phase loses the start, and the season is not started, not paused (round 8)", async () => {
     const { seasonId, one } = await seasonWithPhases(day(5));
     expect(await scheduledOf(one)).toBe(day(5));
     const peak = await draft("Strength peak");
 
     expect((await startTrainingCycle(peak, day(3))).success).toBe(true);
     expect(await scheduledOf(one)).toBeNull();
-    expect(await pausedWithResume(seasonId)).toEqual({ scheduled: false, paused: true });
+    expect(await pausedWithResume(seasonId)).toEqual({ scheduled: false, paused: false });
   });
 });
 
@@ -112,7 +112,7 @@ describe("a paused season's later phases (J4-18, J8-12)", () => {
     // Another block takes the one scheduled start in a week: Base ends the day before and the chain pauses.
     expect((await startTrainingCycle(await draft("Oslo base"), day(7))).success).toBe(true);
     const detail = (await getSeasonDetail(me, seasonId))!;
-    expect(seasonPaused(detail.next!, detail.phases, day(0))).toBe(true);
+    expect(seasonPaused(detail.next!, detail.phases)).toBe(true);
     expect(detail.phases.map((p) => [p.name, p.start, p.end])).toEqual([
       ["Base", day(0), day(6)],
       // Resume schedules Build for the day Base was planned to end, not for the other block's start.

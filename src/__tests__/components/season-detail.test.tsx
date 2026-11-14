@@ -25,7 +25,8 @@ const actions = vi.hoisted(() => {
   };
 });
 vi.mock("@/lib/actions/seasons", () => actions);
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn() }) }));
+const router = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: router.refresh, back: vi.fn() }) }));
 
 // The drop handler, captured from DndContext: jsdom has no layout, so a real drag cannot run here.
 const dnd = vi.hoisted(() => ({ onDragEnd: null as null | ((e: DragEndEvent) => void) }));
@@ -264,13 +265,24 @@ describe("season detail text (fix round 2)", () => {
     expect(screen.getAllByText("Finish the race")).toHaveLength(1);
   });
 
-  it("says Paused, not Starts, for a first phase that lost its later start, as the Plan list does (J8-12)", () => {
+  it("says Next, not Paused, for a first phase of a season not started that lost its later start (round 8)", () => {
     render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
     const first = screen.getAllByTestId("phase-row")[0];
-    expect(first.textContent).not.toContain("Starts");
-    expect(first.textContent).toContain("Paused");
-    // Grey, as on the Plan list: the accent marks only now and next (J8-12, J4-18).
-    expect(within(first).getByText("Paused").className).toContain("text-muted-foreground");
+    expect(first.textContent).not.toContain("Paused");
+    expect(within(first).getByText("Next").className).toContain("text-primary");
+  });
+
+  it("a season with no goal and no race says when it ends, not Goal by (round 8)", () => {
+    render(<SeasonDetailClient {...base} season={{ ...base.season, goal: null }} enduranceEnabled={false} races={[]} aRaceId={null} phases={[]} next={null} />);
+    const hero = screen.getByTestId("season-hero");
+    expect(hero.textContent).not.toContain("Goal by");
+    expect(hero.textContent!.replace(/\u00a0/g, " ")).toContain("Ends 17 Apr 2027");
+  });
+
+  it("sets the next goal apart from its label, so its capital letter does not sit mid-sentence (round 8)", () => {
+    render(<SeasonDetailClient {...base} season={{ ...base.season, nextGoal: "Hold it through the spring" }} />);
+    const line = screen.getByTestId("next-goal");
+    expect(line.textContent!.replace(/\u00a0/g, " ")).toBe("Next goal · Hold it through the spring");
   });
 
   it("says Next for a first phase that is due and not scheduled", () => {
@@ -278,9 +290,32 @@ describe("season detail text (fix round 2)", () => {
     expect(screen.getAllByTestId("phase-row")[0].textContent).toContain("Next");
   });
 
-  it("a season whose first phase lost its later start shows paused with Resume", () => {
-    // Another block took the one scheduled start (scheduleCycle): the first phase was due 16 Nov.
+  it("a season not started whose first phase lost its later start offers Start, not Resume (round 8)", () => {
     render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
+    expect(screen.queryByText("Paused. The next phase is not scheduled.")).toBeNull();
+    expect(screen.getByText("“Aerobic base + strength” is not started.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+  });
+
+  it("a season not started still warns that the taper misses race day and offers Fit the taper (round 8)", () => {
+    render(
+      <SeasonDetailClient
+        {...base}
+        next={{ ...base.next, scheduled: false }}
+        replan={{ reason: 'The A race "Jevnaker" moved from 3 Apr 2027 to 17 Apr 2027' }}
+        taperFit={{ status: "early", taperId: 3, days: 14 }}
+      />,
+    );
+    const banner = screen.getByTestId("replan-banner");
+    expect(banner.textContent).toContain("Race date changed. The taper no longer ends on race day.");
+    expect(within(banner).getByRole("button", { name: "Fit the taper" })).toBeTruthy();
+    expect(within(screen.getAllByTestId("phase-row")[2]).getByText("Taper ends 14 days before the race")).toBeTruthy();
+  });
+
+  it("a season whose phase ended and whose next phase is not scheduled shows paused with Resume", () => {
+    const done = [{ ...phases[0], state: "done" as const }, phases[1], phases[2]];
+    render(<SeasonDetailClient {...base} today="2027-01-20" phases={done} next={{ cycleId: 2, name: "Longer ride and run", plannedStart: "2027-01-20", scheduled: false }} />);
+    expect(within(screen.getAllByTestId("phase-row")[1]).getByText("Paused").className).toContain("text-muted-foreground");
     expect(screen.getByText("Paused. The next phase is not scheduled.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
   });
@@ -309,7 +344,13 @@ describe("season detail text (fix round 2)", () => {
 });
 
 describe("Resume asks first (fix round 4)", () => {
-  const paused = { ...base, next: { ...base.next, scheduled: false } };
+  // The first phase ran and ended; the next one is not scheduled (seasonPaused).
+  const paused = {
+    ...base,
+    phases: [{ ...phases[0], state: "done" as const }, phases[1], phases[2]],
+    next: { cycleId: 2, name: "Longer ride and run", plannedStart: "2026-11-16", scheduled: false },
+  };
+  const notStarted = { ...base, next: { ...base.next, scheduled: false } };
   // A cycle outside the season runs from 2 Nov, and another draft is scheduled for 30 Nov.
   const running = { id: 20, name: "Base block", startDate: "2026-11-02", durationWeeks: 6, durationDays: null, seasonId: null };
   const scheduled = { id: 21, name: "Strength upkeep", day: "2026-11-30", season: null };
@@ -320,8 +361,8 @@ describe("Resume asks first (fix round 4)", () => {
     const sheet = screen.getByRole("region", { name: "Resume this season?" });
     // The dates keep their words together with no-break spaces (keepDates).
     const text = sheet.textContent!.replace(/\u00a0/g, " ");
-    expect(text).toContain("Aerobic base + strength starts Mon 16 Nov.");
-    expect(text).toContain("This ends Base block at week 3 of 6.");
+    expect(text).toContain("Longer ride and run starts Mon 16 Nov.");
+    expect(text).toContain("This ends Base block at week 2 of 6.");
     expect(text).toContain("Strength upkeep no longer starts Mon 30 Nov.");
     expect(actions.resumeSeasonAction).not.toHaveBeenCalled();
     fireEvent.click(within(sheet).getByRole("button", { name: "Resume season" }));
@@ -329,18 +370,47 @@ describe("Resume asks first (fix round 4)", () => {
   });
 
   it("Start on a season due today says it starts today", () => {
-    render(<SeasonDetailClient {...paused} today="2026-11-16" running={running} scheduled={null} />);
+    render(<SeasonDetailClient {...notStarted} today="2026-11-16" running={running} scheduled={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     const sheet = screen.getByRole("region", { name: "Start this season?" });
     const text = sheet.textContent!.replace(/\u00a0/g, " ");
     expect(text).toContain("Aerobic base + strength starts today.");
-    expect(text).toContain("This ends Base block at week 3 of 6.");
+    expect(text).toContain("This ends Base block at week 2 of 6.");
   });
 
   it("resumes at once when nothing else runs or is scheduled", async () => {
     render(<SeasonDetailClient {...paused} />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await waitFor(() => expect(actions.resumeSeasonAction).toHaveBeenCalledWith({ seasonId: 7 }));
+  });
+});
+
+describe("a season deleted in another tab (round 8)", () => {
+  it("a failed write reloads the page, so a deleted season shows its deleted state", async () => {
+    router.refresh.mockClear();
+    actions.resumeSeasonAction.mockImplementation(async () => ({ success: false, error: "Season not found" }) as never);
+    render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(actions.resumeSeasonAction).toHaveBeenCalled());
+    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
+  });
+});
+
+describe("one A race per season (round 8)", () => {
+  it("the race sheet says before Save that the old A race becomes a B race", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    fireEvent.click(within(within(sheet).getByRole("group", { name: "Priority" })).getByRole("button", { name: "B" }));
+    expect(within(sheet).queryByText(/becomes a B race/)).toBeNull();
+    fireEvent.click(within(within(sheet).getByRole("group", { name: "Priority" })).getByRole("button", { name: "A" }));
+    expect(within(sheet).getByText("“Jevnaker Halv Full Distanse” becomes a B race.")).toBeTruthy();
+  });
+
+  it("says nothing when the race edited is the A race", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /Jevnaker Halv Full Distanse/ }));
+    expect(screen.queryByText(/becomes a B race/)).toBeNull();
   });
 });
 
@@ -412,13 +482,44 @@ describe("phase length in weeks or days (fix round 4)", () => {
     await waitFor(() => expect(actions.setPhaseAction).toHaveBeenCalledWith(expect.objectContaining({ cycleId: 2, durationDays: 84 })));
   });
 
-  it("Days to Weeks keeps days and says so when the days are not whole weeks", () => {
+  it("Days to Weeks switches to weeks and says how the days were rounded; the unit shown is the unit saved (round 8)", async () => {
     render(<SeasonDetailClient {...base} />);
     fireEvent.click(within(screen.getAllByTestId("phase-row")[2]).getAllByRole("button")[1]);
     fireEvent.click(screen.getByRole("button", { name: "Weeks" }));
-    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("10");
-    expect(screen.getByRole("button", { name: "Days" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText("10 days is not a whole number of weeks, so the length stays in days.")).toBeTruthy();
+    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("1");
+    expect(screen.getByRole("button", { name: "Weeks" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("10 days is not a whole number of weeks, so it is now 1 week.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save phase" }));
+    await waitFor(() => expect(actions.setPhaseAction).toHaveBeenCalledWith(expect.objectContaining({ cycleId: 3, durationWeeks: 3, durationDays: null })));
+  });
+
+  it("a length out of range says the range instead of a bare Invalid input (round 8)", () => {
+    const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[2]).getAllByRole("button")[1]);
+    const save = screen.getByRole("button", { name: "Save phase" });
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "365" } });
+    expect(reasonOf(save)).toBe("Pick 1 to 364 days.");
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "9999999" } });
+    expect(reasonOf(save)).toBe("Pick 1 to 364 days.");
+    fireEvent.click(screen.getByRole("button", { name: "Weeks" }));
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "53" } });
+    expect(reasonOf(save)).toBe("Pick 1 to 52 weeks.");
+    expect(actions.setPhaseAction).not.toHaveBeenCalled();
+  });
+
+  it("the sheet's dates follow the length as it is typed (round 8)", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[0]).getAllByRole("button")[1]);
+    const sheet = screen.getByRole("region", { name: "Aerobic base + strength" });
+    const text = () => sheet.textContent!.replace(/\u00a0/g, " ");
+    expect(text()).toContain("16 Nov – 10 Jan");
+    fireEvent.change(within(sheet).getByLabelText("Length"), { target: { value: "4" } });
+    expect(text()).toContain("16 Nov – 13 Dec");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Days" }));
+    fireEvent.change(within(sheet).getByLabelText("Length"), { target: { value: "10" } });
+    expect(text()).toContain("16 – 25 Nov");
   });
 });
 
@@ -452,9 +553,11 @@ describe("the phase bar and badges match the Plan list (fix round 6)", () => {
     expect(tones()).toEqual(["next", "grey", "grey"]);
   });
 
-  it("gives a start inside the week with its date (J4-17)", () => {
+  it("gives a start inside the week in the same date format as a later one (J4-17, round 8)", () => {
     render(<SeasonDetailClient {...base} />);
-    expect(screen.getAllByTestId("phase-row")[0].textContent?.replace(/\u00a0/g, " ")).toContain("Starts Mon 16 Nov");
+    const text = screen.getAllByTestId("phase-row")[0].textContent?.replace(/\u00a0/g, " ");
+    expect(text).toContain("Starts 16 Nov");
+    expect(text).not.toContain("Mon");
   });
 });
 
