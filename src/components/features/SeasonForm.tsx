@@ -14,7 +14,6 @@ import { useBack, useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink"
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import {
   ButtonReason,
-  Chip,
   DESTRUCTIVE_TEXT,
   FIELD,
   FormHeader,
@@ -22,8 +21,10 @@ import {
   LABEL,
   PRIMARY_BUTTON,
   PinnedBar,
+  RaceKindChips,
+  RacePriorityRow,
   RadioCard,
-  Segmented,
+  TriDistanceOptions,
 } from "@/components/features/season-ui";
 import Link from "next/link";
 import { useState } from "react";
@@ -50,14 +51,6 @@ type Props =
       running: RunningBlock | null;
       scheduled: ScheduledDraft | null;
     };
-
-const DISCIPLINES: { value: RaceDiscipline; label: string }[] = [
-  { value: "triathlon", label: "Triathlon" },
-  { value: "run", label: "Run" },
-  { value: "ride", label: "Ride" },
-  { value: "swim", label: "Swim" },
-  { value: "other", label: "Other" },
-];
 
 const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started" };
 
@@ -266,37 +259,14 @@ export function SeasonForm(props: Props) {
               <input aria-label="Race date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={INNER_FIELD} />
               {discipline === "triathlon" ? (
                 <select aria-label="Distance" value={distance} onChange={(e) => setDistance(e.target.value as TriDistance)} className={INNER_FIELD}>
-                  <option value="sprint">Sprint</option>
-                  <option value="olympic">Olympic</option>
-                  <option value="half">Half</option>
-                  <option value="full">Full</option>
+                  <TriDistanceOptions />
                 </select>
               ) : (
                 <input aria-label="Distance in km" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} placeholder="km" className={INNER_FIELD} />
               )}
             </div>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Race kind">
-              {DISCIPLINES.map((d) => (
-                <Chip key={d.value} pressed={discipline === d.value} onClick={() => setDiscipline(d.value)}>
-                  {d.label}
-                </Chip>
-              ))}
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className={LABEL}>Priority</span>
-              <Segmented
-                label="Priority"
-                value={priority}
-                onChange={setPriority}
-                track="bg-widget-2"
-                className="w-[168px]"
-                options={[
-                  { value: "A", label: "A" },
-                  { value: "B", label: "B" },
-                  { value: "C", label: "C" },
-                ]}
-              />
-            </div>
+            <RaceKindChips label="Race kind" value={discipline} onChange={setDiscipline} />
+            <RacePriorityRow value={priority} onChange={setPriority} />
             {hasRace && !raceComplete && <p className="text-[13px] text-muted-foreground">Give the race a name and a date, or leave both empty.</p>}
           </section>
         )}
