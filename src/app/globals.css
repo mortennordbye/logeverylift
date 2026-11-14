@@ -477,19 +477,16 @@ select {
 /* Home edit mode: widgets jiggle a little, as on the iPhone home screen.
    Off for anyone who asks for less motion. */
 @keyframes home-jiggle {
-  0%, 100% { transform: rotate(-1.1deg); }
-  50% { transform: rotate(1.1deg); }
-}
-@keyframes home-jiggle-sm {
-  0%, 100% { transform: rotate(-0.35deg); }
-  50% { transform: rotate(0.35deg); }
+  0%, 100% { transform: rotate(calc(-1 * var(--jiggle, 1.1deg))); }
+  50% { transform: rotate(var(--jiggle, 1.1deg)); }
 }
 .home-jiggle {
   animation: home-jiggle 0.28s ease-in-out infinite;
   transform-origin: 50% 50%;
 }
+/* A large widget turns less, so its far edges do not swing wide. */
 .home-jiggle[data-size="l"] {
-  animation-name: home-jiggle-sm;
+  --jiggle: 0.35deg;
 }
 @media (prefers-reduced-motion: reduce) {
   .home-jiggle {

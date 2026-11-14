@@ -58,21 +58,23 @@ function Days({ states }: { states: { date: string; state: DayState; count: numb
   );
 }
 
+/**
+ * The legend's words come from CSS (`content: attr(...)`): it is decoration
+ * (aria-hidden), and as DOM text "Done" would clash with Today's "Done" chip
+ * for anyone finding that by its text.
+ */
 function Legend() {
-  const item = "flex items-center gap-[5px] text-[11px] font-medium text-muted-foreground";
+  const item = "flex items-center gap-[5px] text-[11px] font-medium text-muted-foreground after:content-[attr(data-label)]";
   return (
     <div className="mt-2.5 flex gap-3" aria-hidden>
-      <span className={item}>
+      <span className={item} data-label="Done">
         <i className="h-2 w-2 rounded-full bg-brand-fill" />
-        Done
       </span>
-      <span className={item}>
+      <span className={item} data-label="Missed">
         <i className="h-2 w-2 rounded-full bg-muted-foreground" />
-        Missed
       </span>
-      <span className={item}>
+      <span className={item} data-label="Planned">
         <i className="h-2 w-2 rounded-full ring-[1.5px] ring-inset ring-muted-foreground" />
-        Planned
       </span>
     </div>
   );

@@ -169,6 +169,10 @@ test("E3: Endurance today below Week still starts the guided player", async ({ p
   await done(page);
 
   await page.reload();
+  // React reveals streamed parts in batches after the load event; until then
+  // they sit in hidden containers in the order they finished, not page order.
+  await expect(page.getByTestId("endurance-today")).toBeVisible();
+  await expect(page.getByTestId("week-strip")).toBeVisible();
   const order = await page.evaluate(() =>
     Array.from(document.querySelectorAll<HTMLElement>("[data-testid]"))
       .map((el) => el.dataset.testid)
@@ -245,14 +249,17 @@ test("drag a widget in the grid; the order persists after a reload", async ({ pa
   await page.getByRole("button", { name: "Edit home" }).click();
   await expect.poll(() => tiles(page)).toEqual(["title", "today", "week"]);
 
+  // Today is taller than a short screen's room above Week: bring the seam
+  // between them to the middle, so both are under the pointer.
+  await tile(page, "week").evaluate((el) => el.scrollIntoView({ block: "center" }));
   const from = (await tile(page, "week").boundingBox())!;
   const to = (await tile(page, "today").boundingBox())!;
   // Press near Week's top edge: on a short screen the rest of it is below the fold.
   await page.mouse.move(from.x + from.width / 2, from.y + 40);
   await page.mouse.down();
-  // Past the 8 px activation distance, then onto Today, in steps.
+  // Past the 8 px activation distance, then onto Today's lower part, in steps.
   await page.mouse.move(from.x + from.width / 2, from.y + 20, { steps: 5 });
-  await page.mouse.move(to.x + to.width / 2, to.y + 30, { steps: 15 });
+  await page.mouse.move(to.x + to.width / 2, to.y + to.height - 40, { steps: 15 });
   await expect.poll(() => tiles(page)).toEqual(["title", "week", "today"]);
   await page.mouse.up();
   await page.clock.runFor(100);
@@ -262,6 +269,8 @@ test("drag a widget in the grid; the order persists after a reload", async ({ pa
   await expect.poll(async () => (await layoutOf(userId))?.items.slice(0, 3).map((i) => i.id)).toEqual(["title", "week", "today"]);
 
   await page.reload();
+  await expect(page.getByTestId("today-card")).toBeVisible();
+  await expect(page.getByTestId("week-strip")).toBeVisible();
   const order = await page.evaluate(() =>
     Array.from(document.querySelectorAll<HTMLElement>("[data-testid]"))
       .map((el) => el.dataset.testid)
