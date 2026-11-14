@@ -3,7 +3,7 @@
 import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, DESTRUCTIVE_TEXT, ErrorLine, INNER_FIELD, LABEL, PRIMARY_BUTTON, RACE_KIND_LABELS, RaceKindChips, RacePriorityRow, SectionLabel, Segmented, TriDistanceOptions } from "@/components/features/season-ui";
+import { ButtonReason, Chip, DESTRUCTIVE_TEXT, ErrorLine, INNER_FIELD, LABEL, PRIMARY_BUTTON, RACE_KIND_LABELS, RaceKindChips, RacePriorityRow, SectionLabel, Segmented, SelectField, TriDistanceOptions } from "@/components/features/season-ui";
 import {
   addRaceAction,
   clearReplanAction,
@@ -558,10 +558,10 @@ export function SeasonDetailClient(p: Props) {
             {race.discipline === "triathlon" ? (
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>Distance</span>
-                <select value={race.distance ?? ""} onChange={(e) => setRace({ ...race, distance: (e.target.value || null) as TriDistance | null })} className={INNER_FIELD}>
+                <SelectField value={race.distance ?? ""} onChange={(v) => setRace({ ...race, distance: (v || null) as TriDistance | null })}>
                   <TriDistanceOptions />
                   <option value="">Not set</option>
-                </select>
+                </SelectField>
               </label>
             ) : (
               <label className="flex flex-col gap-1.5">

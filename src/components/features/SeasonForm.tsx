@@ -25,6 +25,7 @@ import {
   RaceKindChips,
   RacePriorityRow,
   RadioCard,
+  SelectField,
   TriDistanceOptions,
 } from "@/components/features/season-ui";
 import Link from "next/link";
@@ -264,9 +265,9 @@ export function SeasonForm(props: Props) {
               {discipline === "triathlon" ? (
                 <label className="flex flex-col gap-1.5">
                   <span className={LABEL}>Distance</span>
-                  <select value={distance} onChange={(e) => setDistance(e.target.value as TriDistance)} className={INNER_FIELD}>
+                  <SelectField value={distance} onChange={(v) => setDistance(v as TriDistance)}>
                     <TriDistanceOptions />
-                  </select>
+                  </SelectField>
                 </label>
               ) : (
                 <label className="flex flex-col gap-1.5">

@@ -149,6 +149,33 @@ export function RaceKindChips({ value, onChange }: { value: RaceDiscipline; onCh
   return <ChipChoice label="Sport" value={value} options={RACE_KINDS.map((d) => ({ value: d, label: RACE_KIND_LABELS[d] }))} onChange={onChange} />;
 }
 
+/**
+ * A select drawn as an inner field with a chevron. `appearance-none`: WebKit
+ * draws its own select about 22 px tall and ignores the height otherwise.
+ */
+export function SelectField({ value, onChange, children }: { value: string; onChange: (v: string) => void; children: React.ReactNode }) {
+  return (
+    <span className="relative flex">
+      <select value={value} onChange={(e) => onChange(e.target.value)} className={`${INNER_FIELD} h-11 appearance-none pr-9`}>
+        {children}
+      </select>
+      <svg
+        aria-hidden="true"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+      >
+        <path d="M6 9l6 6 6-6" />
+      </svg>
+    </span>
+  );
+}
+
 /** The triathlon distances of a race form's select, shortest first. */
 export function TriDistanceOptions() {
   return (

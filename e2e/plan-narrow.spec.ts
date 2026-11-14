@@ -219,3 +219,18 @@ test("at 320 px counts stay whole, no line can start with a dot, and long names 
   expect(await breakableJoins(confirm)).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("delete-confirm-320.png") });
 });
+
+test("at 320 px the race distance select is a 44 px tap target, on New season and in the race sheet (round 8 B15)", async ({ page }, testInfo) => {
+  const { seasonId } = await plan(testInfo.parallelIndex);
+  await page.goto("/seasons/new");
+  const onForm = page.getByRole("combobox", { name: "Distance" });
+  await expect(onForm).toBeVisible();
+  expect((await onForm.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+
+  await page.goto(`/seasons/${seasonId}`);
+  await page.getByRole("button", { name: "+ Add race" }).click();
+  const inSheet = page.getByRole("region", { name: "New race" }).getByRole("combobox", { name: "Distance" });
+  await expect(inSheet).toBeVisible();
+  expect((await inSheet.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  await page.screenshot({ path: testInfo.outputPath("race-sheet-320.png") });
+});
