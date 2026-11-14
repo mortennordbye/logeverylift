@@ -31,10 +31,10 @@ It makes a season, not a cycle: "Make a triathlon plan" in New season (`/seasons
 
 | Day | Session |
 |---|---|
-| 1 Mon | **Workout A** — Squat & Horizontal (Front Squat, DB Bench, Pendlay Row, Bulgarian Split Squat, Seated Calf Raise, Pallof Hold) |
-| 2 Tue | Run — Threshold Intervals |
-| 3 Wed | Bike — Endurance + Swim |
-| 4 Thu | **Workout B** — Hinge & Vertical (RDL, Pull-up, DB Shoulder Press, Seated Leg Curl, Face Pull, Cable Crunch) |
+| 1 Mon | **Workout A** · Squat & horizontal (Front Squat, DB Bench, Pendlay Row, Bulgarian Split Squat, Seated Calf Raise, Pallof Hold) |
+| 2 Tue | Run · Threshold intervals |
+| 3 Wed | Bike · Endurance + swim |
+| 4 Thu | **Workout B** · Hinge & vertical (RDL, Pull-up, DB Shoulder Press, Seated Leg Curl, Face Pull, Cable Crunch) |
 | 5 Fri | Recovery Swim |
 | 6 Sat | Long Run |
 | 7 Sun | Long Bike + Brick Run |

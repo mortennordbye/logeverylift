@@ -1,12 +1,12 @@
 {
-  "cycleName": "Triathlon Build · Intermediate — 16 wk",
+  "cycleName": "Triathlon Build · Intermediate · 16 wk",
   "durationWeeks": 16,
   "goal": "build",
   "level": "intermediate",
   "days": [
     {
       "dayOfWeek": 1,
-      "label": "Workout A — Squat & Horizontal",
+      "label": "Workout A · Squat & horizontal",
       "exercises": [
         {
           "name": "Front Squat",
@@ -170,7 +170,7 @@
     },
     {
       "dayOfWeek": 2,
-      "label": "Run — Threshold Intervals",
+      "label": "Run · Threshold intervals",
       "exercises": [
         {
           "name": "Run",
@@ -224,7 +224,7 @@
     },
     {
       "dayOfWeek": 3,
-      "label": "Bike — Endurance + Swim",
+      "label": "Bike · Endurance + swim",
       "exercises": [
         {
           "name": "Bike",
@@ -293,7 +293,7 @@
     },
     {
       "dayOfWeek": 4,
-      "label": "Workout B — Hinge & Vertical",
+      "label": "Workout B · Hinge & vertical",
       "exercises": [
         {
           "name": "Romanian Deadlift",
