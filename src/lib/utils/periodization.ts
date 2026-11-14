@@ -416,9 +416,13 @@ export function formatPeriodizationSummary(
     const wk = p.weeksUntilTaper === 1 ? "wk" : "wks";
     note = `At peak · taper in ${p.weeksUntilTaper} ${wk}.`;
   } else if (p.phase === "taper") {
-    note = "Tapering into race week - easing volume to arrive fresh.";
+    note = "Tapering into race week, easing volume to arrive fresh.";
+  } else if (p.phase === "peak") {
+    note = "Peak block at race-prep volume.";
   } else {
-    note = "Peak block - race-prep volume.";
+    // A typed phase of a season (general, base, build, transition) has no
+    // peak inside it to count down to: give this week's share only.
+    note = `This week ~${pct}% of peak volume.`;
   }
   // Append the no-wearable performance nudge when it adjusted this week's volume.
   if (p.adaptationNote) note = `${note} ${p.adaptationNote}`;

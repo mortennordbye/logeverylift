@@ -240,7 +240,29 @@ describe("formatPeriodizationSummary", () => {
 
   it("describes the taper phase", () => {
     const { note } = summary(24, 24, "build");
-    expect(note).toBe("Tapering into race week - easing volume to arrive fresh.");
+    expect(note).toBe("Tapering into race week, easing volume to arrive fresh.");
+  });
+
+  it("never calls a general, base or build phase of a season a peak block", () => {
+    // A typed phase has no peak or taper inside it to count down to (getCyclePeriodization).
+    const phaseInput = (phase: PeriodizationSummaryInput["phase"], multiplier: number): PeriodizationSummaryInput => ({
+      goal: "build",
+      phase,
+      phaseLabel: "General prep",
+      currentWeek: 1,
+      totalWeeks: 8,
+      multiplier,
+      isDeload: false,
+      weeksUntilPeak: 0,
+      weeksUntilTaper: 0,
+    });
+    for (const phase of ["general", "base", "build", "transition"] as const) {
+      const { note } = formatPeriodizationSummary(phaseInput(phase, 0.8));
+      expect(note).not.toMatch(/peak block|race-prep/i);
+    }
+    expect(formatPeriodizationSummary(phaseInput("general", 0.8)).note).toBe("This week ~80% of peak volume.");
+    expect(formatPeriodizationSummary(phaseInput("peak", 1)).note).toBe("Peak block at race-prep volume.");
+    expect(formatPeriodizationSummary(phaseInput("taper", 0.6)).note).toBe("Tapering into race week, easing volume to arrive fresh.");
   });
 
   it("holds steady for maintain goal", () => {
