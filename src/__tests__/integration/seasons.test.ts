@@ -144,7 +144,7 @@ describe("races and the re-plan flag (D17)", () => {
     expect(moved.success).toBe(true);
     const row = await seasonRow(id);
     expect(row.replanFlaggedAt).not.toBeNull();
-    expect(row.replanReason).toBe('A race "Haugesund" moved from 2027-08-22 to 2027-08-29');
+    expect(row.replanReason).toBe('A race "Haugesund" moved from 22 Aug 2027 to 29 Aug 2027');
 
     // The phases were not touched by the flag.
     expect((await getSeasonDetail(me, id))!.replan).toMatchObject({ flagged: true });
@@ -153,6 +153,46 @@ describe("races and the re-plan flag (D17)", () => {
     // A triathlon race keeps no metres; another race keeps no triathlon distance.
     await addRaceAction({ seasonId: id, name: "10k", raceDate: "2027-05-01", discipline: "run", distance: "full", distanceMeters: 10000, priority: "C" });
     expect((await racesOf(id)).at(-1)).toMatchObject({ distance: null, distanceMeters: 10000 });
+  });
+
+  it("moves the season end with the A race and writes dates in words in the reason", async () => {
+    const id = await newSeason(me, day(0), day(120));
+    await addRaceAction({ seasonId: id, ...race, raceDate: day(120) });
+    const [a] = await racesOf(id);
+    expect((await updateRaceAction({ seasonId: id, raceId: a.id, raceDate: day(134) })).success).toBe(true);
+    expect((await seasonRow(id)).endDate).toBe(day(134));
+    const words = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).replace("Sept", "Sep");
+    expect((await seasonRow(id)).replanReason).toBe(`A race "Haugesund 70.3" moved from ${words(day(120))} to ${words(day(134))}`);
+    // Earlier again: the end follows it back.
+    await updateRaceAction({ seasonId: id, raceId: a.id, raceDate: day(127) });
+    expect((await seasonRow(id)).endDate).toBe(day(127));
+  });
+
+  it("refuses a race date in the past or outside the season, and saves nothing", async () => {
+    const id = await newSeason(me, day(10), day(120));
+    expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(-1) })).toEqual({ success: false, error: "Pick a race date from today on." });
+    expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(5), priority: "B" })).toMatchObject({
+      success: false,
+      error: expect.stringContaining("on or after the season start"),
+    });
+    expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(130), priority: "B" })).toMatchObject({
+      success: false,
+      error: expect.stringContaining("on or before the season end"),
+    });
+    expect(await racesOf(id)).toEqual([]);
+    expect((await seasonRow(id)).endDate).toBe(day(120));
+  });
+
+  it("removing the race a flag was about clears the flag", async () => {
+    const id = await newSeason(me, day(0), day(120));
+    await addRaceAction({ seasonId: id, ...race, raceDate: day(120) });
+    await addRaceAction({ seasonId: id, ...race, name: "Tune-up", raceDate: day(60), priority: "B" });
+    await clearReplanAction({ seasonId: id });
+    const tune = (await racesOf(id)).find((r) => r.name === "Tune-up")!;
+    await updateRaceAction({ seasonId: id, raceId: tune.id, raceDate: day(70) });
+    expect((await seasonRow(id)).replanReason).toContain('B race "Tune-up" moved');
+    await removeRaceAction({ seasonId: id, raceId: tune.id });
+    expect(await seasonRow(id)).toMatchObject({ replanFlaggedAt: null, replanReason: null });
   });
 
   it("refuses races with the endurance switch off, and a race on a phase cycle", async () => {

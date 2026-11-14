@@ -150,7 +150,7 @@ New table `seasons` (*new*):
 | `end_date` | date, not null, >= start | Last day |
 | `next_goal` | text, null, max 500 | What comes after ("Full distance in 2028") |
 | `replan_flagged_at` | timestamp, null | Set when a race change needs a re-plan (2.6). Null = no flag |
-| `replan_reason` | text, null | Plain text for the user and the AI: "A race Ironman 70.3 moved from 2027-08-22 to 2027-08-29" |
+| `replan_reason` | text, null | Plain text for the user and the AI: "A race Ironman 70.3 moved from 22 Aug 2027 to 29 Aug 2027" |
 | `version` | integer, default 1 | T9 |
 | `deleted_at` | timestamp, null | T6 |
 | `created_at`, `updated_at` | timestamp | |

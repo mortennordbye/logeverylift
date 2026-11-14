@@ -187,15 +187,15 @@ export function replanReason(before: RaceLike[], after: RaceLike[]): string | nu
   for (const r of after) {
     const was = prev.get(r.id);
     if (!was) {
-      if (r.priority === "A") out.push(`${raceLabel(r)} added on ${r.raceDate}`);
+      if (r.priority === "A") out.push(`${raceLabel(r)} added on ${dayLabel(r.raceDate)}`);
       continue;
     }
-    if (was.raceDate !== r.raceDate) out.push(`${raceLabel(r)} moved from ${was.raceDate} to ${r.raceDate}`);
+    if (was.raceDate !== r.raceDate) out.push(`${raceLabel(r)} moved from ${dayLabel(was.raceDate)} to ${dayLabel(r.raceDate)}`);
     if (was.priority !== r.priority && (was.priority === "A" || r.priority === "A")) {
       out.push(`"${r.name}" changed from ${was.priority} priority to ${r.priority} priority`);
     }
   }
-  for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push(`${raceLabel(r)} on ${r.raceDate} removed`);
+  for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push(`${raceLabel(r)} on ${dayLabel(r.raceDate)} removed`);
   return out.length ? out.join("; ") : null;
 }
 
