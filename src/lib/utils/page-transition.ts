@@ -64,5 +64,9 @@ export function resolveDirection(
   source: NavSource,
 ): Direction {
   if (source === "history") return "none";
+  // A pop we initiated is a step back whatever the depths: never a tab switch,
+  // and Back can return to a page as deep as this one (History to a friend's
+  // page) or to a tab root (History to the home).
+  if (source === "programmatic-back") return from === to ? "none" : "back";
   return getDirection(from, to);
 }
