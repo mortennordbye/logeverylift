@@ -290,7 +290,7 @@ describe("Did you do it? from a past row", () => {
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     expect(within(sheet).getByRole("button", { name: "Yes, I did it" }).getAttribute("aria-pressed")).toBe("false");
     expect(within(sheet).getByRole("button", { name: "Missed" }).getAttribute("aria-pressed")).toBe("false");
-    expect(within(sheet).queryByLabelText("Time (h:mm)")).toBeNull();
+    expect(within(sheet).queryByLabelText("Time")).toBeNull();
     expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -300,7 +300,7 @@ describe("Did you do it? from a past row", () => {
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     expect(within(sheet).getByText("No run found for this day. Did you do it?")).toBeTruthy();
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
-    fireEvent.change(within(sheet).getByLabelText("Time (h:mm)"), { target: { value: "1:05" } });
+    fireEvent.change(within(sheet).getByLabelText("Time"), { target: { value: "1:05" } });
     fireEvent.click(within(sheet).getByRole("button", { name: "Effort 6" }));
     await act(async () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
@@ -314,12 +314,23 @@ describe("Did you do it? from a past row", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     fireEvent.click(within(sheet).getByRole("button", { name: "Missed" }));
-    expect(within(sheet).queryByLabelText("Time (h:mm)")).toBeNull();
+    expect(within(sheet).queryByLabelText("Time")).toBeNull();
     await act(async () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
     });
     expect(updatePlannedSession).toHaveBeenCalledWith({ op: "miss", id: 1 });
     expect(confirmPlannedDone).not.toHaveBeenCalled();
+  });
+
+  it("has no colon in its words, the Time label and the time error included (round 8 B16)", () => {
+    renderWeek({ sessions: past });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    expect(within(sheet).getByLabelText("Time")).toBeTruthy();
+    fireEvent.change(within(sheet).getByLabelText("Time"), { target: { value: "abc" } });
+    expect(within(sheet).getByText("Type minutes, such as 45, or hours and minutes, such as 1.30.")).toBeTruthy();
+    expect(sheet.textContent).not.toMatch(/[:—]/);
   });
 
   it("labels Distance as short as Time, with the unit in the field, so both fit one line at 320 px (round 8)", () => {
@@ -352,7 +363,7 @@ describe("Did you do it? from a past row", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
-    fireEvent.change(within(sheet).getByLabelText("Time (h:mm)"), { target: { value: "1:05" } });
+    fireEvent.change(within(sheet).getByLabelText("Time"), { target: { value: "1:05" } });
     fireEvent.change(within(sheet).getByLabelText(/^Distance/), { target: { value: "-5" } });
     expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
     expect(within(sheet).getByText("Type a distance of 0 or more.")).toBeTruthy();
@@ -557,7 +568,7 @@ describe("a dimmed Save says what is missing (J5-10)", () => {
     expect(reasonOf(save)).toBe("Pick Yes or Missed.");
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
     expect(reasonOf(save)).toBe("Type a time.");
-    fireEvent.change(within(sheet).getByLabelText("Time (h:mm)"), { target: { value: "1:05" } });
+    fireEvent.change(within(sheet).getByLabelText("Time"), { target: { value: "1:05" } });
     expect(save.getAttribute("aria-describedby")).toBeNull();
     fireEvent.click(within(sheet).getByRole("button", { name: "Missed" }));
     expect(save.getAttribute("aria-describedby")).toBeNull();
