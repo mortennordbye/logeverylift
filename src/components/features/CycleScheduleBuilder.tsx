@@ -53,9 +53,9 @@ const TINT = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
 const PRIMARY =
   "h-[52px] w-full rounded-2xl bg-brand text-primary-foreground text-base font-semibold active:opacity-80 disabled:opacity-50";
 
-/** What a slot runs, in words: its program, else its label, else Rest. */
+/** What a slot runs, in words: its label (as the cycle page shows it), else its program, else Rest. */
 function slotName(slot: Slot): string {
-  return slot.program?.name ?? slot.label ?? (isRest(slot) ? "Rest" : "Workout");
+  return slot.label ?? slot.program?.name ?? (isRest(slot) ? "Rest" : "Workout");
 }
 
 /** A slot with no program and no workout: a rest day. */
@@ -681,7 +681,7 @@ function RotationBuilder({
   const outline = "flex-1 h-11 rounded-xl border border-[rgba(244,244,245,0.12)] text-[15px] font-medium active:opacity-70 disabled:opacity-40";
   return (
     <div className="flex flex-col gap-[18px]">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext id="cycle-rotation" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={localSlots.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           {localSlots.length > 0 && (
             <ol className="flex flex-col rounded-2xl bg-widget overflow-hidden">

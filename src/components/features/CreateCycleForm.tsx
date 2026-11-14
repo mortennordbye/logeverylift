@@ -10,12 +10,15 @@
  * exists: its sessions are built for it.
  *
  * Step 2 (`CycleSetupSessions`): the sessions, saved as they are added. Create
- * cycle starts the draft today, or schedules it for the chosen day.
+ * cycle starts the draft today, or schedules it for the chosen day. Cancel
+ * discards the draft this setup made.
  */
 
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
+import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
-import { createTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
+import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { addDays, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { choiceFor, startDayFor, type StartChoice, type StartDays } from "@/lib/utils/cycle-setup";
 import { shortDay } from "@/lib/utils/seasons";
@@ -55,12 +58,12 @@ export function setupHref(cycleId: number, start: string, step1 = false): string
 // Shared parts
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SetupHeader({ left }: { left: ReactNode }) {
+function SetupHeader({ left, right }: { left: ReactNode; right?: ReactNode }) {
   return (
     <header className="grid grid-cols-[1fr_auto_1fr] items-center px-2 pt-4 shrink-0">
       <div className="justify-self-start">{left}</div>
       <h1 className="text-base font-semibold">New cycle</h1>
-      <span />
+      <div className="justify-self-end">{right}</div>
     </header>
   );
 }
@@ -132,8 +135,11 @@ export function CreateCycleForm({
   days,
   draft,
   start,
+  scheduled,
 }: {
   days: StartDays;
+  /** Another draft scheduled to start later: a later start for this one replaces it (scheduleCycle). */
+  scheduled?: { name: string; day: string } | null;
   /** The draft made by an earlier Next, when the user came back from step 2. */
   draft?: TrainingCycle;
   /** The start day chosen before, with `draft`. */
@@ -302,6 +308,11 @@ export function CreateCycleForm({
         {choice === "after" && days.afterCurrent && (
           <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(days.afterCurrent)}</p>
         )}
+        {scheduled && startDay && startDay > days.today && (
+          <p className="-mt-2 text-[13px] text-muted-foreground">
+            {scheduled.name} is set to start {shortDay(scheduled.day).slice(4)}. This start replaces it.
+          </p>
+        )}
 
         <ChipGroup label="When it ends">
           {END_ACTIONS.map((a) => (
@@ -356,6 +367,21 @@ export function CycleSetupSessions({
   const returnTo = useReturnTo();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [discarding, setDiscarding] = useState(false);
+  const [discardBusy, setDiscardBusy] = useState(false);
+  const [discardError, setDiscardError] = useState("");
+
+  async function discard() {
+    setDiscardBusy(true);
+    setDiscardError("");
+    const result = await callAction(deleteTrainingCycle(cycle.id));
+    if (result.success) {
+      returnTo("/cycles");
+    } else {
+      setDiscardBusy(false);
+      setDiscardError(result.error);
+    }
+  }
 
   async function create() {
     setLoading(true);
@@ -377,6 +403,18 @@ export function CycleSetupSessions({
             ‹ Back
           </Link>
         }
+        right={
+          <button
+            type="button"
+            onClick={() => {
+              setDiscardError("");
+              setDiscarding(true);
+            }}
+            className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70"
+          >
+            Cancel
+          </button>
+        }
       />
       <div className="flex flex-col gap-[18px] px-4 pt-3">
         <StepProgress step={2} />
@@ -393,6 +431,36 @@ export function CycleSetupSessions({
           Create cycle
         </button>
       </PinnedBar>
+      <BottomSheet open={discarding} onClose={() => setDiscarding(false)}>
+        {discarding && (
+          <PlanSheetPanel label="Discard this cycle?">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-xl font-semibold">Discard this cycle?</h2>
+              <p className="text-sm text-muted-foreground">{cycle.name} and the sessions you added are deleted.</p>
+            </div>
+            {discardError && (
+              <p role="alert" className="text-sm text-[#ff6b5a]">
+                {discardError}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={discard}
+              disabled={discardBusy}
+              className="h-[52px] w-full rounded-2xl bg-[#c23a2e] text-white text-base font-semibold active:opacity-80 disabled:opacity-50"
+            >
+              {discardBusy ? "Discarding…" : "Discard cycle"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDiscarding(false)}
+              className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70"
+            >
+              Keep building
+            </button>
+          </PlanSheetPanel>
+        )}
+      </BottomSheet>
     </div>
   );
 }

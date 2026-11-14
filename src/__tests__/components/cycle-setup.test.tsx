@@ -3,6 +3,7 @@ import { CreateCycleForm, CycleSetupSessions } from "@/components/features/Creat
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
 import {
   createTrainingCycle,
+  deleteTrainingCycle,
   removeCycleSlot,
   reorderCycleSlots,
   startTrainingCycle,
@@ -22,6 +23,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/actions/training-cycles", () => ({
   createTrainingCycle: vi.fn(),
+  deleteTrainingCycle: vi.fn(),
   updateTrainingCycle: vi.fn(),
   startTrainingCycle: vi.fn(),
   removeCycleSlot: vi.fn(),
@@ -48,6 +50,7 @@ beforeEach(() => {
   vi.mocked(upsertCycleSlot).mockResolvedValue({ success: true, data: {} as never });
   vi.mocked(removeCycleSlot).mockResolvedValue({ success: true, data: undefined });
   vi.mocked(reorderCycleSlots).mockResolvedValue({ success: true, data: undefined });
+  vi.mocked(deleteTrainingCycle).mockResolvedValue({ success: true, data: undefined });
 });
 
 describe("step 1: the basics", () => {
@@ -114,6 +117,20 @@ describe("step 1: the basics", () => {
     expect(createTrainingCycle).not.toHaveBeenCalled();
   });
 
+  it("says which scheduled draft a later start replaces", () => {
+    const scheduled = { name: "Strength peak", day: "2026-12-12" };
+    render(<CreateCycleForm days={days} scheduled={scheduled} />);
+    const line = "Strength peak is set to start 12 Dec. This start replaces it.";
+    // Today starts the cycle at once: nothing is replaced.
+    expect(screen.queryByText(line)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Next Monday · 16 Nov" }));
+    expect(screen.getByText(line)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
+    expect(screen.queryByText(line)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-01" } });
+    expect(screen.getByText(line)).toBeTruthy();
+  });
+
   it("shows a refused write and stays on step 1", async () => {
     vi.mocked(createTrainingCycle).mockResolvedValue({ success: false, error: "Failed to create the cycle" });
     render(<CreateCycleForm days={days} />);
@@ -162,6 +179,31 @@ describe("step 2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
     await waitFor(() => expect(returnTo).toHaveBeenCalledWith("/cycles/3"));
     expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-16");
+  });
+
+  it("Cancel asks first, then discards the draft and goes back to Plan", async () => {
+    render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-11-16" endurance={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const sheet = screen.getByRole("region", { name: "Discard this cycle?" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Keep building" }));
+    expect(deleteTrainingCycle).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Discard this cycle?" })).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Discard this cycle?" })).getByRole("button", { name: "Discard cycle" }));
+    await waitFor(() => expect(returnTo).toHaveBeenCalledWith("/cycles"));
+    expect(deleteTrainingCycle).toHaveBeenCalledWith(3);
+    expect(startTrainingCycle).not.toHaveBeenCalled();
+  });
+
+  it("a refused discard shows in the sheet and stays on step 2", async () => {
+    vi.mocked(deleteTrainingCycle).mockResolvedValue({ success: false, error: "Failed to delete the cycle" });
+    render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-11-16" endurance={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const sheet = screen.getByRole("region", { name: "Discard this cycle?" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Discard cycle" }));
+    await waitFor(() => expect(within(sheet).getByRole("alert").textContent).toBe("Failed to delete the cycle"));
+    expect(returnTo).not.toHaveBeenCalled();
   });
 
   it("shows why the cycle did not start", async () => {
@@ -217,6 +259,18 @@ describe("rotation builder", () => {
     await waitFor(() => expect(removeCycleSlot).toHaveBeenCalledWith(21, 3));
   });
 
+  it("names the drag instructions the same on every render, so the server HTML hydrates", () => {
+    // dnd-kit numbers its ids from a module counter when DndContext has no id:
+    // the server and the browser count differently ("DndDescribedBy-0" vs "-4").
+    const describedBy = () => document.querySelector("[aria-roledescription='sortable']")?.getAttribute("aria-describedby");
+    const first = render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    const a = describedBy();
+    first.unmount();
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    expect(a).toBeTruthy();
+    expect(describedBy()).toBe(a);
+  });
+
   it("puts the order back when a reorder is refused", async () => {
     vi.mocked(reorderCycleSlots).mockResolvedValue({ success: false, error: "Failed to reorder the slots" });
     render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
@@ -247,6 +301,16 @@ describe("weekday builder", () => {
     await waitFor(() =>
       expect(upsertCycleSlot).toHaveBeenCalledWith({ trainingCycleId: 4, dayOfWeek: 7, daySlot: 3, programId: 11, label: "Upper A" }),
     );
+  });
+
+  it("a session with its own label shows the label, not the program name", () => {
+    const labelled = {
+      ...week,
+      slots: [slot({ id: 34, dayOfWeek: 3, daySlot: 1, label: "Legs PM", programId: 12, program: programs[1] })],
+    } as unknown as TrainingCycleWithSlots;
+    render(<CycleScheduleBuilder cycle={labelled} programs={programs} />);
+    expect(screen.getByRole("button", { name: "Legs PM" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Lower A" })).toBeNull();
   });
 
   it("the session sheet saves key session, brick link, auto, label and note with the endurance features on", async () => {

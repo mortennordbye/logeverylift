@@ -9,7 +9,7 @@
  */
 
 import { db } from "@/db";
-import { programExercises } from "@/db/schema";
+import { programExercises, trainingCycles } from "@/db/schema";
 import { CreateCycleForm, CycleSetupSessions } from "@/components/features/CreateCycleForm";
 import { HOME_UI } from "@/components/features/home/fonts";
 import { getActiveCycleForUser, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
@@ -20,10 +20,31 @@ import { userToday } from "@/lib/user-settings";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { nextMonday, type StartDays } from "@/lib/utils/cycle-setup";
 import { requireSession } from "@/lib/utils/session";
-import { and, count, inArray, isNull } from "drizzle-orm";
+import { and, asc, count, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * The other cycle set to start on a later day, if any. Only one can be
+ * (scheduleCycle), so a later start for this draft replaces it; step 1 says so.
+ */
+async function otherScheduled(userId: string, draftId: number | null) {
+  const [row] = await db
+    .select({ name: trainingCycles.name, day: trainingCycles.scheduledStartDate })
+    .from(trainingCycles)
+    .where(
+      and(
+        eq(trainingCycles.userId, userId),
+        isNotNull(trainingCycles.scheduledStartDate),
+        isNull(trainingCycles.deletedAt),
+        draftId ? ne(trainingCycles.id, draftId) : undefined,
+      ),
+    )
+    .orderBy(asc(trainingCycles.scheduledStartDate))
+    .limit(1);
+  return row?.day ? { name: row.name, day: row.day } : null;
+}
 
 export default async function NewCyclePage({
   searchParams,
@@ -47,7 +68,7 @@ export default async function NewCyclePage({
   if (!params.cycle) {
     return (
       <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
-        <CreateCycleForm days={days} />
+        <CreateCycleForm days={days} scheduled={await otherScheduled(auth.user.id, null)} />
       </div>
     );
   }
@@ -63,7 +84,7 @@ export default async function NewCyclePage({
   if (params.step === "1") {
     return (
       <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
-        <CreateCycleForm days={days} draft={cycle} start={start} />
+        <CreateCycleForm days={days} draft={cycle} start={start} scheduled={await otherScheduled(auth.user.id, cycle.id)} />
       </div>
     );
   }
