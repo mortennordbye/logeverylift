@@ -39,6 +39,7 @@ test("no Plan form screen shows the tab bar over its pinned button", async ({ pa
     await page.goto(path);
     const button = page.getByRole("button", { name: label, exact: true });
     await expect(button, path).toBeInViewport();
+    await page.screenshot({ path: testInfo.outputPath(`${path.replaceAll("/", "_")}.png`) });
     await expect(page.getByRole("link", { name: "Programs" }), `${path} shows the tab bar`).toBeHidden();
     // The pinned button is the top element at its own centre: nothing covers it.
     const onTop = await button.evaluate((el) => {

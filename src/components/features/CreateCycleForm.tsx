@@ -16,6 +16,7 @@
 
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { Chip, FormHeader, PinnedBar, StepProgress } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
@@ -48,7 +49,6 @@ const END_ACTIONS: { value: EndAction; label: string }[] = [
 ];
 
 const SECTION = "text-xs font-semibold tracking-[1px] uppercase text-muted-foreground";
-const TINT = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
 
 /** A setup URL: step 2 of `cycleId`, or step 1 of it with `step1`. */
 export function setupHref(cycleId: number, start: string, step1 = false): string {
@@ -59,65 +59,8 @@ export function setupHref(cycleId: number, start: string, step1 = false): string
 // Shared parts
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SetupHeader({ left, right }: { left: ReactNode; right?: ReactNode }) {
-  return (
-    <header className="grid grid-cols-[1fr_auto_1fr] items-center px-2 pt-4 shrink-0">
-      <div className="justify-self-start">{left}</div>
-      <h1 className="text-base font-semibold">New cycle</h1>
-      <div className="justify-self-end">{right}</div>
-    </header>
-  );
-}
-
-function StepProgress({ step }: { step: 1 | 2 }) {
-  return (
-    <div className="flex flex-col gap-2">
-      <span className={SECTION}>Step {step} of 2</span>
-      <div
-        className="grid grid-cols-2 gap-1 h-1"
-        role="progressbar"
-        aria-label={`Step ${step} of 2`}
-        aria-valuemin={1}
-        aria-valuemax={2}
-        aria-valuenow={step}
-      >
-        <div className="rounded-sm bg-brand" />
-        <div className={`rounded-sm ${step === 2 ? "bg-brand" : "bg-[#707076]"}`} />
-      </div>
-    </div>
-  );
-}
-
-/** The pinned bottom bar with one primary button. It covers the tab bar. */
-function PinnedBar({ children }: { children: ReactNode }) {
-  return (
-    <div
-      className="fixed inset-x-0 bottom-0 z-40 bg-[#111113] border-t border-hairline px-4 pt-4"
-      style={{ paddingBottom: "calc(28px + env(safe-area-inset-bottom, 0px))" }}
-    >
-      {children}
-    </div>
-  );
-}
-
 const PRIMARY =
   "h-[52px] w-full rounded-2xl bg-brand text-primary-foreground text-base font-semibold active:opacity-80 disabled:opacity-50";
-
-function Chip({ label, on, onClick, disabled }: { label: string; on: boolean; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={on}
-      disabled={disabled}
-      onClick={onClick}
-      className={`h-11 px-3.5 rounded-full border text-sm font-medium active:opacity-70 disabled:opacity-40 ${
-        on ? `border-brand ${TINT} text-foreground` : "border-[rgba(244,244,245,0.12)] text-[#c4c4c9]"
-      }`}
-    >
-      {label}
-    </button>
-  );
-}
 
 function ChipGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -191,7 +134,8 @@ export function CreateCycleForm({
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col" style={{ paddingBottom: "calc(140px + var(--kb-height, 0px))" }}>
-      <SetupHeader
+      <FormHeader
+        title="New cycle"
         left={
           <button type="button" onClick={cancel.go} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
             Cancel
@@ -200,7 +144,7 @@ export function CreateCycleForm({
       />
 
       <div className="flex flex-col gap-[22px] px-4 pt-3">
-        <StepProgress step={1} />
+        <StepProgress step={1} of={2} />
 
         <label className="flex flex-col gap-2">
           <span className={SECTION}>Name</span>
@@ -255,15 +199,16 @@ export function CreateCycleForm({
           {MAIN_LENGTHS.map((w) => (
             <Chip
               key={w}
-              label={`${w} weeks`}
-              on={!moreLengths && durationWeeks === w}
+              pressed={!moreLengths && durationWeeks === w}
               onClick={() => {
                 setMoreLengths(false);
                 setDurationWeeks(w);
               }}
-            />
+            >
+              {w} weeks
+            </Chip>
           ))}
-          <Chip label="Custom" on={moreLengths} onClick={() => setMoreLengths(true)} />
+          <Chip pressed={moreLengths} onClick={() => setMoreLengths(true)}>Custom</Chip>
         </ChipGroup>
         {moreLengths && (
           <label className="flex flex-col gap-2 -mt-2">
@@ -289,10 +234,10 @@ export function CreateCycleForm({
         )}
 
         <ChipGroup label="Start">
-          <Chip label="Today" on={choice === "today"} onClick={() => setChoice("today")} />
-          <Chip label={`Next Monday · ${shortDay(days.nextMonday).slice(4)}`} on={choice === "monday"} onClick={() => setChoice("monday")} />
-          <Chip label="Pick a date" on={choice === "date"} onClick={() => setChoice("date")} />
-          {days.afterCurrent && <Chip label="After current cycle" on={choice === "after"} onClick={() => setChoice("after")} />}
+          <Chip pressed={choice === "today"} onClick={() => setChoice("today")}>Today</Chip>
+          <Chip pressed={choice === "monday"} onClick={() => setChoice("monday")}>{`Next Monday · ${shortDay(days.nextMonday).slice(4)}`}</Chip>
+          <Chip pressed={choice === "date"} onClick={() => setChoice("date")}>Pick a date</Chip>
+          {days.afterCurrent && <Chip pressed={choice === "after"} onClick={() => setChoice("after")}>After current cycle</Chip>}
         </ChipGroup>
         {choice === "date" && (
           <label className="flex flex-col gap-2 -mt-2">
@@ -314,7 +259,7 @@ export function CreateCycleForm({
 
         <ChipGroup label="When it ends">
           {END_ACTIONS.map((a) => (
-            <Chip key={a.value} label={a.label} on={endAction === a.value} onClick={() => setEndAction(a.value)} />
+            <Chip key={a.value} pressed={endAction === a.value} onClick={() => setEndAction(a.value)}>{a.label}</Chip>
           ))}
         </ChipGroup>
 
@@ -395,7 +340,8 @@ export function CycleSetupSessions({
 
   return (
     <div className="flex flex-col" style={{ paddingBottom: "140px" }}>
-      <SetupHeader
+      <FormHeader
+        title="New cycle"
         left={
           <Link replace href={setupHref(cycle.id, start, true)} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
             ‹ Back
@@ -415,7 +361,7 @@ export function CycleSetupSessions({
         }
       />
       <div className="flex flex-col gap-[18px] px-4 pt-3">
-        <StepProgress step={2} />
+        <StepProgress step={2} of={2} />
         <h2 className="text-[22px] font-semibold">{cycle.scheduleType === "rotation" ? "Rotation order" : "Build the week"}</h2>
         <CycleScheduleBuilder cycle={cycle} programs={programs} endurance={endurance} />
         {error && (
