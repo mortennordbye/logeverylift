@@ -271,6 +271,12 @@ describe("season detail text (fix round 2)", () => {
     expect(within(first).getByText("Next").className).toContain("text-primary");
   });
 
+  it("sets the next goal apart from its label, so its capital letter does not sit mid-sentence (round 8)", () => {
+    render(<SeasonDetailClient {...base} season={{ ...base.season, nextGoal: "Hold it through the spring" }} />);
+    const line = screen.getByTestId("next-goal");
+    expect(line.textContent!.replace(/\u00a0/g, " ")).toBe("Next goal · Hold it through the spring");
+  });
+
   it("says Next for a first phase that is due and not scheduled", () => {
     render(<SeasonDetailClient {...base} today="2026-11-16" next={{ ...base.next, scheduled: false }} />);
     expect(screen.getAllByTestId("phase-row")[0].textContent).toContain("Next");

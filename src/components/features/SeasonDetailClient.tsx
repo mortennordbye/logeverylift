@@ -316,7 +316,12 @@ export function SeasonDetailClient(p: Props) {
           </span>
           {/* With no A race the hero card carries the goal. */}
           {p.season.goal && aRace && <span className="text-sm text-foreground/75">{p.season.goal}</span>}
-          {p.season.nextGoal && <span className="text-[13px] text-muted-foreground">Next goal is {p.season.nextGoal}</span>}
+          {/* The goal is the user's own words, set apart from the label (round 8). */}
+          {p.season.nextGoal && (
+            <span data-testid="next-goal" className="text-[13px] text-muted-foreground">
+              Next goal{" "}· {p.season.nextGoal}
+            </span>
+          )}
         </div>
 
         {race == null && phase == null && !confirmDelete && !confirmResume && errorLine}
