@@ -63,10 +63,17 @@ describe("resolveBack", () => {
     // A friend's name or a plan name says more than the route noun.
     const parent = { href: "/more/friends/abc", label: "Ada" };
     expect(resolveBack("/more/friends/abc", "/more/friends/abc/sessions/4", parent)).toEqual({ kind: "pop", label: "Ada" });
-    // The query does not change which page it is.
-    expect(resolveBack("/more/garmin?tab=day", "/more/garmin/activity/8", { href: "/more/garmin?tab=activities", label: "Activities" })).toEqual({
+    expect(resolveBack("/more/garmin?tab=activities", "/more/garmin/activity/8", { href: "/more/garmin?tab=activities", label: "Activities" })).toEqual({
       kind: "pop",
       label: "Activities",
+    });
+  });
+
+  it("names the page it pops to when only the path matches the fallback", () => {
+    // Opened from the Overview tab, Back returns to Overview, so it must not say "Activities".
+    expect(resolveBack("/more/garmin?tab=overview", "/more/garmin/activity/8", { href: "/more/garmin?tab=activities", label: "Activities" })).toEqual({
+      kind: "pop",
+      label: "Garmin",
     });
   });
 

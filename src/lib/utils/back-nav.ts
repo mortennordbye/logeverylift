@@ -66,6 +66,13 @@ function pathOf(url: string): string {
   return path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
 }
 
+function withoutHash(url: string): string {
+  const u = url.split("#")[0];
+  const [path, query] = u.split("?");
+  const p = path.length > 1 && path.endsWith("/") ? path.slice(0, -1) : path;
+  return query ? `${p}?${query}` : p;
+}
+
 function segments(path: string): string[] {
   return path.split("/").filter(Boolean);
 }
@@ -103,7 +110,9 @@ export function resolveBack(prev: string | null, current: string, fallback: Back
   if (NEVER.some((p) => prevPath === p || prevPath.startsWith(`${p}/`))) return toFallback;
   if (isForm(prevPath)) return toFallback;
   if (prevPath === pathOf(current)) return toFallback;
-  if (prevPath === pathOf(fallback.href)) return { kind: "pop", label: fallback.label };
+  // The fallback's label names its exact URL: the Garmin activities tab, not
+  // whichever Garmin tab the user was on.
+  if (withoutHash(prev) === withoutHash(fallback.href)) return { kind: "pop", label: fallback.label };
   return { kind: "pop", label: backLabelFor(prev) ?? "Back" };
 }
 
