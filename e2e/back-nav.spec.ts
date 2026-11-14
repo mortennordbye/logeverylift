@@ -137,6 +137,31 @@ test("two levels from the home: Friends' activity > Friends > Add Friends > Back
   await page.waitForURL(atPath("/"));
 });
 
+test("the Progress tab is kept in the URL, through Back, a reload and a link back", async ({ page }) => {
+  const records = () => page.getByRole("button", { name: "Records" });
+  await openMore(page);
+  await page.getByRole("link", { name: /Progress/ }).first().click();
+  await page.waitForURL(atPath("/more/metrics"));
+  await records().click();
+  await expect(records()).toHaveAttribute("aria-pressed", "true");
+  await expect(page).toHaveURL(/\/more\/metrics\?tab=records$/);
+  // The tab is not a history step: Back still leaves Progress.
+  await expect(back(page)).toHaveText("More");
+
+  // Away through the bottom nav, then the platform's Back.
+  await page.getByRole("link", { name: "Programs" }).click();
+  await page.waitForURL(atPath("/programs"));
+  await page.goBack();
+  await page.waitForURL("**/more/metrics?tab=records");
+  await expect(records()).toHaveAttribute("aria-pressed", "true");
+
+  await page.reload();
+  await expect(records()).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByRole("button", { name: "All Time" }).click();
+  await expect(page).toHaveURL(/\/more\/metrics$/);
+});
+
 test("a saved form does not stay in history: New season > Create > Back lands on Cycles", async ({ page }, testInfo) => {
   const settle = trackActions(page);
   await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.email, e2eUser(testInfo.parallelIndex).email));

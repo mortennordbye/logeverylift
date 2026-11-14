@@ -1493,6 +1493,14 @@ export function MetricsClient({
   // Only exercises with a thumb are built-ins with a drawing; a custom one may share a name.
   const selectedArt = useArtSpec(selectedRecord && artThumbs[selectedRecord.exerciseId] ? selectedRecord.exerciseName : null);
 
+  // The tab goes in the URL, so a reload, a link back here and Back all keep it.
+  // history.replaceState, which Next syncs with its router, rather than
+  // router.replace: no server round trip for the whole page on each tap.
+  function selectTab(tab: Tab) {
+    setActiveTab(tab);
+    window.history.replaceState(null, "", tab === "alltime" ? window.location.pathname : `${window.location.pathname}?tab=${tab}`);
+  }
+
   function selectExercise(exerciseId: number) {
     if (exerciseId === selectedId) return;
     setSelectedId(exerciseId);
@@ -1529,7 +1537,8 @@ export function MetricsClient({
           {(["alltime", "cycle", "records"] as Tab[]).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => selectTab(tab)}
+              aria-pressed={activeTab === tab}
               className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors min-h-[36px] ${
                 activeTab === tab
                   ? "bg-background text-foreground shadow-sm"
