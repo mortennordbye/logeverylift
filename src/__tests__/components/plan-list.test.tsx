@@ -2,7 +2,7 @@
 import { CyclesListClient } from "@/components/features/CyclesListClient";
 import { deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
 import type { PlanListData } from "@/lib/plan-list";
-import { rotationChips, seasonCard, weekDays, type HeroView } from "@/lib/utils/plan-list";
+import { seasonCard, weekDays, type HeroView } from "@/lib/utils/plan-list";
 import type { PhaseLike } from "@/lib/utils/seasons";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -48,17 +48,13 @@ const rotationHero: HeroView = {
   name: "Upper / Lower hypertrophy",
   label: "Week 3 of 6 · Rotation",
   ends: "Ends 20 Dec",
-  chips: rotationChips(
-    [
-      { id: 11, orderIndex: 1, name: "Upper A" },
-      { id: 12, orderIndex: 2, name: "Lower A" },
-      { id: 13, orderIndex: 3, name: null },
-      { id: 14, orderIndex: 4, name: "Upper B" },
-      { id: 15, orderIndex: 5, name: "Lower B" },
-    ],
-    11,
-    12,
-  ),
+  chips: [
+    { id: 11, name: "Upper A", rest: false, tag: "Done" },
+    { id: 12, name: "Lower A", rest: false, tag: "Next" },
+    { id: 13, name: "Rest", rest: true, tag: null },
+    { id: 14, name: "Upper B", rest: false, tag: "Skipped" },
+    { id: 15, name: "Lower B", rest: false, tag: null },
+  ],
   next: "Lower A",
 };
 
@@ -185,8 +181,11 @@ describe("the Plan list", () => {
     expect(hero.getAttribute("href")).toBe("/cycles/1");
     expect(within(hero).getByText("Week 3 of 6 · Rotation")).toBeTruthy();
     const chips = within(within(hero).getByRole("list", { name: "Rotation" })).getAllByRole("listitem");
-    expect(chips.map((c) => c.textContent)).toEqual(["DoneUpper A", "NextLower A", "Rest", "Upper B", "Lower B"]);
+    expect(chips.map((c) => c.textContent)).toEqual(["DoneUpper A", "NextLower A", "Rest", "SkippedUpper B", "Lower B"]);
     expect(within(hero).getByText("Ends 20 Dec")).toBeTruthy();
+    // The footer has no colon.
+    expect(hero.textContent).toContain("Lower A is next");
+    expect(hero.textContent).not.toContain(":");
     expect(screen.getByRole("heading", { name: "Up next" })).toBeTruthy();
     const starts = screen.getAllByTestId("scheduled-start");
     expect(starts.map((x) => x.textContent)).toEqual(["Starts 21 Dec", "Not started"]);
@@ -212,6 +211,14 @@ describe("the Plan list", () => {
     expect(days[6].textContent).toContain("key session");
     expect(days[6].className).toContain("ring-brand");
     expect(days[4].textContent).toContain("Rest");
+    // A screen reader hears each day once: the day and what it holds, never "Rest Rest".
+    const spoken = (el: HTMLElement) =>
+      [...el.querySelectorAll("*")]
+        .filter((n) => n.children.length === 0 && !n.closest("[aria-hidden='true']"))
+        .map((n) => n.textContent)
+        .join(" ");
+    expect(spoken(days[4])).toBe("Fri, Rest");
+    expect(spoken(days[6])).toBe("Sun, Long ride, Run off bike, key session");
     expect(within(hero).getByText("6 sessions · about 7 h")).toBeTruthy();
 
     const card = screen.getByTestId("season-card");

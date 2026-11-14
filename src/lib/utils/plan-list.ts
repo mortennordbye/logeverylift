@@ -5,6 +5,7 @@
  * builds these and the client renders the same text.
  */
 
+import type { RotationRow } from "@/lib/utils/cycle-detail";
 import type { PhaseType } from "@/lib/utils/periodization";
 import { dateLabel } from "@/lib/utils/date-label";
 import { addDaysStr, daysBetweenStr, seasonTimeline, shortDay, taperFit, type PhaseLike, type TimelinePhase } from "@/lib/utils/seasons";
@@ -111,7 +112,7 @@ export type HeroDay = {
   names: string;
 };
 
-export type RotationChip = { id: number; name: string; rest: boolean; tag: "Done" | "Next" | null };
+export type RotationChip = { id: number; name: string; rest: boolean; tag: "Done" | "Next" | "Skipped" | null };
 
 type HeroBase = { id: number; name: string; label: string; ends: string };
 export type HeroView =
@@ -140,7 +141,7 @@ export type WeekSession = {
 
 const SPORT_WORDS = { swim: "Swim", bike: "Bike", run: "Run" } as const;
 
-/** The 7-day strip of a weekday block, Monday first. */
+/** The strip of a weekday block: the days of one block week, from the block's start weekday. */
 export function weekDays(dates: string[], sessions: WeekSession[], today: string, keyMarks: boolean): HeroDay[] {
   return dates.map((date) => {
     const mine = sessions.filter((s) => s.date === date && !s.skipped);
@@ -176,18 +177,21 @@ export function weekSummary(sessions: WeekSession[]): string {
   return `${count} · ${time}`;
 }
 
-export type RotationSlot = { id: number; orderIndex: number | null; name: string | null };
-
-/** The rotation in order, with the last session done and the next one marked. */
-export function rotationChips(slots: RotationSlot[], lastDoneSlotId: number | null, nextSlotId: number | null): RotationChip[] {
-  return [...slots]
-    .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
-    .map((s) => ({
-      id: s.id,
-      name: s.name ?? "Rest",
-      rest: s.name == null,
-      tag: s.id === nextSlotId ? "Next" : s.id === lastDoneSlotId ? "Done" : null,
-    }));
+/**
+ * The rotation in order from the detail's order rows (`rotationRows`), so a
+ * swapped session shows its program and a skipped one its mark, as the
+ * detail and the hero's footer do. Of the sessions done, only the last one
+ * done is marked.
+ */
+export function rotationChips(rows: Pick<RotationRow, "slotId" | "name" | "rest" | "mark" | "lastDone">[]): RotationChip[] {
+  let last: (typeof rows)[number] | null = null;
+  for (const r of rows) if (r.lastDone && (!last || r.lastDone > last.lastDone!)) last = r;
+  return rows.map((r) => ({
+    id: r.slotId,
+    name: r.name,
+    rest: r.rest,
+    tag: r.mark === "next" ? "Next" : r.mark === "skipped" ? "Skipped" : r === last ? "Done" : null,
+  }));
 }
 
 // ── Seasons ──────────────────────────────────────────────────────────────────

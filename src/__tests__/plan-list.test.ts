@@ -117,19 +117,20 @@ describe("the hero", () => {
     expect(weekSummary([s("2026-11-16"), s("2026-11-17", { skipped: true })])).toBe("1 session");
   });
 
-  it("marks the last session done and the next one in the rotation", () => {
-    const chips = rotationChips(
-      [
-        { id: 13, orderIndex: 3, name: null },
-        { id: 11, orderIndex: 1, name: "Upper A" },
-        { id: 12, orderIndex: 2, name: "Lower A" },
-      ],
-      11,
-      12,
-    );
+  it("marks the last session done, the next one and a skipped one in the rotation", () => {
+    const row = (slotId: number, name: string, mark: "next" | "skipped" | "done" | null, lastDone: string | null = null) => ({ slotId, name, rest: name === "Rest", mark, lastDone });
+    const chips = rotationChips([
+      row(10, "Lower B", "done", "2026-11-09"),
+      row(11, "Upper A", "done", "2026-11-12"),
+      row(12, "Lower B", "next"),
+      row(14, "Upper B", "skipped"),
+      row(13, "Rest", null),
+    ]);
     expect(chips).toEqual([
+      { id: 10, name: "Lower B", rest: false, tag: null },
       { id: 11, name: "Upper A", rest: false, tag: "Done" },
-      { id: 12, name: "Lower A", rest: false, tag: "Next" },
+      { id: 12, name: "Lower B", rest: false, tag: "Next" },
+      { id: 14, name: "Upper B", rest: false, tag: "Skipped" },
       { id: 13, name: "Rest", rest: true, tag: null },
     ]);
   });
