@@ -117,6 +117,20 @@ describe("step 1: the basics", () => {
     expect(createTrainingCycle).not.toHaveBeenCalled();
   });
 
+  it("says which scheduled draft a later start replaces", () => {
+    const scheduled = { name: "Strength peak", day: "2026-12-12" };
+    render(<CreateCycleForm days={days} scheduled={scheduled} />);
+    const line = "Strength peak is set to start 12 Dec. This start replaces it.";
+    // Today starts the cycle at once: nothing is replaced.
+    expect(screen.queryByText(line)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Next Monday · 16 Nov" }));
+    expect(screen.getByText(line)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
+    expect(screen.queryByText(line)).toBeNull();
+    fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-01" } });
+    expect(screen.getByText(line)).toBeTruthy();
+  });
+
   it("shows a refused write and stays on step 1", async () => {
     vi.mocked(createTrainingCycle).mockResolvedValue({ success: false, error: "Failed to create the cycle" });
     render(<CreateCycleForm days={days} />);

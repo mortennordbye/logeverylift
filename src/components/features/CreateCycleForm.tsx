@@ -135,8 +135,11 @@ export function CreateCycleForm({
   days,
   draft,
   start,
+  scheduled,
 }: {
   days: StartDays;
+  /** Another draft scheduled to start later: a later start for this one replaces it (scheduleCycle). */
+  scheduled?: { name: string; day: string } | null;
   /** The draft made by an earlier Next, when the user came back from step 2. */
   draft?: TrainingCycle;
   /** The start day chosen before, with `draft`. */
@@ -304,6 +307,11 @@ export function CreateCycleForm({
         )}
         {choice === "after" && days.afterCurrent && (
           <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(days.afterCurrent)}</p>
+        )}
+        {scheduled && startDay && startDay > days.today && (
+          <p className="-mt-2 text-[13px] text-muted-foreground">
+            {scheduled.name} is set to start {shortDay(scheduled.day).slice(4)}. This start replaces it.
+          </p>
         )}
 
         <ChipGroup label="When it ends">

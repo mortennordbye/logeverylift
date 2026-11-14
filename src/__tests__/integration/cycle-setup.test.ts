@@ -1,3 +1,4 @@
+import NewCyclePage from "@/app/cycles/new/page";
 import { db } from "@/db";
 import { trainingCycleSlots, trainingCycles, users } from "@/db/schema";
 import { createTrainingCycle, reorderCycleSlots, startTrainingCycle, upsertCycleSlot } from "@/lib/actions/training-cycles";
@@ -173,5 +174,30 @@ describe("reorderCycleSlots", () => {
     expect(await reorderCycleSlots(id, [...ids].reverse())).toEqual({ success: false, error: "Cycle not found" });
     asUser(userId);
     expect(await labelsInOrder(id)).toEqual(["1:S1", "2:S2", "3:S3", "4:S4", "5:S5"]);
+  });
+});
+
+describe("/cycles/new step 1 names the other scheduled draft", () => {
+  /** The `scheduled` prop the page hands to CreateCycleForm. */
+  async function scheduledProp(params: Record<string, string> = {}) {
+    const page = (await NewCyclePage({ searchParams: Promise.resolve(params) })) as React.ReactElement<{ children: React.ReactElement<{ scheduled: unknown }> }>;
+    return page.props.children.props.scheduled;
+  }
+
+  it("is null when no draft is scheduled", async () => {
+    await draft("Loose draft");
+    expect(await scheduledProp()).toBeNull();
+  });
+
+  it("names the user's scheduled draft, not another user's", async () => {
+    const day = toDateStr(addDays(today, 20));
+    const other = (await createUser()).id;
+    await db.insert(trainingCycles).values({ userId: other, name: "Not mine", durationWeeks: 4, scheduledStartDate: toDateStr(addDays(today, 5)) });
+    const peak = await draft("Strength peak");
+    await db.update(trainingCycles).set({ scheduledStartDate: day }).where(eq(trainingCycles.id, peak));
+
+    expect(await scheduledProp()).toEqual({ name: "Strength peak", day });
+    const mine = await draft("New block");
+    expect(await scheduledProp({ cycle: String(mine), step: "1" })).toEqual({ name: "Strength peak", day });
   });
 });
