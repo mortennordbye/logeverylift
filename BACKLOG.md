@@ -142,6 +142,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** A rule for reading sessions with no sets: leave them out of history, `getCompletedSessions` and the home strip (keep `source = 'auto'` days), or mark them "empty". Tests: a component or e2e check that a closed empty session does not show as done, and that a session whose queued sets land later does.
 - **Touchpoints:** `src/lib/actions/workout-sets.ts` (`getCompletedSessions`), `src/app/page.tsx`, `src/app/history/`, `src/lib/actions/workout-sessions.ts`.
 
+### One prod account gets an empty open session every 10 minutes
+- **What:** On 2026-11-14, from 08:00 UTC, one regular user account got a new open workout session every 10 minutes, at about :00:05, each with no sets and the same program. The pattern looks like an automated client (perhaps a scheduled MCP client or a script), not a person training.
+- **Why deferred:** It is another user's data, and the home widgets work did not need it. The source was not looked at.
+- **Unblocked by:** The owner deciding to look into it. Check the app logs around those times for the caller (user agent, MCP or the app), and whether `createWorkoutSession` or an MCP tool made the rows. If a client loops, stop it from making a new session while one is open for the same program.
+- **Touchpoints:** `src/lib/actions/workout-sessions.ts` (`createWorkoutSession`), `scripts/cleanup-ghost-sessions.ts`.
+
 ### Run the ghost-session cleanup in prod
 - **What:** Remove old empty "completed" sessions in prod with `scripts/cleanup-ghost-sessions.ts` (decision D23): completed sessions with no sets, notes or feeling, older than 7 days. The app no longer gives them a false duration (`closeStaleSessions` in `src/lib/actions/workout-sessions.ts`) and the weekly sync ignores them, but it does not delete them.
 - **Why deferred:** Deleting prod data needs the owner. Agents never run it against prod.
@@ -226,6 +232,18 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Why deferred:** (1) laterality is a separate feature with its own column + picker; no one asked for it yet. (2) precise per-exercise classification of the 191 seed entries is a manual judgment pass the user opted out of in favour of the heuristic.
 - **Unblocked by:** (1) wanting unilateral/bilateral tracking — add a nullable `laterality` enum column to `exercises` (+ optional `program_exercises` override) mirroring the exercise-type plumbing. (2) wanting accurate types — do a one-time pass classifying the seed `EXERCISES` array explicitly (a name/equipment-aware heuristic: single-muscle + cable/machine ⇒ isolation), then a corrective migration `UPDATE` for existing rows.
 - **Touchpoints:** `src/db/schema/exercises.ts`, `src/db/schema/programs.ts`, `src/lib/utils/exercise-type.ts` (`exerciseTypeFromPattern`), `scripts/seed.ts` (`EXERCISES`), `drizzle/0039_nice_supreme_intelligence.sql` (the backfill CASE), `src/components/features/ExercisesClient.tsx`.
+
+### Readiness: resting heart rate scores 0 too soon
+- **What:** The readiness model gives resting heart rate a score of 0 at 1.5 SD above the baseline, and the SD has a floor of 1.5 bpm (`src/lib/garmin/analytics/readiness.ts:66`). So about 2 bpm above normal already scores 0. Seen on 2026-11-14: 49 bpm against a normal of 45 gave "RHR 0" on the home Readiness widget.
+- **Why deferred:** It is a model choice, outside the home widgets work, and needs the owner's view and a check against the research reference.
+- **Unblocked by:** An owner decision on the scale (for example a larger SD floor, or 0 only at 2.5 SD), with unit tests for the new scores.
+- **Touchpoints:** `src/lib/garmin/analytics/readiness.ts`, `docs/research/endurance-training-reference.md`.
+
+### Progress body-weight chart: dates without the year
+- **What:** The body-weight chart on Progress labels its first and last entry with day and month only (`src/components/features/MetricsClient.tsx:544`). For a history that spans years, "27 Sept" was really 27 Sep 2023, which made the chart look like this autumn.
+- **Why deferred:** Found while checking the Body weight widget; it is outside the widgets work.
+- **Unblocked by:** Show the year when the first entry is in another year than the last (fixed month names, no locale formatter, as in `src/lib/utils/date-label.ts`). Unit test for the label.
+- **Touchpoints:** `src/components/features/MetricsClient.tsx`, `src/lib/utils/date-label.ts`.
 
 ## Privacy and legal
 
