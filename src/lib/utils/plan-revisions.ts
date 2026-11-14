@@ -66,8 +66,9 @@ export const isPlannedSessionSnapshot = (s: PlanSnapshot): s is PlannedSessionSn
 // A rotation override names no number: its rotationPosition counts every
 // session of the block, while the session sheet numbers the slots ("position
 // 2 of 5"), and the slot count is not in the snapshot.
+const sessionWhat = (s: PlannedSessionSnapshot) => s.session.label ?? s.programName ?? "Session";
 const sessionTitle = (s: PlannedSessionSnapshot) => {
-  const what = s.session.label ?? s.programName ?? "Session";
+  const what = sessionWhat(s);
   return s.session.date ? `${what} on ${shortDay(String(s.session.date))}` : `${what} in the rotation`;
 };
 
@@ -75,10 +76,11 @@ const sessionTitle = (s: PlannedSessionSnapshot) => {
  * One change to a dated session on its cycle's history, joined to the session
  * it is about ("Squat day on Wed 4 Nov, moved from ..."). A skip names it
  * after the verb, with its reason last ("Skipped Long ride on Sun 22 Nov (Work
- * trip)"). A line that names the session already stays as it is.
+ * trip)"). A move names it itself ("Moved Long ride from Sun 22 Nov to Sat 21
+ * Nov"). A line that names the session already stays as it is.
  */
 export function sessionChangeLine(name: string, change: string): string {
-  if (change.startsWith(`Added ${name}`) || change.startsWith(`Skipped ${name}`)) return change;
+  if (change.startsWith(`Added ${name}`) || change.startsWith(`Skipped ${name}`) || change.startsWith("Moved ")) return change;
   if (change === "Skipped" || change.startsWith("Skipped (")) return `Skipped ${name}${change.slice("Skipped".length)}`;
   return `${name}, ${change.charAt(0).toLowerCase()}${change.slice(1)}`;
 }
@@ -387,7 +389,8 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!prev) return [a.status === "skipped" ? `Skipped ${sessionTitle(after)}` : `Added ${sessionTitle(after)}`];
     const b = prev.session;
     const out: string[] = [];
-    if (!sameValue(b.date, a.date)) out.push(`Moved from ${shortDay(String(b.date))} to ${shortDay(String(a.date))}`);
+    const moved = !sameValue(b.date, a.date);
+    if (moved) out.push(`Moved ${sessionWhat(after)} from ${shortDay(String(b.date))} to ${shortDay(String(a.date))}`);
     if (!sameValue(b.position, a.position) && sameValue(b.date, a.date)) out.push(changeLine("Order in the day", b.position, a.position));
     if (!sameValue(b.programId, a.programId)) out.push(changeLine("Program", prev.programName, after.programName));
     if (!sameValue(b.label ?? null, a.label ?? null)) out.push(changeLine("Label", b.label, a.label));
@@ -399,7 +402,8 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!sameValue(b.priority ?? null, a.priority ?? null)) out.push(changeLine("Priority", b.priority ?? "default", a.priority ?? "default"));
     if (!sameValue(b.brickParentId ?? null, a.brickParentId ?? null)) out.push(a.brickParentId == null ? "Brick unlinked" : "Linked as a brick");
     if (!sameValue(b.garminActivityId ?? null, a.garminActivityId ?? null)) out.push(a.garminActivityId == null ? "Garmin activity unlinked" : "Garmin activity picked");
-    if (!sameValue(b.status, a.status)) {
+    // A missed session moved to a coming day is planned again by the move: one change, one line (J8-04).
+    if (!sameValue(b.status, a.status) && !(moved && b.status === "missed" && a.status === "planned")) {
       out.push(
         a.status === "skipped"
           ? `Skipped${a.skipReason ? ` (${a.skipReason})` : ""}`

@@ -285,9 +285,26 @@ describe("changing one session", () => {
       `Skipped ${name} on Mon 9 Nov (Work trip)`,
       `${name} on Mon 9 Nov, planned again`,
       `Skipped ${name} on Mon 16 Nov`,
-      `${name} on Wed 11 Nov, moved from Mon 9 Nov to Wed 11 Nov`,
+      `Moved ${name} from Mon 9 Nov to Wed 11 Nov`,
       `Heavy on Wed 11 Nov, label set to Heavy`,
     ]);
+  });
+
+  it("a missed session moved to a coming day is one line on the history (J8-04)", async () => {
+    me = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+    asUser(me);
+    const ex = await createExercise();
+    lift = (await createProgram(me, [{ exerciseId: ex.id, sets: [{}] }])).program.id;
+    run = lift;
+    const id = await cycle();
+    await active();
+    const mon = (await rows(id)).find((x) => x.date === "2026-11-02")!;
+    await db.update(plannedSessions).set({ label: "Long ride" }).where(eq(plannedSessions.id, mon.id));
+    expect((await updatePlannedSession({ op: "miss", id: mon.id })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "move", id: mon.id, date: "2026-11-07" })).success).toBe(true);
+    const history = await getPlanHistory({ type: "cycle", id });
+    if (!history.success) throw new Error(history.error);
+    expect(history.data.revisions[0].changes).toEqual(["Moved Long ride from Mon 2 Nov to Sat 7 Nov"]);
   });
 
   it("a program swap drops the label the template gave, and keeps one the user set", async () => {

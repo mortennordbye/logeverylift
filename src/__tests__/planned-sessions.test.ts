@@ -270,7 +270,7 @@ describe("planned session revisions", () => {
 
   it("names the session and says what changed", () => {
     expect(snapshotName(snap({}))).toBe("Squat day on Wed 4 Nov");
-    expect(diffSnapshots(snap({}), snap({ date: "2026-11-06", touchedAt: "x" }))).toEqual(["Moved from Wed 4 Nov to Fri 6 Nov"]);
+    expect(diffSnapshots(snap({}), snap({ date: "2026-11-06", touchedAt: "x" }))).toEqual(["Moved Squat day from Wed 4 Nov to Fri 6 Nov"]);
     expect(diffSnapshots(snap({}), snap({ status: "skipped", skipReason: "Travel", touchedAt: "x" }))).toEqual(["Skipped (Travel)"]);
     expect(diffSnapshots(snap({ touchedAt: "x", programId: 11 }, "Run"), snap({}))).toEqual(["Program changed from Run to Squat day", "Back to the template"]);
     expect(diffSnapshots(null, snap({}))).toEqual(["Added Squat day on Wed 4 Nov"]);
