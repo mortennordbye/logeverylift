@@ -37,6 +37,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** An owner choice on shared vs per-phase programs; a confirm line in step 1 of the new cycle flow; a grep for `String(err)` and `String(e)` in `src/lib/actions/` with the canonical error pattern from `CLAUDE.md`.
 - **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/training-cycles.ts` (`startTrainingCycle`), `src/components/features/CreateCycleForm.tsx`, `src/lib/actions/`.
 
+### Triathlon plan: one library function for the action and the demo seed
+- **What:** `generateTriathlonPlan` is a Server Action and reads the user from the browser session, so `scripts/seed-plan-demo.ts` copies its body to make the demo triathlon season. Extract a library function that takes a userId and a plan-write context, and call it from both the action and the seed.
+- **Why deferred:** The seed was a local demo tool; the copy was the quick way to get the demo accounts. Two copies can drift: a change to the generator would not reach the demo season.
+- **Unblocked by:** Nothing. Move the body into a function in `src/lib/` (beside the other plan libraries the seed uses, such as `createSeason` and `addPhase`), keep `requireSession()` and the input check in the action, and call the function from the seed.
+- **Touchpoints:** `src/lib/actions/triathlon-plan.ts` (`generateTriathlonPlan`), `scripts/seed-plan-demo.ts`.
+
 ### Dated sessions: what C2 left for later
 - **What:** Two gaps left by the session model (C2, `docs/plans/sessions.md`):
   - `dismissed_makeups` is still written when a whole day is declined, so an app from before C2 keeps hiding the day after a rollback (hub decision 13). Reads use the session's status only. Drop the writes and the table one release after C2.
