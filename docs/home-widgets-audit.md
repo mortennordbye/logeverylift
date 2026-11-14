@@ -961,8 +961,16 @@ Where the build differs from it or from section 4, and why:
   home's look, so the notices and Endurance today match without their own changes.
 - **Accent colour** (decision 20). The theme provider marks `<html>` with `data-accent`
   (`src/components/ui/theme-provider.tsx`), and `globals.css` maps each accent to `--brand`
-  and `--brand-fill`, light and dark; a custom accent goes through `--brand-custom`. Blue keeps
-  the design's tokens. `.home-ui` sets `--primary` to `--brand`, so the shared parts follow.
+  and `--brand-fill`, light and dark. Blue, green and orange use the design's values; the
+  design has no white or purple, which follow the same 4.5:1 rule. `.home-ui` sets `--primary`
+  to `--brand`, so the shared parts follow.
+  - The pre-paint script in `src/app/layout.tsx` (`prePaintThemeScript` in
+    `src/lib/utils/accent.ts`) sets `data-accent` and the custom tokens before the first
+    paint, from the same localStorage keys, so a non-blue accent does not paint blue first.
+  - A custom accent is not used as picked: `customAccentTokens` darkens (light theme) or
+    lightens (dark theme) it until brand text has 4.5:1 on every home surface, derives a fill
+    with 4.5:1 for white text, and picks white or #0b0b0c for text on the brand. They reach
+    the CSS as `--brand-custom`, `--brand-fill-custom` and `--on-brand-custom`.
 - **Edit entry stays the pencil** (decision 16), restyled as the design's round pill, and not
   the design's "Edit" text button. Edit mode keeps Cancel, Undo and Reset, which the design
   does not show.
@@ -981,18 +989,27 @@ Where the build differs from it or from section 4, and why:
 - **Recent PRs** has no gain pill or confetti: `getRecentPRs` returns no previous value.
 - **Friends' activity** has no reaction button: a reaction is a write, and "Reactions to my
   workouts" is its own widget (4.5).
-- **Streak** (S, M). The bars are sessions per week from `getHeatmapData`; there is no
-  "best streak", which no action returns. `getSummaryStats` computes weeks in UTC on the
-  server, as the Progress page does.
+- **Streak** (S, M). The streak and the bars both come from `getHeatmapData`'s days
+  (`streakWeeks`, `weekCounts` in `src/lib/home/widget-data.ts`), in Monday-to-Sunday weeks
+  of the sessions' own dates around `ctx.today`, so a session at Monday 00:30 in Oslo counts
+  in the new week. The Progress page still uses `getSummaryStats`, which cuts weeks in UTC.
+  There is no "best streak", which no action returns. S says "Keep it lit." once this week
+  has a session, and "Train this week to keep it." before.
 - **Body weight** (S, M) shows kg; the app has no weight unit setting. It links to Progress,
-  where weight is logged.
+  where weight is logged. When the latest entry is older than the 30-day window, the line
+  under the number gives its date ("82.4 kg on 3 Sep") instead of a change.
 - **Training load** (M, L) reads `getTrainingLoad`, which picks the source itself: the stored
   Garmin series when `garminAllowedFor` is true and there are days, else the app's sessions.
   It is available to endurance and Garmin users and links to `/week`. The line is the 7-day
   fatigue (ATL); the design's "sweet spot" band is left out, since the bars' scale has no
-  agreed band.
-- **Weekly sets** (S) is the catalogue's "Weekly volume". Its week starts on the server's
-  Monday, as on the Progress page.
+  agreed band. The 28 days are placed by date (`loadSummary` in
+  `src/lib/home/widget-data.ts`): a day the Garmin series lacks is a 0 bar, and its fatigue
+  decays from the day before as one rest day. The load figure is the last 7 calendar days.
+  Form is today's state, so when the newest day with data is older than yesterday the widget
+  shows the 7-day load as its number and no form (hub decision, 2026-11-14).
+- **Weekly sets** (S) is the catalogue's "Weekly volume". It counts the sessions dated in the
+  user's own Monday-to-Sunday week (`getWeeklyMuscleVolume` with a `week` range from
+  `ctx.today`). Without the range, as on the Progress page, the week is the server's UTC week.
 - **Race countdown** (S) is for endurance users: the soonest A race on or after today from
   `listSeasons`. A cycle's own `race_date` is not read.
 - Sizes from section 4 that the design does not show (Weekly volume M and L, Body weight L,
@@ -1010,4 +1027,16 @@ Where the build differs from it or from section 4, and why:
   pill and Decline muted text, rows still 44 px; the insight shows in the hero as the design's
   one-line tip pill (headline only), not the full banner; Readiness S uses the design's 24 px
   number.
-
+- **Third pass against the design** (two reviews, 2026-11-14): the edit-mode jiggle is the
+  design's, one swing each way per 0.28 s, alternating, every second widget half a swing
+  behind; the streak's inner flame has its own flicker (`home-flicker2`) and the sparkline
+  area fades in (`home-fade`), both only without reduced motion; the no-cycle heading is
+  24 px, sheet titles 20 px, the Today name 34 px at line height 1.15. The set-up link's
+  accessible name is "Set up a Cycle", without the arrow.
+- **Done dot in dark** uses `--brand-fill` on purpose, not the design's `--brand`: white on
+  the fill has 5.5:1, white on the design's light blue 2.9:1.
+- **Light theme in the mockup.** The locked mockup's light theme still paints some parts with
+  its older tokens (a leak from before the v2 tokens). Light comparisons follow the v2 intent
+  (`--brand`, `--brand-fill`, neutrals), not those pixels.
+- **A failed plan read** (`readTodayPlan`) shows Today without its exercise list and logs
+  `[Home] today_plan_read_failed`; before, it showed the error page.
