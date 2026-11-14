@@ -39,7 +39,7 @@ export function SeasonCard({ season }: { season: SeasonCardView }) {
       <Link href={`/seasons/${season.id}`} className="flex flex-col gap-3 px-[18px] pt-4 pb-3 active:opacity-70">
         {race ? (
           <div className="flex items-baseline justify-between gap-2">
-            <span className="min-w-0 truncate text-base font-semibold">{season.name}</span>
+            <span data-testid="season-name" className="min-w-0 line-clamp-2 break-words text-base font-semibold">{season.name}</span>
             {race.daysLeft != null && (
               <span className="shrink-0 text-[13px] text-muted-foreground">
                 Race in <span className="home-display text-xl text-foreground">{race.daysLeft}</span> {race.daysLeft === 1 ? "day" : "days"}
@@ -49,8 +49,8 @@ export function SeasonCard({ season }: { season: SeasonCardView }) {
         ) : (
           <div className="flex items-start justify-between gap-3">
             <span className="flex min-w-0 flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-[1px] text-muted-foreground">Season · {keepDates(season.goalBy)}</span>
-              <span className="text-lg font-semibold">{season.name}</span>
+              <span className="text-xs font-semibold uppercase tracking-[1px] text-muted-foreground">{keepDates(`Season · ${season.goalBy}`)}</span>
+              <span data-testid="season-name" className="text-lg font-semibold break-words">{season.name}</span>
             </span>
             <span className="flex shrink-0 flex-col items-end">
               <span className="home-display text-[40px] leading-[38px]">{season.daysLeft}</span>
@@ -65,7 +65,7 @@ export function SeasonCard({ season }: { season: SeasonCardView }) {
         <Link key={p.id} href={`/cycles/${p.id}`} className={row}>
           <span className={`h-2 w-2 shrink-0 rounded-full ${p.mark === "accent" ? "bg-brand" : "bg-[#707076]"}`} aria-hidden />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate text-[15px] font-medium">{p.name}</span>
+            <span data-testid="phase-name" className="line-clamp-2 break-words text-[15px] font-medium">{p.name}</span>
             <span className="text-[13px] text-muted-foreground">{keepDates(p.sub)}</span>
           </span>
           {p.badge && <span className={`shrink-0 text-xs font-semibold ${p.badgeAccent ? "text-brand" : "text-muted-foreground"}`}>{keepDates(p.badge)}</span>}
@@ -75,8 +75,8 @@ export function SeasonCard({ season }: { season: SeasonCardView }) {
         <Link href={`/seasons/${season.id}`} className={row}>
           <FlagIcon className="-ml-1 h-4 w-4 shrink-0" />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate text-[15px] font-semibold">{race.name}</span>
-            <span className="text-[13px] text-muted-foreground">A race · {keepDates(race.when)}</span>
+            <span data-testid="race-name" className="line-clamp-2 break-words text-[15px] font-semibold">{race.name}</span>
+            <span className="text-[13px] text-muted-foreground">{keepDates(`A race · ${race.when}`)}</span>
           </span>
         </Link>
       )}

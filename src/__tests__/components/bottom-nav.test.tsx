@@ -25,3 +25,15 @@ describe("the active tab", () => {
     expect(marked()).toEqual(["More"]);
   });
 });
+
+describe("tap feedback", () => {
+  it("uses :active, never a hover colour that stays on a touch screen (J2-13)", () => {
+    nav.pathname = "/cycles";
+    render(<BottomNav />);
+    for (const link of screen.getAllByRole("link")) {
+      expect(link.className).not.toMatch(/hover:/);
+    }
+    const programs = screen.getAllByRole("link").find((l) => l.textContent === "Programs")!;
+    expect(programs.className).toContain("active:text-foreground");
+  });
+});

@@ -140,7 +140,7 @@ export function BottomNav() {
                 ${
                   active
                     ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground active:text-foreground"
                 }
               `}
             >

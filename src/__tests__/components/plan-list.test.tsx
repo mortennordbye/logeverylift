@@ -181,7 +181,7 @@ describe("the Plan list", () => {
     render(<CyclesListClient data={gym} deletedCount={1} />);
     const hero = screen.getByTestId("plan-hero");
     expect(hero.getAttribute("href")).toBe("/cycles/1");
-    expect(within(hero).getByTestId("hero-label").textContent).toBe("Week 3 of 6 · Rotation");
+    expect(within(hero).getByTestId("hero-label").textContent!.replace(/\u00a0/g, " ")).toBe("Week 3 of 6 · Rotation");
     const chips = within(within(hero).getByRole("list", { name: "Rotation" })).getAllByRole("listitem");
     expect(chips.map((c) => c.textContent)).toEqual(["DoneUpper A", "NextLower A", "Rest", "SkippedUpper B", "Lower B"]);
     expect(within(hero).getByText("Ends 20 Dec")).toBeTruthy();
@@ -210,6 +210,15 @@ describe("the Plan list", () => {
     const days = within(within(hero).getByRole("list", { name: "This week" })).getAllByRole("listitem");
     expect(days).toHaveLength(7);
     expect(days[6].textContent).toContain("Brick");
+    // Names wrap to two lines instead of an ellipsis on one (J7-06, J8-01, J4-20, J6-01).
+    for (const short of within(hero).getAllByTestId("hero-day-short")) {
+      expect(short.className).toContain("line-clamp-2");
+      expect(short.className).not.toContain("truncate");
+    }
+    for (const name of [...screen.getAllByTestId("phase-name"), screen.getByTestId("season-name"), screen.getByTestId("race-name")]) {
+      expect(name.className).toContain("line-clamp-2");
+      expect(name.className).not.toContain("truncate");
+    }
     expect(days[6].textContent).toContain("key session");
     expect(days[6].className).toContain("ring-brand");
     expect(days[4].textContent).toContain("Rest");
@@ -225,11 +234,11 @@ describe("the Plan list", () => {
 
     const card = screen.getByTestId("season-card");
     expect(within(card).getByText("Jevnaker Half 2027")).toBeTruthy();
-    expect(card.textContent).toContain("Race in 288 days");
+    expect(card.textContent!.replace(/\u00a0/g, " ")).toContain("Race in 288 days");
     expect(within(card).getByRole("img", { name: /Phase bar/ })).toBeTruthy();
-    expect(within(card).getByRole("link", { name: /Longer ride and run.*Base · 12 wk · 11\sJan\s– 4\sApr/ }).getAttribute("href")).toBe("/cycles/22");
+    expect(within(card).getByRole("link", { name: /Longer ride and run.*Base\s· 12\swk\s· 11\sJan\s– 4\sApr/ }).getAttribute("href")).toBe("/cycles/22");
     expect(within(card).getByText(/^Starts Mon\s16\sNov$/)).toBeTruthy();
-    expect(within(card).getByRole("link", { name: /Jevnaker Halv Full Distanse.*A race · 29\sAug/ }).getAttribute("href")).toBe("/seasons/9");
+    expect(within(card).getByRole("link", { name: /Jevnaker Halv Full Distanse.*A race\s· 29\sAug/ }).getAttribute("href")).toBe("/seasons/9");
   });
 
   it("gym user with a goal season: goal date, days left as the season page counts them, the running phase marked Now", () => {
@@ -238,7 +247,7 @@ describe("the Plan list", () => {
     expect(within(card).getByText("Season · Goal by 7 Feb")).toBeTruthy();
     expect(card.textContent).toContain("85days left");
     expect(within(card).getByText("Now").className).toContain("text-brand");
-    expect(within(card).getByText("Starts 21 Dec").className).toContain("text-muted-foreground");
+    expect(within(card).getByText("Starts 21 Dec").className).toContain("text-brand");
     expect(card.textContent).not.toContain("A race");
   });
 });
@@ -253,11 +262,15 @@ describe("select mode", () => {
     expect(screen.getByRole("img", { name: "Season cannot be selected here" })).toBeTruthy();
     expect(screen.getByText("Delete a season from its ⋯ menu.")).toBeTruthy();
     expect(screen.queryByTestId("phase-warning")).toBeNull();
+    // The dimmed Delete says why (J7-01).
+    const del = screen.getByRole("button", { name: "Delete" }) as HTMLButtonElement;
+    expect(del.disabled).toBe(true);
+    expect(document.getElementById(del.getAttribute("aria-describedby")!)!.textContent).toBe("Select a cycle.");
 
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Longer ride and run" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Select Swim, intervals, bricks" }));
     expect(screen.getByText("2 selected")).toBeTruthy();
-    expect(screen.getByTestId("phase-warning").textContent).toBe(
+    expect(screen.getByTestId("phase-warning").textContent!.replace(/\u00a0/g, " ")).toBe(
       "Both are phases of Jevnaker Half 2027. The later phases move 168 days earlier, so the taper will end before race day. You will need to re-plan.",
     );
     expect(screen.getByText("You can restore them for 90 days.")).toBeTruthy();

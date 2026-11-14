@@ -33,7 +33,7 @@ describe("a Plan sheet", () => {
   it("scrolls as a whole: no part of it shrinks into its own scroll", () => {
     render(
       <BottomSheet open onClose={() => {}}>
-        <PlanSheetPanel label="Session" testId="panel">
+        <PlanSheetPanel label="Session" title="Session" testId="panel">
           <ul data-testid="list" className="overflow-hidden">
             <li>Squat</li>
           </ul>
@@ -49,12 +49,16 @@ describe("a Plan sheet", () => {
     const onClose = vi.fn();
     render(
       <BottomSheet open onClose={onClose}>
-        <PlanSheetPanel label="Session">
+        <PlanSheetPanel label="Session" title="Upper A" kicker={<span>Today</span>}>
           <p>Body</p>
         </PlanSheetPanel>
       </BottomSheet>,
     );
     const close = screen.getByRole("button", { name: "Close" });
+    // One header for every Plan sheet: the title and Close on one row (J2-11).
+    const header = screen.getByTestId("sheet-header");
+    expect(within(header).getByRole("heading", { name: "Upper A" })).toBeTruthy();
+    expect(header.contains(close)).toBe(true);
     for (const c of ["h-11", "w-11", "rounded-full", "bg-widget-2"]) expect(close.className).toContain(c);
     fireEvent.click(close);
     expect(onClose).toHaveBeenCalled();
@@ -75,7 +79,7 @@ describe("the Plan list", () => {
   it("breaks the hero label only between its parts", () => {
     render(<CyclesListClient data={list} deletedCount={0} />);
     const parts = [...screen.getByTestId("hero-label").children];
-    expect(parts.map((p) => p.textContent)).toEqual(["Week 2 of 6 · ", "Same days each week"]);
+    expect(parts.map((p) => p.textContent!.replace(/\u00a0/g, " "))).toEqual(["Week 2 of 6 · ", "Same days each week"]);
     for (const p of parts) expect(p.className).toContain("whitespace-nowrap");
   });
 

@@ -27,7 +27,7 @@ export async function PlanHistoryPage({ type, id }: { type: "program" | "cycle" 
         <BackLink fallback={{ href: back, label: deleted ? (type === "program" ? "Programs" : "Plan") : name }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
-        <h1 className={plan ? "home-display text-[34px] leading-9 uppercase" : "text-3xl font-bold tracking-tight"}>History</h1>
+        <h1 className={plan ? "home-display text-[34px] leading-9 uppercase" : "text-3xl font-bold tracking-tight"}>Change history</h1>
         {deleted && (
           <p className="text-sm text-muted-foreground mt-1">
             “{name}” is deleted. Restore a version to bring it back.

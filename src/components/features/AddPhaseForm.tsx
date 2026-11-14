@@ -168,7 +168,8 @@ export function AddPhaseForm(p: Props) {
           </span>
         </div>
 
-        <fieldset className="grid grid-cols-2 gap-2">
+        {/* One card per row: side by side, "Cycle I already have" wrapped to three lines at 320 px (J4-09). */}
+        <fieldset className="flex flex-col gap-2">
           <legend className="sr-only">Phase source</legend>
           <RadioCard name="phase-source" checked={source === "new"} onChange={() => setSource("new")} title="New cycle" />
           <RadioCard
@@ -179,6 +180,7 @@ export function AddPhaseForm(p: Props) {
               if (!lengthTouched) setLength("");
             }}
             title="Cycle I already have"
+            sub={p.candidates.length === 0 ? "No cycle can be added. Only a draft or the running cycle outside a season can be a phase." : undefined}
             disabled={p.candidates.length === 0}
           />
         </fieldset>
@@ -331,11 +333,11 @@ export function AddPhaseCancel({ seasonId, cycleId, name }: { seasonId: number; 
       </button>
       <BottomSheet open={open} onClose={() => setOpen(false)}>
         {open && (
-          <PlanSheetPanel label="Remove this phase?">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-xl font-semibold">Remove this phase?</h2>
-              <p className="text-sm text-muted-foreground">{name} and the sessions you added are deleted.</p>
-            </div>
+          <PlanSheetPanel
+            label="Remove this phase?"
+            title="Remove this phase?"
+            sub={<p className="text-sm text-muted-foreground">{name} and the sessions you added are deleted.</p>}
+          >
             {error && (
               <p role="alert" className="text-sm text-[#ff6b5a]">
                 {error}

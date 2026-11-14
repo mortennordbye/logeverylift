@@ -11,7 +11,8 @@
  *   Delete each ask in a confirm sheet.
  */
 
-import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SHEET_CANCEL, SectionLabel } from "@/components/features/PlanSheetPanel";
+import { keepDates } from "@/lib/utils/keep-dates";
 import { useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteTrainingCycle, restartTrainingCycle, startTrainingCycle } from "@/lib/actions/training-cycles";
@@ -52,11 +53,7 @@ function ConfirmSheet({
 }) {
   return (
     <BottomSheet open={open} onClose={onClose}>
-      <PlanSheetPanel label={title}>
-        <div className="flex flex-col gap-1">
-          <h2 className="text-xl font-semibold">{title}</h2>
-          <div className="text-sm text-muted-foreground">{body}</div>
-        </div>
+      <PlanSheetPanel label={title} title={keepDates(title)} sub={<div className="text-sm text-muted-foreground">{typeof body === "string" ? keepDates(body) : body}</div>}>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}
@@ -70,7 +67,7 @@ function ConfirmSheet({
         >
           {loading ? busyAction : action}
         </button>
-        <button type="button" onClick={onClose} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+        <button type="button" onClick={onClose} className={SHEET_CANCEL}>
           Cancel
         </button>
       </PlanSheetPanel>
@@ -222,8 +219,7 @@ export function CycleMenu({ cycle, running = null }: { cycle: TrainingCycle; run
       </button>
 
       <BottomSheet open={open} onClose={() => setOpen(false)}>
-        <PlanSheetPanel label="Cycle actions" testId="cycle-menu">
-          <h2 className="text-xl font-semibold truncate">{cycle.name}</h2>
+        <PlanSheetPanel label="Cycle actions" testId="cycle-menu" title={cycle.name}>
           <div className="flex flex-col rounded-2xl bg-widget-2 overflow-hidden">
             <Link href={`/cycles/${cycle.id}/edit`} className={row}>
               Edit details

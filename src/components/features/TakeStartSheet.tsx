@@ -1,7 +1,8 @@
 "use client";
 
 import { PRIMARY_BUTTON } from "@/components/features/season-ui";
-import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
+import { keepDates } from "@/lib/utils/keep-dates";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 
 /**
@@ -31,15 +32,15 @@ export function TakeStartSheet({
   return (
     <BottomSheet open={open} onClose={onClose}>
       {open && (
-        <PlanSheetPanel label={title}>
-          <div className="flex flex-col gap-1">
-            <h2 className="text-xl font-semibold">{title}</h2>
-            {lines.map((l) => (
-              <p key={l} className="text-sm text-muted-foreground">
-                {l}
-              </p>
-            ))}
-          </div>
+        <PlanSheetPanel
+          label={title}
+          title={keepDates(title)}
+          sub={lines.map((l) => (
+            <p key={l} className="text-sm text-muted-foreground">
+              {keepDates(l)}
+            </p>
+          ))}
+        >
           {error && (
             <p role="alert" className="text-sm text-[#ff6b5a]">
               {error}
@@ -48,7 +49,7 @@ export function TakeStartSheet({
           <button type="button" disabled={busy} onClick={onConfirm} className={PRIMARY_BUTTON}>
             {action}
           </button>
-          <button type="button" onClick={onClose} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+          <button type="button" onClick={onClose} className={SHEET_CANCEL}>
             Cancel
           </button>
         </PlanSheetPanel>

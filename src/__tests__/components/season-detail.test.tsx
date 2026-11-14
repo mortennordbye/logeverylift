@@ -183,7 +183,7 @@ describe("sheet errors", () => {
     actions.setPhaseAction.mockImplementation(async () => ({ success: false, error: "A phase is 1 to 52 weeks." }) as never);
     render(<SeasonDetailClient {...base} />);
     fireEvent.click(within(screen.getAllByTestId("phase-row")[1]).getAllByRole("button")[1]);
-    const sheet = screen.getByRole("heading", { name: "Longer ride and run" }).closest("div")!.parentElement!;
+    const sheet = screen.getByRole("heading", { name: "Longer ride and run" }).closest("section")!;
     fireEvent.click(within(sheet).getByRole("button", { name: "Save phase" }));
     await waitFor(() => expect(within(sheet).getByRole("alert").textContent).toContain("1 to 52 weeks"));
     expect(actions.setPhaseAction).toHaveBeenCalledWith({ seasonId: 7, cycleId: 2, phaseType: "base", durationWeeks: 12, durationDays: null });
@@ -193,7 +193,9 @@ describe("sheet errors", () => {
     actions.addRaceAction.mockImplementation(async () => ({ success: false, error: "A season holds at most 20 races." }) as never);
     render(<SeasonDetailClient {...base} />);
     fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
-    const sheet = screen.getByRole("heading", { name: "New race" }).parentElement!;
+    const sheet = screen.getByRole("heading", { name: "New race" }).closest("section")!;
+    // Priority has the uppercase label of Name and Date (J4-07).
+    expect(within(sheet).getByText("Priority").className).toBe(within(sheet).getByText("Name").className);
     fireEvent.change(within(sheet).getByLabelText("Name"), { target: { value: "Haugesund" } });
     fireEvent.change(within(sheet).getByLabelText("Date"), { target: { value: "2027-08-22" } });
     fireEvent.click(within(sheet).getByRole("button", { name: "Save race" }));
@@ -267,6 +269,8 @@ describe("season detail text (fix round 2)", () => {
     const first = screen.getAllByTestId("phase-row")[0];
     expect(first.textContent).not.toContain("Starts");
     expect(first.textContent).toContain("Paused");
+    // Grey, as on the Plan list: the accent marks only now and next (J8-12, J4-18).
+    expect(within(first).getByText("Paused").className).toContain("text-muted-foreground");
   });
 
   it("says Next for a first phase that is due and not scheduled", () => {
@@ -314,9 +318,11 @@ describe("Resume asks first (fix round 4)", () => {
     render(<SeasonDetailClient {...paused} running={running} scheduled={scheduled} />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     const sheet = screen.getByRole("region", { name: "Resume this season?" });
-    expect(sheet.textContent).toContain("Aerobic base + strength starts Mon 16 Nov.");
-    expect(sheet.textContent).toContain("This ends Base block at week 3 of 6.");
-    expect(sheet.textContent).toContain("Strength upkeep no longer starts Mon 30 Nov.");
+    // The dates keep their words together with no-break spaces (keepDates).
+    const text = sheet.textContent!.replace(/\u00a0/g, " ");
+    expect(text).toContain("Aerobic base + strength starts Mon 16 Nov.");
+    expect(text).toContain("This ends Base block at week 3 of 6.");
+    expect(text).toContain("Strength upkeep no longer starts Mon 30 Nov.");
     expect(actions.resumeSeasonAction).not.toHaveBeenCalled();
     fireEvent.click(within(sheet).getByRole("button", { name: "Resume season" }));
     await waitFor(() => expect(actions.resumeSeasonAction).toHaveBeenCalledWith({ seasonId: 7 }));
@@ -326,8 +332,9 @@ describe("Resume asks first (fix round 4)", () => {
     render(<SeasonDetailClient {...paused} today="2026-11-16" running={running} scheduled={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     const sheet = screen.getByRole("region", { name: "Start this season?" });
-    expect(sheet.textContent).toContain("Aerobic base + strength starts today.");
-    expect(sheet.textContent).toContain("This ends Base block at week 3 of 6.");
+    const text = sheet.textContent!.replace(/\u00a0/g, " ");
+    expect(text).toContain("Aerobic base + strength starts today.");
+    expect(text).toContain("This ends Base block at week 3 of 6.");
   });
 
   it("resumes at once when nothing else runs or is scheduled", async () => {
@@ -365,8 +372,8 @@ describe("phase length in weeks or days (fix round 4)", () => {
   it("shows a whole number of weeks as weeks, in the row and in the sheet", () => {
     render(<SeasonDetailClient {...base} phases={fitted} />);
     const row = screen.getAllByTestId("phase-row")[1];
-    expect(row.textContent).toContain("15 wk");
-    expect(row.textContent).not.toContain("105 days");
+    expect(row.textContent!.replace(/\u00a0/g, " ")).toContain("15 wk");
+    expect(row.textContent!.replace(/\u00a0/g, " ")).not.toContain("105 days");
     fireEvent.click(within(row).getAllByRole("button")[1]);
     expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("15");
     expect(screen.getByRole("button", { name: "Weeks" }).getAttribute("aria-pressed")).toBe("true");

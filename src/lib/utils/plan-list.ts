@@ -72,6 +72,15 @@ export function nextPhaseBadge(next: { scheduled: boolean; plannedStart: string 
 }
 
 /**
+ * One colour rule for a phase badge, on the Plan list and the season page
+ * (spec: the accent marks only now and next): "Now", "Next" and "Starts ..."
+ * in the accent; "Done" and "Paused" grey.
+ */
+export function badgeAccent(badge: string | null): boolean {
+  return badge === "Now" || badge === "Next" || (badge?.startsWith("Starts") ?? false);
+}
+
+/**
  * A phase's part of the season bar: filled once it has started (done, or the
  * running one with an outline), only outlined when it is the next phase and
  * nothing runs, else grey. A phase that has not started is never filled.
@@ -292,13 +301,14 @@ export function seasonCard(
   const bar = timeline.map<BarSegment>((p) => ({ id: p.id, flex: p.lengthDays, tone: phaseBarTone(p.state, !active && p.id === next?.id) }));
   const rows = timeline.map<PhaseRowView>((p) => {
     const isNext = p.id === next?.id;
+    const badge = p.state === "active" ? "Now" : p.state === "done" ? "Done" : isNext ? nextBadge(p) : null;
     return {
       id: p.id,
       name: p.name,
       sub: phaseSub(p),
       mark: p.state === "active" || (!active && isNext) ? "accent" : "grey",
-      badge: p.state === "active" ? "Now" : p.state === "done" ? "Done" : isNext ? nextBadge(p) : null,
-      badgeAccent: p.state === "active" || (!active && isNext),
+      badge,
+      badgeAccent: badgeAccent(badge),
     };
   });
   const barLabel = timeline.length

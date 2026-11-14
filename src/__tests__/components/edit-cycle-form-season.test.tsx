@@ -52,6 +52,8 @@ describe("a cycle that is a phase of a season", () => {
     render(<EditCycleForm cycle={{ ...base, raceDate: "2027-08-22" }} enduranceEnabled liveSeasonId={null} today="2026-11-14" />);
     expect((screen.getByLabelText("Race (optional)") as HTMLInputElement).value).toBe("2027-08-22");
     expect(screen.queryByTestId("season-race-note")).toBeNull();
+    // One label style: "(optional)" is in the label's own case, as in the note label (J8-03).
+    expect(screen.getByText("Race (optional)").children.length).toBe(0);
   });
 
   it("saves the name without a length, so 10 days stay 10 days", async () => {

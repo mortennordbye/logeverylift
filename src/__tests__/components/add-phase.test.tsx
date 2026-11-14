@@ -42,6 +42,14 @@ beforeEach(() => {
 });
 
 describe("Add a phase", () => {
+  it("a dimmed Cycle I already have says why, and the source cards stack (J4-09)", () => {
+    render(<AddPhaseForm {...props} />);
+    const radio = screen.getByRole("radio", { name: /Cycle I already have/ }) as HTMLInputElement;
+    expect(radio.disabled).toBe(true);
+    expect(screen.getByText("No cycle can be added. Only a draft or the running cycle outside a season can be a phase.")).toBeTruthy();
+    expect(radio.closest("fieldset")!.className).toContain("flex-col");
+  });
+
   it("step 1 goes on to the season's step 2 for the new phase", async () => {
     render(<AddPhaseForm {...props} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Swim, intervals, bricks" } });
@@ -104,8 +112,9 @@ describe("Add a phase, fix round 4", () => {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "General" } });
     fireEvent.click(screen.getByRole("button", { name: "Build the week" }));
     const sheet = await screen.findByRole("region", { name: title });
-    expect(sheet.textContent).toContain("This ends Base at week 3 of 6.");
-    expect(sheet.textContent).toContain("Winter run base pauses. Its next phase no longer starts Mon 14 Dec. You can resume it from the season.");
+    const text = sheet.textContent!.replace(/\u00a0/g, " ");
+    expect(text).toContain("This ends Base at week 3 of 6.");
+    expect(text).toContain("Winter run base pauses. Its next phase no longer starts Mon 14 Dec. You can resume it from the season.");
     expect(actions.addPhaseAction).not.toHaveBeenCalled();
 
     fireEvent.click(within(sheet).getByRole("button", { name: "Build the week" }));

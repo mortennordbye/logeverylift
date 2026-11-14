@@ -273,3 +273,19 @@ export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[],
     };
   });
 }
+
+/**
+ * The end line of a completed cycle: "ended 30 Oct" when it ran its length,
+ * "ended early on 13 Nov" when another start ended it first (J8-09). A block
+ * ended early ran up to the day before the start that ended it, and at least
+ * its first day. `completedOn` is the day it became completed, in the user's
+ * zone, if known.
+ */
+export function endedLine(startDate: string | null, plannedLast: string | null, today: string, completedOn: string | null): string {
+  const early = completedOn != null && plannedLast != null && completedOn <= plannedLast;
+  if (!early && plannedLast && plannedLast < today) return `ended ${dayMonth(plannedLast)}`;
+  if (!completedOn) return "ended early";
+  const before = addDaysStr(completedOn, -1);
+  const last = startDate && before < startDate ? startDate : before;
+  return `ended early on ${dayMonth(last)}`;
+}

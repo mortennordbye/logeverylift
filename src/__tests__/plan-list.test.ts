@@ -1,4 +1,5 @@
 import {
+  badgeAccent,
   dateRange,
   heroLabel,
   pastRow,
@@ -243,9 +244,14 @@ describe("the season card", () => {
     expect(goal.bar.map((b) => b.tone)).toEqual(["current", "grey", "grey"]);
     expect(goal.phases.map((p) => [p.badge, p.badgeAccent])).toEqual([
       ["Now", true],
-      ["Starts 21 Dec", false],
+      // One rule with the season page: the accent marks now and next (J6-01).
+      ["Starts 21 Dec", true],
       [null, false],
     ]);
+  });
+
+  it("colours a badge by one rule: Now, Next and Starts in the accent, Done and Paused grey (J8-01, J4-18)", () => {
+    expect(["Now", "Next", "Starts 21 Dec", "Starts today", "Done", "Paused", null].map(badgeAccent)).toEqual([true, true, true, true, false, false, false]);
   });
 
   it("says Paused, as the season page does, when another block took the next phase's start (fix round 4)", () => {

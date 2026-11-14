@@ -6,6 +6,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { restorePlanRevision } from "@/lib/actions/plan-revisions";
 import type { DeletedItem } from "@/lib/plan-deleted";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { keepDates } from "@/lib/utils/keep-dates";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -42,7 +43,7 @@ export function PlanItemDeleted({ item }: { item: DeletedItem }) {
       <div className="flex flex-col gap-4 px-4 pt-2">
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-semibold break-words">{item.name} was deleted.</h1>
-          <p className="text-[15px] text-muted-foreground">You can restore this {item.what} for 90 days.</p>
+          <p className="text-[15px] text-muted-foreground">{keepDates(`You can restore this ${item.what} for 90 days.`)}</p>
         </div>
         {error && (
           <p role="alert" className="text-sm text-[#ff6b5a]">

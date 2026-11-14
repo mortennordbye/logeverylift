@@ -48,15 +48,15 @@ export default async function AddPhaseWeekPage({ params }: { params: Promise<{ i
 
   return (
     <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
-      {/* The same header as New cycle step 2: Back, the title centred, Cancel. */}
+      {/* The same header as New cycle step 2: Cancel left as on step 1, the title centred, Back. */}
       <FormHeader
         title="Add a phase"
-        left={
+        left={<AddPhaseCancel seasonId={seasonId} cycleId={cycleId} name={cycle.name} />}
+        right={
           <Link replace href={`/seasons/${seasonId}`} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
-            ‹ Back
+            Back
           </Link>
         }
-        right={<AddPhaseCancel seasonId={seasonId} cycleId={cycleId} name={cycle.name} />}
       />
       <div className="flex flex-col gap-[18px] px-4 pt-3 pb-40">
         <StepProgress step={2} of={2} />

@@ -359,11 +359,6 @@ export function CycleSetupSessions({
       <FormHeader
         title="New cycle"
         left={
-          <Link replace href={setupHref(cycle.id, start, true)} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
-            ‹ Back
-          </Link>
-        }
-        right={
           <button
             type="button"
             onClick={() => {
@@ -374,6 +369,11 @@ export function CycleSetupSessions({
           >
             Cancel
           </button>
+        }
+        right={
+          <Link replace href={setupHref(cycle.id, start, true)} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
+            Back
+          </Link>
         }
       />
       <div className="flex flex-col gap-[18px] px-4 pt-3">
@@ -394,11 +394,11 @@ export function CycleSetupSessions({
       </PinnedBar>
       <BottomSheet open={discarding} onClose={() => setDiscarding(false)}>
         {discarding && (
-          <PlanSheetPanel label="Discard this cycle?">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-xl font-semibold">Discard this cycle?</h2>
-              <p className="text-sm text-muted-foreground">{cycle.name} and the sessions you added are deleted.</p>
-            </div>
+          <PlanSheetPanel
+            label="Discard this cycle?"
+            title="Discard this cycle?"
+            sub={<p className="text-sm text-muted-foreground">{cycle.name} and the sessions you added are deleted.</p>}
+          >
             {discardError && (
               <p role="alert" className="text-sm text-[#ff6b5a]">
                 {discardError}

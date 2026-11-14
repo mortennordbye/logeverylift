@@ -155,7 +155,7 @@ export function CycleWeek({
                 {dayCol(true, true)}
                 <span className="flex-1 min-w-0 flex flex-col">
                   {/* A label wraps: cut, it could not be read anywhere (J5-11). */}
-                  <span className={`text-[15px] font-medium ${label ? "text-foreground/80 break-words" : "text-muted-foreground truncate"}`}>{label ?? "Rest"}</span>
+                  <span className={`text-[15px] font-medium line-clamp-2 break-words ${label ? "text-foreground/80" : "text-muted-foreground"}`}>{label ?? "Rest"}</span>
                   {movedTo && <span className="text-[13px] text-muted-foreground truncate">Moved to {weekdayShort(movedTo.date)}</span>}
                 </span>
                 {label && chevron}
@@ -187,7 +187,7 @@ export function CycleWeek({
                 {dayCol(i === 0)}
                 {s.brick && <Link2 role="img" aria-label="Brick, linked to the ride" className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1 min-w-0 flex flex-col">
-                  <span className={`text-[15px] font-medium truncate ${s.status === "skipped" ? "text-muted-foreground line-through" : ""}`}>{s.name}</span>
+                  <span data-testid="week-row-name" className={`text-[15px] font-medium line-clamp-2 break-words ${s.status === "skipped" ? "text-muted-foreground line-through" : ""}`}>{s.name}</span>
                   {/* Two lines, not one: a cut status line lost the sport at 320 px. */}
                   {sub && <span className="text-[13px] text-muted-foreground line-clamp-2 break-words" data-testid="week-row-sub">{sub}</span>}
                 </span>
@@ -232,11 +232,12 @@ export function CycleWeek({
       />
       <BottomSheet open={labelDay !== null} onClose={() => setLabelDay(null)}>
         {labelDay && (
-          <PlanSheetPanel label={`Day on ${shortDay(labelDay)}`} testId="day-label-sheet">
-            <div className="flex flex-col gap-0.5">
-              <SectionLabel accent={labelDay === today}>{shortDay(labelDay)}</SectionLabel>
-              <h2 className="text-2xl font-semibold break-words">{dayLabelOn(dayLabels, labelDay)}</h2>
-            </div>
+          <PlanSheetPanel
+            label={`Day on ${shortDay(labelDay)}`}
+            testId="day-label-sheet"
+            kicker={<SectionLabel accent={labelDay === today}>{shortDay(labelDay)}</SectionLabel>}
+            title={dayLabelOn(dayLabels, labelDay)}
+          >
             {dayNotes?.[dowOf(labelDay)] && <p className="text-[15px] text-muted-foreground whitespace-pre-line break-words">{dayNotes[dowOf(labelDay)]}</p>}
             <TemplateLink href={templateHref} title="Edit weekly template" sub="Change the label or the note for this weekday." />
           </PlanSheetPanel>
@@ -265,7 +266,7 @@ export function TemplateWeek({
             <span className={`w-11 shrink-0 text-[13px] font-semibold ${s ? "" : "text-muted-foreground"}`}>{i === 0 ? NAMES[d.dow] : ""}</span>
             {s ? (
               <span className="flex-1 min-w-0 flex flex-col">
-                <span className="text-[15px] font-medium truncate">{s.name}</span>
+                <span className="text-[15px] font-medium line-clamp-2 break-words">{s.name}</span>
                 {s.sub && <span className="text-[13px] text-muted-foreground truncate">{s.sub}</span>}
               </span>
             ) : (
@@ -329,7 +330,7 @@ export function RotationOrder({
                 {r.n}
               </span>
               <span className="flex flex-col gap-0.5 min-w-0">
-                <span className={`text-[15px] font-medium truncate ${r.rest ? "text-foreground/80" : ""}`}>{r.name}</span>
+                <span className={`text-[15px] font-medium line-clamp-2 break-words ${r.rest ? "text-foreground/80" : ""}`}>{r.name}</span>
                 <span className={`text-[13px] ${next ? "text-brand" : "text-muted-foreground"}`}>{sub}</span>
               </span>
             </>
@@ -432,12 +433,15 @@ export function RotationSessionSheet({
   return (
     <BottomSheet open={row !== null} onClose={onClose}>
       {row && up && (
-        <PlanSheetPanel label={isToday ? "Today's session" : `${row.name}, position ${row.n} of ${count}`} testId="rotation-sheet">
-          <div className="flex flex-col gap-0.5">
-            <SectionLabel accent={isToday}>{label}</SectionLabel>
-            <h2 className="text-2xl font-semibold">{row.name}</h2>
-            {row.swappedFrom && <p className="text-sm text-muted-foreground">Swapped from {row.swappedFrom.name}</p>}
-            {row.programId != null ? (
+        <PlanSheetPanel
+          label={isToday ? "Today's session" : `${row.name}, position ${row.n} of ${count}`}
+          testId="rotation-sheet"
+          kicker={<SectionLabel accent={isToday}>{label}</SectionLabel>}
+          title={row.name}
+          sub={
+            <>
+              {row.swappedFrom && <p className="text-sm text-muted-foreground">Swapped from {row.swappedFrom.name}</p>}
+              {row.programId != null ? (
               <Link href={`/programs/${row.programId}`} className="flex items-center min-h-11 text-sm text-muted-foreground active:opacity-70">
                 Position {row.n} of {count} ·&nbsp;<span className="text-brand">See program ›</span>
               </Link>
@@ -446,7 +450,9 @@ export function RotationSessionSheet({
                 Position {row.n} of {count}
               </p>
             )}
-          </div>
+            </>
+          }
+        >
           {swapping ? (
             <PickList
               title="Swap program"
@@ -485,7 +491,7 @@ export function RotationSessionSheet({
                         ›
                       </span>
                     </button>
-                    <button type="button" disabled={pending} onClick={() => run({ op: "skip" })} className={`${sheetRow} border-b-0 text-muted-foreground`}>
+                    <button type="button" disabled={pending} onClick={() => run({ op: "skip" })} className={`${sheetRow} border-b-0`}>
                       Skip this time
                     </button>
                   </>
