@@ -8,7 +8,7 @@ import { PlanItemDeleted } from "@/components/features/PlanItemDeleted";
 import { db } from "@/db";
 import { planRevisions, trainingCycles } from "@/db/schema";
 import { restorePlanRevision } from "@/lib/actions/plan-revisions";
-import type { DeletedItem } from "@/lib/plan-deleted";
+import { deletedPlanCount, type DeletedItem } from "@/lib/plan-deleted";
 import { and, desc, eq } from "drizzle-orm";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -126,5 +126,18 @@ describe("a page whose season was just deleted", () => {
     await expect(seasonEdit(seasonId)).rejects.toMatchObject(NOT_FOUND);
     await expect(seasonDetail(999_999_999)).rejects.toMatchObject(NOT_FOUND);
     await expect(seasonEdit(999_999_999)).rejects.toMatchObject(NOT_FOUND);
+  });
+});
+
+describe("the Plan list's Recently deleted count", () => {
+  it("counts the user's deleted cycles and seasons, not another user's or live ones", async () => {
+    await othersDeleted();
+    const gone = await cycle("Gone");
+    expect((await deleteTrainingCycle(gone)).success).toBe(true);
+    const goneSeason = await season("Gone");
+    expect((await deleteSeasonAction({ seasonId: goneSeason })).success).toBe(true);
+    await cycle("Kept");
+    await season("Kept");
+    expect(await deletedPlanCount(me)).toBe(2);
   });
 });

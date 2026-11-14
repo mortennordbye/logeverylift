@@ -18,7 +18,7 @@ import { asUser } from "./setup";
  * query and the pool checkout it makes. A second, by the owner (2026-11-14,
  * "it should still show I have a season and the cycle which are coming up"):
  * with no active cycle, Today reads the block scheduled to start next
- * (`upcomingCycle` in src/lib/home/core.ts), +2 the same way.
+ * (`upcomingCycle` in src/lib/cycle-start.ts), +2 the same way.
  *
  * A statement is a `pool.query` call or a `pool.connect` (a transaction). The
  * page runs twice per user: the first render writes the cycle's sessions, the

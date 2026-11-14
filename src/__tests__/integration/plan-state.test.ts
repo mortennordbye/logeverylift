@@ -7,7 +7,7 @@ import { startTrainingCycle } from "@/lib/actions/training-cycles";
 import { loadPlanList } from "@/lib/plan-list";
 import { getSeasonDetail } from "@/lib/seasons";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
-import { dayMonth } from "@/lib/utils/plan-list";
+import { dayMonth } from "@/lib/home/labels";
 import { eq } from "drizzle-orm";
 import { isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";

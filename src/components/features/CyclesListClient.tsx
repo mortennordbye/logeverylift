@@ -2,6 +2,7 @@
 
 import { HOME_UI } from "@/components/features/home/fonts";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
+import { ACCENT_TINT, ErrorLine } from "@/components/features/season-ui";
 import { FlagIcon, SeasonsSection } from "@/components/features/SeasonsSection";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
@@ -17,8 +18,6 @@ import { useState } from "react";
 
 const sectionLabel = "mx-1 text-xs font-semibold uppercase tracking-[1px] text-muted-foreground";
 const card = "rounded-[20px] bg-widget";
-/** The selected chip's tint comes from the accent, never a fixed colour. */
-const accentTint = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
 
 function PlusIcon() {
   return (
@@ -112,7 +111,7 @@ function HeroCard({ hero }: { hero: HeroView }) {
             <li
               key={c.id}
               className={`flex min-h-[44px] flex-col justify-center rounded-xl border px-3 py-1 ${
-                c.tag === "Next" ? `${accentTint} border-brand` : c.tag === "Done" ? "border-foreground/12" : "border-transparent bg-widget-2"
+                c.tag === "Next" ? `${ACCENT_TINT} border-brand` : c.tag === "Done" ? "border-foreground/12" : "border-transparent bg-widget-2"
               }`}
             >
               {c.tag && <span className={`text-[11px] font-semibold ${c.tag === "Next" ? "text-brand" : "text-muted-foreground"}`}>{c.tag}</span>}
@@ -323,11 +322,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
               {warning}
             </p>
           )}
-          {error && (
-            <p role="alert" className="text-sm text-[#ff6b5a]">
-              {error}
-            </p>
-          )}
+          <ErrorLine error={error} />
           <button
             type="button"
             onClick={handleDelete}

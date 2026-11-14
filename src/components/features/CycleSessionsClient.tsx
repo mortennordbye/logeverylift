@@ -19,12 +19,12 @@ import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useUnits } from "@/contexts/user-settings-context";
 import { updateRotationSession } from "@/lib/actions/planned-sessions";
+import { dayMonth } from "@/lib/home/labels";
 import {
   type BlockWeek,
   type DetailSession,
   type RotationRow,
   dayLabelOn,
-  dayMonth,
   doneLabel,
   isMoved,
   rowAction,

@@ -5,12 +5,11 @@
  */
 
 import type { AnswerSession } from "@/components/features/answer-session";
+import { dayMonth } from "@/lib/home/labels";
+import { dateLabel } from "@/lib/utils/date-label";
 import { addDaysStr, dowOf } from "@/lib/utils/planned-sessions";
 import type { MoveSuggestion } from "@/lib/utils/session-compliance";
 import { shortDay } from "@/lib/utils/seasons";
-
-const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 export type BlockWeek = { from: string; to: string };
 
@@ -161,27 +160,14 @@ export function weekDays(week: BlockWeek): string[] {
   return out;
 }
 
-function parts(day: string) {
-  const d = new Date(`${day}T00:00:00Z`);
-  return { date: d.getUTCDate(), month: d.getUTCMonth(), weekday: d.getUTCDay() };
-}
-
-/** "16 Nov". */
-export function dayMonth(day: string): string {
-  const p = parts(day);
-  return `${p.date} ${MONTH_SHORT[p.month]}`;
-}
-
 /** "Mon". */
 export function weekdayShort(day: string): string {
-  return WEEKDAY_SHORT[parts(day).weekday];
+  return dateLabel(day, "EEE");
 }
 
 /** "16–22 Nov", or "30 Nov – 6 Dec" across two months. */
 export function weekRangeLabel(week: BlockWeek): string {
-  const a = parts(week.from);
-  const b = parts(week.to);
-  if (a.month === b.month) return `${a.date}–${b.date} ${MONTH_SHORT[b.month]}`;
+  if (week.from.slice(0, 7) === week.to.slice(0, 7)) return `${Number(week.from.slice(8))}–${dayMonth(week.to)}`;
   return `${dayMonth(week.from)} – ${dayMonth(week.to)}`;
 }
 

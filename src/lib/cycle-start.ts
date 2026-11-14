@@ -11,9 +11,14 @@ import { seasons, trainingCycles } from "@/db/schema";
 import { liveCycles } from "@/lib/plan-live";
 import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import type { RunningCycle, ScheduledDraft } from "@/lib/utils/cycle-start";
-import { and, asc, eq, gt, inArray, isNull, ne } from "drizzle-orm";
+import type { RunningBlock } from "@/lib/utils/season-start";
+import { and, asc, eq, gt, inArray, isNotNull, isNull, ne } from "drizzle-orm";
 
-export async function cycleStartContext(userId: string, today: string): Promise<{ running: RunningCycle | null; scheduled: ScheduledDraft | null }> {
+/**
+ * The running cycle, with the live season it is a phase of, and the draft
+ * scheduled next, in one read.
+ */
+export async function startBlocks(userId: string) {
   const rows = await db
     .select({
       id: trainingCycles.id,
@@ -34,25 +39,68 @@ export async function cycleStartContext(userId: string, today: string): Promise<
   const draft = rows
     .filter((c) => c.status === "draft" && c.scheduledStartDate)
     .sort((a, b) => a.scheduledStartDate!.localeCompare(b.scheduledStartDate!))[0];
+  const running: RunningBlock | null = active
+    ? {
+        id: active.id,
+        name: active.name,
+        startDate: active.startDate!,
+        durationWeeks: active.durationWeeks,
+        durationDays: active.durationDays,
+        seasonId: active.seasonId,
+      }
+    : null;
+  const scheduled: ScheduledDraft | null = draft
+    ? {
+        id: draft.id,
+        name: draft.name,
+        day: draft.scheduledStartDate!,
+        season: draft.seasonId != null ? { id: draft.seasonId, name: draft.seasonName! } : null,
+      }
+    : null;
+  return { running, scheduled };
+}
+
+/**
+ * The block scheduled to start next: its id, name, start day and the season
+ * it is a phase of. One cycle is scheduled at a time.
+ */
+export async function upcomingCycle(userId: string) {
+  const [row] = await db
+    .select({
+      id: trainingCycles.id,
+      name: trainingCycles.name,
+      startsOn: trainingCycles.scheduledStartDate,
+      seasonName: seasons.name,
+    })
+    .from(trainingCycles)
+    .leftJoin(seasons, and(eq(seasons.id, trainingCycles.seasonId), isNull(seasons.deletedAt)))
+    .where(
+      and(
+        eq(trainingCycles.userId, userId),
+        eq(trainingCycles.status, "draft"),
+        isNotNull(trainingCycles.scheduledStartDate),
+        liveCycles,
+      ),
+    )
+    .orderBy(asc(trainingCycles.scheduledStartDate))
+    .limit(1);
+  return row?.startsOn ? { id: row.id, name: row.name, startsOn: row.startsOn, seasonName: row.seasonName } : null;
+}
+
+export async function cycleStartContext(userId: string, today: string): Promise<{ running: RunningCycle | null; scheduled: ScheduledDraft | null }> {
+  const { running, scheduled } = await startBlocks(userId);
   return {
-    running: active
+    running: running
       ? {
-          id: active.id,
-          name: active.name,
-          week: cycleWeek(parseDateStr(active.startDate!), active.durationWeeks, parseDateStr(today), active.durationDays).currentWeek,
-          totalWeeks: active.durationWeeks,
-          startDate: active.startDate!,
-          durationDays: active.durationDays,
+          id: running.id,
+          name: running.name,
+          week: cycleWeek(parseDateStr(running.startDate), running.durationWeeks, parseDateStr(today), running.durationDays).currentWeek,
+          totalWeeks: running.durationWeeks,
+          startDate: running.startDate,
+          durationDays: running.durationDays,
         }
       : null,
-    scheduled: draft
-      ? {
-          id: draft.id,
-          name: draft.name,
-          day: draft.scheduledStartDate!,
-          season: draft.seasonId != null ? { id: draft.seasonId, name: draft.seasonName! } : null,
-        }
-      : null,
+    scheduled,
   };
 }
 
