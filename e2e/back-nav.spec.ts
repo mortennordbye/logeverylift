@@ -185,8 +185,8 @@ test("a saved form does not stay in history: New season > Create > Back lands on
   const settle = trackActions(page);
   await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
   await page.goto("/cycles");
-  // A fresh account has an empty Plan: Season is the third choice on its card.
-  await page.getByRole("link", { name: /^Season/ }).click();
+  await page.getByRole("button", { name: "New cycle or season" }).click();
+  await page.getByRole("link", { name: /New season/ }).click();
   await page.waitForURL(atPath("/seasons/new"));
   await page.getByRole("button", { name: "Change start" }).click();
   await page.getByLabel("Start date").fill("2027-01-04");

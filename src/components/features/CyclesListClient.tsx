@@ -51,6 +51,21 @@ function ChevronIcon() {
   );
 }
 
+/** The empty Plan's ways to start: two kinds of cycle, then a season. One title and one short line each. */
+const START_GROUPS = [
+  {
+    label: "Cycle · a block of weeks",
+    rows: [
+      { href: "/cycles/new?type=day_of_week", Icon: CalendarIcon, title: "Same days each week", sub: "Monday upper, Thursday lower" },
+      { href: "/cycles/new?type=rotation", Icon: RotateIcon, title: "Rotation", sub: "Next session follows the last" },
+    ],
+  },
+  {
+    label: "Season · a goal with an end date",
+    rows: [{ href: "/seasons/new", Icon: FlagIcon, title: "Race or goal", sub: "Your cycles become its phases" }],
+  },
+];
+
 function SeasonPrompt() {
   return (
     <Link href="/seasons/new" className="flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground active:opacity-70">
@@ -369,37 +384,31 @@ export function CyclesListClient({ data, deletedCount }: Props) {
 
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 pt-2">
         {data.empty ? (
-          <div className="flex flex-col gap-4 pt-14">
+          <div className="flex flex-col gap-4 pt-4">
             <section className={`${card} flex flex-col gap-5 px-5 py-6`} data-testid="plan-empty">
-              <div className="flex flex-col gap-2 text-center">
-                <h2 className="text-[22px] font-semibold">Plan your training</h2>
-                <p className="text-[15px] leading-[21px] text-foreground/80">A cycle is a block of weeks that runs your programs. A season is a bigger goal made of cycles.</p>
-              </div>
-              <nav aria-label="How do you want to plan?" className="flex flex-col overflow-hidden rounded-[14px] bg-widget-2">
-                <Link href="/cycles/new?type=day_of_week" className="flex min-h-[60px] items-center gap-3 border-b border-hairline px-3.5 py-3 active:opacity-70">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand/15 text-brand" aria-hidden><CalendarIcon className="h-5 w-5 shrink-0" /></span>
-                  <span className="flex flex-1 flex-col gap-0.5">
-                    <span className="text-sm font-semibold">Same days each week</span>
-                    <span className="text-[13px] text-muted-foreground">Monday upper, Thursday lower</span>
-                  </span>
-                  <ChevronIcon />
-                </Link>
-                <Link href="/cycles/new?type=rotation" className="flex min-h-[60px] items-center gap-3 border-b border-hairline px-3.5 py-3 active:opacity-70">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand/15 text-brand" aria-hidden><RotateIcon className="h-5 w-5 shrink-0" /></span>
-                  <span className="flex flex-1 flex-col gap-0.5">
-                    <span className="text-sm font-semibold">Rotation</span>
-                    <span className="text-[13px] text-muted-foreground">The next session follows the last one</span>
-                  </span>
-                  <ChevronIcon />
-                </Link>
-                <Link href="/seasons/new" className="flex min-h-[60px] items-center gap-3 px-3.5 py-3 active:opacity-70">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand/15 text-brand" aria-hidden><FlagIcon className="h-5 w-5 shrink-0" /></span>
-                  <span className="flex flex-1 flex-col gap-0.5">
-                    <span className="text-sm font-semibold">Season</span>
-                    <span className="text-[13px] text-muted-foreground">A long goal with an end date, like a race or “Bench 120 kg by summer”. Your cycles become its phases, one after the other.</span>
-                  </span>
-                  <ChevronIcon />
-                </Link>
+              <h2 className="text-[22px] font-semibold">Plan your training</h2>
+              <nav aria-label="How do you want to plan?" className="flex flex-col gap-5">
+                {START_GROUPS.map((g) => (
+                  <div key={g.label} className="flex flex-col gap-2">
+                    <h3 className={sectionLabel}>{g.label}</h3>
+                    <ul className="flex flex-col overflow-hidden rounded-[14px] bg-widget-2">
+                      {g.rows.map((r) => (
+                        <li key={r.href} className="border-b border-hairline last:border-b-0">
+                          <Link href={r.href} className="flex min-h-[60px] items-center gap-3 px-3.5 py-3 active:opacity-70">
+                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand/15 text-brand" aria-hidden>
+                              <r.Icon className="h-5 w-5 shrink-0" />
+                            </span>
+                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                              <span className="text-sm font-semibold">{r.title}</span>
+                              <span className="truncate text-[13px] text-muted-foreground">{r.sub}</span>
+                            </span>
+                            <ChevronIcon />
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </nav>
             </section>
             {recentlyDeleted}
