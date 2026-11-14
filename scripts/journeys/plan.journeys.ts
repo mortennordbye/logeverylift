@@ -13,6 +13,44 @@ const sqlValue = (sql: string) =>
     .trim()
     .split("\n")[0];
 
+/**
+ * Run in the page before a click to a season (J8-10). The dev server answers
+ * so fast that the season's loading skeleton never shows, so this holds back
+ * the page's own rows of the navigation response, from the
+ * SeasonDetailClient row on, until `window.releaseSeasonPage()` is called.
+ * The layout rows arrive and the page's loading boundary shows meanwhile.
+ * A string, so tsx does not add helpers that do not exist in the page.
+ */
+const HOLD_SEASON_PAGE = `(() => {
+  const real = window.fetch.bind(window);
+  let release = () => {};
+  const held = new Promise((r) => (release = r));
+  window.releaseSeasonPage = release;
+  window.fetch = async (input, init) => {
+    const res = await real(input, init);
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    const headers = new Headers(init && init.headers);
+    if (!/^\\/seasons\\/\\d+$/.test(url.pathname) || headers.get("rsc") !== "1" || headers.has("next-router-prefetch")) return res;
+    window.fetch = real;
+    const body = new Uint8Array(await res.arrayBuffer());
+    const mark = new TextEncoder().encode("SeasonDetailClient.tsx");
+    const at = body.findIndex((_, i) => mark.every((m, j) => body[i + j] === m));
+    const cut = at < 0 ? body.length : body.lastIndexOf(10, at) + 1;
+    const stream = new ReadableStream({
+      async start(c) {
+        c.enqueue(body.subarray(0, cut));
+        await held;
+        c.enqueue(body.subarray(cut));
+        c.close();
+      },
+    });
+    const out = new Response(stream, { status: res.status, statusText: res.statusText, headers: res.headers });
+    Object.defineProperty(out, "url", { value: res.url });
+    Object.defineProperty(out, "redirected", { value: res.redirected });
+    return out;
+  };
+})()`;
+
 /** Caches a lookup that needs the page, so it runs inside the first step that needs it. */
 const once = <T>(fn: () => Promise<T>) => {
   let p: Promise<T> | undefined;
@@ -164,6 +202,8 @@ const set: JourneySet = {
         });
         await step("J8 light", async () => {
           // The app keeps its own theme (Settings, localStorage "theme"), not the phone's.
+          // A run of J8 alone starts on about:blank, which has no localStorage.
+          if (page.url() === "about:blank") await go("/cycles");
           await page.evaluate(() => localStorage.setItem("theme", "light"));
           await go("/cycles");
           await shot(8, 20, "light-plan-list", "Plan list with the app theme set to light", { small: false });
@@ -499,16 +539,15 @@ const set: JourneySet = {
           await shot(4, 14, "after-resume", "Season after Resume", { small: false });
         });
         await step("J8 skeleton", async () => {
-          // Slow network, so the loading skeleton stays on screen long enough to capture.
-          const cdp = await page.context().newCDPSession(page);
-          await cdp.send("Network.enable");
-          await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 2500, downloadThroughput: 50000, uploadThroughput: 50000 });
           await go("/cycles");
+          await page.evaluate(HOLD_SEASON_PAGE);
           await page.getByRole("link", { name: /Winter run base/ }).first().click();
-          // The skeleton itself, not the old page dimmed while the request starts.
           await page.getByTestId("season-skeleton").waitFor({ state: "visible", timeout: 15_000 });
+          // The Plan list has slid away, so the shot shows the skeleton alone.
+          await page.getByText("When you train, in cycles and seasons").waitFor({ state: "detached" });
           await shot(8, 10, "loading-skeleton", "Loading skeleton while a season opens", { raw: true });
-          await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+          await page.evaluate("window.releaseSeasonPage()");
+          await page.getByTestId("season-skeleton").waitFor({ state: "detached" });
         });
       },
     },
