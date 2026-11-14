@@ -17,6 +17,7 @@
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { ButtonReason, Chip, ChipGroup, ErrorLine, FormHeader, LABEL, PinnedBar, StepProgress, WeeksField } from "@/components/features/season-ui";
+import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
@@ -256,16 +257,23 @@ export function CycleSetupSessions({
   programs,
   start,
   endurance,
+  running,
+  scheduled,
 }: {
   cycle: TrainingCycleWithSlots;
   programs: PickerProgram[];
   /** The first day: today starts the cycle, a later day schedules it. */
   start: string;
   endurance: boolean;
+  /** The running cycle and the scheduled draft: what Create ends and drops, asked first (spec, decisions). */
+  running?: RunningCycle | null;
+  scheduled?: ScheduledDraft | null;
 }) {
   const returnTo = useReturnTo();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const startLines = [endsRunningLine(cycle.id, runningOn(running, start)), dropsScheduledLine(cycle.id, scheduled)].filter((l): l is string => l != null);
   const [discarding, setDiscarding] = useState(false);
   const [discardBusy, setDiscardBusy] = useState(false);
   const [discardError, setDiscardError] = useState("");
@@ -323,14 +331,34 @@ export function CycleSetupSessions({
         <StepProgress step={2} of={2} />
         <h2 className="text-[22px] font-semibold">{cycle.scheduleType === "rotation" ? "Rotation order" : "Build the week"}</h2>
         <CycleScheduleBuilder cycle={cycle} programs={programs} endurance={endurance} />
-        <ErrorLine error={error} />
+        <ErrorLine error={confirming ? null : error} />
       </div>
       <PinnedBar>
-        <button type="button" onClick={create} disabled={loading || !hasSession} aria-describedby={hasSession ? undefined : "create-reason"} className={PRIMARY}>
+        <button
+          type="button"
+          onClick={() => {
+            if (startLines.length === 0) return void create();
+            setError("");
+            setConfirming(true);
+          }}
+          disabled={loading || !hasSession} aria-describedby={hasSession ? undefined : "create-reason"} className={PRIMARY}>
           Create cycle
         </button>
         <ButtonReason id="create-reason" reason={hasSession ? null : "Add a session first."} />
       </PinnedBar>
+      <TakeStartSheet
+        open={confirming}
+        title={`Start ${cycle.name} ${shortDay(start)}?`}
+        lines={startLines}
+        action="Create cycle"
+        busy={loading}
+        error={error || null}
+        onConfirm={create}
+        onClose={() => {
+          setError("");
+          setConfirming(false);
+        }}
+      />
       <BottomSheet open={discarding} onClose={() => setDiscarding(false)}>
         {discarding && (
           <PlanSheetPanel

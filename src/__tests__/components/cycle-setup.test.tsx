@@ -260,6 +260,28 @@ describe("step 2", () => {
     expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-16");
   });
 
+  it("asks first when the start ends the running cycle or drops a scheduled start (round 8 B14)", async () => {
+    const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
+    const scheduled = { id: 7, name: "Strength peak", day: "2026-11-23", season: null };
+    render(
+      <CycleSetupSessions cycle={{ ...rotation, name: "Push / Pull" }} programs={programs} start="2026-11-14" endurance={false} running={running} scheduled={scheduled} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
+    expect(startTrainingCycle).not.toHaveBeenCalled();
+    const sheet = screen.getByRole("region", { name: "Start Push / Pull Sat 14 Nov?" });
+    expect(sheet.textContent!.replace(/ /g, " ")).toContain("This ends Upper / Lower hypertrophy at week 3 of 6.");
+    expect(sheet.textContent!.replace(/ /g, " ")).toContain("Strength peak no longer starts Mon 23 Nov.");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Create cycle" }));
+    await waitFor(() => expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-14"));
+  });
+
+  it("creates at once when the start ends and drops nothing", async () => {
+    const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
+    render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-12-12" endurance={false} running={running} scheduled={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
+    await waitFor(() => expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-12-12"));
+  });
+
   it("names the cycle being built under the title (round 8)", () => {
     render(<CycleSetupSessions cycle={{ ...rotation, name: "Push / Pull rotation" }} programs={programs} start="2026-11-16" endurance={false} />);
     const header = screen.getByTestId("form-header");
