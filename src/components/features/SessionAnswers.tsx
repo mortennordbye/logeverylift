@@ -9,6 +9,7 @@
 
 import type { AnswerSession } from "@/components/features/answer-session";
 import { IllnessSheet, type IllnessDraft } from "@/components/features/IllnessSheet";
+import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPanel";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useUnits } from "@/contexts/user-settings-context";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
@@ -159,17 +160,12 @@ export function AnswerSheets({
   );
 }
 
-function ConfirmDoneSheet({
-  session,
-  onClose,
-  onSaved,
-  onSick,
-}: {
-  session: AnswerSession | null;
-  onClose: () => void;
-  onSaved: (id: number) => void;
-  onSick: (s: AnswerSession) => void;
-}) {
+/**
+ * The "Yes, I did it" form: time, distance, effort and notes, checked, and
+ * saved as a logged session for the planned one. The fields clear when the
+ * session changes. Shared by the home sheet and the cycle detail sheet.
+ */
+function useConfirmDone(session: AnswerSession | null, onSaved: (id: number) => void) {
   const units = useUnits();
   const [time, setTime] = useState("");
   const [distance, setDistance] = useState("");
@@ -214,6 +210,22 @@ function ConfirmDoneSheet({
     }
     onSaved(session.id);
   }
+
+  return { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, setSaving, error, setError, unit, seconds, distanceBad, save };
+}
+
+function ConfirmDoneSheet({
+  session,
+  onClose,
+  onSaved,
+  onSick,
+}: {
+  session: AnswerSession | null;
+  onClose: () => void;
+  onSaved: (id: number) => void;
+  onSick: (s: AnswerSession) => void;
+}) {
+  const { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, error, unit, seconds, distanceBad, save } = useConfirmDone(session, onSaved);
 
   const field = "mt-1 w-full min-h-[44px] rounded-xl bg-muted px-4 text-base outline-none focus:ring-2 ring-primary";
   return (
@@ -281,6 +293,121 @@ function ConfirmDoneSheet({
             </button>
           </div>
         </div>
+      )}
+    </BottomSheet>
+  );
+}
+
+const SPORT_WORD: Record<NonNullable<AnswerSession["sport"]>, string> = { swim: "swim", bike: "ride", run: "run" };
+
+/**
+ * "Did you do it?" for one past session, from its row on the cycle detail
+ * (docs/design/plan-redesign/J5_DidYouDoIt.dc.html). "Yes, I did it" logs it
+ * with the same form and action as the home sheet; "Missed" stores the miss.
+ * `session` null keeps it closed.
+ */
+export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: AnswerSession | null; dayLabel: string; onClose: () => void }) {
+  const router = useRouter();
+  const [answer, setAnswer] = useState<"yes" | "missed">("yes");
+  const form = useConfirmDone(session, () => {
+    onClose();
+    router.refresh();
+  });
+  const { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, setSaving, error, setError, unit, seconds, distanceBad } = form;
+
+  async function save() {
+    if (!session) return;
+    if (answer === "yes") return form.save();
+    setSaving(true);
+    setError(null);
+    const r = await callAction(updatePlannedSession({ op: "miss", id: session.id }));
+    setSaving(false);
+    if (!r.success) {
+      setError(r.error);
+      return;
+    }
+    onClose();
+    router.refresh();
+  }
+
+  const choice = (on: boolean) =>
+    `h-12 rounded-[14px] text-[15px] font-semibold active:opacity-70 ring-1 ring-inset ${on ? "ring-brand bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]" : "ring-foreground/15"}`;
+  const field = "h-12 w-full rounded-xl bg-widget-2 px-3 text-base text-foreground outline-none focus:ring-2 ring-brand";
+  const label = "flex flex-col gap-1.5 text-[13px] text-muted-foreground";
+  return (
+    <BottomSheet open={session !== null} onClose={onClose}>
+      {session && (
+        <PlanSheetPanel label="Unconfirmed session" testId="did-you-do-it-sheet">
+          <div className="flex flex-col gap-1">
+            <SectionLabel>{dayLabel}</SectionLabel>
+            <h2 className="text-xl font-semibold">{session.summary ? `${session.name} · ${session.summary}` : session.name}</h2>
+            <p className="text-sm text-foreground/80">No {session.sport ? SPORT_WORD[session.sport] : "workout"} found for this day. Did you do it?</p>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" aria-pressed={answer === "yes"} onClick={() => setAnswer("yes")} className={choice(answer === "yes")}>
+              Yes, I did it
+            </button>
+            <button type="button" aria-pressed={answer === "missed"} onClick={() => setAnswer("missed")} className={choice(answer === "missed")}>
+              Missed
+            </button>
+          </div>
+          {answer === "yes" && (
+            <>
+              <div className="grid grid-cols-2 gap-2">
+                <label className={label}>
+                  Time (h:mm)
+                  <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="numeric" placeholder="1:05" className={field} />
+                </label>
+                <label className={label}>
+                  Distance, {unit} (optional)
+                  <input value={distance} onChange={(e) => setDistance(e.target.value)} inputMode="decimal" className={field} />
+                </label>
+              </div>
+              {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or h:mm, such as 1:30.</p>}
+              <fieldset className="flex flex-col gap-1.5">
+                <legend className="mb-1.5 text-[13px] text-muted-foreground">Effort, 1 (easy) to 10 (max)</legend>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      aria-pressed={rpe === n}
+                      aria-label={`Effort ${n}`}
+                      onClick={() => setRpe(rpe === n ? null : n)}
+                      className={`h-11 rounded-xl text-[15px] font-semibold active:opacity-70 ${rpe === n ? "bg-primary text-primary-foreground" : "bg-widget-2"}`}
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+              <label className={label}>
+                Notes
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  maxLength={500}
+                  rows={2}
+                  placeholder="How did it feel?"
+                  className="w-full rounded-xl bg-widget-2 px-3 py-2.5 text-base text-foreground outline-none focus:ring-2 ring-brand resize-none"
+                />
+              </label>
+            </>
+          )}
+          {error && (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={save}
+            disabled={saving || (answer === "yes" && (seconds == null || distanceBad))}
+            className="h-[52px] rounded-2xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
+          >
+            Save
+          </button>
+        </PlanSheetPanel>
       )}
     </BottomSheet>
   );
