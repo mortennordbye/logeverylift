@@ -251,11 +251,11 @@ export function CycleCalendarClient({ cycles, completedDates, programsMap, plann
     <div className="flex-1 overflow-hidden px-4 pb-2 flex flex-col">
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-2">
-        <button onClick={prevMonth} className="w-10 h-10 flex items-center justify-center active:opacity-60">
+        <button onClick={prevMonth} aria-label="Previous month" className="w-11 h-11 flex items-center justify-center active:opacity-60">
           <ChevronLeftIcon className="w-5 h-5" />
         </button>
         <span className="text-base font-semibold">{MONTH_NAMES[month]} {year}</span>
-        <button onClick={nextMonth} className="w-10 h-10 flex items-center justify-center active:opacity-60">
+        <button onClick={nextMonth} aria-label="Next month" className="w-11 h-11 flex items-center justify-center active:opacity-60">
           <ChevronRightIcon className="w-5 h-5" />
         </button>
       </div>
