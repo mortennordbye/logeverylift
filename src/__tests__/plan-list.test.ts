@@ -82,6 +82,13 @@ describe("plan list words", () => {
     expect(heroLabel(next, TODAY, false)).toBe("Starts Mon 16 Nov · Week 1 of 8");
   });
 
+  it("counts the hero's weeks to the day a scheduled start cuts the running block (fix round 7)", () => {
+    const running = { id: 1, name: "Base", durationWeeks: 7, durationDays: null, scheduleType: "day_of_week" as const, startDate: "2026-11-09", scheduledStartDate: null };
+    expect(heroLabel(running, TODAY, true, "2026-11-16")).toBe("Week 1 of 1 · Same days each week");
+    expect(heroLabel(running, TODAY, true, "2026-11-24")).toBe("Week 1 of 3 · Same days each week");
+    expect(heroLabel(running, TODAY, true, null)).toBe("Week 1 of 7 · Same days each week");
+  });
+
   it("writes up-next and past rows", () => {
     const c = { id: 2, name: "Strength peak", durationWeeks: 4, durationDays: null, scheduleType: "day_of_week" as const, startDate: null, scheduledStartDate: "2026-12-21" };
     expect(upNextRow(c, TODAY)).toEqual({ id: 2, name: "Strength peak", sub: "4 weeks · Same days each week", starts: "Starts 21 Dec", startsAccent: true });
