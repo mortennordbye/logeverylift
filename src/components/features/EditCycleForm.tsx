@@ -77,6 +77,8 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
 
     const result = await callAction(updateTrainingCycle({
       id: cycle.id,
+      // The version this form read: a save from a tab another tab has saved over is refused.
+      expectedVersion: cycle.version,
       name: name.trim(),
       // Only a changed length: an unchanged one would drop a length in days (T8).
       durationWeeks: weeks !== cycle.durationWeeks ? weeks : undefined,

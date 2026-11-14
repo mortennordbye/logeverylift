@@ -20,7 +20,7 @@ import { insertAutoSessions } from "@/lib/auto-sessions";
 import { declineDay, removeSlotInTx, rotationOverrides, skipAutoDay, upsertSlotInTx, weekdayToday } from "@/lib/planned-sessions";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
-import { OpenWorkoutError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, scheduleCycle, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
+import { OpenWorkoutError, PlanConflictError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, scheduleCycle, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
 import { MAX_SCHEDULE_DAYS } from "@/lib/mcp/tools/cycles";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
@@ -579,10 +579,15 @@ const removeCycleSlotSchema = z.object({ slotId: z.number().int().positive(), cy
  * Run a write to one cycle inside the revision layer (docs/plans/revisions.md,
  * 2.2). Null when it is not the caller's live cycle.
  */
-async function writeCycle<T>(userId: string, cycleId: number, fn: (tx: Tx) => Promise<T>): Promise<{ result: T } | null> {
+async function writeCycle<T>(
+  userId: string,
+  cycleId: number,
+  fn: (tx: Tx) => Promise<T>,
+  expectedVersion?: number,
+): Promise<{ result: T } | null> {
   try {
     const { result } = await planWrite({ userId, writer: "user" }, async (w) => {
-      await w.touch({ type: "cycle", id: cycleId });
+      await w.touch({ type: "cycle", id: cycleId }, { expectedVersion });
       return fn(w.tx);
     });
     return { result };
@@ -625,6 +630,8 @@ export async function createTrainingCycle(
   }
 }
 
+const STALE_EDIT = "This cycle changed in another tab. Reload to see it.";
+
 export async function updateTrainingCycle(
   data: unknown,
 ): Promise<ActionResult<TrainingCycle>> {
@@ -635,7 +642,7 @@ export async function updateTrainingCycle(
       return { success: false, error: "Invalid input" };
     }
 
-    const { id, ...rest } = validation.data;
+    const { id, expectedVersion, ...rest } = validation.data;
 
     // Verify ownership
     const existing = await db.query.trainingCycles.findFirst({
@@ -691,7 +698,7 @@ export async function updateTrainingCycle(
         .where(eq(trainingCycles.id, id))
         .returning();
       return row;
-    });
+    }, expectedVersion);
     if (!done) return { success: false, error: "Cycle not found" };
     const cycle = done.result;
 
@@ -699,6 +706,8 @@ export async function updateTrainingCycle(
     revalidatePath(`/cycles/${id}`);
     return { success: true, data: cycle };
   } catch (err) {
+    // Edit details sends the version it read: another tab saved since (T9).
+    if (err instanceof PlanConflictError) return { success: false, error: STALE_EDIT };
     console.error("[updateTrainingCycle] failed", err);
     return { success: false, error: "Failed to update the cycle" };
   }

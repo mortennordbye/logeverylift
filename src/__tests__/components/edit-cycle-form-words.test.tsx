@@ -93,3 +93,18 @@ describe("the Edit details screen", () => {
     expect(reasonOf(save)).toBe("Give the cycle a name.");
   });
 });
+
+describe("two tabs (round 8 B13)", () => {
+  it("sends the version it read, so a stale tab cannot undo another tab's save", async () => {
+    render(<EditCycleForm cycle={{ ...cycle, version: 4 } as TrainingCycle} enduranceEnabled={false} today="2026-11-14" />);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updateTrainingCycle).toHaveBeenCalledWith(expect.objectContaining({ id: 3, expectedVersion: 4 })));
+  });
+
+  it("shows the refusal of a stale save", async () => {
+    vi.mocked(updateTrainingCycle).mockResolvedValueOnce({ success: false, error: "This cycle changed in another tab. Reload to see it." });
+    render(<EditCycleForm cycle={{ ...cycle, version: 4 } as TrainingCycle} enduranceEnabled={false} today="2026-11-14" />);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("This cycle changed in another tab. Reload to see it."));
+  });
+});

@@ -34,6 +34,8 @@ export const updateTrainingCycleSchema = z.object({
   status: statusEnum.optional(),
   raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   raceDistance: z.enum(["full", "half"]).nullable().optional(),
+  /** The version the form read; a save based on an older one is refused (T9). */
+  expectedVersion: z.number().int().positive().optional(),
 });
 
 export const upsertCycleSlotSchema = z.object({
