@@ -332,11 +332,15 @@ export function CyclesListClient({ data, deletedCount }: Props) {
             type="button"
             onClick={handleDelete}
             disabled={n === 0 || deleting}
+            aria-describedby="delete-reason"
             className="h-[52px] rounded-2xl bg-[#c23a2e] text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
           >
             {deleting ? "Deleting…" : n === 0 ? "Delete" : `Delete ${n} ${n === 1 ? "cycle" : "cycles"}`}
           </button>
-          <span className="text-center text-[13px] text-muted-foreground">You can restore {n === 1 ? "it" : "them"} for 90 days.</span>
+          {/* A dimmed Delete says why, as the other dimmed Plan buttons do (J7-01). */}
+          <span id="delete-reason" className="text-center text-[13px] text-muted-foreground">
+            {n === 0 ? "Select a cycle." : keepDates(`You can restore ${n === 1 ? "it" : "them"} for 90 days.`)}
+          </span>
         </div>
       </div>
     );

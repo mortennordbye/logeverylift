@@ -20,7 +20,7 @@ import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
 import { keepDates } from "@/lib/utils/keep-dates";
-import { nextPhaseBadge, phaseBarTone } from "@/lib/utils/plan-list";
+import { badgeAccent, nextPhaseBadge, phaseBarTone } from "@/lib/utils/plan-list";
 import { callAction } from "@/lib/utils/stale-bundle";
 import {
   PHASE_TYPE_LABELS,
@@ -323,7 +323,7 @@ export function SeasonDetailClient(p: Props) {
         {showBanner && (
           <section data-testid="replan-banner" className="flex flex-col gap-2.5 rounded-2xl border border-[color-mix(in_oklab,var(--home-fg)_16%,transparent)] bg-widget-2 px-4 py-3.5">
             <span className="text-[15px] font-semibold">{bannerTitle}</span>
-            {p.replan?.reason && <span className="text-[13px] text-muted-foreground">{p.replan.reason}.</span>}
+            {p.replan?.reason && <span className="text-[13px] text-muted-foreground">{keepDates(`${p.replan.reason}.`)}</span>}
             <div className="flex items-center gap-2">
               {misfit && (
                 <button type="button" disabled={busy} onClick={fitTaper} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50">
@@ -732,9 +732,9 @@ function PhaseRow({ phase, sub, warn, badge, onOpen }: { phase: SeasonPhaseView;
             {phase.name}
           </span>
           <span className="text-[13px] text-muted-foreground">{keepDates(sub)}</span>
-          {warn && <span className="mt-1 text-[13px]">{warn}</span>}
+          {warn && <span className="mt-1 text-[13px]">{keepDates(warn)}</span>}
         </span>
-        {badge && <span className="shrink-0 text-xs font-semibold text-primary">{keepDates(badge)}</span>}
+        {badge && <span className={`shrink-0 text-xs font-semibold ${badgeAccent(badge) ? "text-primary" : "text-muted-foreground"}`}>{keepDates(badge)}</span>}
         <Chevron />
       </button>
     </li>

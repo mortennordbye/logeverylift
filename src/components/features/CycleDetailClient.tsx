@@ -53,7 +53,7 @@ function ConfirmSheet({
 }) {
   return (
     <BottomSheet open={open} onClose={onClose}>
-      <PlanSheetPanel label={title} title={keepDates(title)} sub={<div className="text-sm text-muted-foreground">{body}</div>}>
+      <PlanSheetPanel label={title} title={keepDates(title)} sub={<div className="text-sm text-muted-foreground">{typeof body === "string" ? keepDates(body) : body}</div>}>
         {error && (
           <p role="alert" className="text-sm text-destructive">
             {error}

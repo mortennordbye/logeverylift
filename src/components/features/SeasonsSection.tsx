@@ -49,7 +49,7 @@ export function SeasonCard({ season }: { season: SeasonCardView }) {
         ) : (
           <div className="flex items-start justify-between gap-3">
             <span className="flex min-w-0 flex-col gap-1">
-              <span className="text-xs font-semibold uppercase tracking-[1px] text-muted-foreground">Season · {keepDates(season.goalBy)}</span>
+              <span className="text-xs font-semibold uppercase tracking-[1px] text-muted-foreground">{keepDates(`Season · ${season.goalBy}`)}</span>
               <span className="text-lg font-semibold">{season.name}</span>
             </span>
             <span className="flex shrink-0 flex-col items-end">
@@ -76,7 +76,7 @@ export function SeasonCard({ season }: { season: SeasonCardView }) {
           <FlagIcon className="-ml-1 h-4 w-4 shrink-0" />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="truncate text-[15px] font-semibold">{race.name}</span>
-            <span className="text-[13px] text-muted-foreground">A race · {keepDates(race.when)}</span>
+            <span className="text-[13px] text-muted-foreground">{keepDates(`A race · ${race.when}`)}</span>
           </span>
         </Link>
       )}

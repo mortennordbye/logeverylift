@@ -79,7 +79,7 @@ describe("the Plan list", () => {
   it("breaks the hero label only between its parts", () => {
     render(<CyclesListClient data={list} deletedCount={0} />);
     const parts = [...screen.getByTestId("hero-label").children];
-    expect(parts.map((p) => p.textContent)).toEqual(["Week 2 of 6 · ", "Same days each week"]);
+    expect(parts.map((p) => p.textContent!.replace(/\u00a0/g, " "))).toEqual(["Week 2 of 6 · ", "Same days each week"]);
     for (const p of parts) expect(p.className).toContain("whitespace-nowrap");
   });
 

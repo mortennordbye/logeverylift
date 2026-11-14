@@ -256,6 +256,8 @@ describe("season detail text (fix round 2)", () => {
     const first = screen.getAllByTestId("phase-row")[0];
     expect(first.textContent).not.toContain("Starts");
     expect(first.textContent).toContain("Paused");
+    // Grey, as on the Plan list: the accent marks only now and next (J8-12, J4-18).
+    expect(within(first).getByText("Paused").className).toContain("text-muted-foreground");
   });
 
   it("says Next for a first phase that is due and not scheduled", () => {
@@ -317,8 +319,9 @@ describe("Resume asks first (fix round 4)", () => {
     render(<SeasonDetailClient {...paused} today="2026-11-16" running={running} scheduled={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     const sheet = screen.getByRole("region", { name: "Start this season?" });
-    expect(sheet.textContent).toContain("Aerobic base + strength starts today.");
-    expect(sheet.textContent).toContain("This ends Base block at week 3 of 6.");
+    const text = sheet.textContent!.replace(/\u00a0/g, " ");
+    expect(text).toContain("Aerobic base + strength starts today.");
+    expect(text).toContain("This ends Base block at week 3 of 6.");
   });
 
   it("resumes at once when nothing else runs or is scheduled", async () => {
@@ -356,8 +359,8 @@ describe("phase length in weeks or days (fix round 4)", () => {
   it("shows a whole number of weeks as weeks, in the row and in the sheet", () => {
     render(<SeasonDetailClient {...base} phases={fitted} />);
     const row = screen.getAllByTestId("phase-row")[1];
-    expect(row.textContent).toContain("15 wk");
-    expect(row.textContent).not.toContain("105 days");
+    expect(row.textContent!.replace(/\u00a0/g, " ")).toContain("15 wk");
+    expect(row.textContent!.replace(/\u00a0/g, " ")).not.toContain("105 days");
     fireEvent.click(within(row).getAllByRole("button")[1]);
     expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("15");
     expect(screen.getByRole("button", { name: "Weeks" }).getAttribute("aria-pressed")).toBe("true");

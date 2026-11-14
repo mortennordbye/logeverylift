@@ -209,7 +209,7 @@ describe("New season while another block holds the start (fix round 4)", () => {
     fireEvent.click(within(screen.getByRole("list", { name: "Your cycles" })).getByLabelText(/Strength peak/));
     fireEvent.click(screen.getByRole("button", { name: "Create season" }));
     const sheet = await screen.findByRole("region", { name: title });
-    expect(sheet.textContent).toContain(ends);
+    expect(sheet.textContent!.replace(/\u00a0/g, " ")).toContain(ends);
     fireEvent.click(within(sheet).getByRole("button", { name: "Create season" }));
     await waitFor(() => expect(mocks.createSeasonAction).toHaveBeenCalledWith(expect.objectContaining({ cycleIds: [2], takeStart: true })));
   });
