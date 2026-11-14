@@ -19,7 +19,8 @@ export const enduranceTodayWidget: Renderer<EnduranceTodayRow[]> = defineWidget<
   View: ({ data }) => <EnduranceTodayCard rows={data} />,
   Empty: () => null,
   Skeleton: ({ size }) => <PreviewBox title="Endurance today" size={size} />,
-  Preview: ({ size }) => enduranceTodayWidget.View({ data: SAMPLE_ENDURANCE, size }),
+  Preview: ({ size }) => <PreviewBox title="Endurance today" size={size} />,
+  Sample: ({ size }) => enduranceTodayWidget.View({ data: SAMPLE_ENDURANCE, size }),
   Error: () => (
     <div className={CARD} role="status" data-testid="widget-error">
       <p className="text-sm text-muted-foreground mb-3">Couldn&apos;t load this.</p>

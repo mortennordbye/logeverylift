@@ -48,5 +48,10 @@ export const titleWidget = defineWidget<TitleData>({
       {size === "l" && <div className="mb-1.5 h-2.5 w-36 rounded-full bg-widget-2" />}
       <p className="home-display text-[38px] uppercase leading-[1.1]">LogEveryLift</p>
     </div>
+  ),  Sample: ({ size }) => (
+    <div aria-hidden="true" className="px-1">
+      {size === "l" && <div className="mb-1.5 h-2.5 w-36 rounded-full bg-widget-2" />}
+      <p className="home-display text-[38px] uppercase leading-[1.1]">LogEveryLift</p>
+    </div>
   ),
 });

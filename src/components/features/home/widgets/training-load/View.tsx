@@ -1,6 +1,6 @@
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { SAMPLE_LOAD } from "@/components/features/home/samples";
-import { Card, Cap, Label, Num, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { Cap, Card, Label, Num, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { bars, slotLine } from "@/lib/home/charts";
 import { Layers } from "lucide-react";
 import { loadTrainingLoad, type TrainingLoadData } from "./load";
@@ -87,5 +87,6 @@ export const trainingLoadWidget: Renderer<TrainingLoadData> = defineWidget<Train
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => trainingLoadWidget.View({ data: SAMPLE_LOAD, size }),
+  Preview: ({ size }) => <PreviewBox title="Training load" size={size} />,
+  Sample: ({ size }) => trainingLoadWidget.View({ data: SAMPLE_LOAD, size }),
 });

@@ -1,6 +1,6 @@
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { SAMPLE_READINESS } from "@/components/features/home/samples";
-import { Card, Cap, Label, Num, Ring, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { Cap, Card, Label, Num, PreviewBox, Ring, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { CONTRIBUTOR_LABEL, READINESS_BAND_LABEL, type Readiness } from "@/lib/garmin/analytics/readiness";
 import { Activity } from "lucide-react";
 import Link from "next/link";
@@ -98,5 +98,6 @@ export const garminReadinessWidget: Renderer<GarminReadinessData> = defineWidget
   },
   Empty: () => null,
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => garminReadinessWidget.View({ data: SAMPLE_READINESS, size }),
+  Preview: ({ size }) => <PreviewBox title="Garmin readiness" size={size} />,
+  Sample: ({ size }) => garminReadinessWidget.View({ data: SAMPLE_READINESS, size }),
 });

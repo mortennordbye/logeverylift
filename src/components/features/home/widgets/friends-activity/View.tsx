@@ -1,6 +1,6 @@
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { SAMPLE_FRIENDS } from "@/components/features/home/samples";
-import { Card, Cap, Label, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { Cap, Card, Label, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { dayMonth } from "@/lib/home/labels";
 import { Plus, Users } from "lucide-react";
 import Link from "next/link";
@@ -90,5 +90,6 @@ export const friendsActivityWidget: Renderer<FriendWorkout[]> = defineWidget<Fri
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => friendsActivityWidget.View({ data: SAMPLE_FRIENDS, size }),
+  Preview: ({ size }) => <PreviewBox title="Friends' activity" size={size} lines={3} />,
+  Sample: ({ size }) => friendsActivityWidget.View({ data: SAMPLE_FRIENDS, size }),
 });

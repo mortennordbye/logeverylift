@@ -997,7 +997,10 @@ Where the build differs from it or from section 4, and why:
   `listSeasons`. A cycle's own `race_date` is not read.
 - Sizes from section 4 that the design does not show (Weekly volume M and L, Body weight L,
   Training load S and per-sport L, Race countdown M) are in `BACKLOG.md`.
-- **Previews** in the gallery and in edit mode render each widget's own view with made-up
-  data from `src/components/features/home/samples.ts`, the same for every user, as the
-  design's "Add a widget" sheet does. No loader runs for a preview.
+- **Samples and previews.** The "Add widget" gallery shows each widget's own view with
+  made-up data from `src/components/features/home/samples.ts` (`Sample` in the renderer),
+  the same for every user, as the design's "Add a widget" sheet does. Edit mode, at a size
+  other than the saved one, shows the neutral skeleton (`Preview`): the user's own home never
+  shows made-up numbers (hub decision, 2026-11-14; the owner may change it). No loader runs
+  for either.
 

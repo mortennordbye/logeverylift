@@ -3,9 +3,11 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
- * The gallery and edit-mode previews render each widget's real view with
- * made-up sample data (src/components/features/home/samples.ts), the same
- * for every user: no loader runs, so no user data and no query.
+ * The gallery's samples render each widget's real view with made-up data
+ * (src/components/features/home/samples.ts), the same for every user. Edit
+ * mode's previews never show made-up numbers on the user's own home (hub
+ * decision, 2026-11-14): they are the neutral skeleton. No loader runs for
+ * either, so no user data and no query.
  */
 
 const loads = vi.hoisted(() => ({
@@ -40,8 +42,8 @@ const SAMPLE_TEXT: Record<keyof typeof RENDERERS, RegExp> = {
   cycle: /Hypertrophy Block|of 8/,
   date: /Friday, 13 November/,
   enduranceToday: /Tempo run/,
-  week: /This week/,
-  weeklyGoal: /Weekly goal/,
+  week: /^13$/,
+  weeklyGoal: /^of 4$/,
   recentPrs: /Bench Press/,
   friendsActivity: /Ola N/,
   garminReadiness: /^68$/,
@@ -54,14 +56,21 @@ const SAMPLE_TEXT: Record<keyof typeof RENDERERS, RegExp> = {
 
 afterEach(cleanup);
 
-describe("previews show sample data, never the user's", () => {
+describe("samples show made-up data; previews show none", () => {
   for (const [id, def] of Object.entries(WIDGETS)) {
     it(id, () => {
       const r = RENDERERS[id as keyof typeof RENDERERS];
+      const text = SAMPLE_TEXT[id as keyof typeof RENDERERS];
       for (const size of def.sizes) {
-        const v = render(<>{r.Preview({ size })}</>);
-        expect(screen.getAllByText(SAMPLE_TEXT[id as keyof typeof RENDERERS]).length, `${id} ${size}`).toBeGreaterThan(0);
-        v.unmount();
+        const sample = render(<>{r.Sample({ size })}</>);
+        expect(screen.getAllByText(text).length, `${id} ${size} sample`).toBeGreaterThan(0);
+        sample.unmount();
+        // The title preview is the app's name, not data; every other preview is a skeleton.
+        if (id !== "title") {
+          const preview = render(<>{r.Preview({ size })}</>);
+          expect(screen.queryAllByText(text), `${id} ${size} preview`).toHaveLength(0);
+          preview.unmount();
+        }
       }
       for (const load of Object.values(loads)) expect(load).not.toHaveBeenCalled();
     });

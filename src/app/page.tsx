@@ -69,6 +69,14 @@ export default async function Home() {
     if (r) previews[item.id] = Object.fromEntries(widgetDef(item.id).sizes.map((size) => [size, r.Preview({ size })]));
   }
 
+  // The gallery's samples: every widget at its default size (one hidden during
+  // an edit appears there too), with made-up data the same for every user.
+  const samples: Partial<Record<WidgetId, ReactNode>> = {};
+  for (const item of items) {
+    const r = renderers[item.id];
+    if (r) samples[item.id] = r.Sample({ size: widgetDef(item.id).defaultSize });
+  }
+
   return (
     <div className={`${HOME_UI} h-[100dvh] pb-nav-safe bg-home flex flex-col overflow-hidden`}>
       <HomeGrid
@@ -79,6 +87,7 @@ export default async function Home() {
         title={slots.title}
         slots={slots}
         previews={previews}
+        samples={samples}
         topNotices={<Notices slot="top" core={core} />}
         afterTraining={<Notices slot="afterTraining" core={core} />}
         endNotices={<Notices slot="end" core={core} />}

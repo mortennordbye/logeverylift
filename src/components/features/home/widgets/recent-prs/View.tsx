@@ -1,6 +1,6 @@
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { SAMPLE_PRS } from "@/components/features/home/samples";
-import { Card, Cap, Label, Num, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { Cap, Card, Label, Num, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { Trophy } from "lucide-react";
 import { loadRecentPrs, type RecentPr } from "./load";
 
@@ -76,5 +76,6 @@ export const recentPrsWidget: Renderer<RecentPr[]> = defineWidget<RecentPr[]>({
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => recentPrsWidget.View({ data: SAMPLE_PRS, size }),
+  Preview: ({ size }) => <PreviewBox title="Recent PRs" size={size} lines={3} />,
+  Sample: ({ size }) => recentPrsWidget.View({ data: SAMPLE_PRS, size }),
 });

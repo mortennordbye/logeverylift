@@ -1,6 +1,6 @@
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { SAMPLE_WEIGHT } from "@/components/features/home/samples";
-import { Card, Cap, Label, Num, Spark, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { Cap, Card, Label, Num, PreviewBox, Spark, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import type { WeightSummary } from "@/lib/home/widget-data";
 import { Scale } from "lucide-react";
 import { loadBodyWeight } from "./load";
@@ -45,5 +45,6 @@ export const bodyWeightWidget: Renderer<WeightSummary> = defineWidget<WeightSumm
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => bodyWeightWidget.View({ data: SAMPLE_WEIGHT, size }),
+  Preview: ({ size }) => <PreviewBox title="Body weight" size={size} />,
+  Sample: ({ size }) => bodyWeightWidget.View({ data: SAMPLE_WEIGHT, size }),
 });

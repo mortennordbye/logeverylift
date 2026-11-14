@@ -160,5 +160,6 @@ export const weekWidget: Renderer<WeekData> = defineWidget<WeekData>({
   View: ({ data, size }) => <WeekView core={data.core} ring={size === "l"} />,
   Empty: ({ size }) => <PreviewBox title="Week" size={size} />,
   Skeleton: ({ size }) => <PreviewBox title="Week" size={size} />,
-  Preview: ({ size }) => weekWidget.View({ data: { core: SAMPLE_WEEK_CORE }, size }),
+  Preview: ({ size }) => <PreviewBox title="This week" size={size} lines={1} />,
+  Sample: ({ size }) => weekWidget.View({ data: { core: SAMPLE_WEEK_CORE }, size }),
 });

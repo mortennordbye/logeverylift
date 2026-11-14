@@ -6,7 +6,6 @@ import { widgetDef, type WidgetId } from "@/lib/home/widgets";
 import { SIZE_LABEL, type WidgetGroup, type WidgetSize } from "@/lib/home/widgets/types";
 import type { ReactNode } from "react";
 import { HOME_UI } from "./fonts";
-import type { Previews } from "./HomeEditGrid";
 
 /**
  * "Add widget" (docs/home-widgets-audit.md, 6.9): the widgets this user can
@@ -29,13 +28,13 @@ export function WidgetGallerySheet({
   open,
   onClose,
   hidden,
-  previews,
+  samples,
   onAdd,
 }: {
   open: boolean;
   onClose: () => void;
   hidden: ResolvedItem[];
-  previews: Previews;
+  samples: Partial<Record<WidgetId, ReactNode>>;
   onAdd: (id: WidgetId) => void;
 }) {
   const groups = new Map<WidgetGroup, ResolvedItem[]>();
@@ -66,7 +65,7 @@ export function WidgetGallerySheet({
                 const def = widgetDef(item.id);
                 return (
                   <div key={item.id} className="flex flex-col gap-2 rounded-[20px] bg-widget p-2.5 ring-1 ring-inset ring-hairline" data-testid="gallery-item">
-                    <MiniPreview size={def.defaultSize}>{previews[item.id]?.[def.defaultSize]}</MiniPreview>
+                    <MiniPreview size={def.defaultSize}>{samples[item.id]}</MiniPreview>
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-bold">{def.title}</p>
                       <p className="text-xs font-medium text-muted-foreground">{def.description}</p>

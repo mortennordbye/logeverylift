@@ -53,6 +53,7 @@ function props(items: ResolvedItem[]): HomeGridProps {
       cycle: <p>Cycle content</p>,
     },
     previews: { today: { s: <p>Today preview S</p> }, recentPrs: { m: <p>PRs preview</p> } },
+    samples: { recentPrs: <p>PRs sample</p> },
     topNotices: <p>Policy notice</p>,
     afterTraining: null,
     endNotices: null,
@@ -250,9 +251,12 @@ describe("the edit grid", () => {
     setup();
     edit();
     fireEvent.click(screen.getByRole("button", { name: "Add widget" }));
+    // The gallery shows the sample; the home itself never does (hub decision, 2026-11-14).
+    expect(within(screen.getByTestId("widget-gallery")).getByText("PRs sample")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Add Recent PRs" }));
     expect(tiles()).toEqual(["title", "today", "week", "cycle", "recentPrs"]);
     expect(within(screen.getByTestId("home-edit-grid")).getByText("PRs preview")).toBeTruthy();
+    expect(within(screen.getByTestId("home-edit-grid")).queryByText("PRs sample")).toBeNull();
   });
 });
 

@@ -21,6 +21,8 @@ export const dateWidget: Renderer<DateData> = defineWidget<DateData>({
   View: ({ data }) => <Line label={data.label} />,
   Empty: () => null,
   Skeleton: () => null,
+  // Never a made-up date on the user's own home: an empty bar in edit mode.
+  Preview: () => <div className="mx-1 h-3 w-40 rounded-full bg-widget-2" aria-hidden="true" />,
   // A fixed sample date for the gallery, the same for every user.
-  Preview: () => <Line label="Friday, 13 November" />,
+  Sample: () => <Line label="Friday, 13 November" />,
 });

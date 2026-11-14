@@ -1,6 +1,6 @@
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { SAMPLE_STREAK } from "@/components/features/home/samples";
-import { Card, Cap, Label, Num, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { Cap, Card, Label, Num, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { Zap } from "lucide-react";
 import { loadStreak, type StreakData } from "./load";
 
@@ -93,5 +93,6 @@ export const streakWidget: Renderer<StreakData> = defineWidget<StreakData>({
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => streakWidget.View({ data: SAMPLE_STREAK, size }),
+  Preview: ({ size }) => <PreviewBox title="Streak" size={size} />,
+  Sample: ({ size }) => streakWidget.View({ data: SAMPLE_STREAK, size }),
 });

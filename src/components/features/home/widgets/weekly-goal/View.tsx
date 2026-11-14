@@ -36,5 +36,6 @@ export const weeklyGoalWidget: Renderer<{ thisWeekWorkouts: number }> = defineWi
   ),
   Empty: ({ size }) => <PreviewBox title="Weekly goal" size={size} />,
   Skeleton: ({ size }) => <PreviewBox title="Weekly goal" size={size} />,
-  Preview: ({ size }) => weeklyGoalWidget.View({ data: { thisWeekWorkouts: SAMPLE_WORKOUTS_THIS_WEEK }, size }),
+  Preview: ({ size }) => <PreviewBox title="Weekly goal" size={size} />,
+  Sample: ({ size }) => weeklyGoalWidget.View({ data: { thisWeekWorkouts: SAMPLE_WORKOUTS_THIS_WEEK }, size }),
 });

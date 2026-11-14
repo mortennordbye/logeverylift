@@ -44,8 +44,10 @@ export type HomeGridProps = {
   /** The title widget, rendered. */
   title: ReactNode;
   slots: Partial<Record<WidgetId, ReactNode>>;
-  /** Static previews per widget and size, for edit mode and the gallery. */
+  /** Static previews per widget and size, for edit mode. */
   previews: Previews;
+  /** Each hidden widget with made-up sample data, for the gallery only. */
+  samples: Partial<Record<WidgetId, ReactNode>>;
   topNotices: ReactNode;
   afterTraining: ReactNode;
   endNotices: ReactNode;
@@ -76,7 +78,7 @@ function toStored(items: ResolvedItem[]): StoredHomeItem[] {
 }
 
 export function HomeGrid(props: HomeGridProps) {
-  const { items, defaultItems, baseUpdatedAt, title, slots, previews, topNotices, afterTraining, endNotices, startBar } = props;
+  const { items, defaultItems, baseUpdatedAt, title, slots, previews, samples, topNotices, afterTraining, endNotices, startBar } = props;
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [state, dispatch] = useReducer(editReducer, items, initEdit);
@@ -336,7 +338,7 @@ export function HomeGrid(props: HomeGridProps) {
           open={galleryOpen}
           onClose={() => setGalleryOpen(false)}
           hidden={hidden}
-          previews={previews}
+          samples={samples}
           onAdd={(id) => {
             setGalleryOpen(false);
             act({ type: "add", id }, { id, control: "tile" }, `${titleOf(id)} added`);

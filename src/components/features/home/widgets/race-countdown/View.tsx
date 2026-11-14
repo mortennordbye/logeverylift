@@ -1,6 +1,6 @@
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { SAMPLE_RACE } from "@/components/features/home/samples";
-import { Card, Cap, Label, Num, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { Cap, Card, Label, Num, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { Flag } from "lucide-react";
 import { loadRaceCountdown, type RaceCountdownData } from "./load";
 
@@ -27,5 +27,6 @@ export const raceCountdownWidget: Renderer<RaceCountdownData> = defineWidget<Rac
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => raceCountdownWidget.View({ data: SAMPLE_RACE, size }),
+  Preview: ({ size }) => <PreviewBox title="Race countdown" size={size} />,
+  Sample: ({ size }) => raceCountdownWidget.View({ data: SAMPLE_RACE, size }),
 });

@@ -349,6 +349,7 @@ export const todayWidget: Renderer<TodayData> = defineWidget<TodayData>({
   // Today always has data: the no-cycle variant is part of View.
   Empty: ({ size }) => <NoCycle size={size} />,
   Skeleton: ({ size }) => <PreviewBox title="Today" size={size} lines={3} />,
-  Preview: ({ size }) => todayWidget.View({ data: SAMPLE_TODAY, size }),
+  Preview: ({ size }) => <PreviewBox title="Today" size={size} lines={3} />,
+  Sample: ({ size }) => todayWidget.View({ data: SAMPLE_TODAY, size }),
   Error: TodayError,
 });
