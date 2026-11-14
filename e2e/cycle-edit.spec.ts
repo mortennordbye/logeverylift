@@ -53,16 +53,16 @@ test("Edit details saves the name and the end, and the history says so in senten
   await page.screenshot({ path: testInfo.outputPath("cycle-history.png"), fullPage: true });
 });
 
-test("a long cycle name in the back link stays clear of the Edit cycle title", async ({ page }, testInfo) => {
+test("Edit cycle has the form header of New cycle: Cancel, the title centred, whatever the cycle's name", async ({ page }, testInfo) => {
   const id = await draftCycle(testInfo.parallelIndex, "Base block with three sessions on Wednesdays and a long easy ride every Saturday morning");
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto(`/cycles/${id}/edit`);
     const title = page.getByRole("heading", { level: 1, name: "Edit cycle" });
     await expect(title).toBeVisible();
-    const back = (await page.getByTestId("back-link").boundingBox())!;
+    const cancel = (await page.getByTestId("form-header").getByRole("button", { name: "Cancel" }).boundingBox())!;
     const heading = (await title.boundingBox())!;
-    expect(back.x + back.width, `back link ends before the title at ${width} px`).toBeLessThanOrEqual(heading.x);
+    expect(cancel.x + cancel.width, `Cancel ends before the title at ${width} px`).toBeLessThanOrEqual(heading.x);
     // The title stays in the middle of the row, as on the other form screens.
     expect(Math.abs(heading.x + heading.width / 2 - width / 2), `title centred at ${width} px`).toBeLessThanOrEqual(2);
     await page.screenshot({ path: testInfo.outputPath(`edit-header-${width}.png`) });

@@ -7,8 +7,8 @@
  * sessions are built for it.
  */
 
-import { Chip, FIELD, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
-import { BackLink, useReturnTo } from "@/components/ui/BackLink";
+import { Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
+import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -56,6 +56,7 @@ function ChipGroup({ label, children }: { label: string; children: ReactNode }) 
 
 export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, today }: Props) {
   const returnTo = useReturnTo();
+  const back = useBack({ href: `/cycles/${cycle.id}`, label: cycle.name });
   const [name, setName] = useState(cycle.name);
   const [durationWeeks, setDurationWeeks] = useState(cycle.durationWeeks);
   const [custom, setCustom] = useState(!MAIN_LENGTHS.includes(cycle.durationWeeks));
@@ -106,14 +107,15 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col" style={{ paddingBottom: "calc(140px + var(--kb-height, 0px))" }}>
-      {/* minmax(0, 1fr): a long back label truncates instead of running under the title. */}
-      <header className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-4 pt-4">
-        <div className="min-w-0">
-          <BackLink fallback={{ href: `/cycles/${cycle.id}`, label: cycle.name }} />
-        </div>
-        <h1 className="text-base font-semibold">Edit cycle</h1>
-        <span />
-      </header>
+      {/* The form header of New cycle and Add a phase: Cancel, the title centred. */}
+      <FormHeader
+        title="Edit cycle"
+        left={
+          <button type="button" onClick={back.go} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
+            Cancel
+          </button>
+        }
+      />
 
       <div className="flex flex-col gap-[22px] px-4 pt-3">
         <div className="flex flex-col gap-2">

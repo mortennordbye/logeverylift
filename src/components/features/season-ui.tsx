@@ -127,10 +127,10 @@ export const PRIMARY_BUTTON =
 /** The top row of a form screen: a control on the left (Cancel or Back), the title centred, and an optional control on the right. */
 export function FormHeader({ title, left, right }: { title: string; left: React.ReactNode; right?: React.ReactNode }) {
   return (
-    <header className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center px-2 pt-4">
-      <div className="justify-self-start">{left}</div>
+    <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 px-2 pt-4" data-testid="form-header">
+      <div className="min-w-0 justify-self-start">{left}</div>
       <h1 className="text-base font-semibold">{title}</h1>
-      <div className="justify-self-end">{right}</div>
+      <div className="min-w-0 justify-self-end">{right}</div>
     </header>
   );
 }

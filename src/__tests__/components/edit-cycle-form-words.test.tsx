@@ -2,19 +2,20 @@
 import { EditCycleForm } from "@/components/features/EditCycleForm";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 /**
  * The Edit details screen in the Plan look (docs/design/plan-redesign/spec.md,
- * J2_CycleSetup): the setup form's words, a back link to the cycle, and no
+ * J2_CycleSetup): the setup form's words and header, Cancel back to the cycle, and no
  * colon or em dash in what the user reads.
  */
 
 vi.mock("@/lib/actions/training-cycles", () => ({
   updateTrainingCycle: vi.fn(async () => ({ success: true, data: {} })),
 }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn() }) }));
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace, refresh: vi.fn(), back: vi.fn() }) }));
 
 const cycle = {
   id: 3,
@@ -35,12 +36,15 @@ const cycle = {
 afterEach(cleanup);
 
 describe("the Edit details screen", () => {
-  it("is titled Edit cycle, with a back link to the cycle", () => {
+  it("has the form header of New cycle: Cancel, then Edit cycle centred; Cancel goes back to the cycle", () => {
     render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Edit cycle");
-    const back = screen.getByTestId("back-link");
-    expect(back.getAttribute("href")).toBe("/cycles/3");
-    expect(back.getAttribute("aria-label")).toBe("Back to Upper / Lower");
+    const header = screen.getByTestId("form-header");
+    // Two equal side columns keep the title in the middle, whatever is on the left.
+    expect(header.className).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
+    expect(within(header).getByRole("heading", { level: 1 }).textContent).toBe("Edit cycle");
+    expect(screen.queryByTestId("back-link")).toBeNull();
+    fireEvent.click(within(header).getByRole("button", { name: "Cancel" }));
+    expect(replace).toHaveBeenCalledWith("/cycles/3");
   });
 
   it("offers the setup form's end options as chips and saves the one picked", async () => {
