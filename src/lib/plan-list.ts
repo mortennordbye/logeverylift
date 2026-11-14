@@ -13,12 +13,12 @@ import { liveCycles } from "@/lib/plan-live";
 import { ensureCycleSessions, listPlanned } from "@/lib/planned-sessions";
 import { getSeasonDetail, listSeasons } from "@/lib/seasons";
 import { sessionCompliance } from "@/lib/session-compliance";
+import { dayMonth } from "@/lib/home/labels";
 import { userToday } from "@/lib/user-settings";
 import { blockWeeks, dayLabels, weekDays as blockWeekDays, rotationRows, weekIndexOf, type RotationWalkDay } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, toDateStr } from "@/lib/utils/cycle-position";
 import {
   blockEnd,
-  dayMonth,
   heroLabel,
   pastEnd,
   pastRow,
@@ -58,29 +58,29 @@ async function weekHero(userId: string, c: Cycle, today: string, active: boolean
   // The block week that holds today, from the block's start day: the 7 days the cycle detail shows.
   const weeks = blockWeeks(start, cycleLengthDays(c));
   const dates = blockWeekDays(weeks[weekIndexOf(weeks, today)]);
-  let sessions: WeekSession[] = [];
+  const [withSlots, rows] = await Promise.all([
+    getTrainingCycleWithSlots(c.id),
+    // Reading can write (the first read makes the dated sessions), so a failure
+    // shows an empty week instead of taking the list down, as on home.
+    ensureCycleSessions(userId, c.id)
+      .then(() => sessionCompliance(userId, dates[0], dates[dates.length - 1], { cycleId: c.id }))
+      .catch((e: unknown) => {
+        console.error("[planList] week failed", { cycleId: c.id }, e instanceof Error ? e.message : "unknown");
+        return [];
+      }),
+  ]);
   // Days the template names with no session, such as "Mobility".
-  let labels: Record<number, string> = {};
-  // Reading can write (the first read makes the dated sessions), so a failure
-  // shows an empty week instead of taking the list down, as on home.
-  try {
-    await ensureCycleSessions(userId, c.id);
-    const withSlots = await getTrainingCycleWithSlots(c.id);
-    if (withSlots.success) labels = dayLabels(withSlots.data.slots);
-    const rows = await sessionCompliance(userId, dates[0], dates[dates.length - 1], { cycleId: c.id });
-    sessions = rows.map((r) => ({
-      date: r.date,
-      name: r.programName ?? r.label ?? r.workout?.name ?? null,
-      sport: r.sport,
-      sports: r.sports,
-      key: r.priority === "key",
-      brick: r.brickParentId != null,
-      skipped: r.status === "skipped",
-      durationSeconds: r.planned.durationSeconds,
-    }));
-  } catch (e) {
-    console.error("[planList] week failed", { cycleId: c.id }, e instanceof Error ? e.message : "unknown");
-  }
+  const labels = withSlots.success ? dayLabels(withSlots.data.slots) : {};
+  const sessions: WeekSession[] = rows.map((r) => ({
+    date: r.date,
+    name: r.programName ?? r.label ?? r.workout?.name ?? null,
+    sport: r.sport,
+    sports: r.sports,
+    key: r.priority === "key",
+    brick: r.brickParentId != null,
+    skipped: r.status === "skipped",
+    durationSeconds: r.planned.durationSeconds,
+  }));
   return {
     kind: "week",
     id: c.id,
@@ -138,27 +138,26 @@ export async function loadPlanList(userId: string, endurance: boolean): Promise<
   const liveSeasons = seasonList
     .filter((s) => s.status !== "done")
     .sort((a, b) => Number(b.status === "active") - Number(a.status === "active") || a.startDate.localeCompare(b.startDate) || a.id - b.id);
-  const details = (await Promise.all(liveSeasons.map((s) => getSeasonDetail(userId, s.id)))).filter((d) => d != null);
-  // The scheduled start ends the running cycle the day before (J4-18).
-  const otherStart = cycles
-    .filter((c) => c.status === "draft" && c.scheduledStartDate)
-    .map((c) => c.scheduledStartDate!)
-    .sort()[0] ?? null;
-  const seasons = details.map((d) => seasonCard(d.season, d.phases, d.aRace, today, otherStart));
-  const inCard = new Set(details.flatMap((d) => d.phases.map((p) => p.id)));
-
   const active = cycles.find((c) => c.status === "active") ?? null;
   const scheduled = cycles
     .filter((c) => c.status === "draft" && c.scheduledStartDate)
     .sort((a, b) => a.scheduledStartDate!.localeCompare(b.scheduledStartDate!));
+  // The scheduled start ends the running cycle the day before (J4-18).
+  const otherStart = scheduled[0]?.scheduledStartDate ?? null;
   const heroCycle = active ?? scheduled[0] ?? null;
   const heroStart = heroCycle ? (heroCycle === active ? heroCycle.startDate! : heroCycle.scheduledStartDate!) : null;
   const heroEnds = heroCycle && heroStart ? `Ends ${dayMonth(heroCycle === active ? runningEnd(heroStart, blockEnd(heroStart, heroCycle), otherStart) : blockEnd(heroStart, heroCycle))}` : "";
-  const hero = heroCycle
-    ? heroCycle.scheduleType === "rotation"
-      ? await rotationHero(userId, heroCycle, today, heroCycle === active, heroEnds)
-      : await weekHero(userId, heroCycle, today, heroCycle === active, endurance, heroEnds)
-    : null;
+  const [seasonDetails, hero] = await Promise.all([
+    Promise.all(liveSeasons.map((s) => getSeasonDetail(userId, s.id))),
+    heroCycle
+      ? heroCycle.scheduleType === "rotation"
+        ? rotationHero(userId, heroCycle, today, heroCycle === active, heroEnds)
+        : weekHero(userId, heroCycle, today, heroCycle === active, endurance, heroEnds)
+      : null,
+  ]);
+  const details = seasonDetails.filter((d) => d != null);
+  const seasons = details.map((d) => seasonCard(d.season, d.phases, d.aRace, today, otherStart));
+  const inCard = new Set(details.flatMap((d) => d.phases.map((p) => p.id)));
 
   const drafts = cycles
     .filter((c) => c.status === "draft" && !inCard.has(c.id))

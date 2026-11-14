@@ -27,7 +27,8 @@ import { syncLimitWarnings } from "@/lib/training-limits";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { cycleCompletedAt } from "@/lib/plan-revisions";
 import { localDateStr } from "@/lib/utils/user-date";
-import { type DetailSession, blockWeeks, cycleSubLine, dayLabels, dayMonth, dayNotes, endedLine, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
+import { dayMonth } from "@/lib/home/labels";
+import { type DetailSession, blockWeeks, cycleSubLine, dayLabels, dayNotes, endedLine, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
@@ -68,42 +69,49 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   if (!cycleResult.success) notFound();
 
   const cycle = cycleResult.data;
-  // A phase of a season shows where it sits (D8).
-  const season = await seasonOfCycle(userId, cycle);
-  // T4: limits this week's sync broke (only an endurance user's sync stores any).
-  const limitWarnings = cycle.status === "active" ? await syncLimitWarnings(userId, cycle.id, cycle.lastSyncedWeek) : [];
   const programs = (programsResult.success ? programsResult.data : []).map((p) => ({ id: p.id, name: p.name }));
   const periodization = periodizationResult.success ? periodizationResult.data : null;
-  const today = toDateStr(await userToday(userId));
-  const endurance = await enduranceEnabledFor(userId);
-
-  // A start names what it ends or drops: the running cycle and the draft scheduled next.
-  const { running, scheduled } = await cycleStartContext(userId, today);
-  const otherRunning = running && running.id !== cycle.id ? running : null;
-  const otherScheduled = scheduled && scheduled.id !== cycle.id ? scheduled : null;
-
   const lengthDays = cycleLengthDays(cycle);
-  // A running block shows the length it runs: a draft scheduled inside it ends it the day before.
-  const runDays = cycle.status === "active" && cycle.startDate ? runLengthDays(cycle.startDate, lengthDays, otherScheduled?.day ?? null) : lengthDays;
-  const totalWeeks = Math.ceil(runDays / 7);
   const weekday = cycle.scheduleType === "day_of_week";
   // The block's first day: a running block's start, or the day a scheduled draft starts.
   const blockStart = cycle.status === "active" ? cycle.startDate : cycle.status === "draft" ? cycle.scheduledStartDate : null;
   const lastDay = blockStart ? addDaysStr(blockStart, lengthDays - 1) : null;
+
+  const todayRead = userToday(userId).then(toDateStr);
+  const [season, limitWarnings, today, endurance, { running, scheduled }, planned] = await Promise.all([
+    // A phase of a season shows where it sits (D8).
+    seasonOfCycle(userId, cycle),
+    // T4: limits this week's sync broke (only an endurance user's sync stores any).
+    cycle.status === "active" ? syncLimitWarnings(userId, cycle.id, cycle.lastSyncedWeek) : [],
+    todayRead,
+    enduranceEnabledFor(userId),
+    // A start names what it ends or drops: the running cycle and the draft scheduled next.
+    todayRead.then((day) => cycleStartContext(userId, day)),
+    blockStart && lastDay && cycle.status !== "completed" ? listPlanned(userId, blockStart, lastDay, cycle.id) : [],
+  ]);
+  const otherRunning = running && running.id !== cycle.id ? running : null;
+  const otherScheduled = scheduled && scheduled.id !== cycle.id ? scheduled : null;
+
+  // A running block shows the length it runs: a draft scheduled inside it ends it the day before.
+  const runDays = cycle.status === "active" && cycle.startDate ? runLengthDays(cycle.startDate, lengthDays, otherScheduled?.day ?? null) : lengthDays;
+  const totalWeeks = Math.ceil(runDays / 7);
   const currentWeek = cycle.status === "active" && cycle.startDate ? cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, parseDateStr(today), cycle.durationDays).currentWeek : null;
 
-  const planned = blockStart && lastDay && cycle.status !== "completed" ? await listPlanned(userId, blockStart, lastDay, cycle.id) : [];
   const dated = planned.filter((p) => p.rotationPosition == null && p.id != null);
   const walk = planned.filter((p) => p.rotationPosition != null);
 
   const programIds = new Set<number>();
   for (const s of cycle.slots) if (s.programId) programIds.add(s.programId);
   for (const p of planned) if (p.programId) programIds.add(p.programId);
-  const programsMap = await getProgramsWithExercises([...programIds]);
 
   // Endurance users see key sessions, bricks and "Did you do it?"; lifters get none of them (D18).
   const showEndurance = endurance && weekday && blockStart != null && lastDay != null && cycle.status !== "completed";
-  const [compliance, library] = showEndurance ? await Promise.all([sessionCompliance(userId, blockStart, lastDay, { cycleId: cycle.id }), listWorkouts(userId)]) : [[], []];
+  const [programsMap, [compliance, library], completedAt] = await Promise.all([
+    getProgramsWithExercises([...programIds]),
+    showEndurance ? Promise.all([sessionCompliance(userId, blockStart, lastDay, { cycleId: cycle.id }), listWorkouts(userId)]) : [[], []],
+    // A block another start ended early says the day it ended (J8-09).
+    cycle.status === "completed" ? cycleCompletedAt(userId, cycle.id) : null,
+  ]);
   const complianceById = new Map(compliance.map((c) => [c.id, c]));
   // A missed key session of this week gets the day home suggests for it (D19).
   const moveTo = new Map(
@@ -149,8 +157,6 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
     next = { id: otherScheduled.id, name: otherScheduled.name, startsLabel: shortDay(otherScheduled.day), startsTomorrow: otherScheduled.day <= addDaysStr(today, 1) };
   }
   const plannedLast = cycle.startDate ? addDaysStr(cycle.startDate, lengthDays - 1) : null;
-  // A block another start ended early says the day it ended (J8-09).
-  const completedAt = cycle.status === "completed" ? await cycleCompletedAt(userId, cycle.id) : null;
   const completedOn = completedAt ? localDateStr(completedAt, (await getUserSettings(userId)).timeZone) : null;
   const endedLabel = endedLine(cycle.startDate, plannedLast, today, completedOn);
 

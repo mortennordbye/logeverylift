@@ -1,6 +1,5 @@
 import {
   badgeAccent,
-  dateRange,
   heroLabel,
   pastRow,
   phaseDeleteWarning,
@@ -49,9 +48,7 @@ const jevnaker = seasonCard(
 );
 
 describe("plan list words", () => {
-  it("writes date ranges and start days as the spec does", () => {
-    expect(dateRange("2026-11-16", "2027-01-10")).toBe("16 Nov – 10 Jan");
-    expect(dateRange("2027-08-20", "2027-08-29")).toBe("20 – 29 Aug");
+  it("writes start days as the spec does", () => {
     // A day inside the week names its date too (J4-17).
     expect(startsLabel(TODAY, "2026-11-16")).toBe("Starts Mon 16 Nov");
     expect(startsLabel(TODAY, "2026-12-21")).toBe("Starts 21 Dec");

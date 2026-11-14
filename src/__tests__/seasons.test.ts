@@ -13,7 +13,6 @@ import { diffSnapshots, type SeasonSnapshot } from "@/lib/utils/plan-revisions";
 import {
   addDaysStr,
   addPhaseWarning,
-  inDaysLabel,
   fitTaperChange,
   lengthShort,
   rangeLabel,
@@ -217,12 +216,6 @@ describe("timeline (2.4)", () => {
     expect(phasesSkippedBy(t, 4)).toBe(2);
     expect(phasesSkippedBy(t, 1)).toBe(0);
     expect(phasesSkippedBy(seasonTimeline("2027-01-04", [phase(1, { status: "completed", startDate: "2027-01-04" })]), 1)).toBe(0);
-  });
-
-  it("says how far off a day is: today, tomorrow, in N days", () => {
-    expect(inDaysLabel("2027-08-22", "2027-08-22")).toBe("today");
-    expect(inDaysLabel("2027-08-22", "2027-08-23")).toBe("tomorrow");
-    expect(inDaysLabel("2027-08-22", "2027-08-25")).toBe("in 3 days");
   });
 
   it("adds days by the calendar", () => {

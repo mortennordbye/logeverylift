@@ -13,7 +13,7 @@
  */
 
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, LABEL } from "@/components/features/season-ui";
+import { ACCENT_TINT, ButtonReason, LABEL } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { createProgram } from "@/lib/actions/programs";
 import {
@@ -52,7 +52,6 @@ type Slot = TrainingCycleWithSlots["slots"][number];
 export type PickerProgram = Program & { exerciseCount?: number };
 type WriteResult = Promise<{ success: boolean; error?: string }>;
 
-const TINT = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
 const PRIMARY =
   "h-[52px] w-full rounded-2xl bg-brand text-primary-foreground text-base font-semibold active:opacity-80 disabled:opacity-50";
 
@@ -179,7 +178,7 @@ export function ProgramPickerSheet({
             const sel = p.id === selectedId;
             return (
               <li key={p.id} className="border-b border-hairline">
-                <button type="button" onClick={() => onPick(p)} aria-pressed={sel} className={`${row} ${sel ? TINT : ""}`}>
+                <button type="button" onClick={() => onPick(p)} aria-pressed={sel} className={`${row} ${sel ? ACCENT_TINT : ""}`}>
                   <span className="flex flex-col gap-0.5 min-w-0">
                     <span className="text-[15px] font-medium truncate">{p.name}</span>
                     {p.exerciseCount !== undefined && (

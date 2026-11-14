@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { seasons, trainingCycles } from "@/db/schema";
 import { getDeletedPlans } from "@/lib/actions/plan-revisions";
 import { getUserSettings } from "@/lib/user-settings";
-import { dayMonth } from "@/lib/utils/plan-list";
+import { dayMonth } from "@/lib/home/labels";
 import { requireSession } from "@/lib/utils/session";
 import { localDateStr } from "@/lib/utils/user-date";
 import { and, eq, inArray } from "drizzle-orm";

@@ -57,12 +57,6 @@ export function daysBetweenStr(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
 }
 
-/** How far off a day on or after `today` is, for a line of text: "today", "tomorrow" or "in N days". */
-export function inDaysLabel(today: string, day: string): string {
-  const n = daysBetweenStr(today, day);
-  return n === 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`;
-}
-
 const lengthOf = (p: { durationWeeks: number; durationDays: number | null }) => p.durationDays ?? p.durationWeeks * 7;
 
 // ── Taper (2.5) ──────────────────────────────────────────────────────────────
@@ -279,16 +273,6 @@ export function addPhaseWarning(p: { startsOn: string; lengthDays: number | null
   if (p.lengthDays == null) return null;
   const over = daysBetweenStr(p.seasonEnd, addDaysStr(p.startsOn, p.lengthDays - 1));
   return over > 0 ? `This phase runs ${over} day${over === 1 ? "" : "s"} past the season end on ${dayLabel(p.seasonEnd)}.` : null;
-}
-
-/** Race kinds in words, for lists and the assistant. */
-export function raceKindLabel(r: Pick<RaceLike, "discipline" | "distance" | "distanceMeters">): string {
-  if (r.discipline === "triathlon") {
-    const d = { full: "Full distance", half: "Half distance", olympic: "Olympic", sprint: "Sprint" } as const;
-    return r.distance ? `${d[r.distance]} triathlon` : "Triathlon";
-  }
-  const name = { run: "Run", ride: "Ride", swim: "Swim", other: "Event" }[r.discipline];
-  return r.distanceMeters ? `${name} ${Math.round(r.distanceMeters / 100) / 10} km` : name;
 }
 
 export const PHASE_TYPE_LABELS: Record<PhaseType, string> = {

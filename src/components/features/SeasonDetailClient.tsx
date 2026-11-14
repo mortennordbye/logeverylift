@@ -3,7 +3,7 @@
 import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, DESTRUCTIVE_TEXT, INNER_FIELD, LABEL, PRIMARY_BUTTON, SectionLabel, Segmented } from "@/components/features/season-ui";
+import { ButtonReason, Chip, DESTRUCTIVE_TEXT, ErrorLine, INNER_FIELD, LABEL, PRIMARY_BUTTON, RACE_KIND_LABELS, RaceKindChips, RacePriorityRow, SectionLabel, Segmented, TriDistanceOptions } from "@/components/features/season-ui";
 import {
   addRaceAction,
   clearReplanAction,
@@ -100,22 +100,14 @@ type Props = {
 };
 
 const PHASE_TYPES = Object.keys(PHASE_TYPE_LABELS) as PhaseType[];
-const DISCIPLINES: { value: RaceDiscipline; label: string }[] = [
-  { value: "triathlon", label: "Triathlon" },
-  { value: "run", label: "Run" },
-  { value: "ride", label: "Ride" },
-  { value: "swim", label: "Swim" },
-  { value: "other", label: "Other" },
-];
 const TRI_WORD: Record<TriDistance, string> = { full: "Full", half: "Half", olympic: "Olympic", sprint: "Sprint" };
-const KIND_WORD: Record<RaceDiscipline, string> = { triathlon: "Triathlon", run: "Run", ride: "Ride", swim: "Swim", other: "Other" };
 
 type RaceDraft = { id?: number; name: string; raceDate: string; discipline: RaceDiscipline; distance: TriDistance | null; km: string; priority: RacePriority };
 type PhaseDraft = { phase: SeasonPhaseView; phaseType: PhaseType | null; unit: LengthUnit; length: string; unitNote: string | null };
 
 /** "Triathlon · Half · 29 Aug 2027" or "Run · 10 km · 3 May 2027". */
 function raceSub(r: SeasonRaceView): string {
-  const kind = r.discipline === "triathlon" ? (r.distance ? `Triathlon · ${TRI_WORD[r.distance]}` : "Triathlon") : r.distanceMeters ? `${KIND_WORD[r.discipline]} · ${Math.round(r.distanceMeters / 100) / 10} km` : KIND_WORD[r.discipline];
+  const kind = r.discipline === "triathlon" ? (r.distance ? `Triathlon · ${TRI_WORD[r.distance]}` : "Triathlon") : r.distanceMeters ? `${RACE_KIND_LABELS[r.discipline]} · ${Math.round(r.distanceMeters / 100) / 10} km` : RACE_KIND_LABELS[r.discipline];
   return `${kind} · ${dayLabel(r.raceDate)}`;
 }
 
@@ -289,11 +281,7 @@ export function SeasonDetailClient(p: Props) {
   // Why Save race or Save phase is off.
   const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
   const phaseReason = phase && !Number(phase.length) ? "Type a length." : null;
-  const errorLine = error && (
-    <p role="alert" className="text-sm text-[#ff6b5a]">
-      {error}
-    </p>
-  );
+  const errorLine = <ErrorLine error={error} />;
 
   return (
     <>
@@ -550,21 +538,12 @@ export function SeasonDetailClient(p: Props) {
               <span className={LABEL}>Date</span>
               <input type="date" value={race.raceDate} onChange={(e) => setRace({ ...race, raceDate: e.target.value })} className={INNER_FIELD} />
             </label>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Kind">
-              {DISCIPLINES.map((d) => (
-                <Chip key={d.value} pressed={race.discipline === d.value} onClick={() => setRace({ ...race, discipline: d.value })}>
-                  {d.label}
-                </Chip>
-              ))}
-            </div>
+            <RaceKindChips label="Kind" value={race.discipline} onChange={(d) => setRace({ ...race, discipline: d })} />
             {race.discipline === "triathlon" ? (
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>Distance</span>
                 <select value={race.distance ?? ""} onChange={(e) => setRace({ ...race, distance: (e.target.value || null) as TriDistance | null })} className={INNER_FIELD}>
-                  <option value="sprint">Sprint</option>
-                  <option value="olympic">Olympic</option>
-                  <option value="half">Half</option>
-                  <option value="full">Full</option>
+                  <TriDistanceOptions />
                   <option value="">Not set</option>
                 </select>
               </label>
@@ -574,21 +553,7 @@ export function SeasonDetailClient(p: Props) {
                 <input inputMode="decimal" value={race.km} onChange={(e) => setRace({ ...race, km: e.target.value })} className={INNER_FIELD} />
               </label>
             )}
-            <div className="flex items-center justify-between gap-3">
-              <span className={LABEL}>Priority</span>
-              <Segmented
-                label="Priority"
-                value={race.priority}
-                onChange={(v) => setRace({ ...race, priority: v })}
-                track="bg-widget-2"
-                className="w-[168px]"
-                options={[
-                  { value: "A", label: "A" },
-                  { value: "B", label: "B" },
-                  { value: "C", label: "C" },
-                ]}
-              />
-            </div>
+            <RacePriorityRow value={race.priority} onChange={(v) => setRace({ ...race, priority: v })} />
             <div>
               <button type="button" disabled={busy || raceReason != null} aria-describedby={raceReason ? "race-reason" : undefined} onClick={saveRace} className={PRIMARY_BUTTON}>
                 Save race

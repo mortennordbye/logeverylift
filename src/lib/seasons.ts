@@ -11,9 +11,8 @@
 
 import { db } from "@/db";
 import { racePlans, seasonRaces, seasons, trainingCycles, type PhaseType, type RaceDiscipline, type RacePriority, type TriDistance } from "@/db/schema";
-import { cycleStartContext } from "@/lib/cycle-start";
+import { upcomingCycle } from "@/lib/cycle-start";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { liveCycles } from "@/lib/plan-live";
 import {
   PlanNotFoundError,
   PlanStateError,
@@ -51,8 +50,6 @@ import {
   type TimelinePhase,
 } from "@/lib/utils/seasons";
 import { SEASON_MAX_PHASES } from "@/lib/utils/seasons";
-import type { ScheduledDraft } from "@/lib/utils/cycle-start";
-import type { RunningBlock } from "@/lib/utils/season-start";
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 
 export const SEASON_TEXT_MAX = 500;
@@ -138,17 +135,6 @@ export type SeasonDetail = {
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
 /** One of the user's live seasons with its races, its phase timeline and the taper fit. Null if not found. */
-/** The day the user's scheduled draft starts, or null. That start completes the running cycle. */
-export async function scheduledStartDay(userId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ day: trainingCycles.scheduledStartDate })
-    .from(trainingCycles)
-    .where(and(eq(trainingCycles.userId, userId), liveCycles, eq(trainingCycles.status, "draft"), isNotNull(trainingCycles.scheduledStartDate)))
-    .orderBy(asc(trainingCycles.scheduledStartDate))
-    .limit(1);
-  return row?.day ?? null;
-}
-
 /** Completed phases with the day they really ended when another start ended them early (earlyLastDay). */
 async function withLastDays<P extends PhaseLike>(userId: string, rows: P[]): Promise<P[]> {
   const done = rows.filter((r) => r.status === "completed" && r.startDate);
@@ -168,16 +154,20 @@ export async function getSeasonDetail(userId: string, seasonId: number): Promise
     .from(seasons)
     .where(and(eq(seasons.id, seasonId), eq(seasons.userId, userId), isNull(seasons.deletedAt)));
   if (!season) return null;
-  const day = await today(userId);
-  const races = await db
-    .select()
-    .from(seasonRaces)
-    .where(eq(seasonRaces.seasonId, seasonId))
-    .orderBy(asc(seasonRaces.raceDate), asc(seasonRaces.id));
-  const rows = await withLastDays(userId, await seasonPhases(db, seasonId));
+  const [day, races, rows, scheduledStart] = await Promise.all([
+    today(userId),
+    db
+      .select()
+      .from(seasonRaces)
+      .where(eq(seasonRaces.seasonId, seasonId))
+      .orderBy(asc(seasonRaces.raceDate), asc(seasonRaces.id)),
+    seasonPhases(db, seasonId).then((r) => withLastDays(userId, r)),
+    // The day the scheduled draft starts: that start completes the running cycle.
+    upcomingCycle(userId).then((c) => c?.startsOn ?? null),
+  ]);
   const versions = new Map(rows.map((r) => [r.id, r.version]));
   // The scheduled start ends a running phase the day before; a paused chain is dated from Resume (J4-18).
-  const timeline = shownTimeline(season.startDate, rows, await scheduledStartDay(userId), day).map((p) => ({ ...p, version: versions.get(p.id) ?? 1 }));
+  const timeline = shownTimeline(season.startDate, rows, scheduledStart, day).map((p) => ({ ...p, version: versions.get(p.id) ?? 1 }));
   const aRace = seasonARace(races, day);
   const next = nextPhase(timeline);
   return {
@@ -211,31 +201,6 @@ export async function seasonlessCycles(userId: string) {
       ),
     )
     .orderBy(desc(trainingCycles.createdAt));
-}
-
-/**
- * The running cycle and the scheduled draft, for a screen that lets a season
- * take the one scheduled start (New season, a season's first phase, Resume),
- * so it can say what that ends and drops first (takeStartLines).
- */
-export async function seasonStartContext(userId: string, day: string): Promise<{ running: RunningBlock | null; scheduled: ScheduledDraft | null }> {
-  const [{ scheduled }, [active]] = await Promise.all([
-    cycleStartContext(userId, day),
-    db
-      .select({
-        id: trainingCycles.id,
-        name: trainingCycles.name,
-        startDate: trainingCycles.startDate,
-        durationWeeks: trainingCycles.durationWeeks,
-        durationDays: trainingCycles.durationDays,
-        seasonId: seasons.id,
-      })
-      .from(trainingCycles)
-      // A phase of a deleted season acts as a cycle with no season.
-      .leftJoin(seasons, and(eq(seasons.id, trainingCycles.seasonId), isNull(seasons.deletedAt)))
-      .where(and(eq(trainingCycles.userId, userId), liveCycles, eq(trainingCycles.status, "active"), isNotNull(trainingCycles.startDate))),
-  ]);
-  return { running: active ? { ...active, startDate: active.startDate! } : null, scheduled };
 }
 
 /** The season a cycle is a phase of, with its races, for the cycle page. Null when it is in no live season. */

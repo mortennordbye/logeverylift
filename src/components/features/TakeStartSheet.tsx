@@ -1,6 +1,6 @@
 "use client";
 
-import { PRIMARY_BUTTON } from "@/components/features/season-ui";
+import { ErrorLine, PRIMARY_BUTTON } from "@/components/features/season-ui";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { keepDates } from "@/lib/utils/keep-dates";
 import { BottomSheet } from "@/components/ui/BottomSheet";
@@ -41,11 +41,7 @@ export function TakeStartSheet({
             </p>
           ))}
         >
-          {error && (
-            <p role="alert" className="text-sm text-[#ff6b5a]">
-              {error}
-            </p>
-          )}
+          <ErrorLine error={error} />
           <button type="button" disabled={busy} onClick={onConfirm} className={PRIMARY_BUTTON}>
             {action}
           </button>

@@ -5,14 +5,16 @@
  * builds these and the client renders the same text.
  */
 
+import { dayMonth } from "@/lib/home/labels";
 import { dayLabelOn, type RotationRow } from "@/lib/utils/cycle-detail";
-import type { PhaseType } from "@/lib/utils/periodization";
-import { dateLabel } from "@/lib/utils/date-label";
+import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import {
+  PHASE_TYPE_LABELS,
   addDaysStr,
   cutByStart,
   daysBetweenStr,
   nextPhase,
+  rangeLabel,
   runLength,
   seasonPaused,
   seasonTimeline,
@@ -25,30 +27,11 @@ import {
 
 // ── Words ────────────────────────────────────────────────────────────────────
 
-/** "16 Nov". */
-export const dayMonth = (day: string) => dateLabel(day, "d MMM");
-
-/** "16 Nov – 10 Jan", or "20 – 29 Aug" inside one month. */
-export function dateRange(from: string, to: string): string {
-  if (from.slice(0, 7) === to.slice(0, 7)) return `${Number(from.slice(8))} – ${dayMonth(to)}`;
-  return `${dayMonth(from)} – ${dayMonth(to)}`;
-}
-
-export const PHASE_TYPE_NAMES: Record<PhaseType, string> = {
-  general: "General",
-  base: "Base",
-  build: "Build",
-  peak: "Peak",
-  taper: "Taper",
-  transition: "Transition",
-};
-
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
 
 /** "Build · 12 wk · 5 Apr – 27 Jun". */
 export function phaseSub(p: Pick<TimelinePhase, "phaseType" | "lengthDays" | "start" | "end">): string {
-  return [p.phaseType ? PHASE_TYPE_NAMES[p.phaseType] : null, runLength(p), dateRange(p.start, p.end)].filter(Boolean).join(" · ");
+  return [p.phaseType ? PHASE_TYPE_LABELS[p.phaseType] : null, runLength(p), rangeLabel(p.start, p.end)].filter(Boolean).join(" · ");
 }
 
 /** "Starts today", "Starts tomorrow", "Starts Mon 16 Nov" inside a week, else "Starts 21 Dec". A weekday never comes without its date (J4-17). */
@@ -109,10 +92,8 @@ type CycleLike = {
   scheduledStartDate: string | null;
 };
 
-const lengthDays = (c: { durationWeeks: number; durationDays: number | null }) => c.durationDays ?? c.durationWeeks * 7;
-
 /** The last day of a block that starts on `start` (inclusive). */
-export const blockEnd = (start: string, c: { durationWeeks: number; durationDays: number | null }) => addDaysStr(start, lengthDays(c) - 1);
+export const blockEnd = (start: string, c: { durationWeeks: number; durationDays: number | null }) => addDaysStr(start, cycleLengthDays(c) - 1);
 
 /** `starts` is drawn in the accent when it is a scheduled start. */
 export type CycleRow = { id: number; name: string; sub: string; starts: string | null; startsAccent: boolean };
