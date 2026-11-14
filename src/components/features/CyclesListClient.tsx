@@ -362,26 +362,29 @@ export function CyclesListClient({ data, deletedCount }: Props) {
   // ── the list ──
   return (
     <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-hidden`}>
-      <header className="flex shrink-0 items-center justify-between px-4 pt-6 pb-2">
-        <h1 className="home-display text-[40px] uppercase tracking-[0.5px]">Plan</h1>
-        <div className="flex items-center gap-2">
-          {selectable.length > 0 && (
-            <button type="button" onClick={() => setSelecting(true)} className="h-11 px-2 text-base font-medium text-brand active:opacity-70">
-              Select
-            </button>
-          )}
-          {/* While the list is empty the card below is the one way in, so there is no + menu. */}
-          {!data.empty && (
-            <button
-              type="button"
-              onClick={() => setShowAddSheet(true)}
-              aria-label="New cycle or season"
-              className="flex h-11 w-11 items-center justify-center rounded-full bg-brand text-primary-foreground active:opacity-80"
-            >
-              <PlusIcon />
-            </button>
-          )}
+      <header className="flex shrink-0 flex-col gap-0.5 px-4 pt-6 pb-2">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="home-display text-[40px] uppercase tracking-[0.5px]">Plan</h1>
+          <div className="flex items-center gap-2">
+            {selectable.length > 0 && (
+              <button type="button" onClick={() => setSelecting(true)} className="h-11 px-2 text-base font-medium text-brand active:opacity-70">
+                Select
+              </button>
+            )}
+            {/* While the list is empty the card below is the one way in, so there is no + menu. */}
+            {!data.empty && (
+              <button
+                type="button"
+                onClick={() => setShowAddSheet(true)}
+                aria-label="New cycle or season"
+                className="flex h-11 w-11 items-center justify-center rounded-full bg-brand text-primary-foreground active:opacity-80"
+              >
+                <PlusIcon />
+              </button>
+            )}
+          </div>
         </div>
+        <p className="text-sm text-muted-foreground">Cycles and seasons: when you train</p>
       </header>
 
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 pt-2">
