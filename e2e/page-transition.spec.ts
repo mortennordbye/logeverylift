@@ -152,12 +152,9 @@ test("Back to a tab root slides back, though both pages sit at tab depth", async
   await expect(back).toHaveText("More");
   const slide = await maxSlide(page, async () => {
     await back.click();
-    // Part of the sampling window (see maxSlide).
-    // eslint-disable-next-line no-restricted-syntax
-    await page.waitForTimeout(300);
+    await page.waitForURL((u) => u.pathname === "/more");
   });
 
   console.log(`TRANSITION back-link pop: maxSlide=${Math.round(slide)}px`);
-  await expect(page).toHaveURL(/\/more$/);
   expect(slide, "Back should slide back").toBeGreaterThan(SLID);
 });
