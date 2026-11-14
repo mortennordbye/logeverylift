@@ -22,7 +22,7 @@ import { liveProgramExercises, liveProgramSets, livePrograms } from "@/lib/plan-
 import { deletePrograms, planWrite, softDeleteSlot, versionKey, type Tx } from "@/lib/plan-revisions";
 import { matchSets } from "@/lib/utils/plan-revisions";
 import { periodizationShare } from "@/lib/periodization-sync";
-import { LimitRefusedError, limitContext, limitCyclesWith, withLimits, type LimitScope } from "@/lib/training-limits";
+import { LimitRefusedError, limitContext, programLimitScope, withLimits, type LimitScope } from "@/lib/training-limits";
 import {
   MAX_BACKOFF_AFTER,
   MAX_BACKOFF_PCT,
@@ -368,10 +368,7 @@ export function registerProgramTools(server: McpServer, userId: string, clientId
       if (typeof override === "string") return fail(override);
       // The limits' scope for a write to this program: its runs, and the
       // week of the active (or scheduled) cycle that holds it.
-      const scopeFor = async (programId: number): Promise<LimitScope> => ({
-        programIds: [programId],
-        cycleIds: await limitCyclesWith(db, userId, programId),
-      });
+      const scopeFor = (programId: number): Promise<LimitScope> => programLimitScope(db, userId, programId);
       try {
         if (args.operation === "add") {
           const { programId, exerciseId } = args;

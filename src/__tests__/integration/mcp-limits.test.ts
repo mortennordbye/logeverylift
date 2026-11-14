@@ -437,3 +437,71 @@ describe("a scheduled draft's settings", () => {
   });
 });
 
+
+describe("a run in a later phase", () => {
+  /** A program held by one draft cycle that starts `startsInDays` from now, or is not scheduled (null). */
+  async function inDraft(minutes: number, startsInDays: number | null) {
+    const p = await runProgram(me, minutes);
+    const [draft] = await db
+      .insert(trainingCycles)
+      .values({
+        userId: me,
+        name: "Later phase",
+        durationWeeks: 12,
+        scheduledStartDate: startsInDays == null ? null : toDateStr(addDays(new Date(), startsInDays)),
+      })
+      .returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: draft.id, dayOfWeek: 3, programId: p.programId });
+    return p;
+  }
+
+  it("is not checked against today's runs when only an unscheduled draft holds the program, and says so", async () => {
+    const p = await inDraft(60, null);
+    const result = await setRun(p, 105)(me);
+
+    expect(result.isError).toBeFalsy();
+    expect(result.data.limits.checked).not.toContain("long_run_cap");
+    expect(result.data.limits.notChecked).toContainEqual(
+      expect.objectContaining({ rule: "long_run_cap", why: expect.stringContaining("checked when that cycle starts") }),
+    );
+    expect(await durationOf(p.setId)).toBe(105 * MIN);
+  });
+
+  it("is not checked when the draft holding it is scheduled more than 30 days ahead", async () => {
+    const p = await inDraft(60, 45);
+    const result = await setRun(p, 105)(me);
+    expect(result.isError).toBeFalsy();
+    expect(await durationOf(p.setId)).toBe(105 * MIN);
+  });
+
+  it("is still checked when the draft holding it starts within 30 days", async () => {
+    const p = await inDraft(60, 10);
+    const result = await setRun(p, 105)(me);
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].rule).toBe("long_run_cap");
+  });
+
+  it("is still checked when the active cycle also holds the program", async () => {
+    const p = await inDraft(60, null);
+    await activeCycle(me, [{ day: 3, programId: p.programId }]);
+    const result = await setRun(p, 105)(me);
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].rule).toBe("long_run_cap");
+  });
+
+  it("is checked on the phase's first week when that phase starts", async () => {
+    const p = await inDraft(60, null);
+    await setRun(p, 150)(me);
+    expect(await durationOf(p.setId)).toBe(150 * MIN);
+    const [draft] = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.programId, p.programId));
+    const [cycle] = await db.select().from(trainingCycles).where(eq(trainingCycles.id, draft.trainingCycleId));
+    const result = await mcpTools(registerCycleTools, me)("manage_training_cycle", {
+      operation: "start",
+      cycleId: cycle.id,
+      reason: "Start the phase",
+      expectedVersion: cycle.version,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.parse(result.raw).brokenLimits[0].rule).toBe("long_run_cap");
+  });
+});
