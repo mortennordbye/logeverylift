@@ -36,12 +36,12 @@ const cycle = {
 afterEach(cleanup);
 
 describe("the Edit details screen", () => {
-  it("has the form header of New cycle: Cancel, then Edit cycle centred; Cancel goes back to the cycle", () => {
+  it("has the form header of New cycle: Cancel, then Edit details centred, the words of the menu item; Cancel goes back to the cycle", () => {
     render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
     const header = screen.getByTestId("form-header");
     // Two equal side columns keep the title in the middle, whatever is on the left.
     expect(header.className).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
-    expect(within(header).getByRole("heading", { level: 1 }).textContent).toBe("Edit cycle");
+    expect(within(header).getByRole("heading", { level: 1 }).textContent).toBe("Edit details");
     expect(screen.queryByTestId("back-link")).toBeNull();
     fireEvent.click(within(header).getByRole("button", { name: "Cancel" }));
     expect(replace).toHaveBeenCalledWith("/cycles/3");
