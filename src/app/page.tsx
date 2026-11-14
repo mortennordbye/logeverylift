@@ -1,4 +1,5 @@
 import { HomeGrid } from "@/components/features/home/HomeGrid";
+import { HOME_UI } from "@/components/features/home/fonts";
 import { Notices } from "@/components/features/home/Notices";
 import { StartBar } from "@/components/features/home/StartBar";
 import type { Renderer } from "@/components/features/home/define-widget";
@@ -69,7 +70,7 @@ export default async function Home() {
   }
 
   return (
-    <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
+    <div className={`${HOME_UI} h-[100dvh] pb-nav-safe bg-home flex flex-col overflow-hidden`}>
       <HomeGrid
         key={`${layoutKey(items)}@${stored?.updatedAt ?? "default"}`}
         items={items}
