@@ -13,17 +13,22 @@ import { loadGarminReadiness, type GarminReadinessData } from "./load";
  */
 
 const HREF = "/more/garmin?tab=day";
-const SHORT: Partial<Record<keyof typeof CONTRIBUTOR_LABEL, string>> = { restingHr: "RHR", sleep: "Sleep" };
+/**
+ * Row labels that fit at 390 px, so none is cut off: M has room for
+ * "Sleep debt", S (a 44 px column) says "Debt" under "Sleep".
+ */
+const SHORT: Record<keyof typeof CONTRIBUTOR_LABEL, string> = { hrv: "HRV", restingHr: "RHR", sleep: "Sleep", sleepDebt: "Sleep debt", form: "Form", feel: "Feel" };
+const SHORT_S: Record<keyof typeof CONTRIBUTOR_LABEL, string> = { ...SHORT, sleepDebt: "Debt" };
 
 /** One contributor: its score out of 100 as a bar, good above the middle. */
-function Bars({ r, n }: { r: Readiness; n: number }) {
+function Bars({ r, n, wide }: { r: Readiness; n: number; wide: boolean }) {
   return (
     <ul className="flex flex-col gap-[7px]">
       {r.contributors.slice(0, n).map((c) => {
         const label = CONTRIBUTOR_LABEL[c.key];
         return (
-          <li key={c.key} className="grid grid-cols-[44px_1fr_28px] items-center gap-2 text-xs font-semibold">
-            <span className="truncate text-muted-foreground">{SHORT[c.key] ?? label}</span>
+          <li key={c.key} className={`grid ${wide ? "grid-cols-[66px_1fr_28px]" : "grid-cols-[44px_1fr_28px]"} items-center gap-2 text-xs font-semibold`}>
+            <span className="whitespace-nowrap text-muted-foreground">{(wide ? SHORT : SHORT_S)[c.key]}</span>
             <span className="block h-1.5 overflow-hidden rounded-full bg-widget-2" role="img" aria-label={`${label} ${c.score} of 100`}>
               <i className={`home-growx block h-full rounded-full ${c.score >= 50 ? "bg-pos" : "bg-muted-foreground"}`} style={{ width: `${c.score}%` }} />
             </span>
@@ -71,7 +76,7 @@ export const garminReadinessWidget: Renderer<GarminReadinessData> = defineWidget
             <div className="min-w-0">{band}</div>
           </div>
           <div className="mt-auto">
-            <Bars r={r} n={2} />
+            <Bars r={r} n={2} wide={false} />
           </div>
         </Card>
       );
@@ -87,7 +92,7 @@ export const garminReadinessWidget: Renderer<GarminReadinessData> = defineWidget
           </Ring>
           <div className="min-w-0 flex-1 space-y-2">
             {band}
-            <Bars r={r} n={4} />
+            <Bars r={r} n={4} wide />
             <Cap>
               {r.signals} of 6 signals{r.capped ? " · capped" : ""}
             </Cap>

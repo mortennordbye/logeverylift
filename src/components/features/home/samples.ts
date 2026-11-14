@@ -97,7 +97,7 @@ export const SAMPLE_READINESS: GarminReadinessData = {
 export const SAMPLE_STREAK: StreakData = { weeks: 9, perWeek: [3, 4, 4, 3, 4, 5, 4, 2] };
 
 const WEIGHTS = [83.1, 83.0, 83.2, 82.9, 83.0, 82.8, 82.9, 83.0, 82.7, 82.8, 82.9, 82.6, 82.7, 82.8, 82.6, 82.5, 82.7, 82.6, 82.4, 82.6, 82.5, 82.6, 82.4, 82.3, 82.5, 82.4, 82.3, 82.5, 82.4, 82.4];
-export const SAMPLE_WEIGHT: WeightSummary = { latestKg: 82.4, changeKg: -0.7, lowKg: 82.3, highKg: 83.2, series: WEIGHTS, oldDate: null };
+export const SAMPLE_WEIGHT: WeightSummary = { latestKg: 82.4, changeKg: -0.7, lowKg: 82.3, highKg: 83.2, series: WEIGHTS, oldDate: null, sinceDate: "2026-10-16" };
 
 const LOADS = [62, 0, 48, 70, 0, 55, 0, 66, 0, 52, 74, 0, 58, 0, 71, 0, 60, 80, 0, 64, 0, 0, 68, 0, 72, 59, 0, 0];
 /** Fatigue as a 7-day exponential average of the loads, from 40. */

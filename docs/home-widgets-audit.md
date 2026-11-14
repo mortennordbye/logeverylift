@@ -996,8 +996,10 @@ Where the build differs from it or from section 4, and why:
   There is no "best streak", which no action returns. S says "Keep it lit." once this week
   has a session, and "Train this week to keep it." before.
 - **Body weight** (S, M) shows kg; the app has no weight unit setting. It links to Progress,
-  where weight is logged. When the latest entry is older than the 30-day window, the line
-  under the number gives its date ("82.4 kg on 3 Sep") instead of a change.
+  where weight is logged. The sparkline draws every entry in the last 30 days (no limit or
+  downsampling), and the change is the newest minus the oldest entry in that window, named by
+  its date ("↓ 2.7 kg since 11 Nov"): the entries can cover only part of the 30 days. When the
+  latest entry is older than the window, the line gives its date ("82.4 kg on 3 Sep").
 - **Training load** (M, L) reads `getTrainingLoad`, which picks the source itself: the stored
   Garmin series when `garminAllowedFor` is true and there are days, else the app's sessions.
   It is available to endurance and Garmin users and links to `/week`. The line is the 7-day
@@ -1040,3 +1042,8 @@ Where the build differs from it or from section 4, and why:
   (`--brand`, `--brand-fill`, neutrals), not those pixels.
 - **A failed plan read** (`readTodayPlan`) shows Today without its exercise list and logs
   `[Home] today_plan_read_failed`; before, it showed the error page.
+- **Readiness labels** are short enough to fit at 390 px: "Sleep" and "Sleep debt" at M (a
+  66 px label column), "Debt" at S (44 px). A contributor scored 0 is a real score, not a
+  missing value: the readiness model leaves out a signal it has no value for. Resting HR
+  scores 0 at 1.5 standard deviations above its baseline, with the deviation at least 1.5
+  bpm, so 4 bpm over can already be 0.

@@ -59,6 +59,8 @@ export type WeightSummary = {
   highKg: number;
   /** The window's entries, oldest first, for the sparkline. */
   series: number[];
+  /** The date of the window's oldest entry, which the change is counted from; null with an empty window. */
+  sinceDate: string | null;
   /** The latest entry's date when it is older than the window, so it is not shown as current; else null. */
   oldDate: string | null;
 };
@@ -82,6 +84,7 @@ export function weightSummary(entries: { kg: number; date: string; at: number }[
     lowKg: r1(series.length ? Math.min(...series) : latest.kg),
     highKg: r1(series.length ? Math.max(...series) : latest.kg),
     series,
+    sinceDate: inWindow[0]?.date ?? null,
     oldDate: utc(latest.date) < from ? latest.date : null,
   };
 }

@@ -95,6 +95,7 @@ describe("weightSummary", () => {
     expect(s.latestKg).toBe(82.4);
     expect(s.series).toEqual([83.1, 82.3, 82.4]);
     expect(s.changeKg).toBe(-0.7);
+    expect(s.sinceDate).toBe("2026-10-20");
     expect([s.lowKg, s.highKg]).toEqual([82.3, 83.1]);
   });
 

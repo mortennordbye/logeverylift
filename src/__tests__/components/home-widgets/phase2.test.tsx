@@ -51,11 +51,11 @@ describe("Streak", () => {
 });
 
 describe("Body weight", () => {
-  const data = { latestKg: 82.4, changeKg: -0.7, lowKg: 82.3, highKg: 83.1, series: [83.1, 82.3, 82.4], oldDate: null };
+  const data = { latestKg: 82.4, changeKg: -0.7, lowKg: 82.3, highKg: 83.1, series: [83.1, 82.3, 82.4], oldDate: null, sinceDate: "2026-10-16" };
   it("S: the latest weight, the change and a sparkline; M adds low and high", () => {
     const s = render(<>{bodyWeightWidget.View({ data, size: "s" })}</>);
     expect(screen.getByText("82.4")).toBeTruthy();
-    expect(screen.getByText("↓ 0.7 kg in 30 days")).toBeTruthy();
+    expect(screen.getByText("↓ 0.7 kg since 16 Oct")).toBeTruthy();
     expect(s.container.querySelectorAll("svg.home-reveal path")).toHaveLength(2);
     expect(screen.queryByText(/Low/)).toBeNull();
     expect(href()).toBe("/more/metrics");
@@ -67,7 +67,11 @@ describe("Body weight", () => {
     render(<>{bodyWeightWidget.View({ data: { ...data, changeKg: null, series: [], oldDate: "2026-09-03" }, size: "s" })}</>);
     expect(screen.getByText("82.4")).toBeTruthy();
     expect(screen.getByText("82.4 kg on 3 Sep")).toBeTruthy();
-    expect(screen.queryByText(/in 30 days/)).toBeNull();
+    expect(screen.queryByText(/since/)).toBeNull();
+  });
+  it("entries only in the last days: the change says from when, not \"in 30 days\" (owner report, 2026-11-14)", () => {
+    render(<>{bodyWeightWidget.View({ data: { ...data, latestKg: 88.8, changeKg: -2.7, series: [91.5, 89.7, 89, 88.8], sinceDate: "2026-11-11" }, size: "s" })}</>);
+    expect(screen.getByText("↓ 2.7 kg since 11 Nov")).toBeTruthy();
   });
   it("one entry: no sparkline, says so", () => {
     const r = render(<>{bodyWeightWidget.View({ data: { ...data, changeKg: null, series: [82.4] }, size: "s" })}</>);
