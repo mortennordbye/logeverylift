@@ -16,6 +16,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed": "tsx scripts/seed.ts",
     "db:seed-fake": "tsx scripts/seed-fake.ts",
+    "db:seed-plan-demo": "tsx scripts/seed-plan-demo.ts",
     "db:reset-user": "tsx scripts/reset-user.ts",
     "db:cleanup-programs": "tsx scripts/cleanup-orphaned-cycle-programs.ts",
     "db:cleanup-ghosts": "tsx scripts/cleanup-ghost-sessions.ts",
