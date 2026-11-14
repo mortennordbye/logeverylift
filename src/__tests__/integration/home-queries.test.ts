@@ -11,7 +11,11 @@ import { asUser } from "./setup";
  * T2 in docs/home-widgets-audit.md: the number of statements one home render
  * sends to the database, per user type. The counts were recorded against the
  * page before the widget system (commit 1 of that build), with this same
- * harness. They must not change: the default layout adds no query.
+ * harness. They must not change: the default layout adds no query. One
+ * exception, by owner decision A (2026-11-14): on a day with one program,
+ * Today reads that program's exercises and sets in one more statement
+ * (`readTodayPlan` in src/lib/home/core.ts). It shows here as +2, the
+ * query and the pool checkout it makes.
  *
  * A statement is a `pool.query` call or a `pool.connect` (a transaction). The
  * page runs twice per user: the first render writes the cycle's sessions, the
@@ -74,7 +78,7 @@ describe("statements per home render (T2)", () => {
     await weekdayCycle();
     const first = await countHome();
     const steady = await countHome();
-    expect({ first, steady }).toEqual({ first: 76, steady: 68 });
+    expect({ first, steady }).toEqual({ first: 78, steady: 70 });
   });
 
   it("lifter, rotation cycle", async () => {
@@ -88,7 +92,7 @@ describe("statements per home render (T2)", () => {
     ]);
     const first = await countHome();
     const steady = await countHome();
-    expect({ first, steady }).toEqual({ first: 59, steady: 52 });
+    expect({ first, steady }).toEqual({ first: 61, steady: 54 });
   });
 
   it("no cycle", async () => {
@@ -107,6 +111,6 @@ describe("statements per home render (T2)", () => {
     ]);
     const first = await countHome();
     const steady = await countHome();
-    expect({ first, steady }).toEqual({ first: 150, steady: 116 });
+    expect({ first, steady }).toEqual({ first: 152, steady: 118 });
   });
 });

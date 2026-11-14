@@ -29,6 +29,17 @@ export const SAMPLE_TODAY: TodayData = {
   isRestDay: false,
   rotationOverdueDays: 0,
   insight: undefined,
+  plan: {
+    exerciseCount: 6,
+    setCount: 24,
+    minutes: 55,
+    exercises: [
+      { name: "Bench Press", sets: "4 × 6–8 · 80 kg" },
+      { name: "Barbell Row", sets: "4 × 8 · 70 kg" },
+      { name: "Overhead Press", sets: "3 × 8 · 47.5 kg" },
+    ],
+    more: ["Pull-up", "Lateral Raise", "Triceps Pushdown"],
+  },
 };
 
 export const SAMPLE_CYCLE = CYCLE;

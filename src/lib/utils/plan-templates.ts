@@ -665,7 +665,7 @@ const WORK_SEC = 45;
 const CHANGEOVER_SEC = 60;
 
 /** Estimated length of a session in minutes. */
-export function estimateSessionMinutes(exercises: Exercise[]): number {
+export function estimateSessionMinutes(exercises: { sets: { durSec?: number | null; rest: number }[] }[]): number {
   let seconds = 0;
   for (const exercise of exercises) {
     seconds += CHANGEOVER_SEC;

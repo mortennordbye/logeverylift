@@ -5,6 +5,7 @@ import { WorkoutInsightBanner } from "@/components/features/WorkoutInsightBanner
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { CARD, PreviewBox } from "@/components/features/home/widget-ui";
 import type { HomeCore } from "@/lib/home/core";
+import type { TodayPlan } from "@/lib/home/today-plan";
 import { todayActions, type TodayAction } from "@/lib/home/today-actions";
 import type { WidgetSize } from "@/lib/home/widgets/types";
 import { ArrowLeftRight, Check, Play, Sparkles } from "lucide-react";
@@ -28,6 +29,8 @@ export type TodayData = {
   isRestDay: boolean;
   rotationOverdueDays: number;
   insight: HomeCore["insight"];
+  /** Today's single program: counts, minutes and the first exercises. Null on other days. */
+  plan: TodayPlan | null;
 };
 
 export function selectToday(core: HomeCore): TodayData {
@@ -50,6 +53,7 @@ export function selectToday(core: HomeCore): TodayData {
     isRestDay: core.isRestDay,
     rotationOverdueDays: core.rotationOverdueDays,
     insight: core.insight,
+    plan: core.todayPlan,
   };
 }
 
@@ -100,6 +104,7 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
   const { cycle, todayProgram, todaySessions, severalToday, completedToday, todayAutoSession, rotationOverdueDays, insight } = data;
   if (!cycle) return null;
   const startNow = !severalToday && todayProgram && !completedToday;
+  const plan = severalToday ? null : data.plan;
   return (
     <div className={HERO} data-testid="today-card">
       {size === "l" && (
@@ -123,12 +128,17 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
           </span>
         )}
       </div>
-      {size === "l" && cycle.endFormatted && <p className="text-sm font-medium opacity-80">Cycle ends {cycle.endFormatted}</p>}
+      {plan ? (
+        <p className="text-sm font-medium opacity-80">{planMeta(plan)}</p>
+      ) : (
+        size === "l" && cycle.endFormatted && <p className="text-sm font-medium opacity-80">Cycle ends {cycle.endFormatted}</p>
+      )}
       {insight && (
         <div className="mt-3 [&>div]:mb-0">
           <WorkoutInsightBanner insight={insight} />
         </div>
       )}
+      {size === "l" && plan && <PlanList plan={plan} />}
       <div className="flex-1 min-h-3" />
       {severalToday ? (
         <>
@@ -178,6 +188,35 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
         <Link href="/new-workout" className={SOFT}>
           {completedToday ? "Do Another Workout →" : "Start a Workout →"}
         </Link>
+      )}
+    </div>
+  );
+}
+
+const planMeta = (p: TodayPlan) =>
+  `${p.exerciseCount} ${p.exerciseCount === 1 ? "exercise" : "exercises"} · ${p.setCount} ${p.setCount === 1 ? "set" : "sets"} · about ${p.minutes} min`;
+
+/** L: the first three exercises with their sets, then the names of the rest. */
+function PlanList({ plan }: { plan: TodayPlan }) {
+  return (
+    <div className="mt-3 flex flex-col gap-1.5" data-testid="today-plan">
+      <ol className="flex flex-col gap-1.5">
+        {plan.exercises.map((e, i) => (
+          <li key={i} className="flex items-center gap-2.5 rounded-[14px] bg-white/10 px-2.5 py-[9px]">
+            <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[9px] bg-white/15 text-xs font-bold" aria-hidden>
+              {i + 1}
+            </span>
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate text-[15px] font-semibold">{e.name}</span>
+              <span className="text-xs opacity-75">{e.sets}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+      {plan.more.length > 0 && (
+        <p className="px-1 text-[13px] font-medium opacity-75">
+          + {plan.more.length} more: {plan.more.join(", ")}
+        </p>
       )}
     </div>
   );
@@ -268,6 +307,11 @@ function TodaySmall({ data }: { data: TodayData }) {
       <div className="min-w-0">
         <p className="text-[13px] font-semibold uppercase tracking-[0.05em] opacity-75">Today</p>
         <p className="home-display text-[24px] uppercase leading-[1.05] break-words line-clamp-2">{todayName(data)}</p>
+        {data.plan && !data.severalToday && (
+          <p className="mt-0.5 text-xs font-medium opacity-80">
+            {data.plan.exerciseCount} exercises · {data.plan.minutes} min
+          </p>
+        )}
         {data.completedToday && (
           <div className="mt-1">
             <DoneChip automatic={!!data.todayAutoSession} />

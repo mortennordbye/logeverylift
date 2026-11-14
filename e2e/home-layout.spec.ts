@@ -230,6 +230,8 @@ test("a long press on a widget enters edit mode; its release opens nothing", asy
   await page.goto("/");
   const week = page.getByTestId("week-strip");
   await expect(week).toBeVisible();
+  // Today with its plan can push Week below a short screen: press inside it.
+  await week.evaluate((el) => el.scrollIntoView({ block: "center" }));
   const box = (await week.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
@@ -373,13 +375,15 @@ test("touch: hold a widget in the edit grid, then drag it; the order persists", 
   await expect.poll(() => tiles(page)).toEqual(["title", "today", "week"]);
   const finger = await touchscreen(page);
 
+  // As in the mouse drag: bring the seam between Today and Week to the middle.
+  await tile(page, "week").evaluate((el) => el.scrollIntoView({ block: "center" }));
   const from = (await tile(page, "week").boundingBox())!;
   const to = (await tile(page, "today").boundingBox())!;
   const x = from.x + from.width / 2;
   await finger.start(x, from.y + 40);
   // dnd-kit's TouchSensor picks the widget up after a 180 ms hold.
   await page.clock.runFor(250);
-  await finger.move(x, from.y + 40, to.x + to.width / 2, to.y + 30, 15);
+  await finger.move(x, from.y + 40, to.x + to.width / 2, to.y + to.height - 40, 15);
   await expect.poll(() => tiles(page)).toEqual(["title", "week", "today"]);
   await finger.end();
   await page.clock.runFor(100);

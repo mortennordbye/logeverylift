@@ -28,6 +28,7 @@ const base: TodayData = {
   isRestDay: false,
   rotationOverdueDays: 0,
   insight: undefined,
+  plan: null,
 };
 const prog = { id: 7, name: "Push" };
 const session = (id: number, programId: number | null, done: boolean, autoSessionId: number | null = null) =>
@@ -98,3 +99,35 @@ describe("error states keep a way to start (C1)", () => {
     expect(screen.getByRole("link", { name: "Start a Workout" }).getAttribute("href")).toBe("/new-workout");
   });
 });
+
+describe("today's plan (owner decision A)", () => {
+  const plan = {
+    exerciseCount: 6,
+    setCount: 24,
+    minutes: 55,
+    exercises: [
+      { name: "Bench Press", sets: "4 × 6–8 · 80 kg" },
+      { name: "Barbell Row", sets: "4 × 8 · 70 kg" },
+      { name: "Overhead Press", sets: "3 × 8 · 47.5 kg" },
+    ],
+    more: ["Pull-up", "Lateral Raise", "Triceps Pushdown"],
+  };
+  const data = { ...STATES["one program, not done"], plan };
+
+  it("L: the counts, the first three exercises and the rest by name", () => {
+    render(<>{todayWidget.View({ data, size: "l" })}</>);
+    expect(screen.getByText("6 exercises · 24 sets · about 55 min")).toBeTruthy();
+    expect(screen.getByText("4 × 6–8 · 80 kg")).toBeTruthy();
+    expect(screen.getByText("+ 3 more: Pull-up, Lateral Raise, Triceps Pushdown")).toBeTruthy();
+  });
+
+  it("M: the counts only; S: exercises and minutes", () => {
+    const m = render(<>{todayWidget.View({ data, size: "m" })}</>);
+    expect(screen.getByText("6 exercises · 24 sets · about 55 min")).toBeTruthy();
+    expect(screen.queryByTestId("today-plan")).toBeNull();
+    m.unmount();
+    render(<>{todayWidget.View({ data, size: "s" })}</>);
+    expect(screen.getByText("6 exercises · 55 min")).toBeTruthy();
+  });
+});
+

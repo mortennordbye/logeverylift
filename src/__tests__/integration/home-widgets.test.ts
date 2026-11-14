@@ -9,9 +9,10 @@ import { loadTrainingLoad } from "@/components/features/home/widgets/training-lo
 import { loadWeeklySets } from "@/components/features/home/widgets/weekly-sets/load";
 import { db } from "@/db";
 import { exercisePrs, friendships, garminConnections, garminDailyMetrics, seasonRaces, seasons, userWeightEntries, workoutSets } from "@/db/schema";
+import { readTodayPlan } from "@/lib/home/core";
 import { WIDGETS } from "@/lib/home/widgets";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createExercise, createSession, createUser } from "./factories";
+import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
 
 /**
@@ -165,5 +166,27 @@ describe("phase 2 loaders read only the caller's data", () => {
 
   it("Training load: null with no load in four weeks", async () => {
     expect(await loadTrainingLoad(ctx())).toBeNull();
+  });
+});
+
+describe("Today's plan read (owner decision A)", () => {
+  it("reads the caller's program in order; another user's program gives null", async () => {
+    const bench = await createExercise({ name: "Bench" });
+    const row = await createExercise({ name: "Row" });
+    const { program } = await createProgram(me, [
+      { exerciseId: bench.id, sets: [{}, {}, {}] },
+      { exerciseId: row.id, sets: [{ weightKg: "70" }] },
+    ]);
+    expect(await readTodayPlan(me, program.id)).toMatchObject({
+      exerciseCount: 2,
+      setCount: 4,
+      exercises: [
+        { name: "Bench", sets: "3 × 8 · 80 kg" },
+        { name: "Row", sets: "1 × 8 · 70 kg" },
+      ],
+      more: [],
+    });
+    const other = await createUser();
+    expect(await readTodayPlan(other.id, program.id)).toBeNull();
   });
 });
