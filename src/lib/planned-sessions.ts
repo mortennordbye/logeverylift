@@ -1105,7 +1105,15 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
           .limit(1);
         if (taken) throw new SessionInputError(`Position ${input.position} is taken on ${row.date}; move that session first.`);
       }
+      // A new program drops the label the template gave the day, which named
+      // the old one; a label the user set on this day stays.
+      let dropLabel = false;
+      if (input.programId != null && input.programId !== row.programId && input.label === undefined && row.label != null && row.slotId != null) {
+        const [slot] = await tx.select({ label: trainingCycleSlots.label }).from(trainingCycleSlots).where(eq(trainingCycleSlots.id, row.slotId));
+        dropLabel = slot?.label === row.label;
+      }
       set = {
+        ...(dropLabel && { label: null }),
         ...(input.programId != null && { programId: input.programId }),
         ...(input.label !== undefined && { label: input.label }),
         ...(input.notes !== undefined && { notes: input.notes }),
