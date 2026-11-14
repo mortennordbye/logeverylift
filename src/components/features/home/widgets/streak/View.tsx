@@ -53,7 +53,7 @@ export const streakWidget: Renderer<StreakData> = defineWidget<StreakData>({
           <Head weeks={data.weeks} />
           <div className="mt-auto">
             <p className="text-sm font-semibold">{unit(data.weeks)}</p>
-            <Cap>Train this week to keep it.</Cap>
+            <Cap>{(data.perWeek.at(-1) ?? 0) > 0 ? "Keep it lit." : "Train this week to keep it."}</Cap>
           </div>
         </Card>
       );

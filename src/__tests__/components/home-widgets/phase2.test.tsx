@@ -36,6 +36,14 @@ describe("Streak", () => {
     render(<>{streakWidget.View({ data, size: "m" })}</>);
     expect(screen.getByRole("img", { name: "Sessions per week, last 8 weeks: 3, 4, 4, 3, 4, 5, 4, 2" })).toBeTruthy();
   });
+  it("S: asks to train only when this week has no workout yet", () => {
+    const s = render(<>{streakWidget.View({ data, size: "s" })}</>);
+    expect(screen.getByText("Keep it lit.")).toBeTruthy();
+    expect(screen.queryByText("Train this week to keep it.")).toBeNull();
+    s.unmount();
+    render(<>{streakWidget.View({ data: { weeks: 9, perWeek: [3, 4, 4, 3, 4, 5, 4, 0] }, size: "s" })}</>);
+    expect(screen.getByText("Train this week to keep it.")).toBeTruthy();
+  });
   it("empty", () => {
     render(<>{streakWidget.Empty({ size: "s" })}</>);
     expect(screen.getByText("No streak yet. Train this week to start one.")).toBeTruthy();
