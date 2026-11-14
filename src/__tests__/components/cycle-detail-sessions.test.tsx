@@ -166,6 +166,13 @@ describe("weekday week", () => {
     expect(within(sheet).getByRole("link", { name: "Start workout" }).getAttribute("href")).toBe("/programs/1/workout?planned=2");
   });
 
+  it("keeps the space before See program under the title (a flex link drops a plain one)", () => {
+    renderWeek();
+    fireEvent.click(screen.getByRole("button", { name: /^Tue 17 Nov: Strength A/ }));
+    const link = within(screen.getByTestId("session-sheet")).getByRole("link", { name: /See program/ });
+    expect(link.textContent).toBe("Phase 1 · General ·\u00a0See program ›");
+  });
+
   it("moves a session to another day of its week; past days and the current day cannot be picked", async () => {
     renderWeek();
     fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));

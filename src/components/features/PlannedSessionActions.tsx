@@ -280,7 +280,7 @@ export function PlannedSessionSheet({
             (phaseLine || s.programId != null) &&
             (s.programId != null ? (
               <Link href={`/programs/${s.programId}`} className="flex items-center min-h-11 text-sm text-muted-foreground active:opacity-70">
-                {phaseLine ? `${phaseLine} · ` : ""}
+                {phaseLine ? `${phaseLine} ·\u00a0` : ""}
                 <span className="text-brand">See program ›</span>
               </Link>
             ) : (
