@@ -8,6 +8,7 @@ import type { Renderer } from "@/components/features/home/define-widget";
 import type { WidgetId } from "@/lib/home/widgets";
 import { bodyWeightWidget } from "./body-weight/View";
 import { cycleWidget } from "./cycle/View";
+import { dateWidget } from "./date/View";
 import { enduranceTodayWidget } from "./endurance-today/View";
 import { friendsActivityWidget } from "./friends-activity/View";
 import { garminReadinessWidget } from "./garmin-readiness/View";
@@ -36,4 +37,5 @@ export const RENDERERS = {
   trainingLoad: trainingLoadWidget,
   weeklySets: weeklySetsWidget,
   raceCountdown: raceCountdownWidget,
+  date: dateWidget,
 } satisfies Record<WidgetId, Renderer>;

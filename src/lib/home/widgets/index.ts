@@ -6,6 +6,7 @@
 
 import { bodyWeight } from "./body-weight";
 import { cycle } from "./cycle";
+import { date } from "./date";
 import { enduranceToday } from "./endurance-today";
 import { friendsActivity } from "./friends-activity";
 import { garminReadiness } from "./garmin-readiness";
@@ -24,6 +25,7 @@ export const WIDGETS = {
   title,
   today,
   cycle,
+  date,
   enduranceToday,
   week,
   weeklyGoal,

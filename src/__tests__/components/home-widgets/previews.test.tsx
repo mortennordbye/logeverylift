@@ -38,6 +38,7 @@ const SAMPLE_TEXT: Record<keyof typeof RENDERERS, RegExp> = {
   title: /LogEveryLift/,
   today: /Upper Body A/,
   cycle: /Hypertrophy Block|of 8/,
+  date: /Friday, 13 November/,
   enduranceToday: /Tempo run/,
   week: /This week/,
   weeklyGoal: /Weekly goal/,

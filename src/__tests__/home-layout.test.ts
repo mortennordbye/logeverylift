@@ -32,7 +32,7 @@ describe("resolveLayout (U1)", () => {
   });
 
   it("the default lists every other available widget hidden, and nothing unavailable", () => {
-    expect(hidden(defaultLayout(LIFTER))).toEqual(["cycle", "weeklyGoal", "recentPrs", "streak", "weeklySets", "bodyWeight", "friendsActivity"]);
+    expect(hidden(defaultLayout(LIFTER))).toEqual(["cycle", "date", "weeklyGoal", "recentPrs", "streak", "weeklySets", "bodyWeight", "friendsActivity"]);
     expect(hidden(defaultLayout(ADMIN))).toContain("garminReadiness");
     expect(hidden(defaultLayout(ADMIN))).toContain("trainingLoad");
     expect(hidden(defaultLayout(ENDURANCE))).toEqual(expect.arrayContaining(["trainingLoad", "raceCountdown"]));

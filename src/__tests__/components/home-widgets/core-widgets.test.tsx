@@ -8,6 +8,7 @@ vi.mock("@/components/ui/theme-provider", () => ({ useTheme: () => ({ weeklyGoal
 
 const { titleWidget } = await import("@/components/features/home/widgets/title/View");
 const { cycleWidget } = await import("@/components/features/home/widgets/cycle/View");
+const { dateWidget } = await import("@/components/features/home/widgets/date/View");
 const { weeklyGoalWidget } = await import("@/components/features/home/widgets/weekly-goal/View");
 
 const cycle = { name: "Block", currentWeek: 2, durationWeeks: 4, progressPct: 25, endFormatted: "Dec 4" };
@@ -49,5 +50,15 @@ describe("Weekly goal", () => {
       expect(screen.getByText("1 more to reach your goal")).toBeTruthy();
       r.unmount();
     }
+  });
+});
+
+describe("Date (owner decision B)", () => {
+  it("shows today's date from the user's zone, built on the server", () => {
+    // 2026-11-14 is a Saturday; core.today is already the user's local day.
+    const label = dateWidget.select!({ today: new Date(2026, 10, 14), info: null } as never)!;
+    expect(label).toEqual({ label: "Saturday, 14 November" });
+    render(<>{dateWidget.View({ data: label, size: "m" })}</>);
+    expect(screen.getByTestId("date-widget").textContent).toBe("Saturday, 14 November");
   });
 });
