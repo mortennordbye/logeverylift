@@ -209,3 +209,48 @@ describe("scheduled starts, review fixes", () => {
   });
 });
 
+
+describe("edit_cycle_slot upsert", () => {
+  it("keeps the program, label and notes it is not sent", async () => {
+    const cycle = await cycleRow(await draft(me));
+    const lift = await createExercise();
+    const { program } = await createProgram(me, [{ exerciseId: lift.id, sets: [{}] }]);
+    const call = mcpTools(registerCycleTools, me);
+    const first = await call("edit_cycle_slot", {
+      operation: "upsert",
+      trainingCycleId: cycle.id,
+      dayOfWeek: 1,
+      programId: program.id,
+      label: "Strength A",
+      notes: "Keep the load",
+      reason: "Monday strength",
+      expectedVersion: cycle.version,
+    });
+    expect(first.isError).toBeFalsy();
+
+    const second = await call("edit_cycle_slot", {
+      operation: "upsert",
+      trainingCycleId: cycle.id,
+      dayOfWeek: 1,
+      label: "Strength A (renamed)",
+      reason: "New label only",
+      expectedVersion: first.data.cycleVersion,
+    });
+    expect(second.isError).toBeFalsy();
+    const [slot] = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, cycle.id));
+    expect(slot).toMatchObject({ label: "Strength A (renamed)", programId: program.id, notes: "Keep the load" });
+  });
+
+  it("clears a field sent as null", async () => {
+    const cycle = await cycleRow(await draft(me));
+    const call = mcpTools(registerCycleTools, me);
+    const first = await call("edit_cycle_slot", {
+      operation: "upsert", trainingCycleId: cycle.id, dayOfWeek: 2, label: "Ride", notes: "Easy", reason: "Tuesday", expectedVersion: cycle.version,
+    });
+    await call("edit_cycle_slot", {
+      operation: "upsert", trainingCycleId: cycle.id, dayOfWeek: 2, notes: null, reason: "No note", expectedVersion: first.data.cycleVersion,
+    });
+    const [slot] = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, cycle.id));
+    expect(slot).toMatchObject({ label: "Ride", notes: null });
+  });
+});
