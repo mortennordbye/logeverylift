@@ -125,13 +125,8 @@ async function enduranceHome(userId: string, today: string) {
 }
 
 /**
- * Everything the home's core widgets and notices render from, read in one
- * pass. `settings` and `today` come from the page, which read them before the
- * cycle; `cycleResult` is the page's `activeCycle()`.
- */
-/**
- * The block scheduled to start next, when no cycle is active: its id, name,
- * start day and the season it is a phase of. One cycle is scheduled at a time.
+ * The block scheduled to start next: its id, name, start day and the season
+ * it is a phase of. One cycle is scheduled at a time.
  */
 export async function upcomingCycle(userId: string) {
   const [row] = await db
@@ -156,6 +151,11 @@ export async function upcomingCycle(userId: string) {
   return row?.startsOn ? { id: row.id, name: row.name, startsOn: row.startsOn, seasonName: row.seasonName } : null;
 }
 
+/**
+ * Everything the home's core widgets and notices render from, read in one
+ * pass. `settings` and `today` come from the page, which read them before the
+ * cycle; `cycleResult` is the page's `activeCycle()`.
+ */
 export async function loadHomeCore(session: Session, settings: UserSettings, today: Date, cycleResult: CycleResult) {
   const todayStr = toDateStr(today);
   const weekDates = weekDatesOf(todayStr);
@@ -187,9 +187,9 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
       : Promise.resolve(null),
     // The block that starts next: Today shows it with no active cycle, and its start cuts a running one.
     upcomingCycle(session.user.id).catch((e: unknown) => {
-          console.error("[Home] upcoming_cycle_read_failed", { error: e instanceof Error ? e.name : "unknown" });
-          return null;
-        }),
+      console.error("[Home] upcoming_cycle_read_failed", { error: e instanceof Error ? e.name : "unknown" });
+      return null;
+    }),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
   const endurance = enduranceRead.home;

@@ -130,7 +130,7 @@ export type SeasonDetail = {
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
 /** The day the user's scheduled draft starts, or null. That start completes the running cycle. */
-export async function scheduledStartDay(userId: string): Promise<string | null> {
+async function scheduledStartDay(userId: string): Promise<string | null> {
   const [row] = await db
     .select({ day: trainingCycles.scheduledStartDate })
     .from(trainingCycles)
