@@ -11,6 +11,22 @@
 import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import { addDaysStr, shortDay } from "@/lib/utils/seasons";
 
+/** How far ahead a block can be scheduled to start. */
+export const MAX_SCHEDULE_DAYS = 120;
+
+/** The last day a block can be scheduled to start on. */
+export const latestStartDay = (today: string) => addDaysStr(today, MAX_SCHEDULE_DAYS);
+
+/**
+ * Why a block cannot start on `start`: it is before today, or more than
+ * MAX_SCHEDULE_DAYS ahead. Null when it can. The app and the assistant's
+ * manage_training_cycle start both check it, each in its own words.
+ */
+export function startDayProblem(start: string, today: string): "past" | "too_far" | null {
+  if (start < today) return "past";
+  return start > latestStartDay(today) ? "too_far" : null;
+}
+
 /**
  * The running cycle and the week of it that holds today. `startDate` and
  * `durationDays` let a screen work out the week on a later start day.
