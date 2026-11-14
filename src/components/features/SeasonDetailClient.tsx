@@ -307,7 +307,7 @@ export function SeasonDetailClient(p: Props) {
         <section className="flex flex-col gap-2">
           <SectionLabel>Phases</SectionLabel>
           {phases.length > 0 && (
-            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <DndContext id="season-phases" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
               <SortableContext items={order} strategy={verticalListSortingStrategy}>
                 <ul data-testid="season-phases" className="flex flex-col overflow-hidden rounded-[20px] bg-widget">
                   {phases.map((ph) => (

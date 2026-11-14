@@ -62,24 +62,30 @@ describe("plan list words", () => {
 
   it("writes up-next and past rows", () => {
     const c = { id: 2, name: "Strength peak", durationWeeks: 4, durationDays: null, scheduleType: "day_of_week" as const, startDate: null, scheduledStartDate: "2026-12-21" };
-    expect(upNextRow(c, TODAY)).toEqual({ id: 2, name: "Strength peak", sub: "4 weeks · Same days each week", starts: "Starts 21 Dec" });
+    expect(upNextRow(c, TODAY)).toEqual({ id: 2, name: "Strength peak", sub: "4 weeks · Same days each week", starts: "Starts 21 Dec", startsAccent: true });
     const past = { ...c, name: "Strength 5×5", durationWeeks: 8, startDate: "2026-09-14", scheduledStartDate: null };
     expect(pastRow(past, TODAY).sub).toBe("8 weeks · ended 8 Nov");
     // Ended early: the block ended no later than today.
     expect(pastRow({ ...past, startDate: "2026-11-01" }, TODAY).sub).toBe("8 weeks · ended 14 Nov");
   });
+
+  it("says a draft with no start date has not started", () => {
+    const c = { id: 3, name: "Hypertrophy", durationWeeks: 6, durationDays: null, scheduleType: "rotation" as const, startDate: null, scheduledStartDate: null };
+    expect(upNextRow(c, TODAY)).toMatchObject({ starts: "Not started", startsAccent: false });
+    expect(upNextRow({ ...c, scheduledStartDate: "2026-12-21" }, TODAY)).toMatchObject({ starts: "Starts 21 Dec", startsAccent: true });
+  });
 });
 
 describe("the hero", () => {
   const dates = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"];
-  const s = (date: string, extra: Partial<WeekSession> = {}): WeekSession => ({ date, name: "Strength A", sport: null, key: false, brick: false, skipped: false, durationSeconds: null, ...extra });
+  const s = (date: string, extra: Partial<WeekSession> = {}): WeekSession => ({ date, name: "Strength A", sport: null, sports: [], key: false, brick: false, skipped: false, durationSeconds: null, ...extra });
   const week = [
     s("2026-11-16"),
-    s("2026-11-17", { name: "Bike tempo", sport: "bike", durationSeconds: 3600 }),
-    s("2026-11-18", { name: "Run aerobic", sport: "run", durationSeconds: 3900 }),
+    s("2026-11-17", { name: "Bike tempo", sport: "bike", sports: ["bike"], durationSeconds: 3600 }),
+    s("2026-11-18", { name: "Run aerobic", sport: "run", sports: ["run"], durationSeconds: 3900 }),
     s("2026-11-19", { name: "Strength B" }),
-    s("2026-11-22", { name: "Long ride", sport: "bike", key: true, durationSeconds: 8100 }),
-    s("2026-11-22", { name: "Run off bike", sport: "run", brick: true, durationSeconds: 1200 }),
+    s("2026-11-22", { name: "Long ride", sport: "bike", sports: ["bike"], key: true, durationSeconds: 8100 }),
+    s("2026-11-22", { name: "Run off bike", sport: "run", sports: ["run"], brick: true, durationSeconds: 1200 }),
   ];
 
   it("makes a 7-day strip with rest days, sports, a brick and the key day", () => {
@@ -90,12 +96,24 @@ describe("the hero", () => {
     expect(days[6].names).toBe("Long ride, Run off bike");
   });
 
+  it("never calls a session with an endurance sport a lift", () => {
+    const mixed = s("2026-11-16", { name: "Bike + swim", sports: ["bike", "swim"] });
+    const liftAndRun = s("2026-11-17", { name: "Legs and a jog", sports: ["run"] });
+    const days = weekDays(dates, [mixed, liftAndRun, s("2026-11-18"), s("2026-11-18", { name: "Bike + swim", sports: ["bike", "swim"] })], TODAY, true);
+    expect(days.slice(0, 3).map((d) => d.short)).toEqual(["Multi", "Multi", "Lift +1"]);
+  });
+
   it("marks no key day without the endurance switch", () => {
     expect(weekDays(dates, week, TODAY, false).some((d) => d.key)).toBe(false);
   });
 
-  it("counts the sessions and the planned time, leaving out skipped ones", () => {
-    expect(weekSummary(week)).toBe("6 sessions · about 5 h");
+  it("counts the sessions, and gives the planned time only when every session has one", () => {
+    const timed = week.filter((x) => x.durationSeconds != null);
+    expect(weekSummary(timed)).toBe("4 sessions · about 5 h");
+    expect(weekSummary([...timed, s("2026-11-19", { skipped: true })])).toBe("4 sessions · about 5 h");
+    // A lift or a session planned by distance has no time: no partial sum.
+    expect(weekSummary(week)).toBe("6 sessions");
+    expect(weekSummary([s("2026-11-16", { durationSeconds: 1200 }), s("2026-11-17", { sport: "bike", sports: ["bike"] })])).toBe("2 sessions");
     expect(weekSummary([s("2026-11-16"), s("2026-11-17", { skipped: true })])).toBe("1 session");
   });
 

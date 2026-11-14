@@ -65,10 +65,13 @@ const rotationHero: HeroView = {
 const gym: PlanListData = {
   ...none,
   hero: rotationHero,
-  upNext: [{ id: 2, name: "Strength peak", sub: "4 weeks · Same days each week", starts: "Starts 21 Dec" }],
+  upNext: [
+    { id: 2, name: "Strength peak", sub: "4 weeks · Same days each week", starts: "Starts 21 Dec", startsAccent: true },
+    { id: 6, name: "Deload week", sub: "1 week · Rotation", starts: "Not started", startsAccent: false },
+  ],
   past: [
-    { id: 3, name: "Strength 5×5", sub: "8 weeks · ended 8 Nov", starts: null },
-    { id: 4, name: "Intro", sub: "4 weeks · ended 13 Sep", starts: null },
+    { id: 3, name: "Strength 5×5", sub: "8 weeks · ended 8 Nov", starts: null, startsAccent: false },
+    { id: 4, name: "Intro", sub: "4 weeks · ended 13 Sep", starts: null, startsAccent: false },
   ],
   select: {
     current: [{ id: 1, name: "Upper / Lower hypertrophy", sub: "Week 3 of 6 · Rotation" }],
@@ -98,6 +101,7 @@ const s = (date: string, name: string, sport: "bike" | "run" | null, extra: { ke
   date,
   name,
   sport,
+  sports: sport ? [sport] : [],
   key: extra.key ?? false,
   brick: extra.brick ?? false,
   skipped: false,
@@ -128,7 +132,7 @@ const endurance: PlanListData = {
     summary: "6 sessions · about 7 h",
   },
   seasons: [jevnaker],
-  past: [{ id: 5, name: "Intro", sub: "4 weeks · ended 8 Nov", starts: null }],
+  past: [{ id: 5, name: "Intro", sub: "4 weeks · ended 8 Nov", starts: null, startsAccent: false }],
   select: { current: [], upNext: [], past: [{ id: 5, name: "Intro", sub: "4 weeks · ended 8 Nov" }] },
 };
 
@@ -175,7 +179,7 @@ describe("the Plan list", () => {
     expect(within(sheet).queryByText(/Triathlon/)).toBeNull();
   });
 
-  it("gym user: the rotation hero, up next, past cycles, recently deleted and the season tip", async () => {
+  it("gym user: the rotation hero, up next, past cycles and recently deleted, with no season tip", () => {
     render(<CyclesListClient data={gym} deletedCount={1} />);
     const hero = screen.getByTestId("plan-hero");
     expect(hero.getAttribute("href")).toBe("/cycles/1");
@@ -184,19 +188,18 @@ describe("the Plan list", () => {
     expect(chips.map((c) => c.textContent)).toEqual(["DoneUpper A", "NextLower A", "Rest", "Upper B", "Lower B"]);
     expect(within(hero).getByText("Ends 20 Dec")).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Up next" })).toBeTruthy();
-    expect(screen.getByTestId("scheduled-start").textContent).toBe("Starts 21 Dec");
+    const starts = screen.getAllByTestId("scheduled-start");
+    expect(starts.map((x) => x.textContent)).toEqual(["Starts 21 Dec", "Not started"]);
+    expect(starts[0].className).toContain("text-brand");
+    expect(starts[1].className).toContain("text-muted-foreground");
     expect(screen.getByRole("heading", { name: "Past cycles" })).toBeTruthy();
     expect(screen.getByText("8 weeks · ended 8 Nov")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Recently deleted (1)" }).getAttribute("href")).toBe("/cycles/deleted");
     expect(screen.queryByTestId("season-card")).toBeNull();
 
-    // The season tip hides, and stays hidden on the next visit.
-    fireEvent.click(await screen.findByRole("button", { name: "Hide season tip" }));
-    expect(screen.queryByTestId("season-tip")).toBeNull();
-    expect(localStorage.getItem("planSeasonTipHidden")).toBe("1");
-    cleanup();
-    render(<CyclesListClient data={gym} deletedCount={1} />);
-    expect(screen.queryByTestId("season-tip")).toBeNull();
+    // No season tip: the + menu has New season.
+    expect(screen.queryByText(/Add a season/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide season tip" })).toBeNull();
   });
 
   it("endurance user: the week strip with the key day, the season card with phases and the A race", () => {
@@ -218,8 +221,6 @@ describe("the Plan list", () => {
     expect(within(card).getByRole("link", { name: /Longer ride and run.*Base · 12 wk · 11 Jan – 4 Apr/ }).getAttribute("href")).toBe("/cycles/22");
     expect(within(card).getByText("Starts Mon")).toBeTruthy();
     expect(within(card).getByRole("link", { name: /Jevnaker Halv Full Distanse.*A race · 29 Aug/ }).getAttribute("href")).toBe("/seasons/9");
-    // With a season there is no season tip.
-    expect(screen.queryByTestId("season-tip")).toBeNull();
   });
 
   it("gym user with a goal season: goal date, weeks left, the running phase marked Now", () => {

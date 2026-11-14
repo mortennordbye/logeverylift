@@ -249,6 +249,27 @@ describe("planned vs done", () => {
     expect(autos).toEqual([]);
   });
 
+  it("a mixed bike and swim session with autoComplete writes no auto row, asks 'Did you do it?' and takes a done answer", async () => {
+    const bikeEx = (await createExercise({ name: `Bike ${Math.random()}`, category: "cardio", discipline: "bike" })).id;
+    const swimEx = (await createExercise({ name: `Swim ${Math.random()}`, category: "cardio", discipline: "swim" })).id;
+    const { program } = await createProgram(me, [
+      { exerciseId: bikeEx, sets: [{ distanceMeters: 30000, targetReps: null, weightKg: null }] },
+      { exerciseId: swimEx, sets: [{ distanceMeters: 1500, targetReps: null, weightKg: null }] },
+    ]);
+    const cycleId = await cycle(me, [{ dayOfWeek: 2, programId: program.id, autoComplete: true }]);
+    await getActiveCycleForUser(); // a second read: the page reads again
+    const autos = await db.select().from(workoutSessions).where(and(eq(workoutSessions.userId, me), eq(workoutSessions.source, "auto")));
+    expect(autos).toEqual([]);
+    const [tue] = await sessionCompliance(me, "2026-11-03", "2026-11-03", { cycleId });
+    expect(tue).toMatchObject({ state: "unconfirmed", sport: null, sports: ["bike", "swim"] });
+    expect((await homeEndurance(me)).unconfirmed.map((x) => x.id)).toContain(tue.id);
+
+    const yes = await confirmPlannedDone({ plannedSessionId: tue.id, durationSeconds: 5400 });
+    expect(yes.success, JSON.stringify(yes)).toBe(true);
+    const [after] = await sessionCompliance(me, "2026-11-03", "2026-11-03", { cycleId });
+    expect(after.state).toBe("done");
+  });
+
   it("answers over MCP: done logs a linked workout; missed on a key session suggests a free day; unmiss", async () => {
     const run = await runProgram(me, 5400); // 90 min: the week's long run is key
     const easy = await runProgram(me, 1800);

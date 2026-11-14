@@ -9,7 +9,7 @@ import { phaseDeleteWarning, type CycleRow, type HeroView } from "@/lib/utils/pl
 import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useSyncExternalStore } from "react";
+import { useState } from "react";
 
 // ─── small parts ─────────────────────────────────────────────────────────────
 
@@ -65,15 +65,6 @@ function NewChoices({ onPick }: { onPick?: () => void }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-function SeasonPrompt() {
-  return (
-    <Link href="/seasons/new" className="flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground active:opacity-70">
-      <FlagIcon />
-      Training for a race or a goal? Add a season
-    </Link>
   );
 }
 
@@ -146,7 +137,7 @@ function CycleRows({ rows }: { rows: CycleRow[] }) {
             <span className="text-[13px] text-muted-foreground">{r.sub}</span>
           </span>
           {r.starts && (
-            <span className="shrink-0 text-[13px] font-semibold text-brand" data-testid="scheduled-start">
+            <span className={`shrink-0 text-[13px] ${r.startsAccent ? "font-semibold text-brand" : "text-muted-foreground"}`} data-testid="scheduled-start">
               {r.starts}
             </span>
           )}
@@ -184,30 +175,6 @@ function SelectRows({ rows, selected, toggle }: { rows: SelectRow[]; selected: S
   );
 }
 
-// ─── the hidden season tip (localStorage, docs/privacy/data-inventory.md) ───
-
-const TIP_KEY = "planSeasonTipHidden";
-const tipListeners = new Set<() => void>();
-function readTipHidden(): boolean {
-  try {
-    return localStorage.getItem(TIP_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-function hideTip() {
-  try {
-    localStorage.setItem(TIP_KEY, "1");
-  } catch {
-    // Storage blocked: the tip hides until the page reloads.
-  }
-  tipListeners.forEach((l) => l());
-}
-function subscribeTip(l: () => void) {
-  tipListeners.add(l);
-  return () => tipListeners.delete(l);
-}
-
 // ─── main export ──────────────────────────────────────────────────────────────
 
 type Props = {
@@ -224,10 +191,6 @@ export function CyclesListClient({ data, deletedCount }: Props) {
   const [showAddSheet, setShowAddSheet] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [tipClosed, setTipClosed] = useState(false);
-  // Hidden on the server, so a hidden tip never flashes in.
-  const tipStored = useSyncExternalStore(subscribeTip, readTipHidden, () => true);
-  const tipHidden = tipClosed || tipStored;
 
   const selectable = [
     ...data.seasons.flatMap((s) => s.phaseData.map((p) => p.id)),
@@ -435,24 +398,6 @@ export function CyclesListClient({ data, deletedCount }: Props) {
                 )}
                 {recentlyDeleted}
               </section>
-            )}
-            {data.seasons.length === 0 && !tipHidden && (
-              <div className="flex items-center justify-between gap-2 pl-1" data-testid="season-tip">
-                <SeasonPrompt />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTipClosed(true);
-                    hideTip();
-                  }}
-                  aria-label="Hide season tip"
-                  className="flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground active:opacity-70"
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden>
-                    <path d="M6 6l12 12M18 6L6 18" />
-                  </svg>
-                </button>
-              </div>
             )}
           </>
         )}

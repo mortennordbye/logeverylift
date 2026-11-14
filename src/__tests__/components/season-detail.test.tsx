@@ -33,9 +33,9 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
   const real = await importOriginal<typeof import("@dnd-kit/core")>();
   return {
     ...real,
-    DndContext: ({ children, onDragEnd }: { children: React.ReactNode; onDragEnd: (e: DragEndEvent) => void }) => {
+    DndContext: ({ children, onDragEnd, id }: { children: React.ReactNode; onDragEnd: (e: DragEndEvent) => void; id?: string }) => {
       dnd.onDragEnd = onDragEnd;
-      return <real.DndContext>{children}</real.DndContext>;
+      return <real.DndContext id={id}>{children}</real.DndContext>;
     },
   };
 });
@@ -127,6 +127,18 @@ describe("drag to reorder the phases", () => {
     await act(async () => dnd.onDragEnd!({ active: { id: 1 }, over: { id: 2 } } as unknown as DragEndEvent));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("cannot move"));
     expect(rowNames()).toEqual(["Aerobic base + strength", "Longer ride and run", "Taper"]);
+  });
+
+  it("names the drag instructions the same on every render, so the server HTML hydrates", () => {
+    // dnd-kit numbers its ids from a module counter when DndContext has no id:
+    // the server and the browser count differently ("DndDescribedBy-0" vs "-4").
+    const describedBy = () => document.querySelector("[aria-roledescription='sortable']")?.getAttribute("aria-describedby");
+    const first = render(<SeasonDetailClient {...base} />);
+    const a = describedBy();
+    first.unmount();
+    render(<SeasonDetailClient {...base} />);
+    expect(a).toBeTruthy();
+    expect(describedBy()).toBe(a);
   });
 
   it("phaseDrop gives the order and position, and nothing for a drop in place", () => {
