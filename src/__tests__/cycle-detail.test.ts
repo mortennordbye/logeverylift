@@ -1,4 +1,4 @@
-import { blockWeeks, canBackToTemplate, cycleSubLine, dayLabels, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
+import { blockWeeks, canBackToTemplate, cycleSubLine, dayLabels, dayNotes, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
 import { describe, expect, it } from "vitest";
 
 describe("cycleSubLine", () => {
@@ -105,6 +105,18 @@ describe("dayLabels", () => {
       { dayOfWeek: 4, programId: null, workoutId: null, label: null },
     ]);
     expect(labels).toEqual({ 5: "Mobility, stretching and the long drive home" });
+  });
+});
+
+describe("dayNotes (J5-11)", () => {
+  it("gives the notes of the labelled days only", () => {
+    const notes = dayNotes([
+      { dayOfWeek: 1, programId: 3, workoutId: null, label: "Strength", notes: "Heavy" },
+      { dayOfWeek: 5, programId: null, workoutId: null, label: "Mobility", notes: " Hips and back " },
+      { dayOfWeek: 6, programId: null, workoutId: null, label: "Walk", notes: null },
+      { dayOfWeek: 7, programId: null, workoutId: null, label: "Rest", notes: "Sleep in" },
+    ]);
+    expect(notes).toEqual({ 5: "Hips and back" });
   });
 });
 

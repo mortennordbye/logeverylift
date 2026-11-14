@@ -36,6 +36,7 @@ import {
 } from "@/lib/utils/cycle-detail";
 import { buildRunSetSummary } from "@/lib/utils/format";
 import { keepDates } from "@/lib/utils/keep-dates";
+import { dowOf } from "@/lib/utils/planned-sessions";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { Units } from "@/lib/utils/units";
@@ -88,6 +89,7 @@ export function CycleWeek({
   programsMap,
   templateHref,
   dayLabels,
+  dayNotes,
 }: {
   weeks: BlockWeek[];
   initialWeek: number;
@@ -100,10 +102,14 @@ export function CycleWeek({
   templateHref: string;
   /** The template's own names for days with no session, by weekday (1 = Monday). */
   dayLabels?: Record<number, string>;
+  /** The notes of those labelled days, by weekday. */
+  dayNotes?: Record<number, string>;
 }) {
   const units = useUnits();
   const [index, setIndex] = useState(initialWeek);
   const [open, setOpen] = useState<DetailSession | null>(null);
+  // A labelled day with no session opens a small sheet with its label and note (J5-11).
+  const [labelDay, setLabelDay] = useState<string | null>(null);
   const [answering, setAnswering] = useState<AnswerSession | null>(null);
   const week = weeks[index];
   const days = weekDays(week);
@@ -144,13 +150,32 @@ export function CycleWeek({
             const label = dayLabelOn(dayLabels, day);
             // A session moved off this day says where it went.
             const movedTo = inWeek.find((s) => s.templateDate === day && isMoved(s));
-            return (
-              <div key={day} className="flex items-center gap-3 px-3.5 py-2 min-h-12 border-b border-hairline" data-testid="week-row">
+            const restInner = (
+              <>
                 {dayCol(true, true)}
                 <span className="flex-1 min-w-0 flex flex-col">
-                  <span className={`text-[15px] font-medium truncate ${label ? "text-foreground/80" : "text-muted-foreground"}`}>{label ?? "Rest"}</span>
+                  {/* A label wraps: cut, it could not be read anywhere (J5-11). */}
+                  <span className={`text-[15px] font-medium ${label ? "text-foreground/80 break-words" : "text-muted-foreground truncate"}`}>{label ?? "Rest"}</span>
                   {movedTo && <span className="text-[13px] text-muted-foreground truncate">Moved to {weekdayShort(movedTo.date)}</span>}
                 </span>
+                {label && chevron}
+              </>
+            );
+            const restClass = "flex w-full items-center gap-3 px-3.5 py-2 min-h-12 border-b border-hairline text-left";
+            return label ? (
+              <button
+                key={day}
+                type="button"
+                data-testid="week-row"
+                aria-label={`${shortDay(day)}: ${label}`}
+                onClick={() => setLabelDay(day)}
+                className={`${restClass} active:bg-foreground/5`}
+              >
+                {restInner}
+              </button>
+            ) : (
+              <div key={day} className={restClass} data-testid="week-row">
+                {restInner}
               </div>
             );
           }
@@ -205,6 +230,18 @@ export function CycleWeek({
         exercises={open?.programId != null ? exerciseLines(programsMap[open.programId], units) : null}
         onClose={() => setOpen(null)}
       />
+      <BottomSheet open={labelDay !== null} onClose={() => setLabelDay(null)}>
+        {labelDay && (
+          <PlanSheetPanel label={`Day on ${shortDay(labelDay)}`} testId="day-label-sheet">
+            <div className="flex flex-col gap-0.5">
+              <SectionLabel accent={labelDay === today}>{shortDay(labelDay)}</SectionLabel>
+              <h2 className="text-2xl font-semibold break-words">{dayLabelOn(dayLabels, labelDay)}</h2>
+            </div>
+            {dayNotes?.[dowOf(labelDay)] && <p className="text-[15px] text-muted-foreground whitespace-pre-line break-words">{dayNotes[dowOf(labelDay)]}</p>}
+            <TemplateLink href={templateHref} title="Edit weekly template" sub="Change the label or the note for this weekday." />
+          </PlanSheetPanel>
+        )}
+      </BottomSheet>
       <DidYouDoItSheet key={answering?.id ?? "closed"} session={answering} dayLabel={answering ? shortDay(answering.date) : ""} onClose={() => setAnswering(null)} />
     </>
   );

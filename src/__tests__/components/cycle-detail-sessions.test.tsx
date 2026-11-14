@@ -129,10 +129,27 @@ describe("weekday week", () => {
     renderWeek({ dayLabels: { 5: "Mobility" } });
     const rows = screen.getAllByTestId("week-row");
     // Fri 20 Nov: the label, not Rest.
-    expect(rows[4].textContent).toBe("Fri20 NovMobility");
+    expect(rows[4].textContent).toBe("Fri20 NovMobility›");
     // Bike tempo moved from Wed to Thu.
     expect(rows[2].textContent).toBe("Wed18 NovRestMoved to Thu");
     expect(rows[3].textContent).toContain("Moved from Wed");
+  });
+
+  it("a labelled day shows its whole label and opens a sheet with the label and the note (J5-11)", () => {
+    const label = "Mobility, stretching and the long drive home after the race weekend";
+    renderWeek({ dayLabels: { 5: label }, dayNotes: { 5: "Twenty minutes on the hips." } });
+    const row = screen.getByRole("button", { name: `Fri 20 Nov: ${label}` });
+    expect(within(row).getByText(label).className).not.toContain("truncate");
+    fireEvent.click(row);
+    const sheet = screen.getByTestId("day-label-sheet");
+    expect(within(sheet).getByRole("heading", { name: label })).toBeTruthy();
+    expect(within(sheet).getByText("Twenty minutes on the hips.")).toBeTruthy();
+    expect(within(sheet).getByText("Fri 20 Nov")).toBeTruthy();
+  });
+
+  it("a plain rest day does not open", () => {
+    renderWeek();
+    expect(screen.queryByRole("button", { name: /^Wed 18 Nov/ })).toBeNull();
   });
 
   it("marks a session changed on its own day", () => {
