@@ -23,7 +23,7 @@ import { moveSuggestion } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { syncLimitWarnings } from "@/lib/training-limits";
 import { userToday } from "@/lib/user-settings";
-import { type DetailSession, blockWeeks, dayMonth, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
+import { type DetailSession, blockWeeks, dayLabels, dayMonth, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
@@ -135,6 +135,8 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   const subLine = [weekday ? "Same days each week" : "Rotation", lengthLabel(cycle), !weekday && currentWeek ? `Week ${currentWeek} of ${totalWeeks}` : null].filter(Boolean).join(" · ");
   const phaseLine = season ? `Phase ${season.position}${cycle.phaseType ? ` · ${PHASE_TYPE_LABELS[cycle.phaseType]}` : ""}` : null;
   const templateHref = `/cycles/${cycle.id}/template`;
+  // Days the template names with no session, such as "Mobility" (only a weekday cycle has days).
+  const labels = weekday ? dayLabels(cycle.slots) : {};
   const slotPrograms = [...new Map(cycle.slots.filter((s) => s.program).map((s) => [s.program!.id, s.program!.name])).entries()];
 
   return (
@@ -241,6 +243,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
             library={showEndurance ? library.map((w) => ({ id: w.id, name: w.name, sport: w.sport, summary: w.summary })) : undefined}
             programsMap={programsMap}
             templateHref={templateHref}
+            dayLabels={labels}
           />
         )}
 
@@ -253,6 +256,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
                 .filter((s) => s.dayOfWeek === dow && s.programId != null)
                 .sort((a, b) => (a.daySlot ?? 1) - (b.daySlot ?? 1))
                 .map((s) => ({ name: s.label ?? s.program?.name ?? "Session", sub: exerciseNames(programsMap[s.programId!]) ?? "" })),
+              label: labels[dow] ?? null,
             }))}
           />
         )}

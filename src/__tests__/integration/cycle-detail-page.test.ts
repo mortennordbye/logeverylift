@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { plannedSessions, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
-import { updatePlannedSession } from "@/lib/actions/planned-sessions";
+import { updatePlannedSession, updateRotationSession } from "@/lib/actions/planned-sessions";
 import { homeEndurance } from "@/lib/session-answers";
 import { and, eq } from "drizzle-orm";
 import CycleDetailPage from "@/app/cycles/[id]/page";
@@ -119,6 +119,34 @@ describe("cycle detail page", () => {
       [lift, "done", "2026-11-18", 2],
       [run, "next", null, 1],
     ]);
+  });
+
+  it("a day with only a labelled slot passes its label to the week and the template", async () => {
+    const running = await weekdayCycle({ status: "active", startDate: "2026-11-09" });
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: running, dayOfWeek: 5, programId: null, label: "Mobility" });
+    expect(propsOf<Parameters<typeof CycleWeek>[0]>(await page(running), CycleWeek)!.dayLabels).toEqual({ 5: "Mobility" });
+
+    const draft = await weekdayCycle({});
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: draft, dayOfWeek: 5, programId: null, label: "Mobility" });
+    const template = propsOf<Parameters<typeof TemplateWeek>[0]>(await page(draft), TemplateWeek)!;
+    expect(template.days.map((d) => d.label)).toEqual([null, null, null, null, "Mobility", null, null]);
+  });
+
+  it("a rotation position swapped after its slot was done reads swapped, not done", async () => {
+    const [c] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Rotation", durationWeeks: 4, status: "active", startDate: "2026-11-18", scheduleType: "rotation" })
+      .returning();
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: c.id, orderIndex: 1, programId: lift },
+      { trainingCycleId: c.id, orderIndex: 2, programId: run },
+    ]);
+    await db.insert(workoutSessions).values({ userId: me, programId: lift, date: "2026-11-18", isCompleted: true });
+    const other = (await createProgram(me, [{ exerciseId: (await createExercise({ name: "Row" })).id, sets: [{}] }])).program.id;
+    // Position 2 is the lift slot's next turn.
+    expect((await updateRotationSession({ op: "change", cycleId: c.id, rotationPosition: 2, programId: other })).success).toBe(true);
+    const order = propsOf<Parameters<typeof RotationOrder>[0]>(await page(c.id), RotationOrder)!;
+    expect(order.rows[0]).toMatchObject({ programId: other, mark: "swapped", lastDone: "2026-11-18" });
   });
 
   it("a completed cycle: the cycle scheduled next", async () => {

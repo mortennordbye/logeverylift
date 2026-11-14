@@ -23,8 +23,10 @@ import {
   type BlockWeek,
   type DetailSession,
   type RotationRow,
+  dayLabelOn,
   dayMonth,
   doneLabel,
+  isMoved,
   rowAction,
   sessionSub,
   setsShort,
@@ -84,6 +86,7 @@ export function CycleWeek({
   library,
   programsMap,
   templateHref,
+  dayLabels,
 }: {
   weeks: BlockWeek[];
   initialWeek: number;
@@ -94,6 +97,8 @@ export function CycleWeek({
   library?: LibraryRow[];
   programsMap: Record<number, ProgramWithExercises>;
   templateHref: string;
+  /** The template's own names for days with no session, by weekday (1 = Monday). */
+  dayLabels?: Record<number, string>;
 }) {
   const units = useUnits();
   const [index, setIndex] = useState(initialWeek);
@@ -135,10 +140,16 @@ export function CycleWeek({
             </span>
           );
           if (list.length === 0) {
+            const label = dayLabelOn(dayLabels, day);
+            // A session moved off this day says where it went.
+            const movedTo = inWeek.find((s) => s.templateDate === day && isMoved(s));
             return (
               <div key={day} className="flex items-center gap-3 px-3.5 py-2 min-h-12 border-b border-hairline" data-testid="week-row">
                 {dayCol(true, true)}
-                <span className="text-[15px] font-medium text-muted-foreground">Rest</span>
+                <span className="flex-1 min-w-0 flex flex-col">
+                  <span className={`text-[15px] font-medium truncate ${label ? "text-foreground/80" : "text-muted-foreground"}`}>{label ?? "Rest"}</span>
+                  {movedTo && <span className="text-[13px] text-muted-foreground truncate">Moved to {weekdayShort(movedTo.date)}</span>}
+                </span>
               </div>
             );
           }
@@ -198,7 +209,14 @@ export function CycleWeek({
 }
 
 /** A draft weekday cycle with no dates yet: the template's week, Monday to Sunday. */
-export function TemplateWeek({ days, templateHref }: { days: { dow: number; sessions: { name: string; sub: string }[] }[]; templateHref: string }) {
+export function TemplateWeek({
+  days,
+  templateHref,
+}: {
+  /** `label` names a day with no session, such as "Mobility". */
+  days: { dow: number; sessions: { name: string; sub: string }[]; label?: string | null }[];
+  templateHref: string;
+}) {
   const NAMES = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
   return (
     <div className={card} data-testid="template-week">
@@ -212,7 +230,7 @@ export function TemplateWeek({ days, templateHref }: { days: { dow: number; sess
                 {s.sub && <span className="text-[13px] text-muted-foreground truncate">{s.sub}</span>}
               </span>
             ) : (
-              <span className="text-[15px] font-medium text-muted-foreground">Rest</span>
+              <span className={`flex-1 min-w-0 truncate text-[15px] font-medium ${d.label ? "text-foreground/80" : "text-muted-foreground"}`}>{d.label ?? "Rest"}</span>
             )}
           </div>
         )),
@@ -225,6 +243,7 @@ export function TemplateWeek({ days, templateHref }: { days: { dow: number; sess
 function rotationSub(row: RotationRow, today: string, exerciseCount: number | undefined): string {
   if (row.mark === "next") return "Next";
   if (row.mark === "skipped") return "Skipped";
+  if (row.mark === "swapped") return "Swapped";
   if (row.mark === "done" && row.lastDone) return doneLabel(row.lastDone, today);
   if (row.rest) return "Rest day";
   return exerciseCount != null ? `${exerciseCount} exercise${exerciseCount === 1 ? "" : "s"}` : "";

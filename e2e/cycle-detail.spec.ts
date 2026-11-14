@@ -84,6 +84,9 @@ test("open a dated session on the cycle detail, move it to another day, then ski
   // The week shows it on its new day.
   const moved = page.getByRole("button", { name: new RegExp(`^${label(dayStr(3))}: ${esc(s.program.name)}`) });
   await expect(moved).toBeVisible();
+  // A muted mark says where it came from, and the day it left says where it went.
+  await expect(moved).toContainText(`Moved from ${label(dayStr(1)).slice(0, 3)}`);
+  await expect(page.getByTestId("week-row").filter({ hasText: `Moved to ${label(dayStr(3)).slice(0, 3)}` })).toBeVisible();
   await moved.click();
   await expect(sheet.getByRole("button", { name: /Back to the template/ })).toBeVisible();
   await sheet.getByRole("button", { name: "Skip this session" }).click();

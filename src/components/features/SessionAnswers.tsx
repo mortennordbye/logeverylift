@@ -312,7 +312,8 @@ const SPORT_WORD: Record<NonNullable<AnswerSession["sport"]>, string> = { swim: 
  */
 export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: AnswerSession | null; dayLabel: string; onClose: () => void }) {
   const router = useRouter();
-  const [answer, setAnswer] = useState<"yes" | "missed">("yes");
+  // Nothing is chosen until the user answers.
+  const [answer, setAnswer] = useState<"yes" | "missed" | null>(null);
   const form = useConfirmDone(session, () => {
     onClose();
     router.refresh();
@@ -320,7 +321,7 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
   const { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, setSaving, error, setError, unit, seconds, distanceBad } = form;
 
   async function save() {
-    if (!session) return;
+    if (!session || answer === null) return;
     if (answer === "yes") return form.save();
     setSaving(true);
     setError(null);
@@ -407,7 +408,7 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
           <button
             type="button"
             onClick={save}
-            disabled={saving || (answer === "yes" && (seconds == null || distanceBad))}
+            disabled={saving || answer === null || (answer === "yes" && (seconds == null || distanceBad))}
             className="h-[52px] rounded-2xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
           >
             Save

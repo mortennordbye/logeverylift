@@ -125,6 +125,21 @@ describe("weekday week", () => {
     expect(screen.queryByText("Long ride")).toBeNull();
   });
 
+  it("names a labelled day with no session, and marks a moved session and the day it left", () => {
+    renderWeek({ dayLabels: { 5: "Mobility" } });
+    const rows = screen.getAllByTestId("week-row");
+    // Fri 20 Nov: the label, not Rest.
+    expect(rows[4].textContent).toBe("Fri20 NovMobility");
+    // Bike tempo moved from Wed to Thu.
+    expect(rows[2].textContent).toBe("Wed18 NovRestMoved to Thu");
+    expect(rows[3].textContent).toContain("Moved from Wed");
+  });
+
+  it("marks a session changed on its own day", () => {
+    renderWeek({ sessions: [session({ id: 9, date: "2026-11-18", name: "Hill repeats", touched: true, exercises: "Squat" })] });
+    expect(screen.getAllByTestId("week-row")[2].textContent).toContain("Changed · Squat");
+  });
+
   it("opens today's session with its exercises and Start workout", () => {
     renderWeek();
     fireEvent.click(screen.getByRole("button", { name: /^Tue 17 Nov: Strength A/ }));
@@ -235,11 +250,22 @@ describe("Did you do it? from a past row", () => {
   const answer = { id: 1, date: "2026-11-16", name: "Run aerobic", summary: "65 min", sport: "run" as const };
   const past = [session({ id: 1, date: "2026-11-16", name: "Run aerobic", programId: null, status: "missed", answer })];
 
+  it("opens with no answer chosen", () => {
+    renderWeek({ sessions: past });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    expect(within(sheet).getByRole("button", { name: "Yes, I did it" }).getAttribute("aria-pressed")).toBe("false");
+    expect(within(sheet).getByRole("button", { name: "Missed" }).getAttribute("aria-pressed")).toBe("false");
+    expect(within(sheet).queryByLabelText("Time (h:mm)")).toBeNull();
+    expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
   it("logs Yes with the time and effort", async () => {
     renderWeek({ sessions: past });
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic, Did you do it\?/ }));
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     expect(within(sheet).getByText("No run found for this day. Did you do it?")).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
     fireEvent.change(within(sheet).getByLabelText("Time (h:mm)"), { target: { value: "1:05" } });
     fireEvent.click(within(sheet).getByRole("button", { name: "Effort 6" }));
     await act(async () => {
@@ -266,6 +292,7 @@ describe("Did you do it? from a past row", () => {
     renderWeek({ sessions: past });
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
     const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
     fireEvent.change(within(sheet).getByLabelText("Time (h:mm)"), { target: { value: "1:05" } });
     fireEvent.change(within(sheet).getByLabelText(/^Distance/), { target: { value: "-5" } });
     expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
@@ -349,6 +376,14 @@ describe("rotation order", () => {
     expect(within(rows[2]).queryByRole("button")).toBeNull();
     expect(screen.getByText("Repeats every 4 days. A missed session waits for you.")).toBeTruthy();
     expect(screen.getByRole("link", { name: "Edit order" }).getAttribute("href")).toBe("/cycles/5/template");
+  });
+
+  it("marks a coming swapped session as swapped, not done", () => {
+    const swapped = walk.map((d) => (d.rotationPosition === 4 ? { ...d, programId: 9, programName: "Full body" } : d));
+    render(
+      <RotationOrder cycleId={5} rows={rotationRows(slots, swapped, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />,
+    );
+    expect(screen.getAllByTestId("rotation-row")[0].textContent).toBe("1Full bodySwapped");
   });
 
   it("skips today's session by its position", async () => {

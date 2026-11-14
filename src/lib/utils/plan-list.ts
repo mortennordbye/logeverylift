@@ -5,7 +5,7 @@
  * builds these and the client renders the same text.
  */
 
-import type { RotationRow } from "@/lib/utils/cycle-detail";
+import { dayLabelOn, type RotationRow } from "@/lib/utils/cycle-detail";
 import type { PhaseType } from "@/lib/utils/periodization";
 import { dateLabel } from "@/lib/utils/date-label";
 import { addDaysStr, daysBetweenStr, seasonTimeline, shortDay, taperFit, type PhaseLike, type TimelinePhase } from "@/lib/utils/seasons";
@@ -103,7 +103,7 @@ export type HeroDay = {
   date: string;
   /** "Mon". */
   day: string;
-  /** "Lift", "Bike", "Multi", "Brick", "Rest". */
+  /** "Lift", "Bike", "Multi", "Brick", "Rest", or a day's own label up to its first comma ("Mobility"). */
   short: string;
   rest: boolean;
   key: boolean;
@@ -112,7 +112,7 @@ export type HeroDay = {
   names: string;
 };
 
-export type RotationChip = { id: number; name: string; rest: boolean; tag: "Done" | "Next" | "Skipped" | null };
+export type RotationChip = { id: number; name: string; rest: boolean; tag: "Done" | "Next" | "Skipped" | "Swapped" | null };
 
 type HeroBase = { id: number; name: string; label: string; ends: string };
 export type HeroView =
@@ -141,15 +141,20 @@ export type WeekSession = {
 
 const SPORT_WORDS = { swim: "Swim", bike: "Bike", run: "Run" } as const;
 
-/** The strip of a weekday block: the days of one block week, from the block's start weekday. */
-export function weekDays(dates: string[], sessions: WeekSession[], today: string, keyMarks: boolean): HeroDay[] {
+/**
+ * The strip of a weekday block: the days of one block week, from the block's
+ * start weekday. A day with no session reads its own label (`dayLabels`) when
+ * the template gives it one, else Rest.
+ */
+export function weekDays(dates: string[], sessions: WeekSession[], today: string, keyMarks: boolean, labels?: Record<number, string>): HeroDay[] {
   return dates.map((date) => {
     const mine = sessions.filter((s) => s.date === date && !s.skipped);
     const rest = mine.length === 0;
+    const label = rest ? dayLabelOn(labels, date) : null;
     const first = mine[0];
     // A session with more than one sport, or a sport and lifts, is "Multi", never "Lift".
     const word = (s: WeekSession) => (s.sport ? SPORT_WORDS[s.sport] : s.sports.length ? "Multi" : "Lift");
-    const short = rest ? "Rest" : mine.some((s) => s.brick) ? "Brick" : mine.length > 1 ? `${word(first)} +${mine.length - 1}` : word(first);
+    const short = rest ? (label?.split(",")[0].trim() ?? "Rest") : mine.some((s) => s.brick) ? "Brick" : mine.length > 1 ? `${word(first)} +${mine.length - 1}` : word(first);
     return {
       date,
       day: shortDay(date).slice(0, 3),
@@ -157,7 +162,7 @@ export function weekDays(dates: string[], sessions: WeekSession[], today: string
       rest,
       key: keyMarks && mine.some((s) => s.key),
       today: date === today,
-      names: rest ? "Rest" : mine.map((s) => s.name ?? "Session").join(", "),
+      names: rest ? (label ?? "Rest") : mine.map((s) => s.name ?? "Session").join(", "),
     };
   });
 }
@@ -190,7 +195,7 @@ export function rotationChips(rows: Pick<RotationRow, "slotId" | "name" | "rest"
     id: r.slotId,
     name: r.name,
     rest: r.rest,
-    tag: r.mark === "next" ? "Next" : r.mark === "skipped" ? "Skipped" : r === last ? "Done" : null,
+    tag: r.mark === "next" ? "Next" : r.mark === "skipped" ? "Skipped" : r.mark === "swapped" ? "Swapped" : r === last ? "Done" : null,
   }));
 }
 

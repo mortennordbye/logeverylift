@@ -5,7 +5,7 @@
  */
 
 import type { AnswerSession } from "@/components/features/answer-session";
-import { addDaysStr } from "@/lib/utils/planned-sessions";
+import { addDaysStr, dowOf } from "@/lib/utils/planned-sessions";
 import type { MoveSuggestion } from "@/lib/utils/session-compliance";
 import { shortDay } from "@/lib/utils/seasons";
 
@@ -47,11 +47,45 @@ export function rowAction(s: Pick<DetailSession, "status" | "date" | "answer">, 
   return "sheet";
 }
 
-/** The words under a session's name: its state when it is not just planned, then what it holds. */
-export function sessionSub(s: Pick<DetailSession, "status" | "summary" | "exercises" | "answer">): string {
+/** True when a session sits on another day than its template day. */
+export function isMoved(s: Pick<DetailSession, "date" | "templateDate">): boolean {
+  return s.templateDate != null && s.templateDate !== s.date;
+}
+
+/**
+ * The words under a session's name: its state when it is not just planned,
+ * "Moved from Tue" or "Changed" when the user changed this one day, then what
+ * it holds. A skip also touches the row; Skipped says enough.
+ */
+export function sessionSub(s: Pick<DetailSession, "status" | "summary" | "exercises" | "answer" | "date" | "touched" | "templateDate">): string {
   const what = s.summary ?? s.exercises ?? "";
   const state = s.answer ? "Did you do it?" : s.status === "done" ? "Done" : s.status === "skipped" ? "Skipped" : s.status === "missed" ? "Missed" : null;
-  return [state, what].filter(Boolean).join(" · ");
+  const change =
+    s.status === "skipped" ? null : isMoved(s) ? `Moved from ${weekdayShort(s.templateDate!)}` : s.touched && s.templateDate != null ? "Changed" : null;
+  return [state, change, what].filter(Boolean).join(" · ");
+}
+
+type DaySlotLike = { dayOfWeek?: number | null; programId?: number | null; workoutId?: number | null; label?: string | null };
+
+/**
+ * The labels of weekdays (1 = Monday) whose slots hold no program and no
+ * workout but carry a name of their own, such as "Mobility". A plain "Rest"
+ * label is left out: those days read Rest anyway.
+ */
+export function dayLabels(slots: DaySlotLike[]): Record<number, string> {
+  const out: Record<number, string> = {};
+  for (const day of [1, 2, 3, 4, 5, 6, 7]) {
+    const mine = slots.filter((s) => s.dayOfWeek === day);
+    if (mine.length === 0 || mine.some((s) => s.programId != null || s.workoutId != null)) continue;
+    const names = mine.map((s) => s.label?.trim()).filter((l): l is string => !!l && l.toLowerCase() !== "rest");
+    if (names.length) out[day] = names.join(" · ");
+  }
+  return out;
+}
+
+/** The label of `date`'s weekday from `dayLabels`, if it has one. */
+export function dayLabelOn(labels: Record<number, string> | undefined, date: string): string | null {
+  return labels?.[dowOf(date)] ?? null;
 }
 
 /** The block's weeks of 7 days from its first day; the last one ends on the block's last day. */
@@ -144,7 +178,7 @@ export type RotationRow = {
   name: string;
   programId: number | null;
   rest: boolean;
-  mark: "next" | "skipped" | "done" | null;
+  mark: "next" | "skipped" | "swapped" | "done" | null;
   /** The slot's next walk day from today on: what skip and change act on. */
   upcoming: RotationWalkDay | null;
   lastDone: string | null;
@@ -162,14 +196,19 @@ export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[],
     const done = walk.filter((d) => d.slotId === slot.id && d.status === "done");
     const lastDone = done.length ? done[done.length - 1].date : null;
     const rest = slot.programId == null;
+    // The row shows the coming position's program. A swapped one is marked as
+    // such, never with the day this slot was last done: that was another session.
+    const swapped = upcoming?.status === "planned" && upcoming.programId !== slot.programId;
     const mark: RotationRow["mark"] =
       upcoming && next && upcoming.rotationPosition === next.rotationPosition
         ? "next"
         : upcoming?.status === "skipped"
           ? "skipped"
-          : lastDone
-            ? "done"
-            : null;
+          : swapped
+            ? "swapped"
+            : lastDone
+              ? "done"
+              : null;
     return {
       slotId: slot.id,
       n: i + 1,
