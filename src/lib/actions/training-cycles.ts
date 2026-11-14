@@ -20,13 +20,15 @@ import { insertAutoSessions } from "@/lib/auto-sessions";
 import { declineDay, removeSlotInTx, rotationOverrides, skipAutoDay, upsertSlotInTx, weekdayToday } from "@/lib/planned-sessions";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
-import { OpenWorkoutError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
+import { OpenWorkoutError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, scheduleCycle, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
+import { MAX_SCHEDULE_DAYS } from "@/lib/mcp/tools/cycles";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
   createTrainingCycleSchema,
   importCycleSchema,
   reorderCycleSlotsSchema,
+  startTrainingCycleSchema,
   updateTrainingCycleSchema,
   upsertCycleSlotSchema,
 } from "@/lib/validators/training-cycles";
@@ -41,6 +43,7 @@ import type {
   TrainingCycleWithSlots,
 } from "@/types/workout";
 import {
+  addDays,
   autoCompleteDue,
   autoDayKey,
   cycleWeek,
@@ -755,16 +758,41 @@ export async function deleteManyTrainingCycles(
   }
 }
 
+/**
+ * Start a draft cycle today, or schedule it to start on a later day: it stays
+ * a draft until that day, and only one cycle is scheduled at a time, so a
+ * later day clears any other scheduled start (scheduleCycle, as the
+ * assistant's manage_training_cycle start).
+ */
 export async function startTrainingCycle(
   cycleId: number,
+  startDate?: string,
 ): Promise<ActionResult<TrainingCycle>> {
   const auth = await requireSession();
   const userId = auth.user.id;
-  if (!cycleIdSchema.safeParse(cycleId).success) return { success: false, error: "Invalid input" };
+  const parsed = startTrainingCycleSchema.safeParse({ cycleId, startDate });
+  if (!parsed.success) return { success: false, error: "Invalid input" };
 
   try {
-    // Only one active cycle at a time — any other active cycle completes.
-    const cycle = await activateCycle({ userId, writer: "user" }, cycleId);
+    const today = await userToday(userId);
+    const todayStr = toDateStr(today);
+    const start = parsed.data.startDate ?? todayStr;
+    if (start < todayStr) return { success: false, error: "The start day is in the past" };
+    if (start > toDateStr(addDays(today, MAX_SCHEDULE_DAYS))) {
+      return { success: false, error: `The start day is more than ${MAX_SCHEDULE_DAYS} days ahead` };
+    }
+
+    let cycle: TrainingCycle;
+    if (start > todayStr) {
+      await scheduleCycle({ userId, writer: "user" }, cycleId, start);
+      [cycle] = await db
+        .select()
+        .from(trainingCycles)
+        .where(and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId), liveCycles));
+    } else {
+      // Only one active cycle at a time — any other active cycle completes.
+      cycle = await activateCycle({ userId, writer: "user" }, cycleId);
+    }
 
     revalidatePath("/cycles");
     revalidatePath(`/cycles/${cycleId}`);
@@ -827,6 +855,10 @@ export async function upsertCycleSlot(
     }
 
     if (dayOfWeek === undefined && orderIndex === undefined) return { success: false, error: "Invalid input" };
+    // A key session and a brick are part of the endurance add-on (src/lib/endurance.ts).
+    if ((rest.priority !== undefined || rest.brickWithNext !== undefined) && !(await enduranceEnabledFor(auth.user.id))) {
+      return { success: false, error: "Endurance features are not on for this account" };
+    }
     // A day can hold up to three sessions (docs/plans/sessions.md, 3.1).
     const done = await writeCycle(auth.user.id, trainingCycleId, (tx) =>
       upsertSlotInTx(tx, trainingCycleId, { dayOfWeek: dayOfWeek ?? null, orderIndex: orderIndex ?? null, daySlot }, rest),
