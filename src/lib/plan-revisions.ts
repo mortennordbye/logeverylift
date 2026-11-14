@@ -840,11 +840,16 @@ export async function seasonPhases(ex: Executor, seasonId: number): Promise<(Pha
  * decision 1). With a phase of the season active, the next one is scheduled
  * for the day after it ends; with none started and the season still ahead,
  * the first is scheduled for the season start. Leaves the chain paused (does
- * nothing) when a cycle outside the season is active or scheduled: the user
- * chose that block, and "Resume" on the season picks the chain up again.
+ * nothing) when a cycle outside the season is scheduled, or is active while
+ * this season holds no scheduled start: the user chose that block, and
+ * "Resume" on the season picks the chain up again.
+ *
+ * `claim`: the season's first phase was just made, so the user means to run
+ * this season from its start. Its first phase takes the one scheduled start
+ * even while another block runs or is scheduled; that other chain pauses.
  * Writer: the caller's; the chained start itself runs as `sync`.
  */
-export async function chainSeason(w: PlanWriteSession, seasonId: number) {
+export async function chainSeason(w: PlanWriteSession, seasonId: number, opts: { claim?: boolean } = {}) {
   const { userToday } = await import("@/lib/user-settings");
   const { toDateStr } = await import("@/lib/utils/cycle-position");
   const { addDaysStr } = await import("@/lib/utils/seasons");
@@ -858,8 +863,12 @@ export async function chainSeason(w: PlanWriteSession, seasonId: number) {
   const timeline = seasonTimeline(season.startDate, phases);
   const next = nextPhase(timeline);
   if (!next) return;
+  const active = timeline.find((p) => p.state === "active");
+  const anyStarted = timeline.some((p) => p.state !== "planned");
+  const day = active ? addDaysStr(active.end, 1) : !anyStarted && season.startDate > today ? season.startDate : null;
+  if (!day) return;
   const outside = await w.tx
-    .select({ id: trainingCycles.id })
+    .select({ id: trainingCycles.id, status: trainingCycles.status, scheduledStartDate: trainingCycles.scheduledStartDate })
     .from(trainingCycles)
     .where(
       and(
@@ -868,13 +877,17 @@ export async function chainSeason(w: PlanWriteSession, seasonId: number) {
         or(eq(trainingCycles.status, "active"), isNotNull(trainingCycles.scheduledStartDate)),
         or(isNull(trainingCycles.seasonId), ne(trainingCycles.seasonId, seasonId)),
       ),
-    )
-    .limit(1);
-  if (outside.length) return;
-  const active = timeline.find((p) => p.state === "active");
-  const anyStarted = timeline.some((p) => p.state !== "planned");
-  const day = active ? addDaysStr(active.end, 1) : !anyStarted && season.startDate > today ? season.startDate : null;
-  if (!day) return;
+    );
+  const outsideScheduled = outside.filter((c) => c.scheduledStartDate != null);
+  if (opts.claim && !active) {
+    for (const c of outsideScheduled) {
+      await w.touch({ type: "cycle", id: c.id });
+      await w.tx.update(trainingCycles).set({ scheduledStartDate: null }).where(eq(trainingCycles.id, c.id));
+    }
+  } else {
+    const holdsStart = phases.some((p) => p.scheduledStartDate != null);
+    if (outsideScheduled.length || (outside.some((c) => c.status === "active") && !holdsStart)) return;
+  }
   const others = phases.filter((p) => p.id !== next.id && p.scheduledStartDate != null);
   for (const p of others) {
     await w.touch({ type: "cycle", id: p.id });

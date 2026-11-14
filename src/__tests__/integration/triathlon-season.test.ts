@@ -84,7 +84,7 @@ describe("generateTriathlonPlan writes a season", () => {
         .from(programSets)
         .innerJoin(programExercises, eq(programExercises.id, programSets.programExerciseId))
         .innerJoin(programs, eq(programs.id, programExercises.programId))
-        .where(and(eq(programs.createdByCycleId, cycleId), eq(programs.name, "Long Run")));
+        .where(and(eq(programs.createdByCycleId, cycleId), eq(programs.name, cycleId === phases[0].id ? "General · Long Run" : "Taper · Long Run")));
       return row;
     };
     const general = await longRun(phases[0].id);
@@ -95,6 +95,22 @@ describe("generateTriathlonPlan writes a season", () => {
     expect(general.distance).toBeGreaterThan(taper.distance!);
     const owned = await db.select({ id: programs.id }).from(programs).where(inArray(programs.createdByCycleId, phases.map((p) => p.id)));
     expect(owned.length).toBeGreaterThanOrEqual(5 * 4);
+  });
+
+  it("names each phase's programs after the phase, so no two programs share a name", async () => {
+    const seasonId = await makePlan(me, day(0), day(240));
+    const phases = await phasesOf(seasonId);
+    const owned = await db
+      .select({ name: programs.name, cycleId: programs.createdByCycleId })
+      .from(programs)
+      .where(inArray(programs.createdByCycleId, phases.map((p) => p.id)));
+    const names = owned.map((p) => p.name);
+    expect(new Set(names).size).toBe(names.length);
+    const base = phases.find((p) => p.phaseType === "base")!;
+    expect(owned.filter((p) => p.cycleId === base.id).map((p) => p.name)).toContain("Base · Long Run");
+    // Every program of a phase starts with that phase's word, so they group in a list.
+    const word: Record<string, string> = { general: "General", base: "Base", build: "Build", peak: "Peak", taper: "Taper" };
+    for (const p of owned) expect(p.name.startsWith(`${word[phases.find((ph) => ph.id === p.cycleId)!.phaseType!]} · `)).toBe(true);
   });
 
   it("schedules the first phase for a season that starts later", async () => {

@@ -218,7 +218,7 @@ describe("timeline (2.4)", () => {
 describe("re-plan trigger (D17)", () => {
   it("flags a date change of any priority", () => {
     expect(replanReason([race(1, { priority: "C" })], [race(1, { priority: "C", raceDate: "2027-08-29" })])).toBe(
-      'C race "R1" moved from 2027-08-22 to 2027-08-29',
+      'C race "R1" moved from 22 Aug 2027 to 29 Aug 2027',
     );
   });
 

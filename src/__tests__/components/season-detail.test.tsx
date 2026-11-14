@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { SeasonDetailClient, phaseDrop, type SeasonPhaseView } from "@/components/features/SeasonDetailClient";
+import { SeasonDetailClient, phaseAnnouncements, phaseDrop, type SeasonPhaseView } from "@/components/features/SeasonDetailClient";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -33,9 +33,13 @@ vi.mock("@dnd-kit/core", async (importOriginal) => {
   const real = await importOriginal<typeof import("@dnd-kit/core")>();
   return {
     ...real,
-    DndContext: ({ children, onDragEnd, id }: { children: React.ReactNode; onDragEnd: (e: DragEndEvent) => void; id?: string }) => {
+    DndContext: ({ children, onDragEnd, id, accessibility }: { children: React.ReactNode; onDragEnd: (e: DragEndEvent) => void; id?: string; accessibility?: import("@dnd-kit/core").DndContextProps["accessibility"] }) => {
       dnd.onDragEnd = onDragEnd;
-      return <real.DndContext id={id}>{children}</real.DndContext>;
+      return (
+        <real.DndContext id={id} accessibility={accessibility}>
+          {children}
+        </real.DndContext>
+      );
     },
   };
 });
@@ -179,5 +183,67 @@ describe("sheet errors", () => {
     fireEvent.change(within(sheet).getByLabelText("Date"), { target: { value: "2027-08-22" } });
     fireEvent.click(within(sheet).getByRole("button", { name: "Save race" }));
     await waitFor(() => expect(within(sheet).getByRole("alert").textContent).toContain("at most 20 races"));
+  });
+});
+
+describe("sheets (fix round 2)", () => {
+  it("draws each sheet on the Plan sheet card, not straight over the page", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[1]).getAllByRole("button")[1]);
+    expect(screen.getByRole("region", { name: "Longer ride and run" }).className).toContain("bg-widget");
+    fireEvent.click(screen.getByRole("button", { name: /Jevnaker Halv Full Distanse/ }));
+    expect(screen.getByRole("region", { name: "Edit race" }).className).toContain("bg-widget");
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    expect(screen.getByRole("region", { name: "Season actions" }).className).toContain("bg-widget");
+    fireEvent.click(within(screen.getByRole("region", { name: "Season actions" })).getByRole("button", { name: "Delete season" }));
+    expect(screen.getByRole("region", { name: "Delete this season?" }).className).toContain("bg-widget");
+  });
+
+  it("keeps the length field from taking the whole row, so Weeks and Days stay visible", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[1]).getAllByRole("button")[1]);
+    // A full-width class on the field itself squeezes the unit switch to nothing.
+    expect(screen.getByLabelText("Length").className.split(" ")).not.toContain("w-full");
+  });
+
+  it("asks before it removes a race", async () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /Jevnaker Halv Full Distanse/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove race" }));
+    expect(actions.removeRaceAction).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("region", { name: "Remove this race?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Remove race" }));
+    await waitFor(() => expect(actions.removeRaceAction).toHaveBeenCalledWith({ seasonId: 7, raceId: 4 }));
+  });
+});
+
+describe("season detail text (fix round 2)", () => {
+  it("shows the goal once when there is no A race", () => {
+    render(<SeasonDetailClient {...base} enduranceEnabled={false} races={[]} aRaceId={null} />);
+    expect(screen.getAllByText("Finish the race")).toHaveLength(1);
+  });
+
+  it("says Next, not Starts, for a first phase that is not scheduled", () => {
+    render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
+    const first = screen.getAllByTestId("phase-row")[0];
+    expect(first.textContent).not.toContain("Starts");
+    expect(first.textContent).toContain("Next");
+  });
+
+  it("does not call a B race change an A race change", () => {
+    render(<SeasonDetailClient {...base} replan={{ reason: 'B race "Tune-up" moved from 29 Aug 2027 to 12 Sep 2027' }} />);
+    const banner = screen.getByTestId("replan-banner");
+    expect(banner.textContent).not.toContain("A race changed");
+    expect(banner.textContent).toContain("Your races changed. The phases stay as they are.");
+  });
+
+  it("announces a drag with the phase names", () => {
+    render(<SeasonDetailClient {...base} />);
+    const describedBy = document.querySelector("[aria-roledescription='sortable']")!.getAttribute("aria-describedby")!;
+    expect(document.getElementById(describedBy)?.textContent).not.toContain("draggable item");
+    const say = phaseAnnouncements((id) => phases.find((p) => p.id === Number(id))?.name ?? "");
+    expect(say.onDragStart({ active: { id: 1 } } as never)).toBe("Picked up Aerobic base + strength.");
+    expect(say.onDragEnd({ active: { id: 1 }, over: { id: 3 } } as never)).toBe("Aerobic base + strength dropped in the place of Taper.");
+    expect(say.onDragCancel({ active: { id: 1 } } as never)).toBe("Aerobic base + strength was not moved.");
   });
 });

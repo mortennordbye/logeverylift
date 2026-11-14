@@ -29,6 +29,7 @@ import {
 import { userToday } from "@/lib/user-settings";
 import { toDateStr, weeksForDays } from "@/lib/utils/cycle-position";
 import {
+  dayLabel,
   fitTaperChange,
   nextPhase,
   phasesSkippedBy,
@@ -42,7 +43,7 @@ import {
   type TimelinePhase,
 } from "@/lib/utils/seasons";
 import { SEASON_MAX_PHASES } from "@/lib/utils/seasons";
-import { and, asc, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 
 export const SEASON_TEXT_MAX = 500;
 export const PHASE_MAX_WEEKS = 52;
@@ -52,6 +53,7 @@ export const SEASON_MAX_RACES = 20;
 export { SEASON_MAX_PHASES } from "@/lib/utils/seasons";
 /** A new phase with no length given. */
 export const DEFAULT_PHASE_WEEKS = 4;
+export const COMPLETED_PHASE = "A finished cycle cannot be a phase. Pick a draft or the running cycle, or make a new phase.";
 
 export const RACES_OFF =
   "Races are part of the endurance features, which are off for this account. An admin can turn them on.";
@@ -158,7 +160,7 @@ export async function getSeasonDetail(userId: string, seasonId: number): Promise
   };
 }
 
-/** The user's live cycles in no live season: what "Add phase" can pick. */
+/** The user's live cycles in no live season, drafts and the running one: what "Add phase" can pick. */
 export async function seasonlessCycles(userId: string) {
   return db
     .select({ id: trainingCycles.id, name: trainingCycles.name, status: trainingCycles.status })
@@ -169,6 +171,7 @@ export async function seasonlessCycles(userId: string) {
       and(
         eq(trainingCycles.userId, userId),
         isNull(trainingCycles.deletedAt),
+        ne(trainingCycles.status, "completed"),
         or(isNull(trainingCycles.seasonId), isNotNull(seasons.deletedAt)),
       ),
     )
@@ -415,10 +418,38 @@ async function raceWrite<T>(
   return { ...result, version: seasonVersion(versions, seasonId) };
 }
 
+/**
+ * A new race date must be today or later and inside the season. An A race
+ * past the season end, or an A race the season ended on, takes the season end
+ * with it, so the season still ends on its race (not before a later race).
+ */
+async function placeRaceDate(
+  w: PlanWriteSession,
+  seasonId: number,
+  race: { id: number | null; raceDate: string; priority: RacePriority },
+  was: { raceDate: string; priority: RacePriority } | null,
+) {
+  if (was && was.raceDate === race.raceDate) return;
+  const [season] = await w.tx.select().from(seasons).where(and(eq(seasons.id, seasonId), isNull(seasons.deletedAt)));
+  if (race.raceDate < (await today(w.ctx.userId))) throw new PlanStateError("Pick a race date from today on.");
+  if (race.raceDate < season.startDate) throw new PlanStateError(`Pick a race date on or after the season start, ${dayLabel(season.startDate)}.`);
+  const follows = race.priority === "A" && (race.raceDate > season.endDate || (was?.priority === "A" && was.raceDate === season.endDate));
+  if (!follows) {
+    if (race.raceDate > season.endDate) {
+      throw new PlanStateError(`Pick a race date on or before the season end, ${dayLabel(season.endDate)}, or move the season end first.`);
+    }
+    return;
+  }
+  const others = await w.tx.select({ id: seasonRaces.id, raceDate: seasonRaces.raceDate }).from(seasonRaces).where(eq(seasonRaces.seasonId, seasonId));
+  const end = [race.raceDate, ...others.filter((o) => o.id !== race.id).map((o) => o.raceDate)].sort().at(-1)!;
+  if (end !== season.endDate) await w.tx.update(seasons).set({ endDate: end, updatedAt: new Date() }).where(eq(seasons.id, seasonId));
+}
+
 export async function addRace(ctx: PlanWriteContext, seasonId: number, input: RaceInput, expectedVersion?: number) {
   return raceWrite(ctx, seasonId, expectedVersion, async (w) => {
     const existing = await w.tx.select({ id: seasonRaces.id }).from(seasonRaces).where(eq(seasonRaces.seasonId, seasonId));
     if (existing.length >= SEASON_MAX_RACES) throw new PlanStateError(`A season holds at most ${SEASON_MAX_RACES} races.`);
+    await placeRaceDate(w, seasonId, { id: null, raceDate: input.raceDate, priority: input.priority }, null);
     const [row] = await w.tx
       .insert(seasonRaces)
       .values({ ...cleanRace(input), seasonId, userId: ctx.userId })
@@ -453,6 +484,7 @@ export async function updateRace(
       distanceMeters: patch.distanceMeters !== undefined ? patch.distanceMeters : current.distanceMeters,
       priority: patch.priority ?? current.priority,
     });
+    await placeRaceDate(w, seasonId, { id: raceId, raceDate: merged.raceDate, priority: merged.priority }, current);
     const [row] = await w.tx.update(seasonRaces).set(merged).where(eq(seasonRaces.id, raceId)).returning();
     return row;
   });
@@ -460,8 +492,17 @@ export async function updateRace(
 
 export async function removeRace(ctx: PlanWriteContext, seasonId: number, raceId: number, expectedVersion?: number) {
   return raceWrite(ctx, seasonId, expectedVersion, async (w) => {
-    await ownRace(w, seasonId, raceId);
+    const gone = await ownRace(w, seasonId, raceId);
     await w.tx.delete(seasonRaces).where(eq(seasonRaces.id, raceId));
+    // A flag about this race alone has nothing left to re-plan for.
+    const [season] = await w.tx.select({ reason: seasons.replanReason }).from(seasons).where(and(eq(seasons.id, seasonId), isNull(seasons.deletedAt)));
+    if (season.reason) {
+      const left = season.reason.split("; ").filter((part) => !part.includes(`"${gone.name}"`));
+      await w.tx
+        .update(seasons)
+        .set(left.length ? { replanReason: left.join("; ") } : { replanFlaggedAt: null, replanReason: null })
+        .where(eq(seasons.id, seasonId));
+    }
     // Its race plan stays, hidden, until a season restore brings the race back;
     // the purge counts from now (docs/plans/nutrition-and-race-day.md, 3).
     await w.tx.update(racePlans).set({ orphanedAt: new Date() }).where(and(eq(racePlans.seasonRaceId, raceId), eq(racePlans.userId, ctx.userId)));
@@ -555,6 +596,9 @@ export async function addPhase(ctx: PlanWriteContext, seasonId: number, input: A
       if ((await liveSeasonId(w.tx, cycle.seasonId)) != null) {
         throw new PlanStateError(cycle.seasonId === seasonId ? "This cycle is already a phase of this season." : "This cycle is a phase of another season. Remove it there first.");
       }
+      // A finished block ran on its own dates; as a phase it would sit out of
+      // the chain (docs/plans/seasons.md 2.4: real starts win), so it is refused.
+      if (cycle.status === "completed") throw new PlanStateError(COMPLETED_PHASE);
       if (cycle.raceDate) {
         const [same] = await w.tx
           .select({ id: seasonRaces.id })
@@ -610,7 +654,8 @@ export async function addPhase(ctx: PlanWriteContext, seasonId: number, input: A
     // The new phase has no position yet; renumber gives it one.
     current.set(cycleId, null);
     await renumber(w, order, current);
-    await chainSeason(w, seasonId);
+    // The season's first phase: the user means to run this season from its start.
+    await chainSeason(w, seasonId, { claim: ids.length === 0 });
     return { cycleId, raceMoved };
   });
   return {

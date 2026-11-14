@@ -150,7 +150,7 @@ New table `seasons` (*new*):
 | `end_date` | date, not null, >= start | Last day |
 | `next_goal` | text, null, max 500 | What comes after ("Full distance in 2028") |
 | `replan_flagged_at` | timestamp, null | Set when a race change needs a re-plan (2.6). Null = no flag |
-| `replan_reason` | text, null | Plain text for the user and the AI: "A race Ironman 70.3 moved from 2027-08-22 to 2027-08-29" |
+| `replan_reason` | text, null | Plain text for the user and the AI: "A race Ironman 70.3 moved from 22 Aug 2027 to 29 Aug 2027" |
 | `version` | integer, default 1 | T9 |
 | `deleted_at` | timestamp, null | T6 |
 | `created_at`, `updated_at` | timestamp | |
@@ -243,6 +243,9 @@ the next race, the re-plan trigger, the phase curves and the diff text.
   day after the one before ends, or on its real start date once it has started. It returns, per
   phase, start, end, status (done, active, planned), and the gaps or overlaps with the season
   dates. This is the only place phase dates come from; nothing stores them.
+- **A completed cycle is not a phase.** Its real start would win in the timeline, so it would
+  keep its old dates out of the chain. `add_phase` refuses it, and Add phase and New season
+  offer only drafts and the running cycle (fix round 2, item 7).
 - **Chained start (owner question 1).** When a phase becomes active, the layer schedules the
   next phase in the season to start on the day after this one ends, with the existing
   `scheduled_start_date` and writer `sync`. On that day `startDueScheduledCycle` starts it and

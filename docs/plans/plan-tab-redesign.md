@@ -100,7 +100,7 @@ Files: `src/app/seasons/**`, `SeasonForm`, `SeasonDetailClient`, `src/app/cycles
   race date, the taper ending on race day. `/cycles/triathlon` redirects to the new season form.
 - Season detail per `J4_SeasonDetail`: drag to reorder phases, re-plan banner ("Fit the taper",
   "Keep as it is"), races.
-- Add a phase per `J4_AddPhase`, then continue to `/cycles/[id]/template` for the week.
+- Add a phase per `J4_AddPhase`, then continue to `/seasons/[id]/phases/[cycleId]/week` (`J4_WeekBuilder`, step 2 of 2) for the week.
 
 ## Rules for every package
 

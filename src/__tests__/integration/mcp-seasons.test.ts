@@ -153,7 +153,7 @@ describe("manage_race and the re-plan flag", () => {
     const renamed = await call("manage_race", { operation: "update", seasonId: id, raceId: add.data.raceId, name: "Haugesund", reason: "Name", expectedVersion: 3 });
     expect(renamed.data.replanFlagged).toBeNull();
     const moved = await call("manage_race", { operation: "update", seasonId: id, raceId: add.data.raceId, date: "2027-08-29", reason: "Date moved", expectedVersion: 4 });
-    expect(moved.data.replanFlagged).toContain("moved from 2027-08-22 to 2027-08-29");
+    expect(moved.data.replanFlagged).toContain("moved from 22 Aug 2027 to 29 Aug 2027");
     expect((await call("list_seasons")).data.seasons[0].replan).toMatchObject({ flagged: true, reason: expect.stringContaining("moved") });
     expect((await call("get_season", { seasonId: id })).data.replan).toMatchObject({ flagged: true });
     const removed = await call("manage_race", { operation: "remove", seasonId: id, raceId: add.data.raceId, reason: "Cancelled", expectedVersion: 5 });

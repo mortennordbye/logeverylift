@@ -21,6 +21,7 @@ import {
   type PlanProgressionAdvance,
 } from "@/lib/utils/triathlon-plan";
 import { triathlonPhases } from "@/lib/utils/triathlon-phases";
+import { PHASE_TYPE_LABELS } from "@/lib/utils/seasons";
 import { getAthleteProfile } from "@/lib/athlete-profile";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { chainSeason, planWrite, type PlanWriteSession } from "@/lib/plan-revisions";
@@ -161,10 +162,10 @@ export async function generateTriathlonPlan(data: unknown): Promise<ActionResult
           })
           .returning({ id: trainingCycles.id });
         w.create({ type: "cycle", id: cycle.id });
-        await insertPlanWeek(w, cycle.id, plans[i], nameToId);
+        await insertPlanWeek(w, cycle.id, plans[i], nameToId, PHASE_TYPE_LABELS[phase.phaseType]);
       }
       // A season that starts later gets its first phase scheduled for its start.
-      await chainSeason(w, season.id);
+      await chainSeason(w, season.id, { claim: true });
       return season.id;
     });
 
@@ -209,8 +210,13 @@ async function ensurePlanExercises(neededNames: string[]): Promise<Map<string, n
   return nameToId;
 }
 
-/** One cycle's week: a slot per day, each training day with its own program. */
-async function insertPlanWeek(w: PlanWriteSession, cycleId: number, plan: PlanBlueprint, nameToId: Map<string, number>) {
+/**
+ * One cycle's week: a slot per day, each training day with its own program.
+ * Each phase has its own copies (their week content differs), so a program's
+ * name starts with the phase, "Base · Long Run", to keep them apart and
+ * grouped in the program list.
+ */
+async function insertPlanWeek(w: PlanWriteSession, cycleId: number, plan: PlanBlueprint, nameToId: Map<string, number>, phaseWord: string) {
   const tx = w.tx;
   for (const day of plan.days) {
     // Rest day: a slot with no program.
@@ -226,7 +232,7 @@ async function insertPlanWeek(w: PlanWriteSession, cycleId: number, plan: PlanBl
 
     const [program] = await tx
       .insert(programs)
-      .values({ userId: w.ctx.userId, name: day.label, createdByCycleId: cycleId })
+      .values({ userId: w.ctx.userId, name: `${phaseWord} · ${day.label}`, createdByCycleId: cycleId })
       .returning({ id: programs.id });
     w.create({ type: "program", id: program.id });
 

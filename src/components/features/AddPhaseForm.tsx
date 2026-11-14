@@ -26,12 +26,13 @@ type Props = {
 };
 
 const PHASE_TYPES = Object.keys(PHASE_TYPE_LABELS) as PhaseType[];
-const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started", completed: "Done" };
+const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started" };
 
 /**
  * Add a phase (J4_AddPhase). Step 1 of 2: a new cycle with a name, type,
- * length and schedule, then step 2 builds its week on /cycles/[id]/template.
- * A cycle the user already has joins in one step.
+ * length and schedule, then step 2 builds its week on
+ * /seasons/[id]/phases/[cycleId]/week. A cycle the user already has joins in
+ * one step.
  */
 export function AddPhaseForm(p: Props) {
   const router = useRouter();
@@ -78,7 +79,7 @@ export function AddPhaseForm(p: Props) {
     setBusy(false);
     if (!result.success) return setError(result.error);
     // Step 2: the week of the new cycle. Replaces this form, so Back goes to the season.
-    if (source === "new") router.replace(`/cycles/${result.data.cycleId}/template`);
+    if (source === "new") router.replace(`/seasons/${p.seasonId}/phases/${result.data.cycleId}/week`);
     else returnTo(`/seasons/${p.seasonId}`);
   }
 
@@ -157,7 +158,7 @@ export function AddPhaseForm(p: Props) {
                 setLength(e.target.value.replace(/\D/g, ""));
                 setLengthTouched(true);
               }}
-              className={`${FIELD} w-[88px] font-semibold`}
+              className={`${FIELD.replace("w-full", "w-[88px] shrink-0")} font-semibold`}
             />
             <Segmented
               label="Length unit"
@@ -208,5 +209,17 @@ export function AddPhaseForm(p: Props) {
         </button>
       </PinnedBar>
     </form>
+  );
+}
+
+/** Step 2's pinned finish (J4_WeekBuilder): the phase is saved, so it only goes back to the season. */
+export function AddPhaseFinish({ seasonId }: { seasonId: number }) {
+  const returnTo = useReturnTo();
+  return (
+    <PinnedBar>
+      <button type="button" onClick={() => returnTo(`/seasons/${seasonId}`)} className={PRIMARY_BUTTON}>
+        Add phase
+      </button>
+    </PinnedBar>
   );
 }
