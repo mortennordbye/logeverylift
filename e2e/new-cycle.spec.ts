@@ -43,6 +43,9 @@ test("a new rotation is reordered by drag and Move up, and Cancel discards it", 
   await testDb().insert(programs).values(["Zed one", "Zed two", "Zed three"].map((name) => ({ userId: user.id, name })));
 
   await page.goto("/cycles/new");
+  // A chip only shows as pressed once React runs, so typing after it sticks (WebKit hydrates late and would reset the name).
+  await page.getByRole("button", { name: "6 weeks" }).click();
+  await expect(page.getByRole("button", { name: "6 weeks" })).toHaveAttribute("aria-pressed", "true");
   await page.getByPlaceholder("Upper / Lower hypertrophy").fill("PPL rotation");
   await page.getByText("Rotation", { exact: true }).click();
   await page.getByRole("button", { name: "Put the sessions in order" }).click();

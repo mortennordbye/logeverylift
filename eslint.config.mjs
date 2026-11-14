@@ -62,6 +62,7 @@ const eslintConfig = defineConfig([
     "test-results/**", // Playwright artifacts (traces, built bundles) from an e2e run
     "playwright-report/**",
     ".claude/**", // agent worktrees: full repo copies with their own .next builds
+    ".playwright-mcp/**", // local smoke and QA scripts (gitignored)
   ]),
 ]);
 
