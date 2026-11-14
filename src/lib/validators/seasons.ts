@@ -15,15 +15,6 @@ export const seasonFieldsSchema = z.object({
   nextGoal: text.nullable().optional(),
 });
 
-export const createSeasonSchema = seasonFieldsSchema.refine((s) => s.endDate >= s.startDate, {
-  message: "The season must end on or after its start",
-  path: ["endDate"],
-});
-
-export const updateSeasonSchema = seasonFieldsSchema.partial().extend({ seasonId: id });
-
-export const seasonIdSchema = z.object({ seasonId: id });
-
 const raceFields = z.object({
   name: z.string().trim().min(1).max(100),
   raceDate: day,
@@ -32,6 +23,21 @@ const raceFields = z.object({
   distanceMeters: z.number().int().min(100).max(1_000_000).nullable().optional(),
   priority: z.enum(RACE_PRIORITIES),
 });
+
+/** New season (docs/plans/plan-tab-redesign.md, P4): an optional first race, and cycles to add as its phases, in order. */
+export const createSeasonSchema = seasonFieldsSchema
+  .extend({
+    race: raceFields.optional(),
+    cycleIds: z.array(id).max(30).optional(),
+  })
+  .refine((s) => s.endDate >= s.startDate, {
+    message: "The season must end on or after its start",
+    path: ["endDate"],
+  });
+
+export const updateSeasonSchema = seasonFieldsSchema.partial().extend({ seasonId: id });
+
+export const seasonIdSchema = z.object({ seasonId: id });
 
 export const addRaceSchema = raceFields.extend({ seasonId: id });
 export const updateRaceSchema = raceFields.partial().extend({ seasonId: id, raceId: id });

@@ -7,8 +7,7 @@
  * no version (docs/plans/revisions.md, owner decision 3).
  */
 
-import { OpenWorkoutError, PlanConflictError, PlanNotFoundError, PlanStateError } from "@/lib/plan-revisions";
-import {
+import { OpenWorkoutError, PlanConflictError, PlanNotFoundError, PlanStateError } from "@/lib/plan-revisions";import {
   addPhase,
   addRace,
   clearReplan,
@@ -19,6 +18,7 @@ import {
   removePhase,
   removeRace,
   resumeSeason,
+  seasonlessCycles,
   setPhase,
   updateRace,
   updateSeason,
@@ -73,8 +73,18 @@ export async function createSeasonAction(data: unknown) {
     "createSeasonAction",
     createSeasonSchema,
     data,
-    async (ctx, input) => ({ id: (await createSeason(ctx, input)).season.id }),
-    () => ["/cycles"],
+    async (ctx, { cycleIds, ...input }) => {
+      // Checked before the season is made, so a wrong pick leaves nothing behind.
+      if (cycleIds?.length) {
+        const free = new Set((await seasonlessCycles(ctx.userId)).map((c) => c.id));
+        if (cycleIds.some((c) => !free.has(c))) throw new PlanStateError("Pick your own cycles that are in no season.");
+      }
+      const id = (await createSeason(ctx, input)).season.id;
+      // "Use cycles I already have": each joins in the order picked.
+      for (const cycleId of cycleIds ?? []) await addPhase(ctx, id, { cycleId });
+      return { id };
+    },
+    (i, out) => ["/cycles", `/seasons/${out.id}`, ...(i.cycleIds ?? []).map((c) => `/cycles/${c}`)],
   );
 }
 
