@@ -576,6 +576,20 @@ export function SeasonDetailClient(p: Props) {
             label={phase.phase.name}
             title={phase.phase.name}
             sub={<span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, phase.phase.end))}</span>}
+            footer={
+              <>
+                <div>
+                  <button type="button" disabled={busy || phaseReason != null} aria-describedby={phaseReason ? "phase-reason" : undefined} onClick={savePhase} className={PRIMARY_BUTTON}>
+                    Save phase
+                  </button>
+                  <ButtonReason id="phase-reason" reason={phaseReason} />
+                </div>
+                {errorLine}
+                <button type="button" disabled={busy} onClick={() => run(removePhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id }), () => setPhase(null))} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>
+                  Remove from season
+                </button>
+              </>
+            }
           >
             <div className="flex gap-4">
               <Link href={`/cycles/${phase.phase.id}`} className="flex min-h-11 items-center text-sm font-medium text-primary active:opacity-70">
@@ -624,16 +638,6 @@ export function SeasonDetailClient(p: Props) {
               </div>
               {phase.unitNote && <span className="text-[13px] text-muted-foreground">{phase.unitNote}</span>}
             </div>
-            <div>
-              <button type="button" disabled={busy || phaseReason != null} aria-describedby={phaseReason ? "phase-reason" : undefined} onClick={savePhase} className={PRIMARY_BUTTON}>
-                Save phase
-              </button>
-              <ButtonReason id="phase-reason" reason={phaseReason} />
-            </div>
-            {errorLine}
-            <button type="button" disabled={busy} onClick={() => run(removePhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id }), () => setPhase(null))} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>
-              Remove from season
-            </button>
           </PlanSheetPanel>
         )}
       </BottomSheet>

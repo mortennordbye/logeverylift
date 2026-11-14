@@ -45,6 +45,21 @@ describe("a Plan sheet", () => {
     expect(panel.className).toContain("[&>*]:shrink-0");
   });
 
+  it("pins its footer at the bottom while the rest scrolls under it", () => {
+    render(
+      <BottomSheet open onClose={() => {}}>
+        <PlanSheetPanel label="Phase" title="Base" testId="panel" footer={<button type="button">Save phase</button>}>
+          <p>Body</p>
+        </PlanSheetPanel>
+      </BottomSheet>,
+    );
+    const footer = screen.getByTestId("sheet-footer");
+    expect(footer.parentElement).toBe(screen.getByTestId("panel"));
+    expect(footer.className).toContain("sticky");
+    expect(footer.className).toContain("bottom-0");
+    expect(within(footer).getByRole("button", { name: "Save phase" })).toBeTruthy();
+  });
+
   it("has the one round 44 px Close button, which closes it", () => {
     const onClose = vi.fn();
     render(
