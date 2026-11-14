@@ -217,6 +217,18 @@ describe("rotation builder", () => {
     await waitFor(() => expect(removeCycleSlot).toHaveBeenCalledWith(21, 3));
   });
 
+  it("names the drag instructions the same on every render, so the server HTML hydrates", () => {
+    // dnd-kit numbers its ids from a module counter when DndContext has no id:
+    // the server and the browser count differently ("DndDescribedBy-0" vs "-4").
+    const describedBy = () => document.querySelector("[aria-roledescription='sortable']")?.getAttribute("aria-describedby");
+    const first = render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    const a = describedBy();
+    first.unmount();
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    expect(a).toBeTruthy();
+    expect(describedBy()).toBe(a);
+  });
+
   it("puts the order back when a reorder is refused", async () => {
     vi.mocked(reorderCycleSlots).mockResolvedValue({ success: false, error: "Failed to reorder the slots" });
     render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);

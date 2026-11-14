@@ -681,7 +681,7 @@ function RotationBuilder({
   const outline = "flex-1 h-11 rounded-xl border border-[rgba(244,244,245,0.12)] text-[15px] font-medium active:opacity-70 disabled:opacity-40";
   return (
     <div className="flex flex-col gap-[18px]">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext id="cycle-rotation" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={localSlots.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           {localSlots.length > 0 && (
             <ol className="flex flex-col rounded-2xl bg-widget overflow-hidden">
