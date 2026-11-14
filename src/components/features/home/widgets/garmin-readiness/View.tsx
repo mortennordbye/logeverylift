@@ -66,7 +66,7 @@ export const garminReadinessWidget: Renderer<GarminReadinessData> = defineWidget
           <Label icon={<Activity />}>Readiness</Label>
           <div className="mt-2 mb-2.5 flex items-center gap-2.5">
             <Ring size={62} stroke={7} pct={r.score / 100} color="var(--pos)">
-              <Num size={26}>{r.score}</Num>
+              <Num size={24}>{r.score}</Num>
             </Ring>
             <div className="min-w-0">{band}</div>
           </div>

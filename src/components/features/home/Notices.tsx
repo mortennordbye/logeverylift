@@ -39,18 +39,18 @@ function MissedThisWeek({ core }: { core: HomeCore }) {
       <ul className="flex flex-col">
         {dowMissed.map((m) =>
           m.slot.program ? (
-            <li key={`${m.date}-${m.plannedSessionId ?? m.slot.id}`} className="flex items-center justify-between gap-2 py-1.5 border-t border-hairline first:border-t-0">
+            <li key={`${m.date}-${m.plannedSessionId ?? m.slot.id}`} className="flex min-h-11 items-center justify-between gap-2 border-t border-hairline first:border-t-0">
               <span className="text-sm min-w-0">
                 <span className="text-muted-foreground">{dowLabel(m.date)}: </span>
                 <span className="font-semibold">{m.slot.program.name}</span>
               </span>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
                 <Link
                   href={`/programs/${m.slot.program.id}/workout?makeup=${m.date}`}
                   prefetch={true}
-                  className="inline-flex min-h-11 items-center rounded-full bg-brand-fill px-4 text-[13px] font-bold text-white active:scale-[0.95] transition-transform"
+                  className="group inline-flex min-h-11 items-center active:scale-[0.95] transition-transform"
                 >
-                  Make up
+                  <span className="rounded-full bg-brand/15 px-3 py-1 text-[13px] font-semibold text-brand">Make up</span>
                 </Link>
                 <DeclineMakeupButton date={m.date} plannedSessionId={m.plannedSessionId} />
               </div>

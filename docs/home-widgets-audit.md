@@ -1003,4 +1003,11 @@ Where the build differs from it or from section 4, and why:
   other than the saved one, shows the neutral skeleton (`Preview`): the user's own home never
   shows made-up numbers (hub decision, 2026-11-14; the owner may change it). No loader runs
   for either.
+- **Second pass against the design** (hub, 2026-11-14), measured at 390 px with
+  `getBoundingClientRect`: Week no longer stretches to fill the screen and is as tall as its
+  content (164 px at M, as in the design); the hero's main action is the white 54 px button in
+  every state, the other action a ghost link; "Make up" in the missed notice is a small tinted
+  pill and Decline muted text, rows still 44 px; the insight shows in the hero as the design's
+  one-line tip pill (headline only), not the full banner; Readiness S uses the design's 24 px
+  number.
 

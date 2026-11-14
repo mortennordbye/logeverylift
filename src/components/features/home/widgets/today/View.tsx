@@ -1,14 +1,13 @@
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
 import { SAMPLE_TODAY } from "@/components/features/home/samples";
 import { TodaySessionsList } from "@/components/features/TodaySessionsList";
-import { WorkoutInsightBanner } from "@/components/features/WorkoutInsightBanner";
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { CARD, PreviewBox } from "@/components/features/home/widget-ui";
 import type { HomeCore } from "@/lib/home/core";
 import type { TodayPlan } from "@/lib/home/today-plan";
 import { todayActions, type TodayAction } from "@/lib/home/today-actions";
 import type { WidgetSize } from "@/lib/home/widgets/types";
-import { ArrowLeftRight, Check, Play, Sparkles } from "lucide-react";
+import { ArrowLeftRight, Check, Play, Sparkles, Zap } from "lucide-react";
 import Link from "next/link";
 import { TodayMore } from "./TodayMore";
 
@@ -68,11 +67,9 @@ function DoneChip({ automatic }: { automatic: boolean }) {
 
 /** The hero surface: the brand fill, white text, and the hero token mapping for the shared parts inside. */
 const HERO = "home-hero relative flex flex-col h-full overflow-hidden rounded-widget bg-brand-fill p-4 ring-1 ring-inset ring-white/5";
-/** The white start button (54 px), and the quieter white-on-blue ones. */
+/** The white main button (54 px) for every state of the hero. */
 const START =
   "flex min-h-[54px] w-full items-center justify-center gap-2 rounded-[18px] bg-white px-4 text-[17px] font-bold text-brand-fill transition-transform active:scale-[0.97]";
-const SOFT =
-  "inline-flex min-h-11 items-center justify-center gap-2 rounded-[14px] bg-white/15 px-4 text-[15px] font-semibold text-white transition-transform active:scale-[0.97]";
 const GHOST = "flex min-h-11 items-center justify-center gap-1 text-[15px] font-semibold text-white/85 active:opacity-60";
 
 /** One bar segment per cycle week: done weeks white, this week half, the rest faint. A long cycle gets one bar. */
@@ -134,9 +131,12 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
         size === "l" && cycle.endFormatted && <p className="text-sm font-medium opacity-80">Cycle ends {cycle.endFormatted}</p>
       )}
       {insight && (
-        <div className="mt-3 [&>div]:mb-0">
-          <WorkoutInsightBanner insight={insight} />
-        </div>
+        // The locked design's tip: one line on a soft pill. The full banner
+        // (detail and per-lift status) is on the workout screen.
+        <p className="mt-2.5 inline-flex max-w-full items-center gap-1.5 self-start rounded-full bg-white/15 py-1.5 pl-2 pr-2.5 text-[13px] font-semibold" data-testid="today-tip">
+          <Zap className="h-[15px] w-[15px] shrink-0" aria-hidden />
+          <span className="min-w-0">{insight.headline}</span>
+        </p>
       )}
       {size === "l" && plan && <PlanList plan={plan} />}
       <div className="flex-1 min-h-3" />
@@ -164,7 +164,7 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
           ) : (
             <>
               {completedToday ? (
-                <Link href={`/programs/${todayProgram.id}/workout`} prefetch={true} className={SOFT}>
+                <Link href={`/programs/${todayProgram.id}/workout`} prefetch={true} className={START}>
                   {todayAutoSession ? "Log in app" : "Do Again"}
                 </Link>
               ) : (
@@ -185,7 +185,8 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
           )}
         </div>
       ) : (
-        <Link href="/new-workout" className={SOFT}>
+        <Link href="/new-workout" className={START}>
+          {!completedToday && <Play className="h-[18px] w-[18px] fill-current" aria-hidden />}
           {completedToday ? "Do Another Workout →" : "Start a Workout →"}
         </Link>
       )}
@@ -287,11 +288,7 @@ function ActionLink({ a }: { a: Extract<TodayAction, { kind: "link" }> }) {
       href={a.href}
       prefetch={a.href.startsWith("/programs/")}
       aria-label={a.ariaLabel ?? (a.short ? a.label : undefined)}
-      className={
-        a.primary
-          ? "inline-flex min-h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[16px] bg-white px-3 text-[15px] font-bold text-brand-fill active:scale-[0.97] transition-transform"
-          : "inline-flex min-h-12 min-w-0 flex-1 items-center justify-center rounded-[16px] bg-white/15 px-3 text-[15px] font-semibold text-white active:scale-[0.97] transition-transform"
-      }
+      className="inline-flex min-h-12 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-[16px] bg-white px-3 text-[15px] font-bold text-brand-fill active:scale-[0.97] transition-transform"
     >
       {a.primary && <Play className="h-4 w-4 shrink-0 fill-current" aria-hidden />}
       <span className="truncate">{a.short ?? a.label}</span>

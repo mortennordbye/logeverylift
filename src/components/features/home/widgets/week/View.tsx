@@ -9,8 +9,8 @@ import { GoalLeft, GoalRing } from "./GoalRing";
 /**
  * The week: the day strip (day-of-week cycle, no cycle) or the rotation, in
  * the locked look. L (the default) has the weekly goal ring beside the days
- * and a legend; M is the days alone. It stretches to fill the screen when it
- * is the last widget. The whole card opens the calendar.
+ * and a legend; M is the days alone. The card is as tall as its content, as
+ * in the locked design. The whole card opens the calendar.
  */
 
 const DAY_LETTERS = ["M", "T", "W", "T", "F", "S", "S"];
@@ -116,7 +116,7 @@ function WeekView({ core, ring }: { core: HomeCore; ring: boolean }) {
 
   if (info?.cycle.scheduleType === "rotation") {
     return (
-      <Card href="/more/calendar" testId="rotation-strip" className="flex-1">
+      <Card href="/more/calendar" testId="rotation-strip">
         <Label icon={<CalendarDays />} more={ring ? <GoalLeft done={done} short /> : undefined}>
           Rotation
         </Label>
@@ -142,7 +142,7 @@ function WeekView({ core, ring }: { core: HomeCore; ring: boolean }) {
   }
 
   return (
-    <Card href="/more/calendar" testId="week-strip" className="flex-1">
+    <Card href="/more/calendar" testId="week-strip">
       <Label icon={<CalendarDays />} more={ring ? <GoalLeft done={done} short /> : undefined}>
         This week
       </Label>

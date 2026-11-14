@@ -131,3 +131,11 @@ describe("today's plan (owner decision A)", () => {
   });
 });
 
+
+describe("the insight as the hero's tip", () => {
+  it("shows the headline on one pill", () => {
+    const insight = { type: "stagnating", headline: "Holding the same weights" } as TodayData["insight"];
+    render(<>{todayWidget.View({ data: { ...STATES["one program, not done"], insight }, size: "l" })}</>);
+    expect(screen.getByTestId("today-tip").textContent).toBe("Holding the same weights");
+  });
+});

@@ -24,7 +24,7 @@ import { useLongPress } from "./use-long-press";
  * Outside edit mode widget content arrives rendered from the server in
  * `slots`, and this only places it: two consecutive S widgets share a row, M
  * and L take a full row, and the last widget stretches to fill the screen
- * when its def says so (Week), as the old page did. The content scrolls when
+ * when its def says so (none does since the redesign). The content scrolls when
  * it is taller than the screen.
  *
  * Edit mode starts from the pencil or a long-press on a widget, and shows the

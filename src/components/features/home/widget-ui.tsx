@@ -70,7 +70,7 @@ export function Label({ icon, children, more }: { icon?: ReactNode; children: Re
   );
 }
 
-const NUM_SIZE = { 54: "text-[54px]", 38: "text-[38px]", 26: "text-[26px]", 20: "text-[20px]", 17: "text-[17px]" } as const;
+const NUM_SIZE = { 54: "text-[54px]", 38: "text-[38px]", 26: "text-[26px]", 24: "text-[24px]", 20: "text-[20px]", 17: "text-[17px]" } as const;
 
 /** A big number in the display face, with an optional unit after it. */
 export function Num({ size, children, unit, className = "" }: { size: keyof typeof NUM_SIZE; children: ReactNode; unit?: string; className?: string }) {
