@@ -144,7 +144,7 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
     {
       description: [
         "One season: its fields and version, its races, and its phases in order with the dates the app computes (each phase is a training cycle; cycleVersion is that cycle's version).",
-        "taperFit says whether the taper phase ends on the A race day ('fits', or 'early'/'late' by days). chainPaused means the next phase is not scheduled because a cycle outside the season ran; operation 'resume' picks it up.",
+        "taperFit says whether the taper phase ends on the A race day ('fits', or 'early'/'late' by days). chainPaused means the next phase is not scheduled because a cycle outside the season ran; operation 'resume' picks it up. While it is paused, the later phases are dated from the day resume would start the next one, so taperFit is what a resume today gives.",
         "replan: { flagged, since, reason } is set when a race date or an A race changed (D17). The app never reshapes the phases itself: re-plan them, then clear the flag with manage_season clear_replan.",
       ].join(" "),
       inputSchema: { seasonId: z.number().int().positive() },

@@ -627,6 +627,11 @@ second points the interview at it.
   user changes it, so a length in days stays.
 - **A length in weeks replaces a length in days.** A weeks write (cycle form, MCP update)
   clears `duration_days`.
+- **A paused chain is dated from Resume** (fix round 7, J4-18). While another block holds the
+  scheduled start, the season's next phase is shown from the day Resume would give it (today
+  when its planned day has come, else that day), not from the other block's start, and later
+  phases follow it (`shownTimeline` in `src/lib/utils/seasons.ts`). The season page shows no
+  taper warning while the chain is paused, since those dates assume a Resume.
 - **A restore restores the season link too.** A revision made after this package but before the
   cycle joined a season takes the cycle out of the season again (a restore is of the whole
   object). Only a revision from before this package, which has no season key, keeps the season

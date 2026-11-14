@@ -116,6 +116,19 @@ describe("the re-plan banner", () => {
     expect(banner.textContent).toContain("The taper does not end on race day.");
     expect(within(banner).queryByRole("button", { name: "Keep as it is" })).toBeNull();
   });
+
+  it("a paused season does not warn about the taper: its dates assume a Resume today (J8-12)", () => {
+    render(
+      <SeasonDetailClient
+        {...base}
+        taperFit={{ status: "early", taperId: 3, days: 30 }}
+        next={{ cycleId: 2, name: "Longer ride and run", plannedStart: "2027-01-11", scheduled: false }}
+        phases={[{ ...phases[0], state: "active" }, phases[1], phases[2]]}
+      />,
+    );
+    expect(screen.queryByTestId("replan-banner")).toBeNull();
+    expect(screen.queryByText(/Taper ends .* before the race/)).toBeNull();
+  });
 });
 
 describe("drag to reorder the phases", () => {

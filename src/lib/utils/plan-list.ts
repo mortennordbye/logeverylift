@@ -18,6 +18,7 @@ import {
   seasonPaused,
   seasonTimeline,
   shortDay,
+  shownTimeline,
   taperFit,
   type PhaseLike,
   type TimelinePhase,
@@ -283,7 +284,7 @@ export function seasonCard(
     startDate: p.startDate,
     scheduledStartDate: p.scheduledStartDate,
   }));
-  const timeline = seasonTimeline(s.startDate, phaseData, otherStart);
+  const timeline = shownTimeline(s.startDate, phaseData, otherStart, today);
   const active = timeline.find((p) => p.state === "active");
   const next = nextPhase(timeline);
   // The next phase's badge says what the season page says (nextPhaseBadge).

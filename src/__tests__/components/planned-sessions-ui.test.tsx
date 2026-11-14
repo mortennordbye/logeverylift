@@ -82,8 +82,14 @@ describe("PlannedSessionActions", () => {
   it("offers nothing for a logged session, and plan again and reset for a skipped, moved one", () => {
     const { rerender } = render(<PlannedSessionActions session={{ ...base, status: "done" }} today="2026-11-05" lastDay="2026-11-29" name="Strength" />);
     expect(screen.queryAllByRole("button")).toEqual([]);
-    rerender(<PlannedSessionActions session={{ ...base, status: "skipped", touched: true }} today="2026-11-05" lastDay="2026-11-29" name="Strength" />);
+    rerender(<PlannedSessionActions session={{ ...base, date: "2026-11-11", status: "skipped", touched: true }} today="2026-11-05" lastDay="2026-11-29" name="Strength" />);
     expect(screen.getByRole("button", { name: "Plan Strength again" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Back to the template" })).toBeTruthy();
+  });
+
+  it("offers only plan again for a session that was only skipped (J5-08)", () => {
+    render(<PlannedSessionActions session={{ ...base, status: "skipped", touched: true }} today="2026-11-05" lastDay="2026-11-29" name="Strength" />);
+    expect(screen.getByRole("button", { name: "Plan Strength again" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Back to the template" })).toBeNull();
   });
 });

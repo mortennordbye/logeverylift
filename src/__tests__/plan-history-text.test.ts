@@ -132,7 +132,7 @@ describe("dated session history text", () => {
 
   it("names a dated session by its day", () => {
     expect(snapshotName(snap())).toBe("Squat day on Wed 4 Nov");
-    expect(diffSnapshots(snap(), snap({ date: "2026-11-06" }))).toEqual(["Moved from Wed 4 Nov to Fri 6 Nov"]);
+    expect(diffSnapshots(snap(), snap({ date: "2026-11-06" }))).toEqual(["Moved Squat day from Wed 4 Nov to Fri 6 Nov"]);
   });
 
   it("gives a rotation session no walk number, which the sheet does not show", () => {
@@ -153,6 +153,10 @@ describe("dated session history text", () => {
     noColon(lines);
   });
 
+  it("a missed session moved to a coming day is one move, not a move and a plan again (J8-04)", () => {
+    expect(diffSnapshots(snap({ status: "missed" }), snap({ date: "2026-11-07" }))).toEqual(["Moved Squat day from Wed 4 Nov to Sat 7 Nov"]);
+  });
+
   it("a skip names the session and the day, with the reason after (J8-04)", () => {
     expect(sessionChangeLine("Long ride on Sun 22 Nov", "Skipped (Work trip)")).toBe("Skipped Long ride on Sun 22 Nov (Work trip)");
     expect(sessionChangeLine("Long ride on Sun 22 Nov", "Skipped")).toBe("Skipped Long ride on Sun 22 Nov");
@@ -160,9 +164,8 @@ describe("dated session history text", () => {
   });
 
   it("joins a change to the session it is about with a comma", () => {
-    expect(sessionChangeLine("Squat day on Wed 4 Nov", "Moved from Wed 4 Nov to Fri 6 Nov")).toBe(
-      "Squat day on Wed 4 Nov, moved from Wed 4 Nov to Fri 6 Nov",
-    );
+    expect(sessionChangeLine("Squat day on Wed 4 Nov", "Label set to Heavy")).toBe("Squat day on Wed 4 Nov, label set to Heavy");
+    expect(sessionChangeLine("Squat day on Fri 6 Nov", "Moved Squat day from Wed 4 Nov to Fri 6 Nov")).toBe("Moved Squat day from Wed 4 Nov to Fri 6 Nov");
     expect(sessionChangeLine("Squat day on Wed 4 Nov", "Added Squat day on Wed 4 Nov")).toBe("Added Squat day on Wed 4 Nov");
   });
 });

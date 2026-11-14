@@ -129,10 +129,27 @@ describe("weekday week", () => {
     renderWeek({ dayLabels: { 5: "Mobility" } });
     const rows = screen.getAllByTestId("week-row");
     // Fri 20 Nov: the label, not Rest.
-    expect(rows[4].textContent).toBe("Fri20 NovMobility");
+    expect(rows[4].textContent).toBe("Fri20 NovMobility›");
     // Bike tempo moved from Wed to Thu.
     expect(rows[2].textContent).toBe("Wed18 NovRestMoved to Thu");
     expect(rows[3].textContent).toContain("Moved from Wed");
+  });
+
+  it("a labelled day shows its whole label and opens a sheet with the label and the note (J5-11)", () => {
+    const label = "Mobility, stretching and the long drive home after the race weekend";
+    renderWeek({ dayLabels: { 5: label }, dayNotes: { 5: "Twenty minutes on the hips." } });
+    const row = screen.getByRole("button", { name: `Fri 20 Nov: ${label}` });
+    expect(within(row).getByText(label).className).not.toContain("truncate");
+    fireEvent.click(row);
+    const sheet = screen.getByTestId("day-label-sheet");
+    expect(within(sheet).getByRole("heading", { name: label })).toBeTruthy();
+    expect(within(sheet).getByText("Twenty minutes on the hips.")).toBeTruthy();
+    expect(within(sheet).getByText("Fri 20 Nov")).toBeTruthy();
+  });
+
+  it("a plain rest day does not open", () => {
+    renderWeek();
+    expect(screen.queryByRole("button", { name: /^Wed 18 Nov/ })).toBeNull();
   });
 
   it("marks a session changed on its own day", () => {
@@ -433,6 +450,14 @@ describe("the session sheets say the session's state (J3-10, J5-08, J5-13, J5-15
     expect(within(open(/^Sat 21 Nov: Hill repeats/)).getByText("Sat 21 Nov · Changed")).toBeTruthy();
   });
 
+  it("a day that was only skipped offers Plan again and not Back to the template (J5-08)", () => {
+    renderWeek({ sessions: [session({ id: 6, date: "2026-11-20", name: "Bike intervals", programId: null, status: "skipped", touched: true })] });
+    fireEvent.click(screen.getByRole("button", { name: /^Fri 20 Nov: Bike intervals/ }));
+    const sheet = screen.getByTestId("session-sheet");
+    expect(within(sheet).getByRole("button", { name: "Plan again" })).toBeTruthy();
+    expect(within(sheet).queryByRole("button", { name: /Back to the template/ })).toBeNull();
+  });
+
   it("a plain planned day shows only its day", () => {
     renderWeek();
     fireEvent.click(screen.getByRole("button", { name: /^Tue 17 Nov: Strength A/ }));
@@ -454,6 +479,25 @@ describe("the session sheets say the session's state (J3-10, J5-08, J5-13, J5-15
     fireEvent.keyDown(document, { key: "Escape" });
     fireEvent.click(screen.getAllByRole("button", { name: "Actions for Full body" })[0]);
     expect(within(screen.getByTestId("rotation-sheet")).getByText("Today · Swapped")).toBeTruthy();
+  });
+
+  it("the swapped turn's sheet names the program it replaced and swaps back to it (J3-10)", async () => {
+    const slots = [
+      { id: 11, orderIndex: 1, programId: 1, label: null, programName: "Upper A" },
+      { id: 12, orderIndex: 2, programId: 2, label: null, programName: "Lower A" },
+    ];
+    const walk = [
+      { date: "2026-11-17", slotId: 11, rotationPosition: 0, programId: 1, programName: "Upper A", status: "planned" as const },
+      { date: "2026-11-18", slotId: 12, rotationPosition: 1, programId: 9, programName: "Full body", status: "planned" as const },
+    ];
+    render(<RotationOrder cycleId={5} rows={rotationRows(slots, walk, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Full body" }));
+    const sheet = screen.getByTestId("rotation-sheet");
+    expect(within(sheet).getByText("Swapped from Lower A")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Back to Lower A" }));
+    });
+    expect(updateRotationSession).toHaveBeenCalledWith({ op: "change", programId: 2, cycleId: 5, rotationPosition: 1 });
   });
 });
 

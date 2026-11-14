@@ -25,7 +25,7 @@ import { moveSuggestion } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { syncLimitWarnings } from "@/lib/training-limits";
 import { userToday } from "@/lib/user-settings";
-import { type DetailSession, blockWeeks, cycleSubLine, dayLabels, dayMonth, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
+import { type DetailSession, blockWeeks, cycleSubLine, dayLabels, dayMonth, dayNotes, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
@@ -155,6 +155,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   const templateHref = `/cycles/${cycle.id}/template`;
   // Days the template names with no session, such as "Mobility" (only a weekday cycle has days).
   const labels = weekday ? dayLabels(cycle.slots) : {};
+  const notes = weekday ? dayNotes(cycle.slots) : {};
   const slotPrograms = [...new Map(cycle.slots.filter((s) => s.program).map((s) => [s.program!.id, s.program!.name])).entries()];
 
   return (
@@ -262,6 +263,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
             programsMap={programsMap}
             templateHref={templateHref}
             dayLabels={labels}
+            dayNotes={notes}
           />
         )}
 

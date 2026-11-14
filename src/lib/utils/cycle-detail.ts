@@ -63,6 +63,16 @@ export function isMoved(s: Pick<DetailSession, "date" | "templateDate">): boolea
 }
 
 /**
+ * "Back to the template" is offered for a changed day from today on. A skip
+ * also touches the row, but a skip alone is not a change: Plan again undoes
+ * it, so a skipped session offers the reset only when it was also moved (J5-08).
+ */
+export function canBackToTemplate(s: Pick<DetailSession, "status" | "date" | "touched" | "templateDate">, today: string): boolean {
+  if (!s.touched || s.templateDate == null || s.templateDate < today) return false;
+  return s.status !== "skipped" || isMoved(s);
+}
+
+/**
  * A session's state when it is not just planned, then "Moved from Tue" or
  * "Changed" when the user changed this one day: "Missed · Moved from Tue".
  * A skip and a Missed answer also touch the row; Skipped and Missed say
@@ -87,7 +97,7 @@ export function sessionSub(s: Pick<DetailSession, "status" | "summary" | "exerci
   return [sessionState(s), s.summary ?? s.exercises ?? ""].filter(Boolean).join(" · ");
 }
 
-type DaySlotLike = { dayOfWeek?: number | null; programId?: number | null; workoutId?: number | null; label?: string | null };
+type DaySlotLike = { dayOfWeek?: number | null; programId?: number | null; workoutId?: number | null; label?: string | null; notes?: string | null };
 
 /**
  * The labels of weekdays (1 = Monday) whose slots hold no program and no
@@ -101,6 +111,20 @@ export function dayLabels(slots: DaySlotLike[]): Record<number, string> {
     if (mine.length === 0 || mine.some((s) => s.programId != null || s.workoutId != null)) continue;
     const names = mine.map((s) => s.label?.trim()).filter((l): l is string => !!l && l.toLowerCase() !== "rest");
     if (names.length) out[day] = names.join(" · ");
+  }
+  return out;
+}
+
+/** The notes of the days dayLabels names, by weekday: the labelled day's sheet shows them (J5-11). */
+export function dayNotes(slots: DaySlotLike[]): Record<number, string> {
+  const labelled = dayLabels(slots);
+  const out: Record<number, string> = {};
+  for (const day of Object.keys(labelled).map(Number)) {
+    const notes = slots
+      .filter((s) => s.dayOfWeek === day)
+      .map((s) => s.notes?.trim())
+      .filter((n): n is string => !!n);
+    if (notes.length) out[day] = notes.join("\n");
   }
   return out;
 }
@@ -203,6 +227,8 @@ export type RotationRow = {
   mark: "next" | "skipped" | "swapped" | "done" | null;
   /** The coming turn runs another program than the slot's, also when it is the next one. */
   swapped: boolean;
+  /** The slot's own program, which a swapped turn replaced: the sheet names it and swaps back (J3-10). */
+  swappedFrom: { programId: number; name: string } | null;
   /** The slot's next walk day from today on: what skip and change act on. */
   upcoming: RotationWalkDay | null;
   lastDone: string | null;
@@ -241,6 +267,7 @@ export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[],
       rest,
       mark,
       swapped,
+      swappedFrom: swapped && slot.programId != null ? { programId: slot.programId, name: slot.programName ?? slot.label ?? "the template" } : null,
       upcoming: rest ? null : upcoming,
       lastDone,
     };

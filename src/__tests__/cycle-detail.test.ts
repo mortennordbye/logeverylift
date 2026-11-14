@@ -1,4 +1,4 @@
-import { blockWeeks, cycleSubLine, dayLabels, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
+import { blockWeeks, canBackToTemplate, cycleSubLine, dayLabels, dayNotes, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
 import { describe, expect, it } from "vitest";
 
 describe("cycleSubLine", () => {
@@ -108,6 +108,18 @@ describe("dayLabels", () => {
   });
 });
 
+describe("dayNotes (J5-11)", () => {
+  it("gives the notes of the labelled days only", () => {
+    const notes = dayNotes([
+      { dayOfWeek: 1, programId: 3, workoutId: null, label: "Strength", notes: "Heavy" },
+      { dayOfWeek: 5, programId: null, workoutId: null, label: "Mobility", notes: " Hips and back " },
+      { dayOfWeek: 6, programId: null, workoutId: null, label: "Walk", notes: null },
+      { dayOfWeek: 7, programId: null, workoutId: null, label: "Rest", notes: "Sleep in" },
+    ]);
+    expect(notes).toEqual({ 5: "Hips and back" });
+  });
+});
+
 describe("rotationRows", () => {
   const slots = [
     { id: 1, orderIndex: 1, programId: 10, label: null, programName: "Upper A" },
@@ -157,5 +169,20 @@ describe("rotationRows", () => {
       "2026-11-17",
     );
     expect(rows[1]).toMatchObject({ mark: "swapped", name: "Full body", programId: 30, lastDone: "2026-11-12" });
+  });
+});
+
+describe("canBackToTemplate (J5-08)", () => {
+  const s = { status: "planned" as const, date: "2026-11-17", templateDate: "2026-11-17", touched: true };
+  it("offers it for a changed day from today on", () => {
+    expect(canBackToTemplate(s, "2026-11-14")).toBe(true);
+    expect(canBackToTemplate({ ...s, touched: false }, "2026-11-14")).toBe(false);
+    expect(canBackToTemplate(s, "2026-11-18")).toBe(false);
+  });
+  it("a skip alone is not a change: only Plan again undoes it", () => {
+    expect(canBackToTemplate({ ...s, status: "skipped" }, "2026-11-14")).toBe(false);
+  });
+  it("a skipped session that was also moved can go back to its template day", () => {
+    expect(canBackToTemplate({ ...s, status: "skipped", date: "2026-11-19" }, "2026-11-14")).toBe(true);
   });
 });
