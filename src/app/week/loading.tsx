@@ -1,5 +1,5 @@
 import { ListPageSkeleton } from "@/components/ui/PageSkeletons";
 
 export default function WeekLoading() {
-  return <ListPageSkeleton title="This week" rows={4} />;
+  return <ListPageSkeleton title="This week" rows={4} back={null} />;
 }
