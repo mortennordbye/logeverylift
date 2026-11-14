@@ -1,9 +1,14 @@
 import { RENDERERS } from "@/components/features/home/widgets";
 import { loadFriendsActivity } from "@/components/features/home/widgets/friends-activity/load";
 import { loadGarminReadiness } from "@/components/features/home/widgets/garmin-readiness/load";
+import { loadBodyWeight } from "@/components/features/home/widgets/body-weight/load";
+import { loadRaceCountdown } from "@/components/features/home/widgets/race-countdown/load";
 import { loadRecentPrs } from "@/components/features/home/widgets/recent-prs/load";
+import { loadStreak } from "@/components/features/home/widgets/streak/load";
+import { loadTrainingLoad } from "@/components/features/home/widgets/training-load/load";
+import { loadWeeklySets } from "@/components/features/home/widgets/weekly-sets/load";
 import { db } from "@/db";
-import { exercisePrs, friendships, garminConnections, garminDailyMetrics } from "@/db/schema";
+import { exercisePrs, friendships, garminConnections, garminDailyMetrics, seasonRaces, seasons, userWeightEntries, workoutSets } from "@/db/schema";
 import { WIDGETS } from "@/lib/home/widgets";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createSession, createUser } from "./factories";
@@ -109,5 +114,56 @@ describe("Garmin readiness loader (I2)", () => {
     await db.insert(garminConnections).values({ userId: me, encryptedKey: "v1.x.y.z" });
     await db.insert(garminDailyMetrics).values({ userId: other.id, day: today, modelVersion: 3, metrics: { readiness } });
     expect(await loadGarminReadiness(ctx("admin"))).toEqual({ connected: true, readiness: null });
+  });
+});
+
+describe("phase 2 loaders read only the caller's data", () => {
+  const day = (offset: number) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
+
+  it("Body weight: the caller's entries only, latest and 30-day change; null without any", async () => {
+    expect(await loadBodyWeight(ctx())).toBeNull();
+    const other = await createUser();
+    await db.insert(userWeightEntries).values([
+      { id: "w1", userId: me, weightKg: 83.1, recordedAt: new Date(`${day(-10)}T08:00:00Z`) },
+      { id: "w2", userId: me, weightKg: 82.4, recordedAt: new Date(`${today}T08:00:00Z`) },
+      { id: "w3", userId: other.id, weightKg: 120, recordedAt: new Date(`${day(-1)}T08:00:00Z`) },
+    ]);
+    const w = await loadBodyWeight(ctx());
+    expect(w).toEqual({ latestKg: 82.4, changeKg: -0.7, lowKg: 82.4, highKg: 83.1, series: [83.1, 82.4] });
+  });
+
+  it("Race countdown: the caller's next A race, not another user's, not a past one", async () => {
+    const other = await createUser();
+    const [mine] = await db.insert(seasons).values({ userId: me, name: "2026", startDate: day(-30), endDate: day(60) }).returning();
+    const [theirs] = await db.insert(seasons).values({ userId: other.id, name: "Theirs", startDate: day(-30), endDate: day(60) }).returning();
+    await db.insert(seasonRaces).values([
+      { seasonId: theirs.id, userId: other.id, name: "Their race", raceDate: day(3), discipline: "run", priority: "A" },
+      { seasonId: mine.id, userId: me, name: "Past race", raceDate: day(-2), discipline: "run", priority: "A" },
+    ]);
+    expect(await loadRaceCountdown(ctx())).toBeNull();
+    await db.insert(seasonRaces).values({ seasonId: mine.id, userId: me, name: "Oslo Half", raceDate: day(22), discipline: "run", priority: "A" });
+    expect(await loadRaceCountdown(ctx())).toMatchObject({ name: "Oslo Half", days: 22, seasonId: mine.id });
+  });
+
+  it("Weekly sets and Streak: only the caller's sessions count", async () => {
+    expect(await loadWeeklySets(ctx())).toBeNull();
+    expect(await loadStreak(ctx())).toBeNull();
+    const other = await createUser();
+    const lift = await createExercise({ name: "Bench", muscleGroup: "chest" });
+    const theirs = await createSession(other.id, null, { isCompleted: true, endTime: new Date() });
+    await db.insert(workoutSets).values({ sessionId: theirs.id, exerciseId: lift.id, setNumber: 1, actualReps: 5, weightKg: "100", restTimeSeconds: 90, isCompleted: true });
+    expect(await loadWeeklySets(ctx())).toBeNull();
+    expect(await loadStreak(ctx())).toBeNull();
+
+    const mine = await createSession(me, null, { isCompleted: true, endTime: new Date() });
+    await db.insert(workoutSets).values([1, 2, 3].map((n) => ({ sessionId: mine.id, exerciseId: lift.id, setNumber: n, actualReps: 5, weightKg: "100", restTimeSeconds: 90, isCompleted: true })));
+    expect(await loadWeeklySets(ctx())).toEqual({ total: 3, muscles: [{ name: "chest", sets: 3, target: 10 }] });
+    const streak = await loadStreak(ctx());
+    expect(streak!.weeks).toBe(1);
+    expect(streak!.perWeek.at(-1)).toBe(1);
+  });
+
+  it("Training load: null with no load in four weeks", async () => {
+    expect(await loadTrainingLoad(ctx())).toBeNull();
   });
 });

@@ -4,16 +4,21 @@
  * widget's id goes to RETIRED_IDS.
  */
 
+import { bodyWeight } from "./body-weight";
 import { cycle } from "./cycle";
 import { enduranceToday } from "./endurance-today";
 import { friendsActivity } from "./friends-activity";
 import { garminReadiness } from "./garmin-readiness";
+import { raceCountdown } from "./race-countdown";
 import { recentPrs } from "./recent-prs";
+import { streak } from "./streak";
 import { title } from "./title";
 import { today } from "./today";
+import { trainingLoad } from "./training-load";
 import type { WidgetDef } from "./types";
 import { week } from "./week";
 import { weeklyGoal } from "./weekly-goal";
+import { weeklySets } from "./weekly-sets";
 
 export const WIDGETS = {
   title,
@@ -22,7 +27,12 @@ export const WIDGETS = {
   enduranceToday,
   week,
   weeklyGoal,
+  raceCountdown,
+  trainingLoad,
   recentPrs,
+  streak,
+  weeklySets,
+  bodyWeight,
   friendsActivity,
   garminReadiness,
 } as const satisfies Record<string, WidgetDef>;
