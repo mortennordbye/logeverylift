@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cycle complete</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 900px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; position: relative">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 16px 8px 0">
+    <a href="#" style="display: flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 8px; color: {{accent}}; font-size: 16px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Plan</a>
+    <button aria-label="More actions" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #161618; color: #f4f4f5; display: flex; align-items: center; justify-content: center">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
+    </button>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 20px; padding: 8px 16px 0">
+    <div style="display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 34px; line-height: 36px; text-transform: uppercase">Upper / Lower hypertrophy</h1>
+      <span style="font-size: 14px; color: #8d8d93">Rotation · 6 weeks</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 20px; background: #161618">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="{{accent}}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12l5 5L20 7"></path></svg>
+        <span style="font-size: 20px; font-weight: 600">Cycle complete</span>
+      </div>
+      <span style="font-size: 14px; color: #8d8d93">6 weeks · ended 20 Dec</span>
+      <div style="height: 1px; background: rgba(244,244,245,0.08)"></div>
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Next</span>
+        <span style="font-size: 16px; font-weight: 500">Strength peak starts Mon 21 Dec</span>
+      </div>
+      <button style="height: 52px; border: none; border-radius: 16px; background: {{accent}}; color: #0b0b0c; font: 600 16px 'Work Sans', sans-serif">Start now instead</button>
+      <button style="min-height: 44px; border: none; background: transparent; color: #c4c4c9; font: 500 15px 'Work Sans', sans-serif">Not now</button>
+    </div>
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Programs in this cycle</h2>
+      <div style="display: flex; flex-direction: column; border-radius: 20px; background: #161618; overflow: hidden">
+        <sc-for list="{{programs}}" as="p" hint-placeholder-count="4">
+          <a href="#" style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; min-height: 52px; border-bottom: 1px solid rgba(244,244,245,0.08); color: #f4f4f5; font-size: 15px">
+            <span>{{p}}</span><span style="font-size: 14px; color: {{accent}}">See history ›</span>
+          </a>
+        </sc-for>
+      </div>
+    </section>
+  </div>
+
+  <nav style="position: absolute; left: 0; right: 0; bottom: 0; height: 84px; background: #111113; border-top: 1px solid rgba(244,244,245,0.08); display: flex; justify-content: space-around; padding-top: 10px; box-sizing: border-box; font-size: 11px">
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"></path></svg>Workout</a>
+    <a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: {{accent}}; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>Plan</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><path d="M14 5h6M14 9h6M4 15h16M4 19h16"></path></svg>Programs</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>More</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#6b95ff', programs: ['Upper A', 'Lower A', 'Upper B', 'Lower B'] };
+  }
+}
+</script>
+</body>
+</html>

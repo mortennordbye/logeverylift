@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add a phase</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; position: relative">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 16px 8px 0">
+    <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 8px; font-size: 16px; color: {{accent}}">Cancel</a>
+    <span style="font-size: 16px; font-weight: 600">Add a phase</span>
+    <span style="width: 70px"></span>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 20px; padding: 4px 16px 0">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Step 1 of 2</span>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; height: 4px">
+        <div style="border-radius: 2px; background: {{accent}}"></div>
+        <div style="border-radius: 2px; background: #707076"></div>
+      </div>
+      <span style="font-size: 14px; color: #c4c4c9">Phase 3 in Jevnaker Half 2027 · after Longer ride and run</span>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <sc-for list="{{source}}" as="s" hint-placeholder-count="2">
+        <label style="display: flex; align-items: center; gap: 10px; padding: 0 14px; min-height: 56px; border-radius: 16px; background: #161618; border: {{s.border}}">
+          <span style="width: 22px; height: 22px; border-radius: 11px; box-sizing: border-box; border: {{s.ring}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><span style="width: 10px; height: 10px; border-radius: 5px; background: {{s.dot}}"></span></span>
+          <span style="font-size: 15px; font-weight: 600">{{s.title}}</span>
+        </label>
+      </sc-for>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <label for="pname" style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Name</label>
+      <input id="pname" placeholder="For example: Swim, intervals, bricks" style="height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(244,244,245,0.12); background: #161618; color: #f4f4f5; font: 400 16px 'Work Sans', sans-serif">
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Phase type</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{types}}" as="t" hint-placeholder-count="6">
+          <button aria-pressed="{{t.pressed}}" style="height: 44px; padding: 0 14px; border-radius: 22px; border: {{t.border}}; background: {{t.bg}}; color: {{t.fg}}; font: 500 14px 'Work Sans', sans-serif">{{t.name}}</button>
+        </sc-for>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Length</span>
+      <div style="display: flex; gap: 8px">
+        <input aria-label="Length" value="12" style="width: 88px; height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(244,244,245,0.12); background: #161618; color: #f4f4f5; font: 600 16px 'Work Sans', sans-serif">
+        <div style="flex: 1; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 12px; background: #161618">
+          <button style="height: 44px; border-radius: 10px; border: none; background: {{accent}}; color: #0b0b0c; font: 600 14px 'Work Sans', sans-serif">Weeks</button>
+          <button style="height: 44px; border-radius: 10px; border: none; background: transparent; color: #f4f4f5; font: 500 14px 'Work Sans', sans-serif">Days</button>
+        </div>
+      </div>
+      <span style="font-size: 13px; color: #8d8d93">Starts 5 Apr, the day after the phase before ends.</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Schedule</span>
+      <sc-for list="{{schedule}}" as="s" hint-placeholder-count="2">
+        <label style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; min-height: 44px; border-radius: 16px; background: #161618; border: {{s.border}}">
+          <span style="width: 22px; height: 22px; border-radius: 11px; box-sizing: border-box; border: {{s.ring}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><span style="width: 10px; height: 10px; border-radius: 5px; background: {{s.dot}}"></span></span>
+          <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 600">{{s.title}}</span><span style="font-size: 13px; color: #8d8d93">{{s.sub}}</span></span>
+        </label>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 16px 28px; background: #111113; border-top: 1px solid rgba(244,244,245,0.08)">
+    <button style="width: 100%; height: 52px; border-radius: 16px; border: none; background: {{accent}}; color: #0b0b0c; font: 600 16px 'Work Sans', sans-serif">Next: build the week</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#6b95ff';
+    const off = { border: '1px solid transparent', ring: '2px solid #8d8d93', dot: 'transparent' };
+    const on = { border: '1px solid ' + accent, ring: '2px solid ' + accent, dot: accent };
+    const chip = (name, sel) => ({ name, pressed: sel ? 'true' : 'false', bg: sel ? 'rgba(107,149,255,0.18)' : 'transparent', fg: sel ? '#f4f4f5' : '#c4c4c9', border: sel ? '1px solid ' + accent : '1px solid rgba(244,244,245,0.12)' });
+    return {
+      accent,
+      source: [ { title: 'New cycle', ...on }, { title: 'Cycle I already have', ...off } ],
+      types: [ chip('General'), chip('Base'), chip('Build', true), chip('Peak'), chip('Taper'), chip('Transition') ],
+      schedule: [
+        { title: 'Same days each week', sub: 'Monday strength, Wednesday run', ...on },
+        { title: 'Rotation', sub: 'The next session follows the last one. No fixed days.', ...off }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

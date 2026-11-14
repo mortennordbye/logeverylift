@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Did you do it?</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+input,textarea{font-family:'Work Sans',sans-serif}
+</style>
+</helmet>
+<div style="width: 390px; height: 900px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; gap: 14px; padding: 24px 16px">
+
+  <section aria-label="Unconfirmed session" style="display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 20px; background: #161618">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Wed 18 Nov</span>
+      <h2 style="margin: 0; font-size: 20px; font-weight: 600">Run aerobic · 65 min</h2>
+      <p style="margin: 0; font-size: 14px; color: #c4c4c9">No run found for this day. Did you do it?</p>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <button aria-pressed="true" style="height: 48px; border-radius: 14px; border: 1px solid {{accent}}; background: rgba(107,149,255,0.18); color: #f4f4f5; font: 600 15px 'Work Sans', sans-serif">Yes, I did it</button>
+      <button aria-pressed="false" style="height: 48px; border-radius: 14px; border: 1px solid rgba(244,244,245,0.16); background: transparent; color: #f4f4f5; font: 600 15px 'Work Sans', sans-serif">Missed</button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #8d8d93">Time (h:mm)
+        <input value="1:05" inputmode="numeric" style="height: 48px; box-sizing: border-box; padding: 0 12px; border-radius: 12px; border: none; background: #222225; color: #f4f4f5; font-size: 16px">
+      </label>
+      <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #8d8d93">Distance, km (optional)
+        <input placeholder="11.2" inputmode="decimal" style="height: 48px; box-sizing: border-box; padding: 0 12px; border-radius: 12px; border: none; background: #222225; color: #f4f4f5; font-size: 16px">
+      </label>
+    </div>
+
+    <fieldset style="margin: 0; padding: 0; border: none; display: flex; flex-direction: column; gap: 6px">
+      <legend style="padding: 0; margin-bottom: 6px; font-size: 13px; color: #8d8d93">Effort, 1 (easy) to 10 (max)</legend>
+      <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px">
+        <sc-for list="{{rpe}}" as="r" hint-placeholder-count="10">
+          <button aria-pressed="{{r.pressed}}" style="height: 44px; border-radius: 12px; border: none; background: {{r.bg}}; color: {{r.fg}}; font: 600 15px 'Work Sans', sans-serif">{{r.n}}</button>
+        </sc-for>
+      </div>
+    </fieldset>
+
+    <label style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #8d8d93">Notes
+      <textarea rows="2" placeholder="How did it feel?" style="box-sizing: border-box; padding: 10px 12px; border-radius: 12px; border: none; background: #222225; color: #f4f4f5; font-size: 16px; resize: none"></textarea>
+    </label>
+
+    <button style="height: 52px; border: none; border-radius: 16px; background: {{accent}}; color: #0b0b0c; font: 600 16px 'Work Sans', sans-serif">Save</button>
+  </section>
+
+  <section aria-label="Missed key session" style="display: flex; flex-direction: column; gap: 12px; padding: 18px; border-radius: 20px; background: #161618">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Missed key session</span>
+      <span style="font-size: 17px; font-weight: 600">Long ride, Sun 22 Nov</span>
+      <span style="font-size: 14px; color: #c4c4c9">No free day is left this week. It stays missed, and the plan goes on.</span>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px">
+      <button style="height: 48px; border: none; border-radius: 14px; background: {{accent}}; color: #0b0b0c; font: 600 15px 'Work Sans', sans-serif">OK</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#6b95ff';
+    const rpe = [1,2,3,4,5,6,7,8,9,10].map((n) => n === 6
+      ? { n: String(n), pressed: 'true', bg: accent, fg: '#0b0b0c' }
+      : { n: String(n), pressed: 'false', bg: '#222225', fg: '#f4f4f5' });
+    return { accent, rpe };
+  }
+}
+</script>
+</body>
+</html>

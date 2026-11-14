@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Today's session</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 900px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; position: relative; overflow: hidden">
+
+  <!-- Dimmed cycle detail behind -->
+  <div aria-hidden="true" style="padding: 24px 16px; display: flex; flex-direction: column; gap: 12px">
+    <span style="font-size: 16px; color: {{accent}}">‹ Plan</span>
+    <span style="font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 34px; text-transform: uppercase">Upper / Lower hypertrophy</span>
+    <span style="font-size: 14px; color: #8d8d93">Rotation · 6 weeks · Week 3 of 6</span>
+    <div style="height: 64px; border-radius: 20px; background: #161618"></div>
+    <div style="height: 260px; border-radius: 20px; background: #161618"></div>
+  </div>
+  <div aria-hidden="true" style="position: absolute; inset: 0; background: rgba(0,0,0,0.6)"></div>
+
+  <!-- Sheet -->
+  <section aria-label="Today's session" style="position: absolute; left: 0; right: 0; bottom: 0; background: #161618; border-radius: 20px 20px 0 0; padding: 8px 16px 32px; display: flex; flex-direction: column; gap: 16px">
+    <span aria-hidden="true" style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #3a3a3e"></span>
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: {{accent}}">Today</span>
+      <h2 style="margin: 0; font-size: 24px; font-weight: 600">Lower A</h2>
+      <a href="#" style="display: flex; align-items: center; min-height: 44px; font-size: 14px; color: #8d8d93">Position 2 of 5 ·&#160;<span style="color: {{accent}}">See program ›</span></a>
+    </div>
+
+    <ul style="list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border-radius: 16px; background: #222225; overflow: hidden">
+      <sc-for list="{{exercises}}" as="e" hint-placeholder-count="4">
+        <li style="display: flex; justify-content: space-between; padding: 12px 14px; border-bottom: 1px solid rgba(244,244,245,0.08); font-size: 15px">
+          <span>{{e.name}}</span><span style="color: #8d8d93">{{e.sets}}</span>
+        </li>
+      </sc-for>
+    </ul>
+
+    <button style="height: 52px; border: none; border-radius: 16px; background: {{accent}}; color: #0b0b0c; font: 600 16px 'Work Sans', sans-serif">Start workout</button>
+
+    <div style="display: flex; flex-direction: column; border-radius: 16px; background: #222225; overflow: hidden">
+      <button style="display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0 14px; border: none; border-bottom: 1px solid rgba(244,244,245,0.08); background: transparent; color: #f4f4f5; font: 500 15px 'Work Sans', sans-serif">Swap program<span aria-hidden="true" style="color: #8d8d93">›</span></button>
+      <button style="display: flex; align-items: center; min-height: 52px; padding: 0 14px; border: none; background: transparent; color: #8d8d93; font: 500 15px 'Work Sans', sans-serif">Skip this time</button>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#6b95ff',
+      exercises: [
+        { name: 'Squat', sets: '4 × 6–8' },
+        { name: 'Romanian deadlift', sets: '3 × 8' },
+        { name: 'Leg press', sets: '3 × 10–12' },
+        { name: 'Calf raise', sets: '4 × 12' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

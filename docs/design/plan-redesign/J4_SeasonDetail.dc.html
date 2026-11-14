@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Season detail</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; position: relative">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 16px 8px 0">
+    <a href="#" style="display: flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 8px; font-size: 16px; color: {{accent}}">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Plan</a>
+    <button aria-label="More actions" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #161618; color: #f4f4f5; display: flex; align-items: center; justify-content: center">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
+    </button>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 16px; padding: 4px 16px 0">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h1 style="margin: 0; font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 34px; line-height: 36px; text-transform: uppercase">Jevnaker Half 2027</h1>
+      <span style="font-size: 13px; color: #8d8d93">16 Nov 2026 to 29 Aug 2027</span>
+      <span style="font-size: 14px; color: #c4c4c9">Finish the race and run the whole half marathon without injury.</span>
+    </div>
+
+    <section style="display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; background: #222225; border: 1px solid rgba(244,244,245,0.16)">
+      <span style="font-size: 15px; font-weight: 600">Race date changed. The taper no longer ends on race day.</span>
+      <div style="display: flex; gap: 8px; align-items: center">
+        <button style="height: 44px; padding: 0 16px; border-radius: 12px; border: none; background: {{accent}}; color: #0b0b0c; font: 600 14px 'Work Sans', sans-serif">Fit the taper</button>
+        <button style="height: 44px; padding: 0 12px; border: none; background: transparent; color: #f4f4f5; font: 500 14px 'Work Sans', sans-serif">Keep as it is</button>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 14px; padding: 16px 18px; border-radius: 20px; background: #161618">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px">
+        <div style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+          <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">A race · 29 Aug 2027</span>
+          <span style="font-size: 17px; font-weight: 600">Jevnaker Halv Full Distanse</span>
+          <a href="#" style="min-height: 44px; display: flex; align-items: center; font-size: 14px; font-weight: 500">Race plan ›</a>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end">
+          <span style="font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 44px; line-height: 40px; color: #f4f4f5">288</span>
+          <span style="font-size: 12px; color: #8d8d93">days</span>
+        </div>
+      </div>
+      <div style="display: flex; gap: 3px; height: 10px">
+        <div style="flex: 56 1 0; border-radius: 4px; background: {{accent}}"></div>
+        <div style="flex: 84 1 0; border-radius: 4px; background: #707076"></div>
+        <div style="flex: 84 1 0; border-radius: 4px; background: #707076"></div>
+        <div style="flex: 50 1 0; border-radius: 4px; background: #707076"></div>
+        <div style="flex: 10 1 0; min-width: 8px; border-radius: 4px; background: #707076"></div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Phases</h2>
+      <div style="display: flex; flex-direction: column; border-radius: 20px; background: #161618; overflow: hidden">
+        <sc-for list="{{phases}}" as="p" hint-placeholder-count="5">
+          <div style="display: flex; align-items: center; border-bottom: 1px solid rgba(244,244,245,0.08)">
+            <button aria-label="Reorder {{p.name}}" style="width: 44px; height: 56px; border: none; background: transparent; color: #8d8d93; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>
+            </button>
+            <a href="#" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 10px 12px 10px 0; min-height: 44px; color: #f4f4f5">
+              <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+                <span style="font-size: 15px; font-weight: 500">{{p.name}}</span>
+                <span style="font-size: 13px; color: #8d8d93">{{p.sub}}</span>
+                <sc-if value="{{p.warn}}" hint-placeholder-val="{{ false }}">
+                  <span style="display: flex; align-items: center; gap: 8px; margin-top: 4px">
+                    <span style="font-size: 13px; color: #f4f4f5">Taper ends 3 days before the race</span>
+                  </span>
+                </sc-if>
+              </span>
+              <span style="font-size: 12px; font-weight: 600; color: {{accent}}">{{p.badge}}</span>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8d8d93" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+            </a>
+          </div>
+        </sc-for>
+      </div>
+      <button style="align-self: flex-start; min-height: 44px; padding: 0 4px; border: none; background: transparent; color: {{accent}}; font: 500 15px 'Work Sans', sans-serif">+ Add phase</button>
+      <span style="margin: 0 4px; font-size: 13px; color: #8d8d93">Each phase starts the day after the one before.</span>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Races</h2>
+      <div style="display: flex; flex-direction: column; border-radius: 20px; background: #161618; overflow: hidden">
+        <a href="#" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; min-height: 44px; color: #f4f4f5">
+          <span style="width: 28px; height: 28px; border-radius: 14px; background: {{accent}}; color: #0b0b0c; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center">A</span>
+          <span style="flex: 1; display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px; font-weight: 500">Jevnaker Halv Full Distanse</span><span style="font-size: 13px; color: #8d8d93">Triathlon · Half · 29 Aug 2027</span></span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8d8d93" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+        </a>
+      </div>
+      <button style="align-self: flex-start; min-height: 44px; padding: 0 4px; border: none; background: transparent; color: {{accent}}; font: 500 15px 'Work Sans', sans-serif">+ Add race</button>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accent ?? '#6b95ff',
+      phases: [
+        { name: 'Aerobic base + strength', sub: 'General · 8 wk · 16 Nov – 10 Jan', badge: 'Starts Mon', warn: false },
+        { name: 'Longer ride and run', sub: 'Base · 12 wk · 11 Jan – 4 Apr', badge: '', warn: false },
+        { name: 'Swim, intervals, bricks', sub: 'Build · 12 wk · 5 Apr – 27 Jun', badge: '', warn: false },
+        { name: 'Race pace + open water', sub: 'Build · 50 days · 28 Jun – 16 Aug', badge: '', warn: false },
+        { name: 'Taper', sub: 'Taper · 10 days · 17 – 26 Aug', badge: '', warn: true }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
