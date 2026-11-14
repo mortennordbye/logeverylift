@@ -44,6 +44,7 @@ import {
   canonical,
   changeSetFor,
   diffSnapshots,
+  sessionChangeLine,
   isMemorySnapshot,
   isCycleSnapshot,
   isProgramSnapshot,
@@ -2015,7 +2016,7 @@ export async function listCycleSessionRevisions(userId: string, cycleId: number)
       if (r.action === "baseline") continue;
       const [rev] = await db.select({ snapshot: planRevisions.snapshot }).from(planRevisions).where(eq(planRevisions.id, r.id));
       const name = snapshotName(rev.snapshot as PlanSnapshot);
-      out.push({ ...r, changes: r.changes.map((c) => (c.startsWith("Added") || c.startsWith("Skipped ") ? c : `${name}: ${c}`)) });
+      out.push({ ...r, changes: r.changes.map((c) => sessionChangeLine(name, c)) });
     }
   }
   return out.sort((a, b) => b.id - a.id);
@@ -2028,8 +2029,8 @@ function conflictLines(rejected: unknown): string[] {
   if (!r?.sets?.length) return ["A change was not applied"];
   return r.sets.map((s) =>
     s.setDeleted
-      ? "Not applied: the set was removed from the plan"
-      : `Not applied: ${Object.entries(s.fields).map(([f, v]) => `${f} ${v ?? "none"}`).join(", ")}`,
+      ? "Not applied. The set was removed from the plan"
+      : `Not applied (${Object.entries(s.fields).map(([f, v]) => `${f} ${v ?? "none"}`).join(", ")})`,
   );
 }
 

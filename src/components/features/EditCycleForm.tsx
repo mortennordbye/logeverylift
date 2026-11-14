@@ -1,25 +1,39 @@
 "use client";
 
+/**
+ * Edit details of a cycle, in the Plan look of the new cycle setup
+ * (docs/design/plan-redesign J2_CycleSetup): name, length, race, what happens
+ * at the end and a note. The schedule type shows but cannot change: the
+ * sessions are built for it.
+ */
+
+import { Chip, FIELD, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
+import { BackLink, useReturnTo } from "@/components/ui/BackLink";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 /** The lengths offered as chips; any other length goes in the Custom field. */
 const MAIN_LENGTHS = [4, 6, 8, 12];
 
-const END_ACTION_OPTIONS = [
-  { value: "none", label: "None" },
-  { value: "deload", label: "Deload week" },
-  { value: "new_cycle", label: "Start new cycle" },
-  { value: "rest", label: "Rest period" },
-] as const;
-
 type EndAction = "none" | "deload" | "new_cycle" | "rest";
+
+// The words of the setup form (CreateCycleForm).
+const END_ACTIONS: { value: EndAction; label: string }[] = [
+  { value: "none", label: "Just stop" },
+  { value: "deload", label: "Deload week" },
+  { value: "new_cycle", label: "Start a new cycle" },
+  { value: "rest", label: "Rest period" },
+];
+
+const MODES = [
+  { value: "day_of_week", title: "Same days each week", sub: "Monday upper, Thursday lower" },
+  { value: "rotation", title: "Rotation", sub: "The next session follows the last one. No fixed days." },
+] as const;
 
 type Props = {
   cycle: TrainingCycle;
@@ -31,8 +45,17 @@ type Props = {
   today: string;
 };
 
+function ChipGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className={`mb-2 ${LABEL}`}>{label}</legend>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </fieldset>
+  );
+}
+
 export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, today }: Props) {
-  const router = useRouter();
+  const returnTo = useReturnTo();
   const [name, setName] = useState(cycle.name);
   const [durationWeeks, setDurationWeeks] = useState(cycle.durationWeeks);
   const [custom, setCustom] = useState(!MAIN_LENGTHS.includes(cycle.durationWeeks));
@@ -40,17 +63,13 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
   const [customWeeks, setCustomWeeks] = useState(String(cycle.durationWeeks));
   const weeks = custom ? Number(customWeeks) : durationWeeks;
   const weeksOk = Number.isInteger(weeks) && weeks >= MIN_CYCLE_WEEKS && weeks <= MAX_CYCLE_WEEKS;
-  const [endAction, setEndAction] = useState<EndAction>(
-    (cycle.endAction as EndAction) ?? "none",
-  );
+  const [endAction, setEndAction] = useState<EndAction>((cycle.endAction as EndAction) ?? "none");
   const [endMessage, setEndMessage] = useState(cycle.endMessage ?? "");
   const [raceDate, setRaceDate] = useState(cycle.raceDate ?? "");
   const [raceDistance, setRaceDistance] = useState<"full" | "half" | null>(cycle.raceDistance ?? null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const scheduleLabel =
-    cycle.scheduleType === "day_of_week" ? "Day of week" : "Rotation";
   // A cycle in a season stores no race (D8).
   const inSeason = liveSeasonId != null;
 
@@ -77,234 +96,190 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
       raceDistance: raceDate ? raceDistance : null,
     }));
 
-    setLoading(false);
     if (result.success) {
-      router.replace(`/cycles/${cycle.id}`);
+      returnTo(`/cycles/${cycle.id}`);
     } else {
+      setLoading(false);
       setError(result.error);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      {/* Name */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Name
-        </label>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Spring Strength Block"
-          className="rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2 ring-primary"
-        />
-      </div>
+    <form onSubmit={handleSubmit} className="flex flex-col" style={{ paddingBottom: "calc(140px + var(--kb-height, 0px))" }}>
+      <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-4">
+        <div className="min-w-0 justify-self-start">
+          <BackLink fallback={{ href: `/cycles/${cycle.id}`, label: cycle.name }} />
+        </div>
+        <h1 className="text-base font-semibold">Edit cycle</h1>
+        <span />
+      </header>
 
-      {/* Duration: a phase of a season sets its length on the season page. */}
-      {inSeason ? (
+      <div className="flex flex-col gap-[22px] px-4 pt-3">
         <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Duration</span>
-          <p className="text-sm text-muted-foreground">
-            {cycle.durationDays != null ? `${cycle.durationDays} days` : `${cycle.durationWeeks} weeks`}. This cycle is a phase of a season: change its length and phase type on the{" "}
-            <Link href={`/seasons/${liveSeasonId}`} className="text-primary font-medium">season page</Link>.
-          </p>
-        </div>
-      ) : (
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Duration
-        </label>
-        <div className="flex gap-2 flex-wrap">
-          {MAIN_LENGTHS.map((w) => (
-            <button
-              key={w}
-              type="button"
-              aria-pressed={!custom && durationWeeks === w}
-              onClick={() => {
-                setCustom(false);
-                setDurationWeeks(w);
-              }}
-              className={`
-                min-h-11 px-4 py-2 rounded-full text-sm font-semibold border-2 transition-colors
-                ${!custom && durationWeeks === w
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground"}
-              `}
-            >
-              {w} weeks
-            </button>
-          ))}
-          <button
-            type="button"
-            aria-pressed={custom}
-            onClick={() => setCustom(true)}
-            className={`
-              min-h-11 px-4 py-2 rounded-full text-sm font-semibold border-2 transition-colors
-              ${custom ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}
-            `}
-          >
-            Custom
-          </button>
-        </div>
-        {custom && (
-          <label className="flex items-center gap-3">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={MIN_CYCLE_WEEKS}
-              max={MAX_CYCLE_WEEKS}
-              step={1}
-              value={customWeeks}
-              onChange={(e) => setCustomWeeks(e.target.value)}
-              aria-label="Length in weeks"
-              aria-invalid={!weeksOk}
-              className="h-12 w-24 rounded-xl border border-border bg-card px-3.5 text-base outline-none focus:ring-2 ring-primary aria-[invalid=true]:border-destructive"
-            />
-            <span className="text-base text-muted-foreground">
-              weeks ({MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS})
-            </span>
+          <label htmlFor="cycle-name" className={LABEL}>
+            Name
           </label>
-        )}
-        {durationWarning && (
-          <p className="text-sm text-destructive">{durationWarning}</p>
-        )}
-      </div>
-      )}
+          <input
+            id="cycle-name"
+            value={name}
+            maxLength={100}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Upper / Lower hypertrophy"
+            className={`${FIELD} placeholder:text-muted-foreground`}
+          />
+        </div>
 
-      {/* Race: what the Garmin race views count down to. Part of the endurance
-          add-on; a cycle that already has a race keeps showing it, so no stored
-          value is hidden from its owner. */}
-      {inSeason && (
-        <div id="race" className="flex flex-col gap-2 scroll-mt-4">
-          <span className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Race</span>
-          <p className="text-sm text-muted-foreground" data-testid="season-race-note">
-            Races are set on the season.
+        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+          <legend className={`mb-2 ${LABEL}`}>How do you train?</legend>
+          {MODES.map((m) => (
+            <RadioCard
+              key={m.value}
+              name="scheduleType"
+              checked={cycle.scheduleType === m.value}
+              onChange={() => {}}
+              disabled
+              title={m.title}
+              sub={m.sub}
+            />
+          ))}
+          <p className="mx-1 text-[13px] text-muted-foreground">The schedule type can&apos;t be changed after the cycle is made.</p>
+        </fieldset>
+
+        {/* A phase of a season sets its length on the season page. */}
+        {inSeason ? (
+          <div className="flex flex-col gap-2">
+            <span className={LABEL}>Length</span>
+            <p className="text-[13px] text-muted-foreground">
+              {cycle.durationDays != null ? `${cycle.durationDays} days` : `${cycle.durationWeeks} weeks`}. This cycle is a phase of a
+              season. Change its length and phase type on the{" "}
+              <Link href={`/seasons/${liveSeasonId}`} className="inline-flex min-h-11 items-center font-medium text-primary active:opacity-70">
+                season page
+              </Link>
+              .
+            </p>
+          </div>
+        ) : (
+          <>
+            <ChipGroup label="Length">
+              {MAIN_LENGTHS.map((w) => (
+                <Chip
+                  key={w}
+                  pressed={!custom && durationWeeks === w}
+                  onClick={() => {
+                    setCustom(false);
+                    setDurationWeeks(w);
+                  }}
+                >
+                  {w} weeks
+                </Chip>
+              ))}
+              <Chip pressed={custom} onClick={() => setCustom(true)}>
+                Custom
+              </Chip>
+            </ChipGroup>
+            {custom && (
+              <label className="-mt-2 flex flex-col gap-2">
+                <span className="text-[13px] text-muted-foreground">
+                  {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks
+                </span>
+                <span className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={MIN_CYCLE_WEEKS}
+                    max={MAX_CYCLE_WEEKS}
+                    step={1}
+                    value={customWeeks}
+                    onChange={(e) => setCustomWeeks(e.target.value)}
+                    aria-label="Length in weeks"
+                    aria-invalid={!weeksOk}
+                    className={`${FIELD} !w-24 aria-[invalid=true]:border-[#ff6b5a]`}
+                  />
+                  <span className="text-base text-muted-foreground">weeks</span>
+                </span>
+              </label>
+            )}
+            {durationWarning && <p className="-mt-2 text-[13px] text-[#ff6b5a]">{durationWarning}</p>}
+          </>
+        )}
+
+        {/* Race: what the Garmin race views count down to. Part of the endurance
+            add-on; a cycle that already has a race keeps showing it, so no stored
+            value is hidden from its owner. */}
+        {inSeason && (
+          <div id="race" className="flex scroll-mt-4 flex-col gap-2">
+            <span className={LABEL}>Race</span>
+            <p className="text-[13px] text-muted-foreground" data-testid="season-race-note">
+              Races are set on the season.
+            </p>
+          </div>
+        )}
+        {!inSeason && (enduranceEnabled || cycle.raceDate) && (
+          <div id="race" className="flex scroll-mt-4 flex-col gap-2">
+            <label htmlFor="race-date" className={LABEL}>
+              Race <span className="font-normal normal-case">(optional)</span>
+            </label>
+            <input id="race-date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={FIELD} />
+            {raceDate && (
+              <div className="flex flex-wrap gap-2" role="group" aria-label="Race distance">
+                {([["full", "Ironman"], ["half", "70.3"]] as const).map(([value, label]) => (
+                  <Chip key={value} pressed={raceDistance === value} onClick={() => setRaceDistance(raceDistance === value ? null : value)}>
+                    {label}
+                  </Chip>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRaceDate("");
+                    setRaceDistance(null);
+                  }}
+                  className="ml-auto min-h-11 px-3 text-sm text-muted-foreground active:opacity-60"
+                >
+                  Clear
+                </button>
+              </div>
+            )}
+            <p className="text-[13px] text-muted-foreground">
+              The Garmin page counts down to this date and checks your training against the race distance.
+            </p>
+          </div>
+        )}
+
+        <ChipGroup label="When it ends">
+          {END_ACTIONS.map((a) => (
+            <Chip key={a.value} pressed={endAction === a.value} onClick={() => setEndAction(a.value)}>
+              {a.label}
+            </Chip>
+          ))}
+        </ChipGroup>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="cycle-note" className={LABEL}>
+            Note to future self (optional)
+          </label>
+          <textarea
+            id="cycle-note"
+            value={endMessage}
+            maxLength={500}
+            onChange={(e) => setEndMessage(e.target.value)}
+            placeholder="Test your 1RM"
+            rows={2}
+            className={`${FIELD} resize-none py-3 placeholder:text-muted-foreground`}
+          />
+        </div>
+
+        {error && (
+          <p role="alert" className="text-sm text-[#ff6b5a]">
+            {error}
           </p>
-        </div>
-      )}
-      {!inSeason && (enduranceEnabled || cycle.raceDate) && (
-      <div id="race" className="flex flex-col gap-2 scroll-mt-4">
-        <label htmlFor="race-date" className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Race <span className="normal-case font-normal">(optional)</span>
-        </label>
-        <input
-          id="race-date"
-          type="date"
-          value={raceDate}
-          onChange={(e) => setRaceDate(e.target.value)}
-          className="rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2 ring-primary min-h-[44px]"
-        />
-        <div className="flex gap-2" role="group" aria-label="Race distance">
-          {([["full", "Ironman"], ["half", "70.3"]] as const).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              aria-pressed={raceDistance === value}
-              disabled={!raceDate}
-              onClick={() => setRaceDistance(raceDistance === value ? null : value)}
-              className={`
-                px-4 min-h-[44px] rounded-full text-sm font-semibold border-2 transition-colors disabled:opacity-40
-                ${raceDistance === value ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}
-              `}
-            >
-              {label}
-            </button>
-          ))}
-          {raceDate && (
-            <button type="button" onClick={() => { setRaceDate(""); setRaceDistance(null); }} className="ml-auto px-3 min-h-[44px] text-sm text-muted-foreground active:opacity-60">
-              Clear
-            </button>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          The Garmin page counts down to this date and checks your training against the race distance.
-        </p>
-      </div>
-      )}
-
-      {/* Schedule type — read-only after creation */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Schedule type
-        </label>
-        <div className="flex rounded-xl overflow-hidden border border-border opacity-60">
-          <div
-            className={`
-              flex-1 py-3 text-sm font-semibold text-center transition-colors
-              ${cycle.scheduleType === "day_of_week" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}
-            `}
-          >
-            Day of week
-          </div>
-          <div
-            className={`
-              flex-1 py-3 text-sm font-semibold text-center transition-colors
-              ${cycle.scheduleType === "rotation" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}
-            `}
-          >
-            Rotation
-          </div>
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {cycle.scheduleType === "day_of_week"
-            ? "Each weekday has a workout. Missed days don't carry over — Monday's leg day stays on Monday."
-            : "Follow a sequence in order. Missed workouts repeat until done; rest days auto-advance with the calendar."}
-        </p>
-        <p className="text-xs text-muted-foreground">
-          {scheduleLabel} — schedule type can&apos;t be changed after creation
-        </p>
+        )}
       </div>
 
-      {/* End action */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          When cycle ends
-        </label>
-        <div className="flex flex-col rounded-xl overflow-hidden border border-border divide-y divide-border">
-          {END_ACTION_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setEndAction(opt.value)}
-              className={`
-                flex items-center justify-between px-4 py-3 text-sm transition-colors
-                ${endAction === opt.value ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}
-              `}
-            >
-              {opt.label}
-              {endAction === opt.value && (
-                <span className="w-2 h-2 rounded-full bg-primary" />
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* End message */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Note to future self{" "}
-          <span className="normal-case font-normal">(optional)</span>
-        </label>
-        <textarea
-          value={endMessage}
-          onChange={(e) => setEndMessage(e.target.value)}
-          placeholder="e.g. Time to test your 1RM!"
-          rows={3}
-          className="rounded-xl bg-muted px-4 py-3 text-sm outline-none focus:ring-2 ring-primary resize-none"
-        />
-      </div>
-
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={loading || !name.trim() || !!durationWarning || !weeksOk}
-        className="rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-95 transition-transform"
-      >
-        {loading ? "Saving…" : "Save Changes"}
-      </button>
-      <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
+      <PinnedBar>
+        <button type="submit" disabled={loading || !name.trim() || !!durationWarning || !weeksOk} className={PRIMARY_BUTTON}>
+          {loading ? "Saving…" : "Save"}
+        </button>
+      </PinnedBar>
     </form>
   );
 }

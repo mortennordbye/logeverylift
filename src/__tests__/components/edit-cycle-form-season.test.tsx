@@ -56,7 +56,7 @@ describe("a cycle that is a phase of a season", () => {
 
   it("saves the name without a length, so 10 days stay 10 days", async () => {
     render(<EditCycleForm cycle={base} enduranceEnabled liveSeasonId={7} today="2026-11-14" />);
-    fireEvent.change(screen.getByPlaceholderText("e.g. Spring Strength Block"), { target: { value: "Race taper" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Race taper" } });
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(updateTrainingCycle).toHaveBeenCalled());
     const sent = vi.mocked(updateTrainingCycle).mock.calls[0][0] as Record<string, unknown>;

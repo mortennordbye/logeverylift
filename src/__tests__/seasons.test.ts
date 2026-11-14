@@ -254,9 +254,9 @@ describe("season history text", () => {
       phases: [{ cycleId: 9, name: "Base", phaseOrder: 1, phaseType: "base" }],
     });
     expect(diffSnapshots(snap(), after)).toEqual([
-      "end 2027-09-30 → 2027-10-15",
-      "Flagged for a re-plan: moved",
-      'Added A race "Haugesund" on 2027-08-22',
+      "End changed from 30 Sep 2027 to 15 Oct 2027",
+      "Flagged for a re-plan (moved)",
+      'Added A race "Haugesund" on 22 Aug 2027',
       'Phase "Base" added',
     ]);
     expect(diffSnapshots(after, snap())).toContain("Marked as re-planned");

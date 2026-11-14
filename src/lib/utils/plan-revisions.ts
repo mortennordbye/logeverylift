@@ -7,6 +7,7 @@
 
 import type { ThresholdKind } from "@/db/schema/athlete-profile";
 import type { PlanWriter } from "@/db/schema/plan-revisions";
+import { PHASE_TYPE_LABELS, dayLabel, shortDay } from "@/lib/utils/seasons";
 import { THRESHOLD_LABEL, formatThreshold } from "@/lib/utils/thresholds";
 
 export type Row = { id: number } & Record<string, unknown>;
@@ -62,10 +63,23 @@ const INJURY_AREA_TEXT = (area: unknown) => String(area ?? "other").replace("_",
 export const isSeasonSnapshot = (s: PlanSnapshot): s is SeasonSnapshot => "season" in s;
 export const isPlannedSessionSnapshot = (s: PlanSnapshot): s is PlannedSessionSnapshot => "session" in s;
 
+// A rotation override names no number: its rotationPosition counts every
+// session of the block, while the session sheet numbers the slots ("position
+// 2 of 5"), and the slot count is not in the snapshot.
 const sessionTitle = (s: PlannedSessionSnapshot) => {
   const what = s.session.label ?? s.programName ?? "Session";
-  return s.session.date ? `${what} on ${s.session.date}` : `${what} (rotation, position ${Number(s.session.rotationPosition) + 1})`;
+  return s.session.date ? `${what} on ${shortDay(String(s.session.date))}` : `${what} in the rotation`;
 };
+
+/**
+ * One change to a dated session on its cycle's history, joined to the session
+ * it is about ("Squat day on Wed 4 Nov, moved from ..."). A line that names the
+ * session already stays as it is.
+ */
+export function sessionChangeLine(name: string, change: string): string {
+  if (change.startsWith("Added") || change.startsWith("Skipped ")) return change;
+  return `${name}, ${change.charAt(0).toLowerCase()}${change.slice(1)}`;
+}
 
 /** The name an object goes by in the history and the AI changes feed. */
 export function snapshotName(s: PlanSnapshot): string {
@@ -226,42 +240,83 @@ const EXERCISE_FIELDS: Record<string, string> = {
   weightStack: "weight stack",
 };
 
-const CYCLE_FIELDS: Record<string, string> = {
-  name: "name",
-  durationWeeks: "weeks",
-  scheduleType: "schedule",
-  goal: "goal",
-  athleteLevel: "level",
-  raceDate: "race date",
-  raceDistance: "race distance",
-  status: "status",
-  startDate: "start date",
-  endAction: "end action",
-  endMessage: "end message",
-  adaptationPct: "volume adjustment",
-  scheduledStartDate: "scheduled start",
-  durationDays: "days",
-  seasonId: "season",
-  phaseOrder: "phase position",
-  phaseType: "phase type",
+/** A Plan field on the history page: its label, and how a value reads (plain text when absent). */
+type PlanField = { label: string; value?: (v: unknown) => string };
+
+const date: PlanField["value"] = (v) => dayLabel(String(v));
+const weeks: PlanField["value"] = (v) => `${v} week${Number(v) === 1 ? "" : "s"}`;
+const days: PlanField["value"] = (v) => `${v} day${Number(v) === 1 ? "" : "s"}`;
+
+// The words of the cycle setup form (src/components/features/CreateCycleForm.tsx).
+const SCHEDULE_TEXT: Record<string, string> = { day_of_week: "Same days each week", rotation: "Rotation" };
+const END_TEXT: Record<string, string> = { none: "Just stop", deload: "Deload week", new_cycle: "Start a new cycle", rest: "Rest period" };
+const RACE_DISTANCE_TEXT: Record<string, string> = { full: "Ironman", half: "70.3" };
+
+const CYCLE_FIELDS: Record<string, PlanField> = {
+  name: { label: "Name" },
+  durationWeeks: { label: "Length", value: weeks },
+  scheduleType: { label: "Schedule", value: (v) => SCHEDULE_TEXT[String(v)] ?? String(v) },
+  goal: { label: "Goal" },
+  athleteLevel: { label: "Level" },
+  raceDate: { label: "Race date", value: date },
+  raceDistance: { label: "Race distance", value: (v) => RACE_DISTANCE_TEXT[String(v)] ?? String(v) },
+  status: { label: "Status" },
+  startDate: { label: "Start date", value: date },
+  endAction: { label: "When it ends", value: (v) => END_TEXT[String(v)] ?? String(v) },
+  endMessage: { label: "Note to future self" },
+  adaptationPct: { label: "Volume adjustment", value: (v) => `${v}%` },
+  scheduledStartDate: { label: "Scheduled start", value: date },
+  durationDays: { label: "Length in days", value: days },
+  phaseOrder: { label: "Phase position" },
+  phaseType: { label: "Phase type", value: (v) => phaseTypeText(String(v)) ?? "" },
 };
 
-const SEASON_FIELDS: Record<string, string> = {
-  name: "name",
-  goal: "goal",
-  startDate: "start",
-  endDate: "end",
-  nextGoal: "next goal",
+const SEASON_FIELDS: Record<string, PlanField> = {
+  name: { label: "Name" },
+  goal: { label: "Goal" },
+  startDate: { label: "Start", value: date },
+  endDate: { label: "End", value: date },
+  nextGoal: { label: "Next goal" },
 };
 
-const RACE_FIELDS: Record<string, string> = {
-  name: "name",
-  raceDate: "date",
-  discipline: "kind",
-  distance: "distance",
-  distanceMeters: "metres",
-  priority: "priority",
+const RACE_FIELDS: Record<string, PlanField> = {
+  name: { label: "name" },
+  raceDate: { label: "date", value: date },
+  discipline: { label: "kind" },
+  distance: { label: "distance" },
+  distanceMeters: { label: "distance in metres" },
+  priority: { label: "priority" },
 };
+
+/** One value change as a sentence: "Label set to X", "Label cleared" or "Label changed from X to Y". */
+function changeLine(what: string, from: unknown, to: unknown): string {
+  const none = (v: unknown) => v == null || v === "";
+  if (none(from)) return `${what} set to ${to}`;
+  if (none(to)) return `${what} cleared`;
+  return `${what} changed from ${from} to ${to}`;
+}
+
+const phaseTypeText = (v: string | null) => (v == null ? null : (PHASE_TYPE_LABELS[v as keyof typeof PHASE_TYPE_LABELS] ?? v));
+
+/**
+ * Plan field changes as sentences, with no colon ("Start date set to 31 Oct
+ * 2026", "Length changed from 8 weeks to 10 weeks"). `prefix` names the part a
+ * field belongs to ('Race "Haugesund" date changed ...').
+ */
+function planFieldLines(prefix: string, fields: Record<string, PlanField>, before: Row, after: Row): string[] {
+  const out: string[] = [];
+  for (const [field, { label, value }] of Object.entries(fields)) {
+    if (sameValue(before[field], after[field])) continue;
+    const what = `${prefix}${label}`;
+    if (field === "endMessage") {
+      out.push(`${what} changed`);
+      continue;
+    }
+    const text = (v: unknown) => (v == null || v === "" ? null : value ? value(v) : String(v));
+    out.push(changeLine(what, text(before[field]), text(after[field])));
+  }
+  return out;
+}
 
 const MEMORY_FIELDS: Record<string, string> = {
   kind: "kind",
@@ -330,24 +385,24 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     if (!prev) return [a.status === "skipped" ? `Skipped ${sessionTitle(after)}` : `Added ${sessionTitle(after)}`];
     const b = prev.session;
     const out: string[] = [];
-    if (!sameValue(b.date, a.date)) out.push(`Moved from ${b.date} to ${a.date}`);
-    if (!sameValue(b.position, a.position) && sameValue(b.date, a.date)) out.push(`Order in the day ${b.position} → ${a.position}`);
-    if (!sameValue(b.programId, a.programId)) out.push(`Program ${prev.programName ?? "none"} → ${after.programName ?? "none"}`);
-    if (!sameValue(b.label ?? null, a.label ?? null)) out.push(`Label ${b.label ?? "none"} → ${a.label ?? "none"}`);
+    if (!sameValue(b.date, a.date)) out.push(`Moved from ${shortDay(String(b.date))} to ${shortDay(String(a.date))}`);
+    if (!sameValue(b.position, a.position) && sameValue(b.date, a.date)) out.push(changeLine("Order in the day", b.position, a.position));
+    if (!sameValue(b.programId, a.programId)) out.push(changeLine("Program", prev.programName, after.programName));
+    if (!sameValue(b.label ?? null, a.label ?? null)) out.push(changeLine("Label", b.label, a.label));
     if (!sameValue(b.notes ?? null, a.notes ?? null)) out.push("Notes changed");
     if (canonical(b.workout ?? null) !== canonical(a.workout ?? null)) {
       const name = (w: unknown) => (w && typeof w === "object" ? String((w as { name?: unknown }).name ?? "workout") : null);
-      out.push(a.workout == null ? `Workout ${name(b.workout)} cleared` : b.workout == null ? `Workout set: ${name(a.workout)}` : `Workout changed: ${name(b.workout)} → ${name(a.workout)}`);
+      out.push(a.workout == null ? `Workout ${name(b.workout)} cleared` : b.workout == null ? `Workout set to ${name(a.workout)}` : `Workout changed from ${name(b.workout)} to ${name(a.workout)}`);
     }
-    if (!sameValue(b.priority ?? null, a.priority ?? null)) out.push(`Priority ${b.priority ?? "default"} → ${a.priority ?? "default"}`);
+    if (!sameValue(b.priority ?? null, a.priority ?? null)) out.push(changeLine("Priority", b.priority ?? "default", a.priority ?? "default"));
     if (!sameValue(b.brickParentId ?? null, a.brickParentId ?? null)) out.push(a.brickParentId == null ? "Brick unlinked" : "Linked as a brick");
     if (!sameValue(b.garminActivityId ?? null, a.garminActivityId ?? null)) out.push(a.garminActivityId == null ? "Garmin activity unlinked" : "Garmin activity picked");
     if (!sameValue(b.status, a.status)) {
       out.push(
         a.status === "skipped"
-          ? `Skipped${a.skipReason ? `: ${a.skipReason}` : ""}`
+          ? `Skipped${a.skipReason ? ` (${a.skipReason})` : ""}`
           : a.status === "missed"
-            ? `Confirmed missed${a.missedReason ? `: ${a.missedReason}` : ""}`
+            ? `Confirmed missed${a.missedReason ? ` (${a.missedReason})` : ""}`
             : "Planned again",
       );
     }
@@ -432,16 +487,16 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
   if (isSeasonSnapshot(after)) {
     const prev = before && isSeasonSnapshot(before) ? before : null;
     if (!prev) return [`Created season "${after.season.name}"`];
-    const out = fieldLines("", SEASON_FIELDS, prev.season, after.season);
+    const out = planFieldLines("", SEASON_FIELDS, prev.season, after.season);
     if (!sameValue(prev.season.replanFlaggedAt ?? null, after.season.replanFlaggedAt ?? null)) {
-      out.push(after.season.replanFlaggedAt ? `Flagged for a re-plan: ${after.season.replanReason ?? ""}`.trim() : "Marked as re-planned");
+      out.push(after.season.replanFlaggedAt ? after.season.replanReason ? `Flagged for a re-plan (${after.season.replanReason})` : "Flagged for a re-plan" : "Marked as re-planned");
     }
     const prevRaces = new Map(prev.races.map((r) => [r.id, r]));
     const nextIds = new Set(after.races.map((r) => r.id));
     for (const r of after.races) {
       const old = prevRaces.get(r.id);
-      if (!old) out.push(`Added ${r.priority} race "${r.name}" on ${r.raceDate}`);
-      else out.push(...fieldLines(`Race "${old.name}": `, RACE_FIELDS, old, r));
+      if (!old) out.push(`Added ${r.priority} race "${r.name}" on ${dayLabel(String(r.raceDate))}`);
+      else out.push(...planFieldLines(`Race "${old.name}" `, RACE_FIELDS, old, r));
     }
     for (const r of prev.races) if (!nextIds.has(r.id)) out.push(`Removed race "${r.name}"`);
     const prevPhases = new Map(prev.phases.map((p) => [p.cycleId, p]));
@@ -449,8 +504,9 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     for (const p of after.phases) {
       const old = prevPhases.get(p.cycleId);
       if (!old) out.push(`Phase "${p.name}" added`);
-      else if (old.phaseOrder !== p.phaseOrder || old.phaseType !== p.phaseType) {
-        out.push(`Phase "${p.name}": position ${old.phaseOrder} → ${p.phaseOrder}${old.phaseType !== p.phaseType ? `, type ${old.phaseType ?? "none"} → ${p.phaseType ?? "none"}` : ""}`);
+      else {
+        if (old.phaseOrder !== p.phaseOrder) out.push(`Phase "${p.name}" moved from position ${old.phaseOrder} to ${p.phaseOrder}`);
+        if (old.phaseType !== p.phaseType) out.push(changeLine(`Phase "${p.name}" type`, phaseTypeText(old.phaseType), phaseTypeText(p.phaseType)));
       }
     }
     for (const p of prev.phases) if (!nextPhaseIds.has(p.cycleId)) out.push(`Phase "${p.name}" removed`);
@@ -482,43 +538,61 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
         continue;
       }
       const label = exerciseLabel(e);
-      out.push(...fieldLines(`${label}: `, EXERCISE_FIELDS, old, e));
+      out.push(...fieldLines(`${label}, `, EXERCISE_FIELDS, old, e));
       const oldSets = new Map(old.sets.map((s) => [s.id, s]));
       const newIds = new Set(e.sets.map((s) => s.id));
       for (const s of e.sets) {
         const was = oldSets.get(s.id);
-        if (!was) out.push(`${label}: added set ${s.setNumber}`);
-        else out.push(...fieldLines(`${label}, set ${was.setNumber}: `, SET_FIELDS, was, s, true));
+        if (!was) out.push(`${label}, added set ${s.setNumber}`);
+        else out.push(...fieldLines(`${label}, set ${was.setNumber}, `, SET_FIELDS, was, s, true));
       }
-      for (const s of old.sets) if (!newIds.has(s.id)) out.push(`${label}: removed set ${s.setNumber}`);
+      for (const s of old.sets) if (!newIds.has(s.id)) out.push(`${label}, removed set ${s.setNumber}`);
     }
     for (const e of prev.exercises) if (!nextEx.has(e.id)) out.push(`Removed ${exerciseLabel(e)}`);
     return out;
   }
   const prev = before && isCycleSnapshot(before) ? before : null;
   if (!prev) return [`Created "${after.cycle.name}"`];
-  const out = fieldLines("", CYCLE_FIELDS, prev.cycle, after.cycle);
-  // A day's second and third sessions get their number (docs/plans/sessions.md, 3.1).
-  const slotKey = (s: SlotSnap) =>
-    s.dayOfWeek != null
-      ? `${DAYS[Number(s.dayOfWeek)] ?? `Day ${s.dayOfWeek}`}${Number(s.daySlot ?? 1) > 1 ? ` (session ${s.daySlot})` : ""}`
-      : `Day ${s.orderIndex}`;
+  const out = planFieldLines("", CYCLE_FIELDS, prev.cycle, after.cycle);
+  if (!sameValue(prev.cycle.seasonId, after.cycle.seasonId)) {
+    out.push(prev.cycle.seasonId == null ? "Added to a season" : after.cycle.seasonId == null ? "Taken out of its season" : "Moved to another season");
+  }
+  // Slots match on their day (a day's second and third sessions by number,
+  // docs/plans/sessions.md, 3.1) or their order index.
+  const slotKey = (s: SlotSnap) => (s.dayOfWeek != null ? `d${s.dayOfWeek}.${s.daySlot ?? 1}` : `o${s.orderIndex}`);
+  // Where a slot is, in words. A rotation slot shows its place from 1, as the
+  // session sheet does: order indexes may start at 0 or have gaps.
+  const placeIn = (slots: SlotSnap[]) => {
+    const order = slots.filter((s) => s.dayOfWeek == null).sort((a, b) => Number(a.orderIndex ?? 0) - Number(b.orderIndex ?? 0));
+    return (s: SlotSnap) =>
+      s.dayOfWeek != null
+        ? `${DAYS[Number(s.dayOfWeek)] ?? `day ${s.dayOfWeek}`}${Number(s.daySlot ?? 1) > 1 ? `, session ${s.daySlot}` : ""}`
+        : `position ${order.indexOf(s) + 1}`;
+  };
+  const placeBefore = placeIn(prev.slots);
+  const placeAfter = placeIn(after.slots);
+  const onOrAt = (s: SlotSnap, place: string) => (s.dayOfWeek != null ? `on ${place}` : `at ${place}`);
   const slotText = (s: SlotSnap) => s.label ?? s.programName ?? (s.programId == null ? "rest" : `program ${s.programId}`);
   const prevSlots = new Map(prev.slots.map((s) => [slotKey(s), s]));
   const nextSlots = new Map(after.slots.map((s) => [slotKey(s), s]));
   for (const [key, s] of nextSlots) {
     const old = prevSlots.get(key);
-    if (!old) out.push(`${key}: added ${slotText(s)}`);
+    const place = placeAfter(s);
+    if (!old) out.push(`Added ${slotText(s)} ${onOrAt(s, place)}`);
     else if (
       !sameValue(old.programId, s.programId) ||
       !sameValue(old.label, s.label) ||
       !sameValue(old.autoComplete, s.autoComplete) ||
       !sameValue(old.notes, s.notes)
     ) {
-      out.push(`${key}: ${slotText(old)} → ${slotText(s)}`);
+      out.push(
+        slotText(old) === slotText(s)
+          ? `${slotText(s)} ${onOrAt(s, place)} changed`
+          : `${place.charAt(0).toUpperCase()}${place.slice(1)} changed from ${slotText(old)} to ${slotText(s)}`,
+      );
     }
   }
-  for (const [key, s] of prevSlots) if (!nextSlots.has(key)) out.push(`${key}: removed ${slotText(s)}`);
+  for (const [key, s] of prevSlots) if (!nextSlots.has(key)) out.push(`Removed ${slotText(s)} from ${placeBefore(s)}`);
   return out;
 }
 
