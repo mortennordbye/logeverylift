@@ -34,7 +34,7 @@ const row = "flex items-center gap-3 min-h-[44px] border-t border-hairline px-[1
 export function SeasonCard({ season }: { season: SeasonCardView }) {
   const { race } = season;
   return (
-    <section className="flex flex-col overflow-hidden rounded-[20px] bg-widget" data-testid="season-card" aria-label={season.name}>
+    <section className="flex shrink-0 flex-col overflow-hidden rounded-[20px] bg-widget" data-testid="season-card" aria-label={season.name}>
       <Link href={`/seasons/${season.id}`} className="flex flex-col gap-3 px-[18px] pt-4 pb-3 active:opacity-70">
         {race ? (
           <div className="flex items-baseline justify-between gap-2">

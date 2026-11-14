@@ -196,4 +196,16 @@ test("make a triathlon plan: five phases from the start to race day", async ({ p
     .where(eq(trainingCycles.seasonId, season.id))
     .orderBy(asc(trainingCycles.phaseOrder));
   expect(types.map((t) => t.phaseType)).toEqual(["general", "base", "build", "peak", "taper"]);
+
+  // On the Plan list the five-phase card keeps its full height: no row is
+  // squashed and the A race row at the bottom is not cut off.
+  await page.goto("/cycles");
+  const card = page.getByTestId("season-card");
+  const raceRow = card.getByRole("link", { name: /Jevnaker Halv Full Distanse/ });
+  await expect(raceRow).toBeVisible();
+  const fit = await card.evaluate((el) => ({ client: el.clientHeight, scroll: el.scrollHeight }));
+  expect(fit.scroll).toBeLessThanOrEqual(fit.client);
+  const [cardBox, rowBox] = [await card.boundingBox(), await raceRow.boundingBox()];
+  expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(cardBox!.y + cardBox!.height + 1);
+  expect(rowBox!.height).toBeGreaterThanOrEqual(44);
 });
