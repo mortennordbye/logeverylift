@@ -3,8 +3,11 @@
 /**
  * Small parts the season screens share, drawn to the Plan tab spec
  * (docs/design/plan-redesign/spec.md): section labels, radio cards, chips,
- * a segmented choice and the pinned bottom bar. Used inside `.home-ui`.
+ * a segmented choice, the race fields and the pinned bottom bar. Used inside `.home-ui`.
  */
+
+import type { RaceDiscipline, RacePriority } from "@/lib/utils/seasons";
+import { useId } from "react";
 
 /** The selected chip tint comes from the accent, never a fixed blue. */
 export const ACCENT_TINT = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
@@ -19,6 +22,16 @@ export function SectionLabel({ children, id }: { children: React.ReactNode; id?:
     <h2 id={id} className={`${LABEL} mx-1`}>
       {children}
     </h2>
+  );
+}
+
+/** A labelled row of chips, as a fieldset. */
+export function ChipGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className={`mb-2 ${LABEL}`}>{label}</legend>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </fieldset>
   );
 }
 
@@ -77,19 +90,8 @@ export function Chip({ pressed, onClick, children }: { pressed: boolean; onClick
 }
 
 /** A labelled row of chips, one of them chosen: the label is on screen and names the group. */
-export function ChipChoice<T extends string>({
-  id,
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  id: string;
-  label: string;
-  value: T;
-  options: { value: T; label: string }[];
-  onChange: (v: T) => void;
-}) {
+function ChipChoice<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+  const id = useId();
   return (
     <div className="flex flex-col gap-2">
       <span id={id} className={LABEL}>
@@ -105,12 +107,6 @@ export function ChipChoice<T extends string>({
     </div>
   );
 }
-
-export const PRIORITIES: { value: "A" | "B" | "C"; label: string }[] = [
-  { value: "A", label: "A" },
-  { value: "B", label: "B" },
-  { value: "C", label: "C" },
-];
 
 /** Two or three equal choices in one rounded track; the chosen one has the accent tint of a chosen chip. */
 export function Segmented<T extends string>({
@@ -145,6 +141,37 @@ export function Segmented<T extends string>({
   );
 }
 
+export const RACE_KIND_LABELS: Record<RaceDiscipline, string> = { triathlon: "Triathlon", run: "Run", ride: "Ride", swim: "Swim", other: "Other" };
+const RACE_KINDS = Object.keys(RACE_KIND_LABELS) as RaceDiscipline[];
+
+/** The sport of a race form, as a row of chips under the label "Sport". */
+export function RaceKindChips({ value, onChange }: { value: RaceDiscipline; onChange: (v: RaceDiscipline) => void }) {
+  return <ChipChoice label="Sport" value={value} options={RACE_KINDS.map((d) => ({ value: d, label: RACE_KIND_LABELS[d] }))} onChange={onChange} />;
+}
+
+/** The triathlon distances of a race form's select, shortest first. */
+export function TriDistanceOptions() {
+  return (
+    <>
+      <option value="sprint">Sprint</option>
+      <option value="olympic">Olympic</option>
+      <option value="half">Half</option>
+      <option value="full">Full</option>
+    </>
+  );
+}
+
+const PRIORITIES: { value: RacePriority; label: string }[] = [
+  { value: "A", label: "A" },
+  { value: "B", label: "B" },
+  { value: "C", label: "C" },
+];
+
+/** A race's priority, A, B or C, as chips under its label: the same selected style as the sport chips. */
+export function RacePriorityRow({ value, onChange }: { value: RacePriority; onChange: (v: RacePriority) => void }) {
+  return <ChipChoice label="Priority" value={value} options={PRIORITIES} onChange={onChange} />;
+}
+
 /**
  * The pinned bottom bar of a form screen: one full-width primary button. It
  * sits over the tab bar, so a form screen shows no tab bar.
@@ -167,6 +194,16 @@ export function ButtonReason({ id, reason }: { id: string; reason: string | null
   return (
     <p id={id} className="mt-2 text-center text-[13px] text-muted-foreground">
       {reason}
+    </p>
+  );
+}
+
+/** A failed save's message, read out as an alert. Nothing renders for a null error. */
+export function ErrorLine({ error }: { error: string | null }) {
+  if (!error) return null;
+  return (
+    <p role="alert" className={`text-sm ${DESTRUCTIVE_TEXT}`}>
+      {error}
     </p>
   );
 }

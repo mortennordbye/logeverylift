@@ -15,13 +15,13 @@
  */
 
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
-import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, FormHeader, LABEL, PinnedBar, StepProgress, WeeksField } from "@/components/features/season-ui";
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
+import { ButtonReason, Chip, ChipGroup, ErrorLine, FormHeader, LABEL, PinnedBar, StepProgress, WeeksField } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { addDays, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
-import { choiceFor, startDayFor, type StartChoice, type StartDays } from "@/lib/utils/cycle-setup";
+import { END_ACTIONS, MAIN_LENGTHS, SCHEDULE_MODES, choiceFor, startDayFor, type EndAction, type ScheduleType, type StartChoice, type StartDays } from "@/lib/utils/cycle-setup";
 import { dropsScheduledLine, endsRunningLine, runningOn, type RunningCycle, type ScheduledDraft } from "@/lib/utils/cycle-start";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -29,26 +29,7 @@ import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycl
 import type { TrainingCycle, TrainingCycleWithSlots } from "@/types/workout";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
-
-type ScheduleType = "day_of_week" | "rotation";
-type EndAction = "none" | "deload" | "new_cycle" | "rest";
-
-const MAIN_LENGTHS = [4, 6, 8, 12];
-
-const MODES: { value: ScheduleType; title: string; sub: string }[] = [
-  { value: "day_of_week", title: "Same days each week", sub: "Monday upper, Thursday lower" },
-  { value: "rotation", title: "Rotation", sub: "The next session follows the last one. No fixed days." },
-];
-
-const END_ACTIONS: { value: EndAction; label: string }[] = [
-  { value: "none", label: "Just stop" },
-  { value: "deload", label: "Deload week" },
-  { value: "new_cycle", label: "Start a new cycle" },
-  { value: "rest", label: "Rest period" },
-];
-
-const SECTION = "text-xs font-semibold tracking-[1px] uppercase text-muted-foreground";
+import { useState } from "react";
 
 /** A setup URL: step 2 of `cycleId`, or step 1 of it with `step1`. */
 export function setupHref(cycleId: number, start: string, step1 = false): string {
@@ -61,15 +42,6 @@ export function setupHref(cycleId: number, start: string, step1 = false): string
 
 const PRIMARY =
   "h-[52px] w-full rounded-2xl bg-brand text-primary-foreground text-base font-semibold active:opacity-80 disabled:opacity-50";
-
-function ChipGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <fieldset className="m-0 p-0 border-0 flex flex-col gap-2">
-      <legend className={`mb-2 ${SECTION}`}>{label}</legend>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </fieldset>
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 1
@@ -154,7 +126,7 @@ export function CreateCycleForm({
         <StepProgress step={1} of={2} />
 
         <label className="flex flex-col gap-2">
-          <span className={SECTION}>Name</span>
+          <span className={LABEL}>Name</span>
           <input
             autoFocus={!draft}
             value={name}
@@ -166,8 +138,8 @@ export function CreateCycleForm({
         </label>
 
         <fieldset className="m-0 p-0 border-0 flex flex-col gap-2">
-          <legend className={`mb-2 ${SECTION}`}>How do you train?</legend>
-          {MODES.map((m) => {
+          <legend className={`mb-2 ${LABEL}`}>How do you train?</legend>
+          {SCHEDULE_MODES.map((m) => {
             const on = scheduleType === m.value;
             return (
               <label
@@ -251,7 +223,7 @@ export function CreateCycleForm({
         </ChipGroup>
 
         <label className="flex flex-col gap-2">
-          <span className={SECTION}>Note to future self (optional)</span>
+          <span className={LABEL}>Note to future self (optional)</span>
           <textarea
             value={endMessage}
             maxLength={500}
@@ -262,11 +234,7 @@ export function CreateCycleForm({
           />
         </label>
 
-        {error && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
       </div>
 
       <PinnedBar>
@@ -355,11 +323,7 @@ export function CycleSetupSessions({
         <StepProgress step={2} of={2} />
         <h2 className="text-[22px] font-semibold">{cycle.scheduleType === "rotation" ? "Rotation order" : "Build the week"}</h2>
         <CycleScheduleBuilder cycle={cycle} programs={programs} endurance={endurance} />
-        {error && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
       </div>
       <PinnedBar>
         <button type="button" onClick={create} disabled={loading || !hasSession} aria-describedby={hasSession ? undefined : "create-reason"} className={PRIMARY}>
@@ -374,11 +338,7 @@ export function CycleSetupSessions({
             title="Discard this cycle?"
             sub={<p className="text-sm text-muted-foreground">{cycle.name} and the sessions you added are deleted.</p>}
           >
-            {discardError && (
-              <p role="alert" className="text-sm text-[#ff6b5a]">
-                {discardError}
-              </p>
-            )}
+            <ErrorLine error={discardError} />
             <button
               type="button"
               onClick={discard}
@@ -390,7 +350,7 @@ export function CycleSetupSessions({
             <button
               type="button"
               onClick={() => setDiscarding(false)}
-              className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70"
+              className={SHEET_CANCEL}
             >
               Keep building
             </button>

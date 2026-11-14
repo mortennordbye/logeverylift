@@ -14,16 +14,18 @@ import { useBack, useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink"
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import {
   ButtonReason,
-  ChipChoice,
   DESTRUCTIVE_TEXT,
+  ErrorLine,
   FIELD,
   FormHeader,
   INNER_FIELD,
   LABEL,
   PRIMARY_BUTTON,
-  PRIORITIES,
   PinnedBar,
+  RaceKindChips,
+  RacePriorityRow,
   RadioCard,
+  TriDistanceOptions,
 } from "@/components/features/season-ui";
 import Link from "next/link";
 import { useState } from "react";
@@ -50,14 +52,6 @@ type Props =
       running: RunningBlock | null;
       scheduled: ScheduledDraft | null;
     };
-
-const DISCIPLINES: { value: RaceDiscipline; label: string }[] = [
-  { value: "triathlon", label: "Triathlon" },
-  { value: "run", label: "Run" },
-  { value: "ride", label: "Ride" },
-  { value: "swim", label: "Swim" },
-  { value: "other", label: "Other" },
-];
 
 const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started" };
 
@@ -271,10 +265,7 @@ export function SeasonForm(props: Props) {
                 <label className="flex flex-col gap-1.5">
                   <span className={LABEL}>Distance</span>
                   <select value={distance} onChange={(e) => setDistance(e.target.value as TriDistance)} className={INNER_FIELD}>
-                    <option value="sprint">Sprint</option>
-                    <option value="olympic">Olympic</option>
-                    <option value="half">Half</option>
-                    <option value="full">Full</option>
+                    <TriDistanceOptions />
                   </select>
                 </label>
               ) : (
@@ -284,8 +275,8 @@ export function SeasonForm(props: Props) {
                 </label>
               )}
             </div>
-            <ChipChoice id="season-race-sport" label="Sport" value={discipline} options={DISCIPLINES} onChange={setDiscipline} />
-            <ChipChoice id="season-race-priority" label="Priority" value={priority} options={PRIORITIES} onChange={setPriority} />
+            <RaceKindChips value={discipline} onChange={setDiscipline} />
+            <RacePriorityRow value={priority} onChange={setPriority} />
             {hasRace && !raceComplete && <p className="text-[13px] text-muted-foreground">Give the race a name and a date, or leave both empty.</p>}
           </section>
         )}
@@ -381,11 +372,7 @@ export function SeasonForm(props: Props) {
           </fieldset>
         )}
 
-        {error && !confirmStart && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        {!confirmStart && <ErrorLine error={error} />}
 
         {initial && (
           <button type="button" onClick={() => setConfirmDelete(true)} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>

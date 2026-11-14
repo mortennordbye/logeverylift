@@ -1,7 +1,7 @@
 import { CyclesListClient } from "@/components/features/CyclesListClient";
-import { getDeletedPlans } from "@/lib/actions/plan-revisions";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { enduranceEnabledFor } from "@/lib/endurance";
+import { deletedPlanCount } from "@/lib/plan-deleted";
 import { loadPlanList } from "@/lib/plan-list";
 import { requireSession } from "@/lib/utils/session";
 
@@ -9,13 +9,14 @@ import { requireSession } from "@/lib/utils/session";
 export default async function PlanPage() {
   const session = await requireSession();
   // Like home: a block whose day has come starts, and one that is over completes, before the list is read.
-  await getActiveCycleForUser();
-  const enduranceEnabled = await enduranceEnabledFor(session.user.id);
-  const [data, deletedCycles, deletedSeasons] = await Promise.all([
+  const [, enduranceEnabled] = await Promise.all([getActiveCycleForUser(), enduranceEnabledFor(session.user.id)]);
+  const [data, deletedCount] = await Promise.all([
     loadPlanList(session.user.id, enduranceEnabled),
-    getDeletedPlans({ type: "cycle" }),
-    getDeletedPlans({ type: "season" }),
+    // A failed count hides Recently deleted, as a failed list read did.
+    deletedPlanCount(session.user.id).catch((e: unknown) => {
+      console.error("[PlanPage] deleted_count_failed", { error: e instanceof Error ? e.name : "unknown" });
+      return 0;
+    }),
   ]);
-  const deletedCount = (deletedCycles.success ? deletedCycles.data.length : 0) + (deletedSeasons.success ? deletedSeasons.data.length : 0);
   return <CyclesListClient data={data} deletedCount={deletedCount} />;
 }

@@ -10,7 +10,7 @@
 import { db } from "@/db";
 import { seasons, trainingCycles } from "@/db/schema";
 import { deleteRevisionId } from "@/lib/plan-revisions";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, count, eq, isNotNull } from "drizzle-orm";
 
 /** A deleted item of the user: what it was, its name and the revision that restores it. */
 export type DeletedItem = { what: "cycle" | "season"; name: string; revisionId: number | null };
@@ -33,4 +33,13 @@ export async function ownDeletedSeason(userId: string, seasonId: number): Promis
     .where(and(eq(seasons.id, seasonId), eq(seasons.userId, userId), isNotNull(seasons.deletedAt)));
   if (!row) return null;
   return { what: "season", name: row.name, revisionId: await deleteRevisionId(userId, "season", seasonId) };
+}
+
+/** How many cycles and seasons the user deleted: the Plan list's "Recently deleted (n)". */
+export async function deletedPlanCount(userId: string): Promise<number> {
+  const [[c], [s]] = await Promise.all([
+    db.select({ n: count() }).from(trainingCycles).where(and(eq(trainingCycles.userId, userId), isNotNull(trainingCycles.deletedAt))),
+    db.select({ n: count() }).from(seasons).where(and(eq(seasons.userId, userId), isNotNull(seasons.deletedAt))),
+  ]);
+  return c.n + s.n;
 }
