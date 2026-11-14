@@ -278,7 +278,7 @@ would make a false recovery week. Evidence: the 3-week block pattern and the tap
 the research (Coach convention; the taper is Study). The 0.80 start and the 0.50 transition are
 Inference. Each number is a named constant with that label.
 
-`general` and `transition` are new values of the phase name the app shows ("General prep",
+`general` and `transition` are new values of the phase name the app shows ("General",
 "Transition"). Garmin race status and the periodization summary show the phase type when the
 cycle has one.
 

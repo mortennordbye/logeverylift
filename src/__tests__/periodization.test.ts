@@ -6,6 +6,7 @@ import {
   intervalPhaseRecipe,
   meanLoggedRpe,
   periodizedLoad,
+  phaseLabel,
   phaseLayout,
   scaledDuration,
   uncoupledAcwr,
@@ -13,6 +14,7 @@ import {
   type TrainingGoal,
   reanchoredPeaks,
 } from "@/lib/utils/periodization";
+import { PHASE_TYPE_LABELS } from "@/lib/utils/seasons";
 
 describe("phaseLayout", () => {
   it("caps taper at 3 weeks and uses 2 peak weeks for long blocks", () => {
@@ -236,7 +238,7 @@ describe("formatPeriodizationSummary", () => {
   it("describes a ramping build week with weeks-until-peak and percent", () => {
     const { headline, note } = summary(1, 24, "build");
     expect(headline).toBe("Base · Week 1 of 24");
-    expect(note).toBe("Peak in 19 wks · this week ~60% of peak volume.");
+    expect(note).toBe("Peak in 19 wks · this week 60% of peak volume.");
   });
 
   it("flags deload weeks in the headline", () => {
@@ -246,7 +248,7 @@ describe("formatPeriodizationSummary", () => {
 
   it("singularizes the week unit when peak is one week away", () => {
     const { note } = summary(19, 24, "build"); // rampWeeks=19 → peak at 20
-    expect(note).toBe("Peak in 1 wk · this week ~100% of peak volume.");
+    expect(note).toBe("Peak in 1 wk · this week 100% of peak volume.");
   });
 
   it("announces taper countdown once at peak", () => {
@@ -264,7 +266,7 @@ describe("formatPeriodizationSummary", () => {
     const phaseInput = (phase: PeriodizationSummaryInput["phase"], multiplier: number): PeriodizationSummaryInput => ({
       goal: "build",
       phase,
-      phaseLabel: "General prep",
+      phaseLabel: "General",
       currentWeek: 1,
       totalWeeks: 8,
       multiplier,
@@ -276,7 +278,7 @@ describe("formatPeriodizationSummary", () => {
       const { note } = formatPeriodizationSummary(phaseInput(phase, 0.8));
       expect(note).not.toMatch(/peak block|race-prep/i);
     }
-    expect(formatPeriodizationSummary(phaseInput("general", 0.8)).note).toBe("This week ~80% of peak volume.");
+    expect(formatPeriodizationSummary(phaseInput("general", 0.8)).note).toBe("This week 80% of peak volume.");
     expect(formatPeriodizationSummary(phaseInput("peak", 1)).note).toBe("Peak block at race-prep volume.");
     expect(formatPeriodizationSummary(phaseInput("taper", 0.6)).note).toBe("Tapering into race week, easing volume to arrive fresh.");
   });
@@ -415,5 +417,12 @@ describe("computeAdaptationFactor with wearable signals (plan 2.14)", () => {
     expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, ramp: 8.5, sleepDebtH: 7 } }).pct).toBe(92);
     expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, sleepDebtH: 6.5 } }).pct).toBe(95);
     expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, acwr: 1.3, ramp: 8, sleepDebtH: 6 } }).pct).toBe(105);
+  });
+});
+
+describe("phase names (round 8)", () => {
+  it("calls the general phase General, as the season and the Plan list do", () => {
+    expect(phaseLabel("general")).toBe(PHASE_TYPE_LABELS.general);
+    expect(phaseLabel("general")).toBe("General");
   });
 });
