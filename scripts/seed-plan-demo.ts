@@ -17,9 +17,8 @@
  * Writes go through the app's plan libraries (planWrite, activateCycle,
  * scheduleCycle, deleteCycles, createSeason, addPhase, applySessionOp,
  * writeLoggedSession) so versions, revisions and phase chaining match what
- * the app writes. The triathlon season repeats the body of the
- * generateTriathlonPlan Server Action, which has no library function that
- * takes a userId.
+ * the app writes. The triathlon season is made by createTriathlonPlan, the
+ * library behind the generateTriathlonPlan Server Action.
  *
  * Local databases only:
  *   docker exec logeverylift-app pnpm db:seed-plan-demo
@@ -55,7 +54,7 @@ async function main() {
   const rev = await import("../src/lib/plan-revisions");
   const seasonsLib = await import("../src/lib/seasons");
   const sessionsLib = await import("../src/lib/planned-sessions");
-  const { getAthleteProfile, saveAthleteProfile } = await import("../src/lib/athlete-profile");
+  const { saveAthleteProfile } = await import("../src/lib/athlete-profile");
   const { writeLoggedSession } = await import("../src/lib/logged-sessions");
   const { sessionCompliance } = await import("../src/lib/session-compliance");
   const { confirmDone, moveSuggestion } = await import("../src/lib/session-answers");
@@ -63,8 +62,7 @@ async function main() {
   const { userToday } = await import("../src/lib/user-settings");
   const { toDateStr } = await import("../src/lib/utils/cycle-position");
   const { addDaysStr } = await import("../src/lib/utils/seasons");
-  const { triathlonPhases } = await import("../src/lib/utils/triathlon-phases");
-  const { buildTriathlonPlan, planDefaultsFromProfile, planExerciseNames } = await import("../src/lib/utils/triathlon-plan");
+  const { createTriathlonPlan } = await import("../src/lib/triathlon-plan");
   const { and, eq, isNotNull, isNull } = await import("drizzle-orm");
 
   type Ctx = { userId: string; writer: "user" };
@@ -389,109 +387,12 @@ async function main() {
     ]);
     await rev.activateCycle(ctx, intro, undefined, addDaysStr(seasonStart, -6 * 7));
 
-    // The body of generateTriathlonPlan (src/lib/actions/triathlon-plan.ts) for this user.
-    const race = { raceDate: "2027-08-29", discipline: "triathlon" as const, distance: "half" as const, distanceMeters: null };
-    const phases = triathlonPhases(seasonStart, race);
-    if (typeof phases === "string") throw new Error(phases);
-    const profile = await getAthleteProfile(userId);
-    const defaults = planDefaultsFromProfile({ availableDays: profile?.availableDays ?? null, enduranceLevel: profile?.enduranceLevel ?? null });
-    const level = defaults.level;
-    const plans = phases.map((ph) =>
-      buildTriathlonPlan({
-        weeks: ph.durationWeeks,
-        restDays: defaults.restDays.length > 0 ? defaults.restDays : undefined,
-        level,
-        strengthGoal: profile?.strengthGoal ?? null,
-        phaseType: ph.phaseType,
-      }),
-    );
-    for (const n of new Set(plans.flatMap(planExerciseNames))) exerciseId(n);
-    const { result: seasonId } = await rev.planWrite(ctx, async (w) => {
-      const [season] = await w.tx
-        .insert(s.seasons)
-        .values({ userId, name: "Jevnaker Half 2027", goal: "Finish the half in under 6 hours", startDate: seasonStart, endDate: race.raceDate, nextGoal: null })
-        .returning({ id: s.seasons.id });
-      w.create({ type: "season", id: season.id });
-      await w.tx.insert(s.seasonRaces).values({
-        seasonId: season.id,
-        userId,
-        name: "Jevnaker Halv Full Distanse",
-        raceDate: race.raceDate,
-        discipline: "triathlon",
-        distance: race.distance,
-        priority: "A",
-      });
-      for (const [i, phase] of phases.entries()) {
-        const [cycle] = await w.tx
-          .insert(s.trainingCycles)
-          .values({
-            userId,
-            name: phase.name,
-            durationWeeks: phase.durationWeeks,
-            durationDays: phase.durationDays,
-            scheduleType: "day_of_week",
-            goal: "build",
-            athleteLevel: level,
-            status: "draft",
-            seasonId: season.id,
-            phaseOrder: i + 1,
-            phaseType: phase.phaseType,
-          })
-          .returning({ id: s.trainingCycles.id });
-        w.create({ type: "cycle", id: cycle.id });
-        for (const day of plans[i].days) {
-          if (day.exercises.length === 0) {
-            await w.tx.insert(s.trainingCycleSlots).values({ trainingCycleId: cycle.id, dayOfWeek: day.dayOfWeek, label: day.label, programId: null });
-            continue;
-          }
-          const [program] = await w.tx
-            .insert(s.programs)
-            .values({ userId, name: day.label, createdByCycleId: cycle.id })
-            .returning({ id: s.programs.id });
-          w.create({ type: "program", id: program.id });
-          for (const [orderIndex, ex] of day.exercises.entries()) {
-            const [pe] = await w.tx
-              .insert(s.programExercises)
-              .values({
-                programId: program.id,
-                exerciseId: exerciseId(ex.name),
-                orderIndex,
-                progressionAdvance: ex.progressionAdvance,
-                progressionMode: { manual: "manual", distance: "distance", load: "weight", reps: "reps", duration: "time" }[ex.progressionAdvance],
-                overloadIncrementReps: ex.overloadIncrementReps,
-                overloadIncrementKg: ex.overloadIncrementKg != null ? String(ex.overloadIncrementKg) : null,
-                exerciseType: ex.exerciseType ?? null,
-              })
-              .returning({ id: s.programExercises.id });
-            await w.tx.insert(s.programSets).values(
-              ex.sets.map((st, n) => ({
-                programExerciseId: pe.id,
-                setNumber: n + 1,
-                targetReps: st.targetReps ?? null,
-                weightKg: st.weightKg != null ? String(st.weightKg) : null,
-                durationSeconds: st.durationSeconds ?? null,
-                startDelaySeconds: st.startDelaySeconds ?? null,
-                distanceMeters: st.distanceMeters ?? null,
-                peakDistanceMeters: st.peakDistanceMeters ?? null,
-                targetHeartRateZone: st.targetHeartRateZone ?? null,
-                sessionRole: st.sessionRole ?? null,
-                restTimeSeconds: st.restTimeSeconds,
-                setType: st.setType ?? "working",
-                targetRir: st.targetRir ?? null,
-              })),
-            );
-          }
-          await w.tx.insert(s.trainingCycleSlots).values({
-            trainingCycleId: cycle.id,
-            dayOfWeek: day.dayOfWeek,
-            label: day.label,
-            programId: program.id,
-            autoComplete: day.autoComplete,
-          });
-        }
-      }
-      await rev.chainSeason(w, season.id);
-      return season.id;
+    // "Make a triathlon plan" for this user, as the app writes it (createTriathlonPlan).
+    const { seasonId } = await createTriathlonPlan(ctx, {
+      name: "Jevnaker Half 2027",
+      goal: "Finish the half in under 6 hours",
+      startDate: seasonStart,
+      race: { name: "Jevnaker Halv Full Distanse", raceDate: "2027-08-29", distance: "half" },
     });
 
     // Phase 1 runs from the season start; this completes Intro and chains phase 2.

@@ -44,12 +44,6 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Nothing. Pick plain words ("Tempo workout", "Left knee injury", "Experience novice" or "Experience set to novice"), change `snapshotName` and `diffSnapshots`, and update the tests that read those strings (`grep -rn "Workout: \|Injury: " src/__tests__`).
 - **Touchpoints:** `src/lib/utils/plan-revisions.ts` (`snapshotName`, `diffSnapshots`), `src/lib/plan-revisions.ts`, `src/lib/mcp/revisions.ts`, `src/app/more/assistants/changes/page.tsx`.
 
-### Triathlon plan: one library function for the action and the demo seed
-- **What:** `generateTriathlonPlan` is a Server Action and reads the user from the browser session, so `scripts/seed-plan-demo.ts` copies its body to make the demo triathlon season. Extract a library function that takes a userId and a plan-write context, and call it from both the action and the seed.
-- **Why deferred:** The seed was a local demo tool; the copy was the quick way to get the demo accounts. Two copies can drift: a change to the generator would not reach the demo season.
-- **Unblocked by:** Nothing. Move the body into a function in `src/lib/` (beside the other plan libraries the seed uses, such as `createSeason` and `addPhase`), keep `requireSession()` and the input check in the action, and call the function from the seed.
-- **Touchpoints:** `src/lib/actions/triathlon-plan.ts` (`generateTriathlonPlan`), `scripts/seed-plan-demo.ts`.
-
 ### Dated sessions: what C2 left for later
 - **What:** Two gaps left by the session model (C2, `docs/plans/sessions.md`):
   - `dismissed_makeups` is still written when a whole day is declined, so an app from before C2 keeps hiding the day after a rollback (hub decision 13). Reads use the session's status only. Drop the writes and the table one release after C2.
