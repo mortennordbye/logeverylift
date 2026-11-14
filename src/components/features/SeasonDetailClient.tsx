@@ -132,13 +132,16 @@ export function SeasonDetailClient(p: Props) {
           ? `The taper ends ${fit.days} day${fit.days === 1 ? "" : "s"} after the A race.`
           : null;
 
+  // An open sheet covers the page, so its error shows in the sheet.
+  const errorLine = error && (
+    <p role="alert" className="text-sm text-destructive">
+      {error}
+    </p>
+  );
+
   return (
     <>
-      {error && (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      )}
+      {race == null && phase == null && errorLine}
 
       {p.replan && (
         <div data-testid="replan-banner" className="rounded-2xl bg-amber-500/10 p-4 flex flex-col gap-2">
@@ -324,6 +327,7 @@ export function SeasonDetailClient(p: Props) {
             <button type="button" disabled={busy || !race.name.trim() || !race.raceDate} onClick={saveRace} className="rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-95 transition-transform">
               Save race
             </button>
+            {errorLine}
             {race.id && (
               <button type="button" disabled={busy} onClick={() => run(removeRaceAction({ seasonId: p.seasonId, raceId: race.id! }), () => setRace(null))} className="text-destructive text-sm font-medium min-h-[44px] active:opacity-70">
                 Remove race
@@ -405,6 +409,7 @@ export function SeasonDetailClient(p: Props) {
             >
               {phase.mode === "edit" ? "Save phase" : "Add phase"}
             </button>
+            {errorLine}
             {phase.mode === "edit" && (
               <button type="button" disabled={busy} onClick={() => run(removePhaseAction({ seasonId: p.seasonId, cycleId: phase.cycleId }), () => setPhase(null))} className="text-destructive text-sm font-medium min-h-[44px] active:opacity-70">
                 Remove from season
