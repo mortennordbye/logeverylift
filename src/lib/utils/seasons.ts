@@ -184,19 +184,15 @@ export function nextPhase(timeline: TimelinePhase[]): TimelinePhase | null {
 }
 
 /**
- * The season's chain is paused: its next phase is not scheduled although the
- * season is under way, or that phase was due to start on a later day. Another
- * block took the one scheduled start (scheduleCycle), and Resume picks the
- * chain up again. False when nothing has started and the next phase is due
- * today or earlier: that season is not started yet.
+ * The season's chain is paused: a phase has started and the next one is not
+ * scheduled, because another block took the one scheduled start
+ * (scheduleCycle). Resume picks the chain up again. A season where no phase
+ * has started is not started, never paused, even when its first phase lost a
+ * later start (round 8): Start schedules it again.
  */
-export function seasonPaused(
-  next: { scheduled: boolean; plannedStart: string } | null,
-  phases: { state: TimelinePhase["state"] }[],
-  today: string,
-): boolean {
+export function seasonPaused(next: { scheduled: boolean } | null, phases: { state: TimelinePhase["state"] }[]): boolean {
   if (!next || next.scheduled) return false;
-  return phases.some((p) => p.state !== "planned") || next.plannedStart > today;
+  return phases.some((p) => p.state !== "planned");
 }
 
 /**
@@ -209,7 +205,7 @@ export function seasonPaused(
 export function shownTimeline(seasonStart: string, phases: PhaseLike[], otherStart: string | null, today: string): TimelinePhase[] {
   const timeline = seasonTimeline(seasonStart, phases, otherStart);
   const next = nextPhase(timeline);
-  if (!next || !seasonPaused({ scheduled: next.scheduledStartDate != null, plannedStart: next.start }, timeline, today)) return timeline;
+  if (!next || !seasonPaused({ scheduled: next.scheduledStartDate != null }, timeline)) return timeline;
   const planned = nextPhase(seasonTimeline(seasonStart, phases))!.start;
   const resumeDay = planned <= today ? today : planned;
   return seasonTimeline(

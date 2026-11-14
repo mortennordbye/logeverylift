@@ -256,7 +256,7 @@ export function SeasonDetailClient(p: Props) {
     leaveDeleted("/cycles", [`/seasons/${p.season.id}`]);
   }
 
-  const paused = seasonPaused(p.next, phases, p.today);
+  const paused = seasonPaused(p.next, phases);
   const fit = p.taperFit;
   // A paused chain's dates assume a Resume today, so they raise no taper warning (J8-12).
   const misfit = !paused && (fit.status === "early" || fit.status === "late");

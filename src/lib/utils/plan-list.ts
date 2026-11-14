@@ -68,7 +68,7 @@ export function startsLabel(today: string, start: string): string {
  */
 export function nextPhaseBadge(next: { scheduled: boolean; plannedStart: string }, timeline: { state: TimelinePhase["state"] }[], today: string): string {
   if (next.scheduled) return startsLabel(today, next.plannedStart);
-  return seasonPaused(next, timeline, today) ? "Paused" : "Next";
+  return seasonPaused(next, timeline) ? "Paused" : "Next";
 }
 
 /**

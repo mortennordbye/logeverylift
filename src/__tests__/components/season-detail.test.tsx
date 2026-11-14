@@ -264,13 +264,11 @@ describe("season detail text (fix round 2)", () => {
     expect(screen.getAllByText("Finish the race")).toHaveLength(1);
   });
 
-  it("says Paused, not Starts, for a first phase that lost its later start, as the Plan list does (J8-12)", () => {
+  it("says Next, not Paused, for a first phase of a season not started that lost its later start (round 8)", () => {
     render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
     const first = screen.getAllByTestId("phase-row")[0];
-    expect(first.textContent).not.toContain("Starts");
-    expect(first.textContent).toContain("Paused");
-    // Grey, as on the Plan list: the accent marks only now and next (J8-12, J4-18).
-    expect(within(first).getByText("Paused").className).toContain("text-muted-foreground");
+    expect(first.textContent).not.toContain("Paused");
+    expect(within(first).getByText("Next").className).toContain("text-primary");
   });
 
   it("says Next for a first phase that is due and not scheduled", () => {
@@ -278,9 +276,32 @@ describe("season detail text (fix round 2)", () => {
     expect(screen.getAllByTestId("phase-row")[0].textContent).toContain("Next");
   });
 
-  it("a season whose first phase lost its later start shows paused with Resume", () => {
-    // Another block took the one scheduled start (scheduleCycle): the first phase was due 16 Nov.
+  it("a season not started whose first phase lost its later start offers Start, not Resume (round 8)", () => {
     render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
+    expect(screen.queryByText("Paused. The next phase is not scheduled.")).toBeNull();
+    expect(screen.getByText("“Aerobic base + strength” is not started.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+  });
+
+  it("a season not started still warns that the taper misses race day and offers Fit the taper (round 8)", () => {
+    render(
+      <SeasonDetailClient
+        {...base}
+        next={{ ...base.next, scheduled: false }}
+        replan={{ reason: 'The A race "Jevnaker" moved from 3 Apr 2027 to 17 Apr 2027' }}
+        taperFit={{ status: "early", taperId: 3, days: 14 }}
+      />,
+    );
+    const banner = screen.getByTestId("replan-banner");
+    expect(banner.textContent).toContain("Race date changed. The taper no longer ends on race day.");
+    expect(within(banner).getByRole("button", { name: "Fit the taper" })).toBeTruthy();
+    expect(within(screen.getAllByTestId("phase-row")[2]).getByText("Taper ends 14 days before the race")).toBeTruthy();
+  });
+
+  it("a season whose phase ended and whose next phase is not scheduled shows paused with Resume", () => {
+    const done = [{ ...phases[0], state: "done" as const }, phases[1], phases[2]];
+    render(<SeasonDetailClient {...base} today="2027-01-20" phases={done} next={{ cycleId: 2, name: "Longer ride and run", plannedStart: "2027-01-20", scheduled: false }} />);
+    expect(within(screen.getAllByTestId("phase-row")[1]).getByText("Paused").className).toContain("text-muted-foreground");
     expect(screen.getByText("Paused. The next phase is not scheduled.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
   });
@@ -309,7 +330,13 @@ describe("season detail text (fix round 2)", () => {
 });
 
 describe("Resume asks first (fix round 4)", () => {
-  const paused = { ...base, next: { ...base.next, scheduled: false } };
+  // The first phase ran and ended; the next one is not scheduled (seasonPaused).
+  const paused = {
+    ...base,
+    phases: [{ ...phases[0], state: "done" as const }, phases[1], phases[2]],
+    next: { cycleId: 2, name: "Longer ride and run", plannedStart: "2026-11-16", scheduled: false },
+  };
+  const notStarted = { ...base, next: { ...base.next, scheduled: false } };
   // A cycle outside the season runs from 2 Nov, and another draft is scheduled for 30 Nov.
   const running = { id: 20, name: "Base block", startDate: "2026-11-02", durationWeeks: 6, durationDays: null, seasonId: null };
   const scheduled = { id: 21, name: "Strength upkeep", day: "2026-11-30", season: null };
@@ -320,7 +347,7 @@ describe("Resume asks first (fix round 4)", () => {
     const sheet = screen.getByRole("region", { name: "Resume this season?" });
     // The dates keep their words together with no-break spaces (keepDates).
     const text = sheet.textContent!.replace(/\u00a0/g, " ");
-    expect(text).toContain("Aerobic base + strength starts Mon 16 Nov.");
+    expect(text).toContain("Longer ride and run starts Mon 16 Nov.");
     expect(text).toContain("This ends Base block at week 3 of 6.");
     expect(text).toContain("Strength upkeep no longer starts Mon 30 Nov.");
     expect(actions.resumeSeasonAction).not.toHaveBeenCalled();
@@ -329,7 +356,7 @@ describe("Resume asks first (fix round 4)", () => {
   });
 
   it("Start on a season due today says it starts today", () => {
-    render(<SeasonDetailClient {...paused} today="2026-11-16" running={running} scheduled={null} />);
+    render(<SeasonDetailClient {...notStarted} today="2026-11-16" running={running} scheduled={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     const sheet = screen.getByRole("region", { name: "Start this season?" });
     const text = sheet.textContent!.replace(/\u00a0/g, " ");

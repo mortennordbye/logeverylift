@@ -224,6 +224,8 @@ describe("the season card", () => {
     expect(nextPhaseBadge({ scheduled: false, plannedStart: "2026-12-28" }, timeline, TODAY)).toBe("Paused");
     expect(nextPhaseBadge({ scheduled: true, plannedStart: "2026-12-28" }, timeline, TODAY)).toBe("Starts 28 Dec");
     expect(nextPhaseBadge({ scheduled: false, plannedStart: "2026-11-10" }, [{ state: "planned" as const }], TODAY)).toBe("Next");
+    // A season not started is not paused, even when its first phase lost its later start (round 8).
+    expect(nextPhaseBadge({ scheduled: false, plannedStart: "2027-01-04" }, [{ state: "planned" as const }], TODAY)).toBe("Next");
   });
 
   it("outlines the running phase and greys the next one in a goal season", () => {
