@@ -37,9 +37,13 @@ describe("endsRunningLine", () => {
 describe("runningOn", () => {
   const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
 
-  it("gives the week the running cycle is in on the start day", () => {
-    expect(runningOn(running, "2026-11-14")?.week).toBe(3);
+  it("gives the last week the running cycle runs: the week of the day before the start day (round 8)", () => {
+    // Started Sat 31 Oct: Fri 13 Nov is its last day in week 2; Sat 14 Nov would begin week 3.
+    expect(runningOn(running, "2026-11-14")?.week).toBe(2);
+    expect(runningOn(running, "2026-11-15")?.week).toBe(3);
     expect(runningOn(running, "2026-12-07")?.week).toBe(6);
+    // A start on its own first day ends it in week 1.
+    expect(runningOn(running, "2026-10-31")?.week).toBe(1);
   });
 
   it("is null from the first day after the running cycle", () => {

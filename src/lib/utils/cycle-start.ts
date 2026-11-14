@@ -9,7 +9,7 @@
  */
 
 import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
-import { shortDay } from "@/lib/utils/seasons";
+import { addDaysStr, shortDay } from "@/lib/utils/seasons";
 
 /**
  * The running cycle and the week of it that holds today. `startDate` and
@@ -26,15 +26,24 @@ export function endsRunningLine(cycleId: number, running: RunningCycle | null | 
 }
 
 /**
- * The running cycle as it stands on `day`, the day another cycle starts: the
- * week it is in then, or null when it has ended by then (a scheduled start
- * ends it only on that day, startDueScheduledCycle).
+ * The last week a running cycle from `startDate` runs when another cycle
+ * starts on `day`: the week of the day before (week 1 when that is its own
+ * first day), not the week it would have entered on `day` (round 8).
+ */
+export function lastRunWeek(startDate: string, totalWeeks: number, durationDays: number | null | undefined, day: string): number {
+  return cycleWeek(parseDateStr(startDate), totalWeeks, parseDateStr(addDaysStr(day, -1)), durationDays).currentWeek;
+}
+
+/**
+ * The running cycle as it stands when another cycle starts on `day`: the last
+ * week it runs (lastRunWeek), or null when it has ended by then (a scheduled
+ * start ends it only on that day, startDueScheduledCycle).
  */
 export function runningOn(running: RunningCycle | null | undefined, day: string): RunningCycle | null {
   if (!running) return null;
   if (!running.startDate) return running;
   const at = cycleWeek(parseDateStr(running.startDate), running.totalWeeks, parseDateStr(day), running.durationDays);
-  return at.isOver ? null : { ...running, week: at.currentWeek };
+  return at.isOver ? null : { ...running, week: lastRunWeek(running.startDate, running.totalWeeks, running.durationDays, day) };
 }
 
 /**

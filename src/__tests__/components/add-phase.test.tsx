@@ -113,7 +113,7 @@ describe("Add a phase, fix round 4", () => {
     fireEvent.click(screen.getByRole("button", { name: "Build the week" }));
     const sheet = await screen.findByRole("region", { name: title });
     const text = sheet.textContent!.replace(/\u00a0/g, " ");
-    expect(text).toContain("This ends Base at week 3 of 6.");
+    expect(text).toContain("This ends Base at week 2 of 6.");
     expect(text).toContain("Winter run base pauses. Its next phase no longer starts Mon 14 Dec. You can resume it from the season.");
     expect(actions.addPhaseAction).not.toHaveBeenCalled();
 

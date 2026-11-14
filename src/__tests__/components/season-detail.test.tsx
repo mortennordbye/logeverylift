@@ -348,7 +348,7 @@ describe("Resume asks first (fix round 4)", () => {
     // The dates keep their words together with no-break spaces (keepDates).
     const text = sheet.textContent!.replace(/\u00a0/g, " ");
     expect(text).toContain("Longer ride and run starts Mon 16 Nov.");
-    expect(text).toContain("This ends Base block at week 3 of 6.");
+    expect(text).toContain("This ends Base block at week 2 of 6.");
     expect(text).toContain("Strength upkeep no longer starts Mon 30 Nov.");
     expect(actions.resumeSeasonAction).not.toHaveBeenCalled();
     fireEvent.click(within(sheet).getByRole("button", { name: "Resume season" }));
@@ -361,7 +361,7 @@ describe("Resume asks first (fix round 4)", () => {
     const sheet = screen.getByRole("region", { name: "Start this season?" });
     const text = sheet.textContent!.replace(/\u00a0/g, " ");
     expect(text).toContain("Aerobic base + strength starts today.");
-    expect(text).toContain("This ends Base block at week 3 of 6.");
+    expect(text).toContain("This ends Base block at week 2 of 6.");
   });
 
   it("resumes at once when nothing else runs or is scheduled", async () => {

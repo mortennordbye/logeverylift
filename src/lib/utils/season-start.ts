@@ -5,8 +5,7 @@
  * the running cycle on that day and drops any other scheduled start now.
  */
 
-import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
-import { dropsScheduledLine, endsRunningLine, type ScheduledDraft } from "@/lib/utils/cycle-start";
+import { dropsScheduledLine, endsRunningLine, lastRunWeek, type ScheduledDraft } from "@/lib/utils/cycle-start";
 
 /** The running cycle, with what it takes to say which week of it a later day falls in. */
 export type RunningBlock = {
@@ -41,7 +40,7 @@ export function takeStartLines(opts: {
       ? endsRunningLine(0, {
           id: running.id,
           name: running.name,
-          week: cycleWeek(parseDateStr(running.startDate), running.durationWeeks, parseDateStr(opts.day), running.durationDays).currentWeek,
+          week: lastRunWeek(running.startDate, running.durationWeeks, running.durationDays, opts.day),
           totalWeeks: running.durationWeeks,
         })
       : null;
