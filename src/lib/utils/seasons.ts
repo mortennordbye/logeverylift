@@ -338,16 +338,26 @@ export function runLength(p: { lengthDays: number }): string {
 export type LengthUnit = "weeks" | "days";
 
 /**
- * A phase length field moved to another unit, the length kept: 15 weeks is
- * 105 days, and days become weeks only when they are whole weeks. Otherwise
- * the field stays in days, with a note that says why.
+ * A phase length field moved to another unit: 15 weeks is 105 days, and whole
+ * weeks of days become weeks. Days that are not whole weeks round to the
+ * nearest week (at least 1), with a note that says so: the field always
+ * shows the unit it saves in (round 8).
  */
 export function switchLengthUnit(length: string, from: LengthUnit, to: LengthUnit): { length: string; unit: LengthUnit; note: string | null } {
   const n = Number(length);
   if (from === to || !length || !Number.isInteger(n) || n <= 0) return { length, unit: to, note: null };
   if (to === "days") return { length: String(n * 7), unit: "days", note: null };
   if (n % 7 === 0) return { length: String(n / 7), unit: "weeks", note: null };
-  return { length, unit: "days", note: `${n} days is not a whole number of weeks, so the length stays in days.` };
+  const weeks = Math.max(1, Math.round(n / 7));
+  return { length: String(weeks), unit: "weeks", note: `${n} days is not a whole number of weeks, so it is now ${weeks} week${weeks === 1 ? "" : "s"}.` };
+}
+
+/** Why a phase length cannot be saved, or null: the range the server takes (setPhaseSchema). */
+export function lengthReason(length: string, unit: LengthUnit): string | null {
+  const n = Number(length);
+  if (!length || n <= 0) return "Type a length.";
+  if (!Number.isInteger(n) || n > (unit === "days" ? 364 : 52)) return unit === "days" ? "Pick 1 to 364 days." : "Pick 1 to 52 weeks.";
+  return null;
 }
 
 /** How the phase sheet opens a length: in weeks when the days make whole weeks. */

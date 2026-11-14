@@ -142,9 +142,10 @@ describe("Add a phase, fix round 4", () => {
     fireEvent.click(unit("Days"));
     fireEvent.change(length, { target: { value: "10" } });
     fireEvent.click(unit("Weeks"));
-    expect(length.value).toBe("10");
-    expect(unit("Days").getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText("10 days is not a whole number of weeks, so the length stays in days.")).toBeTruthy();
+    // The unit shown is the unit saved: Weeks, with the days rounded (round 8).
+    expect(length.value).toBe("1");
+    expect(unit("Weeks").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("10 days is not a whole number of weeks, so it is now 1 week.")).toBeTruthy();
   });
 
   it("step 2 Cancel offers to remove the phase this flow made", async () => {

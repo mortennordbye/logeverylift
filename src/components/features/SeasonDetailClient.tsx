@@ -24,9 +24,11 @@ import { badgeAccent, nextPhaseBadge, phaseBarTone } from "@/lib/utils/plan-list
 import { callAction } from "@/lib/utils/stale-bundle";
 import {
   PHASE_TYPE_LABELS,
+  addDaysStr,
   dayLabel,
   daysBetweenStr,
   lengthField,
+  lengthReason,
   rangeLabel,
   runLength,
   seasonPaused,
@@ -280,7 +282,14 @@ export function SeasonDetailClient(p: Props) {
   // An open sheet covers the page, so its error shows in the sheet.
   // Why Save race or Save phase is off.
   const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
-  const phaseReason = phase && !Number(phase.length) ? "Type a length." : null;
+  const phaseReason = phase ? lengthReason(phase.length, phase.unit) : null;
+  // The sheet's dates follow the length as it is typed; an unchanged length keeps the phase's own end (a cut one too).
+  const sheetEnd = (() => {
+    if (!phase || lengthReason(phase.length, phase.unit)) return phase?.phase.end ?? "";
+    const days = Number(phase.length) * (phase.unit === "weeks" ? 7 : 1);
+    const planned = phase.phase.durationDays ?? phase.phase.durationWeeks * 7;
+    return days === planned ? phase.phase.end : addDaysStr(phase.phase.start, days - 1);
+  })();
   const errorLine = <ErrorLine error={error} />;
 
   return (
@@ -580,7 +589,7 @@ export function SeasonDetailClient(p: Props) {
           <PlanSheetPanel
             label={phase.phase.name}
             title={phase.phase.name}
-            sub={<span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, phase.phase.end))}</span>}
+            sub={<span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, sheetEnd))}</span>}
           >
             <div className="flex gap-4">
               <Link href={`/cycles/${phase.phase.id}`} className="flex min-h-11 items-center text-sm font-medium text-primary active:opacity-70">

@@ -429,13 +429,44 @@ describe("phase length in weeks or days (fix round 4)", () => {
     await waitFor(() => expect(actions.setPhaseAction).toHaveBeenCalledWith(expect.objectContaining({ cycleId: 2, durationDays: 84 })));
   });
 
-  it("Days to Weeks keeps days and says so when the days are not whole weeks", () => {
+  it("Days to Weeks switches to weeks and says how the days were rounded; the unit shown is the unit saved (round 8)", async () => {
     render(<SeasonDetailClient {...base} />);
     fireEvent.click(within(screen.getAllByTestId("phase-row")[2]).getAllByRole("button")[1]);
     fireEvent.click(screen.getByRole("button", { name: "Weeks" }));
-    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("10");
-    expect(screen.getByRole("button", { name: "Days" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByText("10 days is not a whole number of weeks, so the length stays in days.")).toBeTruthy();
+    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("1");
+    expect(screen.getByRole("button", { name: "Weeks" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("10 days is not a whole number of weeks, so it is now 1 week.")).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "3" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save phase" }));
+    await waitFor(() => expect(actions.setPhaseAction).toHaveBeenCalledWith(expect.objectContaining({ cycleId: 3, durationWeeks: 3, durationDays: null })));
+  });
+
+  it("a length out of range says the range instead of a bare Invalid input (round 8)", () => {
+    const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[2]).getAllByRole("button")[1]);
+    const save = screen.getByRole("button", { name: "Save phase" });
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "365" } });
+    expect(reasonOf(save)).toBe("Pick 1 to 364 days.");
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "9999999" } });
+    expect(reasonOf(save)).toBe("Pick 1 to 364 days.");
+    fireEvent.click(screen.getByRole("button", { name: "Weeks" }));
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "53" } });
+    expect(reasonOf(save)).toBe("Pick 1 to 52 weeks.");
+    expect(actions.setPhaseAction).not.toHaveBeenCalled();
+  });
+
+  it("the sheet's dates follow the length as it is typed (round 8)", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[0]).getAllByRole("button")[1]);
+    const sheet = screen.getByRole("region", { name: "Aerobic base + strength" });
+    const text = () => sheet.textContent!.replace(/\u00a0/g, " ");
+    expect(text()).toContain("16 Nov – 10 Jan");
+    fireEvent.change(within(sheet).getByLabelText("Length"), { target: { value: "4" } });
+    expect(text()).toContain("16 Nov – 13 Dec");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Days" }));
+    fireEvent.change(within(sheet).getByLabelText("Length"), { target: { value: "10" } });
+    expect(text()).toContain("16 – 25 Nov");
   });
 });
 
