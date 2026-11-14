@@ -5,9 +5,13 @@
  *   plan-gym@demo.local   rotation cycle in week 3, a scheduled draft, past and deleted cycles
  *   plan-goal@demo.local  a goal season (no race) whose first phase is the running rotation
  *   plan-race@demo.local  endurance on: a triathlon season, phase 1 running this week
+ *   plan-edge@demo.local  endurance on: edge cases (long names, three sessions a day,
+ *                         a season to re-plan, a paused season, missed key sessions)
+ *   plan-edge2@demo.local a rotation with a skipped and a swapped position, long names
+ *   plan-empty@demo.local no plan at all (first open)
  *
  * Dates are relative to the run day, so the states hold on later days; run it
- * again to move them. Each run deletes the three demo accounts (and with them
+ * again to move them. Each run deletes the demo accounts (and with them
  * all their data) and makes them again. No other account is touched.
  *
  * Writes go through the app's plan libraries (planWrite, activateCycle,
@@ -27,6 +31,9 @@ const DEMO_PASSWORD = "plan-demo-password";
 const GYM = "plan-gym@demo.local";
 const GOAL = "plan-goal@demo.local";
 const RACE = "plan-race@demo.local";
+const EDGE = "plan-edge@demo.local";
+const EDGE2 = "plan-edge2@demo.local";
+const EMPTY = "plan-empty@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
 
 function assertLocal() {
@@ -51,6 +58,8 @@ async function main() {
   const { getAthleteProfile, saveAthleteProfile } = await import("../src/lib/athlete-profile");
   const { writeLoggedSession } = await import("../src/lib/logged-sessions");
   const { sessionCompliance } = await import("../src/lib/session-compliance");
+  const { confirmDone, moveSuggestion } = await import("../src/lib/session-answers");
+  const { mondayOf } = await import("../src/lib/utils/session-compliance");
   const { userToday } = await import("../src/lib/user-settings");
   const { toDateStr } = await import("../src/lib/utils/cycle-position");
   const { addDaysStr } = await import("../src/lib/utils/seasons");
@@ -63,7 +72,7 @@ async function main() {
 
   // ── Accounts ──────────────────────────────────────────────────────────────
 
-  const emails = [GYM, GOAL, RACE];
+  const emails = [GYM, GOAL, RACE, EDGE, EDGE2, EMPTY];
   const old = await db.select({ id: s.users.id }).from(s.users).where(inArray(s.users.email, emails));
   if (old.length) {
     const ids = old.map((u) => u.id);
@@ -159,7 +168,14 @@ async function main() {
     return result;
   }
 
-  type SlotSpec = { dayOfWeek?: number; orderIndex?: number; programId: number | null; label?: string };
+  type SlotSpec = {
+    dayOfWeek?: number;
+    daySlot?: number;
+    orderIndex?: number;
+    programId: number | null;
+    label?: string;
+    priority?: "key" | "support" | "optional";
+  };
 
   /** A draft cycle with its template slots, as manage_training_cycle create and edit_cycle_slot write it. */
   async function makeCycle(
@@ -188,8 +204,8 @@ async function main() {
         await sessionsLib.upsertSlotInTx(
           w.tx,
           cycleId,
-          { dayOfWeek: sl.dayOfWeek ?? null, orderIndex: sl.orderIndex ?? null },
-          { programId: sl.programId, label: sl.label ?? null },
+          { dayOfWeek: sl.dayOfWeek ?? null, orderIndex: sl.orderIndex ?? null, daySlot: sl.daySlot },
+          { programId: sl.programId, label: sl.label ?? null, ...(sl.priority && { priority: sl.priority }) },
         );
       }
     });
@@ -536,8 +552,183 @@ async function main() {
     console.log(`${RACE}: season from ${seasonStart}, skipped ${skip?.date ?? "none"}, moved ${move ? `${move.date} to ${moveTo}` : "none"}, brick ${ride?.date ?? "none"}`);
   }
 
+
+  // ── 4. Edge cases, endurance on ───────────────────────────────────────────
+
+  {
+    const userId = await makeUser(EDGE, "Plan Edge Demo", true);
+    const ctx: Ctx = { userId, writer: "user" };
+    const today = toDateStr(await userToday(userId));
+    await saveAthleteProfile(ctx, {
+      enduranceLevel: "intermediate",
+      availableDays: [1, 2, 3, 4, 5, 6, 7],
+      hoursPerWeek: 10,
+      longestDayMinutes: 180,
+      longDay: 6,
+      strengthGoal: "keep_muscle",
+      completeInterview: true,
+    });
+    const monday = mondayOf(today);
+    const nextMonday = addDaysStr(monday, 7);
+    // The running cycle started last week's Monday: last week and this week have past days.
+    const blockStart = addDaysStr(monday, -7);
+
+    const CORE: Lift[] = [
+      { name: "Hanging Leg Raise", sets: 3, reps: 12, kg: 0 },
+      { name: "Calf Raise", sets: 3, reps: 15, kg: 40 },
+    ];
+    const strength = await makeProgram(ctx, "Strength A with heavy compound lifts and a long accessory finisher", UPPER_A);
+    const core = await makeProgram(ctx, "Core", CORE);
+    const bikeIntervals = await makeProgram(ctx, "Bike intervals 5 × 6 min", [{ name: "Bike", sets: 5, seconds: 6 * 60, zone: 4 }]);
+    const swim = await makeProgram(ctx, "Swim technique", [{ name: "Swim", sets: 1, seconds: 45 * 60, zone: 2 }]);
+    const runEasy = await makeProgram(ctx, "Run easy", [{ name: "Run", sets: 1, seconds: 40 * 60, zone: 2 }]);
+    const runTempo = await makeProgram(ctx, "Run tempo", [{ name: "Run", sets: 3, seconds: 10 * 60, zone: 4 }]);
+    const ride = await makeProgram(ctx, "Easy ride", [{ name: "Bike", sets: 1, seconds: 60 * 60, zone: 2 }]);
+    const liftsOf = new Map([
+      [strength, UPPER_A],
+      [core, CORE],
+    ]);
+    const keyIds = new Set([bikeIntervals, runTempo]);
+    const simpleWeek: SlotSpec[] = [
+      { dayOfWeek: 2, programId: runEasy },
+      { dayOfWeek: 4, programId: strength },
+      { dayOfWeek: 6, programId: ride },
+    ];
+
+    // A finished standalone block, then a season whose first phase ran until
+    // the running cycle started: its chain is paused (Resume).
+    const pausedStart = addDaysStr(blockStart, -5 * 7);
+    const spring = await makeCycle(ctx, "Spring run block", 4, "day_of_week", simpleWeek);
+    await rev.activateCycle(ctx, spring, undefined, addDaysStr(pausedStart, -5 * 7));
+    const { season: paused } = await seasonsLib.createSeason(ctx, {
+      name: "Winter run base",
+      goal: "Run 10 km easy without walking",
+      startDate: pausedStart,
+      endDate: addDaysStr(pausedStart, 16 * 7 - 1),
+      nextGoal: null,
+    });
+    const pb1 = await seasonsLib.addPhase(ctx, paused.id, { name: "Aerobic base", scheduleType: "day_of_week", durationWeeks: 8, phaseType: "base" });
+    await addSlots(ctx, pb1.cycleId, simpleWeek);
+    const pb2 = await seasonsLib.addPhase(ctx, paused.id, { name: "Run build", scheduleType: "day_of_week", durationWeeks: 8, phaseType: "build" });
+    await addSlots(ctx, pb2.cycleId, simpleWeek);
+    await rev.activateCycle(ctx, pb1.cycleId, undefined, pausedStart);
+
+    // The running weekday cycle: three sessions on Wednesday, a labelled day with no program, two key sessions.
+    const running = await makeCycle(
+      ctx,
+      "Base block with three sessions on Wednesdays and a long easy ride every Saturday morning",
+      6,
+      "day_of_week",
+      [
+        { dayOfWeek: 1, programId: strength },
+        { dayOfWeek: 2, programId: bikeIntervals, priority: "key" },
+        { dayOfWeek: 3, daySlot: 1, programId: swim },
+        { dayOfWeek: 3, daySlot: 2, programId: core },
+        { dayOfWeek: 3, daySlot: 3, programId: runEasy },
+        { dayOfWeek: 4, programId: runTempo, priority: "key" },
+        { dayOfWeek: 5, programId: null, label: "Mobility, stretching and the long drive home" },
+        { dayOfWeek: 6, programId: ride, priority: "support" },
+        { dayOfWeek: 7, programId: null, label: "Rest" },
+      ],
+    );
+    await rev.activateCycle(ctx, running, undefined, blockStart);
+    await sessionsLib.ensureCycleSessions(userId, running);
+
+    // A season with a long name whose A race moved two weeks: the re-plan banner, and the taper no longer ends on race day.
+    const aStart = addDaysStr(nextMonday, 7 * 7);
+    const raceDay = addDaysStr(aStart, 25 * 7 - 1);
+    const { season: replan } = await seasonsLib.createSeason(ctx, {
+      name: "Oslo Triathlon and the long build toward the Lanzarote half distance in early summer",
+      goal: "Finish the half distance strong and run the whole half marathon",
+      startDate: aStart,
+      endDate: raceDay,
+      nextGoal: null,
+      race: { name: "Lanzarote Half Distance Triathlon presented by the island council", raceDate: raceDay, discipline: "triathlon", distance: "half", priority: "A" },
+    });
+    await seasonsLib.addPhase(ctx, replan.id, { name: "Base", scheduleType: "day_of_week", durationWeeks: 10, phaseType: "base" });
+    await seasonsLib.addPhase(ctx, replan.id, { name: "Swim, intervals and long bricks on Sundays", scheduleType: "day_of_week", durationWeeks: 13, phaseType: "build" });
+    await seasonsLib.addPhase(ctx, replan.id, { name: "Taper", scheduleType: "day_of_week", durationDays: 14, phaseType: "taper" });
+    const replanDetail = await seasonsLib.getSeasonDetail(userId, replan.id);
+    await seasonsLib.updateRace(ctx, replan.id, replanDetail!.races[0].id, { raceDate: addDaysStr(raceDay, 14) });
+
+    // Drafts: one scheduled after the running block, one not started.
+    const upkeep = await makeCycle(ctx, "Strength upkeep", 4, "day_of_week", simpleWeek);
+    await rev.scheduleCycle(ctx, upkeep, addDaysStr(blockStart, 6 * 7));
+    await makeCycle(ctx, "Hill strength, stairs and long walks before the mountain trip in March", 3, "day_of_week", simpleWeek);
+
+    // Recently deleted: a cycle and a season.
+    await rev.deleteCycles(ctx, [await makeCycle(ctx, "Old swim block", 4, "day_of_week", simpleWeek)]);
+    const { season: oldSeason } = await seasonsLib.createSeason(ctx, {
+      name: "Old goal season",
+      goal: null,
+      startDate: nextMonday,
+      endDate: addDaysStr(nextMonday, 8 * 7 - 1),
+      nextGoal: null,
+    });
+    await seasonsLib.deleteSeason(ctx, oldSeason.id);
+
+    // Last week: all done but Saturday's ride (unconfirmed). This week: strength
+    // done, key sessions missed, the swim unconfirmed, the rest done. Next week:
+    // the bike skipped, the swim moved to Friday, the tempo run changed.
+    const rows = await sessionsLib.listPlanned(userId, blockStart, addDaysStr(nextMonday, 6), running);
+    const lastSaturday = addDaysStr(blockStart, 5);
+    for (const r of rows.filter((x) => x.id != null && x.programId != null && x.date < today)) {
+      const id = r.id!;
+      const lifts = liftsOf.get(r.programId!);
+      if (lifts) await logWorkout(userId, r.programId!, lifts, r.date, id);
+      else if (r.date < monday) {
+        if (r.date !== lastSaturday) await confirmDone(ctx, id, { durationSeconds: 45 * 60, rpe: 5 }, "app");
+      } else if (keyIds.has(r.programId!)) await sessionsLib.applySessionOp(ctx, { op: "miss", id, reason: "Long day at work" });
+      else if (r.programId !== swim) await confirmDone(ctx, id, { durationSeconds: 40 * 60, rpe: 4 }, "app");
+    }
+    const next = rows.filter((x) => x.id != null && x.date >= nextMonday);
+    const nextOf = (pid: number) => next.find((x) => x.programId === pid);
+    const skip = nextOf(bikeIntervals);
+    if (skip) await sessionsLib.applySessionOp(ctx, { op: "skip", id: skip.id!, reason: "Work trip" });
+    const moved = nextOf(swim);
+    if (moved) await sessionsLib.applySessionOp(ctx, { op: "move", id: moved.id!, date: addDaysStr(nextMonday, 4) });
+    const changed = nextOf(runTempo);
+    if (changed) await sessionsLib.applySessionOp(ctx, { op: "change", id: changed.id!, label: "Hill repeats", notes: "Find a hill of about 6 percent. Walk down." });
+
+    const week = await sessionCompliance(userId, monday, addDaysStr(monday, 6));
+    const missed = [];
+    for (const c of week.filter((x) => x.status === "missed")) missed.push(`${c.date} ${JSON.stringify(await moveSuggestion(userId, c, week))}`);
+    console.log(`${EDGE}: block from ${blockStart}, re-plan race ${raceDay} moved 14 days, missed key ${missed.join(", ") || "none"}`);
+  }
+
+  // ── 5. Rotation with a skipped and a swapped position, gym only ───────────
+
+  {
+    const userId = await makeUser(EDGE2, "Plan Edge Two Demo", false);
+    const ctx: Ctx = { userId, writer: "user" };
+    const today = toDateStr(await userToday(userId));
+    const ua = await makeProgram(ctx, "Upper body strength with a long accessory finisher", UPPER_A);
+    const la = await makeProgram(ctx, "Lower body strength and single-leg work", LOWER_A);
+    const ub = await makeProgram(ctx, "Upper B", UPPER_B);
+    const lb = await makeProgram(ctx, "Lower B", LOWER_B);
+    const express = await makeProgram(ctx, "Full body express", [...UPPER_A.slice(0, 2), ...LOWER_A.slice(0, 2)]);
+
+    const start = addDaysStr(today, -11);
+    const cycle = await makeCycle(ctx, "Upper / Lower rotation for the busy autumn weeks before the holidays", 4, "rotation", rotationSlots(ua, la, ub, lb));
+    await rev.activateCycle(ctx, cycle, undefined, start);
+    await logRotation(userId, start, today, rotationOrder(ua, la, ub, lb));
+
+    const ahead = (await sessionsLib.listPlanned(userId, today, addDaysStr(today, 14), cycle)).filter(
+      (v) => v.rotationPosition != null && v.date > today && v.programId != null,
+    );
+    if (ahead.length < 2) throw new Error("Rotation has too few sessions ahead");
+    await sessionsLib.applyRotationOp(ctx, { op: "skip", cycleId: cycle, rotationPosition: ahead[0].rotationPosition!, reason: "Travel" });
+    await sessionsLib.applyRotationOp(ctx, { op: "change", cycleId: cycle, rotationPosition: ahead[1].rotationPosition!, programId: express });
+    console.log(`${EDGE2}: rotation from ${start}, skipped position ${ahead[0].rotationPosition}, swapped position ${ahead[1].rotationPosition}`);
+  }
+
+  // ── 6. No plan at all ─────────────────────────────────────────────────────
+
+  await makeUser(EMPTY, "Plan Empty Demo", false);
+  console.log(`${EMPTY}: no cycles, no seasons`);
+
   console.log("");
-  console.log("Demo logins (password for all three):", DEMO_PASSWORD);
+  console.log("Demo logins (password for all):", DEMO_PASSWORD);
   for (const e of emails) console.log(`  ${e}`);
   process.exit(0);
 }
