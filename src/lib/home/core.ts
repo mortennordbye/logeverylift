@@ -149,7 +149,13 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     needsPolicyNotice(session),
     enduranceHome(session.user.id, todayStr),
     // A day with several sessions lists them instead (TodaySessionsList).
-    todayProgram && (info?.todaySessions.length ?? 0) <= 1 ? readTodayPlan(session.user.id, todayProgram.id) : Promise.resolve(null),
+    // A failed read shows Today without its plan, not the error page.
+    todayProgram && (info?.todaySessions.length ?? 0) <= 1
+      ? readTodayPlan(session.user.id, todayProgram.id).catch((e: unknown) => {
+          console.error("[Home] today_plan_read_failed", { error: e instanceof Error ? e.name : "unknown" });
+          return null;
+        })
+      : Promise.resolve(null),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
   const endurance = enduranceRead.home;

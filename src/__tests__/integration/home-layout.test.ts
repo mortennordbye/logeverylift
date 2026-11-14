@@ -17,6 +17,19 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createUser } from "./factories";
 import { asUser } from "./setup";
 
+// Lets a test make Today's plan read fail (review 2026-11-14, finding 1).
+const plan = vi.hoisted(() => ({ fail: false }));
+vi.mock("@/lib/home/today-plan", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/home/today-plan")>();
+  return {
+    ...actual,
+    todayPlanFrom: (...a: Parameters<typeof actual.todayPlanFrom>) => {
+      if (plan.fail) throw new Error("plan read failed");
+      return actual.todayPlanFrom(...a);
+    },
+  };
+});
+
 /**
  * The home layout against a real database (docs/home-widgets-audit.md,
  * section 7): the Server Action (I1), the page's query count with a streamed
@@ -35,6 +48,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  plan.fail = false;
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
@@ -266,5 +280,29 @@ describe("write order (T3)", () => {
     expect(core.completedToday).toBe(true);
     expect(core.todayAutoSession).not.toBeNull();
     expect(core.completedDates.has("2026-11-05")).toBe(true);
+  });
+});
+
+describe("Today's plan read fails", () => {
+  it("the home still renders, with Today and without the plan", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-05T12:00:00Z")); // Thursday
+    const lift = await createExercise();
+    const prog = (await createProgram(me, [{ exerciseId: lift.id, sets: [{}] }])).program.id;
+    const [cycle] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Block", durationWeeks: 4, status: "active", startDate: "2026-11-02" })
+      .returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: cycle.id, dayOfWeek: 4, programId: prog });
+    plan.fail = true;
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const props = await homeGridProps();
+    expect(props.slots.today).toBeTruthy();
+    const session = { user: { id: me, role: "user" as const, name: "Test", email: "t@test.local" }, session: {} };
+    const settings = await getUserSettings(me);
+    const core = await loadHomeCore(session as never, settings, todayIn(settings.timeZone, new Date()), await activeCycle());
+    expect(core.todayProgram?.id).toBe(prog);
+    expect(core.todayPlan).toBeNull();
   });
 });
