@@ -10,6 +10,7 @@
 import type { AnswerSession } from "@/components/features/answer-session";
 import { IllnessSheet, type IllnessDraft } from "@/components/features/IllnessSheet";
 import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPanel";
+import { ButtonReason } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useUnits } from "@/contexts/user-settings-context";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
@@ -189,6 +190,8 @@ function useConfirmDone(session: AnswerSession | null, onSaved: (id: number) => 
   const seconds = parseDuration(time);
   const distanceValue = distance.trim() ? Number(normalizeDecimal(distance.trim())) : null;
   const distanceBad = distanceValue != null && (!Number.isFinite(distanceValue) || distanceValue < 0);
+  // Why Save is off.
+  const reason = seconds == null ? (time.trim() === "" ? "Type a time." : "Fix the time.") : distanceBad ? "Fix the distance." : null;
 
   async function save() {
     if (!session || seconds == null || distanceBad) return;
@@ -211,7 +214,7 @@ function useConfirmDone(session: AnswerSession | null, onSaved: (id: number) => 
     onSaved(session.id);
   }
 
-  return { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, setSaving, error, setError, unit, seconds, distanceBad, save };
+  return { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, setSaving, error, setError, unit, seconds, distanceBad, reason, save };
 }
 
 function ConfirmDoneSheet({
@@ -225,7 +228,7 @@ function ConfirmDoneSheet({
   onSaved: (id: number) => void;
   onSick: (s: AnswerSession) => void;
 }) {
-  const { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, error, unit, seconds, distanceBad, save } = useConfirmDone(session, onSaved);
+  const { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, error, unit, seconds, distanceBad, reason, save } = useConfirmDone(session, onSaved);
 
   const field = "mt-1 w-full min-h-[44px] rounded-xl bg-muted px-4 text-base outline-none focus:ring-2 ring-primary";
   return (
@@ -287,11 +290,13 @@ function ConfirmDoneSheet({
             <button
               type="button"
               onClick={save}
-              disabled={saving || seconds == null || distanceBad}
+              disabled={saving || reason != null}
+              aria-describedby={reason ? "done-reason" : undefined}
               className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
             >
               Save
             </button>
+            <ButtonReason id="done-reason" reason={reason} />
           </div>
         </div>
       )}
@@ -319,6 +324,7 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
     router.refresh();
   });
   const { time, setTime, distance, setDistance, rpe, setRpe, notes, setNotes, saving, setSaving, error, setError, unit, seconds, distanceBad } = form;
+  const reason = answer === null ? "Pick Yes or Missed." : answer === "yes" ? form.reason : null;
 
   async function save() {
     if (!session || answer === null) return;
@@ -405,14 +411,18 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
               {error}
             </p>
           )}
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving || answer === null || (answer === "yes" && (seconds == null || distanceBad))}
-            className="h-[52px] rounded-2xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-          >
-            Save
-          </button>
+          <div className="flex flex-col">
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || reason != null}
+              aria-describedby={reason ? "answer-reason" : undefined}
+              className="h-[52px] rounded-2xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
+            >
+              Save
+            </button>
+            <ButtonReason id="answer-reason" reason={reason} />
+          </div>
         </PlanSheetPanel>
       )}
     </BottomSheet>

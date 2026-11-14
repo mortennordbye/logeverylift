@@ -40,6 +40,9 @@ vi.mock("@/components/ui/BackLink", () => ({
 const router = { push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
+/** The line a dimmed button points to with aria-describedby. */
+const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+
 const days: StartDays = { today: "2026-11-14", nextMonday: "2026-11-16", afterCurrent: null, latest: "2027-03-14" };
 
 beforeEach(() => {
@@ -138,6 +141,31 @@ describe("step 1: the basics", () => {
     render(<CreateCycleForm days={days} scheduled={scheduled} />);
     fireEvent.click(screen.getByRole("button", { name: "Next Monday · 16 Nov" }));
     expect(screen.getByText("Jevnaker Half 2027 pauses. Its next phase no longer starts Mon 16 Nov. You can resume it from the season.")).toBeTruthy();
+  });
+
+  it("says the start ends the running cycle, at the week it is in on the start day (J2-01, J2-05)", () => {
+    const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
+    render(<CreateCycleForm days={{ ...days, afterCurrent: "2026-12-12" }} running={running} />);
+    expect(screen.getByText("This ends Upper / Lower hypertrophy at week 3 of 6.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
+    fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-07" } });
+    expect(screen.getByText("This ends Upper / Lower hypertrophy at week 6 of 6.")).toBeTruthy();
+    // After the running cycle nothing ends.
+    fireEvent.click(screen.getByRole("button", { name: "After current cycle" }));
+    expect(screen.queryByText(/^This ends/)).toBeNull();
+  });
+
+  it("a dimmed Build the week says what is missing (J2-01)", () => {
+    render(<CreateCycleForm days={days} />);
+    const next = screen.getByRole("button", { name: "Build the week" }) as HTMLButtonElement;
+    expect(next.disabled).toBe(true);
+    expect(reasonOf(next)).toBe("Give the cycle a name.");
+    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Block" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
+    expect(reasonOf(next)).toBe("Pick a start day.");
+    fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-01" } });
+    expect(next.disabled).toBe(false);
+    expect(next.getAttribute("aria-describedby")).toBeNull();
   });
 
   it("shows a refused write and stays on step 1", async () => {
@@ -251,6 +279,17 @@ describe("rotation builder", () => {
     await waitFor(() =>
       expect(upsertCycleSlot).toHaveBeenCalledWith({ trainingCycleId: 3, orderIndex: 4, programId: 12, label: "Lower A" }),
     );
+  });
+
+  it("a dimmed Create for a new program says the name is missing", () => {
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add session" }));
+    const sheet = screen.getByRole("region", { name: "Pick a program" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "+ New program" }));
+    const create = within(sheet).getByRole("button", { name: "Create" });
+    expect(reasonOf(create)).toBe("Type a name for the program.");
+    fireEvent.change(within(sheet).getByLabelText("Program name"), { target: { value: "Push" } });
+    expect(create.getAttribute("aria-describedby")).toBeNull();
   });
 
   it("adds a rest day", async () => {

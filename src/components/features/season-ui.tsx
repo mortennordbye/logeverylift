@@ -121,6 +121,20 @@ export function PinnedBar({ children }: { children: React.ReactNode }) {
   );
 }
 
+/**
+ * Why the primary button above it is off: one short line, such as "Give the
+ * cycle a name.". The button points to it with `aria-describedby={id}` while
+ * `reason` is set. Nothing renders for a null reason.
+ */
+export function ButtonReason({ id, reason }: { id: string; reason: string | null }) {
+  if (!reason) return null;
+  return (
+    <p id={id} className="mt-2 text-center text-[13px] text-muted-foreground">
+      {reason}
+    </p>
+  );
+}
+
 export const PRIMARY_BUTTON =
   "w-full min-h-[52px] rounded-2xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-transform";
 

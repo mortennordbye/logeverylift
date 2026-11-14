@@ -59,6 +59,19 @@ describe("Add a phase", () => {
   });
 });
 
+describe("a dimmed button says what is missing", () => {
+  const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+
+  it("asks for a name, then a length", () => {
+    render(<AddPhaseForm {...props} />);
+    const button = screen.getByRole("button", { name: "Build the week" });
+    expect(reasonOf(button)).toBe("Give the phase a name.");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Swim, intervals, bricks" } });
+    fireEvent.change(screen.getByLabelText("Length"), { target: { value: "" } });
+    expect(reasonOf(button)).toBe("Type a length.");
+  });
+});
+
 describe("Add a phase, fix round 4", () => {
   // The season's first phase, due Mon 16 Nov, while Base of another season runs and its Build waits for 14 Dec.
   const first = {

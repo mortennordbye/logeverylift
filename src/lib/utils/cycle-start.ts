@@ -8,10 +8,14 @@
  * it (chainSeason).
  */
 
+import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import { shortDay } from "@/lib/utils/seasons";
 
-/** The running cycle and the week of it that holds today. */
-export type RunningCycle = { id: number; name: string; week: number; totalWeeks: number };
+/**
+ * The running cycle and the week of it that holds today. `startDate` and
+ * `durationDays` let a screen work out the week on a later start day.
+ */
+export type RunningCycle = { id: number; name: string; week: number; totalWeeks: number; startDate?: string; durationDays?: number | null };
 /** The draft scheduled to start on a later day, and its season when it is a phase of one. */
 export type ScheduledDraft = { id: number; name: string; day: string; season: { id: number; name: string } | null };
 
@@ -19,6 +23,18 @@ export type ScheduledDraft = { id: number; name: string; day: string; season: { 
 export function endsRunningLine(cycleId: number, running: RunningCycle | null | undefined): string | null {
   if (!running || running.id === cycleId) return null;
   return `This ends ${running.name} at week ${running.week} of ${running.totalWeeks}.`;
+}
+
+/**
+ * The running cycle as it stands on `day`, the day another cycle starts: the
+ * week it is in then, or null when it has ended by then (a scheduled start
+ * ends it only on that day, startDueScheduledCycle).
+ */
+export function runningOn(running: RunningCycle | null | undefined, day: string): RunningCycle | null {
+  if (!running) return null;
+  if (!running.startDate) return running;
+  const at = cycleWeek(parseDateStr(running.startDate), running.totalWeeks, parseDateStr(day), running.durationDays);
+  return at.isOver ? null : { ...running, week: at.currentWeek };
 }
 
 /**

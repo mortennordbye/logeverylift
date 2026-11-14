@@ -3,7 +3,7 @@
 import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
-import { Chip, DESTRUCTIVE_TEXT, INNER_FIELD, LABEL, PRIMARY_BUTTON, SectionLabel, Segmented } from "@/components/features/season-ui";
+import { ButtonReason, Chip, DESTRUCTIVE_TEXT, INNER_FIELD, LABEL, PRIMARY_BUTTON, SectionLabel, Segmented } from "@/components/features/season-ui";
 import {
   addRaceAction,
   clearReplanAction,
@@ -284,6 +284,9 @@ export function SeasonDetailClient(p: Props) {
   }
 
   // An open sheet covers the page, so its error shows in the sheet.
+  // Why Save race or Save phase is off.
+  const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
+  const phaseReason = phase && !Number(phase.length) ? "Type a length." : null;
   const errorLine = error && (
     <p role="alert" className="text-sm text-[#ff6b5a]">
       {error}
@@ -576,9 +579,12 @@ export function SeasonDetailClient(p: Props) {
                 ]}
               />
             </div>
-            <button type="button" disabled={busy || !race.name.trim() || !race.raceDate} onClick={saveRace} className={PRIMARY_BUTTON}>
-              Save race
-            </button>
+            <div>
+              <button type="button" disabled={busy || raceReason != null} aria-describedby={raceReason ? "race-reason" : undefined} onClick={saveRace} className={PRIMARY_BUTTON}>
+                Save race
+              </button>
+              <ButtonReason id="race-reason" reason={raceReason} />
+            </div>
             {errorLine}
             {race.id && (
               <button
@@ -648,9 +654,12 @@ export function SeasonDetailClient(p: Props) {
               </div>
               {phase.unitNote && <span className="text-[13px] text-muted-foreground">{phase.unitNote}</span>}
             </div>
-            <button type="button" disabled={busy || !Number(phase.length)} onClick={savePhase} className={PRIMARY_BUTTON}>
-              Save phase
-            </button>
+            <div>
+              <button type="button" disabled={busy || phaseReason != null} aria-describedby={phaseReason ? "phase-reason" : undefined} onClick={savePhase} className={PRIMARY_BUTTON}>
+                Save phase
+              </button>
+              <ButtonReason id="phase-reason" reason={phaseReason} />
+            </div>
             {errorLine}
             <button type="button" disabled={busy} onClick={() => run(removePhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id }), () => setPhase(null))} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>
               Remove from season

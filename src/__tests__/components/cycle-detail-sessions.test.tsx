@@ -413,6 +413,69 @@ describe("rotation order", () => {
   });
 });
 
+describe("the session sheets say the session's state (J3-10, J5-08, J5-13, J5-15)", () => {
+  it("a skipped, a missed, a moved and a changed day each say so in the header line", () => {
+    renderWeek({
+      sessions: [
+        session({ id: 1, date: "2026-11-16", name: "Long ride", programId: null, status: "missed", key: true, moveTo: { date: "2026-11-21" } }),
+        session({ id: 3, date: "2026-11-19", name: "Bike tempo", programId: null, touched: true, templateDate: "2026-11-18" }),
+        session({ id: 6, date: "2026-11-20", name: "Bike intervals", programId: null, status: "skipped", touched: true }),
+        session({ id: 8, date: "2026-11-21", name: "Hill repeats", touched: true }),
+      ],
+    });
+    const open = (name: RegExp) => {
+      fireEvent.click(screen.getByRole("button", { name }));
+      return screen.getByTestId("session-sheet");
+    };
+    expect(within(open(/^Mon 16 Nov: Long ride/)).getByText("Mon 16 Nov · Missed")).toBeTruthy();
+    expect(within(open(/^Thu 19 Nov: Bike tempo/)).getByText("Thu 19 Nov · Moved from Wed")).toBeTruthy();
+    expect(within(open(/^Fri 20 Nov: Bike intervals/)).getByText("Fri 20 Nov · Skipped")).toBeTruthy();
+    expect(within(open(/^Sat 21 Nov: Hill repeats/)).getByText("Sat 21 Nov · Changed")).toBeTruthy();
+  });
+
+  it("a plain planned day shows only its day", () => {
+    renderWeek();
+    fireEvent.click(screen.getByRole("button", { name: /^Tue 17 Nov: Strength A/ }));
+    expect(within(screen.getByTestId("session-sheet")).getByText("Today")).toBeTruthy();
+  });
+
+  it("a swapped rotation turn says Swapped, also when it is the next one", () => {
+    const slots = [
+      { id: 11, orderIndex: 1, programId: 1, label: null, programName: "Upper A" },
+      { id: 12, orderIndex: 2, programId: 2, label: null, programName: "Lower A" },
+    ];
+    const walk = [
+      { date: "2026-11-17", slotId: 11, rotationPosition: 0, programId: 9, programName: "Full body", status: "planned" as const },
+      { date: "2026-11-18", slotId: 12, rotationPosition: 1, programId: 9, programName: "Full body", status: "planned" as const },
+    ];
+    render(<RotationOrder cycleId={5} rows={rotationRows(slots, walk, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
+    fireEvent.click(screen.getAllByRole("button", { name: "Actions for Full body" })[1]);
+    expect(within(screen.getByTestId("rotation-sheet")).getByText("Later · Swapped")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getAllByRole("button", { name: "Actions for Full body" })[0]);
+    expect(within(screen.getByTestId("rotation-sheet")).getByText("Today · Swapped")).toBeTruthy();
+  });
+});
+
+describe("a dimmed Save says what is missing (J5-10)", () => {
+  const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+  const answer = { id: 1, date: "2026-11-16", name: "Run aerobic", summary: "65 min", sport: "run" as const };
+
+  it("asks for an answer, then for the time", () => {
+    renderWeek({ sessions: [session({ id: 1, date: "2026-11-16", name: "Run aerobic", programId: null, status: "missed", answer })] });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    const save = within(sheet).getByRole("button", { name: "Save" });
+    expect(reasonOf(save)).toBe("Pick Yes or Missed.");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    expect(reasonOf(save)).toBe("Type a time.");
+    fireEvent.change(within(sheet).getByLabelText("Time (h:mm)"), { target: { value: "1:05" } });
+    expect(save.getAttribute("aria-describedby")).toBeNull();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Missed" }));
+    expect(save.getAttribute("aria-describedby")).toBeNull();
+  });
+});
+
 describe("completed cycle", () => {
   const done = { id: 5, name: "Upper / Lower", status: "completed", endAction: "none", endMessage: null } as unknown as TrainingCycle;
 

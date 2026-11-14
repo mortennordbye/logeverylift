@@ -7,7 +7,7 @@
  * sessions are built for it.
  */
 
-import { Chip, FIELD, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
+import { ButtonReason, Chip, FIELD, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
 import { BackLink, useReturnTo } from "@/components/ui/BackLink";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
@@ -78,6 +78,15 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
     if (!weeksOk || !wouldEndActiveCycle(cycle, weeks, parseDateStr(today))) return null;
     return "This length is shorter than the time already done, so the cycle would end at once.";
   }, [cycle, weeks, weeksOk, today]);
+
+  // Why Save is off, first missing thing first.
+  const reason = !name.trim()
+    ? "Give the cycle a name."
+    : !weeksOk
+      ? `Pick a length from ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks.`
+      : durationWarning
+        ? "Pick a longer length."
+        : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -283,9 +292,10 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
       </div>
 
       <PinnedBar>
-        <button type="submit" disabled={loading || !name.trim() || !!durationWarning || !weeksOk} className={PRIMARY_BUTTON}>
+        <button type="submit" disabled={loading || reason != null} aria-describedby={reason ? "save-reason" : undefined} className={PRIMARY_BUTTON}>
           {loading ? "Saving…" : "Save"}
         </button>
+        <ButtonReason id="save-reason" reason={reason} />
       </PinnedBar>
     </form>
   );

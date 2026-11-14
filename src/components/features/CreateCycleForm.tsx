@@ -16,13 +16,13 @@
 
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
-import { Chip, FormHeader, PinnedBar, StepProgress } from "@/components/features/season-ui";
+import { ButtonReason, Chip, FormHeader, PinnedBar, StepProgress } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { addDays, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { choiceFor, startDayFor, type StartChoice, type StartDays } from "@/lib/utils/cycle-setup";
-import { dropsScheduledLine, type ScheduledDraft } from "@/lib/utils/cycle-start";
+import { dropsScheduledLine, endsRunningLine, runningOn, type RunningCycle, type ScheduledDraft } from "@/lib/utils/cycle-start";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
@@ -79,9 +79,12 @@ export function CreateCycleForm({
   days,
   draft,
   start,
+  running,
   scheduled,
 }: {
   days: StartDays;
+  /** The running cycle: a start before it ends ends it (activateInSession, startDueScheduledCycle). */
+  running?: RunningCycle | null;
   /** The draft scheduled to start later: this start drops it (scheduleCycle, activateInSession). */
   scheduled?: ScheduledDraft | null;
   /** The draft made by an earlier Next, when the user came back from step 2. */
@@ -110,7 +113,10 @@ export function CreateCycleForm({
   const [error, setError] = useState("");
 
   const startDay = startDayFor(choice, days, picked);
+  const endsLine = startDay ? endsRunningLine(draft?.id ?? 0, runningOn(running, startDay)) : null;
   const dropsLine = startDay ? dropsScheduledLine(draft?.id ?? null, scheduled) : null;
+  // Why Build the week is off, first missing thing first.
+  const reason = !name.trim() ? "Give the cycle a name." : !weeksOk ? `Pick a length from ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks.` : !startDay ? "Pick a start day." : null;
   const tomorrow = toDateStr(addDays(parseDateStr(days.today), 1));
 
   async function handleSubmit(e: React.FormEvent) {
@@ -261,6 +267,7 @@ export function CreateCycleForm({
         {choice === "after" && days.afterCurrent && (
           <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(days.afterCurrent)}</p>
         )}
+        {endsLine && <p className="-mt-2 text-[13px] text-muted-foreground">{endsLine}</p>}
         {dropsLine && <p className="-mt-2 text-[13px] text-muted-foreground">{dropsLine}</p>}
 
         <ChipGroup label="When it ends">
@@ -289,9 +296,10 @@ export function CreateCycleForm({
       </div>
 
       <PinnedBar>
-        <button type="submit" disabled={loading || !name.trim() || !startDay || !weeksOk} className={PRIMARY}>
+        <button type="submit" disabled={loading || reason != null} aria-describedby={reason ? "build-reason" : undefined} className={PRIMARY}>
           {scheduleType === "rotation" ? "Put the sessions in order" : "Build the week"}
         </button>
+        <ButtonReason id="build-reason" reason={reason} />
       </PinnedBar>
     </form>
   );
@@ -379,14 +387,10 @@ export function CycleSetupSessions({
         )}
       </div>
       <PinnedBar>
-        {!hasSession && (
-          <p id="create-reason" className="mb-2 text-center text-[13px] text-muted-foreground">
-            Add a session first.
-          </p>
-        )}
         <button type="button" onClick={create} disabled={loading || !hasSession} aria-describedby={hasSession ? undefined : "create-reason"} className={PRIMARY}>
           Create cycle
         </button>
+        <ButtonReason id="create-reason" reason={hasSession ? null : "Add a session first."} />
       </PinnedBar>
       <BottomSheet open={discarding} onClose={() => setDiscarding(false)}>
         {discarding && (

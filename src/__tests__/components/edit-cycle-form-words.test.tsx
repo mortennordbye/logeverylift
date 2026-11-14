@@ -79,4 +79,13 @@ describe("the Edit details screen", () => {
     expect(link.getAttribute("href")).toBe("/seasons/7");
     expect(link.className).toMatch(/min-h-11/);
   });
+
+  it("a dimmed Save says what is missing", () => {
+    const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+    render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
+    const save = screen.getByRole("button", { name: "Save" });
+    expect(save.getAttribute("aria-describedby")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: " " } });
+    expect(reasonOf(save)).toBe("Give the cycle a name.");
+  });
 });
