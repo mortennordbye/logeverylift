@@ -187,13 +187,15 @@ test("a saved form does not stay in history: New season > Create > Back lands on
   await page.goto("/cycles");
   await page.getByRole("link", { name: "New season" }).click();
   await page.waitForURL(atPath("/seasons/new"));
-  await page.getByLabel("Name").fill("Back test");
-  await page.getByLabel("Start").fill("2027-01-04");
-  await page.getByLabel("End").fill("2027-05-02");
+  await page.getByRole("button", { name: "Change start" }).click();
+  await page.getByLabel("Start date").fill("2027-01-04");
+  await page.getByLabel("Name", { exact: true }).fill("Back test");
+  await page.getByRole("button", { name: "Change end" }).click();
+  await page.getByLabel("End date").fill("2027-05-02");
   await page.getByRole("button", { name: "Create season" }).click();
   await settle();
   await expect(page).toHaveURL(/\/seasons\/\d+$/);
-  await expect(back(page)).toHaveText("Cycles");
+  await expect(back(page)).toHaveText("Plan");
   await back(page).click();
   await page.waitForURL(atPath("/cycles"));
   // The form is gone from history: forward is the season, not the form.
@@ -230,7 +232,8 @@ test("Edit season > Save returns to the season without a duplicate entry", async
   await page.goto("/cycles");
   await page.getByRole("link", { name: /Edit back test/ }).click();
   await page.waitForURL(atPath(`/seasons/${season.id}`));
-  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("link", { name: "Edit details" }).click();
   await page.waitForURL(atPath(`/seasons/${season.id}/edit`));
   await page.getByLabel("Name").fill("Edited back test");
   await page.getByRole("button", { name: "Save" }).click();
@@ -326,7 +329,8 @@ test("deleting a season from its edit page leaves no deleted page behind Cycles"
   await page.waitForURL(atPath("/cycles"));
   await page.getByRole("link", { name: /Delete back test/ }).click();
   await page.waitForURL(atPath(`/seasons/${id}`));
-  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("link", { name: "Edit details" }).click();
   await page.waitForURL(atPath(`/seasons/${id}/edit`));
   await deleteSeason(page);
   await expect(page.getByRole("link", { name: /Delete back test/ })).toHaveCount(0);
@@ -338,7 +342,8 @@ test("deleting a season from its edit page leaves no deleted page behind Cycles"
 test("a cold start on a season, then Edit and Delete, leaves no deleted page behind", async ({ page }, testInfo) => {
   const id = await seasonFor(testInfo.parallelIndex, "Cold delete test");
   await page.goto(`/seasons/${id}`);
-  await page.getByRole("link", { name: "Edit", exact: true }).click();
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByRole("link", { name: "Edit details" }).click();
   await page.waitForURL(atPath(`/seasons/${id}/edit`));
   await deleteSeason(page);
   await page.goBack();
