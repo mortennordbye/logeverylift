@@ -174,6 +174,22 @@ describe("computeAdaptationFactor — no-wearable nudge", () => {
     expect(computeAdaptationFactor({ adherence: 1, avgReadiness: 4.5, avgRpe: 5 }).pct).toBe(105);
   });
 
+  it("writes its notes as plain sentences, with no em dash", () => {
+    const notes = [
+      computeAdaptationFactor({ adherence: 0.4, avgReadiness: null, avgRpe: null }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: 2, avgRpe: 5 }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: 4.5, avgRpe: 5 }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: null, avgRpe: null, wearable: { hrvState: "fatigued", restingHrFlag: false, acwr: null, ramp: null, sleepDebtH: null } }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: null, avgRpe: null, wearable: { hrvState: "balanced", restingHrFlag: false, acwr: 1.5, ramp: null, sleepDebtH: null } }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: null, avgRpe: null, wearable: { hrvState: "balanced", restingHrFlag: false, acwr: null, ramp: null, sleepDebtH: 8 } }),
+    ].map((a) => a.note);
+    for (const n of notes) {
+      expect(n).not.toContain("—");
+      expect(n).toMatch(/^(Eased|Boosted) ~\d+%\. [A-Z].*\.$/);
+    }
+    expect(notes[0]).toBe("Eased ~10%. Under half of last week's sessions were completed.");
+  });
+
   it("stays neutral when there's no clear signal", () => {
     expect(computeAdaptationFactor({ adherence: 0.75, avgReadiness: null, avgRpe: null }).pct).toBe(100);
     expect(computeAdaptationFactor({ adherence: 0.75, avgReadiness: 3, avgRpe: 7 }).pct).toBe(100);
@@ -287,6 +303,24 @@ describe("formatPeriodizationSummary", () => {
       adaptationNote: "Eased ~10% — under half of last week's sessions were completed.",
     };
     expect(formatPeriodizationSummary(input).note).toContain("Eased ~10%");
+  });
+
+  it("shows a stored note written with an em dash as plain sentences", () => {
+    const input: PeriodizationSummaryInput = {
+      goal: "build",
+      phase: "taper",
+      phaseLabel: "Taper",
+      currentWeek: 8,
+      totalWeeks: 8,
+      multiplier: 0.6,
+      isDeload: false,
+      weeksUntilPeak: 0,
+      weeksUntilTaper: 0,
+      adaptationNote: "Eased ~10% — under half of last week's sessions were completed.",
+    };
+    const { note } = formatPeriodizationSummary(input);
+    expect(note).not.toContain("—");
+    expect(note).toContain("Eased ~10%. Under half of last week's sessions were completed.");
   });
 });
 

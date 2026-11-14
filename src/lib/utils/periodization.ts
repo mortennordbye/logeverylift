@@ -350,22 +350,22 @@ export function computeAdaptationFactor(s: AdaptationSignals): Adaptation {
   const w = s.wearable;
   if (w) {
     if (w.hrvState === "fatigued" || (w.hrvState === "strained" && w.restingHrFlag)) {
-      return { pct: 88, note: "Eased ~12% — HRV has been under your normal range for a week." };
+      return { pct: 88, note: "Eased ~12%. HRV has been under your normal range for a week." };
     }
     if ((w.acwr != null && w.acwr > 1.3) || (w.ramp != null && w.ramp > 8)) {
-      return { pct: 92, note: "Eased ~8% — load rose too fast." };
+      return { pct: 92, note: "Eased ~8%. Load rose too fast." };
     }
     if (w.sleepDebtH != null && w.sleepDebtH > 6) {
-      return { pct: 95, note: "Eased ~5% — over 6 h of sleep debt." };
+      return { pct: 95, note: "Eased ~5%. Over 6 h of sleep debt." };
     }
   }
   // Behind on the plan — don't pile volume onto a missed week.
   if (s.adherence < 0.6) {
-    return { pct: 90, note: "Eased ~10% — under half of last week's sessions were completed." };
+    return { pct: 90, note: "Eased ~10%. Under half of last week's sessions were completed." };
   }
   // Under-recovered — back off slightly.
   if (s.avgReadiness != null && s.avgReadiness <= 2) {
-    return { pct: 92, note: "Eased ~8% — readiness has been low lately." };
+    return { pct: 92, note: "Eased ~8%. Readiness has been low lately." };
   }
   // Consistent, fresh, and comfortable — allow a small extra push.
   if (
@@ -375,9 +375,18 @@ export function computeAdaptationFactor(s: AdaptationSignals): Adaptation {
     // With a wearable, the push also needs HRV in or above its normal range.
     (!w || w.hrvState === "balanced" || w.hrvState === "high")
   ) {
-    return { pct: 105, note: "Boosted ~5% — strong, consistent week." };
+    return { pct: 105, note: "Boosted ~5%. Strong, consistent week." };
   }
   return { pct: 100, note: "" };
+}
+
+/**
+ * A stored note in plain sentences. Older notes joined two parts with an em
+ * dash ("Eased ~10% — under half ..."); the rows keep that text, so the dash
+ * becomes a full stop when shown.
+ */
+function plainNote(note: string): string {
+  return note.replace(/\s*—\s*(.)/g, (_, c: string) => `. ${c.toUpperCase()}`);
 }
 
 /** Fields needed to phrase a periodization summary (subset of CyclePeriodization). */
@@ -425,7 +434,7 @@ export function formatPeriodizationSummary(
     note = `This week ~${pct}% of peak volume.`;
   }
   // Append the no-wearable performance nudge when it adjusted this week's volume.
-  if (p.adaptationNote) note = `${note} ${p.adaptationNote}`;
+  if (p.adaptationNote) note = `${note} ${plainNote(p.adaptationNote)}`;
   return { headline, note };
 }
 
