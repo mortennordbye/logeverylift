@@ -2,6 +2,7 @@
 
 import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { Chip, DESTRUCTIVE_TEXT, INNER_FIELD, LABEL, PRIMARY_BUTTON, SectionLabel, Segmented } from "@/components/features/season-ui";
 import {
   addRaceAction,
@@ -30,7 +31,18 @@ import {
 } from "@/lib/utils/seasons";
 import type { PhaseType } from "@/lib/utils/periodization";
 import type { ActionResult } from "@/types/workout";
-import { DndContext, KeyboardSensor, PointerSensor, closestCenter, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragEndEvent,
+  type ScreenReaderInstructions,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
@@ -103,6 +115,21 @@ export function phaseDrop(ids: number[], activeId: number, overId: number): { or
   return { order: arrayMove(ids, from, to), position: to + 1 };
 }
 
+const DRAG_INSTRUCTIONS: ScreenReaderInstructions = {
+  draggable: "To move a phase, press space or enter. Use the up and down arrow keys to move it, space or enter to drop it, or escape to cancel.",
+};
+
+/** What a screen reader hears during a drag: the phase names, not dnd-kit's item ids. */
+export function phaseAnnouncements(nameOf: (id: UniqueIdentifier) => string): Announcements {
+  return {
+    onDragStart: ({ active }) => `Picked up ${nameOf(active.id)}.`,
+    onDragOver: ({ active, over }) => (over ? `${nameOf(active.id)} is over ${nameOf(over.id)}.` : `${nameOf(active.id)} is over no phase.`),
+    onDragEnd: ({ active, over }) =>
+      over && over.id !== active.id ? `${nameOf(active.id)} dropped in the place of ${nameOf(over.id)}.` : `${nameOf(active.id)} was not moved.`,
+    onDragCancel: ({ active }) => `${nameOf(active.id)} was not moved.`,
+  };
+}
+
 /**
  * A season (J4_SeasonDetail): the re-plan banner, the A race with its
  * countdown and the phase bar, the phases (drag to reorder, tap to change
@@ -118,6 +145,7 @@ export function SeasonDetailClient(p: Props) {
   const [phase, setPhase] = useState<PhaseDraft | null>(null);
   const [menu, setMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRemoveRace, setConfirmRemoveRace] = useState(false);
   const showRaces = p.enduranceEnabled || p.races.length > 0;
   const aRace = showRaces ? (p.races.find((r) => r.id === p.aRaceId) ?? null) : null;
 
@@ -207,7 +235,7 @@ export function SeasonDetailClient(p: Props) {
   const bannerTitle = p.replan
     ? misfit
       ? "Race date changed. The taper no longer ends on race day."
-      : "A race changed. The phases stay as they are."
+      : "Your races changed. The phases stay as they are."
     : "The taper does not end on race day.";
 
   const countdownTo = aRace?.raceDate ?? p.season.endDate;
@@ -217,7 +245,8 @@ export function SeasonDetailClient(p: Props) {
     if (ph.state === "active") return "Now";
     if (p.next?.cycleId !== ph.id) return "";
     const n = daysBetweenStr(p.today, ph.start);
-    if (n < 0) return "Next";
+    // Not scheduled: the chain is paused, so the phase does not start by itself.
+    if (n < 0 || !p.next.scheduled) return "Next";
     return n < 7 ? `Starts ${shortDay(ph.start).slice(0, 3)}` : `Starts ${shortDay(ph.start).slice(4)}`;
   }
 
@@ -247,7 +276,8 @@ export function SeasonDetailClient(p: Props) {
           <span className="text-[13px] text-muted-foreground">
             {dayLabel(p.season.startDate)} to {dayLabel(p.season.endDate)}
           </span>
-          {p.season.goal && <span className="text-sm text-foreground/75">{p.season.goal}</span>}
+          {/* With no A race the hero card carries the goal. */}
+          {p.season.goal && aRace && <span className="text-sm text-foreground/75">{p.season.goal}</span>}
           {p.season.nextGoal && <span className="text-[13px] text-muted-foreground">Next goal is {p.season.nextGoal}</span>}
         </div>
 
@@ -307,7 +337,13 @@ export function SeasonDetailClient(p: Props) {
         <section className="flex flex-col gap-2">
           <SectionLabel>Phases</SectionLabel>
           {phases.length > 0 && (
-            <DndContext id="season-phases" sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+            <DndContext
+              id="season-phases"
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              accessibility={{ announcements: phaseAnnouncements((id) => byId.get(Number(id))?.name ?? "phase"), screenReaderInstructions: DRAG_INSTRUCTIONS }}
+            >
               <SortableContext items={order} strategy={verticalListSortingStrategy}>
                 <ul data-testid="season-phases" className="flex flex-col overflow-hidden rounded-[20px] bg-widget">
                   {phases.map((ph) => (
@@ -386,44 +422,77 @@ export function SeasonDetailClient(p: Props) {
       </div>
 
       <BottomSheet open={menu} onClose={() => setMenu(false)}>
-        <nav aria-label="Season actions" className="flex w-full flex-col px-4 pb-8">
-          <Link href={`/seasons/${p.season.id}/edit`} className="flex min-h-12 items-center text-base active:opacity-70">
-            Edit details
-          </Link>
-          <Link href={`/seasons/${p.season.id}/history`} className="flex min-h-12 items-center text-base active:opacity-70">
-            Change history
-          </Link>
-          <button
-            type="button"
-            onClick={() => {
-              setMenu(false);
-              setConfirmDelete(true);
-            }}
-            className={`flex min-h-12 items-center text-base ${DESTRUCTIVE_TEXT} active:opacity-70`}
-          >
-            Delete season
-          </button>
-        </nav>
+        <PlanSheetPanel label="Season actions">
+          <h2 className="truncate text-xl font-semibold">{p.season.name}</h2>
+          <div className="flex flex-col overflow-hidden rounded-2xl bg-widget-2">
+            <Link href={`/seasons/${p.season.id}/edit`} className={MENU_ROW}>
+              Edit details
+            </Link>
+            <Link href={`/seasons/${p.season.id}/history`} className={MENU_ROW}>
+              Change history
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setMenu(false);
+                setConfirmDelete(true);
+              }}
+              className={`${MENU_ROW} ${DESTRUCTIVE_TEXT}`}
+            >
+              Delete season
+            </button>
+          </div>
+        </PlanSheetPanel>
       </BottomSheet>
 
       <BottomSheet open={confirmDelete} onClose={() => setConfirmDelete(false)}>
-        <div className="flex w-full flex-col gap-3 px-4 pb-8">
-          <h2 className="text-lg font-semibold">Delete this season?</h2>
-          <p className="text-sm text-muted-foreground">Its cycles stay. You can restore it from Recently deleted for 90 days.</p>
+        <PlanSheetPanel label="Delete this season?">
+          <div className="flex flex-col gap-1">
+            <h2 className="text-xl font-semibold">Delete this season?</h2>
+            <p className="text-sm text-muted-foreground">Its cycles stay. You can restore it from Recently deleted for 90 days.</p>
+          </div>
           {errorLine}
-          <button type="button" disabled={busy} onClick={deleteSeason} className="min-h-[52px] rounded-2xl bg-[#c23a2e] text-base font-semibold text-white active:opacity-80">
+          <button type="button" disabled={busy} onClick={deleteSeason} className={DESTRUCTIVE_BUTTON}>
             Delete season
           </button>
-          <button type="button" onClick={() => setConfirmDelete(false)} className="min-h-11 text-sm font-medium active:opacity-70">
+          <button type="button" onClick={() => setConfirmDelete(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
             Cancel
           </button>
-        </div>
+        </PlanSheetPanel>
       </BottomSheet>
 
-      <BottomSheet open={race != null} onClose={() => setRace(null)}>
+      <BottomSheet open={race != null && confirmRemoveRace} onClose={() => setConfirmRemoveRace(false)}>
+        {race?.id && (
+          <PlanSheetPanel label="Remove this race?">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-xl font-semibold">Remove this race?</h2>
+              <p className="text-sm text-muted-foreground">{race.name} leaves the season. Restore it from Change history.</p>
+            </div>
+            {errorLine}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                run(removeRaceAction({ seasonId: p.season.id, raceId: race.id! }), () => {
+                  setConfirmRemoveRace(false);
+                  setRace(null);
+                })
+              }
+              className={DESTRUCTIVE_BUTTON}
+            >
+              Remove race
+            </button>
+            <button type="button" onClick={() => setConfirmRemoveRace(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+              Cancel
+            </button>
+          </PlanSheetPanel>
+        )}
+      </BottomSheet>
+
+      <BottomSheet open={race != null && !confirmRemoveRace} onClose={() => setRace(null)}>
         {race && (
-          <div className="flex w-full flex-col gap-4 px-4 pb-8">
-            <h2 className="text-lg font-semibold">{race.id ? "Edit race" : "New race"}</h2>
+          <PlanSheetPanel label={race.id ? "Edit race" : "New race"}>
+            <h2 className="text-xl font-semibold">{race.id ? "Edit race" : "New race"}</h2>
             <label className="flex flex-col gap-1.5">
               <span className={LABEL}>Name</span>
               <input value={race.name} maxLength={100} onChange={(e) => setRace({ ...race, name: e.target.value })} className={INNER_FIELD} />
@@ -476,19 +545,27 @@ export function SeasonDetailClient(p: Props) {
             </button>
             {errorLine}
             {race.id && (
-              <button type="button" disabled={busy} onClick={() => run(removeRaceAction({ seasonId: p.season.id, raceId: race.id! }), () => setRace(null))} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  setError(null);
+                  setConfirmRemoveRace(true);
+                }}
+                className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}
+              >
                 Remove race
               </button>
             )}
-          </div>
+          </PlanSheetPanel>
         )}
       </BottomSheet>
 
       <BottomSheet open={phase != null} onClose={() => setPhase(null)}>
         {phase && (
-          <div className="flex w-full flex-col gap-4 px-4 pb-8">
+          <PlanSheetPanel label={phase.phase.name}>
             <div className="flex flex-col gap-0.5">
-              <h2 className="text-lg font-semibold">{phase.phase.name}</h2>
+              <h2 className="text-xl font-semibold">{phase.phase.name}</h2>
               <span className="text-[13px] text-muted-foreground">{rangeLabel(phase.phase.start, phase.phase.end)}</span>
             </div>
             <div className="flex gap-4">
@@ -519,7 +596,7 @@ export function SeasonDetailClient(p: Props) {
                   inputMode="numeric"
                   value={phase.length}
                   onChange={(e) => setPhase({ ...phase, length: e.target.value.replace(/\D/g, "") })}
-                  className={`${INNER_FIELD} w-[88px] font-semibold`}
+                  className={`${INNER_FIELD.replace("w-full", "w-[88px] shrink-0")} font-semibold`}
                 />
                 <Segmented
                   label="Length unit"
@@ -541,12 +618,15 @@ export function SeasonDetailClient(p: Props) {
             <button type="button" disabled={busy} onClick={() => run(removePhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id }), () => setPhase(null))} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>
               Remove from season
             </button>
-          </div>
+          </PlanSheetPanel>
         )}
       </BottomSheet>
     </>
   );
 }
+
+const MENU_ROW = "flex min-h-[52px] w-full items-center border-b border-hairline px-3.5 text-left text-[15px] font-medium last:border-b-0 active:bg-foreground/5";
+const DESTRUCTIVE_BUTTON = "min-h-[52px] w-full rounded-2xl bg-[#c23a2e] text-base font-semibold text-white active:opacity-80 disabled:opacity-50";
 
 function Chevron() {
   return (
