@@ -606,7 +606,7 @@ export type AddPhaseInput = PhaseLength & {
    * A season's first phase takes the one scheduled start, ending the running
    * cycle on its day and dropping any other scheduled start (chainSeason
    * `claim`). The app sends true only after the user confirmed that; false
-   * leaves the season paused when another block holds the start. Default true.
+   * leaves the season paused when another block holds the start. Default false.
    */
   takeStart?: boolean;
 };
@@ -704,7 +704,7 @@ export async function addPhase(ctx: PlanWriteContext, seasonId: number, input: A
     current.set(cycleId, null);
     await renumber(w, order, current);
     // The season's first phase: the user means to run this season from its start.
-    await chainSeason(w, seasonId, { claim: ids.length === 0 && input.takeStart !== false });
+    await chainSeason(w, seasonId, { claim: ids.length === 0 && input.takeStart === true });
     return { cycleId, raceMoved };
   });
   return {
