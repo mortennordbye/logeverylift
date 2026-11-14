@@ -59,18 +59,25 @@ describe("BackLink", () => {
     const { BackLink } = await load();
     at("/more/metrics", "/");
     render(<BackLink fallback={MORE} />);
-    const link = screen.getByRole("link", { name: "Home" });
+    const link = screen.getByRole("link", { name: "Back to Home" });
     expect(link.getAttribute("href")).toBe("/more");
     expect(click(link)).toBe(true);
     expect(markProgrammaticBack).toHaveBeenCalledTimes(1);
     expect(back).toHaveBeenCalledTimes(1);
   });
 
+  it("tells a screen reader where Back goes", async () => {
+    const { BackLink } = await load();
+    at("/more/metrics", "/");
+    render(<BackLink fallback={MORE} />);
+    expect(screen.getByRole("link", { name: "Back to Home" }).textContent).toBe("Home");
+  });
+
   it("links to the fallback when there is no previous page", async () => {
     const { BackLink } = await load();
     at("/more/metrics", null);
     render(<BackLink fallback={MORE} />);
-    const link = screen.getByRole("link", { name: "More" });
+    const link = screen.getByRole("link", { name: "Back to More" });
     expect(click(link)).toBe(false);
     expect(back).not.toHaveBeenCalled();
     expect(markProgrammaticBack).not.toHaveBeenCalled();
@@ -80,7 +87,7 @@ describe("BackLink", () => {
     const { BackLink } = await load();
     at("/seasons/2", "/seasons/new");
     render(<BackLink fallback={{ href: "/cycles", label: "Cycles" }} />);
-    expect(click(screen.getByRole("link", { name: "Cycles" }))).toBe(false);
+    expect(click(screen.getByRole("link", { name: "Back to Cycles" }))).toBe(false);
     expect(back).not.toHaveBeenCalled();
   });
 });

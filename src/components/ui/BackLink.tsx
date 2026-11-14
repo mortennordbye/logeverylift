@@ -67,6 +67,8 @@ export function BackLink({ fallback }: { fallback: BackTarget }) {
       href={fallback.href}
       replace
       onClick={back.onClick}
+      // Spoken as "Back to More", not just "More", which is also the tab's name.
+      aria-label={`Back to ${back.label}`}
       data-testid="back-link"
       className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px] min-w-0"
     >
