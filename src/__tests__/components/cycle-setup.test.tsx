@@ -3,6 +3,7 @@ import { CreateCycleForm, CycleSetupSessions } from "@/components/features/Creat
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
 import {
   createTrainingCycle,
+  deleteTrainingCycle,
   removeCycleSlot,
   reorderCycleSlots,
   startTrainingCycle,
@@ -22,6 +23,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/actions/training-cycles", () => ({
   createTrainingCycle: vi.fn(),
+  deleteTrainingCycle: vi.fn(),
   updateTrainingCycle: vi.fn(),
   startTrainingCycle: vi.fn(),
   removeCycleSlot: vi.fn(),
@@ -48,6 +50,7 @@ beforeEach(() => {
   vi.mocked(upsertCycleSlot).mockResolvedValue({ success: true, data: {} as never });
   vi.mocked(removeCycleSlot).mockResolvedValue({ success: true, data: undefined });
   vi.mocked(reorderCycleSlots).mockResolvedValue({ success: true, data: undefined });
+  vi.mocked(deleteTrainingCycle).mockResolvedValue({ success: true, data: undefined });
 });
 
 describe("step 1: the basics", () => {
@@ -162,6 +165,31 @@ describe("step 2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
     await waitFor(() => expect(returnTo).toHaveBeenCalledWith("/cycles/3"));
     expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-16");
+  });
+
+  it("Cancel asks first, then discards the draft and goes back to Plan", async () => {
+    render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-11-16" endurance={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const sheet = screen.getByRole("region", { name: "Discard this cycle?" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Keep building" }));
+    expect(deleteTrainingCycle).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Discard this cycle?" })).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Discard this cycle?" })).getByRole("button", { name: "Discard cycle" }));
+    await waitFor(() => expect(returnTo).toHaveBeenCalledWith("/cycles"));
+    expect(deleteTrainingCycle).toHaveBeenCalledWith(3);
+    expect(startTrainingCycle).not.toHaveBeenCalled();
+  });
+
+  it("a refused discard shows in the sheet and stays on step 2", async () => {
+    vi.mocked(deleteTrainingCycle).mockResolvedValue({ success: false, error: "Failed to delete the cycle" });
+    render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-11-16" endurance={false} />);
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    const sheet = screen.getByRole("region", { name: "Discard this cycle?" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Discard cycle" }));
+    await waitFor(() => expect(within(sheet).getByRole("alert").textContent).toBe("Failed to delete the cycle"));
+    expect(returnTo).not.toHaveBeenCalled();
   });
 
   it("shows why the cycle did not start", async () => {
