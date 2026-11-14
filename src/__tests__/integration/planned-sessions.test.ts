@@ -265,6 +265,19 @@ describe("changing one session", () => {
     expect(restored).toMatchObject({ date: "2026-11-11", status: "skipped", skipReason: "Travel" });
   });
 
+  it("clearing a day's label gives it back the template's label", async () => {
+    const id = await cycle();
+    await db.update(trainingCycleSlots).set({ label: "Long Run" }).where(and(eq(trainingCycleSlots.trainingCycleId, id), eq(trainingCycleSlots.dayOfWeek, 1)));
+    await active();
+    const mon = (await rows(id)).find((x) => x.date === "2026-11-09")!;
+    expect(mon.label).toBe("Long Run");
+    expect((await updatePlannedSession({ op: "change", id: mon.id, label: "Hill repeats" })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "change", id: mon.id, label: "   " })).success).toBe(true);
+    expect((await rows(id)).find((x) => x.id === mon.id)!.label).toBe("Long Run");
+    expect((await updatePlannedSession({ op: "change", id: mon.id, label: null })).success).toBe(true);
+    expect((await rows(id)).find((x) => x.id === mon.id)!.label).toBe("Long Run");
+  });
+
   it("the cycle's history names the session and the day on every session change (J8-04)", async () => {
     const id = await cycle();
     await active();
