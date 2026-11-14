@@ -18,7 +18,7 @@ vi.mock("@/contexts/pending-queue-context", () => ({
   useWorkoutSetWriter: () => ({ logWithRetry: vi.fn(async () => ({ success: true })) }),
 }));
 vi.mock("@/contexts/toast-context", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/actions/programs", () => ({
   updateProgramSet: (...a: unknown[]) => updateProgramSet(...a),
   setProgramExerciseType: vi.fn(),
@@ -50,7 +50,7 @@ beforeEach(() => {
 
 describe("SetEditView — a weighted timed set", () => {
   it("shows the load and writes it with the time", async () => {
-    render(<SetEditView set={set} isTimed />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={set} isTimed />);
     expect(screen.getByRole("button", { name: /Weight \(kg\)/ }).textContent).toContain("20");
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Save" }));

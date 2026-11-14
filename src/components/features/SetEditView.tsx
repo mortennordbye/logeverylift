@@ -20,7 +20,8 @@ import { type Equipment, isCustomWeight, weightOptionsFor, withCustomOption } fr
 import { formatPlates } from "@/lib/utils/plates";
 import { logCustomWeight } from "@/lib/actions/custom-weights";
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
-import { markProgrammaticBack } from "@/lib/utils/nav-intent";
+import { useBack } from "@/components/ui/BackLink";
+import type { BackTarget } from "@/lib/utils/back-nav";
 import type { SetType } from "@/lib/validators/workout";
 import type { ProgramSet } from "@/types/workout";
 import { Loader2 } from "lucide-react";
@@ -29,6 +30,8 @@ import { useEffect, useRef, useState } from "react";
 
 type Props = {
   set: ProgramSet;
+  /** Where Save returns: the exercise's sets, as the page's own Back. */
+  back: BackTarget;
   isWorkout?: boolean;
   isTimed?: boolean;
   isRunning?: boolean;
@@ -99,6 +102,7 @@ export function SetEditView(props: Props) {
 
 function SetEditForm({
   set,
+  back: backTarget,
   isWorkout = false,
   isTimed = false,
   isRunning = false,
@@ -111,6 +115,9 @@ function SetEditForm({
   weightStack = null,
 }: Props) {
   const router = useRouter();
+  // Save pops back to the sets it came from; on a cold start at this URL it
+  // replaces with them instead of leaving the app.
+  const back = useBack(backTarget);
   const { logWithRetry } = useWorkoutSetWriter();
   const cfg = disciplineConfig(discipline);
   const units = useUnits();
@@ -420,10 +427,9 @@ function SetEditForm({
     // strand the editor.
     await Promise.all(writes);
 
-    // Marks this as our own back, not an edge swipe. Both arrive as popstate;
-    // only the swipe is already being animated by the system.
-    markProgrammaticBack();
-    router.back();
+    // A pop marked as our own back (not an edge swipe: both arrive as
+    // popstate, and only the swipe is animated by the system).
+    back.go();
   };
 
   // The load row, shared by rep sets and timed sets. A timed set can carry a

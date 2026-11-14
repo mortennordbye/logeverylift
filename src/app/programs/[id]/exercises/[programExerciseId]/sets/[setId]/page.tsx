@@ -68,7 +68,7 @@ export default async function ProgramSetEditPage({ params, searchParams }: Props
       </div>
 
       {/* Edit view */}
-      <SetEditView set={set} isTimed={pe.exercise.isTimed} isRunning={pe.exercise.name === "Running" || pe.exercise.discipline != null} discipline={pe.exercise.discipline} exerciseId={pe.exercise.id} exerciseTypeDefault={pe.exercise.exerciseType} exerciseTypeOverride={pe.exerciseType} equipment={pe.exercise.equipment} weightStack={pe.weightStack} />
+      <SetEditView set={set} back={{ href: `/programs/${programId}/exercises/${peId}${edit === "true" ? "?edit=true" : ""}`, label: "Sets" }} isTimed={pe.exercise.isTimed} isRunning={pe.exercise.name === "Running" || pe.exercise.discipline != null} discipline={pe.exercise.discipline} exerciseId={pe.exercise.id} exerciseTypeDefault={pe.exercise.exerciseType} exerciseTypeOverride={pe.exerciseType} equipment={pe.exercise.equipment} weightStack={pe.weightStack} />
     </div>
   );
 }

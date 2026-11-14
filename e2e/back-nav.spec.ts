@@ -5,7 +5,7 @@ import type { StoredHomeItem } from "../src/lib/home/stored-layout";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
-import { backLink, trackActions } from "./helpers";
+import { backLink, openFirstExercise, openFirstSetEditor, openWorkout, trackActions } from "./helpers";
 
 /**
  * Back goes where the user came from (docs/plans/back-navigation.md).
@@ -239,4 +239,43 @@ test("deleting a session returns to History, and Back does not reopen the delete
   await expect(page.locator(`a[href="${href}"]`).filter({ visible: true })).toHaveCount(0);
   await page.goBack();
   await page.waitForURL(atPath("/more"));
+});
+
+test("adding an exercise mid-workout returns to the workout without leaving the picker behind", async ({ page }) => {
+  await openWorkout(page);
+  const workout = new URL(page.url()).pathname;
+  await page.getByRole("button", { name: "Workout actions" }).click();
+  await page.getByRole("link", { name: "Add Exercise" }).click();
+  await page.waitForURL(atPath(`${workout}/add-exercise`));
+  const added = await page.getByRole("listitem").first().locator("span").first().innerText();
+  await page.getByRole("listitem").first().getByRole("button").click();
+  await page.waitForURL(atPath(workout));
+  // Popped back to the workout, and it shows the new exercise.
+  await expect(page.getByRole("link", { name: new RegExp(added) }).filter({ visible: true }).first()).toBeVisible();
+  // The platform's Back (the iOS swipe) must not reopen the picker.
+  await page.goBack();
+  await expect(page).not.toHaveURL(/\/add-exercise/);
+});
+
+test("a cold start on the exercise picker: Back goes to the workout, not out of the app", async ({ page }) => {
+  await openWorkout(page);
+  const workout = new URL(page.url()).pathname;
+  const cold = await page.context().newPage();
+  await cold.goto(`${workout}/add-exercise`);
+  await cold.getByRole("button", { name: /^Back( to Workout)?$/ }).click();
+  await cold.waitForURL(atPath(workout));
+  await cold.close();
+});
+
+test("a cold start on the set editor: Save goes to the exercise, not out of the app", async ({ page }) => {
+  await openWorkout(page);
+  await openFirstExercise(page);
+  const exercise = new URL(page.url()).pathname;
+  await openFirstSetEditor(page);
+  const editor = page.url();
+  const cold = await page.context().newPage();
+  await cold.goto(editor);
+  await cold.getByRole("button", { name: /^Save$/ }).first().click();
+  await cold.waitForURL(atPath(exercise));
+  await cold.close();
 });

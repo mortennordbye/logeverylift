@@ -186,6 +186,7 @@ export function WorkoutSessionClient({
           <button
             type="button"
             onClick={() => setShowActionSheet(true)}
+            aria-label="Workout actions"
             className="tap-slop w-7 h-7 rounded-full border-2 border-primary flex items-center justify-center shrink-0"
           >
             <Plus className="w-4 h-4 text-primary" />
