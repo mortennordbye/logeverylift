@@ -144,11 +144,13 @@ describe("step 1: the basics", () => {
     const scheduled = { id: 7, name: "Strength peak", day: "2026-12-14", season: null };
     render(<CreateCycleForm days={days} scheduled={scheduled} />);
     const line = "Strength peak no longer starts Mon 14 Dec.";
+    // No day picked yet: no start is chosen.
+    expect(screen.queryByText(line)).toBeNull();
     // A start today drops the other scheduled start too (activateInSession).
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
     expect(screen.getByText(line)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Next Monday · 16 Nov" }));
     expect(screen.getByText(line)).toBeTruthy();
-    // No day picked yet: no start is chosen.
     fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
     expect(screen.queryByText(line)).toBeNull();
     fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-01" } });
@@ -177,14 +179,33 @@ describe("step 1: the basics", () => {
 
   it("starts after the running cycle by default, so nothing ends or is dropped until the user picks Today (round 8)", () => {
     const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
-    const scheduled = { id: 7, name: "Strength peak", day: "2026-12-14", season: null };
-    render(<CreateCycleForm days={{ ...days, afterCurrent: "2026-12-12" }} running={running} scheduled={scheduled} />);
+    render(<CreateCycleForm days={{ ...days, afterCurrent: "2026-12-12" }} running={running} />);
     expect(screen.getByRole("button", { name: "After current cycle" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "Today" }).getAttribute("aria-pressed")).toBe("false");
     expect(screen.queryByText(/^This ends/)).toBeNull();
     // Today stays one tap away.
     fireEvent.click(screen.getByRole("button", { name: "Today" }));
     expect(screen.getByText("This ends Upper / Lower hypertrophy at week 2 of 6.")).toBeTruthy();
+  });
+
+  it("with a draft scheduled, no start is chosen by default, so nothing is dropped until the user picks one (round 9)", () => {
+    const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
+    const scheduled = { id: 7, name: "Strength peak", day: "2026-12-13", season: null };
+    const line = "Strength peak no longer starts Sun 13 Dec.";
+    for (const props of [{ days: { ...days, afterCurrent: "2026-12-12" }, running }, { days }]) {
+      const { unmount } = render(<CreateCycleForm {...props} scheduled={scheduled} />);
+      expect(screen.getByRole("button", { name: "Pick a date" }).getAttribute("aria-pressed")).toBe("true");
+      expect(screen.queryByText(line)).toBeNull();
+      expect(screen.queryByText(/^This ends/)).toBeNull();
+      fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Base" } });
+      const build = screen.getByRole("button", { name: "Build the week" });
+      expect(build.hasAttribute("disabled")).toBe(true);
+      expect(reasonOf(build)).toBe("Pick a start day.");
+      // The user can still pick a start that drops it.
+      fireEvent.click(screen.getByRole("button", { name: "Today" }));
+      expect(screen.getByText(line)).toBeTruthy();
+      unmount();
+    }
   });
 
   it("starts today by default when no cycle runs", () => {
