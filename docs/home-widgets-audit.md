@@ -925,5 +925,19 @@ Where the build differs from sections 6 and 7, and why. The code is the referenc
   not sent to every page.
 - **Screenshots.** No `toHaveScreenshot` baselines: they need a Linux CI job. The fallback in
   6.2 applies: manual before and after screenshots, per user type, light and dark.
-- **U5** is in `src/__tests__/home-layout.test.ts`, and the U4 renderer check in
+- **U5** is an integration test in `src/__tests__/integration/home-layout.test.ts`: it
+  renders the page with Recent PRs and Friends hidden, then visible, awaits the streamed
+  slots and counts calls to each renderer's `load`. It tests the page's own loop, so there
+  is no separate helper for it. The U4 renderer check is in
   `src/__tests__/integration/home-widgets.test.ts` (importing the renderers needs the env).
+- **A stored layout that does not parse** renders the default, and the page sends base
+  `null`. The save then checks the row against the value it read, not its `updatedAt`;
+  otherwise every save from that row would be a conflict.
+- **After a save** edit mode stays, with the draft and "Saving…", until the refreshed page
+  arrives (`router.refresh()` in a transition), so the old layout does not show first.
+  Cancel, Reset and Save mine are disabled while a save runs.
+- **A retry sends what failed.** Done after an error and Save mine after a conflict send the
+  payload of the failed save; a failed Reset is retried as a Reset, not saved as a fixed
+  default layout. An edit after the failure drops it, and the draft is sent.
+- **Long-press and text selection.** `[data-widget]` has `user-select: none`, so holding a
+  widget on iOS does not start a text selection.

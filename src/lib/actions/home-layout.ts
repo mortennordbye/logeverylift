@@ -19,7 +19,8 @@ import { z } from "zod";
  *
  * A save carries the `updatedAt` it was edited from. If the stored layout has
  * changed since (another device saved), it returns "conflict" unless `force`.
- * The check is part of the UPDATE, so two saves at once cannot both win.
+ * The check is part of the UPDATE, so two saves at once cannot both win. A
+ * stored layout that does not parse is compared as read instead.
  */
 
 const saveSchema = z
@@ -80,16 +81,18 @@ export async function saveHomeLayout(data: unknown): Promise<ActionResult<{ upda
       next = { v: 1, updatedAt: new Date().toISOString(), items: mergeForSave(stored, own, audience) };
     }
 
-    const base = force ? null : (baseUpdatedAt ?? null);
+    // A stored row that does not parse (an old or broken shape) renders the
+    // default, so the page sent base null while the row may still hold an
+    // updatedAt. A save from it is checked against the row as read here, not
+    // its updatedAt, or every save would be a conflict.
+    const unreadable = row.homeLayout !== null && stored === null && baseUpdatedAt === null;
+    const unchanged = unreadable
+      ? sql`${users.homeLayout} = ${JSON.stringify(row.homeLayout)}::jsonb`
+      : sql`(${users.homeLayout} ->> 'updatedAt') IS NOT DISTINCT FROM ${baseUpdatedAt}`;
     const updated = await db
       .update(users)
       .set({ homeLayout: next })
-      .where(
-        and(
-          eq(users.id, userId),
-          force ? undefined : sql`(${users.homeLayout} ->> 'updatedAt') IS NOT DISTINCT FROM ${base}`,
-        ),
-      )
+      .where(and(eq(users.id, userId), force ? undefined : unchanged))
       .returning({ id: users.id });
     if (updated.length === 0) return { success: false, error: "conflict" };
 

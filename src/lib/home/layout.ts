@@ -129,11 +129,6 @@ export function mergeForSave(
   return [...items, ...kept];
 }
 
-/** The streamed widgets the page renders, which are the only ones whose loader runs. */
-export function visibleStreamed(items: ResolvedItem[]): WidgetId[] {
-  return items.filter((i) => !i.hidden && widgetDef(i.id).source === "stream").map((i) => i.id);
-}
-
 /** One row of the home outside edit mode: a full-width widget, or one or two S widgets. */
 export type HomeRow = { ids: WidgetId[]; half: boolean };
 

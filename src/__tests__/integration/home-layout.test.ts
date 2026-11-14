@@ -1,4 +1,6 @@
 import Home from "@/app/page";
+import { RENDERERS } from "@/components/features/home/widgets";
+import type { HomeGridProps } from "@/components/features/home/HomeGrid";
 import { db, pool } from "@/db";
 import { trainingCycleSlots, trainingCycles, users } from "@/db/schema";
 import { collectUserData } from "@/lib/account-data";
@@ -10,6 +12,7 @@ import type { StoredHomeLayout } from "@/lib/home/stored-layout";
 import { getUserSettings } from "@/lib/user-settings";
 import { todayIn } from "@/lib/utils/user-date";
 import { eq } from "drizzle-orm";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createUser } from "./factories";
 import { asUser } from "./setup";
@@ -142,12 +145,47 @@ describe("saveHomeLayout (I1)", () => {
     expect(((await stored(me)) as StoredHomeLayout).items.map((i) => i.id)).not.toContain("garminReadiness");
   });
 
+  it("a stored layout that does not parse renders the default, and a save from it is not a conflict", async () => {
+    const broken = { v: 2, updatedAt: "2026-11-13T10:00:00.000Z", items: [] };
+    await db.update(users).set({ homeLayout: broken as never }).where(eq(users.id, me));
+    const grid = await homeGridProps();
+    expect(grid.items).toEqual(defaultLayout(LIFTER).filter((i) => i.id !== "cycle"));
+    const res = await saveHomeLayout({ items: items({ week: { size: "m" } }), baseUpdatedAt: grid.baseUpdatedAt, force: false });
+    expect(res.success).toBe(true);
+    expect(((await stored(me)) as StoredHomeLayout).v).toBe(1);
+  });
+
   it("the column is in the account export", async () => {
     await saveHomeLayout({ items: items(), baseUpdatedAt: null, force: false });
     const data = await collectUserData(me);
     expect((data.user as { homeLayout: unknown }).homeLayout).toEqual(await stored(me));
   });
 });
+
+/** The props the home page gives HomeGrid. */
+async function homeGridProps(): Promise<HomeGridProps> {
+  const page = (await Home()) as ReactElement<{ children: ReactElement<HomeGridProps> }>;
+  return page.props.children.props;
+}
+
+/**
+ * Await every async Server Component in a tree, as the server would while it
+ * streams. That is where a streamed widget's loader runs. Plain components
+ * are not called: a client part would need React to render it.
+ */
+async function stream(node: ReactNode | unknown): Promise<void> {
+  if (Array.isArray(node)) {
+    for (const n of node) await stream(n);
+    return;
+  }
+  if (!isValidElement(node)) return;
+  const { type, props } = node as ReactElement<{ children?: ReactNode }>;
+  if (typeof type === "function" && type.constructor.name === "AsyncFunction") {
+    await (type as (p: unknown) => Promise<unknown>)(props);
+    return;
+  }
+  await stream(props.children);
+}
 
 /** Statements sent while rendering the home once (the T2 harness in home-queries.test.ts). */
 async function countHome(): Promise<number> {
@@ -169,11 +207,43 @@ describe("query count (T2)", () => {
         homeLayout: {
           v: 1,
           updatedAt: "2026-11-13T10:00:00.000Z",
-          items: [...items(), { id: "recentPrs", size: "m", hidden: false }, { id: "friendsActivity", size: "m", hidden: false }],
+          items: items({ recentPrs: { hidden: false }, friendsActivity: { hidden: false } }),
         },
       })
       .where(eq(users.id, me));
     expect(await countHome()).toBe(before);
+    // The two are really on the page (a repeated id would be dropped as hidden).
+    expect(Object.keys((await homeGridProps()).slots)).toEqual(expect.arrayContaining(["recentPrs", "friendsActivity"]));
+  });
+});
+
+describe("hidden streamed widgets (U5)", () => {
+  async function loads(hidden: boolean) {
+    await db
+      .update(users)
+      .set({
+        homeLayout: {
+          v: 1,
+          updatedAt: "2026-11-13T10:00:00.000Z",
+          items: items({ recentPrs: { hidden }, friendsActivity: { hidden } }),
+        },
+      })
+      .where(eq(users.id, me));
+    const prs = vi.spyOn(RENDERERS.recentPrs, "load");
+    const friends = vi.spyOn(RENDERERS.friendsActivity, "load");
+    await stream(Object.values((await homeGridProps()).slots));
+    const n = [prs.mock.calls.length, friends.mock.calls.length];
+    prs.mockRestore();
+    friends.mockRestore();
+    return n;
+  }
+
+  it("with Recent PRs and Friends hidden, their loaders never run", async () => {
+    expect(await loads(true)).toEqual([0, 0]);
+  });
+
+  it("visible, each loader runs once (the harness sees a load)", async () => {
+    expect(await loads(false)).toEqual([1, 1]);
   });
 });
 

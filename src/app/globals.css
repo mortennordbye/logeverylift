@@ -403,4 +403,6 @@ select {
    selection callout on top of it. */
 [data-widget] {
   -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }

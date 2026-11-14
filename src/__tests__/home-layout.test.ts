@@ -6,7 +6,6 @@ import {
   parseStoredLayout,
   resolveLayout,
   toRows,
-  visibleStreamed,
   type ResolvedItem,
 } from "@/lib/home/layout";
 import { noticesIn } from "@/lib/home/notices";
@@ -231,17 +230,5 @@ describe("toRows", () => {
       { id: "today", size: "m", hidden: false },
     ]);
     expect(afterTrainingRow(rows)).toBe(2);
-  });
-});
-
-describe("visibleStreamed (U5)", () => {
-  it("is exactly the visible streamed widgets; a hidden one is never loaded", () => {
-    const items: ResolvedItem[] = [
-      ...defaultLayout(ADMIN).filter((i) => i.id !== "recentPrs" && i.id !== "garminReadiness"),
-      { id: "recentPrs", size: "m", hidden: false },
-      { id: "garminReadiness", size: "m", hidden: true },
-    ];
-    expect(visibleStreamed(items)).toEqual(["recentPrs"]);
-    expect(visibleStreamed(defaultLayout(ADMIN))).toEqual([]);
   });
 });
