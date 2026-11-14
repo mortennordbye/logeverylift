@@ -16,15 +16,21 @@ import {
   setPhaseAction,
   updateRaceAction,
 } from "@/lib/actions/seasons";
+import { TakeStartSheet } from "@/components/features/TakeStartSheet";
+import type { ScheduledDraft } from "@/lib/utils/cycle-start";
+import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
 import { callAction } from "@/lib/utils/stale-bundle";
 import {
   PHASE_TYPE_LABELS,
   dayLabel,
   daysBetweenStr,
+  lengthField,
   lengthShort,
   rangeLabel,
   seasonPaused,
   shortDay,
+  switchLengthUnit,
+  type LengthUnit,
   type RaceDiscipline,
   type RacePriority,
   type TaperFit,
@@ -86,6 +92,9 @@ type Props = {
   next: { cycleId: number; name: string; plannedStart: string; scheduled: boolean } | null;
   gapBefore: number;
   overrunAfter: number;
+  /** The running cycle and the scheduled draft: what Resume ends and drops. */
+  running: RunningBlock | null;
+  scheduled: ScheduledDraft | null;
 };
 
 const PHASE_TYPES = Object.keys(PHASE_TYPE_LABELS) as PhaseType[];
@@ -100,7 +109,7 @@ const TRI_WORD: Record<TriDistance, string> = { full: "Full", half: "Half", olym
 const KIND_WORD: Record<RaceDiscipline, string> = { triathlon: "Triathlon", run: "Run", ride: "Ride", swim: "Swim", other: "Other" };
 
 type RaceDraft = { id?: number; name: string; raceDate: string; discipline: RaceDiscipline; distance: TriDistance | null; km: string; priority: RacePriority };
-type PhaseDraft = { phase: SeasonPhaseView; phaseType: PhaseType | null; unit: "weeks" | "days"; length: string };
+type PhaseDraft = { phase: SeasonPhaseView; phaseType: PhaseType | null; unit: LengthUnit; length: string; unitNote: string | null };
 
 /** "Triathlon · Half · 29 Aug 2027" or "Run · 10 km · 3 May 2027". */
 function raceSub(r: SeasonRaceView): string {
@@ -147,6 +156,21 @@ export function SeasonDetailClient(p: Props) {
   const [menu, setMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRemoveRace, setConfirmRemoveRace] = useState(false);
+  const [confirmResume, setConfirmResume] = useState(false);
+  // An error belongs to the sheet or the page action that caused it: opening
+  // or closing a sheet starts afresh, so an old error never shows elsewhere.
+  const sheet =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      setError(null);
+      set(v);
+    };
+  const toRace = sheet(setRace);
+  const toPhase = sheet(setPhase);
+  const toMenu = sheet(setMenu);
+  const toDelete = sheet(setConfirmDelete);
+  const toRemoveRace = sheet(setConfirmRemoveRace);
+  const toResume = sheet(setConfirmResume);
   const showRaces = p.enduranceEnabled || p.races.length > 0;
   const aRace = showRaces ? (p.races.find((r) => r.id === p.aRaceId) ?? null) : null;
 
@@ -223,6 +247,7 @@ export function SeasonDetailClient(p: Props) {
 
   async function deleteSeason() {
     setBusy(true);
+    setError(null);
     const result = await callAction(deleteSeasonAction({ seasonId: p.season.id }));
     setBusy(false);
     if (!result.success) return setError(result.error);
@@ -242,6 +267,12 @@ export function SeasonDetailClient(p: Props) {
   const countdownTo = aRace?.raceDate ?? p.season.endDate;
   const daysLeft = daysBetweenStr(p.today, countdownTo);
   const paused = seasonPaused(p.next, phases, p.today);
+
+  // Resume starts the next phase today when its day has come, else schedules
+  // it: either way the running cycle ends then and another start is dropped.
+  const resumeDay = p.next ? (p.next.plannedStart <= p.today ? p.today : p.next.plannedStart) : p.today;
+  const resumeLines = p.next ? takeStartLines({ seasonId: p.season.id, day: resumeDay, running: p.running, scheduled: p.scheduled }) : [];
+  const resume = () => run(resumeSeasonAction({ seasonId: p.season.id }), () => setConfirmResume(false));
 
   function badge(ph: SeasonPhaseView): string {
     if (ph.state === "active") return "Now";
@@ -263,7 +294,7 @@ export function SeasonDetailClient(p: Props) {
     <>
       <header className="flex items-center justify-between px-4 pt-4">
         <BackLink fallback={{ href: "/cycles", label: "Plan" }} />
-        <button type="button" aria-label="More actions" onClick={() => setMenu(true)} className="flex h-11 w-11 items-center justify-center rounded-full bg-widget active:opacity-70">
+        <button type="button" aria-label="More actions" onClick={() => toMenu(true)} className="flex h-11 w-11 items-center justify-center rounded-full bg-widget active:opacity-70">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <circle cx="5" cy="12" r="1.8" />
             <circle cx="12" cy="12" r="1.8" />
@@ -283,7 +314,7 @@ export function SeasonDetailClient(p: Props) {
           {p.season.nextGoal && <span className="text-[13px] text-muted-foreground">Next goal is {p.season.nextGoal}</span>}
         </div>
 
-        {race == null && phase == null && !confirmDelete && errorLine}
+        {race == null && phase == null && !confirmDelete && !confirmResume && errorLine}
 
         {showBanner && (
           <section data-testid="replan-banner" className="flex flex-col gap-2.5 rounded-2xl border border-[color-mix(in_oklab,var(--home-fg)_16%,transparent)] bg-widget-2 px-4 py-3.5">
@@ -355,9 +386,7 @@ export function SeasonDetailClient(p: Props) {
                       sub={`${p.enduranceEnabled && ph.phaseType ? `${PHASE_TYPE_LABELS[ph.phaseType]} · ` : ""}${lengthShort(ph)} · ${rangeLabel(ph.start, ph.end)}`}
                       warn={misfit && "taperId" in fit && fit.taperId === ph.id && showRaces ? fitLine : null}
                       badge={badge(ph)}
-                      onOpen={() =>
-                        setPhase({ phase: ph, phaseType: ph.phaseType, unit: ph.durationDays != null ? "days" : "weeks", length: String(ph.durationDays ?? ph.durationWeeks) })
-                      }
+                      onOpen={() => toPhase({ phase: ph, phaseType: ph.phaseType, ...lengthField(ph), unitNote: null })}
                     />
                   ))}
                 </ul>
@@ -373,7 +402,12 @@ export function SeasonDetailClient(p: Props) {
               <p className="text-[13px] text-muted-foreground">
                 {paused ? "Paused. The next phase is not scheduled." : `“${p.next.name}” is not started.`}
               </p>
-              <button type="button" disabled={busy} onClick={() => run(resumeSeasonAction({ seasonId: p.season.id }))} className="min-h-11 shrink-0 text-sm font-medium text-primary active:opacity-70">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => (resumeLines.length > 0 ? toResume(true) : resume())}
+                className="min-h-11 shrink-0 text-sm font-medium text-primary active:opacity-70"
+              >
                 {paused ? "Resume" : "Start"}
               </button>
             </div>
@@ -393,7 +427,7 @@ export function SeasonDetailClient(p: Props) {
                       type="button"
                       disabled={!p.enduranceEnabled}
                       onClick={() =>
-                        setRace({ id: r.id, name: r.name, raceDate: r.raceDate, discipline: r.discipline, distance: r.distance, km: r.distanceMeters ? String(r.distanceMeters / 1000) : "", priority: r.priority })
+                        toRace({ id: r.id, name: r.name, raceDate: r.raceDate, discipline: r.discipline, distance: r.distance, km: r.distanceMeters ? String(r.distanceMeters / 1000) : "", priority: r.priority })
                       }
                       className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left active:opacity-80"
                     >
@@ -413,7 +447,7 @@ export function SeasonDetailClient(p: Props) {
             {p.enduranceEnabled && (
               <button
                 type="button"
-                onClick={() => setRace({ name: "", raceDate: "", discipline: "triathlon", distance: "half", km: "", priority: "A" })}
+                onClick={() => toRace({ name: "", raceDate: "", discipline: "triathlon", distance: "half", km: "", priority: "A" })}
                 className="flex min-h-11 items-center self-start px-1 text-[15px] font-medium text-primary active:opacity-70"
               >
                 + Add race
@@ -423,7 +457,7 @@ export function SeasonDetailClient(p: Props) {
         )}
       </div>
 
-      <BottomSheet open={menu} onClose={() => setMenu(false)}>
+      <BottomSheet open={menu} onClose={() => toMenu(false)}>
         <PlanSheetPanel label="Season actions">
           <h2 className="truncate text-xl font-semibold">{p.season.name}</h2>
           <div className="flex flex-col overflow-hidden rounded-2xl bg-widget-2">
@@ -437,7 +471,7 @@ export function SeasonDetailClient(p: Props) {
               type="button"
               onClick={() => {
                 setMenu(false);
-                setConfirmDelete(true);
+                toDelete(true);
               }}
               className={`${MENU_ROW} ${DESTRUCTIVE_TEXT}`}
             >
@@ -447,7 +481,7 @@ export function SeasonDetailClient(p: Props) {
         </PlanSheetPanel>
       </BottomSheet>
 
-      <BottomSheet open={confirmDelete} onClose={() => setConfirmDelete(false)}>
+      <BottomSheet open={confirmDelete} onClose={() => toDelete(false)}>
         <PlanSheetPanel label="Delete this season?">
           <div className="flex flex-col gap-1">
             <h2 className="text-xl font-semibold">Delete this season?</h2>
@@ -457,13 +491,13 @@ export function SeasonDetailClient(p: Props) {
           <button type="button" disabled={busy} onClick={deleteSeason} className={DESTRUCTIVE_BUTTON}>
             Delete season
           </button>
-          <button type="button" onClick={() => setConfirmDelete(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+          <button type="button" onClick={() => toDelete(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
             Cancel
           </button>
         </PlanSheetPanel>
       </BottomSheet>
 
-      <BottomSheet open={race != null && confirmRemoveRace} onClose={() => setConfirmRemoveRace(false)}>
+      <BottomSheet open={race != null && confirmRemoveRace} onClose={() => toRemoveRace(false)}>
         {race?.id && (
           <PlanSheetPanel label="Remove this race?">
             <div className="flex flex-col gap-1">
@@ -484,14 +518,14 @@ export function SeasonDetailClient(p: Props) {
             >
               Remove race
             </button>
-            <button type="button" onClick={() => setConfirmRemoveRace(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+            <button type="button" onClick={() => toRemoveRace(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
               Cancel
             </button>
           </PlanSheetPanel>
         )}
       </BottomSheet>
 
-      <BottomSheet open={race != null && !confirmRemoveRace} onClose={() => setRace(null)}>
+      <BottomSheet open={race != null && !confirmRemoveRace} onClose={() => toRace(null)}>
         {race && (
           <PlanSheetPanel label={race.id ? "Edit race" : "New race"}>
             <h2 className="text-xl font-semibold">{race.id ? "Edit race" : "New race"}</h2>
@@ -550,10 +584,7 @@ export function SeasonDetailClient(p: Props) {
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => {
-                  setError(null);
-                  setConfirmRemoveRace(true);
-                }}
+                onClick={() => toRemoveRace(true)}
                 className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}
               >
                 Remove race
@@ -563,7 +594,7 @@ export function SeasonDetailClient(p: Props) {
         )}
       </BottomSheet>
 
-      <BottomSheet open={phase != null} onClose={() => setPhase(null)}>
+      <BottomSheet open={phase != null} onClose={() => toPhase(null)}>
         {phase && (
           <PlanSheetPanel label={phase.phase.name}>
             <div className="flex flex-col gap-0.5">
@@ -597,13 +628,16 @@ export function SeasonDetailClient(p: Props) {
                   aria-label="Length"
                   inputMode="numeric"
                   value={phase.length}
-                  onChange={(e) => setPhase({ ...phase, length: e.target.value.replace(/\D/g, "") })}
+                  onChange={(e) => setPhase({ ...phase, length: e.target.value.replace(/\D/g, ""), unitNote: null })}
                   className={`${INNER_FIELD.replace("w-full", "w-[88px] shrink-0")} font-semibold`}
                 />
                 <Segmented
                   label="Length unit"
                   value={phase.unit}
-                  onChange={(unit) => setPhase({ ...phase, unit })}
+                  onChange={(unit) => {
+                    const next = switchLengthUnit(phase.length, phase.unit, unit);
+                    setPhase({ ...phase, length: next.length, unit: next.unit, unitNote: next.note });
+                  }}
                   track="bg-widget-2"
                   className="flex-1"
                   options={[
@@ -612,6 +646,7 @@ export function SeasonDetailClient(p: Props) {
                   ]}
                 />
               </div>
+              {phase.unitNote && <span className="text-[13px] text-muted-foreground">{phase.unitNote}</span>}
             </div>
             <button type="button" disabled={busy || !Number(phase.length)} onClick={savePhase} className={PRIMARY_BUTTON}>
               Save phase
@@ -623,6 +658,19 @@ export function SeasonDetailClient(p: Props) {
           </PlanSheetPanel>
         )}
       </BottomSheet>
+
+      {p.next && (
+        <TakeStartSheet
+          open={confirmResume}
+          title={paused ? "Resume this season?" : "Start this season?"}
+          lines={[`${p.next.name} starts ${resumeDay === p.today ? "today" : shortDay(resumeDay)}.`, ...resumeLines]}
+          action={paused ? "Resume season" : "Start season"}
+          busy={busy}
+          error={error}
+          onConfirm={resume}
+          onClose={() => toResume(false)}
+        />
+      )}
     </>
   );
 }

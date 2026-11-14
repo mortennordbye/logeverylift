@@ -47,6 +47,8 @@ const generateTriathlonPlanSchema = seasonFieldsSchema.omit({ endDate: true }).e
   }),
   restDays: z.array(z.number().int().min(1).max(7)).max(2).optional(),
   level: z.enum(["novice", "intermediate", "advanced"]).optional(),
+  /** The user confirmed the first phase takes the scheduled start (addPhase `takeStart`). */
+  takeStart: z.boolean().optional(),
 });
 // Canonical exercises the plan references. Endurance ones are new (discipline-tagged);
 // the strength/plyometric lifts match the seed names so existing rows are reused, and
@@ -165,7 +167,8 @@ export async function generateTriathlonPlan(data: unknown): Promise<ActionResult
         await insertPlanWeek(w, cycle.id, plans[i], nameToId, PHASE_TYPE_LABELS[phase.phaseType]);
       }
       // A season that starts later gets its first phase scheduled for its start.
-      await chainSeason(w, season.id, { claim: true });
+      // It takes the start from another block only when the user confirmed that.
+      await chainSeason(w, season.id, { claim: input.takeStart === true });
       return season.id;
     });
 

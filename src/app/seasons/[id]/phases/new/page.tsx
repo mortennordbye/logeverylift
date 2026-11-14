@@ -1,7 +1,9 @@
 import { AddPhaseForm } from "@/components/features/AddPhaseForm";
 import { HOME_UI } from "@/components/features/home/fonts";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { getSeasonDetail, seasonlessCycles } from "@/lib/seasons";
+import { getSeasonDetail, seasonStartContext, seasonlessCycles } from "@/lib/seasons";
+import { userToday } from "@/lib/user-settings";
+import { toDateStr } from "@/lib/utils/cycle-position";
 import { addDaysStr } from "@/lib/utils/seasons";
 import { requireSession } from "@/lib/utils/session";
 
@@ -13,10 +15,13 @@ export default async function AddPhasePage({ params }: { params: Promise<{ id: s
   const seasonId = Number(id);
   if (!Number.isInteger(seasonId) || seasonId <= 0) notFound();
   const auth = await requireSession();
-  const [detail, enduranceEnabled, candidates] = await Promise.all([
+  const today = toDateStr(await userToday(auth.user.id));
+  const [detail, enduranceEnabled, candidates, { running, scheduled }] = await Promise.all([
     getSeasonDetail(auth.user.id, seasonId),
     enduranceEnabledFor(auth.user.id),
     seasonlessCycles(auth.user.id),
+    // A season's first phase takes the scheduled start: the form says what that ends first.
+    seasonStartContext(auth.user.id, today),
   ]);
   if (!detail) notFound();
   const last = detail.phases.at(-1) ?? null;
@@ -32,6 +37,9 @@ export default async function AddPhasePage({ params }: { params: Promise<{ id: s
         enduranceEnabled={enduranceEnabled}
         taperDays={detail.taperDays}
         candidates={candidates}
+        today={today}
+        running={running}
+        scheduled={scheduled}
       />
     </div>
   );

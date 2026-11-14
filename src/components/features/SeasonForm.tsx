@@ -5,6 +5,9 @@ import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { PHASE_TYPE_LABELS, dayLabel, lengthShort, rangeLabel, shortDay, type RaceDiscipline, type RacePriority, type TriDistance } from "@/lib/utils/seasons";
 import { triathlonPhases } from "@/lib/utils/triathlon-phases";
+import type { ScheduledDraft } from "@/lib/utils/cycle-start";
+import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
+import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { useBack, useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import {
@@ -38,6 +41,11 @@ type Props =
       /** Cycles in no season, newest first. */
       candidates: Candidate[];
       initialSource?: PhaseSource;
+      /** The user's today, YYYY-MM-DD. */
+      today: string;
+      /** What a first phase that takes the scheduled start ends and drops (takeStartLines). */
+      running: RunningBlock | null;
+      scheduled: ScheduledDraft | null;
     };
 
 const DISCIPLINES: { value: RaceDiscipline; label: string }[] = [
@@ -114,9 +122,27 @@ export function SeasonForm(props: Props) {
     (!hasRace || raceComplete) &&
     (source !== "cycles" || picked.length > 0);
 
+  // Phases made now start the season on its start day, taking the one
+  // scheduled start: the user confirms what that ends and drops first.
+  const [confirmStart, setConfirmStart] = useState(false);
+  const startLines =
+    create && source !== "later" && startDate > create.today
+      ? takeStartLines({ seasonId: null, day: startDate, running: create.running, scheduled: create.scheduled, joining: source === "cycles" ? picked : [] })
+      : [];
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!valid || loading) return;
+    if (startLines.length > 0) {
+      setError("");
+      setConfirmStart(true);
+      return;
+    }
+    await save(false);
+  }
+
+  async function save(takeStart: boolean) {
+    const take = takeStart ? { takeStart: true } : {};
     setLoading(true);
     setError("");
     const fields = { name: name.trim(), goal: goal.trim() || null, startDate };
@@ -127,7 +153,7 @@ export function SeasonForm(props: Props) {
       return returnTo(`/seasons/${initial.id}`);
     }
     if (source === "triathlon") {
-      const result = await callAction(generateTriathlonPlan({ ...fields, race: { name: raceName.trim(), raceDate, distance } }));
+      const result = await callAction(generateTriathlonPlan({ ...fields, race: { name: raceName.trim(), raceDate, distance }, ...take }));
       setLoading(false);
       if (!result.success) return setError(result.error);
       return returnTo(`/seasons/${result.data.seasonId}`);
@@ -143,7 +169,7 @@ export function SeasonForm(props: Props) {
         }
       : undefined;
     const result = await callAction(
-      createSeasonAction({ ...fields, endDate: end, ...(race ? { race } : {}), ...(source === "cycles" ? { cycleIds: picked } : {}) }),
+      createSeasonAction({ ...fields, endDate: end, ...(race ? { race } : {}), ...(source === "cycles" ? { cycleIds: picked } : {}), ...take }),
     );
     setLoading(false);
     if (!result.success) return setError(result.error);
@@ -340,7 +366,7 @@ export function SeasonForm(props: Props) {
           </fieldset>
         )}
 
-        {error && (
+        {error && !confirmStart && (
           <p role="alert" className="text-sm text-[#ff6b5a]">
             {error}
           </p>
@@ -372,6 +398,21 @@ export function SeasonForm(props: Props) {
             </button>
           </div>
         </BottomSheet>
+      )}
+      {create && (
+        <TakeStartSheet
+          open={confirmStart}
+          title={`Start this season ${shortDay(startDate)}?`}
+          lines={startLines}
+          action="Create season"
+          busy={loading}
+          error={error || null}
+          onConfirm={() => save(true)}
+          onClose={() => {
+            setError("");
+            setConfirmStart(false);
+          }}
+        />
       )}
       <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
     </form>

@@ -11,7 +11,9 @@
 
 import { db } from "@/db";
 import { racePlans, seasonRaces, seasons, trainingCycles, type PhaseType, type RaceDiscipline, type RacePriority, type TriDistance } from "@/db/schema";
+import { cycleStartContext } from "@/lib/cycle-start";
 import { enduranceEnabledFor } from "@/lib/endurance";
+import { liveCycles } from "@/lib/plan-live";
 import {
   PlanNotFoundError,
   PlanStateError,
@@ -43,6 +45,8 @@ import {
   type TimelinePhase,
 } from "@/lib/utils/seasons";
 import { SEASON_MAX_PHASES } from "@/lib/utils/seasons";
+import type { ScheduledDraft } from "@/lib/utils/cycle-start";
+import type { RunningBlock } from "@/lib/utils/season-start";
 import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 
 export const SEASON_TEXT_MAX = 500;
@@ -176,6 +180,31 @@ export async function seasonlessCycles(userId: string) {
       ),
     )
     .orderBy(desc(trainingCycles.createdAt));
+}
+
+/**
+ * The running cycle and the scheduled draft, for a screen that lets a season
+ * take the one scheduled start (New season, a season's first phase, Resume),
+ * so it can say what that ends and drops first (takeStartLines).
+ */
+export async function seasonStartContext(userId: string, day: string): Promise<{ running: RunningBlock | null; scheduled: ScheduledDraft | null }> {
+  const [{ scheduled }, [active]] = await Promise.all([
+    cycleStartContext(userId, day),
+    db
+      .select({
+        id: trainingCycles.id,
+        name: trainingCycles.name,
+        startDate: trainingCycles.startDate,
+        durationWeeks: trainingCycles.durationWeeks,
+        durationDays: trainingCycles.durationDays,
+        seasonId: seasons.id,
+      })
+      .from(trainingCycles)
+      // A phase of a deleted season acts as a cycle with no season.
+      .leftJoin(seasons, and(eq(seasons.id, trainingCycles.seasonId), isNull(seasons.deletedAt)))
+      .where(and(eq(trainingCycles.userId, userId), liveCycles, eq(trainingCycles.status, "active"), isNotNull(trainingCycles.startDate))),
+  ]);
+  return { running: active ? { ...active, startDate: active.startDate! } : null, scheduled };
 }
 
 /** The season a cycle is a phase of, with its races, for the cycle page. Null when it is in no live season. */
@@ -564,6 +593,13 @@ export type AddPhaseInput = PhaseLength & {
   /** 1-based position; the end when omitted. */
   position?: number;
   phaseType?: PhaseType | null;
+  /**
+   * A season's first phase takes the one scheduled start, ending the running
+   * cycle on its day and dropping any other scheduled start (chainSeason
+   * `claim`). The app sends true only after the user confirmed that; false
+   * leaves the season paused when another block holds the start. Default true.
+   */
+  takeStart?: boolean;
 };
 
 export type PhaseResult = {
@@ -655,7 +691,7 @@ export async function addPhase(ctx: PlanWriteContext, seasonId: number, input: A
     current.set(cycleId, null);
     await renumber(w, order, current);
     // The season's first phase: the user means to run this season from its start.
-    await chainSeason(w, seasonId, { claim: ids.length === 0 });
+    await chainSeason(w, seasonId, { claim: ids.length === 0 && input.takeStart !== false });
     return { cycleId, raceMoved };
   });
   return {

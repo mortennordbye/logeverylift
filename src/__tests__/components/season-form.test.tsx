@@ -29,6 +29,9 @@ const create = {
     { id: 3, name: "Upper / Lower hypertrophy", status: "active" },
     { id: 2, name: "Strength peak", status: "draft" },
   ],
+  today: "2026-11-14",
+  running: null,
+  scheduled: null,
 };
 
 const triathlonCard = () => screen.getByText("Make a triathlon plan").closest("label")!;
@@ -135,5 +138,76 @@ describe("New season with the endurance switch", () => {
   it("sends a user without the intake interview to it first", () => {
     render(<SeasonForm {...create} interviewDone={false} />);
     expect(screen.getByRole("link", { name: /Make a triathlon plan/ }).getAttribute("href")).toBe("/more/athlete/interview?next=/seasons/new");
+  });
+});
+
+describe("New season while another block holds the start (fix round 4)", () => {
+  // Upper / Lower (id 3) runs from 2 Nov; Build of another season is scheduled for 14 Dec.
+  const busy = {
+    ...create,
+    running: { id: 3, name: "Upper / Lower hypertrophy", startDate: "2026-11-02", durationWeeks: 6, durationDays: null, seasonId: null },
+    scheduled: { id: 5, name: "Build", day: "2026-12-14", season: { id: 9, name: "Jevnaker Half 2027" } },
+  };
+  const ends = "This ends Upper / Lower hypertrophy at week 3 of 6.";
+  const drops = "Jevnaker Half 2027 pauses. Its next phase no longer starts Mon 14 Dec. You can resume it from the season.";
+  const title = "Start this season Mon 16 Nov?";
+
+  function fillPlan() {
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Oslo Tri 2027" } });
+    fireEvent.change(screen.getByLabelText("Race name"), { target: { value: "Oslo 70.3" } });
+    fireEvent.change(screen.getByLabelText("Race date"), { target: { value: "2027-08-29" } });
+    fireEvent.click(within(triathlonCard()).getByRole("radio"));
+  }
+
+  it("a triathlon plan says what it ends and drops, and is made only after the confirm", async () => {
+    render(<SeasonForm {...busy} />);
+    fillPlan();
+    fireEvent.click(screen.getByRole("button", { name: "Create season" }));
+    const sheet = await screen.findByRole("region", { name: title });
+    expect(sheet.textContent).toContain(ends);
+    expect(sheet.textContent).toContain(drops);
+    expect(mocks.generateTriathlonPlan).not.toHaveBeenCalled();
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Create season" }));
+    await waitFor(() => expect(mocks.generateTriathlonPlan).toHaveBeenCalledWith(expect.objectContaining({ name: "Oslo Tri 2027", takeStart: true })));
+  });
+
+  it("Cancel in the confirm makes nothing", async () => {
+    render(<SeasonForm {...busy} />);
+    fillPlan();
+    fireEvent.click(screen.getByRole("button", { name: "Create season" }));
+    const sheet = await screen.findByRole("region", { name: title });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: title })).toBeNull());
+    expect(mocks.generateTriathlonPlan).not.toHaveBeenCalled();
+  });
+
+  it("cycles I already have ask first too", async () => {
+    render(<SeasonForm {...busy} enduranceEnabled={false} />);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Spring" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change end" }));
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2027-03-01" } });
+    fireEvent.click(screen.getByLabelText(/Use cycles I already have/));
+    fireEvent.click(within(screen.getByRole("list", { name: "Your cycles" })).getByLabelText(/Strength peak/));
+    fireEvent.click(screen.getByRole("button", { name: "Create season" }));
+    const sheet = await screen.findByRole("region", { name: title });
+    expect(sheet.textContent).toContain(ends);
+    fireEvent.click(within(sheet).getByRole("button", { name: "Create season" }));
+    await waitFor(() => expect(mocks.createSeasonAction).toHaveBeenCalledWith(expect.objectContaining({ cycleIds: [2], takeStart: true })));
+  });
+
+  it("asks nothing when the running cycle joins, or the season has no phases yet", async () => {
+    render(<SeasonForm {...busy} enduranceEnabled={false} />);
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Spring" } });
+    fireEvent.click(screen.getByRole("button", { name: "Change end" }));
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2027-03-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create season" }));
+    await waitFor(() => expect(mocks.createSeasonAction).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByLabelText(/Use cycles I already have/));
+    fireEvent.click(within(screen.getByRole("list", { name: "Your cycles" })).getByLabelText(/Upper \/ Lower/));
+    fireEvent.click(screen.getByRole("button", { name: "Create season" }));
+    await waitFor(() => expect(mocks.createSeasonAction).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole("region", { name: title })).toBeNull();
   });
 });

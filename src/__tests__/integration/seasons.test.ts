@@ -318,7 +318,7 @@ describe("the chained start (owner decision 1)", () => {
     expect((await cycleRow(p.success ? p.data.cycleId : 0)).scheduledStartDate).toBe(day(14));
   });
 
-  it("a new season's first phase is scheduled for the season start even while another block runs", async () => {
+  it("a new season's first phase is scheduled for the season start while another block runs, once the user confirmed it", async () => {
     // Another season is running: its phase 1 is active and its phase 2 is scheduled.
     const old = await newSeason(me, day(0));
     const o1 = await addPhaseAction({ seasonId: old, name: "Hypertrophy", durationWeeks: 6 });
@@ -328,9 +328,9 @@ describe("the chained start (owner decision 1)", () => {
     await startTrainingCycle(running);
     expect((await cycleRow(waiting)).scheduledStartDate).toBe(day(42));
 
-    // A new season that starts in two days, made with its phases.
+    // A new season that starts in two days, made with its phases (takeStart: the user confirmed).
     const id = await newSeason(me, day(2));
-    const p1 = await addPhaseAction({ seasonId: id, name: "Phase 1", durationWeeks: 2 });
+    const p1 = await addPhaseAction({ seasonId: id, name: "Phase 1", durationWeeks: 2, takeStart: true });
     const p2 = await addPhaseAction({ seasonId: id, name: "Phase 2", durationWeeks: 2 });
     const one = p1.success ? p1.data.cycleId : 0;
     const two = p2.success ? p2.data.cycleId : 0;
@@ -348,7 +348,7 @@ describe("the chained start (owner decision 1)", () => {
     // Made in one go from cycles the user has, the first is scheduled too.
     const draft = await cycle(me, { name: "Draft block" });
     asUser(me);
-    const made = await createSeasonAction({ name: "Later", startDate: day(5), endDate: day(90), cycleIds: [draft] });
+    const made = await createSeasonAction({ name: "Later", startDate: day(5), endDate: day(90), cycleIds: [draft], takeStart: true });
     expect(made.success).toBe(true);
     expect((await cycleRow(draft)).scheduledStartDate).toBe(day(5));
   });

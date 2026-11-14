@@ -29,6 +29,8 @@ export const createSeasonSchema = seasonFieldsSchema
   .extend({
     race: raceFields.optional(),
     cycleIds: z.array(id).max(30).optional(),
+    /** The user confirmed the first phase takes the scheduled start (addPhase `takeStart`). */
+    takeStart: z.boolean().optional(),
   })
   .refine((s) => s.endDate >= s.startDate, {
     message: "The season must end on or after its start",
@@ -56,6 +58,7 @@ export const addPhaseSchema = z
     scheduleType: z.enum(["day_of_week", "rotation"]).optional(),
     position: z.number().int().positive().optional(),
     phaseType: z.enum(PHASE_TYPES).nullable().optional(),
+    takeStart: z.boolean().optional(),
     ...length,
   })
   .refine((p) => p.cycleId != null || !!p.name, { message: "Pick a cycle or name a new one", path: ["name"] });
