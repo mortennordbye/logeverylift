@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { trainingCycleSlots, trainingCycles, users } from "@/db/schema";
-import { createTrainingCycle, startTrainingCycle, upsertCycleSlot } from "@/lib/actions/training-cycles";
+import { createTrainingCycle, reorderCycleSlots, startTrainingCycle, upsertCycleSlot } from "@/lib/actions/training-cycles";
 import { userToday } from "@/lib/user-settings";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { and, eq } from "drizzle-orm";
@@ -128,5 +128,50 @@ describe("upsertCycleSlot: the session sheet's fields", () => {
       error: "Cycle not found",
     });
     expect(await slot(id, 1)).toBeUndefined();
+  });
+});
+
+describe("reorderCycleSlots", () => {
+  async function rotation() {
+    const id = await draft("Rotation", "rotation");
+    for (let i = 1; i <= 5; i++) {
+      const r = await upsertCycleSlot({ trainingCycleId: id, orderIndex: i, label: `S${i}` });
+      if (!r.success) throw new Error(r.error);
+    }
+    const rows = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, id));
+    const ids = rows.sort((a, b) => a.orderIndex! - b.orderIndex!).map((r) => r.id);
+    return { id, ids };
+  }
+
+  const labelsInOrder = async (id: number) =>
+    (await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, id)))
+      .sort((a, b) => a.orderIndex! - b.orderIndex!)
+      .map((r) => `${r.orderIndex}:${r.label}`);
+
+  it("moves one slot to the front of a 5-slot rotation", async () => {
+    const { id, ids } = await rotation();
+
+    const result = await reorderCycleSlots(id, [ids[3], ids[0], ids[1], ids[2], ids[4]]);
+
+    expect(result).toEqual({ success: true, data: undefined });
+    expect(await labelsInOrder(id)).toEqual(["1:S4", "2:S1", "3:S2", "4:S3", "5:S5"]);
+  });
+
+  it("reverses a 5-slot rotation", async () => {
+    const { id, ids } = await rotation();
+
+    const result = await reorderCycleSlots(id, [...ids].reverse());
+
+    expect(result).toEqual({ success: true, data: undefined });
+    expect(await labelsInOrder(id)).toEqual(["1:S5", "2:S4", "3:S3", "4:S2", "5:S1"]);
+  });
+
+  it("does not reorder another user's rotation", async () => {
+    const { id, ids } = await rotation();
+    asUser((await createUser()).id);
+
+    expect(await reorderCycleSlots(id, [...ids].reverse())).toEqual({ success: false, error: "Cycle not found" });
+    asUser(userId);
+    expect(await labelsInOrder(id)).toEqual(["1:S1", "2:S2", "3:S3", "4:S4", "5:S5"]);
   });
 });
