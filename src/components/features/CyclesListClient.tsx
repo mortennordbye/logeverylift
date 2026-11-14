@@ -1,11 +1,13 @@
 "use client";
 
 import { HOME_UI } from "@/components/features/home/fonts";
+import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { FlagIcon, SeasonsSection } from "@/components/features/SeasonsSection";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
 import type { PlanListData, SelectRow } from "@/lib/plan-list";
 import { phaseDeleteWarning, type CycleRow, type HeroView } from "@/lib/utils/plan-list";
+import { keepDates } from "@/lib/utils/keep-dates";
 import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -58,7 +60,7 @@ function NewChoices({ onPick }: { onPick?: () => void }) {
             </span>
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="text-base font-semibold">{r.title}</span>
-              <span className="text-[13px] text-muted-foreground">{r.sub}</span>
+              <span className="text-[13px] text-muted-foreground">{keepDates(r.sub)}</span>
             </span>
             <ChevronIcon />
           </Link>
@@ -72,13 +74,22 @@ function NewChoices({ onPick }: { onPick?: () => void }) {
 
 function HeroCard({ hero }: { hero: HeroView }) {
   return (
-    <Link href={`/cycles/${hero.id}`} className={`${card} flex flex-col gap-3.5 p-[18px] active:opacity-80`} data-testid="plan-hero">
+    <Link href={`/cycles/${hero.id}`} className={`${card} flex flex-col gap-3.5 p-3.5 min-[360px]:p-[18px] active:opacity-80`} data-testid="plan-hero">
       <div className="flex flex-col gap-1">
-        <span className="text-xs font-semibold uppercase tracking-[1px] text-brand">{hero.label}</span>
+        {/* Each part stays whole: a narrow screen breaks the label after a dot, never inside a part. */}
+        <span className="text-xs font-semibold uppercase tracking-[1px] text-brand" data-testid="hero-label">
+          {hero.label.split(" · ").map((part, i, all) => (
+            <span key={i} className="whitespace-nowrap">
+              {keepDates(part)}
+              {i < all.length - 1 ? " ·" : ""}
+              {i < all.length - 1 ? " " : ""}
+            </span>
+          ))}
+        </span>
         <span className="text-xl font-semibold">{hero.name}</span>
       </div>
       {hero.kind === "week" ? (
-        <ul className="grid grid-cols-7 gap-1" aria-label="This week">
+        <ul className="grid grid-cols-7 gap-0.5 min-[360px]:gap-1" aria-label="This week">
           {hero.days.map((d) => (
             <li
               key={d.date}
@@ -88,7 +99,7 @@ function HeroCard({ hero }: { hero: HeroView }) {
                 {d.day}
               </span>
               <span className={`h-2 w-2 rounded-full ${d.key ? "bg-brand" : d.rest ? "bg-foreground/15" : "bg-foreground"}`} aria-hidden />
-              <span aria-hidden className={`max-w-full truncate px-0.5 text-[11px] font-semibold ${d.rest ? "text-muted-foreground" : ""}`}>
+              <span aria-hidden className={`max-w-full truncate text-[11px] font-semibold tracking-[-0.2px] ${d.rest ? "text-muted-foreground" : ""}`}>
                 {d.short}
               </span>
               <span className="sr-only">{`${d.day}, ${d.names}${d.key ? ", key session" : ""}`}</span>
@@ -124,7 +135,7 @@ function HeroCard({ hero }: { hero: HeroView }) {
             )}
           </span>
         )}
-        <span>{hero.ends}</span>
+        <span className="shrink-0">{keepDates(hero.ends)}</span>
       </div>
     </Link>
   );
@@ -143,11 +154,11 @@ function CycleRows({ rows }: { rows: CycleRow[] }) {
         >
           <span className="flex min-w-0 flex-col gap-0.5">
             <span className="truncate text-[15px] font-medium">{r.name}</span>
-            <span className="text-[13px] text-muted-foreground">{r.sub}</span>
+            <span className="text-[13px] text-muted-foreground">{keepDates(r.sub)}</span>
           </span>
           {r.starts && (
             <span className={`shrink-0 text-[13px] ${r.startsAccent ? "font-semibold text-brand" : "text-muted-foreground"}`} data-testid="scheduled-start">
-              {r.starts}
+              {keepDates(r.starts)}
             </span>
           )}
         </Link>
@@ -175,7 +186,7 @@ function SelectRows({ rows, selected, toggle }: { rows: SelectRow[]; selected: S
             </span>
             <span className="flex min-w-0 flex-col gap-0.5">
               <span className="truncate text-[15px] font-medium">{r.name}</span>
-              <span className="text-[13px] text-muted-foreground">{r.sub}</span>
+              <span className="text-[13px] text-muted-foreground">{keepDates(r.sub)}</span>
             </span>
           </label>
         );
@@ -399,7 +410,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
                           className="flex min-h-[44px] flex-col gap-0.5 border-b border-hairline px-4 py-3.5 last:border-b-0 active:bg-widget-2"
                         >
                           <span className="truncate text-[15px] font-medium">{s.name}</span>
-                          <span className="text-[13px] text-muted-foreground">{s.sub}</span>
+                          <span className="text-[13px] text-muted-foreground">{keepDates(s.sub)}</span>
                         </Link>
                       ))}
                     </div>
@@ -417,9 +428,8 @@ export function CyclesListClient({ data, deletedCount }: Props) {
 
       {/* The + menu (J1_AddSheet). */}
       <BottomSheet open={showAddSheet} onClose={() => setShowAddSheet(false)}>
-        <section aria-label="New" className="flex flex-col gap-3 rounded-t-[20px] bg-widget px-4 pt-2.5 pb-8">
-          <span className="h-[5px] w-10 self-center rounded-full bg-foreground/20" aria-hidden />
-          <h2 className="mx-1 mt-1 text-[17px] font-semibold">New</h2>
+        <PlanSheetPanel label="New">
+          <h2 className="mx-1 -mt-2 text-[17px] font-semibold">New</h2>
           <NewChoices onPick={() => setShowAddSheet(false)} />
           <button
             type="button"
@@ -428,7 +438,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
           >
             Cancel
           </button>
-        </section>
+        </PlanSheetPanel>
       </BottomSheet>
     </div>
   );

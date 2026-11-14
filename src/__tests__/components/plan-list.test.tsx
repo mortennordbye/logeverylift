@@ -18,6 +18,8 @@ const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh, back: vi.fn(), replace: vi.fn() }) }));
 
 const TODAY = "2026-11-14";
+/** Text with the non-breaking spaces that keep dates whole read as plain spaces. */
+const plain = (t: string | null) => (t ?? "").replace(/\u00a0/g, " ");
 
 const none: PlanListData = {
   empty: false,
@@ -179,7 +181,7 @@ describe("the Plan list", () => {
     render(<CyclesListClient data={gym} deletedCount={1} />);
     const hero = screen.getByTestId("plan-hero");
     expect(hero.getAttribute("href")).toBe("/cycles/1");
-    expect(within(hero).getByText("Week 3 of 6 · Rotation")).toBeTruthy();
+    expect(within(hero).getByTestId("hero-label").textContent).toBe("Week 3 of 6 · Rotation");
     const chips = within(within(hero).getByRole("list", { name: "Rotation" })).getAllByRole("listitem");
     expect(chips.map((c) => c.textContent)).toEqual(["DoneUpper A", "NextLower A", "Rest", "SkippedUpper B", "Lower B"]);
     expect(within(hero).getByText("Ends 20 Dec")).toBeTruthy();
@@ -188,7 +190,7 @@ describe("the Plan list", () => {
     expect(hero.textContent).not.toContain(":");
     expect(screen.getByRole("heading", { name: "Up next" })).toBeTruthy();
     const starts = screen.getAllByTestId("scheduled-start");
-    expect(starts.map((x) => x.textContent)).toEqual(["Starts 21 Dec", "Not started"]);
+    expect(starts.map((x) => plain(x.textContent))).toEqual(["Starts 21 Dec", "Not started"]);
     expect(starts[0].className).toContain("text-brand");
     expect(starts[1].className).toContain("text-muted-foreground");
     expect(screen.getByRole("heading", { name: "Past cycles" })).toBeTruthy();
@@ -204,7 +206,7 @@ describe("the Plan list", () => {
   it("endurance user: the week strip with the key day, the season card with phases and the A race", () => {
     render(<CyclesListClient data={endurance} deletedCount={0} />);
     const hero = screen.getByTestId("plan-hero");
-    expect(within(hero).getByText("Starts Mon 16 Nov · Week 1 of 8")).toBeTruthy();
+    expect(plain(within(hero).getByTestId("hero-label").textContent)).toBe("Starts Mon 16 Nov · Week 1 of 8");
     const days = within(within(hero).getByRole("list", { name: "This week" })).getAllByRole("listitem");
     expect(days).toHaveLength(7);
     expect(days[6].textContent).toContain("Brick");
@@ -225,9 +227,9 @@ describe("the Plan list", () => {
     expect(within(card).getByText("Jevnaker Half 2027")).toBeTruthy();
     expect(card.textContent).toContain("Race in 288 days");
     expect(within(card).getByRole("img", { name: /Phase bar/ })).toBeTruthy();
-    expect(within(card).getByRole("link", { name: /Longer ride and run.*Base · 12 wk · 11 Jan – 4 Apr/ }).getAttribute("href")).toBe("/cycles/22");
+    expect(within(card).getByRole("link", { name: /Longer ride and run.*Base · 12 wk · 11\sJan\s– 4\sApr/ }).getAttribute("href")).toBe("/cycles/22");
     expect(within(card).getByText("Starts Mon")).toBeTruthy();
-    expect(within(card).getByRole("link", { name: /Jevnaker Halv Full Distanse.*A race · 29 Aug/ }).getAttribute("href")).toBe("/seasons/9");
+    expect(within(card).getByRole("link", { name: /Jevnaker Halv Full Distanse.*A race · 29\sAug/ }).getAttribute("href")).toBe("/seasons/9");
   });
 
   it("gym user with a goal season: goal date, weeks left, the running phase marked Now", () => {

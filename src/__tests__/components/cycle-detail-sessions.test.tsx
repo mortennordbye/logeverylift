@@ -420,7 +420,7 @@ describe("completed cycle", () => {
     render(<CycleCompletionBanner cycle={done} lengthLabel="6 weeks" endedLabel="ended 20 Dec" next={{ id: 8, name: "Strength peak", startsLabel: "Mon 28 Dec", startsTomorrow: false }} />);
     expect(screen.getByText("Cycle complete")).toBeTruthy();
     expect(screen.getByText("6 weeks · ended 20 Dec")).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Strength peak starts Mon 28 Dec/ }).getAttribute("href")).toBe("/cycles/8");
+    expect(screen.getByRole("link", { name: /Strength peak starts Mon\s28\sDec/ }).getAttribute("href")).toBe("/cycles/8");
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Start now instead" }));
     });
@@ -430,7 +430,7 @@ describe("completed cycle", () => {
 
   it("has no Start now instead when the next cycle starts tomorrow", () => {
     render(<CycleCompletionBanner cycle={done} lengthLabel="6 weeks" endedLabel="ended 20 Dec" next={{ id: 8, name: "Strength peak", startsLabel: "Mon 21 Dec", startsTomorrow: true }} />);
-    expect(screen.getByRole("link", { name: /Strength peak starts Mon 21 Dec/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Strength peak starts Mon\s21\sDec/ })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Start now instead" })).toBeNull();
   });
 
@@ -444,7 +444,7 @@ describe("completed cycle", () => {
         running={{ id: 4, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6 }}
       />,
     );
-    expect(screen.getByRole("link", { name: /Strength peak starts Mon 28 Dec/ }).getAttribute("href")).toBe("/cycles/8");
+    expect(screen.getByRole("link", { name: /Strength peak starts Mon\s28\sDec/ }).getAttribute("href")).toBe("/cycles/8");
     expect(screen.queryByRole("button", { name: "Start now instead" })).toBeNull();
   });
 

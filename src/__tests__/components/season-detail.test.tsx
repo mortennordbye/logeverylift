@@ -158,7 +158,7 @@ describe("a gym user's season", () => {
     render(<SeasonDetailClient {...base} enduranceEnabled={false} races={[]} aRaceId={null} />);
     expect(screen.queryByText("Races")).toBeNull();
     expect(screen.queryByRole("button", { name: "+ Add race" })).toBeNull();
-    expect(screen.getByTestId("season-hero").textContent).toContain("Goal by 17 Apr 2027");
+    expect(screen.getByTestId("season-hero").textContent!.replace(/\u00a0/g, " ")).toContain("Goal by 17 Apr 2027");
     expect(screen.getAllByTestId("phase-row")[0].textContent).not.toContain("General");
     fireEvent.click(within(screen.getAllByTestId("phase-row")[0]).getAllByRole("button")[1]);
     expect(screen.queryByRole("group", { name: "Phase type" })).toBeNull();

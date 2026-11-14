@@ -12,6 +12,7 @@
 
 import { startTrainingCycle } from "@/lib/actions/training-cycles";
 import type { RunningCycle } from "@/lib/utils/cycle-start";
+import { keepDates } from "@/lib/utils/keep-dates";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { TrainingCycle } from "@/types/workout";
 import { Check } from "lucide-react";
@@ -66,9 +67,7 @@ export function CycleCompletionBanner({
         <Check className="w-[22px] h-[22px] text-brand" strokeWidth={2.5} aria-hidden />
         <span className="text-xl font-semibold">Cycle complete</span>
       </div>
-      <span className="text-sm text-muted-foreground">
-        {lengthLabel} · {endedLabel}
-      </span>
+      <span className="text-sm text-muted-foreground">{keepDates(`${lengthLabel} · ${endedLabel}`)}</span>
       {cycle.endMessage && <p className="text-sm italic text-foreground/80">&ldquo;{cycle.endMessage}&rdquo;</p>}
       {next && (
         <>
@@ -76,7 +75,10 @@ export function CycleCompletionBanner({
           <Link href={`/cycles/${next.id}`} className="flex flex-col gap-0.5 active:opacity-70">
             <span className="text-xs font-semibold tracking-[1px] uppercase text-muted-foreground">Next</span>
             <span className="text-base font-medium">
-              {next.name} starts {next.startsLabel} <span className="text-brand">›</span>
+              {/* The chevron stays with the last word, never on a line of its own. */}
+              {next.name} starts {keepDates(next.startsLabel)}
+              {"\u00a0"}
+              <span className="text-brand">›</span>
             </span>
           </Link>
           {canStartNext && (

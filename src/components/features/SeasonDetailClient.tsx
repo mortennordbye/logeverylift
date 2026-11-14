@@ -19,6 +19,7 @@ import {
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
+import { keepDates } from "@/lib/utils/keep-dates";
 import { callAction } from "@/lib/utils/stale-bundle";
 import {
   PHASE_TYPE_LABELS,
@@ -307,7 +308,7 @@ export function SeasonDetailClient(p: Props) {
         <div className="flex flex-col gap-1">
           <h1 className="home-display text-[34px] leading-9 uppercase break-words">{p.season.name}</h1>
           <span className="text-[13px] text-muted-foreground">
-            {dayLabel(p.season.startDate)} to {dayLabel(p.season.endDate)}
+            {keepDates(`${dayLabel(p.season.startDate)} to ${dayLabel(p.season.endDate)}`)}
           </span>
           {/* With no A race the hero card carries the goal. */}
           {p.season.goal && aRace && <span className="text-sm text-foreground/75">{p.season.goal}</span>}
@@ -338,7 +339,7 @@ export function SeasonDetailClient(p: Props) {
         <section data-testid="season-hero" className="flex flex-col gap-3.5 rounded-[20px] bg-widget px-[18px] py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-1">
-              <span className={LABEL}>{aRace ? `${aRace.priority} race · ${dayLabel(aRace.raceDate)}` : `Goal by ${dayLabel(p.season.endDate)}`}</span>
+              <span className={LABEL}>{keepDates(aRace ? `${aRace.priority} race · ${dayLabel(aRace.raceDate)}` : `Goal by ${dayLabel(p.season.endDate)}`)}</span>
               <span className="text-[17px] font-semibold break-words">{aRace ? aRace.name : (p.season.goal ?? p.season.name)}</span>
               {/* The race-day plan (docs/plans/nutrition-and-race-day.md, 6): half and full for now. */}
               {aRace && p.enduranceEnabled && aRace.discipline === "triathlon" && (aRace.distance === "half" || aRace.distance === "full") && (
@@ -436,7 +437,7 @@ export function SeasonDetailClient(p: Props) {
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="truncate text-[15px] font-medium">{r.name}</span>
-                        <span className="text-[13px] text-muted-foreground">{raceSub(r)}</span>
+                        <span className="text-[13px] text-muted-foreground">{keepDates(raceSub(r))}</span>
                       </span>
                       <Chevron />
                     </button>
@@ -599,7 +600,7 @@ export function SeasonDetailClient(p: Props) {
           <PlanSheetPanel label={phase.phase.name}>
             <div className="flex flex-col gap-0.5">
               <h2 className="text-xl font-semibold">{phase.phase.name}</h2>
-              <span className="text-[13px] text-muted-foreground">{rangeLabel(phase.phase.start, phase.phase.end)}</span>
+              <span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, phase.phase.end))}</span>
             </div>
             <div className="flex gap-4">
               <Link href={`/cycles/${phase.phase.id}`} className="flex min-h-11 items-center text-sm font-medium text-primary active:opacity-70">
@@ -718,10 +719,10 @@ function PhaseRow({ phase, sub, warn, badge, onOpen }: { phase: SeasonPhaseView;
           <span data-testid="phase-name" className={`text-[15px] font-medium ${phase.state === "done" ? "text-muted-foreground" : ""}`}>
             {phase.name}
           </span>
-          <span className="text-[13px] text-muted-foreground">{sub}</span>
+          <span className="text-[13px] text-muted-foreground">{keepDates(sub)}</span>
           {warn && <span className="mt-1 text-[13px]">{warn}</span>}
         </span>
-        {badge && <span className="shrink-0 text-xs font-semibold text-primary">{badge}</span>}
+        {badge && <span className="shrink-0 text-xs font-semibold text-primary">{keepDates(badge)}</span>}
         <Chevron />
       </button>
     </li>
