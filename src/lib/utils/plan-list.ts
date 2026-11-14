@@ -10,6 +10,7 @@ import type { PhaseType } from "@/lib/utils/periodization";
 import { dateLabel } from "@/lib/utils/date-label";
 import {
   addDaysStr,
+  cutByStart,
   daysBetweenStr,
   lengthShort,
   nextPhase,
@@ -49,13 +50,39 @@ export function phaseSub(p: Pick<TimelinePhase, "phaseType" | "durationWeeks" | 
   return [p.phaseType ? PHASE_TYPE_NAMES[p.phaseType] : null, lengthShort(p), dateRange(p.start, p.end)].filter(Boolean).join(" · ");
 }
 
-/** "Starts today", "Starts tomorrow", "Starts Mon" inside a week, else "Starts 21 Dec". */
+/** "Starts today", "Starts tomorrow", "Starts Mon 16 Nov" inside a week, else "Starts 21 Dec". A weekday never comes without its date (J4-17). */
 export function startsLabel(today: string, start: string): string {
   const n = daysBetweenStr(today, start);
   if (n <= 0) return "Starts today";
   if (n === 1) return "Starts tomorrow";
-  if (n <= 6) return `Starts ${shortDay(start).slice(0, 3)}`;
+  if (n <= 6) return `Starts ${shortDay(start)}`;
   return `Starts ${dayMonth(start)}`;
+}
+
+/**
+ * The badge of a season's next phase, the same on the Plan list and the
+ * season page: its start day when it is scheduled, Paused when the chain is
+ * paused (seasonPaused), else Next for a season not started.
+ */
+export function nextPhaseBadge(next: { scheduled: boolean; plannedStart: string }, timeline: { state: TimelinePhase["state"] }[], today: string): string {
+  if (next.scheduled) return startsLabel(today, next.plannedStart);
+  return seasonPaused(next, timeline, today) ? "Paused" : "Next";
+}
+
+/**
+ * A phase's part of the season bar: filled once it has started (done, or the
+ * running one with an outline), only outlined when it is the next phase and
+ * nothing runs, else grey. A phase that has not started is never filled.
+ */
+export function phaseBarTone(state: TimelinePhase["state"], outlinedNext: boolean): BarSegment["tone"] {
+  if (state === "done") return "accent";
+  if (state === "active") return "current";
+  return outlinedNext ? "next" : "grey";
+}
+
+/** The last day of the running block: its planned end, or the day before another block's scheduled start. */
+export function runningEnd(start: string, end: string, otherStart: string | null): string {
+  return cutByStart(start, end, otherStart);
 }
 
 export const scheduleWords = (t: "day_of_week" | "rotation") => (t === "rotation" ? "Rotation" : "Same days each week");
@@ -211,7 +238,7 @@ export function rotationChips(rows: Pick<RotationRow, "slotId" | "name" | "rest"
 export type SeasonPhaseData = PhaseLike;
 
 export type PhaseRowView = { id: number; name: string; sub: string; mark: "accent" | "grey"; badge: string | null; badgeAccent: boolean };
-export type BarSegment = { id: number; flex: number; tone: "accent" | "current" | "grey" };
+export type BarSegment = { id: number; flex: number; tone: "accent" | "current" | "next" | "grey" };
 
 export type SeasonCardView = {
   id: number;
@@ -219,9 +246,9 @@ export type SeasonCardView = {
   replan: boolean;
   /** The A race; null makes it a goal season. */
   race: { name: string; when: string; daysLeft: number | null } | null;
-  /** "Goal by 7 Feb" and the weeks left, for a goal season. */
+  /** "Goal by 7 Feb" and the days left, counted as the season page counts them, for a goal season. */
   goalBy: string;
-  weeksLeft: number;
+  daysLeft: number;
   bar: BarSegment[];
   barLabel: string;
   phases: PhaseRowView[];
@@ -236,6 +263,7 @@ export function seasonCard(
   phases: PhaseLike[],
   aRace: { name: string; raceDate: string } | null,
   today: string,
+  otherStart: string | null = null,
 ): SeasonCardView {
   const phaseData: SeasonPhaseData[] = phases.map((p) => ({
     id: p.id,
@@ -248,20 +276,12 @@ export function seasonCard(
     startDate: p.startDate,
     scheduledStartDate: p.scheduledStartDate,
   }));
-  const timeline = seasonTimeline(s.startDate, phaseData);
+  const timeline = seasonTimeline(s.startDate, phaseData, otherStart);
   const active = timeline.find((p) => p.state === "active");
   const next = nextPhase(timeline);
-  // The next phase's badge says what the season page says (seasonPaused): a
-  // start day only when it is scheduled, else Paused, or Next for a season
-  // not started.
-  const nextScheduled = next?.scheduledStartDate != null;
-  const paused = next ? seasonPaused({ scheduled: nextScheduled, plannedStart: next.start }, timeline, today) : false;
-  const nextBadge = (p: TimelinePhase) => (nextScheduled ? startsLabel(today, p.start) : paused ? "Paused" : "Next");
-  const bar = timeline.map<BarSegment>((p) => ({
-    id: p.id,
-    flex: p.lengthDays,
-    tone: p.state === "active" ? "current" : p.state === "done" || (!active && p.id === next?.id) ? "accent" : "grey",
-  }));
+  // The next phase's badge says what the season page says (nextPhaseBadge).
+  const nextBadge = (p: TimelinePhase) => nextPhaseBadge({ scheduled: p.scheduledStartDate != null, plannedStart: p.start }, timeline, today);
+  const bar = timeline.map<BarSegment>((p) => ({ id: p.id, flex: p.lengthDays, tone: phaseBarTone(p.state, !active && p.id === next?.id) }));
   const rows = timeline.map<PhaseRowView>((p) => {
     const isNext = p.id === next?.id;
     return {
@@ -276,7 +296,6 @@ export function seasonCard(
   const barLabel = timeline.length
     ? `Phase bar: ${timeline.map((p) => `${p.name}${p.state === "active" ? " now" : p.state === "done" ? " done" : ""}`).join(", then ")}`
     : "No phases yet";
-  const daysToEnd = Math.max(0, daysBetweenStr(today, s.endDate));
   return {
     id: s.id,
     name: s.name,
@@ -285,7 +304,7 @@ export function seasonCard(
       ? { name: aRace.name, when: dayMonth(aRace.raceDate), daysLeft: aRace.raceDate >= today ? daysBetweenStr(today, aRace.raceDate) : null }
       : null,
     goalBy: `Goal by ${dayMonth(s.endDate)}`,
-    weeksLeft: Math.floor(daysToEnd / 7),
+    daysLeft: Math.max(0, daysBetweenStr(today, s.endDate)),
     bar,
     barLabel,
     phases: rows,

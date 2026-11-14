@@ -249,11 +249,16 @@ describe("season detail text (fix round 2)", () => {
     expect(screen.getAllByText("Finish the race")).toHaveLength(1);
   });
 
-  it("says Next, not Starts, for a first phase that is not scheduled", () => {
+  it("says Paused, not Starts, for a first phase that lost its later start, as the Plan list does (J8-12)", () => {
     render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
     const first = screen.getAllByTestId("phase-row")[0];
     expect(first.textContent).not.toContain("Starts");
-    expect(first.textContent).toContain("Next");
+    expect(first.textContent).toContain("Paused");
+  });
+
+  it("says Next for a first phase that is due and not scheduled", () => {
+    render(<SeasonDetailClient {...base} today="2026-11-16" next={{ ...base.next, scheduled: false }} />);
+    expect(screen.getAllByTestId("phase-row")[0].textContent).toContain("Next");
   });
 
   it("a season whose first phase lost its later start shows paused with Resume", () => {
@@ -371,5 +376,25 @@ describe("phase length in weeks or days (fix round 4)", () => {
     expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("10");
     expect(screen.getByRole("button", { name: "Days" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByText("10 days is not a whole number of weeks, so the length stays in days.")).toBeTruthy();
+  });
+});
+
+describe("the phase bar and badges match the Plan list (fix round 6)", () => {
+  const tones = () => [...screen.getByTestId("phase-bar").children].map((c) => c.getAttribute("data-tone"));
+
+  it("fills only the phases that have started (J4-13, J6-02)", () => {
+    const running = [{ ...phases[0], start: "2026-11-02", state: "active" as const }, phases[1], phases[2]];
+    render(<SeasonDetailClient {...base} phases={running} next={{ cycleId: 2, name: phases[1].name, plannedStart: phases[1].start, scheduled: true }} />);
+    expect(tones()).toEqual(["current", "grey", "grey"]);
+  });
+
+  it("outlines the next phase of a season not started, and does not fill it", () => {
+    render(<SeasonDetailClient {...base} />);
+    expect(tones()).toEqual(["next", "grey", "grey"]);
+  });
+
+  it("gives a start inside the week with its date (J4-17)", () => {
+    render(<SeasonDetailClient {...base} />);
+    expect(screen.getAllByTestId("phase-row")[0].textContent).toContain("Starts Mon 16 Nov");
   });
 });

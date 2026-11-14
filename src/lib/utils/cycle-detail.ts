@@ -39,6 +39,16 @@ export type DetailSession = {
   moveTo?: MoveSuggestion | null;
 };
 
+/**
+ * The line under the cycle name: "8 weeks · Rotation · Week 3 of 6". The
+ * length comes first, as on the Plan list row ("4 weeks · Same days each
+ * week"); a rotation adds its week, a weekday cycle shows it in the switcher.
+ */
+export function cycleSubLine(scheduleType: "day_of_week" | "rotation", length: string, currentWeek: number | null, totalWeeks: number): string {
+  const rotation = scheduleType === "rotation";
+  return [length, rotation ? "Rotation" : "Same days each week", rotation && currentWeek ? `Week ${currentWeek} of ${totalWeeks}` : null].filter(Boolean).join(" · ");
+}
+
 /** A row opens the session sheet, "Did you do it?", or nothing (done, rest, a past skip). */
 export function rowAction(s: Pick<DetailSession, "status" | "date" | "answer">, today: string): "answer" | "sheet" | null {
   if (s.answer) return "answer";
@@ -55,13 +65,20 @@ export function isMoved(s: Pick<DetailSession, "date" | "templateDate">): boolea
 /**
  * A session's state when it is not just planned, then "Moved from Tue" or
  * "Changed" when the user changed this one day: "Missed · Moved from Tue".
- * A skip also touches the row; Skipped says enough. Null for a plain planned
- * session. The row and the session sheet's header line both show it.
+ * A skip and a Missed answer also touch the row; Skipped and Missed say
+ * enough. Null for a plain planned session. The row and the session sheet's
+ * header line both show it.
  */
 export function sessionState(s: Pick<DetailSession, "status" | "answer" | "date" | "touched" | "templateDate">): string | null {
   const state = s.answer ? "Did you do it?" : s.status === "done" ? "Done" : s.status === "skipped" ? "Skipped" : s.status === "missed" ? "Missed" : null;
   const change =
-    s.status === "skipped" ? null : isMoved(s) ? `Moved from ${weekdayShort(s.templateDate!)}` : s.touched && s.templateDate != null ? "Changed" : null;
+    s.status === "skipped"
+      ? null
+      : isMoved(s)
+        ? `Moved from ${weekdayShort(s.templateDate!)}`
+        : s.touched && s.templateDate != null && s.status !== "missed"
+          ? "Changed"
+          : null;
   return [state, change].filter(Boolean).join(" · ") || null;
 }
 

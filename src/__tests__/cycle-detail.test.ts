@@ -1,5 +1,13 @@
-import { blockWeeks, dayLabels, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
+import { blockWeeks, cycleSubLine, dayLabels, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
 import { describe, expect, it } from "vitest";
+
+describe("cycleSubLine", () => {
+  it("puts the length first, as the Plan list row does (J2-13)", () => {
+    expect(cycleSubLine("rotation", "8 weeks", null, 8)).toBe("8 weeks · Rotation");
+    expect(cycleSubLine("rotation", "6 weeks", 3, 6)).toBe("6 weeks · Rotation · Week 3 of 6");
+    expect(cycleSubLine("day_of_week", "10 days", 1, 2)).toBe("10 days · Same days each week");
+  });
+});
 
 /** The cycle detail's pure parts (docs/plans/plan-tab-redesign.md, P2). */
 
@@ -68,6 +76,13 @@ describe("rowAction and sessionSub", () => {
     expect(sessionSub({ ...base, status: "planned" })).toBe("Squat, Row");
     expect(sessionSub({ ...base, status: "done" })).toBe("Done · Squat, Row");
     expect(sessionSub({ ...base, summary: "60 min", status: "skipped" })).toBe("Skipped · 60 min");
+  });
+
+  it("does not call a session Changed because the user answered Missed (J5-16)", () => {
+    // The miss answer touches the row, as a skip does; Missed says enough.
+    expect(sessionSub({ ...base, status: "missed", touched: true })).toBe("Missed · Squat, Row");
+    // A missed session moved off its day still says where it came from.
+    expect(sessionSub({ ...base, status: "missed", touched: true, templateDate: "2026-11-17" })).toBe("Missed · Moved from Tue · Squat, Row");
   });
 
   it("marks a session moved from its template day, or changed on its own day", () => {

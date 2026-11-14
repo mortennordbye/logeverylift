@@ -1010,7 +1010,7 @@ export async function claimSeasonPhases(w: PlanWriteSession, seasonId: number) {
           .update(seasonRaces)
           .set({ raceDate: own.raceDate, ...(own.raceDistance ? { discipline: "triathlon" as const, distance: own.raceDistance, distanceMeters: null } : {}) })
           .where(eq(seasonRaces.id, a.id));
-        reasons.push(`A race "${a.name}" moved from ${a.raceDate} to ${own.raceDate} on "${p.name}" while the season was deleted`);
+        reasons.push(`The A race "${a.name}" moved from ${a.raceDate} to ${own.raceDate} on "${p.name}" while the season was deleted`);
       }
     }
     await w.tx.update(trainingCycles).set({ raceDate: null, raceDistance: null }).where(eq(trainingCycles.id, p.id));

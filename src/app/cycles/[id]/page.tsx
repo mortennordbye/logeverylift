@@ -25,7 +25,7 @@ import { moveSuggestion } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { syncLimitWarnings } from "@/lib/training-limits";
 import { userToday } from "@/lib/user-settings";
-import { type DetailSession, blockWeeks, dayLabels, dayMonth, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
+import { type DetailSession, blockWeeks, cycleSubLine, dayLabels, dayMonth, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
@@ -127,16 +127,26 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   const { running, scheduled } = await cycleStartContext(userId, today);
   const otherRunning = running && running.id !== cycle.id ? running : null;
   const otherScheduled = scheduled && scheduled.id !== cycle.id ? scheduled : null;
-  // A completed cycle names the cycle scheduled next, if there is one.
+  // A completed cycle names the cycle scheduled next, if there is one. A
+  // completed phase names its season's next phase, even when the chain is
+  // paused and another cycle holds the scheduled start (J8-09).
   let next: NextCycle | null = null;
-  if (cycle.status === "completed" && otherScheduled) {
+  const following = season?.following ?? null;
+  if (cycle.status === "completed" && following) {
+    next = {
+      id: following.id,
+      name: following.name,
+      startsLabel: following.day ? shortDay(following.day) : null,
+      startsTomorrow: following.day != null && following.day <= addDaysStr(today, 1),
+    };
+  } else if (cycle.status === "completed" && otherScheduled) {
     next = { id: otherScheduled.id, name: otherScheduled.name, startsLabel: shortDay(otherScheduled.day), startsTomorrow: otherScheduled.day <= addDaysStr(today, 1) };
   }
   const plannedLast = cycle.startDate ? addDaysStr(cycle.startDate, lengthDays - 1) : null;
   const endedLabel = plannedLast && plannedLast < today ? `ended ${dayMonth(plannedLast)}` : "ended early";
 
   const { headline: periodizationHeadline, note: periodizationNote } = periodization ? formatPeriodizationSummary(periodization) : { headline: "", note: "" };
-  const subLine = [weekday ? "Same days each week" : "Rotation", lengthLabel(cycle), !weekday && currentWeek ? `Week ${currentWeek} of ${totalWeeks}` : null].filter(Boolean).join(" · ");
+  const subLine = cycleSubLine(cycle.scheduleType, lengthLabel(cycle), currentWeek, totalWeeks);
   const phaseLine = season ? `Phase ${season.position}${cycle.phaseType ? ` · ${PHASE_TYPE_LABELS[cycle.phaseType]}` : ""}` : null;
   const templateHref = `/cycles/${cycle.id}/template`;
   // Days the template names with no session, such as "Mobility" (only a weekday cycle has days).
@@ -166,7 +176,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
               </span>
             </Link>
           )}
-          {season?.replan.flagged && <p className="text-[13px] text-muted-foreground">A race changed. The season&apos;s phases are not planned again yet.</p>}
+          {season?.replan.flagged && <p className="text-[13px] text-muted-foreground">The season&apos;s races changed. Its phases are not planned again yet.</p>}
         </div>
 
         {limitWarnings.length > 0 && (

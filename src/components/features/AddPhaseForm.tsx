@@ -10,7 +10,7 @@ import { deleteTrainingCycle } from "@/lib/actions/training-cycles";
 import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import type { PhaseType } from "@/lib/utils/periodization";
 import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
-import { PHASE_TYPE_LABELS, shortDay, switchLengthUnit, type LengthUnit } from "@/lib/utils/seasons";
+import { PHASE_TYPE_LABELS, addPhaseWarning, shortDay, switchLengthUnit, type LengthUnit } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -34,6 +34,9 @@ type Props = {
   /** What a season's first phase ends and drops when it takes the scheduled start (takeStartLines). */
   running: RunningBlock | null;
   scheduled: ScheduledDraft | null;
+  /** The A race day, if the season has an A race, and the season's last day: a phase past them gets a warning. */
+  raceDate: string | null;
+  seasonEnd: string;
 };
 
 const PHASE_TYPES = Object.keys(PHASE_TYPE_LABELS) as PhaseType[];
@@ -88,6 +91,12 @@ export function AddPhaseForm(p: Props) {
           : unit === "days"
             ? "Pick 1 to 364 days."
             : "Pick 1 to 52 weeks.";
+  const warning = addPhaseWarning({
+    startsOn: p.startsOn,
+    lengthDays: length !== "" && lengthOk ? (unit === "days" ? n : n * 7) : null,
+    raceDate: p.raceDate,
+    seasonEnd: p.seasonEnd,
+  });
 
   function changeUnit(to: LengthUnit) {
     const next = switchLengthUnit(length, unit, to);
@@ -233,6 +242,7 @@ export function AddPhaseForm(p: Props) {
           <span className="text-[13px] text-muted-foreground">
             Starts {shortDay(p.startsOn).slice(4)}, {p.afterName ? "the day after the phase before ends." : "when the season starts."}
           </span>
+          {warning && <span className="text-[13px] font-medium text-[#ff6b5a]">{warning}</span>}
         </div>
 
         {source === "new" && (

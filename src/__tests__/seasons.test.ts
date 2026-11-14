@@ -12,6 +12,7 @@ import {
 import { diffSnapshots, type SeasonSnapshot } from "@/lib/utils/plan-revisions";
 import {
   addDaysStr,
+  addPhaseWarning,
   inDaysLabel,
   fitTaperChange,
   lengthShort,
@@ -179,6 +180,19 @@ describe("timeline (2.4)", () => {
     expect(nextPhase(t)?.id).toBe(2);
   });
 
+  it("ends the running phase the day before another block's scheduled start (J4-18)", () => {
+    const phases = [phase(1, { status: "active", startDate: "2026-11-09", durationWeeks: 7 }), phase(2, { durationWeeks: 4 })];
+    // Another season's first phase starts 16 Nov: that start completes phase 1 (startDueScheduledCycle).
+    const t = seasonTimeline("2026-11-09", phases, "2026-11-16");
+    expect(t.map((p) => [p.id, p.start, p.end, p.lengthDays])).toEqual([
+      [1, "2026-11-09", "2026-11-15", 7],
+      [2, "2026-11-16", "2026-12-13", 28],
+    ]);
+    // A start the day after the phase ends, or none, changes nothing.
+    expect(seasonTimeline("2026-11-09", phases, "2026-12-28")[0].end).toBe("2026-12-27");
+    expect(seasonTimeline("2026-11-09", phases, null)[0].end).toBe("2026-12-27");
+  });
+
   it("the next phase follows the last started one", () => {
     const t = seasonTimeline("2027-01-04", [
       phase(1, { status: "completed", startDate: "2027-01-04" }),
@@ -215,15 +229,33 @@ describe("timeline (2.4)", () => {
   });
 });
 
+describe("a phase added after race day (J4-09)", () => {
+  it("warns when the phase starts after race day or runs past the season end", () => {
+    expect(addPhaseWarning({ startsOn: "2027-08-30", lengthDays: 28, raceDate: "2027-08-29", seasonEnd: "2027-08-29" })).toBe(
+      "This phase starts after race day on 29 Aug 2027.",
+    );
+    expect(addPhaseWarning({ startsOn: "2027-08-10", lengthDays: 28, raceDate: null, seasonEnd: "2027-08-29" })).toBe(
+      "This phase runs 8 days past the season end on 29 Aug 2027.",
+    );
+    expect(addPhaseWarning({ startsOn: "2027-08-02", lengthDays: 28, raceDate: "2027-08-29", seasonEnd: "2027-08-29" })).toBeNull();
+    // An existing cycle that keeps its own length is checked by its start only.
+    expect(addPhaseWarning({ startsOn: "2027-08-02", lengthDays: null, raceDate: "2027-08-29", seasonEnd: "2027-08-29" })).toBeNull();
+  });
+});
+
 describe("re-plan trigger (D17)", () => {
   it("flags a date change of any priority", () => {
     expect(replanReason([race(1, { priority: "C" })], [race(1, { priority: "C", raceDate: "2027-08-29" })])).toBe(
-      'C race "R1" moved from 22 Aug 2027 to 29 Aug 2027',
+      'The C race "R1" moved from 22 Aug 2027 to 29 Aug 2027',
     );
   });
 
   it("flags an A race added or removed, and a priority change to or from A", () => {
-    expect(replanReason([], [race(1)])).toMatch(/A race "R1" added/);
+    // "The A race", so the priority does not read as the article (J4-11).
+    expect(replanReason([], [race(1)])).toBe('The A race "R1" added on 22 Aug 2027');
+    expect(replanReason([race(1), race(2, { priority: "B" })], [race(1, { raceDate: "2027-08-29" }), race(2, { priority: "B", raceDate: "2027-08-01" })])).toBe(
+      'The A race "R1" moved from 22 Aug 2027 to 29 Aug 2027; the B race "R2" moved from 22 Aug 2027 to 1 Aug 2027',
+    );
     expect(replanReason([race(1)], [])).toMatch(/removed/);
     expect(replanReason([race(1)], [race(1, { priority: "B" })])).toMatch(/from A priority to B priority/);
     expect(replanReason([race(1, { priority: "C" })], [race(1, { priority: "A" })])).toMatch(/from C priority to A priority/);

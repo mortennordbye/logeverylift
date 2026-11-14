@@ -144,7 +144,7 @@ describe("races and the re-plan flag (D17)", () => {
     expect(moved.success).toBe(true);
     const row = await seasonRow(id);
     expect(row.replanFlaggedAt).not.toBeNull();
-    expect(row.replanReason).toBe('A race "Haugesund" moved from 22 Aug 2027 to 29 Aug 2027');
+    expect(row.replanReason).toBe('The A race "Haugesund" moved from 22 Aug 2027 to 29 Aug 2027');
 
     // The phases were not touched by the flag.
     expect((await getSeasonDetail(me, id))!.replan).toMatchObject({ flagged: true });
@@ -162,7 +162,7 @@ describe("races and the re-plan flag (D17)", () => {
     expect((await updateRaceAction({ seasonId: id, raceId: a.id, raceDate: day(134) })).success).toBe(true);
     expect((await seasonRow(id)).endDate).toBe(day(134));
     const words = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).replace("Sept", "Sep");
-    expect((await seasonRow(id)).replanReason).toBe(`A race "Haugesund 70.3" moved from ${words(day(120))} to ${words(day(134))}`);
+    expect((await seasonRow(id)).replanReason).toBe(`The A race "Haugesund 70.3" moved from ${words(day(120))} to ${words(day(134))}`);
     // Earlier again: the end follows it back.
     await updateRaceAction({ seasonId: id, raceId: a.id, raceDate: day(127) });
     expect((await seasonRow(id)).endDate).toBe(day(127));
@@ -190,7 +190,7 @@ describe("races and the re-plan flag (D17)", () => {
     await clearReplanAction({ seasonId: id });
     const tune = (await racesOf(id)).find((r) => r.name === "Tune-up")!;
     await updateRaceAction({ seasonId: id, raceId: tune.id, raceDate: day(70) });
-    expect((await seasonRow(id)).replanReason).toContain('B race "Tune-up" moved');
+    expect((await seasonRow(id)).replanReason).toContain('The B race "Tune-up" moved');
     await removeRaceAction({ seasonId: id, raceId: tune.id });
     expect(await seasonRow(id)).toMatchObject({ replanFlaggedAt: null, replanReason: null });
   });

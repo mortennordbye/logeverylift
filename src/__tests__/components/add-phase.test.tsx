@@ -28,6 +28,8 @@ const props = {
   today: "2026-11-14",
   running: null,
   scheduled: null,
+  raceDate: "2027-08-29" as string | null,
+  seasonEnd: "2027-08-29",
 };
 
 beforeEach(() => {
@@ -50,6 +52,19 @@ describe("Add a phase", () => {
   it("keeps the length field from taking the whole row, so Weeks and Days stay visible", () => {
     render(<AddPhaseForm {...props} />);
     expect(screen.getByLabelText("Length").className.split(" ")).not.toContain("w-full");
+  });
+
+  it("warns when the new phase starts after race day (J4-09)", () => {
+    render(<AddPhaseForm {...props} startsOn="2027-08-30" raceDate="2027-08-29" seasonEnd="2027-08-29" />);
+    expect(screen.getByText("This phase starts after race day on 29 Aug 2027.")).toBeTruthy();
+  });
+
+  it("warns when the length runs past the season end, and not when it fits", () => {
+    const { unmount } = render(<AddPhaseForm {...props} startsOn="2027-04-05" raceDate={null} seasonEnd="2027-04-20" />);
+    expect(screen.getByText("This phase runs 12 days past the season end on 20 Apr 2027.")).toBeTruthy();
+    unmount();
+    render(<AddPhaseForm {...props} />);
+    expect(screen.queryByText(/This phase/)).toBeNull();
   });
 
   it("step 2 finishes with Add phase, back on the season", () => {
