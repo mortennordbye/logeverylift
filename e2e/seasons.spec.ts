@@ -107,8 +107,8 @@ test("make a season with a race and phases, fit the taper, and re-plan after a r
   expect(revs.length).toBeGreaterThan(5);
   expect(new Set(revs.map((r) => r.writer))).toEqual(new Set(["user"]));
 
-  // The cycle page shows where the phase sits and the season's race.
+  // The cycle page shows where the phase sits and links to the season.
   await page.goto(`/cycles/${existing.id}`);
-  await expect(page.getByTestId("cycle-season")).toContainText("Phase 1 of 2 in Half 2027");
-  await expect(page.getByTestId("cycle-season")).toContainText("A race: Haugesund 70.3");
+  await expect(page.getByTestId("cycle-season")).toContainText("Phase 1 of 2 · Half 2027");
+  await expect(page.getByTestId("cycle-season")).toHaveAttribute("href", `/seasons/${season.id}`);
 });
