@@ -115,7 +115,11 @@ function SortableTile({ item, index, props }: { item: ResolvedItem; index: numbe
       data-testid="edit-tile"
       data-edit-tile={item.id}
     >
-      <div className="home-jiggle h-full" data-size={item.size} style={{ animationDelay: `${-(index % 3) * 0.09}s` }}>
+      <div
+        className="home-jiggle h-full"
+        data-size={item.size}
+        style={index % 2 === 1 ? { animationDelay: "-0.14s", animationDirection: "alternate-reverse" } : undefined}
+      >
         <TileBody
           item={item}
           {...attributes}

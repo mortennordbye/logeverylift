@@ -80,6 +80,14 @@ describe("Today keeps every action at every size (C1)", () => {
     expect(screen.getByRole("link", { name: "Start Today's Workout" }).getAttribute("href")).toBe("/programs/7/workout");
   });
 
+  it("no cycle: the set-up link's name has no arrow, at S and L", () => {
+    for (const size of ["s", "l"] as const) {
+      const r = render(<>{todayWidget.View({ data: STATES["no cycle"], size })}</>);
+      expect(screen.getByRole("link", { name: "Set up a Cycle" }).getAttribute("href")).toBe("/cycles");
+      r.unmount();
+    }
+  });
+
   it("S with several sessions starts the first open one", () => {
     render(<>{todayWidget.View({ data: STATES["several sessions"], size: "s" })}</>);
     expect(screen.getByText("3 sessions today")).toBeTruthy();

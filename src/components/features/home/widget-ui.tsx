@@ -125,7 +125,7 @@ export function Spark({ values, height, id }: { values: number[]; height: number
             <stop offset="1" stopColor="var(--foreground)" stopOpacity="0" />
           </linearGradient>
         </defs>
-        <path d={s.area} fill={`url(#${id})`} />
+        <path className="home-fade" d={s.area} fill={`url(#${id})`} />
         <path d={s.line} fill="none" stroke="var(--foreground)" strokeWidth="2.2" vectorEffect="non-scaling-stroke" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
       <span

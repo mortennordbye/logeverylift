@@ -25,7 +25,7 @@ export function TodayMore({ actions }: { actions: TodayAction[] }) {
         <div className={`${HOME_UI} bg-sheet rounded-t-[28px] px-4 pt-2 pb-8 space-y-3`} data-testid="today-more-sheet">
           <div className="mx-auto mb-2.5 h-[5px] w-9 rounded-full bg-muted-foreground/50" aria-hidden />
           <div className="flex items-center justify-between">
-            <h2 className="home-display text-[24px]">Today</h2>
+            <h2 className="home-display text-[20px]">Today</h2>
             <button type="button" onClick={() => setOpen(false)} className="min-h-11 rounded-full bg-widget-2 px-4 text-[15px] font-semibold active:scale-[0.94] transition-transform">
               Close
             </button>

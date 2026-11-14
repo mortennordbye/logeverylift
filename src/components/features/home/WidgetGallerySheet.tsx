@@ -47,7 +47,7 @@ export function WidgetGallerySheet({
       <div className={`${HOME_UI} bg-sheet rounded-t-[28px] px-4 pt-2 pb-8 max-h-[80dvh] overflow-y-auto`} data-testid="widget-gallery">
         <div className="mx-auto mb-2.5 h-[5px] w-9 rounded-full bg-muted-foreground/50" aria-hidden />
         <div className="mb-3.5 flex items-center justify-between">
-          <h2 className="home-display text-[24px]">Add a widget</h2>
+          <h2 className="home-display text-[20px]">Add a widget</h2>
           <button
             type="button"
             onClick={onClose}

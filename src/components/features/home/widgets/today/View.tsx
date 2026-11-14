@@ -117,7 +117,7 @@ function TodayCard({ data, size }: { data: TodayData; size: WidgetSize }) {
       )}
       <p className="text-[13px] font-semibold uppercase tracking-[0.05em] opacity-75">Today</p>
       <div className="flex items-center gap-2 flex-wrap mt-0.5 mb-1">
-        <p className="home-display text-[34px] uppercase leading-[1.05] min-w-0 break-words">{todayName(data)}</p>
+        <p className="home-display text-[34px] uppercase leading-[1.15] min-w-0 break-words">{todayName(data)}</p>
         {completedToday && <DoneChip automatic={!!todayAutoSession} />}
         {!completedToday && rotationOverdueDays > 0 && todayProgram && (
           <span className="inline-flex items-center text-xs font-bold text-white bg-white/20 px-2 py-0.5 rounded-full shrink-0">
@@ -261,7 +261,7 @@ function NoCycle({ size }: { size: WidgetSize }) {
       <div className={`${CARD} items-center justify-center text-center p-3!`} data-testid="cycle-setup">
         <PlanArt width={84} />
         <p className="my-2 text-sm font-semibold">Plan your first block</p>
-        <Link href="/cycles" aria-label="Set up a Cycle →" className={`${SET_UP_CLASS} w-full min-h-11! text-sm!`}>
+        <Link href="/cycles" aria-label="Set up a Cycle" className={`${SET_UP_CLASS} w-full min-h-11! text-sm!`}>
           Set up
         </Link>
       </div>
@@ -270,13 +270,13 @@ function NoCycle({ size }: { size: WidgetSize }) {
   return (
     <div className={`${CARD} items-center justify-center text-center p-5!`} data-testid="cycle-setup">
       <PlanArt width={size === "l" ? 132 : 84} />
-      <h2 className="home-display mt-3.5 mb-1.5 text-[30px]">Plan your first block</h2>
+      <h2 className="home-display mt-3.5 mb-1.5 text-[24px]">Plan your first block</h2>
       <p className="mb-[18px] max-w-[270px] text-[15px] leading-snug text-muted-foreground">
         Set up a training cycle: it plans which program you run each day and tracks the weeks as you go.
       </p>
       <Link href="/cycles" className={SET_UP_CLASS}>
         <Sparkles className="h-[18px] w-[18px]" aria-hidden />
-        Set up a Cycle →
+        Set up a Cycle <span aria-hidden>→</span>
       </Link>
     </div>
   );

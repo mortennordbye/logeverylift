@@ -288,6 +288,12 @@ test("widgets jiggle in edit mode, and not with reduced motion", async ({ page }
   await page.goto("/");
   await page.getByRole("button", { name: "Edit home" }).click();
   expect(await jiggle()).toBe("home-jiggle");
+  // As the locked design: one swing each way per 0.28 s, alternating.
+  const timing = await page
+    .locator('[data-edit-tile="week"] .home-jiggle')
+    .evaluate((el) => [getComputedStyle(el).animationDuration, getComputedStyle(el).animationDirection]);
+  expect(timing[0]).toBe("0.28s");
+  expect(["alternate", "alternate-reverse"]).toContain(timing[1]);
   await page.getByRole("button", { name: "Cancel" }).click();
 
   await page.emulateMedia({ reducedMotion: "reduce" });

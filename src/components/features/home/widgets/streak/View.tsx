@@ -24,9 +24,9 @@ function Flame() {
         fill="url(#home-flame-grad)"
       />
       <path
-        className="home-flame"
+        className="home-flame-inner"
         d="M16 19c3.4 3 5.6 5.6 5.6 9.4a5.6 5.6 0 0 1-11.2 0c0-3 1.8-5 3.2-6.2 0 2 .9 3.2 2.2 3.4-.2-2.2-.2-4.4.2-6.6z"
-        style={{ fill: "color-mix(in oklab, var(--brand) 25%, #fff)", animationDuration: "1.1s" }}
+        style={{ fill: "color-mix(in oklab, var(--brand) 25%, #fff)" }}
       />
     </svg>
   );
