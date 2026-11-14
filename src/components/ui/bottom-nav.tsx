@@ -66,7 +66,8 @@ export function BottomNav() {
   // between More, Friends and the rest, where the count changes. On Friends
   // itself it is all on screen, so the dot is off and nothing is fetched: the
   // page marks it seen in its streamed part, which can land after this effect.
-  const hideNav = pathname === "/cycles/new" || pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
+  // Form screens with a pinned bottom bar (the cycle setup and Edit details) show no tab bar.
+  const hideNav = pathname === "/cycles/new" || /^\/cycles\/\d+\/edit$/.test(pathname) || pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
   const badgeScope = pathname === "/more" ? "more" : pathname.startsWith("/more/friends") ? "friends" : "other";
   useEffect(() => {
     if (hideNav || badgeScope === "friends") return;
