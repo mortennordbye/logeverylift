@@ -1,5 +1,6 @@
-import { defineWidget } from "@/components/features/home/define-widget";
-import { Card, Cap, Label, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_FRIENDS } from "@/components/features/home/samples";
+import { Card, Cap, Label, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { dayMonth } from "@/lib/home/labels";
 import { Plus, Users } from "lucide-react";
 import Link from "next/link";
@@ -28,7 +29,7 @@ function Avatar({ name, image }: { name: string; image: string | null }) {
 
 const what = (w: FriendWorkout) => `${w.programName ?? "Workout"} · ${w.setCount} ${w.setCount === 1 ? "set" : "sets"}`;
 
-export const friendsActivityWidget = defineWidget<FriendWorkout[]>({
+export const friendsActivityWidget: Renderer<FriendWorkout[]> = defineWidget<FriendWorkout[]>({
   load: loadFriendsActivity,
   View: ({ data, size }) => {
     if (size === "s") {
@@ -89,5 +90,5 @@ export const friendsActivityWidget = defineWidget<FriendWorkout[]>({
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => <PreviewBox title="Friends' activity" size={size} lines={3} />,
+  Preview: ({ size }) => friendsActivityWidget.View({ data: SAMPLE_FRIENDS, size }),
 });

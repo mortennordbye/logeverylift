@@ -1,11 +1,12 @@
-import { defineWidget } from "@/components/features/home/define-widget";
-import { Card, Cap, Label, Num, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_RACE } from "@/components/features/home/samples";
+import { Card, Cap, Label, Num, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { Flag } from "lucide-react";
 import { loadRaceCountdown, type RaceCountdownData } from "./load";
 
 /** Race countdown (S, endurance): days to the next A race. Opens its season. */
 
-export const raceCountdownWidget = defineWidget<RaceCountdownData>({
+export const raceCountdownWidget: Renderer<RaceCountdownData> = defineWidget<RaceCountdownData>({
   load: loadRaceCountdown,
   View: ({ data }) => (
     <Card href={`/seasons/${data.seasonId}`} testId="race-countdown">
@@ -26,5 +27,5 @@ export const raceCountdownWidget = defineWidget<RaceCountdownData>({
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => <PreviewBox title="Race countdown" size={size} />,
+  Preview: ({ size }) => raceCountdownWidget.View({ data: SAMPLE_RACE, size }),
 });

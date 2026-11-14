@@ -1,7 +1,8 @@
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
+import { SAMPLE_TODAY } from "@/components/features/home/samples";
 import { TodaySessionsList } from "@/components/features/TodaySessionsList";
 import { WorkoutInsightBanner } from "@/components/features/WorkoutInsightBanner";
-import { defineWidget } from "@/components/features/home/define-widget";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { CARD, PreviewBox } from "@/components/features/home/widget-ui";
 import type { HomeCore } from "@/lib/home/core";
 import { todayActions, type TodayAction } from "@/lib/home/today-actions";
@@ -295,7 +296,7 @@ export function TodayError() {
   );
 }
 
-export const todayWidget = defineWidget<TodayData>({
+export const todayWidget: Renderer<TodayData> = defineWidget<TodayData>({
   select: selectToday,
   View: ({ data, size }) => {
     if (!data.cycle) return <NoCycle size={size} />;
@@ -304,6 +305,6 @@ export const todayWidget = defineWidget<TodayData>({
   // Today always has data: the no-cycle variant is part of View.
   Empty: ({ size }) => <NoCycle size={size} />,
   Skeleton: ({ size }) => <PreviewBox title="Today" size={size} lines={3} />,
-  Preview: ({ size }) => <PreviewBox title="Today" size={size} lines={3} />,
+  Preview: ({ size }) => todayWidget.View({ data: SAMPLE_TODAY, size }),
   Error: TodayError,
 });

@@ -1,5 +1,6 @@
-import { defineWidget } from "@/components/features/home/define-widget";
-import { Card, Label, Num, PreviewBox, Track, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_SETS } from "@/components/features/home/samples";
+import { Card, Label, Num, Track, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { BarChart3 } from "lucide-react";
 import { loadWeeklySets, type WeeklySetsData } from "./load";
 
@@ -8,7 +9,7 @@ import { loadWeeklySets, type WeeklySetsData } from "./load";
 const HREF = "/more/metrics";
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
-export const weeklySetsWidget = defineWidget<WeeklySetsData>({
+export const weeklySetsWidget: Renderer<WeeklySetsData> = defineWidget<WeeklySetsData>({
   load: loadWeeklySets,
   View: ({ data }) => (
     <Card href={HREF} testId="weekly-sets">
@@ -33,5 +34,5 @@ export const weeklySetsWidget = defineWidget<WeeklySetsData>({
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => <PreviewBox title="Weekly sets" size={size} />,
+  Preview: ({ size }) => weeklySetsWidget.View({ data: SAMPLE_SETS, size }),
 });

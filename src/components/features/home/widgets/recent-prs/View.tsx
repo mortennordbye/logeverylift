@@ -1,5 +1,6 @@
-import { defineWidget } from "@/components/features/home/define-widget";
-import { Card, Cap, Label, Num, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_PRS } from "@/components/features/home/samples";
+import { Card, Cap, Label, Num, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { Trophy } from "lucide-react";
 import { loadRecentPrs, type RecentPr } from "./load";
 
@@ -20,7 +21,7 @@ const TrophyChip = ({ small = false }: { small?: boolean }) => (
   </span>
 );
 
-export const recentPrsWidget = defineWidget<RecentPr[]>({
+export const recentPrsWidget: Renderer<RecentPr[]> = defineWidget<RecentPr[]>({
   load: loadRecentPrs,
   View: ({ data, size }) => {
     if (size === "s") {
@@ -75,5 +76,5 @@ export const recentPrsWidget = defineWidget<RecentPr[]>({
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => <PreviewBox title="Recent PRs" size={size} lines={3} />,
+  Preview: ({ size }) => recentPrsWidget.View({ data: SAMPLE_PRS, size }),
 });

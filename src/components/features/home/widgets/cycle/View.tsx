@@ -1,4 +1,5 @@
-import { defineWidget } from "@/components/features/home/define-widget";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_CYCLE } from "@/components/features/home/samples";
 import { Card, Cap, Label, Num, PreviewBox } from "@/components/features/home/widget-ui";
 import type { HomeCore } from "@/lib/home/core";
 import { Repeat } from "lucide-react";
@@ -27,7 +28,7 @@ function Segments({ current, total }: { current: number; total: number }) {
   );
 }
 
-export const cycleWidget = defineWidget<CycleData>({
+export const cycleWidget: Renderer<CycleData> = defineWidget<CycleData>({
   select: (core: HomeCore) =>
     core.info
       ? {
@@ -70,5 +71,5 @@ export const cycleWidget = defineWidget<CycleData>({
     </Card>
   ),
   Skeleton: ({ size }) => <PreviewBox title="Cycle progress" size={size} />,
-  Preview: ({ size }) => <PreviewBox title="Cycle progress" size={size} />,
+  Preview: ({ size }) => cycleWidget.View({ data: SAMPLE_CYCLE, size }),
 });

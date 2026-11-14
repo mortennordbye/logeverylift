@@ -1,5 +1,6 @@
 import { EnduranceTodayCard, type EnduranceTodayRow } from "@/components/features/guided/EnduranceTodayCard";
-import { defineWidget } from "@/components/features/home/define-widget";
+import { SAMPLE_ENDURANCE } from "@/components/features/home/samples";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
 import { CARD, PreviewBox } from "@/components/features/home/widget-ui";
 import Link from "next/link";
 
@@ -13,12 +14,12 @@ import Link from "next/link";
  * there to move.
  */
 
-export const enduranceTodayWidget = defineWidget<EnduranceTodayRow[]>({
+export const enduranceTodayWidget: Renderer<EnduranceTodayRow[]> = defineWidget<EnduranceTodayRow[]>({
   select: (core) => (core.endurance && core.endurance.today.length > 0 ? core.endurance.today : null),
   View: ({ data }) => <EnduranceTodayCard rows={data} />,
   Empty: () => null,
   Skeleton: ({ size }) => <PreviewBox title="Endurance today" size={size} />,
-  Preview: ({ size }) => <PreviewBox title="Endurance today" size={size} />,
+  Preview: ({ size }) => enduranceTodayWidget.View({ data: SAMPLE_ENDURANCE, size }),
   Error: () => (
     <div className={CARD} role="status" data-testid="widget-error">
       <p className="text-sm text-muted-foreground mb-3">Couldn&apos;t load this.</p>

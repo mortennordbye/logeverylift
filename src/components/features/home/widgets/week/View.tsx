@@ -1,4 +1,5 @@
-import { defineWidget } from "@/components/features/home/define-widget";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_WEEK_CORE } from "@/components/features/home/samples";
 import { Card, Label, PreviewBox } from "@/components/features/home/widget-ui";
 import type { HomeCore } from "@/lib/home/core";
 import { weekDayMarks } from "@/lib/utils/planned-sessions";
@@ -154,10 +155,10 @@ function WeekView({ core, ring }: { core: HomeCore; ring: boolean }) {
   );
 }
 
-export const weekWidget = defineWidget<WeekData>({
+export const weekWidget: Renderer<WeekData> = defineWidget<WeekData>({
   select: (core) => ({ core }),
   View: ({ data, size }) => <WeekView core={data.core} ring={size === "l"} />,
   Empty: ({ size }) => <PreviewBox title="Week" size={size} />,
   Skeleton: ({ size }) => <PreviewBox title="Week" size={size} />,
-  Preview: ({ size }) => <PreviewBox title="This week" size={size} lines={1} />,
+  Preview: ({ size }) => weekWidget.View({ data: { core: SAMPLE_WEEK_CORE }, size }),
 });

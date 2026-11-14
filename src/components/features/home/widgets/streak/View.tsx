@@ -1,5 +1,6 @@
-import { defineWidget } from "@/components/features/home/define-widget";
-import { Card, Cap, Label, Num, PreviewBox, WidgetSkeleton } from "@/components/features/home/widget-ui";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_STREAK } from "@/components/features/home/samples";
+import { Card, Cap, Label, Num, WidgetSkeleton } from "@/components/features/home/widget-ui";
 import { Zap } from "lucide-react";
 import { loadStreak, type StreakData } from "./load";
 
@@ -42,7 +43,7 @@ function Head({ weeks }: { weeks: number }) {
 
 const unit = (n: number) => (n === 1 ? "week in a row" : "weeks in a row");
 
-export const streakWidget = defineWidget<StreakData>({
+export const streakWidget: Renderer<StreakData> = defineWidget<StreakData>({
   load: loadStreak,
   View: ({ data, size }) => {
     if (size === "s") {
@@ -92,5 +93,5 @@ export const streakWidget = defineWidget<StreakData>({
     </Card>
   ),
   Skeleton: WidgetSkeleton,
-  Preview: ({ size }) => <PreviewBox title="Streak" size={size} />,
+  Preview: ({ size }) => streakWidget.View({ data: SAMPLE_STREAK, size }),
 });

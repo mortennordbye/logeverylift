@@ -1,4 +1,5 @@
-import { defineWidget } from "@/components/features/home/define-widget";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_WORKOUTS_THIS_WEEK } from "@/components/features/home/samples";
 import { Card, Label, PreviewBox } from "@/components/features/home/widget-ui";
 import { Target } from "lucide-react";
 import { GoalLeft, GoalRing } from "../week/GoalRing";
@@ -8,7 +9,7 @@ import { GoalLeft, GoalRing } from "../week/GoalRing";
  * still per device (localStorage, decision 8 moves it to the account later).
  */
 
-export const weeklyGoalWidget = defineWidget<{ thisWeekWorkouts: number }>({
+export const weeklyGoalWidget: Renderer<{ thisWeekWorkouts: number }> = defineWidget<{ thisWeekWorkouts: number }>({
   select: (core) => ({ thisWeekWorkouts: core.stats.thisWeekWorkouts }),
   View: ({ data, size }) => (
     <Card testId="weekly-goal">
@@ -35,5 +36,5 @@ export const weeklyGoalWidget = defineWidget<{ thisWeekWorkouts: number }>({
   ),
   Empty: ({ size }) => <PreviewBox title="Weekly goal" size={size} />,
   Skeleton: ({ size }) => <PreviewBox title="Weekly goal" size={size} />,
-  Preview: ({ size }) => <PreviewBox title="Weekly goal" size={size} />,
+  Preview: ({ size }) => weeklyGoalWidget.View({ data: { thisWeekWorkouts: SAMPLE_WORKOUTS_THIS_WEEK }, size }),
 });
