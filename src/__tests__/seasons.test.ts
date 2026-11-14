@@ -331,3 +331,21 @@ describe("season row words (docs/design/plan-redesign/spec.md)", () => {
     expect(runLengthDays("2026-11-09", 49, null)).toBe(49);
   });
 });
+
+describe("a phase that ended early (round 8)", () => {
+  it("ends on its real last day; the chain after it keeps its planned dates", () => {
+    const t = seasonTimeline("2026-09-28", [
+      { id: 1, name: "Aerobic base", phaseOrder: 1, phaseType: "base", durationWeeks: 8, durationDays: null, status: "completed", startDate: "2026-09-28", scheduledStartDate: null, lastDay: "2026-11-01" },
+      { id: 2, name: "Run build", phaseOrder: 2, phaseType: "build", durationWeeks: 8, durationDays: null, status: "draft", startDate: null, scheduledStartDate: null },
+    ]);
+    expect(t[0]).toMatchObject({ start: "2026-09-28", end: "2026-11-01", lengthDays: 35 });
+    expect(t[1].start).toBe("2026-11-23");
+  });
+
+  it("keeps the planned end when it ran its whole length", () => {
+    const t = seasonTimeline("2026-09-28", [
+      { id: 1, name: "Aerobic base", phaseOrder: 1, phaseType: "base", durationWeeks: 8, durationDays: null, status: "completed", startDate: "2026-09-28", scheduledStartDate: null, lastDay: null },
+    ]);
+    expect(t[0].end).toBe("2026-11-22");
+  });
+});

@@ -497,15 +497,17 @@ async function main() {
     ];
 
     // A finished standalone block, then a season whose first phase ran until
-    // the running cycle started: its chain is paused (Resume).
-    const pausedStart = addDaysStr(blockStart, -5 * 7);
+    // the running cycle started: its chain is paused (Resume). The first phase
+    // runs its whole 8 weeks and ends the day before the running block starts,
+    // so the two never overlap.
+    const pausedStart = addDaysStr(blockStart, -8 * 7);
     const spring = await makeCycle(ctx, "Spring run block", 4, "day_of_week", simpleWeek);
     await rev.activateCycle(ctx, spring, undefined, addDaysStr(pausedStart, -5 * 7));
     const { season: paused } = await seasonsLib.createSeason(ctx, {
       name: "Winter run base",
       goal: "Run 10 km easy without walking",
       startDate: pausedStart,
-      endDate: addDaysStr(pausedStart, 16 * 7 - 1),
+      endDate: addDaysStr(pausedStart, 19 * 7 - 1),
       nextGoal: null,
     });
     const pb1 = await seasonsLib.addPhase(ctx, paused.id, { name: "Aerobic base", scheduleType: "day_of_week", durationWeeks: 8, phaseType: "base" });

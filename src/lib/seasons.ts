@@ -19,6 +19,7 @@ import {
   PlanStateError,
   activateInSession,
   chainSeason,
+  cyclesCompletedAt,
   liveSeasonId,
   lockCycleRows,
   releaseSeasonPhases,
@@ -28,10 +29,13 @@ import {
   type PlanWriteContext,
   type PlanWriteSession,
 } from "@/lib/plan-revisions";
-import { userToday } from "@/lib/user-settings";
+import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr, weeksForDays } from "@/lib/utils/cycle-position";
+import { localDateStr } from "@/lib/utils/user-date";
 import {
+  addDaysStr,
   dayLabel,
+  earlyLastDay,
   fitTaperChange,
   nextPhase,
   phasesSkippedBy,
@@ -41,6 +45,7 @@ import {
   shownTimeline,
   taperDaysFor,
   taperFit,
+  type PhaseLike,
   type RaceLike,
   type TaperFit,
   type TimelinePhase,
@@ -144,6 +149,19 @@ export async function scheduledStartDay(userId: string): Promise<string | null> 
   return row?.day ?? null;
 }
 
+/** Completed phases with the day they really ended when another start ended them early (earlyLastDay). */
+async function withLastDays<P extends PhaseLike>(userId: string, rows: P[]): Promise<P[]> {
+  const done = rows.filter((r) => r.status === "completed" && r.startDate);
+  if (done.length === 0) return rows;
+  const [completed, { timeZone }] = await Promise.all([cyclesCompletedAt(userId, done.map((r) => r.id)), getUserSettings(userId)]);
+  return rows.map((r) => {
+    const at = completed.get(r.id);
+    if (r.status !== "completed" || !r.startDate || !at) return r;
+    const plannedLast = addDaysStr(r.startDate, (r.durationDays ?? r.durationWeeks * 7) - 1);
+    return { ...r, lastDay: earlyLastDay(r.startDate, plannedLast, localDateStr(at, timeZone)) };
+  });
+}
+
 export async function getSeasonDetail(userId: string, seasonId: number): Promise<SeasonDetail | null> {
   const [season] = await db
     .select()
@@ -156,7 +174,7 @@ export async function getSeasonDetail(userId: string, seasonId: number): Promise
     .from(seasonRaces)
     .where(eq(seasonRaces.seasonId, seasonId))
     .orderBy(asc(seasonRaces.raceDate), asc(seasonRaces.id));
-  const rows = await seasonPhases(db, seasonId);
+  const rows = await withLastDays(userId, await seasonPhases(db, seasonId));
   const versions = new Map(rows.map((r) => [r.id, r.version]));
   // The scheduled start ends a running phase the day before; a paused chain is dated from Resume (J4-18).
   const timeline = shownTimeline(season.startDate, rows, await scheduledStartDay(userId), day).map((p) => ({ ...p, version: versions.get(p.id) ?? 1 }));

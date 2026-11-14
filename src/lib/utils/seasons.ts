@@ -32,6 +32,8 @@ export type PhaseLike = {
   status: "draft" | "active" | "completed";
   startDate: string | null;
   scheduledStartDate: string | null;
+  /** The real last day of a completed phase that ended before its planned end (earlyLastDay); null or absent otherwise. */
+  lastDay?: string | null;
 };
 
 export type TimelinePhase = PhaseLike & {
@@ -111,6 +113,17 @@ export function runLengthDays(start: string, lengthDays: number, otherStart: str
 }
 
 /**
+ * The last day a completed block ran when it ended before its planned last
+ * day: the day before the day it completed (another start took over that
+ * day), never before its start. Null when it ran its whole length.
+ */
+export function earlyLastDay(startDate: string | null, plannedLast: string | null, completedOn: string | null): string | null {
+  if (!completedOn || !plannedLast || completedOn > plannedLast) return null;
+  const before = addDaysStr(completedOn, -1);
+  return startDate && before < startDate ? startDate : before;
+}
+
+/**
  * Each phase's dates, forward from the season start: a started phase keeps
  * its real start, a scheduled one its scheduled day, and any other phase
  * starts the day after the one before it ends. Nothing stores these dates.
@@ -126,9 +139,11 @@ export function seasonTimeline(seasonStart: string, phases: PhaseLike[], otherSt
     const started = p.status !== "draft" && p.startDate;
     const start = started ? p.startDate! : (p.scheduledStartDate ?? cursor);
     const planned = addDaysStr(start, lengthOf(p) - 1);
-    const end = p.status === "active" ? cutByStart(start, planned, otherStart) : planned;
+    const end = p.status === "active" ? cutByStart(start, planned, otherStart) : p.status === "completed" && p.lastDay && p.lastDay >= start && p.lastDay < planned ? p.lastDay : planned;
     const lengthDays = daysBetweenStr(start, end) + 1;
-    cursor = addDaysStr(end, 1);
+    // A phase that ended early keeps the chain on its planned dates: Resume
+    // dates the next phase from the planned end (resumeSeason).
+    cursor = addDaysStr(p.status === "completed" ? planned : end, 1);
     return { ...p, start, end, lengthDays, state: p.status === "completed" ? "done" : p.status === "active" ? "active" : "planned" };
   });
 }

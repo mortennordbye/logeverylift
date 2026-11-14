@@ -7,7 +7,7 @@
 import type { AnswerSession } from "@/components/features/answer-session";
 import { addDaysStr, dowOf } from "@/lib/utils/planned-sessions";
 import type { MoveSuggestion } from "@/lib/utils/session-compliance";
-import { shortDay } from "@/lib/utils/seasons";
+import { earlyLastDay, shortDay } from "@/lib/utils/seasons";
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -282,10 +282,8 @@ export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[],
  * zone, if known.
  */
 export function endedLine(startDate: string | null, plannedLast: string | null, today: string, completedOn: string | null): string {
-  const early = completedOn != null && plannedLast != null && completedOn <= plannedLast;
-  if (!early && plannedLast && plannedLast < today) return `ended ${dayMonth(plannedLast)}`;
-  if (!completedOn) return "ended early";
-  const before = addDaysStr(completedOn, -1);
-  const last = startDate && before < startDate ? startDate : before;
+  const last = earlyLastDay(startDate, plannedLast, completedOn);
+  if (!last && plannedLast && plannedLast < today) return `ended ${dayMonth(plannedLast)}`;
+  if (!last) return "ended early";
   return `ended early on ${dayMonth(last)}`;
 }

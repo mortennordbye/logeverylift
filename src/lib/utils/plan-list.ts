@@ -292,6 +292,7 @@ export function seasonCard(
     status: p.status,
     startDate: p.startDate,
     scheduledStartDate: p.scheduledStartDate,
+    lastDay: p.lastDay ?? null,
   }));
   const timeline = shownTimeline(s.startDate, phaseData, otherStart, today);
   const active = timeline.find((p) => p.state === "active");

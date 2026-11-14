@@ -115,4 +115,17 @@ describe("a phase another start ended early says the day it ended (J8-09)", () =
     const banner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await CycleDetailPage({ params: Promise.resolve({ id: String(one) }) }), CycleCompletionBanner)!;
     expect(banner.endedLabel).toBe(`ended early on ${dayMonth(day(0))}`);
   });
+
+  it("the season page and the Plan list show the day it ended, not its planned end (round 8)", async () => {
+    const { seasonId, one } = await runningSeason();
+    // Base began ten days ago; another block starting today ends it yesterday.
+    await db.update(trainingCycles).set({ startDate: day(-10) }).where(eq(trainingCycles.id, one));
+    expect((await startTrainingCycle(await draft("Oslo base"))).success).toBe(true);
+
+    const detail = (await getSeasonDetail(me, seasonId))!;
+    expect(detail.phases[0]).toMatchObject({ state: "done", start: day(-10), end: day(-1), lengthDays: 10 });
+    const card = (await loadPlanList(me, false)).seasons.find((s) => s.id === seasonId)!;
+    expect(card.phases[0].sub).toContain(dayMonth(day(-1)));
+    expect(card.phases[0].sub).not.toContain(dayMonth(day(17)));
+  });
 });
