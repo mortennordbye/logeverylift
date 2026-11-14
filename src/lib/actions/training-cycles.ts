@@ -872,16 +872,21 @@ export async function reorderCycleSlots(
   if (!validation.success) return { success: false, error: "Invalid input" };
   try {
     const done = await writeCycle(auth.user.id, cycleId, async (tx) => {
-      for (const [index, id] of validation.data.orderedIds.entries()) {
-        await tx
-          .update(trainingCycleSlots)
-          .set({ orderIndex: index + 1 })
-          .where(
-            and(
-              eq(trainingCycleSlots.id, id),
-              eq(trainingCycleSlots.trainingCycleId, validation.data.cycleId),
-            ),
-          );
+      // uniq_cycle_order is checked row by row, so a slot cannot take a place
+      // another slot still holds. Park every slot on a negative place first,
+      // then write the final places.
+      for (const sign of [-1, 1]) {
+        for (const [index, id] of validation.data.orderedIds.entries()) {
+          await tx
+            .update(trainingCycleSlots)
+            .set({ orderIndex: sign * (index + 1) })
+            .where(
+              and(
+                eq(trainingCycleSlots.id, id),
+                eq(trainingCycleSlots.trainingCycleId, validation.data.cycleId),
+              ),
+            );
+        }
       }
     });
     if (!done) return { success: false, error: "Cycle not found" };
