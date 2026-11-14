@@ -4,9 +4,6 @@ const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
 const scheduleTypeEnum = z.enum(["day_of_week", "rotation"]);
 const statusEnum = z.enum(["draft", "active", "completed"]);
 
-/** The block lengths the triathlon generator rounds to. A cycle itself can be any length in the range below. */
-export const CYCLE_DURATION_WEEKS = [4, 6, 8, 10, 12, 16, 24, 36, 52];
-
 /** A cycle is a whole number of weeks in this range, the same as a season phase. */
 export const MIN_CYCLE_WEEKS = 1;
 export const MAX_CYCLE_WEEKS = 52;
