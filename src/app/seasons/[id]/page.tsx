@@ -1,9 +1,11 @@
 import { HOME_UI } from "@/components/features/home/fonts";
+import { PlanItemDeleted } from "@/components/features/PlanItemDeleted";
 import { SeasonDetailClient } from "@/components/features/SeasonDetailClient";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { getSeasonDetail, seasonStartContext } from "@/lib/seasons";
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
+import { ownDeletedSeason } from "@/lib/plan-deleted";
 import { requireSession } from "@/lib/utils/session";
 
 import { notFound } from "next/navigation";
@@ -19,6 +21,8 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
     enduranceEnabledFor(auth.user.id),
     userToday(auth.user.id),
   ]);
+  // Delete season renders this page again in its response.
+  if (!detail && (await ownDeletedSeason(auth.user.id, seasonId))) return <PlanItemDeleted what="season" />;
   if (!detail) notFound();
   const s = detail.season;
   // Resume takes the scheduled start: its confirm says what that ends and drops.

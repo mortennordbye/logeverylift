@@ -12,11 +12,13 @@ import { db } from "@/db";
 import { programExercises } from "@/db/schema";
 import { CreateCycleForm, CycleSetupSessions } from "@/components/features/CreateCycleForm";
 import { HOME_UI } from "@/components/features/home/fonts";
+import { PlanItemDeleted } from "@/components/features/PlanItemDeleted";
 import { getActiveCycleForUser, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
 import { cycleStartContext } from "@/lib/cycle-start";
 import { getPrograms } from "@/lib/actions/programs";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { MAX_SCHEDULE_DAYS } from "@/lib/mcp/tools/cycles";
+import { ownDeletedCycle } from "@/lib/plan-deleted";
 import { userToday } from "@/lib/user-settings";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { nextMonday, type StartDays } from "@/lib/utils/cycle-setup";
@@ -58,6 +60,8 @@ export default async function NewCyclePage({
   const cycleId = Number(params.cycle);
   if (!Number.isInteger(cycleId) || cycleId <= 0) notFound();
   const cycleResult = await getTrainingCycleWithSlots(cycleId);
+  // Discard deletes the draft and renders this page again in its response.
+  if (!cycleResult.success && (await ownDeletedCycle(auth.user.id, cycleId))) return <PlanItemDeleted what="cycle" />;
   if (!cycleResult.success) notFound();
   const cycle = cycleResult.data;
   // The setup is for a draft; a started or scheduled cycle lives on its own page.
