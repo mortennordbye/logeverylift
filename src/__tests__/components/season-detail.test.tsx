@@ -74,6 +74,8 @@ const base = {
   next: { cycleId: 1, name: "Aerobic base + strength", plannedStart: "2026-11-16", scheduled: true },
   gapBefore: 0,
   overrunAfter: 0,
+  running: null,
+  scheduled: null,
 };
 
 const rowNames = () => screen.getAllByTestId("phase-name").map((n) => n.textContent);
@@ -257,5 +259,93 @@ describe("season detail text (fix round 2)", () => {
     expect(say.onDragStart({ active: { id: 1 } } as never)).toBe("Picked up Aerobic base + strength.");
     expect(say.onDragEnd({ active: { id: 1 }, over: { id: 3 } } as never)).toBe("Aerobic base + strength dropped in the place of Taper.");
     expect(say.onDragCancel({ active: { id: 1 } } as never)).toBe("Aerobic base + strength was not moved.");
+  });
+});
+
+describe("Resume asks first (fix round 4)", () => {
+  const paused = { ...base, next: { ...base.next, scheduled: false } };
+  // A cycle outside the season runs from 2 Nov, and another draft is scheduled for 30 Nov.
+  const running = { id: 20, name: "Base block", startDate: "2026-11-02", durationWeeks: 6, durationDays: null, seasonId: null };
+  const scheduled = { id: 21, name: "Strength upkeep", day: "2026-11-30", season: null };
+
+  it("says what it ends and drops, and resumes only after the confirm", async () => {
+    render(<SeasonDetailClient {...paused} running={running} scheduled={scheduled} />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    const sheet = screen.getByRole("region", { name: "Resume this season?" });
+    expect(sheet.textContent).toContain("Aerobic base + strength starts Mon 16 Nov.");
+    expect(sheet.textContent).toContain("This ends Base block at week 3 of 6.");
+    expect(sheet.textContent).toContain("Strength upkeep no longer starts Mon 30 Nov.");
+    expect(actions.resumeSeasonAction).not.toHaveBeenCalled();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Resume season" }));
+    await waitFor(() => expect(actions.resumeSeasonAction).toHaveBeenCalledWith({ seasonId: 7 }));
+  });
+
+  it("Start on a season due today says it starts today", () => {
+    render(<SeasonDetailClient {...paused} today="2026-11-16" running={running} scheduled={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    const sheet = screen.getByRole("region", { name: "Start this season?" });
+    expect(sheet.textContent).toContain("Aerobic base + strength starts today.");
+    expect(sheet.textContent).toContain("This ends Base block at week 3 of 6.");
+  });
+
+  it("resumes at once when nothing else runs or is scheduled", async () => {
+    render(<SeasonDetailClient {...paused} />);
+    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
+    await waitFor(() => expect(actions.resumeSeasonAction).toHaveBeenCalledWith({ seasonId: 7 }));
+  });
+});
+
+describe("errors belong to the sheet that caused them (fix round 4)", () => {
+  it("a race error is gone once the race sheet closes, on the page and in the Delete season confirm", async () => {
+    actions.addRaceAction.mockImplementation(async () => ({ success: false, error: "Pick a race date from today on" }) as never);
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    fireEvent.change(within(sheet).getByLabelText("Name"), { target: { value: "Old race" } });
+    fireEvent.change(within(sheet).getByLabelText("Date"), { target: { value: "2026-01-01" } });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save race" }));
+    await waitFor(() => expect(within(sheet).getByRole("alert")).toBeTruthy());
+
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "New race" })).toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Season actions" })).getByRole("button", { name: "Delete season" }));
+    expect(within(screen.getByRole("region", { name: "Delete this season?" })).queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("phase length in weeks or days (fix round 4)", () => {
+  // Fit the taper set Build to 105 days: a whole number of weeks.
+  const fitted = [phases[0], { ...phases[1], durationWeeks: 15, durationDays: 105, end: "2027-04-25", lengthDays: 105 }, phases[2]];
+
+  it("shows a whole number of weeks as weeks, in the row and in the sheet", () => {
+    render(<SeasonDetailClient {...base} phases={fitted} />);
+    const row = screen.getAllByTestId("phase-row")[1];
+    expect(row.textContent).toContain("15 wk");
+    expect(row.textContent).not.toContain("105 days");
+    fireEvent.click(within(row).getAllByRole("button")[1]);
+    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("15");
+    expect(screen.getByRole("button", { name: "Weeks" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("Weeks to Days converts the number, so 12 weeks saves as 84 days", async () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[1]).getAllByRole("button")[1]);
+    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("12");
+    fireEvent.click(screen.getByRole("button", { name: "Days" }));
+    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("84");
+    fireEvent.click(screen.getByRole("button", { name: "Save phase" }));
+    await waitFor(() => expect(actions.setPhaseAction).toHaveBeenCalledWith(expect.objectContaining({ cycleId: 2, durationDays: 84 })));
+  });
+
+  it("Days to Weeks keeps days and says so when the days are not whole weeks", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[2]).getAllByRole("button")[1]);
+    fireEvent.click(screen.getByRole("button", { name: "Weeks" }));
+    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("10");
+    expect(screen.getByRole("button", { name: "Days" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByText("10 days is not a whole number of weeks, so the length stays in days.")).toBeTruthy();
   });
 });

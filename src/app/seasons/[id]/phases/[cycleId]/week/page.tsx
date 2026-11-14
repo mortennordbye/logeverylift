@@ -4,7 +4,7 @@
  * back to the season. The phase already exists; each slot saves as it is set.
  */
 
-import { AddPhaseFinish } from "@/components/features/AddPhaseForm";
+import { AddPhaseCancel, AddPhaseFinish } from "@/components/features/AddPhaseForm";
 import { CycleScheduleBuilder } from "@/components/features/CycleScheduleBuilder";
 import { HOME_UI } from "@/components/features/home/fonts";
 import { StepProgress } from "@/components/features/season-ui";
@@ -32,8 +32,9 @@ export default async function AddPhaseWeekPage({ params }: { params: Promise<{ i
 
   return (
     <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
-      <header className="flex items-center px-4 pt-4 shrink-0">
+      <header className="flex items-center justify-between px-4 pt-4 shrink-0">
         <BackLink fallback={{ href: `/seasons/${seasonId}`, label: "Season" }} />
+        <AddPhaseCancel seasonId={seasonId} cycleId={cycleId} name={cycle.name} />
       </header>
       <div className="flex flex-col gap-4 px-4 pt-2 pb-40">
         <div className="flex flex-col gap-2">

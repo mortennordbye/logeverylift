@@ -1,7 +1,7 @@
 import { HOME_UI } from "@/components/features/home/fonts";
 import { SeasonDetailClient } from "@/components/features/SeasonDetailClient";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { getSeasonDetail } from "@/lib/seasons";
+import { getSeasonDetail, seasonStartContext } from "@/lib/seasons";
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
@@ -21,6 +21,8 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
   ]);
   if (!detail) notFound();
   const s = detail.season;
+  // Resume takes the scheduled start: its confirm says what that ends and drops.
+  const { running, scheduled } = await seasonStartContext(auth.user.id, toDateStr(today));
 
   return (
     <div className={`${HOME_UI} h-[100dvh] overflow-y-auto bg-home`}>
@@ -54,6 +56,8 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
         next={detail.next}
         gapBefore={detail.gapBefore}
         overrunAfter={detail.overrunAfter}
+        running={running}
+        scheduled={scheduled}
       />
     </div>
   );

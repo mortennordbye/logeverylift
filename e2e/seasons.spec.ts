@@ -246,3 +246,46 @@ test("make a triathlon plan: five phases from the start to race day", async ({ p
   await page.getByTestId("season-card").getByRole("link", { name: /Jevnaker Halv Full Distanse/ }).scrollIntoViewIfNeeded();
   await expect(page.getByTestId("season-card").getByRole("link", { name: /Jevnaker Halv Full Distanse/ })).toBeInViewport();
 });
+
+test("a second season asks before it takes the start, step 2 Cancel removes the phase, and Plan stays the active tab", async ({ page }, testInfo) => {
+  const settle = trackActions(page);
+  const [user] = await testDb().select({ id: users.id }).from(users).where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
+  // A season under way: Base runs from today, Build is scheduled for the day after it ends.
+  // Only one cycle runs: the account's seeded block ends first.
+  await testDb().update(trainingCycles).set({ status: "completed" }).where(and(eq(trainingCycles.userId, user.id), eq(trainingCycles.status, "active")));
+  const [old] = await testDb().insert(seasons).values({ userId: user.id, name: "Winter run base", startDate: isoDay(0), endDate: isoDay(120) }).returning();
+  await testDb()
+    .insert(trainingCycles)
+    .values({ userId: user.id, name: "Base", durationWeeks: 4, seasonId: old.id, phaseOrder: 1, status: "active", startDate: isoDay(0) });
+  const [build] = await testDb()
+    .insert(trainingCycles)
+    .values({ userId: user.id, name: "Build", durationWeeks: 4, seasonId: old.id, phaseOrder: 2, scheduledStartDate: isoDay(28) })
+    .returning();
+  const [next] = await testDb().insert(seasons).values({ userId: user.id, name: "Spring block", startDate: isoDay(3), endDate: isoDay(90) }).returning();
+
+  await page.goto(`/seasons/${next.id}`);
+  await expect(page.getByRole("link", { name: "Plan", exact: true })).toHaveAttribute("aria-current", "page");
+
+  // Step 2 Cancel removes the phase this flow made.
+  await page.getByRole("link", { name: "+ Add phase" }).click();
+  await page.getByLabel("Name", { exact: true }).fill("Recovery block");
+  await page.getByRole("button", { name: "Build the week" }).click();
+  const confirm = page.getByRole("region", { name: /^Start this season/ });
+  await expect(confirm).toContainText("This ends Base at week 1 of 4.");
+  await expect(confirm).toContainText("Winter run base pauses. Its next phase no longer starts");
+  // Nothing is written before the confirm.
+  expect(await testDb().select().from(trainingCycles).where(eq(trainingCycles.seasonId, next.id))).toHaveLength(0);
+  await confirm.getByRole("button", { name: "Build the week" }).click();
+  await settle();
+  await expect(page).toHaveURL(/\/phases\/\d+\/week$/);
+  await expect.poll(async () => (await testDb().select().from(trainingCycles).where(eq(trainingCycles.id, build.id)))[0].scheduledStartDate).toBeNull();
+
+  await page.getByRole("button", { name: "Cancel" }).click();
+  const remove = page.getByRole("region", { name: "Remove this phase?" });
+  await expect(remove).toContainText("Recovery block and the sessions you added are deleted.");
+  await remove.getByRole("button", { name: "Remove phase" }).click();
+  await settle();
+  await expect(page).toHaveURL(new RegExp(`/seasons/${next.id}$`));
+  await expect(page.getByTestId("season-phases")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Plan", exact: true })).toHaveAttribute("aria-current", "page");
+});

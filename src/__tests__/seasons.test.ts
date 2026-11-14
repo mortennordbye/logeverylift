@@ -274,5 +274,7 @@ describe("season row words (docs/design/plan-redesign/spec.md)", () => {
     expect(lengthShort({ durationWeeks: 8, durationDays: null })).toBe("8 wk");
     expect(lengthShort({ durationWeeks: 8, durationDays: 53 })).toBe("53 days");
     expect(lengthShort({ durationWeeks: 1, durationDays: 1 })).toBe("1 day");
+    // Days that make whole weeks read as weeks (Fit the taper writes days).
+    expect(lengthShort({ durationWeeks: 15, durationDays: 105 })).toBe("15 wk");
   });
 });

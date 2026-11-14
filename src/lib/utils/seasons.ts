@@ -261,10 +261,35 @@ export function shortDay(day: string): string {
   return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}`;
 }
 
-/** A short phase length for a list row: "8 wk" or "10 days" (docs/design/plan-redesign/spec.md). */
+/**
+ * A short phase length for a list row: "8 wk" or "10 days"
+ * (docs/design/plan-redesign/spec.md). Days that make whole weeks read as
+ * weeks: a fitted 105 days is "15 wk".
+ */
 export function lengthShort(p: { durationWeeks: number; durationDays: number | null }): string {
-  if (p.durationDays != null) return `${p.durationDays} day${p.durationDays === 1 ? "" : "s"}`;
-  return `${p.durationWeeks} wk`;
+  if (p.durationDays != null && p.durationDays % 7 !== 0) return `${p.durationDays} day${p.durationDays === 1 ? "" : "s"}`;
+  return `${p.durationDays != null ? p.durationDays / 7 : p.durationWeeks} wk`;
+}
+
+export type LengthUnit = "weeks" | "days";
+
+/**
+ * A phase length field moved to another unit, the length kept: 15 weeks is
+ * 105 days, and days become weeks only when they are whole weeks. Otherwise
+ * the field stays in days, with a note that says why.
+ */
+export function switchLengthUnit(length: string, from: LengthUnit, to: LengthUnit): { length: string; unit: LengthUnit; note: string | null } {
+  const n = Number(length);
+  if (from === to || !length || !Number.isInteger(n) || n <= 0) return { length, unit: to, note: null };
+  if (to === "days") return { length: String(n * 7), unit: "days", note: null };
+  if (n % 7 === 0) return { length: String(n / 7), unit: "weeks", note: null };
+  return { length, unit: "days", note: `${n} days is not a whole number of weeks, so the length stays in days.` };
+}
+
+/** How the phase sheet opens a length: in weeks when the days make whole weeks. */
+export function lengthField(p: { durationWeeks: number; durationDays: number | null }): { length: string; unit: LengthUnit } {
+  if (p.durationDays != null && p.durationDays % 7 !== 0) return { length: String(p.durationDays), unit: "days" };
+  return { length: String(p.durationDays != null ? p.durationDays / 7 : p.durationWeeks), unit: "weeks" };
 }
 
 /** Two days as a range: "16 Nov – 10 Jan", or "17 – 26 Aug" in one month. */

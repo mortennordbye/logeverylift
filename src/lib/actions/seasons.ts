@@ -73,15 +73,16 @@ export async function createSeasonAction(data: unknown) {
     "createSeasonAction",
     createSeasonSchema,
     data,
-    async (ctx, { cycleIds, ...input }) => {
+    async (ctx, { cycleIds, takeStart, ...input }) => {
       // Checked before the season is made, so a wrong pick leaves nothing behind.
       if (cycleIds?.length) {
         const free = new Set((await seasonlessCycles(ctx.userId)).map((c) => c.id));
         if (cycleIds.some((c) => !free.has(c))) throw new PlanStateError("Pick your own cycles that are in no season.");
       }
       const id = (await createSeason(ctx, input)).season.id;
-      // "Use cycles I already have": each joins in the order picked.
-      for (const cycleId of cycleIds ?? []) await addPhase(ctx, id, { cycleId });
+      // "Use cycles I already have": each joins in the order picked. The first
+      // takes the scheduled start only when the user confirmed what that ends.
+      for (const cycleId of cycleIds ?? []) await addPhase(ctx, id, { cycleId, takeStart: takeStart === true });
       return { id };
     },
     (i, out) => ["/cycles", `/seasons/${out.id}`, ...(i.cycleIds ?? []).map((c) => `/cycles/${c}`)],
@@ -162,8 +163,9 @@ export async function addPhaseAction(data: unknown) {
     "addPhaseAction",
     addPhaseSchema,
     data,
-    async (ctx, { seasonId, ...input }) => {
-      const done = await addPhase(ctx, seasonId, input);
+    async (ctx, { seasonId, takeStart, ...input }) => {
+      // A first phase takes the scheduled start only when the user confirmed what that ends.
+      const done = await addPhase(ctx, seasonId, { ...input, takeStart: takeStart === true });
       return { cycleId: done.cycleId, raceMoved: done.raceMoved };
     },
     (i, out) => [...seasonPaths(i.seasonId), `/cycles/${out.cycleId}`],

@@ -1,10 +1,16 @@
 "use client";
 
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
+import { BottomSheet } from "@/components/ui/BottomSheet";
+import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
+import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { addPhaseAction } from "@/lib/actions/seasons";
+import { deleteTrainingCycle } from "@/lib/actions/training-cycles";
+import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import type { PhaseType } from "@/lib/utils/periodization";
-import { PHASE_TYPE_LABELS, shortDay } from "@/lib/utils/seasons";
+import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
+import { PHASE_TYPE_LABELS, shortDay, switchLengthUnit, type LengthUnit } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -23,6 +29,11 @@ type Props = {
   taperDays: number | null;
   /** Cycles in no season. */
   candidates: { id: number; name: string; status: string }[];
+  /** The user's today, YYYY-MM-DD. */
+  today: string;
+  /** What a season's first phase ends and drops when it takes the scheduled start (takeStartLines). */
+  running: RunningBlock | null;
+  scheduled: ScheduledDraft | null;
 };
 
 const PHASE_TYPES = Object.keys(PHASE_TYPE_LABELS) as PhaseType[];
@@ -43,7 +54,9 @@ export function AddPhaseForm(p: Props) {
   const [cycleId, setCycleId] = useState<number | null>(null);
   const [phaseType, setPhaseType] = useState<PhaseType | null>(null);
   const [length, setLength] = useState("4");
-  const [unit, setUnit] = useState<"weeks" | "days">("weeks");
+  const [unit, setUnit] = useState<LengthUnit>("weeks");
+  const [unitNote, setUnitNote] = useState<string | null>(null);
+  const [confirmStart, setConfirmStart] = useState(false);
   const [lengthTouched, setLengthTouched] = useState(false);
   const [scheduleType, setScheduleType] = useState<"day_of_week" | "rotation">("day_of_week");
   const [busy, setBusy] = useState(false);
@@ -64,17 +77,48 @@ export function AddPhaseForm(p: Props) {
   const lengthOk = source === "existing" && length === "" ? true : Number.isInteger(n) && n >= 1 && n <= (unit === "days" ? 364 : 52);
   const valid = (source === "new" ? name.trim() !== "" : cycleId != null) && lengthOk;
 
+  function changeUnit(to: LengthUnit) {
+    const next = switchLengthUnit(length, unit, to);
+    setLength(next.length);
+    setUnit(next.unit);
+    setUnitNote(next.note);
+  }
+
+  // The season's first phase takes the one scheduled start on the season's
+  // start day: the user confirms what that ends and drops first.
+  const startLines =
+    p.position === 1 && p.startsOn > p.today
+      ? takeStartLines({
+          seasonId: p.seasonId,
+          day: p.startsOn,
+          running: p.running,
+          scheduled: p.scheduled,
+          joining: source === "existing" && cycleId != null ? [cycleId] : [],
+        })
+      : [];
+  const action = source === "new" ? "Build the week" : "Add phase";
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!valid || busy) return;
+    if (startLines.length > 0) {
+      setError(null);
+      setConfirmStart(true);
+      return;
+    }
+    await save(false);
+  }
+
+  async function save(takeStart: boolean) {
     setBusy(true);
     setError(null);
     const len = length === "" ? {} : unit === "days" ? { durationDays: n } : { durationWeeks: n };
     const type = p.enduranceEnabled && phaseType ? { phaseType } : {};
+    const take = takeStart ? { takeStart: true } : {};
     const input =
       source === "new"
-        ? { seasonId: p.seasonId, name: name.trim(), scheduleType, ...type, ...len }
-        : { seasonId: p.seasonId, cycleId: cycleId!, ...type, ...len };
+        ? { seasonId: p.seasonId, name: name.trim(), scheduleType, ...type, ...len, ...take }
+        : { seasonId: p.seasonId, cycleId: cycleId!, ...type, ...len, ...take };
     const result = await callAction(addPhaseAction(input));
     setBusy(false);
     if (!result.success) return setError(result.error);
@@ -158,13 +202,14 @@ export function AddPhaseForm(p: Props) {
               onChange={(e) => {
                 setLength(e.target.value.replace(/\D/g, ""));
                 setLengthTouched(true);
+                setUnitNote(null);
               }}
               className={`${FIELD.replace("w-full", "w-[88px] shrink-0")} font-semibold`}
             />
             <Segmented
               label="Length unit"
               value={unit}
-              onChange={setUnit}
+              onChange={changeUnit}
               className="flex-1"
               options={[
                 { value: "weeks", label: "Weeks" },
@@ -172,6 +217,7 @@ export function AddPhaseForm(p: Props) {
               ]}
             />
           </div>
+          {unitNote && <span className="text-[13px] text-muted-foreground">{unitNote}</span>}
           <span className="text-[13px] text-muted-foreground">
             Starts {shortDay(p.startsOn).slice(4)}, {p.afterName ? "the day after the phase before ends." : "when the season starts."}
           </span>
@@ -197,7 +243,7 @@ export function AddPhaseForm(p: Props) {
           </fieldset>
         )}
 
-        {error && (
+        {error && !confirmStart && (
           <p role="alert" className="text-sm text-[#ff6b5a]">
             {error}
           </p>
@@ -206,10 +252,87 @@ export function AddPhaseForm(p: Props) {
 
       <PinnedBar>
         <button type="submit" disabled={busy || !valid} className={PRIMARY_BUTTON}>
-          {busy ? "Saving…" : source === "new" ? "Build the week" : "Add phase"}
+          {busy ? "Saving…" : action}
         </button>
       </PinnedBar>
+
+      <TakeStartSheet
+        open={confirmStart}
+        title={`Start this season ${shortDay(p.startsOn)}?`}
+        lines={startLines}
+        action={action}
+        busy={busy}
+        error={error}
+        onConfirm={() => save(true)}
+        onClose={() => {
+          setError(null);
+          setConfirmStart(false);
+        }}
+      />
     </form>
+  );
+}
+
+/**
+ * Step 2's Cancel (J4_WeekBuilder): step 1 made the phase, so leaving here
+ * offers to remove it, as Discard does for a new cycle. Keep building stays.
+ */
+export function AddPhaseCancel({ seasonId, cycleId, name }: { seasonId: number; cycleId: number; name: string }) {
+  const returnTo = useReturnTo();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove() {
+    setBusy(true);
+    setError(null);
+    const result = await callAction(deleteTrainingCycle(cycleId));
+    if (!result.success) {
+      setBusy(false);
+      return setError(result.error);
+    }
+    returnTo(`/seasons/${seasonId}`);
+  }
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => {
+          setError(null);
+          setOpen(true);
+        }}
+        className="flex min-h-11 items-center px-2 text-base text-primary active:opacity-70"
+      >
+        Cancel
+      </button>
+      <BottomSheet open={open} onClose={() => setOpen(false)}>
+        {open && (
+          <PlanSheetPanel label="Remove this phase?">
+            <div className="flex flex-col gap-1">
+              <h2 className="text-xl font-semibold">Remove this phase?</h2>
+              <p className="text-sm text-muted-foreground">{name} and the sessions you added are deleted.</p>
+            </div>
+            {error && (
+              <p role="alert" className="text-sm text-[#ff6b5a]">
+                {error}
+              </p>
+            )}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={remove}
+              className="min-h-[52px] w-full rounded-2xl bg-[#c23a2e] text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
+            >
+              {busy ? "Removing…" : "Remove phase"}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+              Keep building
+            </button>
+          </PlanSheetPanel>
+        )}
+      </BottomSheet>
+    </>
   );
 }
 
