@@ -301,7 +301,11 @@ describe("season row words (docs/design/plan-redesign/spec.md)", () => {
 
   it("shows a length as weeks or days", () => {
     expect(lengthShort({ durationWeeks: 8, durationDays: null })).toBe("8 wk");
-    expect(lengthShort({ durationWeeks: 8, durationDays: 53 })).toBe("53 days");
+    // A length over two weeks that is not whole weeks reads as weeks and days (round 8).
+    expect(lengthShort({ durationWeeks: 8, durationDays: 53 })).toBe("7 wk 4 days");
+    expect(lengthShort({ durationWeeks: 17, durationDays: 116 })).toBe("16 wk 4 days");
+    expect(lengthShort({ durationWeeks: 3, durationDays: 15 })).toBe("2 wk 1 day");
+    expect(lengthShort({ durationWeeks: 2, durationDays: 10 })).toBe("10 days");
     expect(lengthShort({ durationWeeks: 1, durationDays: 1 })).toBe("1 day");
     // Days that make whole weeks read as weeks (Fit the taper writes days).
     expect(lengthShort({ durationWeeks: 15, durationDays: 105 })).toBe("15 wk");

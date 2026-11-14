@@ -317,7 +317,10 @@ export function shortDay(day: string): string {
  * weeks: a fitted 105 days is "15 wk".
  */
 export function lengthShort(p: { durationWeeks: number; durationDays: number | null }): string {
-  if (p.durationDays != null && p.durationDays % 7 !== 0) return `${p.durationDays} day${p.durationDays === 1 ? "" : "s"}`;
+  const d = p.durationDays;
+  // Over two weeks, days that are not whole weeks read as weeks and days: "16 wk 4 days", not "116 days" (round 8).
+  if (d != null && d > 14 && d % 7 !== 0) return `${Math.floor(d / 7)} wk ${d % 7} day${d % 7 === 1 ? "" : "s"}`;
+  if (d != null && d % 7 !== 0) return `${d} day${d === 1 ? "" : "s"}`;
   return `${p.durationDays != null ? p.durationDays / 7 : p.durationWeeks} wk`;
 }
 

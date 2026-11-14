@@ -178,7 +178,7 @@ describe("the season card", () => {
       "General · 8 wk · 16 Nov – 10 Jan",
       "Base · 12 wk · 11 Jan – 4 Apr",
       "Build · 12 wk · 5 Apr – 27 Jun",
-      "Build · 53 days · 28 Jun – 19 Aug",
+      "Build · 7 wk 4 days · 28 Jun – 19 Aug",
       "Taper · 10 days · 20 – 29 Aug",
     ]);
     // Nothing runs yet: the next phase is the accent one.
