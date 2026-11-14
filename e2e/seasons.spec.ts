@@ -25,8 +25,8 @@ test("make a season with a race and phases, fit the taper, and re-plan after a r
   const [existing] = await testDb().insert(trainingCycles).values({ userId: user.id, name: "Build block", durationWeeks: 8 }).returning();
 
   await page.goto("/cycles");
-  await expect(page.getByTestId("seasons-section")).toBeVisible();
-  await page.getByRole("link", { name: "New season" }).click();
+  await page.getByRole("button", { name: "New cycle or season" }).click();
+  await page.getByRole("link", { name: /New season/ }).click();
   await expect(page).toHaveURL(/\/seasons\/new$/);
   await page.getByLabel("Name").fill("Half 2027");
   await page.getByLabel("Start").fill(isoDay(0));

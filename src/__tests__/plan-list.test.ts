@@ -1,0 +1,179 @@
+import {
+  dateRange,
+  heroLabel,
+  pastRow,
+  phaseDeleteWarning,
+  rotationChips,
+  seasonCard,
+  startsLabel,
+  upNextRow,
+  weekDays,
+  weekSummary,
+  type WeekSession,
+} from "@/lib/utils/plan-list";
+import type { PhaseLike } from "@/lib/utils/seasons";
+import { describe, expect, it } from "vitest";
+
+const TODAY = "2026-11-14"; // a Saturday
+
+const phase = (id: number, name: string, phaseType: PhaseLike["phaseType"], len: { w?: number; d?: number }, extra: Partial<PhaseLike> = {}): PhaseLike => ({
+  id,
+  name,
+  phaseOrder: id,
+  phaseType,
+  durationWeeks: len.w ?? Math.ceil((len.d ?? 7) / 7),
+  durationDays: len.d ?? null,
+  status: "draft",
+  startDate: null,
+  scheduledStartDate: null,
+  ...extra,
+});
+
+/** The Jevnaker season of the spec (docs/design/plan-redesign/spec.md). */
+const jevnakerPhases = [
+  phase(1, "Aerobic base + strength", "general", { w: 8 }, { scheduledStartDate: "2026-11-16" }),
+  phase(2, "Longer ride and run", "base", { w: 12 }),
+  phase(3, "Swim, intervals, bricks", "build", { w: 12 }),
+  phase(4, "Race pace + open water", "build", { d: 53 }),
+  phase(5, "Taper", "taper", { d: 10 }),
+];
+const jevnaker = seasonCard(
+  { id: 9, name: "Jevnaker Half 2027", startDate: "2026-11-16", endDate: "2027-08-29", replanFlaggedAt: null },
+  jevnakerPhases,
+  { name: "Jevnaker Halv Full Distanse", raceDate: "2027-08-29" },
+  TODAY,
+);
+
+describe("plan list words", () => {
+  it("writes date ranges and start days as the spec does", () => {
+    expect(dateRange("2026-11-16", "2027-01-10")).toBe("16 Nov – 10 Jan");
+    expect(dateRange("2027-08-20", "2027-08-29")).toBe("20 – 29 Aug");
+    expect(startsLabel(TODAY, "2026-11-16")).toBe("Starts Mon");
+    expect(startsLabel(TODAY, "2026-12-21")).toBe("Starts 21 Dec");
+    expect(startsLabel(TODAY, TODAY)).toBe("Starts today");
+  });
+
+  it("labels the hero of a running and of a scheduled block", () => {
+    const rotation = { id: 1, name: "UL", durationWeeks: 6, durationDays: null, scheduleType: "rotation" as const, startDate: "2026-11-02", scheduledStartDate: null };
+    expect(heroLabel(rotation, TODAY, true)).toBe("Week 2 of 6 · Rotation");
+    const next = { ...rotation, scheduleType: "day_of_week" as const, durationWeeks: 8, startDate: null, scheduledStartDate: "2026-11-16" };
+    expect(heroLabel(next, TODAY, false)).toBe("Starts Mon 16 Nov · Week 1 of 8");
+  });
+
+  it("writes up-next and past rows", () => {
+    const c = { id: 2, name: "Strength peak", durationWeeks: 4, durationDays: null, scheduleType: "day_of_week" as const, startDate: null, scheduledStartDate: "2026-12-21" };
+    expect(upNextRow(c, TODAY)).toEqual({ id: 2, name: "Strength peak", sub: "4 weeks · Same days each week", starts: "Starts 21 Dec" });
+    const past = { ...c, name: "Strength 5×5", durationWeeks: 8, startDate: "2026-09-14", scheduledStartDate: null };
+    expect(pastRow(past, TODAY).sub).toBe("8 weeks · ended 8 Nov");
+    // Ended early: the block ended no later than today.
+    expect(pastRow({ ...past, startDate: "2026-11-01" }, TODAY).sub).toBe("8 weeks · ended 14 Nov");
+  });
+});
+
+describe("the hero", () => {
+  const dates = ["2026-11-16", "2026-11-17", "2026-11-18", "2026-11-19", "2026-11-20", "2026-11-21", "2026-11-22"];
+  const s = (date: string, extra: Partial<WeekSession> = {}): WeekSession => ({ date, name: "Strength A", sport: null, key: false, brick: false, skipped: false, durationSeconds: null, ...extra });
+  const week = [
+    s("2026-11-16"),
+    s("2026-11-17", { name: "Bike tempo", sport: "bike", durationSeconds: 3600 }),
+    s("2026-11-18", { name: "Run aerobic", sport: "run", durationSeconds: 3900 }),
+    s("2026-11-19", { name: "Strength B" }),
+    s("2026-11-22", { name: "Long ride", sport: "bike", key: true, durationSeconds: 8100 }),
+    s("2026-11-22", { name: "Run off bike", sport: "run", brick: true, durationSeconds: 1200 }),
+  ];
+
+  it("makes a 7-day strip with rest days, sports, a brick and the key day", () => {
+    const days = weekDays(dates, week, TODAY, true);
+    expect(days.map((d) => d.short)).toEqual(["Lift", "Bike", "Run", "Lift", "Rest", "Rest", "Brick"]);
+    expect(days.map((d) => d.day)).toEqual(["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]);
+    expect(days[6].key).toBe(true);
+    expect(days[6].names).toBe("Long ride, Run off bike");
+  });
+
+  it("marks no key day without the endurance switch", () => {
+    expect(weekDays(dates, week, TODAY, false).some((d) => d.key)).toBe(false);
+  });
+
+  it("counts the sessions and the planned time, leaving out skipped ones", () => {
+    expect(weekSummary(week)).toBe("6 sessions · about 5 h");
+    expect(weekSummary([s("2026-11-16"), s("2026-11-17", { skipped: true })])).toBe("1 session");
+  });
+
+  it("marks the last session done and the next one in the rotation", () => {
+    const chips = rotationChips(
+      [
+        { id: 13, orderIndex: 3, name: null },
+        { id: 11, orderIndex: 1, name: "Upper A" },
+        { id: 12, orderIndex: 2, name: "Lower A" },
+      ],
+      11,
+      12,
+    );
+    expect(chips).toEqual([
+      { id: 11, name: "Upper A", rest: false, tag: "Done" },
+      { id: 12, name: "Lower A", rest: false, tag: "Next" },
+      { id: 13, name: "Rest", rest: true, tag: null },
+    ]);
+  });
+});
+
+describe("the season card", () => {
+  it("counts down to the A race and lays out the phases", () => {
+    expect(jevnaker.race).toEqual({ name: "Jevnaker Halv Full Distanse", when: "29 Aug", daysLeft: 288 });
+    expect(jevnaker.phases.map((p) => p.sub)).toEqual([
+      "General · 8 wk · 16 Nov – 10 Jan",
+      "Base · 12 wk · 11 Jan – 4 Apr",
+      "Build · 12 wk · 5 Apr – 27 Jun",
+      "Build · 53 days · 28 Jun – 19 Aug",
+      "Taper · 10 days · 20 – 29 Aug",
+    ]);
+    // Nothing runs yet: the next phase is the accent one.
+    expect(jevnaker.phases[0]).toMatchObject({ badge: "Starts Mon", badgeAccent: true, mark: "accent" });
+    expect(jevnaker.bar.map((b) => b.tone)).toEqual(["accent", "grey", "grey", "grey", "grey"]);
+  });
+
+  it("outlines the running phase and greys the next one in a goal season", () => {
+    const goal = seasonCard(
+      { id: 3, name: "Bench 120 kg by February", startDate: "2026-11-09", endDate: "2027-02-07", replanFlaggedAt: null },
+      [
+        phase(1, "Upper / Lower hypertrophy", "build", { w: 6 }, { status: "active", startDate: "2026-11-09" }),
+        phase(2, "Strength peak", "peak", { w: 4 }, { scheduledStartDate: "2026-12-21" }),
+        phase(3, "Peak and test", "peak", { w: 3 }),
+      ],
+      null,
+      TODAY,
+    );
+    expect(goal.race).toBeNull();
+    expect(goal.goalBy).toBe("Goal by 7 Feb");
+    expect(goal.weeksLeft).toBe(12);
+    expect(goal.bar.map((b) => b.tone)).toEqual(["current", "grey", "grey"]);
+    expect(goal.phases.map((p) => [p.badge, p.badgeAccent])).toEqual([
+      ["Now", true],
+      ["Starts 21 Dec", false],
+      [null, false],
+    ]);
+  });
+});
+
+describe("the phase warning in select mode", () => {
+  it("says the later phases move earlier and the taper ends before race day", () => {
+    expect(phaseDeleteWarning([jevnaker], new Set([2, 3]))).toBe(
+      "Both are phases of Jevnaker Half 2027. The later phases move 168 days earlier, so the taper will end before race day. You will need to re-plan.",
+    );
+  });
+
+  it("says nothing when no phase is selected", () => {
+    expect(phaseDeleteWarning([jevnaker], new Set([99]))).toBeNull();
+  });
+
+  it("names one phase, and says when the taper itself goes", () => {
+    expect(phaseDeleteWarning([jevnaker], new Set([5]))).toBe(
+      "“Taper” is a phase of Jevnaker Half 2027. The season will have no taper. You will need to re-plan.",
+    );
+  });
+
+  it("counts the phases among other cycles", () => {
+    expect(phaseDeleteWarning([jevnaker], new Set([4, 99, 98]))).toMatch(/^“Race pace \+ open water” is a phase of Jevnaker Half 2027\. The later phases move 53 days earlier, so the taper/);
+    expect(phaseDeleteWarning([jevnaker], new Set([1, 2, 99]))).toMatch(/^2 of them are phases of Jevnaker Half 2027\./);
+  });
+});

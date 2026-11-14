@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
-import { CyclesListClient } from "@/components/features/CyclesListClient";
 import { EditCycleForm } from "@/components/features/EditCycleForm";
 import type { TrainingCycle } from "@/types/workout";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 /**
- * The endurance switch (src/lib/endurance.ts) hides the triathlon plan entry
- * and the race field from users who do not have it (decision D18).
+ * The endurance switch (src/lib/endurance.ts) hides the race field from
+ * users who do not have it (decision D18). The Plan list's + menu has no
+ * triathlon entry for anyone (components/plan-list.test.tsx).
  */
 
 vi.mock("@/lib/actions/training-cycles", () => ({
@@ -36,23 +36,7 @@ const cycle = {
   endMessage: null,
 } as unknown as TrainingCycle;
 
-function openAddSheet(enduranceEnabled: boolean) {
-  render(<CyclesListClient cycles={[]} enduranceEnabled={enduranceEnabled} />);
-  fireEvent.click(screen.getAllByRole("button", { name: /New Cycle/i })[0]);
-}
-
 describe("the endurance switch", () => {
-  it("hides the triathlon plan entry when off", () => {
-    openAddSheet(false);
-    expect(screen.queryByText("Triathlon plan")).toBeNull();
-    expect(screen.getByText("Build a custom weekly schedule")).toBeTruthy();
-  });
-
-  it("shows the triathlon plan entry when on", () => {
-    openAddSheet(true);
-    expect(screen.getByText("Triathlon plan")).toBeTruthy();
-  });
-
   it("hides the race field when off and the cycle has no race", () => {
     render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
     expect(screen.queryByLabelText("Race (optional)")).toBeNull();
