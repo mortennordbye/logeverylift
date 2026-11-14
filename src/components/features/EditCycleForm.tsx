@@ -7,33 +7,16 @@
  * sessions are built for it.
  */
 
-import { ButtonReason, Chip, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
+import { ButtonReason, Chip, ChipGroup, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
+import { END_ACTIONS, MAIN_LENGTHS, SCHEDULE_MODES, type EndAction } from "@/lib/utils/cycle-setup";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
 import Link from "next/link";
-import { useMemo, useState, type ReactNode } from "react";
-
-/** The lengths offered as chips; any other length goes in the Custom field. */
-const MAIN_LENGTHS = [4, 6, 8, 12];
-
-type EndAction = "none" | "deload" | "new_cycle" | "rest";
-
-// The words of the setup form (CreateCycleForm).
-const END_ACTIONS: { value: EndAction; label: string }[] = [
-  { value: "none", label: "Just stop" },
-  { value: "deload", label: "Deload week" },
-  { value: "new_cycle", label: "Start a new cycle" },
-  { value: "rest", label: "Rest period" },
-];
-
-const MODES = [
-  { value: "day_of_week", title: "Same days each week", sub: "Monday upper, Thursday lower" },
-  { value: "rotation", title: "Rotation", sub: "The next session follows the last one. No fixed days." },
-] as const;
+import { useMemo, useState } from "react";
 
 type Props = {
   cycle: TrainingCycle;
@@ -44,15 +27,6 @@ type Props = {
   /** Today in the user's time zone, `YYYY-MM-DD`. */
   today: string;
 };
-
-function ChipGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-      <legend className={`mb-2 ${LABEL}`}>{label}</legend>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </fieldset>
-  );
-}
 
 export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, today }: Props) {
   const returnTo = useReturnTo();
@@ -143,7 +117,7 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
 
         <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
           <legend className={`mb-2 ${LABEL}`}>How do you train?</legend>
-          {MODES.map((m) => (
+          {SCHEDULE_MODES.map((m) => (
             <RadioCard
               key={m.value}
               name="scheduleType"

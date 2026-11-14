@@ -24,6 +24,16 @@ export function SectionLabel({ children, id }: { children: React.ReactNode; id?:
   );
 }
 
+/** A labelled row of chips, as a fieldset. */
+export function ChipGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className={`mb-2 ${LABEL}`}>{label}</legend>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </fieldset>
+  );
+}
+
 /** A card with a radio mark: a real radio input, so the group reads right to a screen reader. */
 export function RadioCard({
   name,
