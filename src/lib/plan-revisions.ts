@@ -76,7 +76,7 @@ import {
   type SeasonSnapshot,
 } from "@/lib/utils/plan-revisions";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { nextPhase, replanReason, seasonTimeline, type PhaseLike, type RaceLike } from "@/lib/utils/seasons";
+import { nextPhase, replanFlag, replanFlagOf, seasonTimeline, type PhaseLike, type RaceLike } from "@/lib/utils/seasons";
 import { judgingRuleChanged } from "@/lib/utils/progression";
 import { THRESHOLDS_PER_KIND_MAX } from "@/lib/utils/thresholds";
 import { limitOverrideLine } from "@/lib/utils/training-limits";
@@ -993,7 +993,7 @@ export async function claimSeasonPhases(w: PlanWriteSession, seasonId: number) {
   const { toDateStr } = await import("@/lib/utils/cycle-position");
   const { seasonARace } = await import("@/lib/utils/seasons");
   const today = toDateStr(await userToday(w.ctx.userId));
-  const reasons: string[] = [];
+  const reasons: { raceId: number; text: string }[] = [];
   const claimed = await seasonPhases(w.tx, seasonId);
   await lockCycleRows(w.tx, claimed.map((p) => p.id));
   for (const p of claimed) {
@@ -1010,32 +1010,31 @@ export async function claimSeasonPhases(w: PlanWriteSession, seasonId: number) {
       const a = seasonARace(races, today);
       const sameDistance = (a?.discipline === "triathlon" ? a.distance : null) === own.raceDistance || own.raceDistance == null;
       if (!a) {
-        await w.tx.insert(seasonRaces).values({
-          seasonId,
-          userId: w.ctx.userId,
-          name: "Race",
-          raceDate: own.raceDate,
-          discipline: "triathlon",
-          distance: own.raceDistance,
-          priority: "A",
-        });
-        reasons.push(`A race on ${own.raceDate} added from "${p.name}"`);
+        const [added] = await w.tx
+          .insert(seasonRaces)
+          .values({
+            seasonId,
+            userId: w.ctx.userId,
+            name: "Race",
+            raceDate: own.raceDate,
+            discipline: "triathlon",
+            distance: own.raceDistance,
+            priority: "A",
+          })
+          .returning({ id: seasonRaces.id });
+        reasons.push({ raceId: added.id, text: `A race on ${own.raceDate} added from "${p.name}"` });
       } else if (a.raceDate !== own.raceDate || !sameDistance) {
         await w.tx
           .update(seasonRaces)
           .set({ raceDate: own.raceDate, ...(own.raceDistance ? { discipline: "triathlon" as const, distance: own.raceDistance, distanceMeters: null } : {}) })
           .where(eq(seasonRaces.id, a.id));
-        reasons.push(`The A race "${a.name}" moved from ${a.raceDate} to ${own.raceDate} on "${p.name}" while the season was deleted`);
+        reasons.push({ raceId: a.id, text: `The A race "${a.name}" moved from ${a.raceDate} to ${own.raceDate} on "${p.name}" while the season was deleted` });
       }
     }
     await w.tx.update(trainingCycles).set({ raceDate: null, raceDistance: null }).where(eq(trainingCycles.id, p.id));
   }
-  if (reasons.length) {
-    await w.tx
-      .update(seasons)
-      .set({ replanFlaggedAt: new Date(), replanReason: reasons.join("; ") })
-      .where(eq(seasons.id, seasonId));
-  }
+  const flag = replanFlagOf(reasons);
+  if (flag) await w.tx.update(seasons).set({ replanFlaggedAt: new Date(), ...flag }).where(eq(seasons.id, seasonId));
 }
 
 /**
@@ -1669,11 +1668,15 @@ async function restoreSeasonTo(
   // The flag: a race change in the restore sets it; otherwise a revision that
   // was flagged brings its flag back (undoing "Mark as re-planned"), and one
   // that was not leaves the current flag as it is.
-  const reason = replanReason(current, target as unknown as RaceLike[]);
-  const flag = reason
-    ? { replanFlaggedAt: new Date(), replanReason: reason }
+  const changed = replanFlag(current, target as unknown as RaceLike[]);
+  const flag = changed
+    ? { replanFlaggedAt: new Date(), ...changed }
     : targetSnap.season.replanFlaggedAt && !row.replanFlaggedAt
-      ? { replanFlaggedAt: new Date(String(targetSnap.season.replanFlaggedAt)), replanReason: (targetSnap.season.replanReason as string | null) ?? null }
+      ? {
+          replanFlaggedAt: new Date(String(targetSnap.season.replanFlaggedAt)),
+          replanReason: (targetSnap.season.replanReason as string | null) ?? null,
+          replanRaceIds: (targetSnap.season.replanRaceIds as number[] | null | undefined) ?? null,
+        }
       : {};
   await tx
     .update(seasons)

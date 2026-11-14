@@ -103,6 +103,50 @@ describe("the first race of a new season gets the race date checks", () => {
   });
 });
 
+describe("removing a race clears only its own re-plan lines", () => {
+  const race = { name: "Race", discipline: "triathlon" as const, distance: "half" as const };
+
+  async function season() {
+    const r = await createSeasonAction({ name: "Season", startDate: day(0), endDate: day(200) });
+    if (!r.success) throw new Error(r.error);
+    return r.data.id;
+  }
+
+  it("keeps the line about the A race named Race when a B race named Race goes", async () => {
+    const id = await season();
+    await addRaceAction({ seasonId: id, ...race, raceDate: day(150), priority: "A" });
+    await addRaceAction({ seasonId: id, ...race, raceDate: day(60), priority: "B" });
+    await clearReplanAction({ seasonId: id });
+    const [a, b] = await racesOf(id);
+    await updateRaceAction({ seasonId: id, raceId: a.id, raceDate: day(160) });
+    const reason = (await seasonRow(id)).replanReason;
+    expect(reason).toContain('The A race "Race" moved');
+
+    expect((await removeRaceAction({ seasonId: id, raceId: b.id })).success).toBe(true);
+    expect(await seasonRow(id)).toMatchObject({ replanFlaggedAt: expect.any(Date), replanReason: reason });
+  });
+
+  it("drops only the removed race's line when one change named two races of the same name", async () => {
+    const id = await season();
+    await addRaceAction({ seasonId: id, ...race, raceDate: day(150), priority: "A" });
+    await clearReplanAction({ seasonId: id });
+    // A new A race makes the old one a B race: one line about each.
+    await addRaceAction({ seasonId: id, ...race, raceDate: day(170), priority: "A" });
+    const [old, added] = await racesOf(id);
+    expect(old.priority).toBe("B");
+    expect((await seasonRow(id)).replanReason?.split("; ")).toHaveLength(2);
+
+    await removeRaceAction({ seasonId: id, raceId: old.id });
+    const row = await seasonRow(id);
+    expect(row.replanFlaggedAt).not.toBeNull();
+    expect(row.replanReason).toMatch(/^The A race "Race" added on /);
+    expect(row.replanReason).not.toContain("priority");
+
+    await removeRaceAction({ seasonId: id, raceId: added.id });
+    expect((await seasonRow(id)).replanReason).toMatch(/removed$/);
+  });
+});
+
 describe("addPhase takes the scheduled start only when asked", () => {
   it("a first phase with no takeStart leaves the running block and the other scheduled start", async () => {
     const s = await createSeasonAction({ name: "Running", startDate: day(0), endDate: day(200) });

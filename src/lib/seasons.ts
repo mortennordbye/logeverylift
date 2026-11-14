@@ -38,7 +38,8 @@ import {
   fitTaperChange,
   nextPhase,
   phasesSkippedBy,
-  replanReason,
+  replanFlag,
+  replanWithoutRace,
   seasonARace,
   seasonTimeline,
   shownTimeline,
@@ -406,7 +407,7 @@ export async function clearReplan(ctx: PlanWriteContext, seasonId: number, expec
     if (!current.replanFlaggedAt) return current.version;
     await w.tx
       .update(seasons)
-      .set({ replanFlaggedAt: null, replanReason: null, updatedAt: new Date() })
+      .set({ replanFlaggedAt: null, replanReason: null, replanRaceIds: null, updatedAt: new Date() })
       .where(eq(seasons.id, seasonId));
     return null;
   });
@@ -445,14 +446,14 @@ async function raceWrite<T>(
     const before = (await w.tx.select().from(seasonRaces).where(eq(seasonRaces.seasonId, seasonId))) as RaceLike[];
     const out = await fn(w);
     const after = (await w.tx.select().from(seasonRaces).where(eq(seasonRaces.seasonId, seasonId))) as RaceLike[];
-    const reason = replanReason(before, after);
-    if (reason) {
+    const flag = replanFlag(before, after);
+    if (flag) {
       await w.tx
         .update(seasons)
-        .set({ replanFlaggedAt: new Date(), replanReason: reason, updatedAt: new Date() })
+        .set({ replanFlaggedAt: new Date(), ...flag, updatedAt: new Date() })
         .where(eq(seasons.id, seasonId));
     }
-    return { out, replanFlagged: reason };
+    return { out, replanFlagged: flag?.replanReason ?? null };
   });
   return { ...result, version: seasonVersion(versions, seasonId) };
 }
@@ -544,12 +545,15 @@ export async function removeRace(ctx: PlanWriteContext, seasonId: number, raceId
     const gone = await ownRace(w, seasonId, raceId);
     await w.tx.delete(seasonRaces).where(eq(seasonRaces.id, raceId));
     // A flag about this race alone has nothing left to re-plan for.
-    const [season] = await w.tx.select({ reason: seasons.replanReason }).from(seasons).where(and(eq(seasons.id, seasonId), isNull(seasons.deletedAt)));
-    if (season.reason) {
-      const left = season.reason.split("; ").filter((part) => !part.includes(`"${gone.name}"`));
+    const [season] = await w.tx
+      .select({ replanReason: seasons.replanReason, replanRaceIds: seasons.replanRaceIds })
+      .from(seasons)
+      .where(and(eq(seasons.id, seasonId), isNull(seasons.deletedAt)));
+    if (season.replanReason) {
+      const left = replanWithoutRace({ replanReason: season.replanReason, replanRaceIds: season.replanRaceIds }, gone);
       await w.tx
         .update(seasons)
-        .set(left.length ? { replanReason: left.join("; ") } : { replanFlaggedAt: null, replanReason: null })
+        .set(left ?? { replanFlaggedAt: null, replanReason: null, replanRaceIds: null })
         .where(eq(seasons.id, seasonId));
     }
     // Its race plan stays, hidden, until a season restore brings the race back;
