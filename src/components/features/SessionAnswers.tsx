@@ -402,7 +402,7 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
                       aria-pressed={rpe === n}
                       aria-label={`Effort ${n}`}
                       onClick={() => setRpe(rpe === n ? null : n)}
-                      className={`h-11 rounded-xl text-[15px] font-semibold active:opacity-70 ${rpe === n ? "bg-primary text-primary-foreground" : "bg-widget-2"}`}
+                      className={`h-11 rounded-xl text-[15px] font-semibold active:opacity-70 ${rpe === n ? "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)] ring-1 ring-inset ring-brand" : "bg-widget-2"}`}
                     >
                       {n}
                     </button>

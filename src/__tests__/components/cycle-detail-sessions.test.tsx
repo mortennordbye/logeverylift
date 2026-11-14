@@ -334,6 +334,19 @@ describe("Did you do it? from a past row", () => {
     expect(within(label).getByText("m").getAttribute("aria-hidden")).toBe("true");
   });
 
+  it("draws the chosen effort with the same selected style as the chosen answer (round 8)", () => {
+    renderWeek({ sessions: past });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    fireEvent.click(within(sheet).getByRole("button", { name: "Effort 6" }));
+    const tint = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
+    expect(within(sheet).getByRole("button", { name: "Yes, I did it" }).className).toContain(tint);
+    const effort = within(sheet).getByRole("button", { name: "Effort 6" });
+    expect(effort.className).toContain(tint);
+    expect(effort.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+  });
+
   it("says why Save is off for a negative distance", () => {
     renderWeek({ sessions: past });
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
