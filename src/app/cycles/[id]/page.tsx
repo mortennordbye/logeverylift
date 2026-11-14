@@ -16,7 +16,7 @@ import { BackLink } from "@/components/ui/BackLink";
 import { getProgramsWithExercises } from "@/lib/actions/programs";
 import { getPrograms } from "@/lib/actions/programs";
 import { getActiveCycleForUser, getCyclePeriodization, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
-import { cycleStartContext } from "@/lib/cycle-start";
+import { cycleStartContext, cycleStartedAfter } from "@/lib/cycle-start";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { ownDeletedCycle } from "@/lib/plan-deleted";
 import { listPlanned } from "@/lib/planned-sessions";
@@ -132,6 +132,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
       exercises: p.programId != null ? exerciseNames(programsMap[p.programId]) : null,
       programId: p.programId,
       status: p.status,
+      skipReason: p.skipReason,
       touched: p.touched,
       templateDate: p.templateDate,
       key: c?.priority === "key",
@@ -141,11 +142,13 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
     };
   });
 
-  // A completed cycle names the cycle scheduled next, if there is one. A
-  // completed phase names its season's next phase, even when the chain is
-  // paused and another cycle holds the scheduled start (J8-09).
+  // A completed cycle names what followed it: the cycle that started after
+  // it, else the cycle scheduled next. A completed phase names its season's
+  // next phase, even when the chain is paused and another cycle holds the
+  // scheduled start (J8-09).
   let next: NextCycle | null = null;
   const following = season?.following ?? null;
+  const startedAfter = cycle.status === "completed" && !following ? await cycleStartedAfter(userId, cycle) : null;
   if (cycle.status === "completed" && following) {
     next = {
       id: following.id,
@@ -153,6 +156,8 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
       startsLabel: following.day ? shortDay(following.day) : null,
       startsTomorrow: following.day != null && following.day <= addDaysStr(today, 1),
     };
+  } else if (startedAfter) {
+    next = { id: startedAfter.id, name: startedAfter.name, startsLabel: shortDay(startedAfter.startDate), startsTomorrow: false, started: true };
   } else if (cycle.status === "completed" && otherScheduled) {
     next = { id: otherScheduled.id, name: otherScheduled.name, startsLabel: shortDay(otherScheduled.day), startsTomorrow: otherScheduled.day <= addDaysStr(today, 1) };
   }

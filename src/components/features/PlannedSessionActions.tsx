@@ -287,6 +287,16 @@ export function PlannedSessionSheet({
               <p className="flex items-center min-h-11 text-sm text-muted-foreground">{phaseLine}</p>
             ))
           }
+          footer={
+            <>
+              {error && (
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+              <p className="text-[13px] text-muted-foreground">Only this day changes. The template stays the same.</p>
+            </>
+          }
         >
 
           {view === "main" && (
@@ -446,12 +456,6 @@ export function PlannedSessionSheet({
             </form>
           )}
 
-          {error && (
-            <p role="alert" className="text-sm text-destructive">
-              {error}
-            </p>
-          )}
-          <p className="text-[13px] text-muted-foreground">Only this day changes. The template stays the same.</p>
         </PlanSheetPanel>
       )}
     </BottomSheet>

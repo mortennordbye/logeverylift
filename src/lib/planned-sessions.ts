@@ -1112,10 +1112,23 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
         const [slot] = await tx.select({ label: trainingCycleSlots.label }).from(trainingCycleSlots).where(eq(trainingCycleSlots.id, row.slotId));
         dropLabel = slot?.label === row.label;
       }
+      // A cleared label (empty or only spaces) gives the day back the
+      // template's label, while the day still runs the template's program.
+      let label = input.label;
+      if (label !== undefined && !label?.trim()) {
+        label = null;
+        if (row.slotId != null) {
+          const [slot] = await tx
+            .select({ label: trainingCycleSlots.label, programId: trainingCycleSlots.programId })
+            .from(trainingCycleSlots)
+            .where(eq(trainingCycleSlots.id, row.slotId));
+          if (slot && slot.programId === (input.programId ?? row.programId)) label = slot.label;
+        }
+      }
       set = {
         ...(dropLabel && { label: null }),
         ...(input.programId != null && { programId: input.programId }),
-        ...(input.label !== undefined && { label: input.label }),
+        ...(label !== undefined && { label }),
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.position !== undefined && { position: input.position }),
       };

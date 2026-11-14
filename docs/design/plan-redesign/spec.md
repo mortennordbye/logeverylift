@@ -29,7 +29,7 @@ The look every Plan screen follows. The mockups in this folder (J*.dc.html) are 
 
 ## Words (use exactly)
 - Tab and list title: "Plan". Program = one session template. Cycle = block of weeks. Season = long goal.
-- Season prompt, everywhere: "Training for a race or a goal? Add a season".
+- No season prompt line ("Training for a race or a goal? Add a season") anywhere: the owner asked for it to go. A season starts from New season in the + menu, or from the empty Plan card.
 - Schedule types: "Same days each week" / "Rotation".
 - End options: "Just stop" / "Deload week" / "Start a new cycle" / "Rest period".
 - Rotation length: "Repeats every 5 days" (rest days count as days).
@@ -55,7 +55,7 @@ The look every Plan screen follows. The mockups in this folder (J*.dc.html) are 
    phase bar, then the phase rows inline (dot, name, "Base · 12 wk · 11 Jan – 4 Apr", "Starts Mon" on the next one),
    last row = the A race with a flag icon.
 3. "Up next" (drafts not in a season), "Past cycles", then one quiet link "Recently deleted (1)".
-4. No season: no season section; one dismissible line with the season prompt at the end.
+4. No season: no season section and no season prompt line. The + menu has New season.
 
 ## Endurance-only controls
 Shown on endurance boards, absent on gym boards: Triathlon plan, Race section, + Add race, Key session, Brick link,

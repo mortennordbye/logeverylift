@@ -27,6 +27,8 @@ export type DetailSession = {
   exercises: string | null;
   programId: number | null;
   status: "planned" | "done" | "missed" | "skipped";
+  /** Why the session was skipped, when the skip gave a reason ("Work trip"). */
+  skipReason?: string | null;
   touched: boolean;
   templateDate: string | null;
   /** Endurance only: a key session, and a run linked to the ride before it. */
@@ -75,10 +77,12 @@ export function canBackToTemplate(s: Pick<DetailSession, "status" | "date" | "to
  * A session's state when it is not just planned, then "Moved from Tue" or
  * "Changed" when the user changed this one day: "Missed · Moved from Tue".
  * A skip and a Missed answer also touch the row; Skipped and Missed say
- * enough. Null for a plain planned session. The row and the session sheet's
- * header line both show it.
+ * enough. A skip with a reason gives it: "Skipped · Work trip". Null for a
+ * plain planned session. The row and the session sheet's header line both
+ * show it.
  */
-export function sessionState(s: Pick<DetailSession, "status" | "answer" | "date" | "touched" | "templateDate">): string | null {
+export function sessionState(s: Pick<DetailSession, "status" | "answer" | "date" | "touched" | "templateDate" | "skipReason">): string | null {
+  const reason = s.status === "skipped" && !s.answer ? s.skipReason?.trim() || null : null;
   const state = s.answer ? "Did you do it?" : s.status === "done" ? "Done" : s.status === "skipped" ? "Skipped" : s.status === "missed" ? "Missed" : null;
   const change =
     s.status === "skipped"
@@ -88,11 +92,11 @@ export function sessionState(s: Pick<DetailSession, "status" | "answer" | "date"
         : s.touched && s.templateDate != null && s.status !== "missed"
           ? "Changed"
           : null;
-  return [state, change].filter(Boolean).join(" · ") || null;
+  return [state, reason, change].filter(Boolean).join(" · ") || null;
 }
 
 /** The words under a session's name: its state (sessionState), then what it holds. */
-export function sessionSub(s: Pick<DetailSession, "status" | "summary" | "exercises" | "answer" | "date" | "touched" | "templateDate">): string {
+export function sessionSub(s: Pick<DetailSession, "status" | "summary" | "exercises" | "answer" | "date" | "touched" | "templateDate" | "skipReason">): string {
   return [sessionState(s), s.summary ?? s.exercises ?? ""].filter(Boolean).join(" · ");
 }
 
@@ -201,6 +205,8 @@ export type RotationWalkDay = {
   programId: number | null;
   programName: string | null;
   status: "planned" | "done" | "missed" | "skipped";
+  /** Why a skipped position was skipped, when the skip gave a reason. */
+  skipReason?: string | null;
 };
 
 export type RotationRow = {
@@ -227,7 +233,7 @@ export type RotationRow = {
 export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[], today: string): RotationRow[] {
   const ordered = [...slots].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
   const next = walk.find((d) => d.date >= today && d.status === "planned") ?? null;
-  return ordered.map((slot, i) => {
+  const rows = ordered.map((slot, i) => {
     const upcoming = walk.find((d) => d.slotId === slot.id && d.date >= today && (d.status === "planned" || d.status === "skipped")) ?? null;
     const done = walk.filter((d) => d.slotId === slot.id && d.status === "done");
     const lastDone = done.length ? done[done.length - 1].date : null;
@@ -258,6 +264,10 @@ export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[],
       lastDone,
     };
   });
+  // A position after Next comes again this round: its done day was last
+  // round, so it is not marked done (the hero shows it as still to come).
+  const nextAt = rows.findIndex((r) => r.mark === "next");
+  return nextAt < 0 ? rows : rows.map((r, i) => (i > nextAt && r.mark === "done" ? { ...r, mark: null } : r));
 }
 
 /**

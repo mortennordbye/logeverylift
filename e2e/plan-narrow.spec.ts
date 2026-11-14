@@ -234,3 +234,91 @@ test("at 320 px the race distance select is a 44 px tap target, on New season an
   expect((await inSheet.boundingBox())!.height).toBeGreaterThanOrEqual(44);
   await page.screenshot({ path: testInfo.outputPath("race-sheet-320.png") });
 });
+
+/** `target` is fully on screen and inside `sheet` as it opens, with no scrolling. */
+async function inView(page: Page, sheet: Locator, target: Locator) {
+  const view = page.viewportSize()!;
+  // The sheet has slid all the way up: its bottom is the screen's.
+  await expect.poll(async () => Math.round(await sheet.evaluate((el) => el.getBoundingClientRect().bottom))).toBe(view.height);
+  const t = (await target.boundingBox())!;
+  const s = (await sheet.boundingBox())!;
+  expect(t.y, "top inside the sheet").toBeGreaterThanOrEqual(Math.max(s.y, 0) - 1);
+  expect(t.y + t.height, "bottom on screen").toBeLessThanOrEqual(Math.min(s.y + s.height, view.height) + 1);
+}
+
+test("at 320 px a long sheet keeps its footer and main actions in view while the rest scrolls", async ({ page }, testInfo) => {
+  const { cycleId, seasonId, program } = await plan(testInfo.parallelIndex);
+  const db = testDb();
+  await db.update(programs).set({ name: "Strength A with heavy compound lifts and a long accessory finisher" }).where(eq(programs.id, program.id));
+
+  await page.goto(`/cycles/${cycleId}`);
+  await page.getByTestId("week-row").first().click();
+  const session = page.getByTestId("session-sheet");
+  await expect(session).toBeVisible();
+  await expect(session.getByRole("link", { name: "Start workout" })).toBeVisible();
+  await inView(page, session, session.getByText("Only this day changes. The template stays the same."));
+  await page.screenshot({ path: testInfo.outputPath("session-footer-320.png") });
+
+  await page.goto(`/seasons/${seasonId}`);
+  await page.getByTestId("phase-row").nth(1).click();
+  const phase = page.locator("[data-plan-sheet]");
+  await expect(phase.getByRole("button", { name: "Save phase" })).toBeVisible();
+  await inView(page, phase, phase.getByRole("button", { name: "Save phase" }));
+  await inView(page, phase, phase.getByRole("button", { name: "Remove from season" }));
+  await page.screenshot({ path: testInfo.outputPath("phase-footer-320.png") });
+});
+
+test("at 320 px the rotation hero names the next session once", async ({ page }, testInfo) => {
+  const { cycleId, program } = await plan(testInfo.parallelIndex);
+  const db = testDb();
+  const name = "Lower body strength and single-leg work";
+  await db.update(programs).set({ name }).where(eq(programs.id, program.id));
+  await db.delete(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, cycleId));
+  await db.update(trainingCycles).set({ scheduleType: "rotation" }).where(eq(trainingCycles.id, cycleId));
+  await db.insert(trainingCycleSlots).values([
+    { trainingCycleId: cycleId, orderIndex: 1, programId: program.id },
+    { trainingCycleId: cycleId, orderIndex: 2, programId: null, label: "Rest" },
+  ]);
+
+  await page.goto("/cycles");
+  const hero = page.getByTestId("plan-hero");
+  await expect(hero.getByRole("list", { name: "Rotation" })).toBeVisible();
+  await expect(hero.getByText(name, { exact: true }).filter({ visible: true })).toHaveCount(1);
+  await page.screenshot({ path: testInfo.outputPath("rotation-hero-320.png") });
+});
+
+test("at 320 px a week strip label never breaks inside a word", async ({ page }, testInfo) => {
+  const { cycleId } = await plan(testInfo.parallelIndex);
+  // Days with a label and no session: the strip shows the label.
+  await testDb()
+    .insert(trainingCycleSlots)
+    .values([
+      { trainingCycleId: cycleId, dayOfWeek: dow(1), daySlot: 1, label: "Mobility" },
+      { trainingCycleId: cycleId, dayOfWeek: dow(2), daySlot: 1, label: "Recovery stretching" },
+      { trainingCycleId: cycleId, dayOfWeek: dow(3), daySlot: 1, label: "Swimmingpoolrecovery" },
+    ]);
+
+  await page.goto("/cycles");
+  const hero = page.getByTestId("plan-hero");
+  await expect(hero.getByTestId("hero-day-short").filter({ hasText: "Mobility" })).toBeVisible();
+  await expect(hero.getByTestId("hero-day-short").filter({ hasText: "Swimmingpoolrecovery" })).toBeVisible();
+  const splitWords = await hero.getByTestId("hero-day-short").evaluateAll((els) =>
+    els.flatMap((el) => {
+      const split: string[] = [];
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode as Text;
+        for (const m of node.data.matchAll(/\S+/g)) {
+          const range = document.createRange();
+          range.setStart(node, m.index!);
+          range.setEnd(node, m.index! + m[0].length);
+          const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+          if (lines.size > 1) split.push(m[0]);
+        }
+      }
+      return split;
+    }),
+  );
+  expect(splitWords).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("week-strip-320.png") });
+});

@@ -99,8 +99,14 @@ function HeroCard({ hero }: { hero: HeroView }) {
                 {d.day}
               </span>
               <span className={`h-2 w-2 rounded-full ${d.key ? "bg-brand" : d.rest ? "bg-foreground/15" : "bg-foreground"}`} aria-hidden />
-              <span aria-hidden data-testid="hero-day-short" lang="en" className={`max-w-full line-clamp-2 text-center leading-[13px] hyphens-auto [overflow-wrap:anywhere] text-[11px] font-semibold tracking-[-0.2px] ${d.rest ? "text-muted-foreground" : ""}`}>
-                {d.short}
+              {/* Wraps between words only; a word too long for the day is cut with an ellipsis, never broken. */}
+              <span aria-hidden data-testid="hero-day-short" className={`max-w-full line-clamp-2 text-center leading-[13px] text-[11px] font-semibold tracking-[-0.2px] ${d.rest ? "text-muted-foreground" : ""}`}>
+                {d.short.split(" ").map((word, i) => (
+                  <span key={i}>
+                    {i > 0 && " "}
+                    <span className="inline-block max-w-full truncate align-top">{word}</span>
+                  </span>
+                ))}
               </span>
               <span className="sr-only">{`${d.day}, ${d.names}${d.key ? ", key session" : ""}`}</span>
             </li>
@@ -127,7 +133,8 @@ function HeroCard({ hero }: { hero: HeroView }) {
         {hero.kind === "week" ? (
           <span>{hero.summary}</span>
         ) : (
-          <span>
+          // On a narrow phone the Next chip alone names it: a long name twice fills the card.
+          <span className="max-[359px]:hidden">
             {hero.next && (
               <>
                 <span className="text-foreground">{hero.next}</span> is next

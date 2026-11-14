@@ -456,6 +456,12 @@ describe("rotation order", () => {
     expect(screen.getAllByTestId("rotation-row")[0].textContent).toBe("1Full bodySwapped");
   });
 
+  it("gives a skipped position its skip reason", () => {
+    const skipped = walk.map((d) => (d.rotationPosition === 3 ? { ...d, status: "skipped" as const, skipReason: "Work trip" } : d));
+    render(<RotationOrder cycleId={5} rows={rotationRows(slots, skipped, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
+    expect(screen.getAllByTestId("rotation-row")[3].textContent).toBe("4Upper BSkipped · Work trip");
+  });
+
   it("skips today's session by its position", async () => {
     renderOrder();
     fireEvent.click(screen.getByRole("button", { name: "Actions for Lower A" }));
@@ -493,6 +499,7 @@ describe("the session sheets say the session's state (J3-10, J5-08, J5-13, J5-15
         session({ id: 3, date: "2026-11-19", name: "Bike tempo", programId: null, touched: true, templateDate: "2026-11-18" }),
         session({ id: 6, date: "2026-11-20", name: "Bike intervals", programId: null, status: "skipped", touched: true }),
         session({ id: 8, date: "2026-11-21", name: "Hill repeats", touched: true }),
+        session({ id: 9, date: "2026-11-22", name: "Long run", programId: null, status: "skipped", skipReason: "Work trip", touched: true }),
       ],
     });
     const open = (name: RegExp) => {
@@ -503,6 +510,7 @@ describe("the session sheets say the session's state (J3-10, J5-08, J5-13, J5-15
     expect(within(open(/^Thu 19 Nov: Bike tempo/)).getByText("Thu 19 Nov · Moved from Wed")).toBeTruthy();
     expect(within(open(/^Fri 20 Nov: Bike intervals/)).getByText("Fri 20 Nov · Skipped")).toBeTruthy();
     expect(within(open(/^Sat 21 Nov: Hill repeats/)).getByText("Sat 21 Nov · Changed")).toBeTruthy();
+    expect(within(open(/^Sun 22 Nov: Long run/)).getByText("Sun 22 Nov · Skipped · Work trip")).toBeTruthy();
   });
 
   it("a day that was only skipped offers Plan again and not Back to the template (J5-08)", () => {
@@ -607,6 +615,15 @@ describe("completed cycle", () => {
       />,
     );
     expect(screen.getByRole("link", { name: /Strength peak starts Mon\s28\sDec/ }).getAttribute("href")).toBe("/cycles/8");
+    expect(screen.queryByRole("button", { name: "Start now instead" })).toBeNull();
+  });
+
+  it("names the cycle that already followed it as started, with no start", () => {
+    render(<CycleCompletionBanner cycle={done} lengthLabel="6 weeks" endedLabel="ended 20 Dec" next={{ id: 9, name: "Upper / Lower hypertrophy", startsLabel: "Mon 2 Nov", startsTomorrow: false, started: true }} />);
+    const link = screen.getByRole("link", { name: /Upper \/ Lower hypertrophy started Mon\s2\sNov/ });
+    expect(link.getAttribute("href")).toBe("/cycles/9");
+    // A 44 px tap target.
+    expect(link.className).toContain("min-h-11");
     expect(screen.queryByRole("button", { name: "Start now instead" })).toBeNull();
   });
 

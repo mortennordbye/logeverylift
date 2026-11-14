@@ -2035,10 +2035,16 @@ export async function listCycleSessionRevisions(userId: string, cycleId: number)
     );
   const out: RevisionEntry[] = [];
   for (const { id } of ids) {
+    const snaps = await db
+      .select({ id: planRevisions.id, snapshot: planRevisions.snapshot })
+      .from(planRevisions)
+      .where(and(eq(planRevisions.userId, userId), eq(planRevisions.objectType, "planned_session"), eq(planRevisions.objectId, id)))
+      .orderBy(planRevisions.id);
     for (const r of await listRevisions(userId, { type: "planned_session", id })) {
       if (r.action === "baseline") continue;
-      const [rev] = await db.select({ snapshot: planRevisions.snapshot }).from(planRevisions).where(eq(planRevisions.id, r.id));
-      const name = snapshotName(rev.snapshot as PlanSnapshot);
+      // The session goes by what it was before the change: a new label is not its name yet.
+      const at = snaps.findIndex((s) => s.id === r.id);
+      const name = snapshotName((snaps[at - 1] ?? snaps[at]).snapshot as PlanSnapshot);
       out.push({ ...r, changes: r.changes.map((c) => sessionChangeLine(name, c)) });
     }
   }

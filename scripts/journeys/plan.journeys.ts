@@ -505,7 +505,8 @@ const set: JourneySet = {
           await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 2500, downloadThroughput: 50000, uploadThroughput: 50000 });
           await go("/cycles");
           await page.getByRole("link", { name: /Winter run base/ }).first().click();
-          await page.waitForTimeout(900);
+          // The skeleton itself, not the old page dimmed while the request starts.
+          await page.getByTestId("season-skeleton").waitFor({ state: "visible", timeout: 15_000 });
           await shot(8, 10, "loading-skeleton", "Loading skeleton while a season opens", { raw: true });
           await cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
         });

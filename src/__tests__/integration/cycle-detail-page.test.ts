@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { plannedSessions, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
 import { updatePlannedSession, updateRotationSession } from "@/lib/actions/planned-sessions";
+import { applyRotationOp } from "@/lib/planned-sessions";
 import { homeEndurance } from "@/lib/session-answers";
 import { and, eq } from "drizzle-orm";
 import CycleDetailPage from "@/app/cycles/[id]/page";
@@ -86,6 +87,28 @@ describe("cycle detail page", () => {
     expect(week.library).toBeUndefined();
   });
 
+  it("a skipped session carries its skip reason, on a weekday block and a rotation", async () => {
+    const id = await weekdayCycle({ status: "active", startDate: "2026-11-09" });
+    await page(id); // the lazy backfill makes the dated sessions
+    const [mon] = await db.select().from(plannedSessions).where(and(eq(plannedSessions.cycleId, id), eq(plannedSessions.date, "2026-11-23")));
+    expect((await updatePlannedSession({ op: "skip", id: mon.id, reason: "Work trip" })).success).toBe(true);
+    const week = propsOf<Parameters<typeof CycleWeek>[0]>(await page(id), CycleWeek)!;
+    expect(week.sessions.find((s) => s.id === mon.id)).toMatchObject({ status: "skipped", skipReason: "Work trip" });
+
+    const [c] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Rotation", durationWeeks: 4, status: "active", startDate: "2026-11-19", scheduleType: "rotation" })
+      .returning();
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: c.id, orderIndex: 1, programId: lift },
+      { trainingCycleId: c.id, orderIndex: 2, programId: run },
+    ]);
+    // The assistant gives a reason; the app's skip has none.
+    await applyRotationOp({ userId: me, writer: "assistant" }, { op: "skip", cycleId: c.id, rotationPosition: 1, reason: "Sick" });
+    const order = propsOf<Parameters<typeof RotationOrder>[0]>(await page(c.id), RotationOrder)!;
+    expect(order.rows[1]).toMatchObject({ mark: "skipped", upcoming: { status: "skipped", skipReason: "Sick" } });
+  });
+
   it("a scheduled weekday draft: its sessions from the start day, and Start today instead", async () => {
     const id = await weekdayCycle({ scheduledStartDate: "2026-11-23" });
     const tree = await page(id);
@@ -156,6 +179,17 @@ describe("cycle detail page", () => {
     expect(banner.next).toEqual({ id: next, name: "Peak", startsLabel: "Mon 30 Nov", startsTomorrow: false });
     expect(banner.endedLabel).toBe("ended 28 Oct");
     expect(banner.running).toBeNull();
+  });
+
+  it("a completed cycle another cycle followed names that one, not a later scheduled draft", async () => {
+    const five = await weekdayCycle({ name: "Strength 5×5", status: "completed", startDate: "2026-09-01" });
+    const intro = await weekdayCycle({ name: "Intro", status: "completed", startDate: "2026-07-01" });
+    const ul = await weekdayCycle({ name: "Upper / Lower hypertrophy", durationWeeks: 6, status: "active", startDate: "2026-11-02" });
+    await weekdayCycle({ name: "Strength peak", scheduledStartDate: "2026-12-14" });
+    const fiveBanner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await page(five), CycleCompletionBanner)!;
+    expect(fiveBanner.next).toEqual({ id: ul, name: "Upper / Lower hypertrophy", startsLabel: "Mon 2 Nov", startsTomorrow: false, started: true });
+    const introBanner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await page(intro), CycleCompletionBanner)!;
+    expect(introBanner.next).toMatchObject({ id: five, name: "Strength 5×5", started: true });
   });
 
   it("a missed key session carries the day home suggests for it", async () => {
