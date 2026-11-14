@@ -71,6 +71,12 @@ describe("step 1: the basics", () => {
     });
   });
 
+  it("starts on the schedule type picked on the empty Plan", () => {
+    render(<CreateCycleForm days={days} initialType="rotation" />);
+    expect((screen.getByLabelText(/Rotation/) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByRole("button", { name: "Next: put the sessions in order" })).toBeTruthy();
+  });
+
   it("needs a day for Pick a date, and offers After current cycle only while a cycle runs", async () => {
     const { unmount } = render(<CreateCycleForm days={days} />);
     expect(screen.queryByRole("button", { name: "After current cycle" })).toBeNull();

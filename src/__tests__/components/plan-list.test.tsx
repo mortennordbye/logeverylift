@@ -151,18 +151,21 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("the Plan list", () => {
-  it("first open: explains cycles, offers New cycle and the season prompt, no Select", () => {
+  it("first open: the two schedule types start a cycle, the season prompt starts a season, no + and no Select", () => {
     render(<CyclesListClient data={{ ...none, empty: true }} deletedCount={0} />);
     expect(screen.getByRole("heading", { name: "Plan", level: 1 })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Plan your training" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "New cycle" }).getAttribute("href")).toBe("/cycles/new");
+    expect(screen.getByRole("link", { name: /Same days each week/ }).getAttribute("href")).toBe("/cycles/new?type=day_of_week");
+    expect(screen.getByRole("link", { name: /Rotation/ }).getAttribute("href")).toBe("/cycles/new?type=rotation");
+    // One way in per action: the card replaces the + menu while the list is empty.
+    expect(screen.queryByRole("button", { name: "New cycle or season" })).toBeNull();
     expect(screen.getByRole("link", { name: "Training for a race or a goal? Add a season" }).getAttribute("href")).toBe("/seasons/new");
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
     expect(screen.queryByText(/Recently deleted/)).toBeNull();
   });
 
   it("the + menu offers a cycle and a season, and no triathlon plan", () => {
-    render(<CyclesListClient data={{ ...none, empty: true }} deletedCount={0} />);
+    render(<CyclesListClient data={gym} deletedCount={0} />);
     fireEvent.click(screen.getByRole("button", { name: "New cycle or season" }));
     const sheet = screen.getByRole("dialog");
     expect(within(sheet).getByRole("link", { name: /New cycle/ }).getAttribute("href")).toBe("/cycles/new");

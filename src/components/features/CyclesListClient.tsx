@@ -43,6 +43,14 @@ function CalendarIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
+function ChevronIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden>
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
 function SeasonPrompt() {
   return (
     <Link href="/seasons/new" className="flex min-h-[44px] items-center gap-2 text-sm text-muted-foreground active:opacity-70">
@@ -345,14 +353,17 @@ export function CyclesListClient({ data, deletedCount }: Props) {
               Select
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => setShowAddSheet(true)}
-            aria-label="New cycle or season"
-            className="flex h-11 w-11 items-center justify-center rounded-full bg-brand text-primary-foreground active:opacity-80"
-          >
-            <PlusIcon />
-          </button>
+          {/* While the list is empty the card below is the one way in, so there is no + menu. */}
+          {!data.empty && (
+            <button
+              type="button"
+              onClick={() => setShowAddSheet(true)}
+              aria-label="New cycle or season"
+              className="flex h-11 w-11 items-center justify-center rounded-full bg-brand text-primary-foreground active:opacity-80"
+            >
+              <PlusIcon />
+            </button>
+          )}
         </div>
       </header>
 
@@ -362,30 +373,26 @@ export function CyclesListClient({ data, deletedCount }: Props) {
             <section className={`${card} flex flex-col gap-5 px-5 py-6`} data-testid="plan-empty">
               <div className="flex flex-col gap-2 text-center">
                 <h2 className="text-[22px] font-semibold">Plan your training</h2>
-                <p className="text-[15px] leading-[21px] text-foreground/80">A cycle is a block of weeks that runs your programs.</p>
+                <p className="text-[15px] leading-[21px] text-foreground/80">A cycle is a block of weeks that runs your programs. How do you train?</p>
               </div>
-              <div className="flex flex-col overflow-hidden rounded-[14px] bg-widget-2">
-                <div className="flex items-center gap-3 border-b border-hairline px-3.5 py-3">
+              <nav aria-label="How do you train?" className="flex flex-col overflow-hidden rounded-[14px] bg-widget-2">
+                <Link href="/cycles/new?type=day_of_week" className="flex min-h-[60px] items-center gap-3 border-b border-hairline px-3.5 py-3 active:opacity-70">
                   <CalendarIcon className="h-5 w-5 shrink-0 text-foreground/80" />
-                  <div className="flex flex-col gap-0.5">
+                  <span className="flex flex-1 flex-col gap-0.5">
                     <span className="text-sm font-semibold">Same days each week</span>
                     <span className="text-[13px] text-muted-foreground">Monday upper, Thursday lower</span>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 px-3.5 py-3">
+                  </span>
+                  <ChevronIcon />
+                </Link>
+                <Link href="/cycles/new?type=rotation" className="flex min-h-[60px] items-center gap-3 px-3.5 py-3 active:opacity-70">
                   <RotateIcon className="h-5 w-5 shrink-0 text-foreground/80" />
-                  <div className="flex flex-col gap-0.5">
+                  <span className="flex flex-1 flex-col gap-0.5">
                     <span className="text-sm font-semibold">Rotation</span>
                     <span className="text-[13px] text-muted-foreground">The next session follows the last one</span>
-                  </div>
-                </div>
-              </div>
-              <Link
-                href="/cycles/new"
-                className="flex h-[52px] items-center justify-center rounded-2xl bg-brand text-base font-semibold text-primary-foreground active:opacity-80"
-              >
-                New cycle
-              </Link>
+                  </span>
+                  <ChevronIcon />
+                </Link>
+              </nav>
             </section>
             <div className="flex justify-center">
               <SeasonPrompt />
