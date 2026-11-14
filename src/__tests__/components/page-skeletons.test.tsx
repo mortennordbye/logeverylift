@@ -23,4 +23,14 @@ describe("loading skeletons", () => {
     expect(container.textContent).not.toMatch(/Back/);
     expect(container.querySelector("svg.lucide-chevron-left")).toBeNull();
   });
+
+  it.each([
+    ["cycle", () => import("@/app/cycles/[id]/history/loading")],
+    ["season", () => import("@/app/seasons/[id]/history/loading")],
+    ["program", () => import("@/app/programs/[id]/history/loading")],
+  ])("%s history is titled Change history, as its menu names it (J8-04)", async (_name, load) => {
+    const { default: Loading } = await load();
+    render(<Loading />);
+    expect(screen.getByText("Change history")).toBeTruthy();
+  });
 });

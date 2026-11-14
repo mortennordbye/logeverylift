@@ -305,7 +305,7 @@ export function ProgramDetailClient({
               href={`/programs/${programId}/history`}
               className="text-primary text-sm font-medium min-h-[44px] flex items-center active:opacity-70"
             >
-              History
+              Change history
             </Link>
           )}
           {!isEditing && (
