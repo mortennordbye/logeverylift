@@ -1,3 +1,4 @@
+import { BackLabel } from "@/components/ui/BackLink";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ChevronLeftIcon, Trash2 } from "lucide-react";
 
@@ -9,7 +10,7 @@ export default function SessionDetailLoading() {
       <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0">
         <span className="flex items-center gap-0.5 text-primary -ml-1 min-h-[44px]">
           <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Back</span>
+          <span className="text-sm font-medium"><BackLabel fallback={{ href: "/history", label: "History" }} /></span>
         </span>
         <span className="w-10 h-10 flex items-center justify-center text-destructive">
           <Trash2 className="h-5 w-5" />

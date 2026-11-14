@@ -16,8 +16,9 @@ vi.mock("@/lib/actions/step-results", () => ({ saveStepResultsAction: (d: unknow
 const callAction = vi.fn();
 vi.mock("@/lib/utils/stale-bundle", () => ({ callAction: (p: Promise<unknown>) => callAction(p) }));
 const push = vi.fn();
+const replace = vi.fn();
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push, replace, refresh }) }));
 
 const view = (key: string, type: PlayerStepView["type"], seconds: number | null, targetText: string | null = null): PlayerStepView => ({
   key,
@@ -59,6 +60,7 @@ beforeEach(() => {
   saveStepResultsAction.mockReset().mockResolvedValue({ success: true, data: { workoutSessionId: 5 } });
   callAction.mockReset().mockImplementation((p: Promise<unknown>) => p);
   push.mockReset();
+  replace.mockReset();
   refresh.mockReset();
 });
 
@@ -96,7 +98,10 @@ describe("StepResultsForm", () => {
       }),
     );
     expect(localStorage.getItem(PLAYER_STORAGE_KEY)).toBeNull();
-    expect(push).toHaveBeenCalledWith("/planned/41");
+    // Replace, not push: the results form must not stay in history, or Back
+    // on the session would return into it.
+    expect(replace).toHaveBeenCalledWith("/planned/41");
+    expect(push).not.toHaveBeenCalled();
   });
 
   it("a failed save keeps the screen and the saved run, and offers Retry", async () => {
@@ -111,6 +116,7 @@ describe("StepResultsForm", () => {
     expect(screen.getByRole("button", { name: "Retry" })).toBeTruthy();
     expect(localStorage.getItem(PLAYER_STORAGE_KEY)).not.toBeNull();
     expect(push).not.toHaveBeenCalled();
+    expect(replace).not.toHaveBeenCalled();
   });
 
   // Review fix 10: the workout was edited after the run; its finished run still fills the form.

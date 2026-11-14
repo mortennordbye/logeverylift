@@ -4,9 +4,9 @@ import { enduranceEnabledFor } from "@/lib/endurance";
 import { db } from "@/db";
 import { liveSeasonId } from "@/lib/plan-revisions";
 import { requireSession } from "@/lib/utils/session";
-import { ChevronLeftIcon } from "lucide-react";
-import Link from "next/link";
+
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 export default async function EditCyclePage({
   params,
@@ -31,13 +31,7 @@ export default async function EditCyclePage({
     <div className="h-[100dvh] bg-background flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
-        <Link
-          href={`/cycles/${cycleId}`}
-          className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]"
-        >
-          <ChevronLeftIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">Back</span>
-        </Link>
+        <BackLink fallback={{ href: `/cycles/${cycleId}`, label: "Cycle" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">Edit Cycle</h1>

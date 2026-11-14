@@ -5,7 +5,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 export default function ProgramDetailLoading() {
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
-      <BackEditHeader />
+      <BackEditHeader back={{ href: "/programs", label: "Programs" }} />
       <div className="px-4 pb-4 shrink-0">
         <Skeleton className="h-9 w-48" />
       </div>

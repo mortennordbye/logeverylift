@@ -8,10 +8,11 @@ import { useUnits } from "@/contexts/user-settings-context";
 import { HONEST_REPS_FROM } from "@/lib/utils/pr-provenance";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { SessionDetail, WorkoutSet } from "@/types/workout";
-import { ChevronLeftIcon, ChevronRight, Dumbbell, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { ChevronRight, Dumbbell, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { BackLink, useReturnTo } from "@/components/ui/BackLink";
+import { dateLabel } from "@/lib/utils/date-label";
 
 const FEELING_COLORS: Record<string, string> = {
   Tired: "bg-red-500/20 text-red-500",
@@ -21,11 +22,7 @@ const FEELING_COLORS: Record<string, string> = {
 };
 
 function formatDate(d: Date): string {
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  return dateLabel(d, "EEEE, MMMM d");
 }
 
 function formatDuration(ms: number): string {
@@ -42,6 +39,7 @@ const INPUT_CLASS =
 export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
   const units = useUnits();
   const router = useRouter();
+  const returnTo = useReturnTo();
   const { showToast } = useToast();
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -82,7 +80,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
       showToast({ variant: "error", message: result.error });
       return;
     }
-    router.push("/history");
+    returnTo("/history");
   }
 
   // Done saves the date and notes, as iOS does, so leaving edit mode never
@@ -107,10 +105,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0">
-        <Link href="/history" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Back</span>
-        </Link>
+        <BackLink fallback={{ href: "/history", label: "History" }} />
         <div className="flex items-center gap-1">
           {editable && (
             <button
@@ -154,7 +149,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
           )}
           {totalVolume > 0 && (
             <span className="text-sm text-muted-foreground">
-              · {totalVolume.toLocaleString()}kg total
+              · {totalVolume.toLocaleString("en-US")}kg total
             </span>
           )}
           {totalDistanceM > 0 && (

@@ -4,8 +4,9 @@ import { users } from "@/db/schema";
 import { getGymMap } from "@/lib/actions/gyms";
 import { requireSession } from "@/lib/utils/session";
 import { eq } from "drizzle-orm";
-import { ChevronLeft } from "lucide-react";
+
 import Link from "next/link";
+import { BackLink } from "@/components/ui/BackLink";
 
 export default async function GymMapPage() {
   const session = await requireSession();
@@ -17,10 +18,7 @@ export default async function GymMapPage() {
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">More</span>
-        </Link>
+        <BackLink fallback={{ href: "/more", label: "More" }} />
         {me?.gymId != null && (
           <Link href="/more/account/gym" className="text-sm font-medium text-primary active:opacity-70 min-h-[44px] flex items-center">
             My gym

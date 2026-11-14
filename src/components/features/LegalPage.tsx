@@ -1,16 +1,14 @@
 import { LEGAL_VERSION } from "@/lib/constants/legal";
-import { ChevronLeft } from "lucide-react";
+
 import Link from "next/link";
+import { BackLink } from "@/components/ui/BackLink";
 
 /** Shell for /privacy and /terms: readable text column, public, no app chrome. */
 export function LegalPage({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="h-[100dvh] overflow-y-auto bg-background">
       <div className="mx-auto max-w-2xl px-4 pt-6 pb-16">
-        <Link href="/" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">LogEveryLift</span>
-        </Link>
+        <BackLink fallback={{ href: "/", label: "Home" }} />
         <h1 className="mt-2 text-3xl font-bold tracking-tight">{title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">Effective {LEGAL_VERSION}</p>
         <div className="mt-6 flex flex-col gap-4 text-[15px] leading-relaxed [&_h2]:mt-6 [&_h2]:text-lg [&_h2]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:flex [&_ul]:flex-col [&_ul]:gap-1 [&_a]:text-primary [&_a]:underline">

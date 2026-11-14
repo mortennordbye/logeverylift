@@ -10,6 +10,7 @@ import { prePaintThemeScript } from "@/lib/utils/accent";
 import { PendingQueueProvider } from "@/contexts/pending-queue-context";
 import { ToastProvider } from "@/contexts/toast-context";
 import { WorkoutSessionProvider } from "@/contexts/workout-session-context";
+import { HISTORY_TAG_SCRIPT } from "@/lib/utils/nav-history";
 import type { Metadata, Viewport } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import { Suspense } from "react";
@@ -84,6 +85,10 @@ export default function RootLayout({
             __html: `(function(){window.__lelHistoryNav=false;window.addEventListener('popstate',function(){window.__lelHistoryNav=true},true)})()`,
           }}
         />
+        {/* Tags each history entry with the app URL it was pushed from, so
+            Back can return there (BackLink). It must wrap pushState before
+            Next's router loads. See src/lib/utils/nav-history.ts. */}
+        <script dangerouslySetInnerHTML={{ __html: HISTORY_TAG_SCRIPT }} />
       </head>
       <body
         className={`${inter.variable} ${geistMono.variable} antialiased pb-nav-safe`}

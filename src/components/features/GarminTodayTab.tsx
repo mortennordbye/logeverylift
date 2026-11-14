@@ -17,6 +17,7 @@ import { formatDateShort } from "@/lib/utils/format";
 import { AlertTriangle, BatteryMedium, BatteryCharging, CalendarDays, CheckCircle2, ChevronLeft, ChevronRight, Flame, Footprints, Gauge, HeartPulse, Info, ShieldAlert, Sun, Timer, Waves, Wind, Zap } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 
 function alpha(rgba: string, a: number) {
@@ -76,7 +77,7 @@ function DayPicker({ data }: { data: TodayData }) {
         <span className={`${btn} opacity-30`} />
       )}
       <div className="text-center">
-        <p className="text-sm font-semibold">{new Date(`${data.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" })}</p>
+        <p className="text-sm font-semibold">{dateLabel(data.date, "EEEE d MMMM")}</p>
         {data.lastDate && data.date !== data.lastDate && (
           <Link href="/more/garmin?tab=day" replace scroll={false} className="text-[11px] text-primary">
             Latest day
@@ -250,7 +251,7 @@ function WeekStrip({ data, theme }: { data: TodayData; theme: VizTheme }) {
   const [idx, setIdx] = useState<number | null>(null);
   const option = useMemo(() => {
     const ax = { axisLine: { lineStyle: { color: theme.grid } }, axisTick: { show: false }, axisLabel: { color: theme.textMuted, fontSize: 10 }, splitLine: { lineStyle: { color: theme.grid } } };
-    const labels = data.strip.map((d) => new Date(`${d.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "short", timeZone: "UTC" }));
+    const labels = data.strip.map((d) => dateLabel(d.date, "EEE"));
     return {
       animationDuration: 300,
       tooltip: { trigger: "axis", showContent: false, axisPointer: { type: "line", lineStyle: { color: theme.textMuted } } },

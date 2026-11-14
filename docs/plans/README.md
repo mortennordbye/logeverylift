@@ -29,6 +29,7 @@ when the brief was written.
 | 8 | [Garmin deep data](garmin-deep-data.md) | phase 1 merged to main (#208, #215) | yes | no |
 | 9 | [MCP access: scopes, revoke, instructions, resources](mcp-access.md) (endurance plan B2, B3) | done | data migration only | no |
 | 10 | [Home screen widgets](../home-widgets-audit.md) (audit, catalogue and build brief; section 6 is the brief, one PR) | phases 1a and 1b built (registry, edit mode, Recent PRs, Friends' activity, Garmin readiness); locked redesign and phase 2 widgets built (Streak, Body weight, Training load, Weekly sets, Race countdown); other phase 2 widgets todo | yes | yes (home start entries) |
+| 11 | [Back navigation](back-navigation.md) (Back goes where you came from) | built on `fix/back-navigation` | no | yes (set pages' Back) |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.

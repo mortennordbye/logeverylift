@@ -1,3 +1,5 @@
+import { BackLabel } from "@/components/ui/BackLink";
+import type { BackTarget } from "@/lib/utils/back-nav";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ChevronLeftIcon } from "lucide-react";
 
@@ -11,14 +13,21 @@ import { ChevronLeftIcon } from "lucide-react";
  * together.
  */
 
-/** Back / Edit header used by WorkoutSetsClient, ProgramDetailClient. */
-export function BackEditHeader({ backLabel = "Back" }: { backLabel?: string }) {
+/**
+ * Back / Edit header used by WorkoutSetsClient, ProgramDetailClient. `back` is
+ * the page's own fallback, so the label matches the page's Back. A loading
+ * file has no route params, so a dynamic parent passes an empty `href`: the
+ * label still names the page the user came from, or the parent's noun.
+ */
+export function BackEditHeader({ back }: { back: BackTarget }) {
   return (
     <div className="flex items-center px-4 pt-6 pb-4 shrink-0">
       <div className="w-20 shrink-0 flex items-center">
         <span className="flex items-center gap-0.5 text-primary -ml-1 min-h-[44px]">
           <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">{backLabel}</span>
+          <span className="text-sm font-medium">
+            <BackLabel fallback={back} />
+          </span>
         </span>
       </div>
       <div className="flex-1" />
@@ -31,10 +40,10 @@ export function BackEditHeader({ backLabel = "Back" }: { backLabel?: string }) {
 
 /** Mirrors WorkoutSetsClient — used by both the workout and program-edit
  *  variants of the exercise sets screen. */
-export function ExerciseSetsSkeleton({ backLabel }: { backLabel?: string }) {
+export function ExerciseSetsSkeleton({ back }: { back: BackTarget }) {
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
-      <BackEditHeader backLabel={backLabel} />
+      <BackEditHeader back={back} />
       <div className="px-4 pb-4 shrink-0">
         <Skeleton className="h-9 w-52" />
       </div>
@@ -123,16 +132,25 @@ export function ExercisePickerSkeleton() {
 export function ListPageSkeleton({
   title,
   rows = 5,
+  back,
 }: {
   title: string;
   rows?: number;
+  /** The page's Back fallback, as in BackEditHeader; null for a page with no Back. */
+  back: BackTarget | null;
 }) {
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="px-4 pt-6 pb-2 shrink-0">
         <span className="flex items-center gap-0.5 text-primary -ml-1 min-h-[44px]">
-          <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Back</span>
+          {back && (
+            <>
+              <ChevronLeftIcon className="h-5 w-5" />
+              <span className="text-sm font-medium">
+                <BackLabel fallback={back} />
+              </span>
+            </>
+          )}
         </span>
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">

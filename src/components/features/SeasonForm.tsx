@@ -2,7 +2,7 @@
 
 import { createSeasonAction, deleteSeasonAction, updateSeasonAction } from "@/lib/actions/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { useRouter } from "next/navigation";
+import { useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink";
 import { useState } from "react";
 
 type Initial = { id: number; name: string; goal: string | null; startDate: string; endDate: string; nextGoal: string | null };
@@ -12,7 +12,8 @@ const INPUT = "rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2
 
 /** Create or edit a season (docs/plans/seasons.md, 2.10). Delete sits at the bottom of the edit form. */
 export function SeasonForm({ initial, defaultStart }: { initial?: Initial; defaultStart?: string }) {
-  const router = useRouter();
+  const returnTo = useReturnTo();
+  const leaveDeleted = useLeaveDeleted();
   const [name, setName] = useState(initial?.name ?? "");
   const [goal, setGoal] = useState(initial?.goal ?? "");
   const [startDate, setStartDate] = useState(initial?.startDate ?? defaultStart ?? "");
@@ -34,12 +35,12 @@ export function SeasonForm({ initial, defaultStart }: { initial?: Initial; defau
       const result = await callAction(updateSeasonAction({ seasonId: initial.id, ...fields }));
       setLoading(false);
       if (!result.success) return setError(result.error);
-      router.push(`/seasons/${initial.id}`);
+      returnTo(`/seasons/${initial.id}`);
     } else {
       const result = await callAction(createSeasonAction(fields));
       setLoading(false);
       if (!result.success) return setError(result.error);
-      router.push(`/seasons/${result.data.id}`);
+      returnTo(`/seasons/${result.data.id}`);
     }
   }
 
@@ -49,7 +50,7 @@ export function SeasonForm({ initial, defaultStart }: { initial?: Initial; defau
     const result = await callAction(deleteSeasonAction({ seasonId: initial.id }));
     setLoading(false);
     if (!result.success) return setError(result.error);
-    router.push("/cycles");
+    leaveDeleted("/cycles", [`/seasons/${initial.id}`]);
   }
 
   return (

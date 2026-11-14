@@ -3,6 +3,7 @@ import { exerciseNotes, programExercises, programs, users } from "../src/db/sche
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
+import { backLink } from "./helpers";
 
 /**
  * The exercise detail screen grew an illustration and a muscle map, which made
@@ -110,6 +111,8 @@ test("the workout's exercise title opens its page and Back returns", async ({ pa
   await expect(page).toHaveURL(new RegExp(`/exercises/${slot.exerciseId}$`));
   await expect(page.getByRole("main").getByRole("heading", { name: "Records" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Back", exact: true }).click();
+  // Back names where it goes: the exercise's sets in the workout.
+  await expect(backLink(page)).toHaveText("Sets");
+  await backLink(page).click();
   await expect(page).toHaveURL(new RegExp(`${workoutUrl}$`));
 });

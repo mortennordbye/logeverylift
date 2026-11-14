@@ -2,12 +2,13 @@
 
 import { refreshGarmin } from "@/lib/actions/garmin";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { Activity, ChartLine, ChevronLeft, Database, LayoutDashboard, Moon, RefreshCw, Sun, TrendingUp, type LucideIcon } from "lucide-react";
+import { Activity, ChartLine, Database, LayoutDashboard, Moon, RefreshCw, Sun, TrendingUp, type LucideIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { GARMIN_TABS, type GarminTab, type GarminView } from "./tabs";
 import { useSwipe } from "./use-swipe";
+import { BackLink } from "@/components/ui/BackLink";
 
 
 const TABS: Record<GarminTab, { label: string; icon: LucideIcon }> = {
@@ -85,10 +86,7 @@ export function GarminShell({ tab, lastSyncedAt, children }: { tab: GarminView; 
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">More</span>
-        </Link>
+        <BackLink fallback={{ href: "/more", label: "More" }} />
         <div className="flex items-center gap-1">
           <RefreshButton lastSyncedAt={lastSyncedAt} />
           <Link

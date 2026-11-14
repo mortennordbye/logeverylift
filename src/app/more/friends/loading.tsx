@@ -1,5 +1,5 @@
 import { ListPageSkeleton } from "@/components/ui/PageSkeletons";
 
 export default function FriendsLoading() {
-  return <ListPageSkeleton title="Friends" rows={4} />;
+  return <ListPageSkeleton title="Friends" rows={4} back={{ href: "/more", label: "More" }} />;
 }

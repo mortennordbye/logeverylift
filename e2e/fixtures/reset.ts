@@ -144,6 +144,10 @@ export async function resetE2EUser(email: string): Promise<void> {
         healthConsentAt: now,
         aiConsentAt: null,
         friendsSeenAt: now,
+        // The seeded history is past the share prompt's workout count, so the
+        // first home a worker opens would get the card over it. No spec is about
+        // that card; asked now keeps it away for the 60-day interval.
+        sharePromptAt: now,
         primaryGymId: null,
         // Settings as for a new user: the browser fills the zone on first load.
         timeZone: null,

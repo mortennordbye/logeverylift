@@ -3,9 +3,8 @@
 import { addExerciseToProgram } from "@/lib/actions/programs";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { Exercise } from "@/types/workout";
-import { markProgrammaticBack } from "@/lib/utils/nav-intent";
+import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { ChevronLeft, Search } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 type Props = {
@@ -14,7 +13,12 @@ type Props = {
 };
 
 export function WorkoutAddExerciseClient({ programId, exercises }: Props) {
-  const router = useRouter();
+  const workout = `/programs/${programId}/workout`;
+  // Opened from the workout: return there by a pop. On a cold start at this
+  // URL there is nothing behind it, so both go to the workout instead of
+  // leaving the app.
+  const back = useBack({ href: workout, label: "Workout" });
+  const returnTo = useReturnTo();
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -31,7 +35,7 @@ export function WorkoutAddExerciseClient({ programId, exercises }: Props) {
       setLoading(false);
       return;
     }
-    router.push(`/programs/${programId}/workout`);
+    returnTo(workout);
   }
 
   return (
@@ -40,16 +44,12 @@ export function WorkoutAddExerciseClient({ programId, exercises }: Props) {
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
         <button
           type="button"
-          onClick={() => {
-            // Our own Back control: keep the slide. An edge swipe would not
-            // be marked, and the system animates that one itself.
-            markProgrammaticBack();
-            router.back();
-          }}
+          onClick={back.go}
+          aria-label={`Back to ${back.label}`}
           className="flex items-center gap-0.5 text-primary text-sm font-medium min-h-[44px] -ml-1 active:opacity-70"
         >
           <ChevronLeft className="w-5 h-5" />
-          Back
+          {back.label}
         </button>
       </div>
       <div className="px-4 pb-4 shrink-0">

@@ -6,7 +6,7 @@ import {
   reorderProgramExercises,
   updateProgram,
 } from "@/lib/actions/programs";
-import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
+import { buildRunSetSummary, buildSetSummary, formatDateShort } from "@/lib/utils/format";
 import { useUnits } from "@/contexts/user-settings-context";
 import type { Discipline } from "@/lib/utils/discipline";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -30,10 +30,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { ProgramShareButton } from "@/components/features/ProgramShareButton";
 import type { FriendWithActivity } from "@/types/workout";
-import { ChevronLeft, ChevronRight, GripVertical, Minus, Plus } from "lucide-react";
+import { ChevronRight, GripVertical, Minus, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 type ProgramExItem = {
   id: number;
@@ -294,10 +295,7 @@ export function ProgramDetailClient({
               Cancel
             </button>
           ) : (
-            <Link href="/programs" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-              <ChevronLeft className="h-5 w-5" />
-              <span className="text-sm font-medium">Back</span>
-            </Link>
+            <BackLink fallback={{ href: "/programs", label: "Programs" }} />
           )}
         </div>
         <div className="flex-1" />
@@ -361,7 +359,7 @@ export function ProgramDetailClient({
                 Last session
               </span>
               <span className="text-[10px] text-muted-foreground">
-                · {new Date(lastSession.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                · {formatDateShort(lastSession.date)}
                 {lastSession.durationMinutes > 0 && ` · ${lastSession.durationMinutes}m`}
               </span>
               {lastSession.feeling && FEELING_COLORS[lastSession.feeling] && (

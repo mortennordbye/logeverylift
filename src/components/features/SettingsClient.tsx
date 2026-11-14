@@ -8,9 +8,10 @@ import { setMissedWorkoutsEnabled } from "@/lib/actions/training-cycles";
 import { exportAllSessions } from "@/lib/actions/workout-sessions";
 import { requestNotificationPermission } from "@/lib/notifications";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { Bell, BookOpen, CheckIcon, ChevronLeft, ChevronRight, Download, Smartphone } from "lucide-react";
+import { Bell, BookOpen, CheckIcon, ChevronRight, Download, Smartphone } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ComponentProps } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 const accentColors = [
   { value: "blue", label: "Blue", color: "#5B8FFF" },
@@ -208,10 +209,7 @@ export function SettingsClient({
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">More</span>
-        </Link>
+        <BackLink fallback={{ href: "/more", label: "More" }} />
       </div>
       <h1 className="text-3xl font-bold tracking-tight px-4 pt-2 pb-0 shrink-0">Settings</h1>
 

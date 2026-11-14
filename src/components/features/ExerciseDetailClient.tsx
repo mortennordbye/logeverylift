@@ -9,9 +9,9 @@ import { formatDateShort, loggedSetLabel, toDateString } from "@/lib/utils/forma
 import { useUnits } from "@/contexts/user-settings-context";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { Exercise } from "@/types/workout";
-import { ChevronLeftIcon, ChevronRight, Trophy } from "lucide-react";
+import { ChevronRight, Trophy } from "lucide-react";
+import { BackLink } from "@/components/ui/BackLink";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -39,18 +39,11 @@ export function ExerciseDetailClient({
   records: PrFeedEntry[];
   history: ExerciseHistorySession[];
 }) {
-  const router = useRouter();
   const { showToast } = useToast();
   const [note, setNote] = useState(initialNote ?? "");
   const [savedNote, setSavedNote] = useState(initialNote ?? "");
   const isRun = exercise.category === "cardio";
   const units = useUnits();
-
-  function handleBack() {
-    // Opened from the library or a workout: go back there. Opened directly: the library.
-    if (window.history.length > 1) router.back();
-    else router.push("/exercises");
-  }
 
   async function handleNoteBlur() {
     const next = note.trim();
@@ -68,13 +61,7 @@ export function ExerciseDetailClient({
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-4 shrink-0">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]"
-        >
-          <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Back</span>
-        </button>
+        <BackLink fallback={{ href: "/exercises", label: "Exercises" }} />
       </div>
 
       <main className="flex-1 overflow-y-auto px-4 pb-nav-safe space-y-4">

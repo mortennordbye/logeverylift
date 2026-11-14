@@ -13,8 +13,8 @@ import { programs } from "@/db/schema/programs";
 import { users } from "@/db/schema/users";
 import { type PrData } from "@/lib/utils/ai-prompt";
 import { and, eq, isNull } from "drizzle-orm";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
+import { BackLink } from "@/components/ui/BackLink";
 
 type Props = {
   /** `revise`: an AI Setup plan answered "doesn't fit" at its check-in. */
@@ -75,10 +75,7 @@ export default async function AiSetupPage({ searchParams }: Props) {
         style={{ minHeight: "calc(100dvh + var(--kb-height, 0px))", paddingBottom: "calc(4rem + env(safe-area-inset-bottom, 0px) + var(--kb-height, 0px))" }}
       >
         <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-          <Link href="/more" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-            <ChevronLeft className="w-5 h-5" />
-            <span className="text-sm font-medium">More</span>
-          </Link>
+          <BackLink fallback={{ href: "/more", label: "More" }} />
         </div>
         <div className="px-4 pt-2 pb-4 shrink-0">
           <h1 className="text-3xl font-bold tracking-tight">AI Setup</h1>

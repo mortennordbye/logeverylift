@@ -1,9 +1,9 @@
 import { SeasonForm } from "@/components/features/SeasonForm";
 import { getSeasonDetail } from "@/lib/seasons";
 import { requireSession } from "@/lib/utils/session";
-import { ChevronLeftIcon } from "lucide-react";
-import Link from "next/link";
+
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 /** Edit a season's name, goal, dates and next goal; delete it at the bottom. */
 export default async function EditSeasonPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,10 +17,7 @@ export default async function EditSeasonPage({ params }: { params: Promise<{ id:
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-y-auto">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href={`/seasons/${s.id}`} className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeftIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">Back</span>
-        </Link>
+        <BackLink fallback={{ href: `/seasons/${s.id}`, label: "Season" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">Edit season</h1>

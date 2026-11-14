@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures/test";
-import { openFirstExercise, openFirstSetEditor, openWorkout } from "./helpers";
+import { backLink, openFirstExercise, openFirstSetEditor, openWorkout } from "./helpers";
 
 /**
  * Page transitions animate what we drive, and stand down for what the platform
@@ -137,4 +137,24 @@ test("our own Back still animates even though it is also a popstate", async ({
 
   console.log(`TRANSITION programmatic-back: maxSlide=${Math.round(slide)}px`);
   expect(slide, "a Back control we drew should keep its slide").toBeGreaterThan(SLID);
+});
+
+test("Back to a tab root slides back, though both pages sit at tab depth", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/more");
+  await page.getByRole("link", { name: /Settings/ }).first().click();
+  await page.waitForURL((u) => u.pathname === "/settings");
+  await transitionsSettled(page);
+
+  // BackLink pops history: a back we initiated, so ours to animate. By depth
+  // alone /settings to /more is a tab switch, which does not slide.
+  const back = backLink(page);
+  await expect(back).toHaveText("More");
+  const slide = await maxSlide(page, async () => {
+    await back.click();
+    await page.waitForURL((u) => u.pathname === "/more");
+  });
+
+  console.log(`TRANSITION back-link pop: maxSlide=${Math.round(slide)}px`);
+  expect(slide, "Back should slide back").toBeGreaterThan(SLID);
 });

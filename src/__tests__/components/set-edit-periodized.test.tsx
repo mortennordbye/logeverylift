@@ -19,7 +19,7 @@ vi.mock("@/contexts/pending-queue-context", () => ({
   useWorkoutSetWriter: () => ({ logWithRetry: vi.fn(async () => ({ success: true })) }),
 }));
 vi.mock("@/contexts/toast-context", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/actions/programs", () => ({
   updateProgramSet: (...a: unknown[]) => updateProgramSet(...a),
   setProgramExerciseType: vi.fn(),
@@ -62,7 +62,7 @@ async function save() {
 
 describe("SetEditView — a periodized endurance set", () => {
   it("asks for a re-anchor and leaves an untouched distance to the sync", async () => {
-    render(<SetEditView set={run({})} isRunning />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={run({})} isRunning />);
     await save();
     const sent = updateProgramSet.mock.calls[0][0];
     expect(sent).toMatchObject({ id: 7, anchor: "distance" });
@@ -72,20 +72,20 @@ describe("SetEditView — a periodized endurance set", () => {
   });
 
   it("sends the distance of a plain set as before", async () => {
-    render(<SetEditView set={run({ peakDistanceMeters: null })} isRunning />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={run({ peakDistanceMeters: null })} isRunning />);
     await save();
     expect(updateProgramSet.mock.calls[0][0].distanceMeters).toBe(4000);
   });
 
   it("leaves an untouched time out of a distance-mode save too", async () => {
-    render(<SetEditView set={run({ durationSeconds: 1500, peakDurationSeconds: 1800 })} isRunning />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={run({ durationSeconds: 1500, peakDurationSeconds: 1800 })} isRunning />);
     await save();
     expect(updateProgramSet.mock.calls[0][0].durationSeconds).toBeUndefined();
   });
 
   it("leaves an untouched time out of a time-mode save", async () => {
     render(
-      <SetEditView
+      <SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }}
         set={run({ distanceMeters: null, peakDistanceMeters: null, durationSeconds: 1500, peakDurationSeconds: 1800 })}
         isRunning
       />,
@@ -97,7 +97,7 @@ describe("SetEditView — a periodized endurance set", () => {
   });
 
   it("sends no anchor for a set that is not periodized", async () => {
-    render(<SetEditView set={run({ peakDistanceMeters: null })} isRunning />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={run({ peakDistanceMeters: null })} isRunning />);
     await save();
     expect(updateProgramSet.mock.calls[0][0]).not.toHaveProperty("anchor");
   });

@@ -11,6 +11,7 @@ import { formatDateShort } from "@/lib/utils/format";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 /**
  * The Data tab: everything stored from Garmin for one day, as Garmin sent it,
@@ -78,7 +79,7 @@ function Status({ s }: { s: GarminExplorerDay["status"] }) {
         <dd className="text-right">{kb(s.storedBytes)}</dd>
       </dl>
       {s.pausedUntil && (
-        <p className="text-xs text-destructive">Garmin asked us to slow down. Import continues at {new Date(s.pausedUntil).toLocaleTimeString()}.</p>
+        <p className="text-xs text-destructive">Garmin asked us to slow down. Import continues at {dateLabel(new Date(s.pausedUntil), "HH:mm")}.</p>
       )}
     </Card>
   );
@@ -231,7 +232,7 @@ export function GarminDataExplorer() {
           {day.runs.map((r, i) => (
             <li key={`${r.startedAt}-${i}`} className="text-xs flex justify-between gap-3">
               <span className="text-muted-foreground">
-                {new Date(r.startedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })} · {r.trigger} · {formatDateShort(r.rangeStart)}–{formatDateShort(r.rangeEnd)}
+                {dateLabel(new Date(r.startedAt), "HH:mm")} · {r.trigger} · {formatDateShort(r.rangeStart)}–{formatDateShort(r.rangeEnd)}
               </span>
               <span className={r.status === "error" ? "text-destructive text-right" : "text-right"}>
                 {r.status === "running"

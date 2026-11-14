@@ -13,6 +13,7 @@ import type { Track } from "../analytics/pmc";
 import { SPORTS, type Sport } from "../analytics/sport";
 import { distributionLabel, type DistributionLabel } from "../analytics/zones";
 import { SPORT_LABEL, type VizTheme } from "./theme";
+import { dateLabel } from "@/lib/utils/date-label";
 
 export type LoadSeries = {
   dates: string[];
@@ -35,7 +36,7 @@ export function rangeStart(series: LoadSeries, range: RangeKey): number {
 export const r1 = (n: number) => Math.round(n * 10) / 10;
 
 export function shortDate(date: string) {
-  return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+  return dateLabel(date, "d MMM");
 }
 
 // ── Form bands ──────────────────────────────────────────────────────────────

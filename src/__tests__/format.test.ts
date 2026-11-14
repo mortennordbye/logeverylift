@@ -278,6 +278,12 @@ describe("formatDateShort", () => {
     expect(formatDateShort("2026-03-05")).toBe("5 Mar");
     expect(formatDateShort("2026-12-31")).toBe("31 Dec");
   });
+
+  it("writes September as Sep, as WebKit does, not Node's Sept", () => {
+    // A label that differs between the server and the browser is a hydration
+    // error (React #418) on every WebKit load that shows it.
+    expect(formatDateShort("2026-09-03")).toBe("3 Sep");
+  });
 });
 
 describe("formatVolume", () => {

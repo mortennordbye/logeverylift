@@ -8,6 +8,7 @@ import { Check, Dumbbell, Loader2, UserCheck, UserMinus, UserPlus } from "lucide
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 type FriendshipStatus = "none" | "pending_sent" | "pending_received" | "accepted";
 
@@ -45,7 +46,7 @@ function relativeDay(date: Date | null): string {
 
 function formatTime(date: Date | null): string {
   if (!date) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return dateLabel(date, "HH:mm");
 }
 
 function streakLabel(streak: number): string {
@@ -76,7 +77,7 @@ function SessionRow({ session, href }: { session: FriendSessionCard; href: strin
           <p className="text-xs text-muted-foreground mt-0.5">
             {session.exerciseCount} exercise{session.exerciseCount !== 1 ? "s" : ""} · {session.setCount} sets
             {session.durationMinutes > 0 && ` · ${session.durationMinutes}min`}
-            {session.totalVolumeKg > 0 && ` · ${Math.round(session.totalVolumeKg).toLocaleString()}kg`}
+            {session.totalVolumeKg > 0 && ` · ${Math.round(session.totalVolumeKg).toLocaleString("en-US")}kg`}
           </p>
         </div>
         <p className="text-xs text-muted-foreground shrink-0">{timeLabel}</p>

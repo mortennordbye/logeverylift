@@ -336,3 +336,12 @@ export async function openTimedExercise(page: Page): Promise<void> {
       "re-run `docker-compose exec app pnpm db:seed-fake --force`.",
   );
 }
+
+/**
+ * The header's Back control (BackLink) on the current page. Filtered to the
+ * visible one, last in the DOM: Next keeps recent pages mounted but hidden,
+ * and during a slide the outgoing page is still on screen before the new one.
+ */
+export function backLink(page: Page): Locator {
+  return page.getByTestId("back-link").filter({ visible: true }).last();
+}

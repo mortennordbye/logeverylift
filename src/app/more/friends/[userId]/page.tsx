@@ -4,9 +4,9 @@ import { friendships, nudges, users, workoutSessions } from "@/db/schema";
 import { getFriendProfile } from "@/lib/actions/friends";
 import { requireSession } from "@/lib/utils/session";
 import { and, eq, gt, or } from "drizzle-orm";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 export default async function PublicProfilePage({
   params,
@@ -72,10 +72,7 @@ export default async function PublicProfilePage({
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more/friends" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Friends</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/friends", label: "Friends" }} />
       </div>
 
       <PublicProfileClient

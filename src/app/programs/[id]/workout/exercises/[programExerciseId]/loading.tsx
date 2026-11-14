@@ -6,5 +6,5 @@ import { ExerciseSetsSkeleton } from "@/components/ui/PageSkeletons";
  * slide actually animates, so its geometry has to match the real screen.
  */
 export default function WorkoutExerciseLoading() {
-  return <ExerciseSetsSkeleton />;
+  return <ExerciseSetsSkeleton back={{ href: "", label: "Workout" }} />;
 }

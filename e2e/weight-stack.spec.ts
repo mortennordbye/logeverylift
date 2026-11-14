@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { exercises, programExercises, programSets, programs } from "../src/db/schema";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
-import { openFirstExercise, openWorkout, tapAndSave, trackActions, waitForLiveSession } from "./helpers";
+import { backLink, openFirstExercise, openWorkout, tapAndSave, trackActions, waitForLiveSession } from "./helpers";
 
 /**
  * A custom weight teaches the stack, from the session that logs it to the next
@@ -50,7 +50,8 @@ test("a custom cable weight changes the next suggestion and the picker, and can 
   // Reloaded, then Back as a lifter would: a goto here can be cut off by the
   // exercise page's own navigation settling.
   await page.reload();
-  await page.getByRole("link", { name: "Back" }).click();
+  await expect(backLink(page)).toHaveText("Workout");
+  await backLink(page).click();
   await page.waitForURL(`**${workout}`);
   // Started after the reload: a request it cut off would never settle.
   const settle = trackActions(page);

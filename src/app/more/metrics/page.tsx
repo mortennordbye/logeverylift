@@ -67,7 +67,8 @@ export default async function MetricsPage({ searchParams }: Props) {
     getWeeklyMuscleVolume(),
     getRecentPRs(150),
   ]);
-  const initialTab = (await searchParams).tab === "records" ? "records" : "alltime";
+  const tab = (await searchParams).tab;
+  const initialTab = tab === "records" || tab === "cycle" ? tab : "alltime";
 
   // Stills for every exercise the lists show. Built-ins only: a custom
   // exercise that shares a name is not the movement that was drawn.

@@ -6,9 +6,9 @@
 
 import { NewSetView } from "@/components/features/NewSetView";
 import { getProgramWithExercises } from "@/lib/actions/programs";
-import { ChevronLeftIcon } from "lucide-react";
-import Link from "next/link";
+
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 type Props = {
   params: Promise<{
@@ -38,13 +38,7 @@ export default async function WorkoutNewSetPage({ params }: Props) {
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-6 pb-4">
-        <Link
-          href={`/programs/${programId}/workout/exercises/${peId}?edit=true`}
-          className="flex items-center gap-1 text-primary"
-        >
-          <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Sets</span>
-        </Link>
+        <BackLink fallback={{ href: `/programs/${programId}/workout/exercises/${peId}?edit=true`, label: "Sets" }} />
         <div className="text-xl font-bold">Add Set</div>
         <div className="w-16" />
       </div>

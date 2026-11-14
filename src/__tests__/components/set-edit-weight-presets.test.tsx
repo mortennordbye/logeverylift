@@ -22,7 +22,7 @@ vi.mock("@/contexts/pending-queue-context", () => ({
   useWorkoutSetWriter: () => ({ logWithRetry: vi.fn(async () => ({ success: true })) }),
 }));
 vi.mock("@/contexts/toast-context", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/actions/programs", () => ({
   updateProgramSet: vi.fn(),
   setProgramExerciseType: vi.fn(),
@@ -64,25 +64,25 @@ beforeEach(() => {
 
 describe("SetEditView — weight presets follow the equipment", () => {
   it("offers 18 kg as a dumbbell preset", () => {
-    render(<SetEditView set={setWith("18")} isWorkout exerciseId={2} setNumber={1} equipment="dumbbell" />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={setWith("18")} isWorkout exerciseId={2} setNumber={1} equipment="dumbbell" />);
     openWeightSheet();
     expect(circle(18).custom).toBe(false);
   });
 
   it("offers 24 kg as a kettlebell preset", () => {
-    render(<SetEditView set={setWith("24")} isWorkout exerciseId={2} setNumber={1} equipment="kettlebell" />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={setWith("24")} isWorkout exerciseId={2} setNumber={1} equipment="kettlebell" />);
     openWeightSheet();
     expect(circle(24).custom).toBe(false);
   });
 
   it("does not call the app's own cable suggestion custom", () => {
-    render(<SetEditView set={setWith("41.25")} isWorkout exerciseId={2} setNumber={1} equipment="cable" />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={setWith("41.25")} isWorkout exerciseId={2} setNumber={1} equipment="cable" />);
     openWeightSheet();
     expect(circle(41.25).custom).toBe(false);
   });
 
   it("still marks a weight off the equipment's ladder as custom", () => {
-    render(<SetEditView set={setWith("17.5")} isWorkout exerciseId={2} setNumber={1} equipment="kettlebell" />);
+    render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={setWith("17.5")} isWorkout exerciseId={2} setNumber={1} equipment="kettlebell" />);
     openWeightSheet();
     expect(circle(17.5).custom).toBe(true);
   });

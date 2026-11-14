@@ -62,7 +62,6 @@ import type { ProgramSet } from "@/types/workout";
 import {
   AlignEndVerticalIcon,
   CheckCheckIcon,
-  ChevronLeftIcon,
   ChevronRightIcon,
   ChevronsUpIcon,
   CircleSlashIcon,
@@ -83,6 +82,7 @@ import { useEffect, useMemo, useState } from "react";
 // SetSuggestionDisplay is the canonical SetSuggestion type from types/workout.ts
 export type { SetSuggestion as SetSuggestionDisplay } from "@/types/workout";
 import type { SetSuggestion } from "@/types/workout";
+import { BackLink } from "@/components/ui/BackLink";
 
 const KG_INCREMENT_PRESETS = [0.5, 1, 2.5, 5, 10] as const;
 /** Sessions-at-target presets. Beyond 3 the gate is slower than most cycles. */
@@ -798,13 +798,9 @@ export function WorkoutSetsClient({
               Done
             </button>
           ) : (
-            <Link
-              href={isWorkout ? `/programs/${programId}/workout` : `/programs/${programId}`}
-              className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]"
-            >
-              <ChevronLeftIcon className="h-5 w-5" />
-              <span className="text-sm font-medium">Back</span>
-            </Link>
+            <BackLink
+              fallback={isWorkout ? { href: `/programs/${programId}/workout`, label: "Workout" } : { href: `/programs/${programId}`, label: "Program" }}
+            />
           )}
         </div>
         <div className="flex-1" />

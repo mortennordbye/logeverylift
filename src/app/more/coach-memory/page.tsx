@@ -3,8 +3,8 @@ import { db } from "@/db";
 import { oauthClients } from "@/db/schema";
 import { getCoachMemory } from "@/lib/actions/coach-memory";
 import { inArray } from "drizzle-orm";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
+import { BackLink } from "@/components/ui/BackLink";
 
 /** Coach memory (docs/plans/ai-coach.md, 2.7): what the user's assistant keeps between conversations. */
 export default async function CoachMemoryPage() {
@@ -26,10 +26,7 @@ export default async function CoachMemoryPage() {
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">More</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/assistants", label: "Connected assistants" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">Coach memory</h1>

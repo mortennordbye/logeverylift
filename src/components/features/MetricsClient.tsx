@@ -49,9 +49,10 @@ import {
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useUnits } from "@/contexts/user-settings-context";
 import { METERS_PER_MILE, type Units } from "@/lib/utils/units";
-import { Activity, ChevronLeft, ChevronRight, Plus, TrendingUp, Trash2, Zap } from "lucide-react";
-import Link from "next/link";
+import { Activity, ChevronRight, Plus, TrendingUp, Trash2, Zap } from "lucide-react";
+import { dayMonth } from "@/lib/home/labels";
 import { useState, useSyncExternalStore, useTransition } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 
@@ -72,9 +73,10 @@ const MUSCLE_LABELS: Record<string, string> = {
   cardio: "Cardio",
 };
 
+// Fixed month names, not toLocaleDateString: Node's ICU writes "Sept" for en-GB
+// and WebKit writes "Sep", a hydration error (#418) on every WebKit load.
 function formatWeekLabel(weekStart: string): string {
-  const d = new Date(weekStart + "T00:00:00");
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return dayMonth(weekStart);
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
@@ -91,7 +93,7 @@ function SummaryStatsRow({ stats }: { stats: SummaryStats }) {
   const cards = [
     {
       label: "Sessions",
-      value: stats.totalSessions.toLocaleString(),
+      value: stats.totalSessions.toLocaleString("en-US"),
     },
     {
       label: "Week streak",
@@ -1491,6 +1493,14 @@ export function MetricsClient({
   // Only exercises with a thumb are built-ins with a drawing; a custom one may share a name.
   const selectedArt = useArtSpec(selectedRecord && artThumbs[selectedRecord.exerciseId] ? selectedRecord.exerciseName : null);
 
+  // The tab goes in the URL, so a reload, a link back here and Back all keep it.
+  // history.replaceState, which Next syncs with its router, rather than
+  // router.replace: no server round trip for the whole page on each tap.
+  function selectTab(tab: Tab) {
+    setActiveTab(tab);
+    window.history.replaceState(null, "", tab === "alltime" ? window.location.pathname : `${window.location.pathname}?tab=${tab}`);
+  }
+
   function selectExercise(exerciseId: number) {
     if (exerciseId === selectedId) return;
     setSelectedId(exerciseId);
@@ -1518,13 +1528,7 @@ export function MetricsClient({
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link
-          href="/more"
-          className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">More</span>
-        </Link>
+        <BackLink fallback={{ href: "/more", label: "More" }} />
       </div>
       <div className="px-4 pt-2 pb-3 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight mb-3">Progress</h1>
@@ -1533,7 +1537,8 @@ export function MetricsClient({
           {(["alltime", "cycle", "records"] as Tab[]).map((tab) => (
             <button
               key={tab}
-              onClick={() => setActiveTab(tab)}
+              onClick={() => selectTab(tab)}
+              aria-pressed={activeTab === tab}
               className={`flex-1 py-2 text-sm font-medium rounded-lg transition-colors min-h-[36px] ${
                 activeTab === tab
                   ? "bg-background text-foreground shadow-sm"

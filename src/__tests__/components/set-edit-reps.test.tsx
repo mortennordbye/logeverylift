@@ -26,7 +26,7 @@ vi.mock("@/contexts/pending-queue-context", () => ({
   useWorkoutSetWriter: () => ({ logWithRetry: vi.fn(async () => ({ success: true })) }),
 }));
 vi.mock("@/contexts/toast-context", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
-vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ back: vi.fn(), replace: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("@/lib/actions/programs", () => ({
   updateProgramSet: (...a: unknown[]) => updateProgramSet(...a),
   setProgramExerciseType: vi.fn(),
@@ -50,7 +50,7 @@ const set = {
 } as unknown as ProgramSet;
 
 function mount() {
-  render(<SetEditView set={set} isWorkout exerciseId={2} setNumber={1} />);
+  render(<SetEditView back={{ href: "/programs/1/workout/exercises/1", label: "Sets" }} set={set} isWorkout exerciseId={2} setNumber={1} />);
 }
 
 async function pickReps(n: number) {

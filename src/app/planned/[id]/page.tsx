@@ -7,9 +7,10 @@ import { shortDay } from "@/lib/utils/seasons";
 import { THRESHOLD_LABEL } from "@/lib/utils/thresholds";
 import { requireSession } from "@/lib/utils/session";
 import type { ThresholdKind } from "@/db/schema/athlete-profile";
-import { ChevronLeft } from "lucide-react";
+
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 const BAND_TEXT: Record<string, string> = { green: "On plan", yellow: "Partly", orange: "Far off plan", red: "Missed", done: "Done", illness: "Sick" };
 
@@ -32,10 +33,7 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-y-auto">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/week" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Week</span>
-        </Link>
+        <BackLink fallback={{ href: "/week", label: "Week" }} />
       </div>
       <div className="px-4 pt-2 pb-3">
         <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">

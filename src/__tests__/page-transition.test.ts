@@ -77,9 +77,17 @@ describe("resolveDirection", () => {
     expect(resolveDirection(deep, shallow, "programmatic-back")).toBe("back");
   });
 
-  it("still refuses to animate a tab switch, whatever the source", () => {
+  it("still refuses to animate a tab switch", () => {
     expect(resolveDirection("/", "/cycles", "push")).toBe("none");
-    expect(resolveDirection("/", "/cycles", "programmatic-back")).toBe("none");
+  });
+
+  it("always slides a back we initiated backwards, whatever the depths", () => {
+    // A pop is never a tab switch: Back from History to the home, or between
+    // two pages at the same depth, is still a step back.
+    expect(resolveDirection("/history", "/", "programmatic-back")).toBe("back");
+    expect(resolveDirection("/history/12", "/more/friends", "programmatic-back")).toBe("back");
+    expect(resolveDirection("/more", "/more/metrics", "programmatic-back")).toBe("back");
+    expect(resolveDirection("/more", "/more", "programmatic-back")).toBe("none");
   });
 });
 

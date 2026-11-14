@@ -11,9 +11,9 @@ import {
 import type { AiModelConfig } from "@/db/schema/ai-model-configs";
 import { isFreeModel } from "@/lib/utils/llm-response";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { Bot, ChevronDown, ChevronLeft, ChevronUp, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { Bot, ChevronDown, ChevronUp, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 // How the model returned structure in the test, best first.
 const MODE_LABELS: Record<string, string> = {
@@ -91,10 +91,7 @@ export function AdminAiModelsClient({ initialModels }: { initialModels: AiModelC
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more/admin" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Admin</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/admin", label: "Admin" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">AI Models</h1>

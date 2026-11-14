@@ -1,9 +1,10 @@
 "use client";
 
 import type { AdminInsightsData } from "@/lib/actions/admin-insights";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
 import { useMemo, useState } from "react";
+import { BackLink } from "@/components/ui/BackLink";
+import { dateLabel } from "@/lib/utils/date-label";
 
 const SORT_OPTIONS = [
   { key: "lastActive", label: "Last active" },
@@ -43,13 +44,7 @@ export function AdminInsightsClient({ data }: { data: AdminInsightsData }) {
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link
-          href="/more/admin"
-          className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Admin</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/admin", label: "Admin" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">Insights</h1>
@@ -65,43 +60,43 @@ export function AdminInsightsClient({ data }: { data: AdminInsightsData }) {
             <div className="col-span-2 rounded-xl border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground mb-1">Total Users</p>
               <p className="text-2xl font-bold tabular-nums">
-                {summary.totalUsers.toLocaleString()}
+                {summary.totalUsers.toLocaleString("en-US")}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground mb-1">Active (7d)</p>
               <p className="text-2xl font-bold tabular-nums">
-                {summary.activeLastSevenDays.toLocaleString()}
+                {summary.activeLastSevenDays.toLocaleString("en-US")}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground mb-1">Active (30d)</p>
               <p className="text-2xl font-bold tabular-nums">
-                {summary.activeLastThirtyDays.toLocaleString()}
+                {summary.activeLastThirtyDays.toLocaleString("en-US")}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground mb-1">Sessions</p>
               <p className="text-2xl font-bold tabular-nums">
-                {summary.totalCompletedSessions.toLocaleString()}
+                {summary.totalCompletedSessions.toLocaleString("en-US")}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground mb-1">Programs</p>
               <p className="text-2xl font-bold tabular-nums">
-                {summary.totalPrograms.toLocaleString()}
+                {summary.totalPrograms.toLocaleString("en-US")}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground mb-1">Cycles</p>
               <p className="text-2xl font-bold tabular-nums">
-                {summary.totalCycles.toLocaleString()}
+                {summary.totalCycles.toLocaleString("en-US")}
               </p>
             </div>
             <div className="rounded-xl border border-border bg-card p-4">
               <p className="text-xs text-muted-foreground mb-1">Custom Exercises</p>
               <p className="text-2xl font-bold tabular-nums">
-                {summary.totalCustomExercises.toLocaleString()}
+                {summary.totalCustomExercises.toLocaleString("en-US")}
               </p>
             </div>
           </div>
@@ -203,15 +198,9 @@ export function AdminInsightsClient({ data }: { data: AdminInsightsData }) {
           <div className="rounded-xl border border-border divide-y divide-border overflow-hidden">
             {sortedUsers.map((user) => {
               const lastActive = user.lastActiveDate
-                ? new Date(user.lastActiveDate + "T00:00:00").toLocaleDateString(
-                    "en-US",
-                    { day: "numeric", month: "short" },
-                  )
+                ? dateLabel(user.lastActiveDate, "MMM d")
                 : "Never";
-              const joined = new Date(user.joinedAt).toLocaleDateString("en-US", {
-                month: "short",
-                year: "numeric",
-              });
+              const joined = dateLabel(new Date(user.joinedAt), "MMM yyyy");
 
               return (
                 <div key={user.id} className="px-4 py-3 flex flex-col gap-1">

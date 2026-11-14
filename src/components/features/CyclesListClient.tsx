@@ -9,13 +9,14 @@ import { Check, PlusIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 function formatEndDate(cycle: TrainingCycle): string {
   if (!cycle.startDate) return "";
   const { endDate } = cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, new Date(), cycle.durationDays);
-  return endDate.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return dateLabel(endDate, "MMM d");
 }
 
 function getWeekProgress(cycle: TrainingCycle): { currentWeek: number; progressPct: number } {
@@ -63,7 +64,7 @@ function DraftCycleRow({ cycle }: { cycle: TrainingCycle }) {
       </div>
       {cycle.scheduledStartDate ? (
         <span className="text-xs font-medium text-primary" data-testid="scheduled-start">
-          Starts {parseDateStr(cycle.scheduledStartDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+          Starts {dateLabel(cycle.scheduledStartDate, "MMM d")}
         </span>
       ) : (
         <span className="text-xs text-muted-foreground capitalize">

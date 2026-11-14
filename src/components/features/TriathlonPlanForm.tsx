@@ -2,10 +2,9 @@
 
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { ChevronLeftIcon, Loader2 } from "lucide-react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
+import { BackLink, useReturnTo } from "@/components/ui/BackLink";
 
 // Duration presets stored as whole weeks (the cycle/progression engine works in
 // weeks) but labelled in months — Ironman builds commonly run 6–12 months.
@@ -46,7 +45,7 @@ export function TriathlonPlanForm({
   restNote?: string | null;
   strengthGoal?: string | null;
 }) {
-  const router = useRouter();
+  const returnTo = useReturnTo();
   const [goal, setGoal] = useState<"build" | "maintain">("build");
   const [level, setLevel] = useState<Level>(initialLevel);
   const [weeks, setWeeks] = useState(12);
@@ -78,7 +77,7 @@ export function TriathlonPlanForm({
       ...(restDays.length > 0 ? { restDays } : {}),
     }));
     if (result.success) {
-      router.push(`/cycles/${result.data.cycleId}`);
+      returnTo(`/cycles/${result.data.cycleId}`);
     } else {
       setError(result.error);
       setSaving(false);
@@ -89,10 +88,7 @@ export function TriathlonPlanForm({
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center px-4 pt-6 pb-4 shrink-0">
-        <Link href="/cycles" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Cycles</span>
-        </Link>
+        <BackLink fallback={{ href: "/cycles", label: "Cycles" }} />
       </div>
 
       <div className="px-4 pb-4 shrink-0">
