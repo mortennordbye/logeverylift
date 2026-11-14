@@ -2143,22 +2143,27 @@ export async function listDeleted(userId: string, type: PlanObjectType) {
     .orderBy(desc(table.deletedAt));
   const out: { id: number; name: string; deletedAt: Date; revisionId: number | null }[] = [];
   for (const r of rows) {
-    const [rev] = await db
-      .select({ id: planRevisions.id })
-      .from(planRevisions)
-      .where(
-        and(
-          eq(planRevisions.userId, userId),
-          eq(planRevisions.objectType, type),
-          eq(planRevisions.objectId, r.id),
-          eq(planRevisions.action, "delete"),
-        ),
-      )
-      .orderBy(desc(planRevisions.id))
-      .limit(1);
-    out.push({ id: r.id, name: r.name, deletedAt: r.deletedAt!, revisionId: rev?.id ?? null });
+    out.push({ id: r.id, name: r.name, deletedAt: r.deletedAt!, revisionId: await deleteRevisionId(userId, type, r.id) });
   }
   return out;
+}
+
+/** The revision a Restore of this deleted object brings back: its newest delete. */
+export async function deleteRevisionId(userId: string, type: PlanObjectType, objectId: number): Promise<number | null> {
+  const [rev] = await db
+    .select({ id: planRevisions.id })
+    .from(planRevisions)
+    .where(
+      and(
+        eq(planRevisions.userId, userId),
+        eq(planRevisions.objectType, type),
+        eq(planRevisions.objectId, objectId),
+        eq(planRevisions.action, "delete"),
+      ),
+    )
+    .orderBy(desc(planRevisions.id))
+    .limit(1);
+  return rev?.id ?? null;
 }
 
 // ── Retention (section 9) ────────────────────────────────────────────────────

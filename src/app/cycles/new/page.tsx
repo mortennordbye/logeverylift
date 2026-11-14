@@ -61,7 +61,8 @@ export default async function NewCyclePage({
   if (!Number.isInteger(cycleId) || cycleId <= 0) notFound();
   const cycleResult = await getTrainingCycleWithSlots(cycleId);
   // Discard deletes the draft and renders this page again in its response.
-  if (!cycleResult.success && (await ownDeletedCycle(auth.user.id, cycleId))) return <PlanItemDeleted what="cycle" />;
+  const deleted = cycleResult.success ? null : await ownDeletedCycle(auth.user.id, cycleId);
+  if (deleted) return <PlanItemDeleted item={deleted} />;
   if (!cycleResult.success) notFound();
   const cycle = cycleResult.data;
   // The setup is for a draft; a started or scheduled cycle lives on its own page.

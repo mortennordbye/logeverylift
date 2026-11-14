@@ -22,7 +22,8 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
     userToday(auth.user.id),
   ]);
   // Delete season renders this page again in its response.
-  if (!detail && (await ownDeletedSeason(auth.user.id, seasonId))) return <PlanItemDeleted what="season" />;
+  const deleted = detail ? null : await ownDeletedSeason(auth.user.id, seasonId);
+  if (deleted) return <PlanItemDeleted item={deleted} />;
   if (!detail) notFound();
   const s = detail.season;
   // Resume takes the scheduled start: its confirm says what that ends and drops.

@@ -4,8 +4,13 @@ import EditSeasonPage from "@/app/seasons/[id]/edit/page";
 import SeasonPage from "@/app/seasons/[id]/page";
 import { createSeasonAction, deleteSeasonAction } from "@/lib/actions/seasons";
 import { createTrainingCycle, deleteTrainingCycle } from "@/lib/actions/training-cycles";
-import Link from "next/link";
-import { isValidElement, type ReactNode } from "react";
+import { PlanItemDeleted } from "@/components/features/PlanItemDeleted";
+import { db } from "@/db";
+import { planRevisions, trainingCycles } from "@/db/schema";
+import { restorePlanRevision } from "@/lib/actions/plan-revisions";
+import type { DeletedItem } from "@/lib/plan-deleted";
+import { and, desc, eq } from "drizzle-orm";
+import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createUser } from "./factories";
 import { asUser } from "./setup";
@@ -16,7 +21,8 @@ import { asUser } from "./setup";
  * response. A notFound() there put a NEXT_HTTP_ERROR_FALLBACK;404 error into
  * the client tree while the client went back, and React reported it as
  * uncaught (minified error 441) when the Back landed first. These pages now
- * say the item was deleted; any other missing id is still not found.
+ * say the item was deleted, by name, with the revision Restore brings back;
+ * any other missing id is still not found.
  */
 
 let me: string;
@@ -26,14 +32,21 @@ beforeEach(async () => {
   asUser(me);
 });
 
-function hrefsOf(tree: ReactNode): string[] {
-  if (Array.isArray(tree)) return tree.flatMap(hrefsOf);
-  if (!isValidElement(tree)) return [];
-  const props = tree.props as { href?: string; children?: ReactNode };
-  // Render our own components (PlanItemDeleted) to reach their links.
-  if (typeof tree.type === "function" && tree.type !== Link) return hrefsOf((tree.type as (p: unknown) => ReactNode)(props));
-  const own = tree.type === Link && props.href ? [props.href] : [];
-  return [...own, ...hrefsOf(props.children)];
+/** The deleted state a page rendered: the item it names and the revision its Restore brings back. */
+function deletedItem(tree: ReactNode) {
+  expect(isValidElement(tree) && tree.type === PlanItemDeleted).toBe(true);
+  return (tree as ReactElement<{ item: DeletedItem }>).props.item;
+}
+
+/** The newest delete revision of an object, which Recently deleted restores too. */
+async function deleteRevision(type: "cycle" | "season", id: number) {
+  const [row] = await db
+    .select({ id: planRevisions.id })
+    .from(planRevisions)
+    .where(and(eq(planRevisions.objectType, type), eq(planRevisions.objectId, id), eq(planRevisions.action, "delete")))
+    .orderBy(desc(planRevisions.id))
+    .limit(1);
+  return row.id;
 }
 
 const NOT_FOUND = { digest: expect.stringContaining("NEXT_HTTP_ERROR_FALLBACK;404") };
@@ -71,13 +84,22 @@ describe("a page whose cycle was just deleted", () => {
   it("new cycle step 2 says the draft was deleted after Discard", async () => {
     const id = await cycle();
     expect((await deleteTrainingCycle(id)).success).toBe(true);
-    expect(hrefsOf(await newCycle(id))).toEqual(["/cycles", "/cycles/deleted"]);
+    expect(deletedItem(await newCycle(id))).toEqual({ what: "cycle", name: "Base block", revisionId: await deleteRevision("cycle", id) });
   });
 
   it("cycle detail says the cycle was deleted after Delete", async () => {
     const id = await cycle();
     expect((await deleteTrainingCycle(id)).success).toBe(true);
-    expect(hrefsOf(await cycleDetail(id))).toEqual(["/cycles", "/cycles/deleted"]);
+    expect(deletedItem(await cycleDetail(id))).toEqual({ what: "cycle", name: "Base block", revisionId: await deleteRevision("cycle", id) });
+  });
+
+  it("restores the cycle with the revision the page offers", async () => {
+    const id = await cycle();
+    expect((await deleteTrainingCycle(id)).success).toBe(true);
+    const { revisionId } = deletedItem(await cycleDetail(id));
+    expect((await restorePlanRevision({ revisionId })).success).toBe(true);
+    const [row] = await db.select({ deletedAt: trainingCycles.deletedAt }).from(trainingCycles).where(eq(trainingCycles.id, id));
+    expect(row.deletedAt).toBeNull();
   });
 
   it("is still not found for another user's deleted cycle or a missing id", async () => {
@@ -93,8 +115,9 @@ describe("a page whose season was just deleted", () => {
   it("season detail and edit say the season was deleted", async () => {
     const id = await season();
     expect((await deleteSeasonAction({ seasonId: id })).success).toBe(true);
-    expect(hrefsOf(await seasonDetail(id))).toEqual(["/cycles", "/cycles/deleted"]);
-    expect(hrefsOf(await seasonEdit(id))).toEqual(["/cycles", "/cycles/deleted"]);
+    const item = { what: "season", name: "Spring", revisionId: await deleteRevision("season", id) };
+    expect(deletedItem(await seasonDetail(id))).toEqual(item);
+    expect(deletedItem(await seasonEdit(id))).toEqual(item);
   });
 
   it("is still not found for another user's deleted season or a missing id", async () => {
