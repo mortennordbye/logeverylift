@@ -353,6 +353,7 @@ src/
 - `src/lib/utils/set-mapping.ts` (`toFlatItems`, `computeMapping`) handles drag-reorder logic for sets
 - `src/lib/utils/format.ts` (`buildSetSummary`, `setToken`, `restToken`, `formatTime`) — shared formatters used across components
 - Drag & drop via `@dnd-kit`
+- Back controls use `BackLink` (`src/components/ui/BackLink.tsx`) with the page's parent as `fallback`, never a hand-drawn back link: Back pops to where the user came from when that is in the app (docs/plans/back-navigation.md)
 - `revalidatePath()` is called after mutations to refresh Server Component data
 
 ### UI rules
