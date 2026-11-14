@@ -17,6 +17,7 @@ vi.mock("@/lib/actions/training-cycles", () => ({
   reorderCycleSlots: vi.fn(),
   upsertCycleSlot: vi.fn(),
 }));
+vi.mock("@/lib/actions/programs", () => ({ createProgram: vi.fn() }));
 const returnTo = vi.fn();
 vi.mock("@/components/ui/BackLink", () => ({ useReturnTo: () => returnTo }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn() }) }));
@@ -59,7 +60,8 @@ describe("cycle actions show a refused write", () => {
       slots: [{ id: 9, orderIndex: 1, label: "Day 1", programId: null, program: null, autoComplete: false }],
     } as unknown as TrainingCycleWithSlots;
     render(<CycleScheduleBuilder cycle={withSlots} programs={[]} />);
-    fireEvent.click(screen.getByRole("button", { name: "Remove Day 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Options for Day 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove session" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Failed to remove the slot"));
   });
 });
