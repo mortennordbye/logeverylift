@@ -25,7 +25,8 @@ const actions = vi.hoisted(() => {
   };
 });
 vi.mock("@/lib/actions/seasons", () => actions);
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), back: vi.fn() }) }));
+const router = vi.hoisted(() => ({ refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn(), refresh: router.refresh, back: vi.fn() }) }));
 
 // The drop handler, captured from DndContext: jsdom has no layout, so a real drag cannot run here.
 const dnd = vi.hoisted(() => ({ onDragEnd: null as null | ((e: DragEndEvent) => void) }));
@@ -381,6 +382,17 @@ describe("Resume asks first (fix round 4)", () => {
     render(<SeasonDetailClient {...paused} />);
     fireEvent.click(screen.getByRole("button", { name: "Resume" }));
     await waitFor(() => expect(actions.resumeSeasonAction).toHaveBeenCalledWith({ seasonId: 7 }));
+  });
+});
+
+describe("a season deleted in another tab (round 8)", () => {
+  it("a failed write reloads the page, so a deleted season shows its deleted state", async () => {
+    router.refresh.mockClear();
+    actions.resumeSeasonAction.mockImplementation(async () => ({ success: false, error: "Season not found" }) as never);
+    render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() => expect(actions.resumeSeasonAction).toHaveBeenCalled());
+    await waitFor(() => expect(router.refresh).toHaveBeenCalled());
   });
 });
 

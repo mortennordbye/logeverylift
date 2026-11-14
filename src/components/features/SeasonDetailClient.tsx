@@ -195,6 +195,8 @@ export function SeasonDetailClient(p: Props) {
     setBusy(false);
     if (!result.success) {
       setError(result.error);
+      // The season may be gone (deleted in another tab): a reload shows its deleted page, or what changed.
+      router.refresh();
       return false;
     }
     after?.();
