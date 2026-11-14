@@ -210,6 +210,15 @@ describe("the Plan list", () => {
     const days = within(within(hero).getByRole("list", { name: "This week" })).getAllByRole("listitem");
     expect(days).toHaveLength(7);
     expect(days[6].textContent).toContain("Brick");
+    // Names wrap to two lines instead of an ellipsis on one (J7-06, J8-01, J4-20, J6-01).
+    for (const short of within(hero).getAllByTestId("hero-day-short")) {
+      expect(short.className).toContain("line-clamp-2");
+      expect(short.className).not.toContain("truncate");
+    }
+    for (const name of [...screen.getAllByTestId("phase-name"), screen.getByTestId("season-name"), screen.getByTestId("race-name")]) {
+      expect(name.className).toContain("line-clamp-2");
+      expect(name.className).not.toContain("truncate");
+    }
     expect(days[6].textContent).toContain("key session");
     expect(days[6].className).toContain("ring-brand");
     expect(days[4].textContent).toContain("Rest");

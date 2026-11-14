@@ -148,7 +148,7 @@ export function CycleWeek({
               <div key={day} className="flex items-center gap-3 px-3.5 py-2 min-h-12 border-b border-hairline" data-testid="week-row">
                 {dayCol(true, true)}
                 <span className="flex-1 min-w-0 flex flex-col">
-                  <span className={`text-[15px] font-medium truncate ${label ? "text-foreground/80" : "text-muted-foreground"}`}>{label ?? "Rest"}</span>
+                  <span className={`text-[15px] font-medium line-clamp-2 break-words ${label ? "text-foreground/80" : "text-muted-foreground"}`}>{label ?? "Rest"}</span>
                   {movedTo && <span className="text-[13px] text-muted-foreground truncate">Moved to {weekdayShort(movedTo.date)}</span>}
                 </span>
               </div>
@@ -162,7 +162,7 @@ export function CycleWeek({
                 {dayCol(i === 0)}
                 {s.brick && <Link2 role="img" aria-label="Brick, linked to the ride" className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1 min-w-0 flex flex-col">
-                  <span className={`text-[15px] font-medium truncate ${s.status === "skipped" ? "text-muted-foreground line-through" : ""}`}>{s.name}</span>
+                  <span data-testid="week-row-name" className={`text-[15px] font-medium line-clamp-2 break-words ${s.status === "skipped" ? "text-muted-foreground line-through" : ""}`}>{s.name}</span>
                   {/* Two lines, not one: a cut status line lost the sport at 320 px. */}
                   {sub && <span className="text-[13px] text-muted-foreground line-clamp-2 break-words" data-testid="week-row-sub">{sub}</span>}
                 </span>
@@ -228,7 +228,7 @@ export function TemplateWeek({
             <span className={`w-11 shrink-0 text-[13px] font-semibold ${s ? "" : "text-muted-foreground"}`}>{i === 0 ? NAMES[d.dow] : ""}</span>
             {s ? (
               <span className="flex-1 min-w-0 flex flex-col">
-                <span className="text-[15px] font-medium truncate">{s.name}</span>
+                <span className="text-[15px] font-medium line-clamp-2 break-words">{s.name}</span>
                 {s.sub && <span className="text-[13px] text-muted-foreground truncate">{s.sub}</span>}
               </span>
             ) : (
@@ -292,7 +292,7 @@ export function RotationOrder({
                 {r.n}
               </span>
               <span className="flex flex-col gap-0.5 min-w-0">
-                <span className={`text-[15px] font-medium truncate ${r.rest ? "text-foreground/80" : ""}`}>{r.name}</span>
+                <span className={`text-[15px] font-medium line-clamp-2 break-words ${r.rest ? "text-foreground/80" : ""}`}>{r.name}</span>
                 <span className={`text-[13px] ${next ? "text-brand" : "text-muted-foreground"}`}>{sub}</span>
               </span>
             </>

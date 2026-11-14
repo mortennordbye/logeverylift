@@ -64,24 +64,63 @@ async function plan(parallelIndex: number) {
   return { cycleId: first.id, seasonId: season.id, program };
 }
 
+const DATES = /(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[  ])?\d{1,2}[  ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b(?:[  ]\d{4})?/g;
+/** "week 3 of 6", "90 days", "15 wk": a count and its word (J3-09, J7-09, J8-06). */
+const COUNTS = /\b(?:[Ww]eek[  ]\d+[  ]of[  ]\d+|\d+[  ](?:days?|weeks?|wk))\b/g;
+
+/** Every match of `re` in `root` that is drawn over more than one line. */
+function splitText(root: Locator, re: RegExp): Promise<string[]> {
+  return root.evaluate(
+    (el, { source, flags }) => {
+      const pattern = new RegExp(source, flags);
+      const split: string[] = [];
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode as Text;
+        for (const m of node.data.matchAll(pattern)) {
+          const range = document.createRange();
+          range.setStart(node, m.index!);
+          range.setEnd(node, m.index! + m[0].length);
+          const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
+          if (lines.size > 1) split.push(m[0]);
+        }
+      }
+      return split;
+    },
+    { source: re.source, flags: re.flags },
+  );
+}
+
 /** Every date in `root` ("16 Nov", "Mon 14 Dec", "5 Sep 2027") that is drawn over more than one line. */
-function splitDates(root: Locator): Promise<string[]> {
+const splitDates = (root: Locator) => splitText(root, DATES);
+
+/**
+ * Places in `root` where a line could break inside a count or before a "·"
+ * separator: an ordinary space there instead of a no-break one. Which line
+ * breaks happen depends on the text and the font, so this checks that none
+ * can (J3-09, J4-17, J7-02, J7-09, J8-06).
+ */
+function breakableJoins(root: Locator): Promise<string[]> {
   return root.evaluate((el) => {
-    const re = /(?:(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[  ])?\d{1,2}[  ](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b(?:[  ]\d{4})?/g;
-    const split: string[] = [];
+    const re = /\b[Ww]eek \d+|\d+ of \d+|\d+ (?:days?|weeks?|wk)\b|\S ·/g;
+    const found: string[] = [];
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
     while (walker.nextNode()) {
       const node = walker.currentNode as Text;
-      for (const m of node.data.matchAll(re)) {
-        const range = document.createRange();
-        range.setStart(node, m.index!);
-        range.setEnd(node, m.index! + m[0].length);
-        const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top)));
-        if (lines.size > 1) split.push(m[0]);
-      }
+      const parent = node.parentElement!;
+      if (parent.closest("script, style, template") || getComputedStyle(parent).whiteSpace === "nowrap") continue;
+      for (const m of node.data.matchAll(re)) found.push(`${m[0]} in "${node.data.slice(0, 50)}"`);
     }
-    return split;
+    return found;
   });
+}
+
+/** Names in `root` matched by `selector` whose text is cut (ellipsis or clipped lines). */
+function cutNames(root: Locator, selector: string): Promise<string[]> {
+  return root.evaluate(
+    (el, sel) => [...el.querySelectorAll<HTMLElement>(sel)].filter((n) => n.scrollHeight > n.clientHeight + 1 || n.scrollWidth > n.clientWidth + 1).map((n) => n.textContent!),
+    selector,
+  );
 }
 
 /** Elements inside `sheet` (not the sheet) that clip their own content: a list that scrolls inside. */
@@ -147,4 +186,36 @@ test("at 320 px today's session sheet scrolls as a whole and every action is rea
   await reachable(page, sheet, sheet.getByRole("button", { name: "Skip this session" }));
   await reachable(page, sheet, sheet.getByRole("button", { name: "Label and note" }));
   await reachable(page, sheet, sheet.getByRole("button", { name: "Close" }));
+});
+
+test("at 320 px counts stay whole, no line can start with a dot, and long names wrap instead of being cut", async ({ page }, testInfo) => {
+  const { cycleId, seasonId } = await plan(testInfo.parallelIndex);
+  const db = testDb();
+  await db.update(seasons).set({ name: "Jevnaker Half Full Distance 2027" }).where(eq(seasons.id, seasonId));
+  await db.update(trainingCycles).set({ name: "Longer ride and run with bricks" }).where(and(eq(trainingCycles.seasonId, seasonId), eq(trainingCycles.phaseOrder, 2)));
+
+  await page.goto("/cycles");
+  const card = page.getByTestId("season-card");
+  await expect(card).toBeVisible();
+  // Names wrap to a second line where there is room (J4-20, J6-01).
+  await expect(card.getByTestId("season-name")).toHaveText("Jevnaker Half Full Distance 2027");
+  expect(await cutNames(card, "[data-testid=season-name], [data-testid=phase-name]")).toEqual([]);
+  expect(await splitText(page.locator("body"), COUNTS)).toEqual([]);
+  expect(await breakableJoins(page.locator("main, body").first())).toEqual([]);
+
+  await page.goto(`/seasons/${seasonId}`);
+  await expect(page.getByTestId("phase-row")).toHaveCount(3);
+  expect(await splitText(page.locator("body"), COUNTS)).toEqual([]);
+  expect(await breakableJoins(page.locator("main, body").first())).toEqual([]);
+
+  // The delete confirm keeps "90 days" together (J8-06) and its title on the Close row.
+  await page.goto(`/cycles/${cycleId}`);
+  await page.getByRole("button", { name: "More actions" }).click();
+  await page.getByTestId("cycle-menu").getByRole("button", { name: "Delete cycle" }).click();
+  const confirm = page.getByRole("region", { name: "Delete this cycle?" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm).toContainText("90");
+  expect(await splitText(confirm, COUNTS)).toEqual([]);
+  expect(await breakableJoins(confirm)).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("delete-confirm-320.png") });
 });

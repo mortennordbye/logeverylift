@@ -444,7 +444,7 @@ export function SeasonDetailClient(p: Props) {
                         {r.priority}
                       </span>
                       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                        <span className="truncate text-[15px] font-medium">{r.name}</span>
+                        <span data-testid="race-name" className="line-clamp-2 break-words text-[15px] font-medium">{r.name}</span>
                         <span className="text-[13px] text-muted-foreground">{keepDates(raceSub(r))}</span>
                       </span>
                       <Chevron />

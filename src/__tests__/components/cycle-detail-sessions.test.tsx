@@ -190,6 +190,14 @@ describe("weekday week", () => {
     expect(updatePlannedSession).toHaveBeenLastCalledWith({ op: "skip", id: 3 });
   });
 
+  it("wraps a long session name to two lines instead of cutting it (J5-01)", () => {
+    renderWeek();
+    for (const name of screen.getAllByTestId("week-row-name")) {
+      expect(name.className).toContain("line-clamp-2");
+      expect(name.className).not.toContain("truncate");
+    }
+  });
+
   it("saves a label and a note for one day", async () => {
     renderWeek();
     fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));

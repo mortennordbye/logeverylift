@@ -99,7 +99,7 @@ function HeroCard({ hero }: { hero: HeroView }) {
                 {d.day}
               </span>
               <span className={`h-2 w-2 rounded-full ${d.key ? "bg-brand" : d.rest ? "bg-foreground/15" : "bg-foreground"}`} aria-hidden />
-              <span aria-hidden className={`max-w-full truncate text-[11px] font-semibold tracking-[-0.2px] ${d.rest ? "text-muted-foreground" : ""}`}>
+              <span aria-hidden data-testid="hero-day-short" lang="en" className={`max-w-full line-clamp-2 text-center leading-[13px] hyphens-auto [overflow-wrap:anywhere] text-[11px] font-semibold tracking-[-0.2px] ${d.rest ? "text-muted-foreground" : ""}`}>
                 {d.short}
               </span>
               <span className="sr-only">{`${d.day}, ${d.names}${d.key ? ", key session" : ""}`}</span>
@@ -153,7 +153,7 @@ function CycleRows({ rows }: { rows: CycleRow[] }) {
           className="flex min-h-[44px] items-center justify-between gap-3 border-b border-hairline px-4 py-3.5 last:border-b-0 active:bg-widget-2"
         >
           <span className="flex min-w-0 flex-col gap-0.5">
-            <span className="truncate text-[15px] font-medium">{r.name}</span>
+            <span className="line-clamp-2 break-words text-[15px] font-medium">{r.name}</span>
             <span className="text-[13px] text-muted-foreground">{keepDates(r.sub)}</span>
           </span>
           {r.starts && (
@@ -185,7 +185,7 @@ function SelectRows({ rows, selected, toggle }: { rows: SelectRow[]; selected: S
               </span>
             </span>
             <span className="flex min-w-0 flex-col gap-0.5">
-              <span className="truncate text-[15px] font-medium">{r.name}</span>
+              <span className="line-clamp-2 break-words text-[15px] font-medium">{r.name}</span>
               <span className="text-[13px] text-muted-foreground">{keepDates(r.sub)}</span>
             </span>
           </label>
@@ -280,7 +280,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
             <div key={s.id} className="flex flex-col gap-4">
               <div className={`${card} flex flex-col gap-1 px-4 py-3.5`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="truncate text-base font-semibold">{s.name}</span>
+                  <span className="line-clamp-2 break-words text-base font-semibold">{s.name}</span>
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className="shrink-0 text-muted-foreground" role="img" aria-label="Season cannot be selected here">
                     <rect x="5" y="11" width="14" height="10" rx="2" />
                     <path d="M8 11V8a4 4 0 0 1 8 0v3" />
@@ -413,7 +413,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
                           href={`/seasons/${s.id}`}
                           className="flex min-h-[44px] flex-col gap-0.5 border-b border-hairline px-4 py-3.5 last:border-b-0 active:bg-widget-2"
                         >
-                          <span className="truncate text-[15px] font-medium">{s.name}</span>
+                          <span className="line-clamp-2 break-words text-[15px] font-medium">{s.name}</span>
                           <span className="text-[13px] text-muted-foreground">{keepDates(s.sub)}</span>
                         </Link>
                       ))}
