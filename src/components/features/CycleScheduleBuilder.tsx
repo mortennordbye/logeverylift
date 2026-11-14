@@ -340,12 +340,13 @@ function SlotSheet({
           </div>
         )}
         {extra}
-        <button type="button" onClick={onRemove} className="self-start min-h-11 text-[15px] font-medium text-[#ff6b5a] active:opacity-70">
-          Remove session
-        </button>
         <ErrorLine error={error} />
         <button type="button" onClick={done} className={`mt-2 ${PRIMARY}`}>
           Done
+        </button>
+        {/* The destructive action goes at the bottom. */}
+        <button type="button" onClick={onRemove} className="mt-1 min-h-11 text-[15px] font-medium text-[#ff6b5a] active:opacity-70">
+          Remove session
         </button>
       </div>
     </PlanSheetPanel>

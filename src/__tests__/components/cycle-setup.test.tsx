@@ -374,6 +374,14 @@ describe("rotation builder", () => {
     await waitFor(() => expect(removeCycleSlot).toHaveBeenCalledWith(21, 3));
   });
 
+  it("puts Remove session at the bottom of the options sheet, under Done (round 8)", () => {
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    fireEvent.click(screen.getByRole("button", { name: "Options for Upper A" }));
+    const done = screen.getByRole("button", { name: "Done" });
+    const remove = screen.getByRole("button", { name: "Remove session" });
+    expect(done.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("names the drag instructions the same on every render, so the server HTML hydrates", () => {
     // dnd-kit numbers its ids from a module counter when DndContext has no id:
     // the server and the browser count differently ("DndDescribedBy-0" vs "-4").
