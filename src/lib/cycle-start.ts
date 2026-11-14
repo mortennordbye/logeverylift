@@ -7,11 +7,11 @@
  */
 
 import { db } from "@/db";
-import { trainingCycles } from "@/db/schema";
+import { seasons, trainingCycles } from "@/db/schema";
 import { liveCycles } from "@/lib/plan-live";
 import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import type { RunningCycle, ScheduledDraft } from "@/lib/utils/cycle-start";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 export async function cycleStartContext(userId: string, today: string): Promise<{ running: RunningCycle | null; scheduled: ScheduledDraft | null }> {
   const rows = await db
@@ -23,8 +23,12 @@ export async function cycleStartContext(userId: string, today: string): Promise<
       scheduledStartDate: trainingCycles.scheduledStartDate,
       durationWeeks: trainingCycles.durationWeeks,
       durationDays: trainingCycles.durationDays,
+      seasonId: seasons.id,
+      seasonName: seasons.name,
     })
     .from(trainingCycles)
+    // A phase of a deleted season acts as a cycle with no season.
+    .leftJoin(seasons, and(eq(seasons.id, trainingCycles.seasonId), isNull(seasons.deletedAt)))
     .where(and(eq(trainingCycles.userId, userId), liveCycles));
   const active = rows.find((c) => c.status === "active" && c.startDate);
   const draft = rows
@@ -39,6 +43,13 @@ export async function cycleStartContext(userId: string, today: string): Promise<
           totalWeeks: active.durationWeeks,
         }
       : null,
-    scheduled: draft ? { id: draft.id, name: draft.name, day: draft.scheduledStartDate! } : null,
+    scheduled: draft
+      ? {
+          id: draft.id,
+          name: draft.name,
+          day: draft.scheduledStartDate!,
+          season: draft.seasonId != null ? { id: draft.seasonId, name: draft.seasonName! } : null,
+        }
+      : null,
   };
 }

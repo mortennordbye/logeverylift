@@ -196,8 +196,8 @@ describe("/cycles/new step 1 names the other scheduled draft", () => {
     const peak = await draft("Strength peak");
     await db.update(trainingCycles).set({ scheduledStartDate: day }).where(eq(trainingCycles.id, peak));
 
-    expect(await scheduledProp()).toEqual({ name: "Strength peak", day });
+    expect(await scheduledProp()).toEqual({ id: peak, name: "Strength peak", day, season: null });
     const mine = await draft("New block");
-    expect(await scheduledProp({ cycle: String(mine), step: "1" })).toEqual({ name: "Strength peak", day });
+    expect(await scheduledProp({ cycle: String(mine), step: "1" })).toEqual({ id: peak, name: "Strength peak", day, season: null });
   });
 });

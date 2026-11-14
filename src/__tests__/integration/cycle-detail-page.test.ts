@@ -154,7 +154,7 @@ describe("cycle detail page", () => {
     const draft = await weekdayCycle({ name: "Later" });
     const start = propsOf<Parameters<typeof StartCycleButton>[0]>(await page(draft), StartCycleButton)!;
     expect(start.running).toEqual({ id: runningId, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6 });
-    expect(start.otherScheduled).toEqual({ id: peak, name: "Peak", day: "2026-11-30" });
+    expect(start.otherScheduled).toEqual({ id: peak, name: "Peak", day: "2026-11-30", season: null });
     // The scheduled draft itself: its own start is no other draft's.
     expect(propsOf<Parameters<typeof StartCycleButton>[0]>(await page(peak), StartCycleButton)!.otherScheduled).toBeNull();
 

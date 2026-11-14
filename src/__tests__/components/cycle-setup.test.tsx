@@ -117,18 +117,26 @@ describe("step 1: the basics", () => {
     expect(createTrainingCycle).not.toHaveBeenCalled();
   });
 
-  it("says which scheduled draft a later start replaces", () => {
-    const scheduled = { name: "Strength peak", day: "2026-12-12" };
+  it("says which scheduled draft the start drops, in the words the cycle page uses", () => {
+    const scheduled = { id: 7, name: "Strength peak", day: "2026-12-14", season: null };
     render(<CreateCycleForm days={days} scheduled={scheduled} />);
-    const line = "Strength peak is set to start 12 Dec. This start replaces it.";
-    // Today starts the cycle at once: nothing is replaced.
-    expect(screen.queryByText(line)).toBeNull();
+    const line = "Strength peak no longer starts Mon 14 Dec.";
+    // A start today drops the other scheduled start too (activateInSession).
+    expect(screen.getByText(line)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Next Monday · 16 Nov" }));
     expect(screen.getByText(line)).toBeTruthy();
+    // No day picked yet: no start is chosen.
     fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
     expect(screen.queryByText(line)).toBeNull();
     fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-01" } });
     expect(screen.getByText(line)).toBeTruthy();
+  });
+
+  it("says a season pauses when the start drops its next phase", () => {
+    const scheduled = { id: 8, name: "Build", day: "2026-11-16", season: { id: 4, name: "Jevnaker Half 2027" } };
+    render(<CreateCycleForm days={days} scheduled={scheduled} />);
+    fireEvent.click(screen.getByRole("button", { name: "Next Monday · 16 Nov" }));
+    expect(screen.getByText("Jevnaker Half 2027 pauses. Its next phase no longer starts Mon 16 Nov. You can resume it from the season.")).toBeTruthy();
   });
 
   it("shows a refused write and stays on step 1", async () => {

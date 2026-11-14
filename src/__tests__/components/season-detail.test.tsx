@@ -230,6 +230,18 @@ describe("season detail text (fix round 2)", () => {
     expect(first.textContent).toContain("Next");
   });
 
+  it("a season whose first phase lost its later start shows paused with Resume", () => {
+    // Another block took the one scheduled start (scheduleCycle): the first phase was due 16 Nov.
+    render(<SeasonDetailClient {...base} next={{ ...base.next, scheduled: false }} />);
+    expect(screen.getByText("Paused. The next phase is not scheduled.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+  });
+
+  it("a season whose first phase is due today or earlier offers Start", () => {
+    render(<SeasonDetailClient {...base} today="2026-11-16" next={{ ...base.next, scheduled: false }} />);
+    expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+  });
+
   it("does not call a B race change an A race change", () => {
     render(<SeasonDetailClient {...base} replan={{ reason: 'B race "Tune-up" moved from 29 Aug 2027 to 12 Sep 2027' }} />);
     const banner = screen.getByTestId("replan-banner");

@@ -21,6 +21,7 @@ import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { addDays, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { choiceFor, startDayFor, type StartChoice, type StartDays } from "@/lib/utils/cycle-setup";
+import { dropsScheduledLine, type ScheduledDraft } from "@/lib/utils/cycle-start";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
@@ -138,8 +139,8 @@ export function CreateCycleForm({
   scheduled,
 }: {
   days: StartDays;
-  /** Another draft scheduled to start later: a later start for this one replaces it (scheduleCycle). */
-  scheduled?: { name: string; day: string } | null;
+  /** The draft scheduled to start later: this start drops it (scheduleCycle, activateInSession). */
+  scheduled?: ScheduledDraft | null;
   /** The draft made by an earlier Next, when the user came back from step 2. */
   draft?: TrainingCycle;
   /** The start day chosen before, with `draft`. */
@@ -166,6 +167,7 @@ export function CreateCycleForm({
   const [error, setError] = useState("");
 
   const startDay = startDayFor(choice, days, picked);
+  const dropsLine = startDay ? dropsScheduledLine(draft?.id ?? null, scheduled) : null;
   const tomorrow = toDateStr(addDays(parseDateStr(days.today), 1));
 
   async function handleSubmit(e: React.FormEvent) {
@@ -308,11 +310,7 @@ export function CreateCycleForm({
         {choice === "after" && days.afterCurrent && (
           <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(days.afterCurrent)}</p>
         )}
-        {scheduled && startDay && startDay > days.today && (
-          <p className="-mt-2 text-[13px] text-muted-foreground">
-            {scheduled.name} is set to start {shortDay(scheduled.day).slice(4)}. This start replaces it.
-          </p>
-        )}
+        {dropsLine && <p className="-mt-2 text-[13px] text-muted-foreground">{dropsLine}</p>}
 
         <ChipGroup label="When it ends">
           {END_ACTIONS.map((a) => (
