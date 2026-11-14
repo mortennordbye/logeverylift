@@ -113,9 +113,19 @@ export function SeasonForm(props: Props) {
         : "Phases from the start date to race day, made for you.";
   const triBlocked = !create?.interviewDone || !triReady || typeof triPhases === "string";
 
+  // The race day the server would refuse (placeRaceDate), named before the end it moves.
+  const raceDayProblem =
+    !create || !hasRace || raceDate === ""
+      ? null
+      : raceDate < create.today
+        ? "Pick a race day from today on."
+        : startDate !== "" && raceDate < startDate
+          ? "Pick a race day on or after the season start."
+          : null;
   const valid =
     name.trim() !== "" &&
     startDate !== "" &&
+    raceDayProblem == null &&
     (source === "triathlon" ? !triBlocked : end !== "" && end >= startDate) &&
     (!hasRace || raceComplete) &&
     (source !== "cycles" || picked.length > 0);
@@ -130,7 +140,9 @@ export function SeasonForm(props: Props) {
           ? "Give the race a name."
           : hasRace && raceDate === ""
             ? "Pick the race day."
-            : source === "triathlon"
+            : raceDayProblem
+              ? raceDayProblem
+              : source === "triathlon"
               ? !create?.interviewDone
                 ? "Answer the athlete questions first."
                 : typeof triPhases === "string"

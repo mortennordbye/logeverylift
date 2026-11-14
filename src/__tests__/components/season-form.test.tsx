@@ -94,6 +94,29 @@ describe("a dimmed Create season says what is missing", () => {
   });
 });
 
+describe("a race day that cannot be (round 8 B17)", () => {
+  const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+  const race = (date: string) => {
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Plain season" } });
+    fireEvent.change(screen.getByLabelText("Race name"), { target: { value: "Old race" } });
+    fireEvent.change(screen.getByLabelText("Race date"), { target: { value: date } });
+  };
+
+  it("says a race day in the past is the problem, not the end day", () => {
+    render(<SeasonForm {...create} />);
+    race("2026-11-01");
+    const button = screen.getByRole("button", { name: "Create season" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(reasonOf(button)).toBe("Pick a race day from today on.");
+  });
+
+  it("says a race day before the season start is the problem", () => {
+    render(<SeasonForm {...create} />);
+    race("2026-11-15");
+    expect(reasonOf(screen.getByRole("button", { name: "Create season" }))).toBe("Pick a race day on or after the season start.");
+  });
+});
+
 describe("New season with the endurance switch", () => {
   function fillRace(date = "2027-08-29") {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jevnaker Half 2027" } });
