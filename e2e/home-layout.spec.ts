@@ -283,3 +283,123 @@ test("widgets jiggle in edit mode, and not with reduced motion", async ({ page }
   await page.getByRole("button", { name: "Edit home" }).click();
   expect(await jiggle()).toBe("none");
 });
+
+/**
+ * Touch, the way a phone does it: CDP Input.dispatchTouchEvent sends real touch
+ * input, which Chromium turns into pointer events and, for a swipe, a scroll.
+ * Playwright's WebKit only offers touchscreen.tap (no hold, no move), so these
+ * run on Chromium only.
+ */
+async function touchscreen(page: Page) {
+  const cdp = await page.context().newCDPSession(page);
+  const send = (type: "touchStart" | "touchMove" | "touchEnd", x = 0, y = 0) =>
+    cdp.send("Input.dispatchTouchEvent", { type, touchPoints: type === "touchEnd" ? [] : [{ x: Math.round(x), y: Math.round(y) }] });
+  return {
+    start: (x: number, y: number) => send("touchStart", x, y),
+    /** Move in steps from (x0, y0) to (x1, y1), as a finger does. */
+    async move(x0: number, y0: number, x1: number, y1: number, steps = 10) {
+      for (let n = 1; n <= steps; n++) await send("touchMove", x0 + ((x1 - x0) * n) / steps, y0 + ((y1 - y0) * n) / steps);
+    },
+    end: () => send("touchEnd"),
+  };
+}
+
+/** Every widget a lifter can have, visible, so the home is taller than the screen. */
+async function tallHome(userId: string) {
+  const items = [
+    { id: "title", size: "m", hidden: false },
+    { id: "today", size: "l", hidden: false },
+    { id: "cycle", size: "m", hidden: false },
+    { id: "weeklyGoal", size: "m", hidden: false },
+    { id: "recentPrs", size: "l", hidden: false },
+    { id: "friendsActivity", size: "l", hidden: false },
+    { id: "week", size: "l", hidden: false },
+  ] as const;
+  await testDb()
+    .update(users)
+    .set({ homeLayout: { v: 1, updatedAt: new Date().toISOString(), items: [...items] } })
+    .where(eq(users.id, userId));
+}
+
+test("touch: a swipe on a widget scrolls and does not enter edit mode; a hold does", async ({ page, browserName }, testInfo) => {
+  test.skip(browserName !== "chromium", "Touch hold and move need CDP; Playwright's WebKit has only touchscreen.tap");
+  const { userId } = await lifter(testInfo.parallelIndex);
+  await tallHome(userId);
+  // The long-press timer runs on this clock, so "held long enough" and "not
+  // held long enough" are exact, not waits.
+  await page.clock.install();
+  await page.goto("/");
+  const content = page.getByTestId("home-content");
+  const scrollTop = () => content.evaluate((el) => el.scrollTop);
+  await expect.poll(() => content.evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  const finger = await touchscreen(page);
+
+  const today = (await page.getByTestId("today-card").boundingBox())!;
+  const x = today.x + today.width / 2;
+  const y = today.y + today.height / 2;
+  await finger.start(x, y);
+  await finger.move(x, y, x, y - 250);
+  await finger.end();
+  await expect.poll(scrollTop).toBeGreaterThan(0);
+  await page.clock.runFor(1000);
+  await expect(grid(page)).toHaveCount(0);
+
+  const widget = page.locator("[data-widget]").filter({ has: page.getByTestId("week-strip") });
+  await widget.scrollIntoViewIfNeeded();
+  const box = (await widget.boundingBox())!;
+  await finger.start(box.x + box.width / 2, box.y + 30);
+  await page.clock.runFor(600);
+  await expect(grid(page)).toBeVisible();
+  await finger.end();
+  await expect(sheet(page)).toHaveCount(0);
+  await expect(page).toHaveURL(/\/$/);
+});
+
+test("touch: hold a widget in the edit grid, then drag it; the order persists", async ({ page, browserName }, testInfo) => {
+  test.skip(browserName !== "chromium", "Touch hold and move need CDP; Playwright's WebKit has only touchscreen.tap");
+  const { userId } = await lifter(testInfo.parallelIndex);
+  await page.clock.install();
+  await page.goto("/");
+  await page.getByRole("button", { name: "Edit home" }).click();
+  await expect.poll(() => tiles(page)).toEqual(["title", "today", "week"]);
+  const finger = await touchscreen(page);
+
+  const from = (await tile(page, "week").boundingBox())!;
+  const to = (await tile(page, "today").boundingBox())!;
+  const x = from.x + from.width / 2;
+  await finger.start(x, from.y + 40);
+  // dnd-kit's TouchSensor picks the widget up after a 180 ms hold.
+  await page.clock.runFor(250);
+  await finger.move(x, from.y + 40, to.x + to.width / 2, to.y + 30, 15);
+  await expect.poll(() => tiles(page)).toEqual(["title", "week", "today"]);
+  await finger.end();
+  await page.clock.runFor(100);
+  await expect(sheet(page)).toHaveCount(0);
+  await done(page);
+  await expect.poll(async () => (await layoutOf(userId))?.items.slice(0, 3).map((i) => i.id)).toEqual(["title", "week", "today"]);
+});
+
+test("keyboard: Space picks a widget up, ArrowUp moves it, Space drops it, and it is announced", async ({ page, browserName }, testInfo) => {
+  test.skip(browserName !== "chromium", "Keyboard reorder runs on Chromium (desktop and Android keyboards); the iPhone has no Space key");
+  const { userId } = await lifter(testInfo.parallelIndex);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Edit home" }).click();
+  await expect.poll(() => tiles(page)).toEqual(["title", "today", "week"]);
+
+  await tile(page, "week").focus();
+  await page.keyboard.press("Space");
+  // dnd-kit's KeyboardSensor starts listening for the arrow keys in a
+  // setTimeout(0) after the pick-up. A timer queued now runs after it.
+  await page.evaluate(() => new Promise((r) => setTimeout(r)));
+  // dnd-kit's own live region; the pick-up is followed at once by where it is.
+  const live = page.locator('[id^="DndLiveRegion-"]');
+  await expect(live).toHaveText("Week is at position 2 of 2.");
+  await page.keyboard.press("ArrowUp");
+  await expect.poll(() => tiles(page)).toEqual(["title", "week", "today"]);
+  await expect(live).toHaveText("Week is at position 1 of 2.");
+  await page.keyboard.press("Space");
+  await expect(live).toHaveText("Week moved to position 1 of 2.");
+  await expect(tile(page, "week")).toBeFocused();
+  await done(page);
+  await expect.poll(async () => (await layoutOf(userId))?.items.slice(0, 3).map((i) => i.id)).toEqual(["title", "week", "today"]);
+});
