@@ -165,7 +165,7 @@ export async function generateTriathlonPlan(data: unknown): Promise<ActionResult
         await insertPlanWeek(w, cycle.id, plans[i], nameToId, PHASE_TYPE_LABELS[phase.phaseType]);
       }
       // A season that starts later gets its first phase scheduled for its start.
-      await chainSeason(w, season.id);
+      await chainSeason(w, season.id, { claim: true });
       return season.id;
     });
 

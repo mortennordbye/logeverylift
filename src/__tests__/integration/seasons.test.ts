@@ -278,6 +278,41 @@ describe("the chained start (owner decision 1)", () => {
     expect((await cycleRow(p.success ? p.data.cycleId : 0)).scheduledStartDate).toBe(day(14));
   });
 
+  it("a new season's first phase is scheduled for the season start even while another block runs", async () => {
+    // Another season is running: its phase 1 is active and its phase 2 is scheduled.
+    const old = await newSeason(me, day(0));
+    const o1 = await addPhaseAction({ seasonId: old, name: "Hypertrophy", durationWeeks: 6 });
+    const o2 = await addPhaseAction({ seasonId: old, name: "Strength", durationWeeks: 4 });
+    const running = o1.success ? o1.data.cycleId : 0;
+    const waiting = o2.success ? o2.data.cycleId : 0;
+    await startTrainingCycle(running);
+    expect((await cycleRow(waiting)).scheduledStartDate).toBe(day(42));
+
+    // A new season that starts in two days, made with its phases.
+    const id = await newSeason(me, day(2));
+    const p1 = await addPhaseAction({ seasonId: id, name: "Phase 1", durationWeeks: 2 });
+    const p2 = await addPhaseAction({ seasonId: id, name: "Phase 2", durationWeeks: 2 });
+    const one = p1.success ? p1.data.cycleId : 0;
+    const two = p2.success ? p2.data.cycleId : 0;
+    expect((await cycleRow(one)).scheduledStartDate).toBe(day(2));
+    expect((await getSeasonDetail(me, id))!.next).toMatchObject({ cycleId: one, scheduled: true });
+    // One cycle is scheduled at a time: the other season's chain pauses.
+    expect((await cycleRow(waiting)).scheduledStartDate).toBeNull();
+    expect((await getSeasonDetail(me, old))!.next).toMatchObject({ cycleId: waiting, scheduled: false });
+
+    // The new season keeps its chain: a reorder schedules the new first phase.
+    await movePhaseAction({ seasonId: id, cycleId: two, position: 1 });
+    expect((await cycleRow(two)).scheduledStartDate).toBe(day(2));
+    expect((await cycleRow(one)).scheduledStartDate).toBeNull();
+
+    // Made in one go from cycles the user has, the first is scheduled too.
+    const draft = await cycle(me, { name: "Draft block" });
+    asUser(me);
+    const made = await createSeasonAction({ name: "Later", startDate: day(5), endDate: day(90), cycleIds: [draft] });
+    expect(made.success).toBe(true);
+    expect((await cycleRow(draft)).scheduledStartDate).toBe(day(5));
+  });
+
   it("a cycle started outside the season pauses the chain; resume picks it up", async () => {
     const id = await newSeason(me, day(0));
     const p1 = await addPhaseAction({ seasonId: id, name: "Base", durationWeeks: 4 });

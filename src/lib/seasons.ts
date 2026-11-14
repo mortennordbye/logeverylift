@@ -615,7 +615,8 @@ export async function addPhase(ctx: PlanWriteContext, seasonId: number, input: A
     // The new phase has no position yet; renumber gives it one.
     current.set(cycleId, null);
     await renumber(w, order, current);
-    await chainSeason(w, seasonId);
+    // The season's first phase: the user means to run this season from its start.
+    await chainSeason(w, seasonId, { claim: ids.length === 0 });
     return { cycleId, raceMoved };
   });
   return {
