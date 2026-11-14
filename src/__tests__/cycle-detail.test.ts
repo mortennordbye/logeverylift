@@ -145,6 +145,36 @@ describe("rotationRows", () => {
     expect(rows[0].lastDone).toBe("2026-11-16");
   });
 
+  it("marks done only the positions before Next: one after it was done last round and comes again", () => {
+    const five = [
+      ...slots,
+      { id: 4, orderIndex: 4, programId: 40, label: null, programName: "Upper B" },
+      { id: 5, orderIndex: 5, programId: 50, label: null, programName: "Lower B" },
+    ];
+    const rows = rotationRows(
+      five,
+      [
+        { date: "2026-11-11", slotId: 4, rotationPosition: 3, programId: 40, programName: "Upper B", status: "done" },
+        { date: "2026-11-12", slotId: 5, rotationPosition: 4, programId: 50, programName: "Lower B", status: "done" },
+        { date: "2026-11-13", slotId: 1, rotationPosition: 5, programId: 10, programName: "Upper A", status: "done" },
+        { date: "2026-11-14", slotId: 2, rotationPosition: 6, programId: 20, programName: "Lower A", status: "planned" },
+        { date: "2026-11-15", slotId: 3, rotationPosition: 7, programId: null, programName: null, status: "planned" },
+        { date: "2026-11-16", slotId: 4, rotationPosition: 8, programId: 40, programName: "Upper B", status: "planned" },
+        { date: "2026-11-17", slotId: 5, rotationPosition: 9, programId: 50, programName: "Lower B", status: "planned" },
+      ],
+      "2026-11-14",
+    );
+    expect(rows.map((r) => [r.name, r.mark])).toEqual([
+      ["Upper A", "done"],
+      ["Lower A", "next"],
+      ["Rest", null],
+      ["Upper B", null],
+      ["Lower B", null],
+    ]);
+    // The day it was last done stays known, for the hero's last done chip.
+    expect(rows[3].lastDone).toBe("2026-11-11");
+  });
+
   it("shows a skipped coming session and a changed program", () => {
     const rows = rotationRows(
       slots,

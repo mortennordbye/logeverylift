@@ -241,7 +241,7 @@ export type RotationRow = {
 export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[], today: string): RotationRow[] {
   const ordered = [...slots].sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
   const next = walk.find((d) => d.date >= today && d.status === "planned") ?? null;
-  return ordered.map((slot, i) => {
+  const rows = ordered.map((slot, i) => {
     const upcoming = walk.find((d) => d.slotId === slot.id && d.date >= today && (d.status === "planned" || d.status === "skipped")) ?? null;
     const done = walk.filter((d) => d.slotId === slot.id && d.status === "done");
     const lastDone = done.length ? done[done.length - 1].date : null;
@@ -272,6 +272,10 @@ export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[],
       lastDone,
     };
   });
+  // A position after Next comes again this round: its done day was last
+  // round, so it is not marked done (the hero shows it as still to come).
+  const nextAt = rows.findIndex((r) => r.mark === "next");
+  return nextAt < 0 ? rows : rows.map((r, i) => (i > nextAt && r.mark === "done" ? { ...r, mark: null } : r));
 }
 
 /**
