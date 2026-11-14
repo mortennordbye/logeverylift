@@ -536,4 +536,15 @@ describe("a season has one A race (round 8)", () => {
       ["Oslo", "A"],
     ]);
   });
+
+  it("a cycle that brings its own race as a phase makes the old A race a B race", async () => {
+    const id = await newSeason(me);
+    await addRaceAction({ seasonId: id, ...race, name: "R good", raceDate: day(100) });
+    const c = await cycle(me, { raceDate: day(150), raceDistance: "full" });
+    expect((await addPhaseAction({ seasonId: id, cycleId: c })).success).toBe(true);
+    expect((await racesOf(id)).map((r) => [r.name, r.raceDate, r.priority])).toEqual([
+      ["R good", day(100), "B"],
+      ["Race", day(150), "A"],
+    ]);
+  });
 });

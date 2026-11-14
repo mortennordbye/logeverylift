@@ -650,15 +650,19 @@ export async function addPhase(ctx: PlanWriteContext, seasonId: number, input: A
           .from(seasonRaces)
           .where(and(eq(seasonRaces.seasonId, seasonId), eq(seasonRaces.raceDate, cycle.raceDate)));
         if (!same) {
-          await w.tx.insert(seasonRaces).values({
-            seasonId,
-            userId: ctx.userId,
-            name: "Race",
-            raceDate: cycle.raceDate,
-            discipline: "triathlon",
-            distance: cycle.raceDistance,
-            priority: "A",
-          });
+          const [moved] = await w.tx
+            .insert(seasonRaces)
+            .values({
+              seasonId,
+              userId: ctx.userId,
+              name: "Race",
+              raceDate: cycle.raceDate,
+              discipline: "triathlon",
+              distance: cycle.raceDistance,
+              priority: "A",
+            })
+            .returning({ id: seasonRaces.id });
+          await keepOneARace(w, seasonId, moved.id);
         }
         raceMoved = true;
       }
