@@ -136,8 +136,18 @@ export class PlanNotFoundError extends Error {
   }
 }
 
-/** A write the object's current state does not allow; the message says why. */
-export class PlanStateError extends Error {}
+/**
+ * A write the object's current state does not allow; the message says why.
+ * `field` names the input it is about, so a form can show it under that field.
+ */
+export class PlanStateError extends Error {
+  constructor(
+    message: string,
+    readonly field?: string,
+  ) {
+    super(message);
+  }
+}
 
 /** A plan change that would disturb a workout in progress. */
 export class OpenWorkoutError extends Error {

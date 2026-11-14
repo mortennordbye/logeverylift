@@ -153,6 +153,8 @@ export function SeasonDetailClient(p: Props) {
   const leaveDeleted = useLeaveDeleted();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The input a refused write named (fieldErrors), so its error shows under that field.
+  const [errorField, setErrorField] = useState<string | null>(null);
   const [race, setRace] = useState<RaceDraft | null>(null);
   const [phase, setPhase] = useState<PhaseDraft | null>(null);
   const [menu, setMenu] = useState(false);
@@ -165,6 +167,7 @@ export function SeasonDetailClient(p: Props) {
     <T,>(set: (v: T) => void) =>
     (v: T) => {
       setError(null);
+      setErrorField(null);
       set(v);
     };
   const toRace = sheet(setRace);
@@ -197,10 +200,12 @@ export function SeasonDetailClient(p: Props) {
   async function run<T>(promise: Promise<ActionResult<T>>, after?: () => void) {
     setBusy(true);
     setError(null);
+    setErrorField(null);
     const result = await callAction(promise);
     setBusy(false);
     if (!result.success) {
       setError(result.error);
+      setErrorField(result.fieldErrors?.raceDate ? "raceDate" : null);
       return false;
     }
     after?.();
@@ -289,6 +294,7 @@ export function SeasonDetailClient(p: Props) {
   // Why Save race or Save phase is off.
   const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
   const phaseReason = phase && !Number(phase.length) ? "Type a length." : null;
+  const dateError = error != null && errorField === "raceDate";
   const errorLine = error && (
     <p role="alert" className="text-sm text-[#ff6b5a]">
       {error}
@@ -543,8 +549,23 @@ export function SeasonDetailClient(p: Props) {
             </label>
             <label className="flex flex-col gap-1.5">
               <span className={LABEL}>Date</span>
-              <input type="date" value={race.raceDate} onChange={(e) => setRace({ ...race, raceDate: e.target.value })} className={INNER_FIELD} />
+              <input
+                type="date"
+                value={race.raceDate}
+                aria-invalid={dateError ? true : undefined}
+                aria-describedby={dateError ? "race-date-error" : undefined}
+                onChange={(e) => {
+                  if (dateError) toRace({ ...race, raceDate: e.target.value });
+                  else setRace({ ...race, raceDate: e.target.value });
+                }}
+                className={INNER_FIELD}
+              />
             </label>
+            {dateError && (
+              <p id="race-date-error" role="alert" className="-mt-1 text-sm text-[#ff6b5a]">
+                {error}
+              </p>
+            )}
             <div className="flex flex-wrap gap-1.5" role="group" aria-label="Kind">
               {DISCIPLINES.map((d) => (
                 <Chip key={d.value} pressed={race.discipline === d.value} onClick={() => setRace({ ...race, discipline: d.value })}>
@@ -590,7 +611,7 @@ export function SeasonDetailClient(p: Props) {
               </button>
               <ButtonReason id="race-reason" reason={raceReason} />
             </div>
-            {errorLine}
+            {!dateError && errorLine}
             {race.id && (
               <button
                 type="button"

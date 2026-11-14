@@ -170,14 +170,21 @@ describe("races and the re-plan flag (D17)", () => {
 
   it("refuses a race date in the past or outside the season, and saves nothing", async () => {
     const id = await newSeason(me, day(10), day(120));
-    expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(-1) })).toEqual({ success: false, error: "Pick a race date from today on." });
+    // The refusal names the field, so the race sheet shows it under Date (round 8).
+    expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(-1) })).toEqual({
+      success: false,
+      error: "Pick a race date from today on.",
+      fieldErrors: { raceDate: ["Pick a race date from today on."] },
+    });
     expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(5), priority: "B" })).toMatchObject({
       success: false,
       error: expect.stringContaining("on or after the season start"),
+      fieldErrors: { raceDate: [expect.stringContaining("on or after the season start")] },
     });
     expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(130), priority: "B" })).toMatchObject({
       success: false,
       error: expect.stringContaining("on or before the season end"),
+      fieldErrors: { raceDate: [expect.stringContaining("on or before the season end")] },
     });
     expect(await racesOf(id)).toEqual([]);
     expect((await seasonRow(id)).endDate).toBe(day(120));

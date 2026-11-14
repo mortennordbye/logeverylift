@@ -365,6 +365,29 @@ describe("errors belong to the sheet that caused them (fix round 4)", () => {
   });
 });
 
+describe("field errors show under their field (round 8)", () => {
+  it("a refused race date shows under Date, not under Save race", async () => {
+    const msg = "Pick a race date from today on.";
+    actions.addRaceAction.mockImplementation(async () => ({ success: false, error: msg, fieldErrors: { raceDate: [msg] } }) as never);
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    fireEvent.change(within(sheet).getByLabelText("Name"), { target: { value: "Old race" } });
+    const date = within(sheet).getByLabelText("Date");
+    fireEvent.change(date, { target: { value: "2026-01-01" } });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save race" }));
+    const alert = await waitFor(() => within(sheet).getByRole("alert"));
+    expect(alert.textContent).toBe(msg);
+    expect(date.getAttribute("aria-invalid")).toBe("true");
+    expect(date.getAttribute("aria-describedby")).toBe(alert.id);
+    const save = within(sheet).getByRole("button", { name: "Save race" });
+    expect(alert.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A new date clears it.
+    fireEvent.change(date, { target: { value: "2027-01-01" } });
+    expect(within(sheet).queryByRole("alert")).toBeNull();
+  });
+});
+
 describe("phase length in weeks or days (fix round 4)", () => {
   // Fit the taper set Build to 105 days: a whole number of weeks.
   const fitted = [phases[0], { ...phases[1], durationWeeks: 15, durationDays: 105, end: "2027-04-25", lengthDays: 105 }, phases[2]];
