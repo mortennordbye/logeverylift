@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 import { and, eq } from "drizzle-orm";
-import { exercisePrs, exercises, users } from "../src/db/schema";
+import { exercisePrs, exercises, users, workoutSessions } from "../src/db/schema";
 import type { StoredHomeItem } from "../src/lib/home/stored-layout";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
@@ -180,4 +180,21 @@ test("a saved form does not stay in history: New season > Create > Back lands on
   // The form is gone from history: forward is the season, not the form.
   await page.goForward();
   await expect(page).toHaveURL(/\/seasons\/\d+$/);
+});
+
+test("a deep link to a child, then Back twice, reaches the grandparent instead of looping", async ({ page }, testInfo) => {
+  const user = await testDb().query.users.findFirst({ where: eq(users.email, e2eUser(testInfo.parallelIndex).email) });
+  const [session] = await testDb()
+    .select({ id: workoutSessions.id })
+    .from(workoutSessions)
+    .where(and(eq(workoutSessions.userId, user!.id), eq(workoutSessions.isCompleted, true)))
+    .limit(1);
+  await page.goto(`/history/${session.id}`);
+  await expect(back(page)).toHaveText("History");
+  await back(page).click();
+  await page.waitForURL(atPath("/history"));
+  // The parent replaced the child, so its own Back goes up, not back down.
+  await expect(back(page)).toHaveText("More");
+  await back(page).click();
+  await page.waitForURL(atPath("/more"));
 });

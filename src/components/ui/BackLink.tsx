@@ -53,12 +53,19 @@ export function useBack(fallback: BackTarget): { label: string; onClick: (e: Mou
   };
 }
 
-/** The "< Name" header control. Renders a real link to the fallback. */
+/**
+ * The "< Name" header control. Renders a real link to the fallback.
+ *
+ * The link replaces, as `go()` does. A push would tag the parent's entry with
+ * this page, and the parent's own Back would pop straight back down here: a
+ * deep link to a child, then Back, Back, looped between the two forever.
+ */
 export function BackLink({ fallback }: { fallback: BackTarget }) {
   const back = useBack(fallback);
   return (
     <Link
       href={fallback.href}
+      replace
       onClick={back.onClick}
       data-testid="back-link"
       className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px] min-w-0"
