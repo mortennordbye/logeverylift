@@ -24,8 +24,10 @@ import { seasonOfCycle } from "@/lib/seasons";
 import { moveSuggestion } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { syncLimitWarnings } from "@/lib/training-limits";
-import { userToday } from "@/lib/user-settings";
-import { type DetailSession, blockWeeks, cycleSubLine, dayLabels, dayMonth, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
+import { getUserSettings, userToday } from "@/lib/user-settings";
+import { cycleCompletedAt } from "@/lib/plan-revisions";
+import { localDateStr } from "@/lib/utils/user-date";
+import { type DetailSession, blockWeeks, cycleSubLine, dayLabels, dayMonth, endedLine, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
@@ -147,7 +149,10 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
     next = { id: otherScheduled.id, name: otherScheduled.name, startsLabel: shortDay(otherScheduled.day), startsTomorrow: otherScheduled.day <= addDaysStr(today, 1) };
   }
   const plannedLast = cycle.startDate ? addDaysStr(cycle.startDate, lengthDays - 1) : null;
-  const endedLabel = plannedLast && plannedLast < today ? `ended ${dayMonth(plannedLast)}` : "ended early";
+  // A block another start ended early says the day it ended (J8-09).
+  const completedAt = cycle.status === "completed" ? await cycleCompletedAt(userId, cycle.id) : null;
+  const completedOn = completedAt ? localDateStr(completedAt, (await getUserSettings(userId)).timeZone) : null;
+  const endedLabel = endedLine(cycle.startDate, plannedLast, today, completedOn);
 
   const { headline: periodizationHeadline, note: periodizationNote } = periodization ? formatPeriodizationSummary(periodization) : { headline: "", note: "" };
   const subLine = cycleSubLine(cycle.scheduleType, runDays === lengthDays ? lengthLabel(cycle) : lengthLabel(lengthFromDays(runDays)), currentWeek, totalWeeks);

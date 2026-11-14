@@ -1,4 +1,4 @@
-import { blockWeeks, cycleSubLine, dayLabels, doneLabel, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
+import { blockWeeks, cycleSubLine, dayLabels, doneLabel, endedLine, rotationRows, rowAction, sessionSub, setsShort, weekIndexOf, weekRangeLabel } from "@/lib/utils/cycle-detail";
 import { describe, expect, it } from "vitest";
 
 describe("cycleSubLine", () => {
@@ -157,5 +157,26 @@ describe("rotationRows", () => {
       "2026-11-17",
     );
     expect(rows[1]).toMatchObject({ mark: "swapped", name: "Full body", programId: 30, lastDone: "2026-11-12" });
+  });
+});
+
+describe("endedLine (J8-09)", () => {
+  it("names the planned last day of a block that ran its length", () => {
+    expect(endedLine("2026-10-03", "2026-10-30", "2026-11-14", "2026-10-31")).toBe("ended 30 Oct");
+    expect(endedLine("2026-10-03", "2026-10-30", "2026-11-14", null)).toBe("ended 30 Oct");
+  });
+
+  it("names the day before the start that ended it early", () => {
+    expect(endedLine("2026-09-28", "2026-11-22", "2026-11-14", "2026-11-09")).toBe("ended early on 8 Nov");
+    // Still early after the planned end has passed.
+    expect(endedLine("2026-09-28", "2026-11-22", "2026-12-01", "2026-11-09")).toBe("ended early on 8 Nov");
+  });
+
+  it("never ends before its first day", () => {
+    expect(endedLine("2026-11-09", "2026-12-06", "2026-11-14", "2026-11-09")).toBe("ended early on 9 Nov");
+  });
+
+  it("says ended early with no date only when no completion is known", () => {
+    expect(endedLine("2026-11-02", "2026-12-06", "2026-11-14", null)).toBe("ended early");
   });
 });

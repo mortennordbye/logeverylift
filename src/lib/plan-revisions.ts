@@ -2272,3 +2272,22 @@ export async function purgePlanRevisions(now = new Date()) {
     await db.delete(seasons).where(inArray(seasons.id, ids));
   }
 }
+
+/**
+ * When a cycle last became completed: the time of its first revision with
+ * status completed after one without it. No column holds the end of a block,
+ * and a block ended early (another start took over) has no other trace.
+ */
+export async function cycleCompletedAt(userId: string, cycleId: number): Promise<Date | null> {
+  const rows = await db
+    .select({ status: sql<string | null>`${planRevisions.snapshot}->'cycle'->>'status'`, at: planRevisions.createdAt })
+    .from(planRevisions)
+    .where(and(eq(planRevisions.userId, userId), eq(planRevisions.objectType, "cycle"), eq(planRevisions.objectId, cycleId)))
+    .orderBy(desc(planRevisions.id));
+  let at: Date | null = null;
+  for (const r of rows) {
+    if (r.status !== "completed") break;
+    at = r.at;
+  }
+  return at;
+}

@@ -104,3 +104,15 @@ describe("a completed phase names the season's next phase (J8-09)", () => {
     expect(banner.next?.startsLabel).not.toBeNull();
   });
 });
+
+describe("a phase another start ended early says the day it ended (J8-09)", () => {
+  it("ended early on its last day, from the start that ended it", async () => {
+    const { one } = await runningSeason();
+    const other = await draft("Oslo base");
+    // Starting another block today completes Base, which began today.
+    expect((await startTrainingCycle(other)).success).toBe(true);
+
+    const banner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await CycleDetailPage({ params: Promise.resolve({ id: String(one) }) }), CycleCompletionBanner)!;
+    expect(banner.endedLabel).toBe(`ended early on ${dayMonth(day(0))}`);
+  });
+});
