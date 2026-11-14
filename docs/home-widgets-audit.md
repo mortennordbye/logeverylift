@@ -1046,4 +1046,4 @@ Where the build differs from it or from section 4, and why:
   66 px label column), "Debt" at S (44 px). A contributor scored 0 is a real score, not a
   missing value: the readiness model leaves out a signal it has no value for. Resting HR
   scores 0 at 1.5 standard deviations above its baseline, with the deviation at least 1.5
-  bpm, so 4 bpm over can already be 0.
+  bpm, so about 2 bpm over is already 0.

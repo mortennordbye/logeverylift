@@ -131,7 +131,7 @@ describe("phase 2 loaders read only the caller's data", () => {
       { id: "w3", userId: other.id, weightKg: 120, recordedAt: new Date(`${day(-1)}T08:00:00Z`) },
     ]);
     const w = await loadBodyWeight(ctx());
-    expect(w).toEqual({ latestKg: 82.4, changeKg: -0.7, lowKg: 82.4, highKg: 83.1, series: [83.1, 82.4] });
+    expect(w).toEqual({ latestKg: 82.4, changeKg: -0.7, lowKg: 82.4, highKg: 83.1, series: [83.1, 82.4], sinceDate: day(-10), oldDate: null });
   });
 
   it("Race countdown: the caller's next A race, not another user's, not a past one", async () => {
