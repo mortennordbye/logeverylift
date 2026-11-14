@@ -159,7 +159,10 @@ describe("the Plan list", () => {
     expect(screen.getByRole("link", { name: /Rotation/ }).getAttribute("href")).toBe("/cycles/new?type=rotation");
     // One way in per action: the card replaces the + menu while the list is empty.
     expect(screen.queryByRole("button", { name: "New cycle or season" })).toBeNull();
-    expect(screen.getByRole("link", { name: "Training for a race or a goal? Add a season" }).getAttribute("href")).toBe("/seasons/new");
+    // The season is the third choice in the same list, not a separate line.
+    const choices = within(screen.getByRole("navigation", { name: "How do you want to plan?" })).getAllByRole("link");
+    expect(choices.map((a) => a.getAttribute("href"))).toEqual(["/cycles/new?type=day_of_week", "/cycles/new?type=rotation", "/seasons/new"]);
+    expect(screen.queryByRole("link", { name: "Training for a race or a goal? Add a season" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
     expect(screen.queryByText(/Recently deleted/)).toBeNull();
   });
