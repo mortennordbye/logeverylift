@@ -1,6 +1,7 @@
 import type { Locator, Page } from "@playwright/test";
 import { and, asc, eq } from "drizzle-orm";
 import { athleteProfiles, planRevisions, seasonRaces, seasons, trainingCycles, users } from "../src/db/schema";
+import { dayLabel } from "../src/lib/utils/seasons";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
@@ -35,6 +36,13 @@ async function drag(page: Page, handle: Locator, target: Locator) {
 }
 
 const phaseNames = (page: Page) => page.getByTestId("phase-name").allInnerTexts();
+
+/** The Weeks and Days switch next to the length field has room for both words. */
+async function expectUnitSwitchVisible(page: Page) {
+  const unit = page.getByRole("group", { name: "Length unit" });
+  await expect(unit.getByRole("button", { name: "Days" })).toBeVisible();
+  expect((await unit.boundingBox())!.width).toBeGreaterThan(100);
+}
 
 test("make a season with a race and phases, fit the taper, drag a phase, and answer a re-plan", async ({ page }, testInfo) => {
   const settle = trackActions(page);
@@ -77,21 +85,37 @@ test("make a season with a race and phases, fit the taper, drag a phase, and ans
 
   await page.getByRole("link", { name: "+ Add phase" }).click();
   await expect(page.getByText("Step 1 of 2")).toBeVisible();
+  await expectUnitSwitchVisible(page);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await expectUnitSwitchVisible(page);
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.getByLabel("Name", { exact: true }).fill("Taper");
   // Picking Taper sets the A race's taper length.
   await page.getByRole("button", { name: "Taper", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Length", exact: true })).toHaveValue("10");
   await page.getByRole("button", { name: "Build the week" }).click();
   await settle();
-  await expect(page).toHaveURL(/\/cycles\/\d+\/template$/);
-
-  await page.goto(seasonUrl);
+  // Step 2 is the season's own page: the week, then Add phase back to the season.
+  await expect(page).toHaveURL(/\/seasons\/\d+\/phases\/\d+\/week$/);
+  await expect(page.getByText("Step 2 of 2")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Build the week" })).toBeVisible();
+  await page.getByRole("button", { name: "Add phase" }).click();
+  await expect(page).toHaveURL(seasonUrl);
   await expect(page.getByTestId("season-phases")).toContainText("10 days");
   await expect(page.getByTestId("replan-banner")).toContainText("The taper does not end on race day.");
   await expect(page.getByTestId("season-phases")).toContainText("Taper ends 3 days before the race");
   await page.getByRole("button", { name: "Fit the taper" }).click();
   await settle();
   await expect(page.getByTestId("replan-banner")).toHaveCount(0);
+
+  // The phase sheet draws on a card, with room for Weeks and Days.
+  await page.getByRole("button", { name: /^Taper/ }).click();
+  const sheet = page.getByRole("region", { name: "Taper" });
+  await expect(sheet).toBeVisible();
+  expect(await sheet.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe("rgba(0, 0, 0, 0)");
+  await expectUnitSwitchVisible(page);
+  await page.keyboard.press("Escape");
+  await page.goto(seasonUrl);
 
   // Drag the taper above the build block, then back.
   expect(await phaseNames(page)).toEqual(["Build block", "Taper"]);
@@ -128,7 +152,9 @@ test("make a season with a race and phases, fit the taper, drag a phase, and ans
   await settle();
   const banner = page.getByTestId("replan-banner");
   await expect(banner).toContainText("Race date changed. The taper no longer ends on race day.");
-  await expect(banner).toContainText(`moved from ${isoDay(68)} to ${isoDay(75)}`);
+  await expect(banner).toContainText(`moved from ${dayLabel(isoDay(68))} to ${dayLabel(isoDay(75))}`);
+  // The season ended on its A race, so the end moved with it.
+  await expect(page.getByText(`${dayLabel(isoDay(0))} to ${dayLabel(isoDay(75))}`)).toBeVisible();
   await expect(page.getByTestId("season-phases")).toContainText("Taper ends 7 days before the race");
 
   // Keep as it is: the flag goes, the phases do not change.
@@ -208,4 +234,15 @@ test("make a triathlon plan: five phases from the start to race day", async ({ p
   const [cardBox, rowBox] = [await card.boundingBox(), await raceRow.boundingBox()];
   expect(rowBox!.y + rowBox!.height).toBeLessThanOrEqual(cardBox!.y + cardBox!.height + 1);
   expect(rowBox!.height).toBeGreaterThanOrEqual(44);
+
+  // At 320 by 568, under a running cycle, the card keeps its height too.
+  await testDb().update(trainingCycles).set({ status: "active", startDate: isoDay(0) }).where(and(eq(trainingCycles.seasonId, season.id), eq(trainingCycles.phaseOrder, 1)));
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.reload();
+  await expect(page.getByTestId("season-card")).toBeVisible();
+  const small = await page.getByTestId("season-card").evaluate((el) => ({ client: el.clientHeight, scroll: el.scrollHeight }));
+  expect(small.client).toBeGreaterThan(200);
+  expect(small.scroll).toBeLessThanOrEqual(small.client);
+  await page.getByTestId("season-card").getByRole("link", { name: /Jevnaker Halv Full Distanse/ }).scrollIntoViewIfNeeded();
+  await expect(page.getByTestId("season-card").getByRole("link", { name: /Jevnaker Halv Full Distanse/ })).toBeInViewport();
 });
