@@ -77,6 +77,23 @@ describe("New season for a gym user", () => {
   });
 });
 
+describe("a dimmed Create season says what is missing", () => {
+  const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+
+  it("asks for a name, then an end, then a cycle", () => {
+    render(<SeasonForm {...create} enduranceEnabled={false} />);
+    const button = screen.getByRole("button", { name: "Create season" });
+    expect(reasonOf(button)).toBe("Give the season a name.");
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Spring" } });
+    expect(reasonOf(button)).toBe("Pick an end day.");
+    fireEvent.click(screen.getByRole("button", { name: "Change end" }));
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2027-03-01" } });
+    expect(button.getAttribute("aria-describedby")).toBeNull();
+    fireEvent.click(screen.getByLabelText(/Use cycles I already have/));
+    expect(reasonOf(button)).toBe("Pick at least one cycle.");
+  });
+});
+
 describe("New season with the endurance switch", () => {
   function fillRace(date = "2027-08-29") {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jevnaker Half 2027" } });

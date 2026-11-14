@@ -53,16 +53,21 @@ export function isMoved(s: Pick<DetailSession, "date" | "templateDate">): boolea
 }
 
 /**
- * The words under a session's name: its state when it is not just planned,
- * "Moved from Tue" or "Changed" when the user changed this one day, then what
- * it holds. A skip also touches the row; Skipped says enough.
+ * A session's state when it is not just planned, then "Moved from Tue" or
+ * "Changed" when the user changed this one day: "Missed · Moved from Tue".
+ * A skip also touches the row; Skipped says enough. Null for a plain planned
+ * session. The row and the session sheet's header line both show it.
  */
-export function sessionSub(s: Pick<DetailSession, "status" | "summary" | "exercises" | "answer" | "date" | "touched" | "templateDate">): string {
-  const what = s.summary ?? s.exercises ?? "";
+export function sessionState(s: Pick<DetailSession, "status" | "answer" | "date" | "touched" | "templateDate">): string | null {
   const state = s.answer ? "Did you do it?" : s.status === "done" ? "Done" : s.status === "skipped" ? "Skipped" : s.status === "missed" ? "Missed" : null;
   const change =
     s.status === "skipped" ? null : isMoved(s) ? `Moved from ${weekdayShort(s.templateDate!)}` : s.touched && s.templateDate != null ? "Changed" : null;
-  return [state, change, what].filter(Boolean).join(" · ");
+  return [state, change].filter(Boolean).join(" · ") || null;
+}
+
+/** The words under a session's name: its state (sessionState), then what it holds. */
+export function sessionSub(s: Pick<DetailSession, "status" | "summary" | "exercises" | "answer" | "date" | "touched" | "templateDate">): string {
+  return [sessionState(s), s.summary ?? s.exercises ?? ""].filter(Boolean).join(" · ");
 }
 
 type DaySlotLike = { dayOfWeek?: number | null; programId?: number | null; workoutId?: number | null; label?: string | null };
@@ -179,6 +184,8 @@ export type RotationRow = {
   programId: number | null;
   rest: boolean;
   mark: "next" | "skipped" | "swapped" | "done" | null;
+  /** The coming turn runs another program than the slot's, also when it is the next one. */
+  swapped: boolean;
   /** The slot's next walk day from today on: what skip and change act on. */
   upcoming: RotationWalkDay | null;
   lastDone: string | null;
@@ -216,6 +223,7 @@ export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[],
       programId: rest ? null : (upcoming?.programId ?? slot.programId),
       rest,
       mark,
+      swapped,
       upcoming: rest ? null : upcoming,
       lastDone,
     };

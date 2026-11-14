@@ -188,6 +188,30 @@ describe("sheet errors", () => {
   });
 });
 
+describe("a dimmed Save in a season sheet says what is missing", () => {
+  const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+
+  it("the race sheet asks for a name, then a date", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    const save = within(sheet).getByRole("button", { name: "Save race" });
+    expect(reasonOf(save)).toBe("Give the race a name.");
+    fireEvent.change(within(sheet).getByLabelText("Name"), { target: { value: "Haugesund" } });
+    expect(reasonOf(save)).toBe("Pick the race day.");
+    fireEvent.change(within(sheet).getByLabelText("Date"), { target: { value: "2027-08-22" } });
+    expect(save.getAttribute("aria-describedby")).toBeNull();
+  });
+
+  it("the phase sheet asks for a length", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(within(screen.getAllByTestId("phase-row")[1]).getAllByRole("button")[1]);
+    const sheet = screen.getByRole("region", { name: "Longer ride and run" });
+    fireEvent.change(within(sheet).getByLabelText("Length"), { target: { value: "" } });
+    expect(reasonOf(within(sheet).getByRole("button", { name: "Save phase" }))).toBe("Type a length.");
+  });
+});
+
 describe("sheets (fix round 2)", () => {
   it("draws each sheet on the Plan sheet card, not straight over the page", () => {
     render(<SeasonDetailClient {...base} />);

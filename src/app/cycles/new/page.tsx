@@ -46,13 +46,14 @@ export default async function NewCyclePage({
     latest: toDateStr(addDays(todayDate, MAX_SCHEDULE_DAYS)),
   };
   const start = params.start && DAY.test(params.start) ? params.start : today;
-  // Only one cycle is scheduled at a time (scheduleCycle): step 1 says what the start drops.
-  const scheduled = async () => (await cycleStartContext(auth.user.id, today)).scheduled;
+  // Only one cycle runs and one is scheduled at a time (activateInSession,
+  // scheduleCycle): step 1 says what the start ends and drops.
+  const startContext = () => cycleStartContext(auth.user.id, today);
 
   if (!params.cycle) {
     return (
       <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
-        <CreateCycleForm days={days} scheduled={await scheduled()} />
+        <CreateCycleForm days={days} {...await startContext()} />
       </div>
     );
   }
@@ -70,7 +71,7 @@ export default async function NewCyclePage({
   if (params.step === "1") {
     return (
       <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
-        <CreateCycleForm days={days} draft={cycle} start={start} scheduled={await scheduled()} />
+        <CreateCycleForm days={days} draft={cycle} start={start} {...await startContext()} />
       </div>
     );
   }

@@ -41,6 +41,8 @@ export async function cycleStartContext(userId: string, today: string): Promise<
           name: active.name,
           week: cycleWeek(parseDateStr(active.startDate!), active.durationWeeks, parseDateStr(today), active.durationDays).currentWeek,
           totalWeeks: active.durationWeeks,
+          startDate: active.startDate!,
+          durationDays: active.durationDays,
         }
       : null,
     scheduled: draft

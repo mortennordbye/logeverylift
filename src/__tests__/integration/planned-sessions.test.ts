@@ -3,12 +3,13 @@ import {
   dismissedMakeups,
   planRevisions,
   plannedSessions,
+  programs,
   trainingCycleSlots,
   trainingCycles,
   workoutSessions,
 } from "@/db/schema";
 import { getPlannedSessions, updatePlannedSession } from "@/lib/actions/planned-sessions";
-import { restorePlanRevision } from "@/lib/actions/plan-revisions";
+import { getPlanHistory, restorePlanRevision } from "@/lib/actions/plan-revisions";
 import {
   getActiveCycleForUser,
   removeCycleSlot,
@@ -262,6 +263,31 @@ describe("changing one session", () => {
     expect((await restorePlanRevision({ revisionId: revs[2].id })).success).toBe(true);
     const [restored] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, r.id));
     expect(restored).toMatchObject({ date: "2026-11-11", status: "skipped", skipReason: "Travel" });
+  });
+
+  it("the cycle's history names the session and the day on every session change (J8-04)", async () => {
+    const id = await cycle();
+    await active();
+    const [{ name }] = await db.select({ name: programs.name }).from(programs).where(eq(programs.id, lift));
+    const mon = (await rows(id)).find((x) => x.date === "2026-11-09")!;
+    const nextMon = (await rows(id)).find((x) => x.date === "2026-11-16")!;
+    expect((await updatePlannedSession({ op: "skip", id: mon.id, reason: "Work trip" })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "unskip", id: mon.id })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "skip", id: nextMon.id })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "move", id: mon.id, date: "2026-11-11" })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "change", id: mon.id, label: "Heavy" })).success).toBe(true);
+    const history = await getPlanHistory({ type: "cycle", id });
+    if (!history.success) throw new Error(history.error);
+    const lines = history.data.revisions.flatMap((r) => r.changes).reverse();
+    expect(lines).toEqual([
+      // The cycle's own first entry.
+      "How it looked before history started",
+      `Skipped ${name} on Mon 9 Nov (Work trip)`,
+      `${name} on Mon 9 Nov, planned again`,
+      `Skipped ${name} on Mon 16 Nov`,
+      `${name} on Wed 11 Nov, moved from Mon 9 Nov to Wed 11 Nov`,
+      `Heavy on Wed 11 Nov, label set to Heavy`,
+    ]);
   });
 
   it("a program swap drops the label the template gave, and keeps one the user set", async () => {

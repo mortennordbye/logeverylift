@@ -11,6 +11,7 @@ import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { useBack, useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import {
+  ButtonReason,
   Chip,
   DESTRUCTIVE_TEXT,
   FIELD,
@@ -121,6 +122,28 @@ export function SeasonForm(props: Props) {
     (source === "triathlon" ? !triBlocked : end !== "" && end >= startDate) &&
     (!hasRace || raceComplete) &&
     (source !== "cycles" || picked.length > 0);
+  // Why the button is off, in the order of the form.
+  const reason = valid
+    ? null
+    : name.trim() === ""
+      ? "Give the season a name."
+      : startDate === ""
+        ? "Pick a start day."
+        : hasRace && raceName.trim() === ""
+          ? "Give the race a name."
+          : hasRace && raceDate === ""
+            ? "Pick the race day."
+            : source === "triathlon"
+              ? !create?.interviewDone
+                ? "Answer the athlete questions first."
+                : typeof triPhases === "string"
+                  ? triPhases
+                  : "Add a triathlon A race first."
+              : end === ""
+                ? "Pick an end day."
+                : end < startDate
+                  ? "Pick an end day after the start."
+                  : "Pick at least one cycle.";
 
   // Phases made now start the season on its start day, taking the one
   // scheduled start: the user confirms what that ends and drops first.
@@ -380,9 +403,10 @@ export function SeasonForm(props: Props) {
       </div>
 
       <PinnedBar>
-        <button type="submit" disabled={loading || !valid} className={PRIMARY_BUTTON}>
+        <button type="submit" disabled={loading || !valid} aria-describedby={reason ? "season-reason" : undefined} className={PRIMARY_BUTTON}>
           {loading ? "Saving…" : initial ? "Save" : "Create season"}
         </button>
+        <ButtonReason id="season-reason" reason={reason} />
       </PinnedBar>
 
       {initial && (

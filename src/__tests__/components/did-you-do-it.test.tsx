@@ -73,6 +73,18 @@ describe("DidYouDoItCard", () => {
     expect(rows()).toHaveLength(0);
   });
 
+  it("a dimmed Save says the time is missing (J5-10)", () => {
+    const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+    render(<DidYouDoItCard unconfirmed={[run]} missedKey={[]} today="2026-11-13" />);
+    fireEvent.click(screen.getByRole("button", { name: "Yes, I did Easy run" }));
+    const save = within(screen.getByTestId("confirm-done-sheet")).getByRole("button", { name: "Save" });
+    expect(reasonOf(save)).toBe("Type a time.");
+    fireEvent.change(within(screen.getByTestId("confirm-done-sheet")).getByLabelText("Time"), { target: { value: "abc" } });
+    expect(reasonOf(save)).toBe("Fix the time.");
+    fireEvent.change(within(screen.getByTestId("confirm-done-sheet")).getByLabelText("Time"), { target: { value: "45" } });
+    expect(save.getAttribute("aria-describedby")).toBeNull();
+  });
+
   it("I was sick opens the sick-period sheet with the session's day as the first day", async () => {
     render(<DidYouDoItCard unconfirmed={[run]} missedKey={[]} today="2026-11-13" />);
     fireEvent.click(screen.getByRole("button", { name: "Yes, I did Easy run" }));

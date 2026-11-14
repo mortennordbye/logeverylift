@@ -386,7 +386,9 @@ export function RotationSessionSheet({
 
   const up = row?.upcoming;
   const isToday = up?.date === today && up.status === "planned";
-  const label = isToday ? "Today" : row?.mark === "next" ? "Next" : row?.mark === "skipped" ? "Skipped" : "Later";
+  const when = isToday ? "Today" : row?.mark === "next" ? "Next" : row?.mark === "skipped" ? "Skipped" : "Later";
+  // A swapped turn says so, as its row does (J3-10).
+  const label = row?.swapped ? `${when} · Swapped` : when;
 
   return (
     <BottomSheet open={row !== null} onClose={onClose}>

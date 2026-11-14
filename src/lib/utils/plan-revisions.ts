@@ -73,11 +73,13 @@ const sessionTitle = (s: PlannedSessionSnapshot) => {
 
 /**
  * One change to a dated session on its cycle's history, joined to the session
- * it is about ("Squat day on Wed 4 Nov, moved from ..."). A line that names the
- * session already stays as it is.
+ * it is about ("Squat day on Wed 4 Nov, moved from ..."). A skip names it
+ * after the verb, with its reason last ("Skipped Long ride on Sun 22 Nov (Work
+ * trip)"). A line that names the session already stays as it is.
  */
 export function sessionChangeLine(name: string, change: string): string {
-  if (change.startsWith("Added") || change.startsWith("Skipped ")) return change;
+  if (change.startsWith(`Added ${name}`) || change.startsWith(`Skipped ${name}`)) return change;
+  if (change === "Skipped" || change.startsWith("Skipped (")) return `Skipped ${name}${change.slice("Skipped".length)}`;
   return `${name}, ${change.charAt(0).toLowerCase()}${change.slice(1)}`;
 }
 

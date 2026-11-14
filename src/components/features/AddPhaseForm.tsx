@@ -3,7 +3,7 @@
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
-import { Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
+import { ButtonReason, Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { addPhaseAction } from "@/lib/actions/seasons";
 import { deleteTrainingCycle } from "@/lib/actions/training-cycles";
@@ -76,6 +76,18 @@ export function AddPhaseForm(p: Props) {
   // An existing cycle keeps its own length when the field is empty.
   const lengthOk = source === "existing" && length === "" ? true : Number.isInteger(n) && n >= 1 && n <= (unit === "days" ? 364 : 52);
   const valid = (source === "new" ? name.trim() !== "" : cycleId != null) && lengthOk;
+  // Why the button is off, in the order of the form.
+  const reason = valid
+    ? null
+    : source === "new" && name.trim() === ""
+      ? "Give the phase a name."
+      : source === "existing" && cycleId == null
+        ? "Pick a cycle."
+        : length === ""
+          ? "Type a length."
+          : unit === "days"
+            ? "Pick 1 to 364 days."
+            : "Pick 1 to 52 weeks.";
 
   function changeUnit(to: LengthUnit) {
     const next = switchLengthUnit(length, unit, to);
@@ -251,9 +263,10 @@ export function AddPhaseForm(p: Props) {
       </div>
 
       <PinnedBar>
-        <button type="submit" disabled={busy || !valid} className={PRIMARY_BUTTON}>
+        <button type="submit" disabled={busy || !valid} aria-describedby={reason ? "phase-reason" : undefined} className={PRIMARY_BUTTON}>
           {busy ? "Saving…" : action}
         </button>
+        <ButtonReason id="phase-reason" reason={reason} />
       </PinnedBar>
 
       <TakeStartSheet

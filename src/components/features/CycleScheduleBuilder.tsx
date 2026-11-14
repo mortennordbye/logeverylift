@@ -13,6 +13,7 @@
  */
 
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { ButtonReason } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { createProgram } from "@/lib/actions/programs";
 import {
@@ -235,7 +236,7 @@ export function ProgramPickerSheet({
                   e.preventDefault();
                   void create();
                 }}
-                className="flex items-center gap-2 px-3 py-2"
+                className="flex flex-wrap items-center gap-2 px-3 py-2"
               >
                 <input
                   autoFocus
@@ -245,9 +246,14 @@ export function ProgramPickerSheet({
                   onChange={(e) => setNewName(e.target.value)}
                   className="flex-1 h-11 px-3 rounded-xl bg-widget text-base outline-none"
                 />
-                <button type="submit" disabled={busy || !newName.trim()} className="h-11 px-4 rounded-xl bg-brand text-primary-foreground font-semibold disabled:opacity-50">
+                <button type="submit" disabled={busy || !newName.trim()} aria-describedby={newName.trim() ? undefined : "program-name-reason"} className="h-11 px-4 rounded-xl bg-brand text-primary-foreground font-semibold disabled:opacity-50">
                   Create
                 </button>
+                {!newName.trim() && (
+                  <div className="basis-full">
+                    <ButtonReason id="program-name-reason" reason="Type a name for the program." />
+                  </div>
+                )}
               </form>
             ) : (
               <button type="button" onClick={() => setNaming(true)} className="w-full flex items-center px-4 min-h-[52px] text-[15px] font-medium text-brand active:opacity-70">

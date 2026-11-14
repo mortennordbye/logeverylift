@@ -1,4 +1,4 @@
-import { dropsScheduledLine, endsRunningLine } from "@/lib/utils/cycle-start";
+import { dropsScheduledLine, endsRunningLine, runningOn } from "@/lib/utils/cycle-start";
 import { describe, expect, it } from "vitest";
 
 const peak = { id: 7, name: "Strength peak", day: "2026-11-23", season: null };
@@ -31,5 +31,19 @@ describe("dropsScheduledLine", () => {
 describe("endsRunningLine", () => {
   it("names the running cycle and its week", () => {
     expect(endsRunningLine(1, { id: 2, name: "Upper / Lower", week: 3, totalWeeks: 6 })).toBe("This ends Upper / Lower at week 3 of 6.");
+  });
+});
+
+describe("runningOn", () => {
+  const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
+
+  it("gives the week the running cycle is in on the start day", () => {
+    expect(runningOn(running, "2026-11-14")?.week).toBe(3);
+    expect(runningOn(running, "2026-12-07")?.week).toBe(6);
+  });
+
+  it("is null from the first day after the running cycle", () => {
+    expect(runningOn(running, "2026-12-12")).toBeNull();
+    expect(runningOn(null, "2026-11-14")).toBeNull();
   });
 });
