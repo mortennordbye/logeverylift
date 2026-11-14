@@ -13,7 +13,11 @@ import { getPrograms } from "@/lib/actions/programs";
 import { getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { PHASE_TYPE_LABELS } from "@/lib/utils/seasons";
+import { db } from "@/db";
+import { trainingCycles } from "@/db/schema";
 import { requireSession } from "@/lib/utils/session";
+import { and, eq, isNotNull } from "drizzle-orm";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 
 export default async function AddPhaseWeekPage({ params }: { params: Promise<{ id: string; cycleId: string }> }) {
@@ -24,6 +28,19 @@ export default async function AddPhaseWeekPage({ params }: { params: Promise<{ i
 
   const auth = await requireSession();
   const [cycleResult, programsResult, endurance] = await Promise.all([getTrainingCycleWithSlots(cycleId), getPrograms(), enduranceEnabledFor(auth.user.id)]);
+  if (!cycleResult.success && (await removedPhase(auth.user.id, seasonId, cycleId))) {
+    // Cancel removed this phase. The delete's revalidatePath renders this
+    // page again in the action response while the client goes back to the
+    // season; a notFound() here reached React as an uncaught error 441.
+    return (
+      <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col gap-4 px-4 pt-4`}>
+        <p className="text-base text-foreground/75">This phase was removed.</p>
+        <Link href={`/seasons/${seasonId}`} className="flex min-h-11 items-center text-base text-primary active:opacity-70">
+          Back to the season
+        </Link>
+      </div>
+    );
+  }
   // The cycle read checks the owner; it must also be a phase of this season.
   if (!cycleResult.success || cycleResult.data.seasonId !== seasonId) notFound();
   const cycle = cycleResult.data;
@@ -50,4 +67,14 @@ export default async function AddPhaseWeekPage({ params }: { params: Promise<{ i
       <AddPhaseFinish seasonId={seasonId} />
     </div>
   );
+}
+
+/** A deleted cycle of this user that was a phase of this season. */
+async function removedPhase(userId: string, seasonId: number, cycleId: number): Promise<boolean> {
+  const [row] = await db
+    // plan-read: includes deleted (only a deleted phase of this season matches)
+    .select({ id: trainingCycles.id })
+    .from(trainingCycles)
+    .where(and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId), eq(trainingCycles.seasonId, seasonId), isNotNull(trainingCycles.deletedAt)));
+  return row != null;
 }
