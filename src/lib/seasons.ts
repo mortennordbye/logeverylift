@@ -430,7 +430,7 @@ async function placeRaceDate(
   was: { raceDate: string; priority: RacePriority } | null,
 ) {
   if (was && was.raceDate === race.raceDate) return;
-  const [season] = await w.tx.select().from(seasons).where(eq(seasons.id, seasonId));
+  const [season] = await w.tx.select().from(seasons).where(and(eq(seasons.id, seasonId), isNull(seasons.deletedAt)));
   if (race.raceDate < (await today(w.ctx.userId))) throw new PlanStateError("Pick a race date from today on.");
   if (race.raceDate < season.startDate) throw new PlanStateError(`Pick a race date on or after the season start, ${dayLabel(season.startDate)}.`);
   const follows = race.priority === "A" && (race.raceDate > season.endDate || (was?.priority === "A" && was.raceDate === season.endDate));
@@ -495,7 +495,7 @@ export async function removeRace(ctx: PlanWriteContext, seasonId: number, raceId
     const gone = await ownRace(w, seasonId, raceId);
     await w.tx.delete(seasonRaces).where(eq(seasonRaces.id, raceId));
     // A flag about this race alone has nothing left to re-plan for.
-    const [season] = await w.tx.select({ reason: seasons.replanReason }).from(seasons).where(eq(seasons.id, seasonId));
+    const [season] = await w.tx.select({ reason: seasons.replanReason }).from(seasons).where(and(eq(seasons.id, seasonId), isNull(seasons.deletedAt)));
     if (season.reason) {
       const left = season.reason.split("; ").filter((part) => !part.includes(`"${gone.name}"`));
       await w.tx
