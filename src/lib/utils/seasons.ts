@@ -55,6 +55,12 @@ export function daysBetweenStr(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
 }
 
+/** How far off a day on or after `today` is, for a line of text: "today", "tomorrow" or "in N days". */
+export function inDaysLabel(today: string, day: string): string {
+  const n = daysBetweenStr(today, day);
+  return n === 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`;
+}
+
 const lengthOf = (p: { durationWeeks: number; durationDays: number | null }) => p.durationDays ?? p.durationWeeks * 7;
 
 // ── Taper (2.5) ──────────────────────────────────────────────────────────────
@@ -156,6 +162,13 @@ export function fitTaperChange(
 export function nextPhase(timeline: TimelinePhase[]): TimelinePhase | null {
   const lastStarted = timeline.findLastIndex((p) => p.state !== "planned");
   return timeline.slice(lastStarted + 1).find((p) => p.state === "planned") ?? null;
+}
+
+/** How many planned phases before this one a start today skips: 0 for the next phase, or a phase that is not planned. */
+export function phasesSkippedBy(timeline: TimelinePhase[], cycleId: number): number {
+  const next = nextPhase(timeline);
+  if (!next) return 0;
+  return Math.max(0, timeline.findIndex((p) => p.id === cycleId) - timeline.indexOf(next));
 }
 
 // ── The re-plan flag (2.6, D17) ──────────────────────────────────────────────

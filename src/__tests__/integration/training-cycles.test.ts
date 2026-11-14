@@ -4,13 +4,20 @@ import { updateProgramSet } from "@/lib/actions/programs";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import {
+  deleteManyTrainingCycles,
+  deleteTrainingCycle,
   getCyclePeriodization,
+  removeCycleSlot,
+  restartTrainingCycle,
+  startTrainingCycle,
   syncActiveCyclePeriodization,
+  upsertCycleSlot,
 } from "@/lib/actions/training-cycles";
+import * as session from "@/lib/utils/session";
 import { scaledDistance } from "@/lib/utils/periodization";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
-import { eq } from "drizzle-orm";
-import { beforeEach, describe, expect, it } from "vitest";
+import { asc, eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
 
@@ -275,5 +282,56 @@ describe("C9: weekly sync adherence counts sessions over program slots", () => {
     await logged(1);
     await logged(8);
     expect(await pct()).toBe(90);
+  });
+});
+
+describe("cycle actions check the caller and the input first", () => {
+  it("deleting no cycles still needs a session", async () => {
+    vi.spyOn(session, "requireSession").mockRejectedValueOnce(new Error("no session"));
+    await expect(deleteManyTrainingCycles([])).rejects.toThrow("no session");
+  });
+
+  it("refuses ids that are not whole positive numbers, and changes nothing", async () => {
+    for (const result of [
+      await deleteTrainingCycle("1; drop" as unknown as number),
+      await deleteManyTrainingCycles([cycleId, -1]),
+      await startTrainingCycle(1.5),
+      await restartTrainingCycle(0),
+      await removeCycleSlot("x" as unknown as number, cycleId),
+    ]) {
+      expect(result).toEqual({ success: false, error: "Invalid input" });
+    }
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId)))[0].deletedAt).toBeNull();
+  });
+
+  it("deleting another user's cycle changes nothing", async () => {
+    asUser((await createUser()).id);
+    expect((await deleteTrainingCycle(cycleId)).success).toBe(false);
+    expect((await deleteManyTrainingCycles([cycleId])).success).toBe(true);
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, cycleId)))[0].deletedAt).toBeNull();
+  });
+});
+
+describe("rotation slots", () => {
+  it("removing a slot closes the gap, so the next added slot does not overwrite one", async () => {
+    const [rot] = await db.insert(trainingCycles).values({ userId, name: "Rotation", durationWeeks: 4, scheduleType: "rotation" }).returning();
+    for (const orderIndex of [1, 2, 3]) {
+      expect((await upsertCycleSlot({ trainingCycleId: rot.id, orderIndex, label: `Day ${orderIndex}` })).success).toBe(true);
+    }
+    const slotsOf = () =>
+      db
+        .select({ orderIndex: trainingCycleSlots.orderIndex, label: trainingCycleSlots.label })
+        .from(trainingCycleSlots)
+        .where(eq(trainingCycleSlots.trainingCycleId, rot.id))
+        .orderBy(asc(trainingCycleSlots.orderIndex));
+    const second = (await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, rot.id))).find((s) => s.orderIndex === 2)!;
+    expect((await removeCycleSlot(second.id, rot.id)).success).toBe(true);
+    expect(await slotsOf()).toEqual([
+      { orderIndex: 1, label: "Day 1" },
+      { orderIndex: 2, label: "Day 3" },
+    ]);
+    // The builder adds at the length of the list plus one.
+    expect((await upsertCycleSlot({ trainingCycleId: rot.id, orderIndex: 3, label: "New" })).success).toBe(true);
+    expect((await slotsOf()).map((s) => s.label)).toEqual(["Day 1", "Day 3", "New"]);
   });
 });

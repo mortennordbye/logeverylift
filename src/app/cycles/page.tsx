@@ -2,7 +2,7 @@ import { CyclesListClient } from "@/components/features/CyclesListClient";
 import { RecentlyDeleted } from "@/components/features/RecentlyDeleted";
 import { SeasonsSection } from "@/components/features/SeasonsSection";
 import { getDeletedPlans } from "@/lib/actions/plan-revisions";
-import { getTrainingCycles } from "@/lib/actions/training-cycles";
+import { getActiveCycleForUser, getTrainingCycles } from "@/lib/actions/training-cycles";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { listSeasons } from "@/lib/seasons";
 import { getUserSettings } from "@/lib/user-settings";
@@ -11,6 +11,8 @@ import { requireSession } from "@/lib/utils/session";
 
 export default async function CyclesPage() {
   const session = await requireSession();
+  // Like home: a block whose day has come starts, and one that is over completes, before the list is read.
+  await getActiveCycleForUser();
   const [result, enduranceEnabled, deletedResult, deletedSeasonsResult, { timeZone }, seasons] = await Promise.all([
     getTrainingCycles(),
     enduranceEnabledFor(session.user.id),

@@ -55,6 +55,21 @@ export function cycleLengthDays(c: { durationWeeks: number; durationDays?: numbe
   return c.durationDays ?? c.durationWeeks * 7;
 }
 
+/**
+ * Whether a new length in weeks would end an active cycle at once: the days it
+ * covers have already passed by `today` (the user's day). An unchanged length
+ * keeps a length in days (T8).
+ */
+export function wouldEndActiveCycle(
+  c: { status: string; startDate: string | null; durationWeeks: number; durationDays: number | null },
+  durationWeeks: number,
+  today: Date,
+): boolean {
+  if (c.status !== "active" || !c.startDate) return false;
+  const days = durationWeeks === c.durationWeeks ? c.durationDays : null;
+  return cycleWeek(parseDateStr(c.startDate), durationWeeks, today, days).isOver;
+}
+
 /** Weeks a length in days spans, for the week-based code (a 10-day phase has 2). */
 export function weeksForDays(days: number): number {
   return Math.max(1, Math.ceil(days / 7));

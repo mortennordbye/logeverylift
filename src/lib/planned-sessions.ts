@@ -43,7 +43,7 @@ import { insertAutoSessions } from "@/lib/auto-sessions";
 import type { SessionPriority } from "@/db/schema/workouts";
 import { parseWorkout, type Workout } from "@/lib/utils/workout-steps";
 import type { MissedSlot, TodaySession, TrainingCycleSlotWithProgram } from "@/types/workout";
-import { and, asc, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm";
 
 type Executor = typeof db | Tx;
 export type PlannedRow = typeof plannedSessions.$inferSelect;
@@ -717,6 +717,19 @@ export async function removeSlotInTx(tx: Tx, cycleId: number, slotId: number) {
     for (const [i, s] of rest.entries()) {
       if (s.daySlot !== i + 1) await tx.update(trainingCycleSlots).set({ daySlot: i + 1 }).where(eq(trainingCycleSlots.id, s.id));
     }
+  } else if (gone?.orderIndex != null) {
+    // A rotation slot: the later ones move up one, so the positions stay dense
+    // and the next slot added at the end does not land on an existing one.
+    await tx
+      .update(trainingCycleSlots)
+      .set({ orderIndex: sql`${trainingCycleSlots.orderIndex} - 1` })
+      .where(
+        and(
+          eq(trainingCycleSlots.trainingCycleId, cycleId),
+          isNull(trainingCycleSlots.dayOfWeek),
+          gt(trainingCycleSlots.orderIndex, gone.orderIndex),
+        ),
+      );
   }
   return removed;
 }

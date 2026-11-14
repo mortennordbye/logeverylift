@@ -79,9 +79,12 @@ function ProgramPicker({
           <span className="font-semibold text-base">Choose program</span>
           <button
             onClick={onCancel}
-            className="w-8 h-8 flex items-center justify-center rounded-full bg-muted"
+            aria-label="Close"
+            className="w-11 h-11 -mr-1.5 flex items-center justify-center"
           >
-            <X className="w-4 h-4" />
+            <span className="w-8 h-8 flex items-center justify-center rounded-full bg-muted">
+              <X className="w-4 h-4" />
+            </span>
           </button>
         </div>
 
@@ -338,6 +341,7 @@ function SortableSlotRow({
     transition,
     isDragging,
   } = useSortable({ id: slot.id });
+  const name = slot.program ? slot.program.name : (slot.label ?? "Rest");
 
   return (
     <div
@@ -353,6 +357,7 @@ function SortableSlotRow({
         className="text-muted-foreground touch-none cursor-grab active:cursor-grabbing"
         {...attributes}
         {...listeners}
+        aria-label={`Reorder ${name}`}
       >
         <GripVertical className="w-4 h-4" />
       </button>
@@ -376,9 +381,12 @@ function SortableSlotRow({
 
       <button
         onClick={() => onRemove(slot)}
-        className="w-7 h-7 flex items-center justify-center rounded-full bg-destructive/10 text-destructive active:bg-destructive/20"
+        aria-label={`Remove ${name}`}
+        className="w-11 h-11 -my-2 -mr-2 flex items-center justify-center group"
       >
-        <X className="w-3 h-3" />
+        <span className="w-7 h-7 flex items-center justify-center rounded-full bg-destructive/10 text-destructive group-active:bg-destructive/20">
+          <X className="w-3 h-3" />
+        </span>
       </button>
     </div>
   );
@@ -393,6 +401,7 @@ function RotationBuilder({
 }) {
   const router = useRouter();
   const [editingSlot, setEditingSlot] = useState<Slot | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const sortedSlots = [...cycle.slots].sort(
     (a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0),
   );
@@ -429,59 +438,76 @@ function RotationBuilder({
       cycle.id,
       reordered.map((s) => s.id),
     ));
-    if (!result.success) setLocalSlots(localSlots);
+    if (!result.success) {
+      setLocalSlots(localSlots);
+      setError(result.error);
+    } else setError(null);
     router.refresh();
+  }
+
+  /** Run one write; true when it saved. A refused write shows its error. */
+  async function save(write: Promise<{ success: boolean; error?: string }>) {
+    const result = await callAction(write);
+    if (!result.success) {
+      setError(result.error ?? "Could not save");
+      return false;
+    }
+    setError(null);
+    router.refresh();
+    return true;
   }
 
   async function handleSelectProgram(programId: number, label: string, autoComplete: boolean) {
     if (!editingSlot) return;
-    await callAction(upsertCycleSlot({
+    const saved = await save(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: editingSlot.orderIndex ?? undefined,
       programId,
       label,
       autoComplete,
     }));
-    setEditingSlot(null);
-    router.refresh();
+    if (saved) setEditingSlot(null);
   }
 
   async function handleToggleAuto(next: boolean) {
     if (!editingSlot) return;
-    await callAction(upsertCycleSlot({
+    await save(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: editingSlot.orderIndex ?? undefined,
       autoComplete: next,
     }));
-    router.refresh();
   }
 
   async function handleRest() {
     if (!editingSlot) return;
-    await callAction(upsertCycleSlot({
+    const saved = await save(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: editingSlot.orderIndex ?? undefined,
       programId: null,
       label: "Rest",
     }));
-    setEditingSlot(null);
-    router.refresh();
+    if (saved) setEditingSlot(null);
   }
 
   async function handleRemove(slot: Slot) {
-    await callAction(removeCycleSlot(slot.id, cycle.id));
-    router.refresh();
+    await save(removeCycleSlot(slot.id, cycle.id));
   }
 
   async function handleAddSlot() {
-    const nextOrder = localSlots.length + 1;
-    await callAction(upsertCycleSlot({
+    // After the last position, not the count: a gap must never make it land on a slot.
+    const nextOrder = Math.max(0, ...localSlots.map((s) => s.orderIndex ?? 0)) + 1;
+    await save(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: nextOrder,
       label: `Day ${nextOrder}`,
     }));
-    router.refresh();
   }
+
+  const errorLine = error && (
+    <p role="alert" className="px-4 pb-2 text-sm text-destructive">
+      {error}
+    </p>
+  );
 
   return (
     <>
@@ -499,7 +525,10 @@ function RotationBuilder({
               <SortableSlotRow
                 key={slot.id}
                 slot={slot}
-                onEdit={setEditingSlot}
+                onEdit={(s) => {
+                  setError(null);
+                  setEditingSlot(s);
+                }}
                 onRemove={handleRemove}
               />
             ))}
@@ -521,6 +550,7 @@ function RotationBuilder({
         <PlusIcon className="w-4 h-4" />
         Add slot
       </button>
+      {editingSlot === null && errorLine}
 
       {editingSlot !== null && (
         <ProgramPicker
@@ -530,6 +560,7 @@ function RotationBuilder({
           onCancel={() => setEditingSlot(null)}
           autoComplete={editingSlot.autoComplete}
           onToggleAuto={editingSlot.programId != null ? handleToggleAuto : undefined}
+          header={errorLine}
         />
       )}
     </>

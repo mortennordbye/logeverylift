@@ -15,7 +15,13 @@ import {
   updateRaceAction,
   updateSeasonAction,
 } from "@/lib/actions/seasons";
-import { getActiveCycleForUser, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
+import {
+  deleteManyTrainingCycles,
+  deleteTrainingCycle,
+  getActiveCycleForUser,
+  startTrainingCycle,
+  updateTrainingCycle,
+} from "@/lib/actions/training-cycles";
 import { restorePlanRevision } from "@/lib/actions/plan-revisions";
 import { getActiveCycle } from "@/lib/garmin/queries";
 import { syncPeriodizedTargets } from "@/lib/periodization-sync";
@@ -281,6 +287,37 @@ describe("the chained start (owner decision 1)", () => {
     expect(resumed.success).toBe(true);
     // Phase 1 was planned for 4 weeks from today, so phase 2 waits for that day.
     expect(await cycleRow(two)).toMatchObject({ status: "draft", scheduledStartDate: day(28) });
+  });
+
+  it("deleting the scheduled first phase schedules the next one in its place", async () => {
+    const id = await newSeason(me, day(2));
+    const p1 = await addPhaseAction({ seasonId: id, name: "Base", durationWeeks: 4 });
+    const p2 = await addPhaseAction({ seasonId: id, name: "Build", durationWeeks: 4 });
+    const one = p1.success ? p1.data.cycleId : 0;
+    const two = p2.success ? p2.data.cycleId : 0;
+    expect((await cycleRow(one)).scheduledStartDate).toBe(day(2));
+
+    expect((await deleteTrainingCycle(one)).success).toBe(true);
+    expect(await cycleRow(two)).toMatchObject({ phaseOrder: 1, scheduledStartDate: day(2) });
+    expect((await getSeasonDetail(me, id))!.next).toMatchObject({ cycleId: two, scheduled: true });
+
+    // A restore puts phase 1 back first, scheduled again.
+    const [rev] = (await revisionsOf("cycle", one)).filter((r) => r.action === "delete");
+    expect((await restorePlanRevision({ revisionId: rev.id })).success).toBe(true);
+    expect(await cycleRow(one)).toMatchObject({ phaseOrder: 1, scheduledStartDate: day(2) });
+    expect(await cycleRow(two)).toMatchObject({ phaseOrder: 2, scheduledStartDate: null });
+  });
+
+  it("deleting a middle phase with others numbers the rest again", async () => {
+    const id = await newSeason(me, day(2));
+    const ids: number[] = [];
+    for (const name of ["Base", "Build", "Peak"]) {
+      const p = await addPhaseAction({ seasonId: id, name, durationWeeks: 2 });
+      ids.push(p.success ? p.data.cycleId : 0);
+    }
+    expect((await deleteManyTrainingCycles([ids[1]])).success).toBe(true);
+    expect((await cycleRow(ids[0])).phaseOrder).toBe(1);
+    expect((await cycleRow(ids[2])).phaseOrder).toBe(2);
   });
 
   it("a length change of the active phase moves the next start", async () => {

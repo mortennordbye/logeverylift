@@ -1,5 +1,5 @@
 import type { SeasonSummary } from "@/lib/seasons";
-import { dayLabel, daysBetweenStr } from "@/lib/utils/seasons";
+import { dayLabel, inDaysLabel } from "@/lib/utils/seasons";
 import { ChevronRight, PlusIcon } from "lucide-react";
 import Link from "next/link";
 
@@ -33,7 +33,7 @@ export function SeasonsSection({ seasons, today, enduranceEnabled }: { seasons: 
                 {(enduranceEnabled || s.aRace) && s.aRace && (
                   <p className="text-xs text-muted-foreground">
                     {s.aRace.name}
-                    {s.aRace.raceDate >= today ? `, in ${daysBetweenStr(today, s.aRace.raceDate)} days` : ""}
+                    {s.aRace.raceDate >= today ? `, ${inDaysLabel(today, s.aRace.raceDate)}` : ""}
                   </p>
                 )}
               </div>

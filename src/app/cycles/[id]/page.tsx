@@ -7,7 +7,7 @@
 import { CycleCompletionBanner } from "@/components/features/CycleCompletionBanner";
 import { DeleteCycleButton, RestartCycleButton, StartCycleButton } from "@/components/features/CycleDetailClient";
 import { CycleScheduleBuilder } from "@/components/features/CycleScheduleBuilder";
-import { getCyclePeriodization, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
+import { getActiveCycleForUser, getCyclePeriodization, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
 import { getPrograms } from "@/lib/actions/programs";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { requireSession } from "@/lib/utils/session";
@@ -29,6 +29,8 @@ export default async function CycleDetailPage({
   if (isNaN(cycleId)) notFound();
 
   const auth = await requireSession();
+  // Like home: a block whose day has come starts, and one that is over completes, before the cycle is read.
+  await getActiveCycleForUser();
   const [cycleResult, programsResult, periodizationResult] = await Promise.all([
     getTrainingCycleWithSlots(cycleId),
     getPrograms(),
@@ -139,7 +141,7 @@ export default async function CycleDetailPage({
         )}
 
         {/* Start cycle CTA (draft only) */}
-        {cycle.status === "draft" && <StartCycleButton cycle={cycle} />}
+        {cycle.status === "draft" && <StartCycleButton cycle={cycle} skippedPhases={season?.skippedPhases ?? 0} />}
 
         {/* Schedule section header */}
         <div>

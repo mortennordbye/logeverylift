@@ -41,7 +41,7 @@ const base = {
 
 describe("a cycle that is a phase of a season", () => {
   it("shows no race field, even with the endurance switch on, and points to the season", () => {
-    render(<EditCycleForm cycle={base} enduranceEnabled liveSeasonId={7} />);
+    render(<EditCycleForm cycle={base} enduranceEnabled liveSeasonId={7} today="2026-11-14" />);
     expect(screen.queryByLabelText("Race (optional)")).toBeNull();
     expect(screen.getByTestId("season-race-note").textContent).toContain("Races are set on the season");
     expect(screen.getByRole("link", { name: "season page" }).getAttribute("href")).toBe("/seasons/7");
@@ -49,13 +49,13 @@ describe("a cycle that is a phase of a season", () => {
   });
 
   it("acts as a cycle with no season once its season is deleted: the race field is back", () => {
-    render(<EditCycleForm cycle={{ ...base, raceDate: "2027-08-22" }} enduranceEnabled liveSeasonId={null} />);
+    render(<EditCycleForm cycle={{ ...base, raceDate: "2027-08-22" }} enduranceEnabled liveSeasonId={null} today="2026-11-14" />);
     expect((screen.getByLabelText("Race (optional)") as HTMLInputElement).value).toBe("2027-08-22");
     expect(screen.queryByTestId("season-race-note")).toBeNull();
   });
 
   it("saves the name without a length, so 10 days stay 10 days", async () => {
-    render(<EditCycleForm cycle={base} enduranceEnabled liveSeasonId={7} />);
+    render(<EditCycleForm cycle={base} enduranceEnabled liveSeasonId={7} today="2026-11-14" />);
     fireEvent.change(screen.getByPlaceholderText("e.g. Spring Strength Block"), { target: { value: "Race taper" } });
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
     await waitFor(() => expect(updateTrainingCycle).toHaveBeenCalled());

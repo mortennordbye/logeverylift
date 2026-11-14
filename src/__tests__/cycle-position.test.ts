@@ -7,6 +7,7 @@ import {
   resolveRotation,
   toDateStr,
   walkRotation,
+  wouldEndActiveCycle,
 } from "@/lib/utils/cycle-position";
 
 // One timezone ahead of UTC, one behind, and UTC itself. Node applies a changed
@@ -24,6 +25,17 @@ describe.each(["Europe/Oslo", "America/New_York", "UTC"])("cycle week arithmetic
   // A 24-week block from Mon 2 Mar 2026: 168 days, last day Sun 16 Aug. Both US
   // (8 Mar) and EU (29 Mar) DST changes fall inside it.
   const weeks = 24;
+
+  it("a new length ends an active cycle once the days it covers have passed, across a DST change", () => {
+    // 23 Mar to 30 Mar 2026 is 7 days; the EU clocks change on 29 Mar.
+    const active = { status: "active", startDate: "2026-03-23", durationWeeks: 4, durationDays: null };
+    expect(wouldEndActiveCycle(active, 1, parseDateStr("2026-03-30"))).toBe(true);
+    expect(wouldEndActiveCycle(active, 1, parseDateStr("2026-03-29"))).toBe(false);
+    expect(wouldEndActiveCycle(active, 2, parseDateStr("2026-03-30"))).toBe(false);
+    // An unchanged length keeps its days (T8): 10 days end on day 10.
+    expect(wouldEndActiveCycle({ ...active, durationWeeks: 2, durationDays: 10 }, 2, parseDateStr("2026-04-02"))).toBe(true);
+    expect(wouldEndActiveCycle({ ...active, status: "draft" }, 1, parseDateStr("2026-03-30"))).toBe(false);
+  });
 
   it("reads a date column as that calendar day at local midnight", () => {
     const start = parseDateStr("2026-03-02");

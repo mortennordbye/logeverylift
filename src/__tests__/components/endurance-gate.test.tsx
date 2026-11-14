@@ -54,17 +54,17 @@ describe("the endurance switch", () => {
   });
 
   it("hides the race field when off and the cycle has no race", () => {
-    render(<EditCycleForm cycle={cycle} enduranceEnabled={false} />);
+    render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
     expect(screen.queryByLabelText("Race (optional)")).toBeNull();
   });
 
   it("shows the race field when on", () => {
-    render(<EditCycleForm cycle={cycle} enduranceEnabled />);
+    render(<EditCycleForm cycle={cycle} enduranceEnabled today="2026-11-14" />);
     expect(screen.getByLabelText("Race (optional)")).toBeTruthy();
   });
 
   it("keeps showing a race the cycle already has, even when off", () => {
-    render(<EditCycleForm cycle={{ ...cycle, raceDate: "2027-08-15" }} enduranceEnabled={false} />);
+    render(<EditCycleForm cycle={{ ...cycle, raceDate: "2027-08-15" }} enduranceEnabled={false} today="2026-11-14" />);
     expect((screen.getByLabelText("Race (optional)") as HTMLInputElement).value).toBe("2027-08-15");
   });
 });

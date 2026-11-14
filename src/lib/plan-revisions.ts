@@ -659,6 +659,13 @@ export async function deleteCycles(ctx: PlanWriteContext, cycleIds: number[], ex
   return planWrite(ctx, async (w) => {
     const at = new Date();
     const generated: number[] = [];
+    // A deleted phase leaves its season: lock the seasons first, the way
+    // every season write does, so the season can be settled after.
+    const inSeasons = cycleIds.length
+      ? await w.tx.select({ seasonId: trainingCycles.seasonId }).from(trainingCycles).where(inArray(trainingCycles.id, cycleIds))
+      : [];
+    const seasonIds = [...new Set(inSeasons.map((c) => c.seasonId).filter((s): s is number => s != null))];
+    await lockSeasonsThenCycles(w, seasonIds, cycleIds);
     for (const id of [...cycleIds].sort((a, b) => a - b)) {
       await w.touch({ type: "cycle", id }, { action: "delete", expectedVersion });
       const owned = await w.tx
@@ -673,6 +680,9 @@ export async function deleteCycles(ctx: PlanWriteContext, cycleIds: number[], ex
       await softDeleteProgram(w.tx, id, at);
     }
     for (const id of cycleIds) await w.tx.update(trainingCycles).set({ deletedAt: at }).where(eq(trainingCycles.id, id));
+    // The phases left are numbered again and the chain scheduled again, so
+    // the next phase starts when the deleted one would have (settleSeason).
+    for (const s of seasonIds) await settleSeason(w, s);
   });
 }
 
