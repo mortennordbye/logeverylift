@@ -38,11 +38,21 @@ export const upsertCycleSlotSchema = z.object({
   orderIndex: z.number().int().positive().optional(),
   // day_of_week mode: the session's order in the day, 1-3 (docs/plans/sessions.md, 3.1)
   daySlot: z.number().int().min(1).max(3).optional(),
-  label: z.string().max(100).optional(),
+  // null clears the label or the note.
+  label: z.string().max(100).nullable().optional(),
   programId: z.number().int().positive().nullable().optional(),
-  notes: z.string().max(500).optional(),
+  notes: z.string().max(500).nullable().optional(),
   // Day tracked outside the app: completes itself (see autoCompleteDue).
   autoComplete: z.boolean().optional(),
+  // Endurance features only: a key session, and the next slot of the day as the run of a brick.
+  priority: z.enum(["key", "support", "optional"]).nullable().optional(),
+  brickWithNext: z.boolean().optional(),
+});
+
+export const startTrainingCycleSchema = z.object({
+  cycleId: z.number().int().positive(),
+  // The block's first day; today when omitted. A later day schedules the draft.
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export const reorderCycleSlotsSchema = z.object({

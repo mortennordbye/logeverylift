@@ -1,187 +1,387 @@
 "use client";
 
 /**
- * CreateCycleForm
+ * The new cycle setup (docs/design/plan-redesign J2_CycleSetup,
+ * J2_RotationOrder, J4_WeekBuilder).
  *
- * Form for creating a new training cycle. Handles name, duration,
- * schedule type, end action, and optional end message.
+ * Step 1 (`CreateCycleForm`): name, schedule type, length, start and what
+ * happens at the end. Next makes the cycle as a draft (or saves the draft on a
+ * second visit) and opens step 2. The schedule type is fixed once the draft
+ * exists: its sessions are built for it.
+ *
+ * Step 2 (`CycleSetupSessions`): the sessions, saved as they are added. Create
+ * cycle starts the draft today, or schedules it for the chosen day.
  */
 
-import { createTrainingCycle } from "@/lib/actions/training-cycles";
+import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
+import { useBack, useReturnTo } from "@/components/ui/BackLink";
+import { createTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
+import { addDays, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
+import { choiceFor, startDayFor, type StartChoice, type StartDays } from "@/lib/utils/cycle-setup";
+import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
-import { useReturnTo } from "@/components/ui/BackLink";
-import { useState } from "react";
+import type { TrainingCycle, TrainingCycleWithSlots } from "@/types/workout";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
 
-const DURATION_OPTIONS = CYCLE_DURATION_WEEKS;
-
-const END_ACTION_OPTIONS = [
-  { value: "none", label: "None" },
-  { value: "deload", label: "Deload week" },
-  { value: "new_cycle", label: "Start new cycle" },
-  { value: "rest", label: "Rest period" },
-] as const;
-
+type ScheduleType = "day_of_week" | "rotation";
 type EndAction = "none" | "deload" | "new_cycle" | "rest";
 
-export function CreateCycleForm() {
-  const returnTo = useReturnTo();
-  const [name, setName] = useState("");
-  const [durationWeeks, setDurationWeeks] = useState(8);
-  const [scheduleType, setScheduleType] = useState<"day_of_week" | "rotation">(
-    "day_of_week",
+const MAIN_LENGTHS = [4, 6, 8, 12];
+const MORE_LENGTHS = CYCLE_DURATION_WEEKS.filter((w) => !MAIN_LENGTHS.includes(w));
+
+const MODES: { value: ScheduleType; title: string; sub: string }[] = [
+  { value: "day_of_week", title: "Same days each week", sub: "Monday upper, Thursday lower" },
+  { value: "rotation", title: "Rotation", sub: "The next session follows the last one. No fixed days." },
+];
+
+const END_ACTIONS: { value: EndAction; label: string }[] = [
+  { value: "none", label: "Just stop" },
+  { value: "deload", label: "Deload week" },
+  { value: "new_cycle", label: "Start a new cycle" },
+  { value: "rest", label: "Rest period" },
+];
+
+const SECTION = "text-xs font-semibold tracking-[1px] uppercase text-muted-foreground";
+const TINT = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
+
+/** A setup URL: step 2 of `cycleId`, or step 1 of it with `step1`. */
+export function setupHref(cycleId: number, start: string, step1 = false): string {
+  return `/cycles/new?cycle=${cycleId}&start=${start}${step1 ? "&step=1" : ""}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Shared parts
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SetupHeader({ left }: { left: ReactNode }) {
+  return (
+    <header className="grid grid-cols-[1fr_auto_1fr] items-center px-2 pt-4 shrink-0">
+      <div className="justify-self-start">{left}</div>
+      <h1 className="text-base font-semibold">New cycle</h1>
+      <span />
+    </header>
   );
-  const [endAction, setEndAction] = useState<EndAction>("none");
-  const [endMessage, setEndMessage] = useState("");
+}
+
+function StepProgress({ step }: { step: 1 | 2 }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className={SECTION}>Step {step} of 2</span>
+      <div
+        className="grid grid-cols-2 gap-1 h-1"
+        role="progressbar"
+        aria-label={`Step ${step} of 2`}
+        aria-valuemin={1}
+        aria-valuemax={2}
+        aria-valuenow={step}
+      >
+        <div className="rounded-sm bg-brand" />
+        <div className={`rounded-sm ${step === 2 ? "bg-brand" : "bg-[#707076]"}`} />
+      </div>
+    </div>
+  );
+}
+
+/** The pinned bottom bar with one primary button. It covers the tab bar. */
+function PinnedBar({ children }: { children: ReactNode }) {
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-40 bg-[#111113] border-t border-hairline px-4 pt-4"
+      style={{ paddingBottom: "calc(28px + env(safe-area-inset-bottom, 0px))" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+const PRIMARY =
+  "h-[52px] w-full rounded-2xl bg-brand text-primary-foreground text-base font-semibold active:opacity-80 disabled:opacity-50";
+
+function Chip({ label, on, onClick, disabled }: { label: string; on: boolean; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      disabled={disabled}
+      onClick={onClick}
+      className={`h-11 px-3.5 rounded-full border text-sm font-medium active:opacity-70 disabled:opacity-40 ${
+        on ? `border-brand ${TINT} text-foreground` : "border-[rgba(244,244,245,0.12)] text-[#c4c4c9]"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function ChipGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <fieldset className="m-0 p-0 border-0 flex flex-col gap-2">
+      <legend className={`mb-2 ${SECTION}`}>{label}</legend>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </fieldset>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 1
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function CreateCycleForm({
+  days,
+  draft,
+  start,
+}: {
+  days: StartDays;
+  /** The draft made by an earlier Next, when the user came back from step 2. */
+  draft?: TrainingCycle;
+  /** The start day chosen before, with `draft`. */
+  start?: string;
+}) {
+  const router = useRouter();
+  const cancel = useBack({ href: "/cycles", label: "Plan" });
+  const [name, setName] = useState(draft?.name ?? "");
+  const [scheduleType, setScheduleType] = useState<ScheduleType>((draft?.scheduleType as ScheduleType) ?? "day_of_week");
+  const [durationWeeks, setDurationWeeks] = useState(draft?.durationWeeks ?? 8);
+  const [moreLengths, setMoreLengths] = useState(MORE_LENGTHS.includes(draft?.durationWeeks ?? 8));
+  const [choice, setChoice] = useState<StartChoice>(() => {
+    const c = start ? choiceFor(start, days) : "today";
+    return c === "after" && !days.afterCurrent ? "today" : c;
+  });
+  const [picked, setPicked] = useState(start && choiceFor(start, days) === "date" ? start : "");
+  const [endAction, setEndAction] = useState<EndAction>((draft?.endAction as EndAction) ?? "none");
+  const [endMessage, setEndMessage] = useState(draft?.endMessage ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const startDay = startDayFor(choice, days, picked);
+  const tomorrow = toDateStr(addDays(parseDateStr(days.today), 1));
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim()) return;
+    if (!name.trim() || !startDay) return;
     setLoading(true);
     setError("");
 
-    const result = await callAction(createTrainingCycle({
-      name: name.trim(),
-      durationWeeks,
-      scheduleType,
-      endAction,
-      endMessage: endMessage.trim() || undefined,
-    }));
+    const fields = { name: name.trim(), durationWeeks, endAction };
+    const result = draft
+      ? await callAction(updateTrainingCycle({ id: draft.id, ...fields, endMessage: endMessage.trim() || null }))
+      : await callAction(createTrainingCycle({ ...fields, scheduleType, endMessage: endMessage.trim() || undefined }));
 
-    setLoading(false);
     if (result.success) {
-      returnTo(`/cycles/${result.data.id}`);
+      router.replace(setupHref(result.data.id, startDay));
     } else {
+      setLoading(false);
       setError(result.error);
     }
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-6">
-      {/* Name */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Name
-        </label>
-        <input
-          autoFocus
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="e.g. Spring Strength Block"
-          className="rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2 ring-primary"
-        />
-      </div>
+    <form onSubmit={handleSubmit} className="flex flex-col" style={{ paddingBottom: "calc(140px + var(--kb-height, 0px))" }}>
+      <SetupHeader
+        left={
+          <button type="button" onClick={cancel.go} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
+            Cancel
+          </button>
+        }
+      />
 
-      {/* Duration */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Duration
+      <div className="flex flex-col gap-[22px] px-4 pt-3">
+        <StepProgress step={1} />
+
+        <label className="flex flex-col gap-2">
+          <span className={SECTION}>Name</span>
+          <input
+            autoFocus={!draft}
+            value={name}
+            maxLength={100}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="For example: Upper / Lower hypertrophy"
+            className="h-12 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand placeholder:text-muted-foreground"
+          />
         </label>
-        <div className="flex gap-2 flex-wrap">
-          {DURATION_OPTIONS.map((w) => (
-            <button
+
+        <fieldset className="m-0 p-0 border-0 flex flex-col gap-2">
+          <legend className={`mb-2 ${SECTION}`}>How do you train?</legend>
+          {MODES.map((m) => {
+            const on = scheduleType === m.value;
+            return (
+              <label
+                key={m.value}
+                className={`flex items-start gap-3 p-3.5 rounded-[14px] bg-widget border ${on ? "border-brand" : "border-[rgba(244,244,245,0.12)]"} ${
+                  draft ? "opacity-60" : "active:opacity-80"
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="scheduleType"
+                  value={m.value}
+                  checked={on}
+                  disabled={!!draft}
+                  onChange={() => setScheduleType(m.value)}
+                  className="sr-only peer"
+                />
+                <span
+                  aria-hidden
+                  className={`mt-px h-[22px] w-[22px] shrink-0 rounded-full border-2 flex items-center justify-center peer-focus-visible:ring-2 ring-brand ${
+                    on ? "border-brand" : "border-[#707076]"
+                  }`}
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full ${on ? "bg-brand" : ""}`} />
+                </span>
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-[15px] font-semibold">{m.title}</span>
+                  <span className="text-[13px] text-muted-foreground">{m.sub}</span>
+                </span>
+              </label>
+            );
+          })}
+        </fieldset>
+
+        <ChipGroup label="Length">
+          {MAIN_LENGTHS.map((w) => (
+            <Chip
               key={w}
-              type="button"
-              onClick={() => setDurationWeeks(w)}
-              className={`
-                px-4 py-2 rounded-full text-sm font-semibold border-2 transition-colors
-                ${durationWeeks === w
-                  ? "border-primary bg-primary/10 text-primary"
-                  : "border-border text-muted-foreground"}
-              `}
-            >
-              {w}w
-            </button>
+              label={`${w} weeks`}
+              on={!moreLengths && durationWeeks === w}
+              onClick={() => {
+                setMoreLengths(false);
+                setDurationWeeks(w);
+              }}
+            />
           ))}
-        </div>
-      </div>
+          <Chip
+            label="Custom"
+            on={moreLengths}
+            onClick={() => {
+              setMoreLengths(true);
+              if (!MORE_LENGTHS.includes(durationWeeks)) setDurationWeeks(MORE_LENGTHS[0]);
+            }}
+          />
+        </ChipGroup>
+        {moreLengths && (
+          <ChipGroup label="Custom length">
+            {MORE_LENGTHS.map((w) => (
+              <Chip key={w} label={`${w} weeks`} on={durationWeeks === w} onClick={() => setDurationWeeks(w)} />
+            ))}
+          </ChipGroup>
+        )}
 
-      {/* Schedule type */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Schedule type
-        </label>
-        <div className="flex rounded-xl overflow-hidden border border-border">
-          <button
-            type="button"
-            onClick={() => setScheduleType("day_of_week")}
-            className={`
-              flex-1 py-3 text-sm font-semibold transition-colors
-              ${scheduleType === "day_of_week" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}
-            `}
-          >
-            Day of week
-          </button>
-          <button
-            type="button"
-            onClick={() => setScheduleType("rotation")}
-            className={`
-              flex-1 py-3 text-sm font-semibold transition-colors
-              ${scheduleType === "rotation" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}
-            `}
-          >
-            Rotation
-          </button>
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          {scheduleType === "day_of_week"
-            ? "Each weekday has a workout. Missed days don't carry over — Monday's leg day stays on Monday."
-            : "Follow a sequence in order. Missed workouts repeat until done; rest days auto-advance with the calendar."}
-        </p>
-      </div>
+        <ChipGroup label="Start">
+          <Chip label="Today" on={choice === "today"} onClick={() => setChoice("today")} />
+          <Chip label={`Next Monday · ${shortDay(days.nextMonday).slice(4)}`} on={choice === "monday"} onClick={() => setChoice("monday")} />
+          <Chip label="Pick a date" on={choice === "date"} onClick={() => setChoice("date")} />
+          {days.afterCurrent && <Chip label="After current cycle" on={choice === "after"} onClick={() => setChoice("after")} />}
+        </ChipGroup>
+        {choice === "date" && (
+          <label className="flex flex-col gap-2 -mt-2">
+            <span className="text-[13px] text-muted-foreground">Start day</span>
+            <input
+              type="date"
+              value={picked}
+              min={tomorrow}
+              max={days.latest}
+              onChange={(e) => setPicked(e.target.value)}
+              className="h-12 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand"
+            />
+          </label>
+        )}
+        {choice === "after" && days.afterCurrent && (
+          <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(days.afterCurrent)}</p>
+        )}
 
-      {/* End action */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          When cycle ends
-        </label>
-        <div className="flex flex-col rounded-xl overflow-hidden border border-border divide-y divide-border">
-          {END_ACTION_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setEndAction(opt.value)}
-              className={`
-                flex items-center justify-between px-4 py-3 text-sm transition-colors
-                ${endAction === opt.value ? "bg-primary/10 text-primary font-semibold" : "text-foreground"}
-              `}
-            >
-              {opt.label}
-              {endAction === opt.value && (
-                <span className="w-2 h-2 rounded-full bg-primary" />
-              )}
-            </button>
+        <ChipGroup label="When it ends">
+          {END_ACTIONS.map((a) => (
+            <Chip key={a.value} label={a.label} on={endAction === a.value} onClick={() => setEndAction(a.value)} />
           ))}
-        </div>
-      </div>
+        </ChipGroup>
 
-      {/* End message */}
-      <div className="flex flex-col gap-2">
-        <label className="text-sm font-medium text-muted-foreground uppercase tracking-wider">
-          Note to future self{" "}
-          <span className="normal-case font-normal">(optional)</span>
+        <label className="flex flex-col gap-2">
+          <span className={SECTION}>Note to future self (optional)</span>
+          <textarea
+            value={endMessage}
+            maxLength={500}
+            onChange={(e) => setEndMessage(e.target.value)}
+            placeholder="For example: Test your 1RM"
+            rows={2}
+            className="px-3.5 py-3 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand resize-none placeholder:text-muted-foreground"
+          />
         </label>
-        <textarea
-          value={endMessage}
-          onChange={(e) => setEndMessage(e.target.value)}
-          placeholder="e.g. Time to test your 1RM!"
-          rows={3}
-          className="rounded-xl bg-muted px-4 py-3 text-sm outline-none focus:ring-2 ring-primary resize-none"
-        />
+
+        {error && (
+          <p role="alert" className="text-sm text-[#ff6b5a]">
+            {error}
+          </p>
+        )}
       </div>
 
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <button
-        type="submit"
-        disabled={loading || !name.trim()}
-        className="rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-95 transition-transform"
-      >
-        {loading ? "Creating…" : "Create Cycle"}
-      </button>
-      <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
+      <PinnedBar>
+        <button type="submit" disabled={loading || !name.trim() || !startDay} className={PRIMARY}>
+          {scheduleType === "rotation" ? "Next: put the sessions in order" : "Next: build the week"}
+        </button>
+      </PinnedBar>
     </form>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 2
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function CycleSetupSessions({
+  cycle,
+  programs,
+  start,
+  endurance,
+}: {
+  cycle: TrainingCycleWithSlots;
+  programs: PickerProgram[];
+  /** The first day: today starts the cycle, a later day schedules it. */
+  start: string;
+  endurance: boolean;
+}) {
+  const returnTo = useReturnTo();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  async function create() {
+    setLoading(true);
+    setError("");
+    const result = await callAction(startTrainingCycle(cycle.id, start));
+    if (result.success) {
+      returnTo(`/cycles/${cycle.id}`);
+    } else {
+      setLoading(false);
+      setError(result.error);
+    }
+  }
+
+  return (
+    <div className="flex flex-col" style={{ paddingBottom: "140px" }}>
+      <SetupHeader
+        left={
+          <Link replace href={setupHref(cycle.id, start, true)} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
+            ‹ Back
+          </Link>
+        }
+      />
+      <div className="flex flex-col gap-[18px] px-4 pt-3">
+        <StepProgress step={2} />
+        <h2 className="text-[22px] font-semibold">{cycle.scheduleType === "rotation" ? "Rotation order" : "Build the week"}</h2>
+        <CycleScheduleBuilder cycle={cycle} programs={programs} endurance={endurance} />
+        {error && (
+          <p role="alert" className="text-sm text-[#ff6b5a]">
+            {error}
+          </p>
+        )}
+      </div>
+      <PinnedBar>
+        <button type="button" onClick={create} disabled={loading} className={PRIMARY}>
+          Create cycle
+        </button>
+      </PinnedBar>
+    </div>
   );
 }
