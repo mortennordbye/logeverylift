@@ -261,7 +261,7 @@ export type SeasonCardView = {
   replan: boolean;
   /** The A race; null makes it a goal season. */
   race: { name: string; when: string; daysLeft: number | null } | null;
-  /** "Goal by 7 Feb" and the days left, counted as the season page counts them, for a goal season. */
+  /** "Goal by 7 Feb", or "Ends 7 Feb" for a season with no goal, and the days left, counted as the season page counts them, for a season with no A race. */
   goalBy: string;
   daysLeft: number;
   bar: BarSegment[];
@@ -274,7 +274,7 @@ export type SeasonCardView = {
 };
 
 export function seasonCard(
-  s: { id: number; name: string; startDate: string; endDate: string; replanFlaggedAt: Date | null },
+  s: { id: number; name: string; startDate: string; endDate: string; replanFlaggedAt: Date | null; goal: string | null },
   phases: PhaseLike[],
   aRace: { name: string; raceDate: string } | null,
   today: string,
@@ -320,7 +320,7 @@ export function seasonCard(
     race: aRace
       ? { name: aRace.name, when: dayMonth(aRace.raceDate), daysLeft: aRace.raceDate >= today ? daysBetweenStr(today, aRace.raceDate) : null }
       : null,
-    goalBy: `Goal by ${dayMonth(s.endDate)}`,
+    goalBy: `${s.goal ? "Goal by" : "Ends"} ${dayMonth(s.endDate)}`,
     daysLeft: Math.max(0, daysBetweenStr(today, s.endDate)),
     bar,
     barLabel,

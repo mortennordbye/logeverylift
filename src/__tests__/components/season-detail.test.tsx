@@ -271,6 +271,13 @@ describe("season detail text (fix round 2)", () => {
     expect(within(first).getByText("Next").className).toContain("text-primary");
   });
 
+  it("a season with no goal and no race says when it ends, not Goal by (round 8)", () => {
+    render(<SeasonDetailClient {...base} season={{ ...base.season, goal: null }} enduranceEnabled={false} races={[]} aRaceId={null} phases={[]} next={null} />);
+    const hero = screen.getByTestId("season-hero");
+    expect(hero.textContent).not.toContain("Goal by");
+    expect(hero.textContent!.replace(/\u00a0/g, " ")).toContain("Ends 17 Apr 2027");
+  });
+
   it("sets the next goal apart from its label, so its capital letter does not sit mid-sentence (round 8)", () => {
     render(<SeasonDetailClient {...base} season={{ ...base.season, nextGoal: "Hold it through the spring" }} />);
     const line = screen.getByTestId("next-goal");

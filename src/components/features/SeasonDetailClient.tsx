@@ -348,7 +348,7 @@ export function SeasonDetailClient(p: Props) {
         <section data-testid="season-hero" className="flex flex-col gap-3.5 rounded-[20px] bg-widget px-[18px] py-4">
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-1">
-              <span className={LABEL}>{keepDates(aRace ? `${aRace.priority} race · ${dayLabel(aRace.raceDate)}` : `Goal by ${dayLabel(p.season.endDate)}`)}</span>
+              <span className={LABEL}>{keepDates(aRace ? `${aRace.priority} race · ${dayLabel(aRace.raceDate)}` : `${p.season.goal ? "Goal by" : "Ends"} ${dayLabel(p.season.endDate)}`)}</span>
               <span className="text-[17px] font-semibold break-words">{aRace ? aRace.name : (p.season.goal ?? p.season.name)}</span>
               {/* The race-day plan (docs/plans/nutrition-and-race-day.md, 6): half and full for now. */}
               {aRace && p.enduranceEnabled && aRace.discipline === "triathlon" && (aRace.distance === "half" || aRace.distance === "full") && (

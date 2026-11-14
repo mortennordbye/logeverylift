@@ -82,7 +82,7 @@ const gym: PlanListData = {
 };
 
 const jevnaker = seasonCard(
-  { id: 9, name: "Jevnaker Half 2027", startDate: "2026-11-16", endDate: "2027-08-29", replanFlaggedAt: null },
+  { id: 9, name: "Jevnaker Half 2027", startDate: "2026-11-16", endDate: "2027-08-29", replanFlaggedAt: null, goal: null },
   [
     phase(21, "Aerobic base + strength", "general", { w: 8 }, { scheduledStartDate: "2026-11-16" }),
     phase(22, "Longer ride and run", "base", { w: 12 }),
@@ -135,7 +135,7 @@ const endurance: PlanListData = {
 };
 
 const goalSeason = seasonCard(
-  { id: 7, name: "Bench 120 kg by February", startDate: "2026-11-09", endDate: "2027-02-07", replanFlaggedAt: null },
+  { id: 7, name: "Bench 120 kg by February", startDate: "2026-11-09", endDate: "2027-02-07", replanFlaggedAt: null, goal: "Bench 120 kg" },
   [
     phase(1, "Upper / Lower hypertrophy", "build", { w: 6 }, { status: "active", startDate: "2026-11-09" }),
     phase(2, "Strength peak", "peak", { w: 4 }, { scheduledStartDate: "2026-12-21" }),
