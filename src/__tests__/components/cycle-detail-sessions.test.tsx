@@ -480,6 +480,25 @@ describe("the session sheets say the session's state (J3-10, J5-08, J5-13, J5-15
     fireEvent.click(screen.getAllByRole("button", { name: "Actions for Full body" })[0]);
     expect(within(screen.getByTestId("rotation-sheet")).getByText("Today · Swapped")).toBeTruthy();
   });
+
+  it("the swapped turn's sheet names the program it replaced and swaps back to it (J3-10)", async () => {
+    const slots = [
+      { id: 11, orderIndex: 1, programId: 1, label: null, programName: "Upper A" },
+      { id: 12, orderIndex: 2, programId: 2, label: null, programName: "Lower A" },
+    ];
+    const walk = [
+      { date: "2026-11-17", slotId: 11, rotationPosition: 0, programId: 1, programName: "Upper A", status: "planned" as const },
+      { date: "2026-11-18", slotId: 12, rotationPosition: 1, programId: 9, programName: "Full body", status: "planned" as const },
+    ];
+    render(<RotationOrder cycleId={5} rows={rotationRows(slots, walk, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Full body" }));
+    const sheet = screen.getByTestId("rotation-sheet");
+    expect(within(sheet).getByText("Swapped from Lower A")).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Back to Lower A" }));
+    });
+    expect(updateRotationSession).toHaveBeenCalledWith({ op: "change", programId: 2, cycleId: 5, rotationPosition: 1 });
+  });
 });
 
 describe("a dimmed Save says what is missing (J5-10)", () => {

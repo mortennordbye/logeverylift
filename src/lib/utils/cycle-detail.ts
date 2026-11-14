@@ -227,6 +227,8 @@ export type RotationRow = {
   mark: "next" | "skipped" | "swapped" | "done" | null;
   /** The coming turn runs another program than the slot's, also when it is the next one. */
   swapped: boolean;
+  /** The slot's own program, which a swapped turn replaced: the sheet names it and swaps back (J3-10). */
+  swappedFrom: { programId: number; name: string } | null;
   /** The slot's next walk day from today on: what skip and change act on. */
   upcoming: RotationWalkDay | null;
   lastDone: string | null;
@@ -265,6 +267,7 @@ export function rotationRows(slots: RotationSlotLike[], walk: RotationWalkDay[],
       rest,
       mark,
       swapped,
+      swappedFrom: swapped && slot.programId != null ? { programId: slot.programId, name: slot.programName ?? slot.label ?? "the template" } : null,
       upcoming: rest ? null : upcoming,
       lastDone,
     };

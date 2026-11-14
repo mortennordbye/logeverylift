@@ -436,6 +436,7 @@ export function RotationSessionSheet({
           <div className="flex flex-col gap-0.5">
             <SectionLabel accent={isToday}>{label}</SectionLabel>
             <h2 className="text-2xl font-semibold">{row.name}</h2>
+            {row.swappedFrom && <p className="text-sm text-muted-foreground">Swapped from {row.swappedFrom.name}</p>}
             {row.programId != null ? (
               <Link href={`/programs/${row.programId}`} className="flex items-center min-h-11 text-sm text-muted-foreground active:opacity-70">
                 Position {row.n} of {count} ·&nbsp;<span className="text-brand">See program ›</span>
@@ -473,6 +474,11 @@ export function RotationSessionSheet({
                   </button>
                 ) : (
                   <>
+                    {row.swappedFrom && (
+                      <button type="button" disabled={pending} onClick={() => run({ op: "change", programId: row.swappedFrom!.programId })} className={sheetRow}>
+                        Back to {row.swappedFrom.name}
+                      </button>
+                    )}
                     <button type="button" onClick={() => setSwapping(true)} className={sheetRow}>
                       Swap program
                       <span aria-hidden className="text-muted-foreground">
