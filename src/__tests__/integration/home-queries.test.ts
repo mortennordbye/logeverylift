@@ -76,12 +76,13 @@ async function weekdayCycle() {
   return cycle.id;
 }
 
+// With a cycle, the home also reads the scheduled draft, whose start cuts the running block (fix round 7).
 describe("statements per home render (T2)", () => {
   it("lifter, weekday cycle with a missed day", async () => {
     await weekdayCycle();
     const first = await countHome();
     const steady = await countHome();
-    expect({ first, steady }).toEqual({ first: 78, steady: 70 });
+    expect({ first, steady }).toEqual({ first: 80, steady: 72 });
   });
 
   it("lifter, rotation cycle", async () => {
@@ -95,7 +96,7 @@ describe("statements per home render (T2)", () => {
     ]);
     const first = await countHome();
     const steady = await countHome();
-    expect({ first, steady }).toEqual({ first: 61, steady: 54 });
+    expect({ first, steady }).toEqual({ first: 63, steady: 56 });
   });
 
   it("no cycle", async () => {
@@ -114,6 +115,6 @@ describe("statements per home render (T2)", () => {
     ]);
     const first = await countHome();
     const steady = await countHome();
-    expect({ first, steady }).toEqual({ first: 152, steady: 118 });
+    expect({ first, steady }).toEqual({ first: 154, steady: 120 });
   });
 });

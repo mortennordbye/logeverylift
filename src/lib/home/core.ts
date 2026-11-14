@@ -26,7 +26,8 @@ import { readinessSwapFor } from "@/lib/readiness-swap";
 import { homeEndurance } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { getUserSettings, type UserSettings } from "@/lib/user-settings";
-import { parseDateStr } from "@/lib/utils/cycle-position";
+import { cycleLengthDays, parseDateStr } from "@/lib/utils/cycle-position";
+import { cutByStart, runLengthDays } from "@/lib/utils/seasons";
 import type { requireSession } from "@/lib/utils/session";
 import { weekDatesOf } from "@/lib/utils/user-date";
 import { db } from "@/db";
@@ -167,7 +168,7 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
   const info = cycleResult.success ? cycleResult.data : null;
   const todayProgram = info?.todaySlot?.program ?? null;
 
-  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, enduranceRead, todayPlan, upcoming] = await Promise.all([
+  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, enduranceRead, todayPlan, scheduledNext] = await Promise.all([
     getWorkoutStats(),
     getCompletedSessions(monday),
     todayProgram
@@ -184,10 +185,8 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
           return null;
         })
       : Promise.resolve(null),
-    // No active cycle: the block that starts next, so Today shows it, not the set-up prompt.
-    info
-      ? Promise.resolve(null)
-      : upcomingCycle(session.user.id).catch((e: unknown) => {
+    // The block that starts next: Today shows it with no active cycle, and its start cuts a running one.
+    upcomingCycle(session.user.id).catch((e: unknown) => {
           console.error("[Home] upcoming_cycle_read_failed", { error: e instanceof Error ? e.name : "unknown" });
           return null;
         }),
@@ -243,11 +242,17 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
       ? await homeWeekPlanned(session.user.id, weekDates[0], weekDates[6], info.cycle.id)
       : [];
 
+  const upcoming = info ? null : scheduledNext;
+  // A running block ends the day before a draft scheduled inside it starts (cutByStart).
+  const otherStart = scheduledNext?.startsOn ?? null;
+  const plannedDays = info ? cycleLengthDays(info.cycle) : 0;
+  const runDays = info?.cycle.startDate ? runLengthDays(info.cycle.startDate, plannedDays, otherStart) : plannedDays;
+  const totalWeeks = info ? (runDays === plannedDays ? info.cycle.durationWeeks : Math.ceil(runDays / 7)) : 0;
   const progressPct = info
-    ? Math.min(((info.currentWeek - 1) / info.cycle.durationWeeks) * 100, 100)
+    ? Math.min(((info.currentWeek - 1) / totalWeeks) * 100, 100)
     : 0;
   const endFormatted = info
-    ? dateLabel(info.endDate, "MMM d")
+    ? dateLabel(info.cycle.startDate ? cutByStart(info.cycle.startDate, info.endDate, otherStart) : info.endDate, "MMM d")
     : null;
 
   return {
@@ -268,6 +273,8 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     rotationOverdueDays,
     dowMissed,
     weekPlanned,
+    /** The block's weeks, to the day a scheduled start cuts it. */
+    totalWeeks,
     progressPct,
     endFormatted,
     insight,

@@ -27,8 +27,8 @@ import {
   dayLabel,
   daysBetweenStr,
   lengthField,
-  lengthShort,
   rangeLabel,
+  runLength,
   seasonPaused,
   shortDay,
   switchLengthUnit,
@@ -392,7 +392,7 @@ export function SeasonDetailClient(p: Props) {
                     <PhaseRow
                       key={ph.id}
                       phase={ph}
-                      sub={`${p.enduranceEnabled && ph.phaseType ? `${PHASE_TYPE_LABELS[ph.phaseType]} · ` : ""}${lengthShort(ph)} · ${rangeLabel(ph.start, ph.end)}`}
+                      sub={`${p.enduranceEnabled && ph.phaseType ? `${PHASE_TYPE_LABELS[ph.phaseType]} · ` : ""}${runLength(ph)} · ${rangeLabel(ph.start, ph.end)}`}
                       warn={misfit && "taperId" in fit && fit.taperId === ph.id && showRaces ? fitLine : null}
                       badge={badge(ph)}
                       onOpen={() => toPhase({ phase: ph, phaseType: ph.phaseType, ...lengthField(ph), unitNote: null })}

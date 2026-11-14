@@ -12,8 +12,9 @@ import {
   addDaysStr,
   cutByStart,
   daysBetweenStr,
-  lengthShort,
   nextPhase,
+  runLength,
+  runLengthDays,
   seasonPaused,
   seasonTimeline,
   shortDay,
@@ -46,8 +47,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 
 /** "Build · 12 wk · 5 Apr – 27 Jun". */
-export function phaseSub(p: Pick<TimelinePhase, "phaseType" | "durationWeeks" | "durationDays" | "start" | "end">): string {
-  return [p.phaseType ? PHASE_TYPE_NAMES[p.phaseType] : null, lengthShort(p), dateRange(p.start, p.end)].filter(Boolean).join(" · ");
+export function phaseSub(p: Pick<TimelinePhase, "phaseType" | "lengthDays" | "start" | "end">): string {
+  return [p.phaseType ? PHASE_TYPE_NAMES[p.phaseType] : null, runLength(p), dateRange(p.start, p.end)].filter(Boolean).join(" · ");
 }
 
 /** "Starts today", "Starts tomorrow", "Starts Mon 16 Nov" inside a week, else "Starts 21 Dec". A weekday never comes without its date (J4-17). */
@@ -153,12 +154,18 @@ export type HeroView =
   | (HeroBase & { kind: "week"; days: HeroDay[]; summary: string })
   | (HeroBase & { kind: "rotation"; chips: RotationChip[]; next: string | null });
 
-/** "Week 3 of 6 · Rotation", or "Starts Mon 16 Nov · Week 1 of 8" for a block that has not started. */
-export function heroLabel(c: CycleLike, today: string, active: boolean): string {
+/**
+ * "Week 3 of 6 · Rotation", or "Starts Mon 16 Nov · Week 1 of 8" for a block
+ * that has not started. A running block counts its weeks to the day another
+ * block's scheduled start (`otherStart`) cuts it.
+ */
+export function heroLabel(c: CycleLike, today: string, active: boolean, otherStart: string | null = null): string {
   const start = active ? c.startDate! : c.scheduledStartDate!;
   if (!active) return `Starts ${shortDay(start)} · Week 1 of ${c.durationWeeks}`;
-  const week = Math.min(Math.floor(Math.max(daysBetweenStr(start, today), 0) / 7) + 1, c.durationWeeks);
-  return `Week ${week} of ${c.durationWeeks} · ${scheduleWords(c.scheduleType)}`;
+  const runDays = runLengthDays(start, lengthDays(c), otherStart);
+  const weeks = runDays === lengthDays(c) ? c.durationWeeks : Math.ceil(runDays / 7);
+  const week = Math.min(Math.floor(Math.max(daysBetweenStr(start, today), 0) / 7) + 1, weeks);
+  return `Week ${week} of ${weeks} · ${scheduleWords(c.scheduleType)}`;
 }
 
 export type WeekSession = {

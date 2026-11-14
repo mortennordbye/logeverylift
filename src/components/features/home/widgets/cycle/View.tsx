@@ -34,7 +34,7 @@ export const cycleWidget: Renderer<CycleData> = defineWidget<CycleData>({
       ? {
           name: core.info.cycle.name,
           currentWeek: core.info.currentWeek,
-          durationWeeks: core.info.cycle.durationWeeks,
+          durationWeeks: core.totalWeeks,
           progressPct: core.progressPct,
           endFormatted: core.endFormatted ?? "",
         }
