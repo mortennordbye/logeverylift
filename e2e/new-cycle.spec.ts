@@ -52,6 +52,9 @@ test("a new rotation is reordered by drag and Move up, and Cancel discards it", 
   await settle();
   await expect(page.getByRole("heading", { name: "Rotation order" })).toBeVisible();
   const cycleId = Number(new URL(page.url()).searchParams.get("cycle"));
+  // No session yet: Create cycle is off and says why.
+  await expect(page.getByRole("button", { name: "Create cycle" })).toBeDisabled();
+  await expect(page.getByText("Add a session first.")).toBeVisible();
 
   for (const name of ["Zed one", "Zed two", "Zed three"]) {
     await page.getByRole("button", { name: "+ Add session" }).click();
@@ -71,7 +74,10 @@ test("a new rotation is reordered by drag and Move up, and Cancel discards it", 
   await page.getByRole("button", { name: "Move up" }).click();
   await settle();
   await expect.poll(() => savedOrder(cycleId)).toEqual(["Zed three", "Zed two", "Zed one"]);
-  await page.getByRole("region", { name: "Zed two" }).getByRole("button", { name: "Done" }).click();
+  // The options sheet closes with the shared Close button, as every Plan sheet does.
+  await page.getByRole("region", { name: "Zed two" }).getByRole("button", { name: "Close" }).click();
+  await expect(page.getByRole("region", { name: "Zed two" })).toBeHidden();
+  await expect(page.getByRole("button", { name: "Create cycle" })).toBeEnabled();
 
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("region", { name: "Discard this cycle?" }).getByRole("button", { name: "Discard cycle" }).click();

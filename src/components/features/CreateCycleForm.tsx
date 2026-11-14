@@ -226,10 +226,16 @@ export function CreateCycleForm({
                 onChange={(e) => setCustomWeeks(e.target.value)}
                 aria-label="Length in weeks"
                 aria-invalid={!weeksOk}
+                aria-describedby={weeksOk ? undefined : "length-error"}
                 className="h-12 w-24 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand aria-[invalid=true]:border-[#ff6b5a]"
               />
               <span className="text-base text-[#c4c4c9]">weeks</span>
             </span>
+            {!weeksOk && (
+              <span id="length-error" className="text-[13px] text-[#ff6b5a]">
+                Pick {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks.
+              </span>
+            )}
           </label>
         )}
 
@@ -313,6 +319,8 @@ export function CycleSetupSessions({
   const [discarding, setDiscarding] = useState(false);
   const [discardBusy, setDiscardBusy] = useState(false);
   const [discardError, setDiscardError] = useState("");
+  // A rest day alone is no cycle: at least one session must be in it.
+  const hasSession = cycle.slots.some((s) => s.programId != null || s.workoutId != null);
 
   async function discard() {
     setDiscardBusy(true);
@@ -371,7 +379,12 @@ export function CycleSetupSessions({
         )}
       </div>
       <PinnedBar>
-        <button type="button" onClick={create} disabled={loading} className={PRIMARY}>
+        {!hasSession && (
+          <p id="create-reason" className="mb-2 text-center text-[13px] text-muted-foreground">
+            Add a session first.
+          </p>
+        )}
+        <button type="button" onClick={create} disabled={loading || !hasSession} aria-describedby={hasSession ? undefined : "create-reason"} className={PRIMARY}>
           Create cycle
         </button>
       </PinnedBar>

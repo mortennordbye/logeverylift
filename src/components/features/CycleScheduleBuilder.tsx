@@ -12,6 +12,7 @@
  *   row's options), add a session or a rest day.
  */
 
+import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { createProgram } from "@/lib/actions/programs";
 import {
@@ -19,6 +20,7 @@ import {
   reorderCycleSlots,
   upsertCycleSlot,
 } from "@/lib/actions/training-cycles";
+import { dayLabels } from "@/lib/utils/cycle-detail";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { Program, TrainingCycleWithSlots } from "@/types/workout";
 import {
@@ -319,53 +321,56 @@ function SlotSheet({
 
   const input = "w-full rounded-xl bg-widget-2 px-3 py-2.5 text-base outline-none focus:ring-2 ring-brand";
   return (
-    <SheetFrame title={title}>
-      <div className="flex items-center justify-between py-2 min-h-[52px] border-b border-hairline">
-        <span className="flex flex-col gap-0.5 min-w-0">
-          <span className="text-xs text-muted-foreground">Program</span>
-          <span className="text-base font-medium truncate">{slot.program?.name ?? (isRest(slot) ? "Rest" : slot.label ?? "Workout")}</span>
-        </span>
-        <button type="button" onClick={onChangeProgram} className="h-11 px-3 text-[15px] font-medium text-brand active:opacity-70">
-          Change
+    <PlanSheetPanel label={title}>
+      <div className="flex flex-col gap-1 -mt-2">
+        <h2 className="text-[17px] font-semibold">{title}</h2>
+        <div className="flex items-center justify-between py-2 min-h-[52px] border-b border-hairline">
+          <span className="flex flex-col gap-0.5 min-w-0">
+            <span className="text-xs text-muted-foreground">Program</span>
+            <span className="text-base font-medium truncate">{slot.program?.name ?? (isRest(slot) ? "Rest" : slot.label ?? "Workout")}</span>
+          </span>
+          <button type="button" onClick={onChangeProgram} className="h-11 px-3 text-[15px] font-medium text-brand active:opacity-70">
+            Change
+          </button>
+        </div>
+        {showKey && <Switch title="Key session" sub="A hard day. A missed one gets a new day." on={key} onChange={setKey} />}
+        {brickWith && (
+          <Switch title="Link to the session before (brick)" sub={`Run right after ${brickWith}`} on={brick} onChange={setBrick} />
+        )}
+        {showAuto && <Switch title="Complete automatically" sub="For days you track on Garmin" on={auto} onChange={setAuto} />}
+        <button
+          type="button"
+          aria-expanded={labelOpen}
+          onClick={() => setLabelOpen(!labelOpen)}
+          className="flex items-center justify-between min-h-[52px] border-b border-hairline text-[15px] text-left"
+        >
+          <span>Label and note</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={`text-muted-foreground transition-transform ${labelOpen ? "rotate-180" : ""}`} aria-hidden>
+            <path d="M6 9l6 6 6-6" />
+          </svg>
+        </button>
+        {labelOpen && (
+          <div className="flex flex-col gap-3 py-3 border-b border-hairline">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted-foreground">Label</span>
+              <input value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)} className={input} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs text-muted-foreground">Note</span>
+              <textarea value={notes} maxLength={500} rows={2} onChange={(e) => setNotes(e.target.value)} className={`${input} resize-none`} />
+            </label>
+          </div>
+        )}
+        {extra}
+        <button type="button" onClick={onRemove} className="self-start min-h-11 text-[15px] font-medium text-[#ff6b5a] active:opacity-70">
+          Remove session
+        </button>
+        <ErrorLine error={error} />
+        <button type="button" onClick={done} className={`mt-2 ${PRIMARY}`}>
+          Done
         </button>
       </div>
-      {showKey && <Switch title="Key session" sub="A hard day. A missed one gets a new day." on={key} onChange={setKey} />}
-      {brickWith && (
-        <Switch title="Link to the session before (brick)" sub={`Run right after ${brickWith}`} on={brick} onChange={setBrick} />
-      )}
-      {showAuto && <Switch title="Complete automatically" sub="For days you track on Garmin" on={auto} onChange={setAuto} />}
-      <button
-        type="button"
-        aria-expanded={labelOpen}
-        onClick={() => setLabelOpen(!labelOpen)}
-        className="flex items-center justify-between min-h-[52px] border-b border-hairline text-[15px] text-left"
-      >
-        <span>Label and note</span>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className={`text-muted-foreground transition-transform ${labelOpen ? "rotate-180" : ""}`} aria-hidden>
-          <path d="M6 9l6 6 6-6" />
-        </svg>
-      </button>
-      {labelOpen && (
-        <div className="flex flex-col gap-3 py-3 border-b border-hairline">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs text-muted-foreground">Label</span>
-            <input value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)} className={input} />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs text-muted-foreground">Note</span>
-            <textarea value={notes} maxLength={500} rows={2} onChange={(e) => setNotes(e.target.value)} className={`${input} resize-none`} />
-          </label>
-        </div>
-      )}
-      {extra}
-      <button type="button" onClick={onRemove} className="self-start min-h-11 text-[15px] font-medium text-[#ff6b5a] active:opacity-70">
-        Remove session
-      </button>
-      <ErrorLine error={error} />
-      <button type="button" onClick={done} className={`mt-2 ${PRIMARY}`}>
-        Done
-      </button>
-    </SheetFrame>
+    </PlanSheetPanel>
   );
 }
 
@@ -415,6 +420,7 @@ function DayOfWeekBuilder({
     slotsByDay.set(s.dayOfWeek, [...(slotsByDay.get(s.dayOfWeek) ?? []), s]);
   }
   for (const list of slotsByDay.values()) list.sort((a, b) => a.daySlot - b.daySlot);
+  const labels = dayLabels(cycle.slots);
   const find = (day: number, daySlot: number) => (slotsByDay.get(day) ?? []).find((s) => s.daySlot === daySlot);
   const editSlot = editing ? find(editing.day, editing.daySlot) : undefined;
   const prevSlot = editing && editing.daySlot > 1 ? find(editing.day, editing.daySlot - 1) : undefined;
@@ -462,8 +468,8 @@ function DayOfWeekBuilder({
               <span className="w-[34px] shrink-0 text-[13px] font-semibold text-muted-foreground">{dayLabel}</span>
               <div className="flex flex-1 min-w-0 flex-wrap items-center gap-1.5">
                 {sessions.length === 0 && (
-                  <span className="inline-flex items-center h-11 px-3 rounded-xl border border-[rgba(244,244,245,0.16)] text-sm font-medium text-muted-foreground">
-                    Rest
+                  <span className={`inline-flex items-center h-11 max-w-full px-3 rounded-xl border border-[rgba(244,244,245,0.16)] text-sm font-medium ${labels[day] ? "text-foreground/80" : "text-muted-foreground"}`}>
+                    <span className="truncate">{labels[day] ?? "Rest"}</span>
                   </span>
                 )}
                 {sessions.map((s) => (

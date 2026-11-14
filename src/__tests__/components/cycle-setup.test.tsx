@@ -81,6 +81,7 @@ describe("step 1: the basics", () => {
     const weeks = screen.getByLabelText("Length in weeks");
     fireEvent.change(weeks, { target: { value: "60" } });
     expect((screen.getByRole("button", { name: "Build the week" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Pick 1 to 52 weeks.")).toBeTruthy();
     fireEvent.change(weeks, { target: { value: "7" } });
     fireEvent.click(screen.getByRole("button", { name: "Build the week" }));
     await waitFor(() => expect(createTrainingCycle).toHaveBeenCalledWith(expect.objectContaining({ name: "Odd block", durationWeeks: 7 })));
@@ -189,6 +190,13 @@ describe("step 2", () => {
     expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-16");
   });
 
+  it("Create cycle stays off with a reason until the cycle has a session", () => {
+    const empty = { ...rotation, slots: [slot({ id: 22, orderIndex: 1, label: "Rest" })] } as unknown as TrainingCycleWithSlots;
+    render(<CycleSetupSessions cycle={empty} programs={programs} start="2026-11-16" endurance={false} />);
+    expect((screen.getByRole("button", { name: "Create cycle" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Add a session first.")).toBeTruthy();
+  });
+
   it("Cancel asks first, then discards the draft and goes back to Plan", async () => {
     render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-11-16" endurance={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
@@ -260,6 +268,14 @@ describe("rotation builder", () => {
     await waitFor(() => expect(reorderCycleSlots).toHaveBeenCalledWith(3, [21, 23, 22]));
   });
 
+  it("closes the options sheet with its Close button", async () => {
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    fireEvent.click(screen.getByRole("button", { name: "Options for Lower A" }));
+    const sheet = screen.getByRole("region", { name: "Lower A" });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Lower A" })).toBeNull());
+  });
+
   it("removes a session from its options", async () => {
     render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
     fireEvent.click(screen.getByRole("button", { name: "Options for Upper A" }));
@@ -309,6 +325,16 @@ describe("weekday builder", () => {
     await waitFor(() =>
       expect(upsertCycleSlot).toHaveBeenCalledWith({ trainingCycleId: 4, dayOfWeek: 7, daySlot: 3, programId: 11, label: "Upper A" }),
     );
+  });
+
+  it("a day with only a labelled slot shows its label, not Rest", () => {
+    const labelled = {
+      ...week,
+      slots: [...week.slots, slot({ id: 35, dayOfWeek: 5, daySlot: 1, label: "Mobility" })],
+    } as unknown as TrainingCycleWithSlots;
+    render(<CycleScheduleBuilder cycle={labelled} programs={programs} />);
+    expect(screen.getByText("Mobility")).toBeTruthy();
+    expect(screen.getAllByText("Rest")).toHaveLength(4);
   });
 
   it("a session with its own label shows the label, not the program name", () => {

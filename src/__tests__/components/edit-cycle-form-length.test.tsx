@@ -45,5 +45,6 @@ describe("the cycle length on the edit form", () => {
     render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
     fireEvent.change(screen.getByLabelText("Length in weeks"), { target: { value: "53" } });
     expect((screen.getByRole("button", { name: /Save/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Pick 1 to 52 weeks.")).toBeTruthy();
   });
 });

@@ -106,8 +106,9 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col" style={{ paddingBottom: "calc(140px + var(--kb-height, 0px))" }}>
-      <header className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-4 pt-4">
-        <div className="min-w-0 justify-self-start">
+      {/* minmax(0, 1fr): a long back label truncates instead of running under the title. */}
+      <header className="grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 px-4 pt-4">
+        <div className="min-w-0">
           <BackLink fallback={{ href: `/cycles/${cycle.id}`, label: cycle.name }} />
         </div>
         <h1 className="text-base font-semibold">Edit cycle</h1>
@@ -193,10 +194,16 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
                     onChange={(e) => setCustomWeeks(e.target.value)}
                     aria-label="Length in weeks"
                     aria-invalid={!weeksOk}
+                    aria-describedby={weeksOk ? undefined : "length-error"}
                     className={`${FIELD} !w-24 aria-[invalid=true]:border-[#ff6b5a]`}
                   />
                   <span className="text-base text-muted-foreground">weeks</span>
                 </span>
+                {!weeksOk && (
+                  <span id="length-error" className="text-[13px] text-[#ff6b5a]">
+                    Pick {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks.
+                  </span>
+                )}
               </label>
             )}
             {durationWarning && <p className="-mt-2 text-[13px] text-[#ff6b5a]">{durationWarning}</p>}
