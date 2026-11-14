@@ -15,7 +15,7 @@
  */
 
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
-import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { ButtonReason, Chip, ErrorLine, FormHeader, PinnedBar, StepProgress } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
@@ -403,7 +403,7 @@ export function CycleSetupSessions({
             <button
               type="button"
               onClick={() => setDiscarding(false)}
-              className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70"
+              className={SHEET_CANCEL}
             >
               Keep building
             </button>

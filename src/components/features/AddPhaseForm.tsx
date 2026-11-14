@@ -2,7 +2,7 @@
 
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
-import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { ButtonReason, Chip, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { addPhaseAction } from "@/lib/actions/seasons";
@@ -343,7 +343,7 @@ export function AddPhaseCancel({ seasonId, cycleId, name }: { seasonId: number; 
             >
               {busy ? "Removing…" : "Remove phase"}
             </button>
-            <button type="button" onClick={() => setOpen(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+            <button type="button" onClick={() => setOpen(false)} className={SHEET_CANCEL}>
               Keep building
             </button>
           </PlanSheetPanel>
