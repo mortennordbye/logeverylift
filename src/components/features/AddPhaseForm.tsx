@@ -26,7 +26,7 @@ type Props = {
 };
 
 const PHASE_TYPES = Object.keys(PHASE_TYPE_LABELS) as PhaseType[];
-const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started", completed: "Done" };
+const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started" };
 
 /**
  * Add a phase (J4_AddPhase). Step 1 of 2: a new cycle with a name, type,

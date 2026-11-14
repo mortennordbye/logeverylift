@@ -47,7 +47,7 @@ const DISCIPLINES: { value: RaceDiscipline; label: string }[] = [
   { value: "other", label: "Other" },
 ];
 
-const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started", completed: "Done" };
+const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started" };
 
 /** "Mon 16 Nov 2026". */
 const longDay = (d: string) => `${shortDay(d)} ${d.slice(0, 4)}`;

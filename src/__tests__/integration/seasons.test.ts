@@ -26,7 +26,7 @@ import { restorePlanRevision } from "@/lib/actions/plan-revisions";
 import { getActiveCycle } from "@/lib/garmin/queries";
 import { syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { purgePlanRevisions } from "@/lib/plan-revisions";
-import { activeCycleRace, getSeasonDetail, listSeasons } from "@/lib/seasons";
+import { activeCycleRace, getSeasonDetail, listSeasons, seasonlessCycles } from "@/lib/seasons";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { scaledDuration } from "@/lib/utils/periodization";
 import { and, asc, eq } from "drizzle-orm";
@@ -217,6 +217,20 @@ describe("phases", () => {
     const c = await cycle(me);
     await addPhaseAction({ seasonId: a, cycleId: c });
     expect(await addPhaseAction({ seasonId: b, cycleId: c })).toMatchObject({ success: false, error: expect.stringContaining("another season") });
+  });
+
+  it("refuses a completed cycle as a phase, and leaves it out of the cycles Add phase offers", async () => {
+    const id = await newSeason(me, day(2));
+    const done = await cycle(me, { name: "Strength 5x5", status: "completed", startDate: day(-80) });
+    const draft = await cycle(me, { name: "Draft" });
+    expect(await addPhaseAction({ seasonId: id, cycleId: done })).toEqual({
+      success: false,
+      error: "A finished cycle cannot be a phase. Pick a draft or the running cycle, or make a new phase.",
+    });
+    expect(await cycleRow(done)).toMatchObject({ seasonId: null, status: "completed", startDate: day(-80) });
+    asUser(me);
+    expect(await createSeasonAction({ name: "With done", startDate: day(2), endDate: day(90), cycleIds: [done] })).toMatchObject({ success: false });
+    expect((await seasonlessCycles(me)).map((c) => c.id)).toEqual([draft]);
   });
 
   it("fit taper sets the phase before the taper so the taper ends on race day", async () => {

@@ -243,6 +243,9 @@ the next race, the re-plan trigger, the phase curves and the diff text.
   day after the one before ends, or on its real start date once it has started. It returns, per
   phase, start, end, status (done, active, planned), and the gaps or overlaps with the season
   dates. This is the only place phase dates come from; nothing stores them.
+- **A completed cycle is not a phase.** Its real start would win in the timeline, so it would
+  keep its old dates out of the chain. `add_phase` refuses it, and Add phase and New season
+  offer only drafts and the running cycle (fix round 2, item 7).
 - **Chained start (owner question 1).** When a phase becomes active, the layer schedules the
   next phase in the season to start on the day after this one ends, with the existing
   `scheduled_start_date` and writer `sync`. On that day `startDueScheduledCycle` starts it and

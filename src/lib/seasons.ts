@@ -42,7 +42,7 @@ import {
   type TimelinePhase,
 } from "@/lib/utils/seasons";
 import { SEASON_MAX_PHASES } from "@/lib/utils/seasons";
-import { and, asc, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm";
 
 export const SEASON_TEXT_MAX = 500;
 export const PHASE_MAX_WEEKS = 52;
@@ -52,6 +52,7 @@ export const SEASON_MAX_RACES = 20;
 export { SEASON_MAX_PHASES } from "@/lib/utils/seasons";
 /** A new phase with no length given. */
 export const DEFAULT_PHASE_WEEKS = 4;
+export const COMPLETED_PHASE = "A finished cycle cannot be a phase. Pick a draft or the running cycle, or make a new phase.";
 
 export const RACES_OFF =
   "Races are part of the endurance features, which are off for this account. An admin can turn them on.";
@@ -158,7 +159,7 @@ export async function getSeasonDetail(userId: string, seasonId: number): Promise
   };
 }
 
-/** The user's live cycles in no live season: what "Add phase" can pick. */
+/** The user's live cycles in no live season, drafts and the running one: what "Add phase" can pick. */
 export async function seasonlessCycles(userId: string) {
   return db
     .select({ id: trainingCycles.id, name: trainingCycles.name, status: trainingCycles.status })
@@ -169,6 +170,7 @@ export async function seasonlessCycles(userId: string) {
       and(
         eq(trainingCycles.userId, userId),
         isNull(trainingCycles.deletedAt),
+        ne(trainingCycles.status, "completed"),
         or(isNull(trainingCycles.seasonId), isNotNull(seasons.deletedAt)),
       ),
     )
@@ -555,6 +557,9 @@ export async function addPhase(ctx: PlanWriteContext, seasonId: number, input: A
       if ((await liveSeasonId(w.tx, cycle.seasonId)) != null) {
         throw new PlanStateError(cycle.seasonId === seasonId ? "This cycle is already a phase of this season." : "This cycle is a phase of another season. Remove it there first.");
       }
+      // A finished block ran on its own dates; as a phase it would sit out of
+      // the chain (docs/plans/seasons.md 2.4: real starts win), so it is refused.
+      if (cycle.status === "completed") throw new PlanStateError(COMPLETED_PHASE);
       if (cycle.raceDate) {
         const [same] = await w.tx
           .select({ id: seasonRaces.id })
