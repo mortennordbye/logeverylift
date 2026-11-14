@@ -169,3 +169,17 @@ describe("Add a phase, fix round 4", () => {
     expect(cycles.deleteTrainingCycle).not.toHaveBeenCalled();
   });
 });
+
+describe("one selected style on the form (round 8)", () => {
+  it("draws the chosen length unit with the same accent tint as the chosen phase type", () => {
+    render(<AddPhaseForm {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    const unit = screen.getByRole("button", { name: "Weeks" });
+    const type = screen.getByRole("button", { name: "Build" });
+    expect(unit.getAttribute("aria-pressed")).toBe("true");
+    const tint = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
+    expect(type.className).toContain(tint);
+    expect(unit.className).toContain(tint);
+    expect(unit.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+  });
+});

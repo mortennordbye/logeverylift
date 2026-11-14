@@ -112,7 +112,7 @@ export const PRIORITIES: { value: "A" | "B" | "C"; label: string }[] = [
   { value: "C", label: "C" },
 ];
 
-/** Two or three equal choices in one rounded track; the chosen one is filled with the accent. */
+/** Two or three equal choices in one rounded track; the chosen one has the accent tint of a chosen chip. */
 export function Segmented<T extends string>({
   label,
   value,
@@ -136,7 +136,7 @@ export function Segmented<T extends string>({
           type="button"
           aria-pressed={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`min-h-11 rounded-[10px] text-sm ${value === o.value ? "bg-primary font-semibold text-primary-foreground" : "font-medium text-foreground"}`}
+          className={`min-h-11 rounded-[10px] text-sm ${value === o.value ? `${ACCENT_TINT} font-semibold text-foreground ring-1 ring-inset ring-primary` : "font-medium text-foreground"}`}
         >
           {o.label}
         </button>
