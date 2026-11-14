@@ -3,7 +3,7 @@
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import { getFriendsBadgeCount } from "@/lib/actions/friends";
 import { isAiGenerating, subscribeAiGenerating } from "@/lib/utils/ai-generating";
-import { Dumbbell, MoreHorizontal, RefreshCw, LayoutList } from "lucide-react";
+import { Activity, Dumbbell, MoreHorizontal, LayoutList } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -16,9 +16,9 @@ const staticNavItems = [
     icon: Dumbbell,
   },
   {
-    label: "Cycles",
+    label: "Plan",
     href: "/cycles",
-    icon: RefreshCw,
+    icon: Activity,
   },
   {
     label: "Programs",
