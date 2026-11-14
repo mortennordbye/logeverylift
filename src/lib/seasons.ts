@@ -31,6 +31,7 @@ import { toDateStr, weeksForDays } from "@/lib/utils/cycle-position";
 import {
   fitTaperChange,
   nextPhase,
+  phasesSkippedBy,
   replanReason,
   seasonARace,
   seasonTimeline,
@@ -180,7 +181,15 @@ export async function seasonOfCycle(userId: string, cycle: { id: number; seasonI
   const detail = await getSeasonDetail(userId, cycle.seasonId);
   if (!detail) return null;
   const position = detail.phases.findIndex((p) => p.id === cycle.id);
-  return { id: detail.season.id, name: detail.season.name, position: position + 1, phaseCount: detail.phases.length, races: detail.races, replan: detail.replan };
+  return {
+    id: detail.season.id,
+    name: detail.season.name,
+    position: position + 1,
+    phaseCount: detail.phases.length,
+    races: detail.races,
+    replan: detail.replan,
+    skippedPhases: phasesSkippedBy(detail.phases, cycle.id),
+  };
 }
 
 // ── The race a cycle reads (2.7, D8) ─────────────────────────────────────────

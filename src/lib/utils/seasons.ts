@@ -158,6 +158,13 @@ export function nextPhase(timeline: TimelinePhase[]): TimelinePhase | null {
   return timeline.slice(lastStarted + 1).find((p) => p.state === "planned") ?? null;
 }
 
+/** How many planned phases before this one a start today skips: 0 for the next phase, or a phase that is not planned. */
+export function phasesSkippedBy(timeline: TimelinePhase[], cycleId: number): number {
+  const next = nextPhase(timeline);
+  if (!next) return 0;
+  return Math.max(0, timeline.findIndex((p) => p.id === cycleId) - timeline.indexOf(next));
+}
+
 // ── The re-plan flag (2.6, D17) ──────────────────────────────────────────────
 
 const raceLabel = (r: Pick<RaceLike, "name" | "priority">) => `${r.priority} race "${r.name}"`;

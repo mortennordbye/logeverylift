@@ -139,7 +139,7 @@ export default async function CycleDetailPage({
         )}
 
         {/* Start cycle CTA (draft only) */}
-        {cycle.status === "draft" && <StartCycleButton cycle={cycle} />}
+        {cycle.status === "draft" && <StartCycleButton cycle={cycle} skippedPhases={season?.skippedPhases ?? 0} />}
 
         {/* Schedule section header */}
         <div>
