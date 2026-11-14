@@ -3,8 +3,10 @@
 /**
  * Small parts the season screens share, drawn to the Plan tab spec
  * (docs/design/plan-redesign/spec.md): section labels, radio cards, chips,
- * a segmented choice and the pinned bottom bar. Used inside `.home-ui`.
+ * a segmented choice, the race fields and the pinned bottom bar. Used inside `.home-ui`.
  */
+
+import type { RaceDiscipline, RacePriority } from "@/lib/utils/seasons";
 
 /** The selected chip tint comes from the accent, never a fixed blue. */
 export const ACCENT_TINT = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
@@ -19,6 +21,16 @@ export function SectionLabel({ children, id }: { children: React.ReactNode; id?:
     <h2 id={id} className={`${LABEL} mx-1`}>
       {children}
     </h2>
+  );
+}
+
+/** A labelled row of chips, as a fieldset. */
+export function ChipGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
+      <legend className={`mb-2 ${LABEL}`}>{label}</legend>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </fieldset>
   );
 }
 
@@ -109,6 +121,55 @@ export function Segmented<T extends string>({
   );
 }
 
+export const RACE_KIND_LABELS: Record<RaceDiscipline, string> = { triathlon: "Triathlon", run: "Run", ride: "Ride", swim: "Swim", other: "Other" };
+const RACE_KINDS = Object.keys(RACE_KIND_LABELS) as RaceDiscipline[];
+
+/** The race kind of a race form, as a row of chips. */
+export function RaceKindChips({ label, value, onChange }: { label: string; value: RaceDiscipline; onChange: (v: RaceDiscipline) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label={label}>
+      {RACE_KINDS.map((d) => (
+        <Chip key={d} pressed={value === d} onClick={() => onChange(d)}>
+          {RACE_KIND_LABELS[d]}
+        </Chip>
+      ))}
+    </div>
+  );
+}
+
+/** The triathlon distances of a race form's select, shortest first. */
+export function TriDistanceOptions() {
+  return (
+    <>
+      <option value="sprint">Sprint</option>
+      <option value="olympic">Olympic</option>
+      <option value="half">Half</option>
+      <option value="full">Full</option>
+    </>
+  );
+}
+
+/** A race's priority, A, B or C, on one row with its label. */
+export function RacePriorityRow({ value, onChange }: { value: RacePriority; onChange: (v: RacePriority) => void }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className={LABEL}>Priority</span>
+      <Segmented
+        label="Priority"
+        value={value}
+        onChange={onChange}
+        track="bg-widget-2"
+        className="w-[168px]"
+        options={[
+          { value: "A", label: "A" },
+          { value: "B", label: "B" },
+          { value: "C", label: "C" },
+        ]}
+      />
+    </div>
+  );
+}
+
 /**
  * The pinned bottom bar of a form screen: one full-width primary button. It
  * sits over the tab bar, so a form screen shows no tab bar.
@@ -131,6 +192,16 @@ export function ButtonReason({ id, reason }: { id: string; reason: string | null
   return (
     <p id={id} className="mt-2 text-center text-[13px] text-muted-foreground">
       {reason}
+    </p>
+  );
+}
+
+/** A failed save's message, read out as an alert. Nothing renders for a null error. */
+export function ErrorLine({ error }: { error: string | null }) {
+  if (!error) return null;
+  return (
+    <p role="alert" className={`text-sm ${DESTRUCTIVE_TEXT}`}>
+      {error}
     </p>
   );
 }

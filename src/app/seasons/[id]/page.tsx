@@ -2,7 +2,8 @@ import { HOME_UI } from "@/components/features/home/fonts";
 import { PlanItemDeleted } from "@/components/features/PlanItemDeleted";
 import { SeasonDetailClient } from "@/components/features/SeasonDetailClient";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { getSeasonDetail, seasonStartContext } from "@/lib/seasons";
+import { startBlocks } from "@/lib/cycle-start";
+import { getSeasonDetail } from "@/lib/seasons";
 import { userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { ownDeletedSeason } from "@/lib/plan-deleted";
@@ -16,18 +17,18 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
   const seasonId = Number(id);
   if (!Number.isInteger(seasonId) || seasonId <= 0) notFound();
   const auth = await requireSession();
-  const [detail, enduranceEnabled, today] = await Promise.all([
+  const [detail, enduranceEnabled, today, { running, scheduled }] = await Promise.all([
     getSeasonDetail(auth.user.id, seasonId),
     enduranceEnabledFor(auth.user.id),
     userToday(auth.user.id),
+    // Resume takes the scheduled start: its confirm says what that ends and drops.
+    startBlocks(auth.user.id),
   ]);
   // Delete season renders this page again in its response.
   const deleted = detail ? null : await ownDeletedSeason(auth.user.id, seasonId);
   if (deleted) return <PlanItemDeleted item={deleted} />;
   if (!detail) notFound();
   const s = detail.season;
-  // Resume takes the scheduled start: its confirm says what that ends and drops.
-  const { running, scheduled } = await seasonStartContext(auth.user.id, toDateStr(today));
 
   return (
     <div className={`${HOME_UI} h-[100dvh] overflow-y-auto bg-home`}>
