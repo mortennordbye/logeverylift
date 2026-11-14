@@ -50,6 +50,11 @@ describe("Add a phase", () => {
     expect(radio.closest("fieldset")!.className).toContain("flex-col");
   });
 
+  it("the Name placeholder is neutral, not a phase name the season may have (round 8)", () => {
+    render(<AddPhaseForm {...props} />);
+    expect((screen.getByLabelText("Name") as HTMLInputElement).placeholder).toBe("Phase name");
+  });
+
   it("step 1 goes on to the season's step 2 for the new phase", async () => {
     render(<AddPhaseForm {...props} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Swim, intervals, bricks" } });
