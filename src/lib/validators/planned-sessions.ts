@@ -34,6 +34,16 @@ export const plannedSessionOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("miss"), id, reason: z.string().trim().max(200).nullable().optional() }),
 ]);
 
+/**
+ * Skip, plan again or change one coming session of a rotation cycle, by its
+ * walk position (docs/plans/sessions.md, 4.3), from the cycle detail.
+ */
+export const rotationSessionOpSchema = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("skip"), cycleId: id, rotationPosition: z.number().int().min(0) }),
+  z.object({ op: z.literal("unskip"), cycleId: id, rotationPosition: z.number().int().min(0) }),
+  z.object({ op: z.literal("change"), cycleId: id, rotationPosition: z.number().int().min(0), programId: id }),
+]);
+
 /** "Yes, I did it" from the app (docs/plans/workouts-and-compliance.md, 6.5). */
 export const confirmDoneSchema = z.object({
   plannedSessionId: id,

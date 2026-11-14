@@ -93,7 +93,8 @@ test("builds a plan from picks, previews it, and imports it", async ({ page }) =
     .orderBy(asc(trainingCycleSlots.dayOfWeek));
   expect(slots.map((s) => s.day)).toEqual([2, 6]);
   await page.goto(newest);
-  await expect(page.getByText("draft").first()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start cycle" })).toBeVisible();
+  await page.getByRole("button", { name: "More actions" }).click();
   await page.getByRole("button", { name: "Delete cycle" }).click();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.waitForURL("/cycles");
