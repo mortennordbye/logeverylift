@@ -147,7 +147,7 @@ describe("DidYouDoItCard", () => {
     await act(async () => {
       fireEvent.click(within(first).getByRole("button", { name: "Move to Sat 14 Nov" }));
     });
-    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 11, date: "2026-11-14" });
+    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 11, date: "2026-11-14", suggested: true });
     expect(refresh).toHaveBeenCalled();
   });
 

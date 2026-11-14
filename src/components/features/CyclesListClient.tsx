@@ -2,12 +2,13 @@
 
 import { HOME_UI } from "@/components/features/home/fonts";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
-import { ACCENT_TINT, ErrorLine } from "@/components/features/season-ui";
+import { ACCENT_TINT } from "@/components/features/season-ui";
 import { FlagIcon, SeasonsSection } from "@/components/features/SeasonsSection";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
 import type { PlanListData, SelectRow } from "@/lib/plan-list";
-import { phaseDeleteWarning, type CycleRow, type HeroView } from "@/lib/utils/plan-list";
+import { ConfirmSheet } from "@/components/features/CycleDetailClient";
+import { deleteManyConfirm, phaseDeleteWarning, type CycleRow, type HeroView } from "@/lib/utils/plan-list";
 import { keepDates } from "@/lib/utils/keep-dates";
 import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
@@ -208,6 +209,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showAddSheet, setShowAddSheet] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -221,6 +223,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
 
   function stopSelecting() {
     setSelecting(false);
+    setConfirming(false);
     setSelected(new Set());
     setError(null);
   }
@@ -257,6 +260,10 @@ export function CyclesListClient({ data, deletedCount }: Props) {
   if (selecting) {
     const warning = phaseDeleteWarning(data.seasons, selected);
     const n = selected.size;
+    const names = [...data.seasons.flatMap((s) => s.phases), ...data.select.current, ...data.select.upNext, ...data.select.past]
+      .filter((r) => selected.has(r.id))
+      .map((r) => r.name);
+    const ask = deleteManyConfirm(names);
     return (
       <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-hidden`}>
         <header className="grid shrink-0 grid-cols-3 items-center px-2 pt-4 pb-2">
@@ -322,21 +329,35 @@ export function CyclesListClient({ data, deletedCount }: Props) {
               {warning}
             </p>
           )}
-          <ErrorLine error={error} />
           <button
             type="button"
-            onClick={handleDelete}
-            disabled={n === 0 || deleting}
+            onClick={() => {
+              setError(null);
+              setConfirming(true);
+            }}
+            disabled={n === 0}
             aria-describedby="delete-reason"
             className="h-[52px] rounded-2xl bg-[#c23a2e] text-base font-semibold text-white active:opacity-80 disabled:opacity-50"
           >
-            {deleting ? "Deleting…" : n === 0 ? "Delete" : `Delete ${n} ${n === 1 ? "cycle" : "cycles"}`}
+            {n === 0 ? "Delete" : ask.action}
           </button>
           {/* A dimmed Delete says why, as the other dimmed Plan buttons do (J7-01). */}
           <span id="delete-reason" className="text-center text-[13px] text-muted-foreground">
             {n === 0 ? "Select a cycle." : keepDates(`You can restore ${n === 1 ? "it" : "them"} for 90 days.`)}
           </span>
         </div>
+        <ConfirmSheet
+          open={confirming}
+          title={ask.title}
+          body={ask.body}
+          action={ask.action}
+          busyAction="Deleting…"
+          destructive
+          loading={deleting}
+          error={error}
+          onConfirm={handleDelete}
+          onClose={() => setConfirming(false)}
+        />
       </div>
     );
   }

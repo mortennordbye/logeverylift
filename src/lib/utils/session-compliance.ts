@@ -243,6 +243,41 @@ const DAY_CAP = 3;
 
 export type MoveSuggestion = { date: string } | { date: null; reason: string };
 
+type MoveInput = {
+  missedDate: string;
+  today: string;
+  load: DayLoad[];
+  availableDays?: number[] | null;
+  illness?: Pick<IllnessPeriod, "startedOn" | "endedOn">[];
+};
+
+/** The days of the missed session's week it may move to, earliest first (the rules of `suggestMoveDay`). */
+function moveDays(input: MoveInput): string[] {
+  const { missedDate, today, load, availableDays, illness = [] } = input;
+  const sunday = addDaysStr(mondayOf(missedDate), 6);
+  const first = addDaysStr(missedDate, 1) > today ? addDaysStr(missedDate, 1) : today;
+  const hardOn = (day: string) => load.some((l) => l.date === day && l.keyOrHard);
+
+  const days: string[] = [];
+  for (let day = first; day <= sunday; day = addDaysStr(day, 1)) {
+    if (availableDays && availableDays.length > 0 && !availableDays.includes(isoWeekday(day))) continue;
+    if (inIllness(day, illness)) continue;
+    if (hardOn(day) || hardOn(addDaysStr(day, -1)) || hardOn(addDaysStr(day, 1))) continue;
+    if (load.filter((l) => l.date === day).length >= DAY_CAP) continue;
+    days.push(day);
+  }
+  return days;
+}
+
+/**
+ * Whether a missed key session may still move to `day` (D19): the server's
+ * check of a suggested day, which a stale screen may send after the week
+ * changed. Any day `suggestMoveDay` could pick passes, not only the earliest.
+ */
+export function canMoveTo(day: string, input: MoveInput): boolean {
+  return moveDays(input).includes(day);
+}
+
 /**
  * The earliest day to move a missed key session to (D11, D19): after the
  * missed day, today or later, in the same Monday-to-Sunday week, an available
@@ -254,28 +289,9 @@ export type MoveSuggestion = { date: string } | { date: null; reason: string };
  * such day, skip it. Key sessions count as hard for the neighbour check, so a
  * long ride does not land next to a long run.
  */
-export function suggestMoveDay(input: {
-  missedDate: string;
-  today: string;
-  load: DayLoad[];
-  availableDays?: number[] | null;
-  illness?: Pick<IllnessPeriod, "startedOn" | "endedOn">[];
-}): MoveSuggestion {
-  const { missedDate, today, load, availableDays, illness = [] } = input;
-  const sunday = addDaysStr(mondayOf(missedDate), 6);
-  const first = addDaysStr(missedDate, 1) > today ? addDaysStr(missedDate, 1) : today;
-
-  const hardOn = (day: string) => load.some((l) => l.date === day && l.keyOrHard);
-  const anyOn = (day: string) => load.some((l) => l.date === day);
-
-  const candidates: string[] = [];
-  for (let day = first; day <= sunday; day = addDaysStr(day, 1)) {
-    if (availableDays && availableDays.length > 0 && !availableDays.includes(isoWeekday(day))) continue;
-    if (inIllness(day, illness)) continue;
-    if (hardOn(day) || hardOn(addDaysStr(day, -1)) || hardOn(addDaysStr(day, 1))) continue;
-    if (load.filter((l) => l.date === day).length >= DAY_CAP) continue;
-    candidates.push(day);
-  }
+export function suggestMoveDay(input: MoveInput): MoveSuggestion {
+  const candidates = moveDays(input);
+  const anyOn = (day: string) => input.load.some((l) => l.date === day);
   const best = candidates.find((d) => !anyOn(d)) ?? candidates[0];
   if (best) return { date: best };
   return { date: null, reason: "No free day this week. Skip it and go on." };

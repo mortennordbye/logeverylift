@@ -324,6 +324,22 @@ function chained(startDate: string, phases: SeasonPhaseData[], removed: Set<numb
 }
 
 /**
+ * The confirm sheet of a delete in select mode: it names each cycle that goes
+ * and says where to get it back, as the one-cycle delete does.
+ */
+export function deleteManyConfirm(names: string[]): { title: string; body: string; action: string } {
+  const n = names.length;
+  const what = `${n} ${n === 1 ? "cycle" : "cycles"}`;
+  const quoted = names.map((x) => `“${x}”`);
+  const list = n > 1 ? `${quoted.slice(0, -1).join(", ")} and ${quoted[n - 1]}` : (quoted[0] ?? "");
+  return {
+    title: `Delete ${what}?`,
+    body: `${list} ${n === 1 ? "goes" : "go"} to Recently deleted. You can restore ${n === 1 ? "it" : "them"} for 90 days.`,
+    action: `Delete ${what}`,
+  };
+}
+
+/**
  * What deleting the selected cycles does to each season they are phases of
  * (J7_SelectMode): the later phases move earlier, and the taper can end
  * before race day. Null when no selected cycle is a phase.

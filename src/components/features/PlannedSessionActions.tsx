@@ -295,7 +295,7 @@ export function PlannedSessionSheet({
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={() => run({ op: "move", id: s.id, date: moveDay })}
+                  onClick={() => run({ op: "move", id: s.id, date: moveDay, suggested: true })}
                   className="flex h-[52px] items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50"
                 >
                   Move to {shortDay(moveDay)}

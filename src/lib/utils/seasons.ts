@@ -199,11 +199,17 @@ export function seasonPaused(
  * the day Resume gives it (resumeSeason), today when its planned day on the
  * chain without the other start has come, else that day. Later phases follow
  * it, so the taper fit is never read from the other block's start.
+ *
+ * A next phase that is not scheduled never shows a day in the past either: it
+ * can start today at the earliest. That is a season not started yet whose
+ * start day has passed, or one whose started phases were deleted (fix round 8).
  */
 export function shownTimeline(seasonStart: string, phases: PhaseLike[], otherStart: string | null, today: string): TimelinePhase[] {
   const timeline = seasonTimeline(seasonStart, phases, otherStart);
   const next = nextPhase(timeline);
-  if (!next || !seasonPaused({ scheduled: next.scheduledStartDate != null, plannedStart: next.start }, timeline, today)) return timeline;
+  if (!next || next.scheduledStartDate != null) return timeline;
+  const paused = seasonPaused({ scheduled: false, plannedStart: next.start }, timeline, today);
+  if (!paused && next.start >= today) return timeline;
   const planned = nextPhase(seasonTimeline(seasonStart, phases))!.start;
   const resumeDay = planned <= today ? today : planned;
   return seasonTimeline(
