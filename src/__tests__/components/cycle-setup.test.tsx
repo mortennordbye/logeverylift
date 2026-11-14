@@ -261,6 +261,16 @@ describe("weekday builder", () => {
     );
   });
 
+  it("a session with its own label shows the label, not the program name", () => {
+    const labelled = {
+      ...week,
+      slots: [slot({ id: 34, dayOfWeek: 3, daySlot: 1, label: "Legs PM", programId: 12, program: programs[1] })],
+    } as unknown as TrainingCycleWithSlots;
+    render(<CycleScheduleBuilder cycle={labelled} programs={programs} />);
+    expect(screen.getByRole("button", { name: "Legs PM" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Lower A" })).toBeNull();
+  });
+
   it("the session sheet saves key session, brick link, auto, label and note with the endurance features on", async () => {
     render(<CycleScheduleBuilder cycle={week} programs={programs} endurance />);
     fireEvent.click(screen.getByRole("button", { name: "Run off bike" }));
