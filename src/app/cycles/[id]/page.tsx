@@ -94,7 +94,9 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
 
   // A running block shows the length it runs: a draft scheduled inside it ends it the day before.
   const runDays = cycle.status === "active" && cycle.startDate ? runLengthDays(cycle.startDate, lengthDays, otherScheduled?.day ?? null) : lengthDays;
-  const totalWeeks = Math.ceil(runDays / 7);
+  // The block's own weeks, also when a scheduled start cuts it: the Plan hero
+  // and the periodization line count them the same way (round 8).
+  const totalWeeks = cycle.durationWeeks;
   const currentWeek = cycle.status === "active" && cycle.startDate ? cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, parseDateStr(today), cycle.durationDays).currentWeek : null;
 
   const dated = planned.filter((p) => p.rotationPosition == null && p.id != null);

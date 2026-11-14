@@ -131,3 +131,27 @@ describe("a phase another start ended early says the day it ended (J8-09)", () =
     expect(card.phases[0].sub).not.toContain(dayMonth(day(17)));
   });
 });
+
+/** Every string drawn in a server tree, joined (props of client components left out). */
+function textOf(tree: ReactNode): string {
+  if (typeof tree === "string" || typeof tree === "number") return String(tree);
+  if (Array.isArray(tree)) return tree.map(textOf).join(" ");
+  if (!isValidElement(tree)) return "";
+  return textOf((tree.props as { children?: ReactNode }).children);
+}
+
+describe("a cycle cut by a scheduled start (round 8)", () => {
+  it("the cycle page counts the block's own weeks, as the Plan hero does", async () => {
+    const [rotation] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Upper lower", durationWeeks: 7, scheduleType: "rotation" })
+      .returning();
+    expect((await startTrainingCycle(rotation.id)).success).toBe(true);
+    expect((await startTrainingCycle(await draft("Oslo base"), day(3))).success).toBe(true);
+
+    const text = textOf(await CycleDetailPage({ params: Promise.resolve({ id: String(rotation.id) }) }));
+    expect(text).toContain("Week 1 of 7");
+    expect(text).not.toContain("Week 1 of 1");
+    expect((await loadPlanList(me, false)).hero?.label).toBe("Week 1 of 7 · Rotation");
+  });
+});
