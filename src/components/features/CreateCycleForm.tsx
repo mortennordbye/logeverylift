@@ -133,11 +133,8 @@ export function CreateCycleForm({
   days,
   draft,
   start,
-  initialType,
 }: {
   days: StartDays;
-  /** The schedule type picked on the empty Plan (`/cycles/new?type=`). */
-  initialType?: ScheduleType;
   /** The draft made by an earlier Next, when the user came back from step 2. */
   draft?: TrainingCycle;
   /** The start day chosen before, with `draft`. */
@@ -146,7 +143,7 @@ export function CreateCycleForm({
   const router = useRouter();
   const cancel = useBack({ href: "/cycles", label: "Plan" });
   const [name, setName] = useState(draft?.name ?? "");
-  const [scheduleType, setScheduleType] = useState<ScheduleType>((draft?.scheduleType as ScheduleType) ?? initialType ?? "day_of_week");
+  const [scheduleType, setScheduleType] = useState<ScheduleType>((draft?.scheduleType as ScheduleType) ?? "day_of_week");
   const [durationWeeks, setDurationWeeks] = useState(draft?.durationWeeks ?? 8);
   const [moreLengths, setMoreLengths] = useState(MORE_LENGTHS.includes(draft?.durationWeeks ?? 8));
   const [choice, setChoice] = useState<StartChoice>(() => {

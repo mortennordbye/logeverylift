@@ -28,7 +28,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 export default async function NewCyclePage({
   searchParams,
 }: {
-  searchParams: Promise<{ cycle?: string; start?: string; step?: string; type?: string }>;
+  searchParams: Promise<{ cycle?: string; start?: string; step?: string }>;
 }) {
   const auth = await requireSession();
   const params = await searchParams;
@@ -47,7 +47,7 @@ export default async function NewCyclePage({
   if (!params.cycle) {
     return (
       <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
-        <CreateCycleForm days={days} initialType={params.type === "rotation" || params.type === "day_of_week" ? params.type : undefined} />
+        <CreateCycleForm days={days} />
       </div>
     );
   }

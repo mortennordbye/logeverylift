@@ -34,15 +34,6 @@ function RotateIcon({ className = "h-5 w-5" }: { className?: string }) {
   );
 }
 
-function CalendarIcon({ className = "h-5 w-5" }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className={className} aria-hidden>
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M3 10h18M8 3v4M16 3v4" />
-    </svg>
-  );
-}
-
 function ChevronIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden>
@@ -51,20 +42,31 @@ function ChevronIcon() {
   );
 }
 
-/** The empty Plan's ways to start: two kinds of cycle, then a season. One title and one short line each. */
-const START_GROUPS = [
-  {
-    label: "Cycle · a block of weeks",
-    rows: [
-      { href: "/cycles/new?type=day_of_week", Icon: CalendarIcon, title: "Same days each week", sub: "Monday upper, Thursday lower" },
-      { href: "/cycles/new?type=rotation", Icon: RotateIcon, title: "Rotation", sub: "Next session follows the last" },
-    ],
-  },
-  {
-    label: "Season · a goal with an end date",
-    rows: [{ href: "/seasons/new", Icon: FlagIcon, title: "Race or goal", sub: "Your cycles become its phases" }],
-  },
-];
+/** The two ways to start, the same on the empty Plan and in the + menu. The new cycle form asks how you train. */
+function NewChoices({ onPick }: { onPick?: () => void }) {
+  const rows = [
+    { href: "/cycles/new", Icon: RotateIcon, title: "New cycle", sub: "Weeks that run your programs" },
+    { href: "/seasons/new", Icon: FlagIcon, title: "New season", sub: "A race or a goal, made of cycles" },
+  ];
+  return (
+    <ul className="flex flex-col overflow-hidden rounded-2xl bg-widget-2">
+      {rows.map((r) => (
+        <li key={r.href} className="border-b border-hairline last:border-b-0">
+          <Link href={r.href} onClick={onPick} className="flex min-h-16 items-center gap-3 px-4 py-3 active:opacity-70">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand/15 text-brand" aria-hidden>
+              <r.Icon className="h-5 w-5 shrink-0" />
+            </span>
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <span className="text-base font-semibold">{r.title}</span>
+              <span className="text-[13px] text-muted-foreground">{r.sub}</span>
+            </span>
+            <ChevronIcon />
+          </Link>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function SeasonPrompt() {
   return (
@@ -387,28 +389,8 @@ export function CyclesListClient({ data, deletedCount }: Props) {
           <div className="flex flex-col gap-4 pt-4">
             <section className={`${card} flex flex-col gap-5 px-5 py-6`} data-testid="plan-empty">
               <h2 className="text-[22px] font-semibold">Plan your training</h2>
-              <nav aria-label="How do you want to plan?" className="flex flex-col gap-5">
-                {START_GROUPS.map((g) => (
-                  <div key={g.label} className="flex flex-col gap-2">
-                    <h3 className={sectionLabel}>{g.label}</h3>
-                    <ul className="flex flex-col overflow-hidden rounded-[14px] bg-widget-2">
-                      {g.rows.map((r) => (
-                        <li key={r.href} className="border-b border-hairline last:border-b-0">
-                          <Link href={r.href} className="flex min-h-[60px] items-center gap-3 px-3.5 py-3 active:opacity-70">
-                            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px] bg-brand/15 text-brand" aria-hidden>
-                              <r.Icon className="h-5 w-5 shrink-0" />
-                            </span>
-                            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                              <span className="text-sm font-semibold">{r.title}</span>
-                              <span className="truncate text-[13px] text-muted-foreground">{r.sub}</span>
-                            </span>
-                            <ChevronIcon />
-                          </Link>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
+              <nav aria-label="Start planning">
+                <NewChoices />
               </nav>
             </section>
             {recentlyDeleted}
@@ -481,26 +463,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
         <section aria-label="New" className="flex flex-col gap-3 rounded-t-[20px] bg-widget px-4 pt-2.5 pb-8">
           <span className="h-[5px] w-10 self-center rounded-full bg-foreground/20" aria-hidden />
           <h2 className="mx-1 mt-1 text-[17px] font-semibold">New</h2>
-          <div className="flex flex-col overflow-hidden rounded-2xl bg-widget-2">
-            <Link
-              href="/cycles/new"
-              onClick={() => setShowAddSheet(false)}
-              className="flex min-h-16 items-center gap-3.5 border-b border-hairline px-4 py-3.5 active:opacity-70"
-            >
-              <RotateIcon className="h-[22px] w-[22px] shrink-0" />
-              <span className="flex flex-col gap-0.5">
-                <span className="text-base font-semibold">New cycle</span>
-                <span className="text-[13px] text-muted-foreground">A block of weeks with your programs</span>
-              </span>
-            </Link>
-            <Link href="/seasons/new" onClick={() => setShowAddSheet(false)} className="flex min-h-16 items-center gap-3.5 px-4 py-3.5 active:opacity-70">
-              <FlagIcon className="h-[22px] w-[22px] shrink-0" />
-              <span className="flex flex-col gap-0.5">
-                <span className="text-base font-semibold">New season</span>
-                <span className="text-[13px] text-muted-foreground">Training for a race or a goal</span>
-              </span>
-            </Link>
-          </div>
+          <NewChoices onPick={() => setShowAddSheet(false)} />
           <button
             type="button"
             onClick={() => setShowAddSheet(false)}

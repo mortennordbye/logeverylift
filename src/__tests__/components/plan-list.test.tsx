@@ -151,17 +151,15 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("the Plan list", () => {
-  it("first open: the two schedule types start a cycle, the season prompt starts a season, no + and no Select", () => {
+  it("first open: New cycle and New season, no + and no Select", () => {
     render(<CyclesListClient data={{ ...none, empty: true }} deletedCount={0} />);
     expect(screen.getByRole("heading", { name: "Plan", level: 1 })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Plan your training" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Same days each week/ }).getAttribute("href")).toBe("/cycles/new?type=day_of_week");
-    expect(screen.getByRole("link", { name: /Rotation/ }).getAttribute("href")).toBe("/cycles/new?type=rotation");
     // One way in per action: the card replaces the + menu while the list is empty.
     expect(screen.queryByRole("button", { name: "New cycle or season" })).toBeNull();
-    // The season is the third choice in the same list, not a separate line.
-    const choices = within(screen.getByRole("navigation", { name: "How do you want to plan?" })).getAllByRole("link");
-    expect(choices.map((a) => a.getAttribute("href"))).toEqual(["/cycles/new?type=day_of_week", "/cycles/new?type=rotation", "/seasons/new"]);
+    // The same two choices as the + menu; the new cycle form asks how you train.
+    const choices = within(screen.getByRole("navigation", { name: "Start planning" })).getAllByRole("link");
+    expect(choices.map((a) => a.getAttribute("href"))).toEqual(["/cycles/new", "/seasons/new"]);
     expect(screen.queryByRole("link", { name: "Training for a race or a goal? Add a season" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Select" })).toBeNull();
     expect(screen.queryByText(/Recently deleted/)).toBeNull();
