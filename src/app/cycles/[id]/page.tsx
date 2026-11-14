@@ -124,6 +124,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
       exercises: p.programId != null ? exerciseNames(programsMap[p.programId]) : null,
       programId: p.programId,
       status: p.status,
+      skipReason: p.skipReason,
       touched: p.touched,
       templateDate: p.templateDate,
       key: c?.priority === "key",

@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { plannedSessions, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
 import { updatePlannedSession, updateRotationSession } from "@/lib/actions/planned-sessions";
+import { applyRotationOp } from "@/lib/planned-sessions";
 import { homeEndurance } from "@/lib/session-answers";
 import { and, eq } from "drizzle-orm";
 import CycleDetailPage from "@/app/cycles/[id]/page";
@@ -84,6 +85,28 @@ describe("cycle detail page", () => {
     expect(week.sessions[0]).toMatchObject({ status: "missed", exercises: "Squat", key: false, answer: null });
     // A lifter gets no workouts library (D18).
     expect(week.library).toBeUndefined();
+  });
+
+  it("a skipped session carries its skip reason, on a weekday block and a rotation", async () => {
+    const id = await weekdayCycle({ status: "active", startDate: "2026-11-09" });
+    await page(id); // the lazy backfill makes the dated sessions
+    const [mon] = await db.select().from(plannedSessions).where(and(eq(plannedSessions.cycleId, id), eq(plannedSessions.date, "2026-11-23")));
+    expect((await updatePlannedSession({ op: "skip", id: mon.id, reason: "Work trip" })).success).toBe(true);
+    const week = propsOf<Parameters<typeof CycleWeek>[0]>(await page(id), CycleWeek)!;
+    expect(week.sessions.find((s) => s.id === mon.id)).toMatchObject({ status: "skipped", skipReason: "Work trip" });
+
+    const [c] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Rotation", durationWeeks: 4, status: "active", startDate: "2026-11-19", scheduleType: "rotation" })
+      .returning();
+    await db.insert(trainingCycleSlots).values([
+      { trainingCycleId: c.id, orderIndex: 1, programId: lift },
+      { trainingCycleId: c.id, orderIndex: 2, programId: run },
+    ]);
+    // The assistant gives a reason; the app's skip has none.
+    await applyRotationOp({ userId: me, writer: "assistant" }, { op: "skip", cycleId: c.id, rotationPosition: 1, reason: "Sick" });
+    const order = propsOf<Parameters<typeof RotationOrder>[0]>(await page(c.id), RotationOrder)!;
+    expect(order.rows[1]).toMatchObject({ mark: "skipped", upcoming: { status: "skipped", skipReason: "Sick" } });
   });
 
   it("a scheduled weekday draft: its sessions from the start day, and Start today instead", async () => {

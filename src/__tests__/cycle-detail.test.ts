@@ -78,6 +78,13 @@ describe("rowAction and sessionSub", () => {
     expect(sessionSub({ ...base, summary: "60 min", status: "skipped" })).toBe("Skipped · 60 min");
   });
 
+  it("gives a skipped session its reason", () => {
+    expect(sessionSub({ ...base, status: "skipped", skipReason: "Work trip" })).toBe("Skipped · Work trip · Squat, Row");
+    expect(sessionSub({ ...base, status: "skipped", skipReason: "  " })).toBe("Skipped · Squat, Row");
+    // A reason left from an earlier skip says nothing once it is planned again.
+    expect(sessionSub({ ...base, status: "planned", skipReason: "Work trip" })).toBe("Squat, Row");
+  });
+
   it("does not call a session Changed because the user answered Missed (J5-16)", () => {
     // The miss answer touches the row, as a skip does; Missed says enough.
     expect(sessionSub({ ...base, status: "missed", touched: true })).toBe("Missed · Squat, Row");

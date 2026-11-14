@@ -282,7 +282,7 @@ export function TemplateWeek({
 
 function rotationSub(row: RotationRow, today: string, exerciseCount: number | undefined): string {
   if (row.mark === "next") return "Next";
-  if (row.mark === "skipped") return "Skipped";
+  if (row.mark === "skipped") return row.upcoming?.skipReason?.trim() ? `Skipped · ${row.upcoming.skipReason.trim()}` : "Skipped";
   if (row.mark === "swapped") return "Swapped";
   if (row.mark === "done" && row.lastDone) return doneLabel(row.lastDone, today);
   if (row.rest) return "Rest day";
