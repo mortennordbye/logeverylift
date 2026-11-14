@@ -346,7 +346,7 @@ export async function createSeason(
       await w.tx.insert(seasonRaces).values({ ...cleanRace(input.race), seasonId: row.id, userId: ctx.userId });
     }
     for (const cycleId of input.cycleIds ?? []) await addPhaseIn(w, row.id, { cycleId, takeStart: input.takeStart });
-    const [made] = await w.tx.select().from(seasons).where(eq(seasons.id, row.id));
+    const [made] = await w.tx.select().from(seasons).where(and(eq(seasons.id, row.id), isNull(seasons.deletedAt)));
     return made;
   });
   return { season: result, version: 1 };
