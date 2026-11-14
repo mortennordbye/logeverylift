@@ -186,6 +186,7 @@ Phase: **1** = this PR (section 6; "built" once merged code has it), **2** = nex
 | Widget | S | M | L | Data source (exists) | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
 | Title (header) | - | "LogEveryLift" (default) | Title, date, cycle week | none | all | none | 1, built |
+| Date | Day and date, as an eyebrow line | Same, full width | - | page data (today in the user's zone) | all | none | decision 19, built |
 | **Today** (cycle and no-cycle variants) | Name, primary action, "More" menu with every other action (6.3) | Card without the cycle header | Card as now (default) | as now | all | as now | 1, built |
 | Cycle progress | Week x/y | Name, week, bar, end date | - | `getActiveCycleForUser` (page data) | all; empty state without a cycle | none | 1, built |
 | Endurance today | - | Rows as now (default) | Rows with step summary | `sessionCompliance`, `answerSession` | endurance | as now | 1, built |
@@ -844,6 +845,10 @@ Decided by the hub on 2026-11-13; the owner may change any of them.
 | 15 | Weekly leaderboard widget? | Only after `getFriendsLeaderboard` uses the user's week. |
 | 16 | Where is the way into edit mode? | Decided by the owner on 2026-11-13: only a pencil icon button ("Edit home") at the top right of the title row. No "Edit home" button at the end of the list, except when the title is hidden: then the pencil moves there. |
 | 17 | What does edit mode look like? | Decided by the owner on 2026-11-13, replacing the list in 6.9: the real grid, as on the iPhone home screen. Two columns (S one, M and L both; L is the taller content). Widgets jiggle (off with reduced motion). Enter by the pencil or a long-press on a widget. Drag the whole widget to reorder; a "−" badge on hideable widgets; a tap opens a sheet with Size, Move up, Move down (WCAG 2.5.7) and Hide; "+ Add widget", Undo and Reset at the top. |
+| 18 | Does Today show the day's exercises? | Decided by the owner on 2026-11-14: yes, as in the locked design. L: the counts, minutes, the first three exercises with their sets and "+ N more"; M: the counts; S: exercises and minutes. The per-lift tip only if the insight already gives it (it does not, so none). |
+| 19 | Where does the date go? | Decided by the owner on 2026-11-14: its own widget, "Date" (S, M), in the gallery and not on the default home. The title row stays first. |
+| 20 | Does the home follow the accent colour? | Decided by the owner on 2026-11-14: yes. `--brand` and `--brand-fill` follow the accent picked in settings, light and dark; blue stays the default; `--pos` does not change. |
+| 21 | Do the new fonts and look spread to the rest of the app? | Decided by the owner on 2026-11-14: no. They stay on the home, for good. |
 
 ## 10. Sources
 
@@ -950,19 +955,26 @@ Where the build differs from it or from section 4, and why:
 - **Fonts and tokens.** Big Shoulders (the current Google family that replaced Big Shoulders
   Display; its `opsz` axis is set to 72 for the display look) and Work Sans load through
   `next/font` in `src/components/features/home/fonts.ts`, for the home page and its sheets
-  only. The rest of the app keeps Inter. The tokens `--brand`, `--brand-fill`, `--pos`,
+  only; by owner decision 21 they stay there. The tokens `--brand`, `--brand-fill`, `--pos`,
   `--font-display`, `--font-ui` and the home surfaces are in `src/app/globals.css`.
   `.home-ui` maps the shared tokens (`--muted`, `--primary`, `--muted-foreground`) to the
   home's look, so the notices and Endurance today match without their own changes.
-- **The user's accent colour does not reach the home.** `.home-ui` sets `--primary` to
-  `--brand`, so the accent picked in settings is not used there. Open question for the owner.
+- **Accent colour** (decision 20). The theme provider marks `<html>` with `data-accent`
+  (`src/components/ui/theme-provider.tsx`), and `globals.css` maps each accent to `--brand`
+  and `--brand-fill`, light and dark; a custom accent goes through `--brand-custom`. Blue keeps
+  the design's tokens. `.home-ui` sets `--primary` to `--brand`, so the shared parts follow.
 - **Edit entry stays the pencil** (decision 16), restyled as the design's round pill, and not
   the design's "Edit" text button. Edit mode keeps Cancel, Undo and Reset, which the design
   does not show.
-- **Title.** M is the title alone, as before; the date eyebrow is the L size.
-- **Today.** The design's exercise list, "Day 2", set count, duration and the per-lift tip
-  need data the home does not read; the hero shows the name, the cycle segments, the end
-  date and the existing insight banner. The no-cycle prompt has no "Browse programs" link:
+- **Title.** M is the title alone, as before. The date is the Date widget (decision 19); the
+  title's L size keeps its date and cycle week line, which was simpler than removing it.
+- **Today** (decision 18) reads the day's program in one more statement, `readTodayPlan`
+  in `src/lib/home/core.ts`, filtered by the program's owner, only on a day with one program.
+  That is why the T2 counts in `src/__tests__/integration/home-queries.test.ts` are 2 higher
+  for a user with a program today (the query and the pool checkout it makes). The minutes use
+  `estimateSessionMinutes`. There is no "Day 2" (the cycle has no day number to show) and no
+  per-lift tip or up chip: `WorkoutInsight` has no suggested weight per lift. The no-cycle
+  prompt has no "Browse programs" link:
   every size of Today must keep the same actions (C1).
 - **Week.** L has the ring beside the days and a legend; the design's sets, volume and time
   tiles are not built (no source on the home). Past planned days not done show as missed.
@@ -985,4 +997,7 @@ Where the build differs from it or from section 4, and why:
   `listSeasons`. A cycle's own `race_date` is not read.
 - Sizes from section 4 that the design does not show (Weekly volume M and L, Body weight L,
   Training load S and per-sport L, Race countdown M) are in `BACKLOG.md`.
+- **Previews** in the gallery and in edit mode render each widget's own view with made-up
+  data from `src/components/features/home/samples.ts`, the same for every user, as the
+  design's "Add a widget" sheet does. No loader runs for a preview.
 

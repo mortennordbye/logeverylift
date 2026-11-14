@@ -62,6 +62,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       currentTheme === "dark" ? "oklch(0.205 0 0)" : "oklch(0.985 0 0)";
     document.documentElement.style.setProperty("--primary", colorValue);
     document.documentElement.style.setProperty("--primary-foreground", foreground);
+    // The home's brand colour follows the accent (globals.css, [data-accent]).
+    document.documentElement.dataset.accent = color;
+    if (color === "custom") document.documentElement.style.setProperty("--brand-custom", colorValue);
   };
 
   // Load persisted preferences and apply to DOM after hydration
@@ -112,6 +115,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem("customAccentHex", hex);
       localStorage.setItem("accentColor", "custom");
       document.documentElement.style.setProperty("--primary", hex);
+      document.documentElement.dataset.accent = "custom";
+      document.documentElement.style.setProperty("--brand-custom", hex);
       const foreground = theme === "dark" ? "oklch(0.205 0 0)" : "oklch(0.985 0 0)";
       document.documentElement.style.setProperty("--primary-foreground", foreground);
     }

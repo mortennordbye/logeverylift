@@ -420,6 +420,20 @@ select {
   filter: invert(1);
 }
 
+/* The home's brand colour follows the accent picked in settings (owner
+   decision C, 2026-11-14). The theme provider sets data-accent on <html>;
+   blue, the default, keeps the tokens above. A fill carries white text, so
+   it is a darker step of the accent. --pos does not change. */
+:root[data-accent="white"] { --brand: oklch(0.205 0 0); --brand-fill: oklch(0.205 0 0); }
+:root[data-accent="green"] { --brand: oklch(0.5 0.15 145); --brand-fill: oklch(0.5 0.15 145); }
+:root[data-accent="purple"] { --brand: oklch(0.52 0.2 300); --brand-fill: oklch(0.52 0.2 300); }
+:root[data-accent="orange"] { --brand: oklch(0.56 0.17 45); --brand-fill: oklch(0.56 0.17 45); }
+:root[data-accent="custom"] { --brand: var(--brand-custom); --brand-fill: var(--brand-custom); }
+:root.dark[data-accent="white"] { --brand: oklch(0.922 0 0); --brand-fill: oklch(0.32 0 0); }
+:root.dark[data-accent="green"] { --brand: oklch(0.7 0.18 145); --brand-fill: oklch(0.5 0.15 145); }
+:root.dark[data-accent="purple"] { --brand: oklch(0.7 0.22 300); --brand-fill: oklch(0.5 0.2 300); }
+:root.dark[data-accent="orange"] { --brand: oklch(0.75 0.2 45); --brand-fill: oklch(0.55 0.17 45); }
+
 /* The home screen's look (docs/design/home-redesign/home-locked.html).
    Scoped to the home page and its sheets: the app's shared tokens are mapped
    to the home's neutral surfaces and its one brand accent, so the notices
