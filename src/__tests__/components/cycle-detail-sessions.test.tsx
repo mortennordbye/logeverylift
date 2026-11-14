@@ -433,6 +433,14 @@ describe("the session sheets say the session's state (J3-10, J5-08, J5-13, J5-15
     expect(within(open(/^Sat 21 Nov: Hill repeats/)).getByText("Sat 21 Nov · Changed")).toBeTruthy();
   });
 
+  it("a day that was only skipped offers Plan again and not Back to the template (J5-08)", () => {
+    renderWeek({ sessions: [session({ id: 6, date: "2026-11-20", name: "Bike intervals", programId: null, status: "skipped", touched: true })] });
+    fireEvent.click(screen.getByRole("button", { name: /^Fri 20 Nov: Bike intervals/ }));
+    const sheet = screen.getByTestId("session-sheet");
+    expect(within(sheet).getByRole("button", { name: "Plan again" })).toBeTruthy();
+    expect(within(sheet).queryByRole("button", { name: /Back to the template/ })).toBeNull();
+  });
+
   it("a plain planned day shows only its day", () => {
     renderWeek();
     fireEvent.click(screen.getByRole("button", { name: /^Tue 17 Nov: Strength A/ }));

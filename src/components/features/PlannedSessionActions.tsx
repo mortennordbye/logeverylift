@@ -4,7 +4,7 @@ import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPan
 import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
-import { type DetailSession, dayMonth, sessionDayLabel, sessionState, weekdayShort } from "@/lib/utils/cycle-detail";
+import { type DetailSession, canBackToTemplate, dayMonth, sessionDayLabel, sessionState, weekdayShort } from "@/lib/utils/cycle-detail";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
@@ -59,7 +59,7 @@ export function PlannedSessionActions({
   }
 
   const button = "min-h-[44px] rounded-xl px-4 text-sm font-medium active:opacity-70 disabled:opacity-50";
-  const canReset = session.touched && session.templateDate != null && session.templateDate >= today;
+  const canReset = canBackToTemplate(session, today);
 
   return (
     <div className="px-4 pb-3.5 flex flex-col gap-2">
@@ -253,7 +253,7 @@ export function PlannedSessionSheet({
   const isToday = s?.date === today;
   // The header line says the state too: "Tue 17 Nov · Skipped" (J5-08, J5-13).
   const state = s ? sessionState(s) : null;
-  const canReset = s != null && s.touched && s.templateDate != null && s.templateDate >= today;
+  const canReset = s != null && canBackToTemplate(s, today);
   const otherKeys = keyDates.filter((d) => d !== s?.date);
   const anyPast = week.some((d) => d < today);
   // A missed key session: the day home suggests, or why there is none (D19).
