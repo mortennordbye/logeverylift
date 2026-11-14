@@ -304,7 +304,7 @@ the last one's settings.
 - The race field on the cycle form shows to every user
   (`src/components/features/EditCycleForm.tsx:121-140`).
 - The `/cycles/triathlon` page and `generateTriathlonPlan`
-  (`src/lib/actions/triathlon-plan.ts:57`) are open to everyone. Hiding the entry alone leaves
+  (`src/lib/actions/triathlon-plan.ts:25`) are open to everyone. Hiding the entry alone leaves
   them reachable by URL.
 - Only the Garmin code reads the race date besides the form (Garmin race views, admin-only).
 - Garmin gates on the role (`garminAllowed`, `src/lib/garmin/access.ts:15-17`). That stays

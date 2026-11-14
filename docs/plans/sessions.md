@@ -53,7 +53,7 @@ periods (C5); structured workouts on a session (C4); the quick workout and sessi
   of the day (`CycleScheduleBuilder.tsx:183-190`).
 - Template writers: `upsertCycleSlot`, `removeCycleSlot`, `reorderCycleSlots`, `importCycle`,
   `updateTrainingCycle` (`src/lib/actions/training-cycles.ts:830`, `:900`, `:926`, `:955`,
-  `:673`), the triathlon generator (`src/lib/actions/triathlon-plan.ts:148-154`), MCP
+  `:673`), the triathlon generator (`src/lib/triathlon-plan.ts:198-232`), MCP
   `edit_cycle_slot` and `manage_training_cycle`, and a cycle restore, which deletes every slot and
   inserts the old ones with their old ids (`src/lib/plan-revisions.ts:1009`). The demo seed
   writes slots straight into the database (`scripts/lib/demo-data.ts:306-313`), and so does the

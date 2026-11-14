@@ -61,7 +61,7 @@ screen and can make a season such as "Bench 120 kg by summer".
   switch off (`src/lib/actions/training-cycles.ts:698`). MCP gates the same fields
   (`src/lib/mcp/tools/cycles.ts:162-170`, message at `src/lib/mcp/tools/cycles.ts:55`).
 - The triathlon generator writes a cycle with goal and level but no race
-  (`src/lib/actions/triathlon-plan.ts:108-115`).
+  (`src/lib/triathlon-plan.ts:135-148`).
 
 ### 1.2 Phases today
 
