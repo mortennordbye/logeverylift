@@ -1,6 +1,6 @@
 # LogEveryLift rules for assistants
 
-Version: 2026-11-13
+Version: 2026-11-14
 
 This document is served to connected AI assistants as an MCP resource
 (`logeverylift://docs/app-rules`). It describes the app as it is today. It holds no personal
@@ -205,7 +205,11 @@ lasts only until that writer runs again.
   endurance features on, on assistant plan writes only (the user's own edits are never checked):
   - `long_run_cap`: no planned run more than 1.10x the longest run in the last 30 days (Study,
     large cohort). The longest run comes from Garmin and from runs logged in the app; with
-    neither, the cap is not checked, and the result says so.
+    neither, the cap is not checked, and the result says so. A program write is checked only
+    when the program can run in the next 30 days: a program that only a draft starting later
+    holds (for example a later season phase) is not checked then, and the result says so; its
+    first week is checked when that cycle starts (`programLimitScope` in
+    `src/lib/training-limits.ts`).
   - `hard_sessions_per_week`: at most 3 interval sessions (a `work` set or zone 4-5 on an
     endurance set) in a weekday cycle's week (Coach convention; what counts as hard is
     Inference): the active cycle and a draft scheduled to start. Rotation cycles have no fixed

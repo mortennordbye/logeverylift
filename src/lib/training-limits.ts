@@ -938,6 +938,34 @@ export async function limitCyclesWith(ex: Executor, userId: string, programId: n
   return rows.map((r) => r.id).sort((a, b) => a - b);
 }
 
+/** Why a program's runs are not checked when only a later cycle holds them. */
+export const LATER_RUNS_WHY =
+  "The program runs only in a cycle that starts more than 30 days from now (for example a later season phase). The long-run cap compares a run with the 30 days before it, so the run is checked when that cycle starts.";
+
+/**
+ * The limit scope of a write to one program: its runs, and the week of the
+ * active (or scheduled) cycle that holds it (limitCyclesWith). The long-run
+ * cap compares a run with the 30 days before today, so it reads the program's
+ * runs only when the program can run in that window: no cycle that is still
+ * to come holds it, or one is active or starts within 30 days. A program that
+ * only later drafts hold (a later season phase) is checked on its first week
+ * when its cycle starts (startCheck; a chained start stores warnings).
+ */
+export async function programLimitScope(ex: Executor, userId: string, programId: number): Promise<LimitScope> {
+  const cycleIds = await limitCyclesWith(ex, userId, programId);
+  const holders = await ex
+    .selectDistinct({ status: trainingCycles.status, scheduledStartDate: trainingCycles.scheduledStartDate })
+    .from(trainingCycles)
+    .innerJoin(trainingCycleSlots, eq(trainingCycleSlots.trainingCycleId, trainingCycles.id))
+    .where(and(eq(trainingCycles.userId, userId), liveCycles, eq(trainingCycleSlots.programId, programId)));
+  const upcoming = holders.filter((h) => h.status !== "completed");
+  const windowEnd = toDateStr(addDays(new Date(`${await todayOn(ex, userId)}T00:00:00Z`), LONG_RUN_WINDOW_DAYS));
+  const later =
+    upcoming.length > 0 &&
+    upcoming.every((h) => h.status === "draft" && (h.scheduledStartDate == null || h.scheduledStartDate > windowEnd));
+  return later ? { programIds: [], cycleIds, runsWhy: LATER_RUNS_WHY } : { programIds: [programId], cycleIds };
+}
+
 /**
  * What a write is about: the programs whose runs it can change, the cycles
  * whose week it can change, and, for a change to dated sessions, the calendar
@@ -948,6 +976,8 @@ export type LimitScope = {
   cycleIds: number[];
   /** `sessionIds`: dated sessions whose own workout's run the long-run cap reads (docs/plans/workouts-and-compliance.md, 8). */
   sessionWeeks?: { userId: string; mondays: string[]; sessionIds?: number[] };
+  /** Set when the long-run cap does not read this write's program runs, with the reason (programLimitScope). */
+  runsWhy?: string;
 };
 
 export type PlanFacts = {
@@ -968,6 +998,8 @@ export type PlanFacts = {
    * touches. Rotation cycles have none.
    */
   placed?: Map<string, PlacedGroup>;
+  /** Why the long-run cap does not read this write's program runs (LimitScope.runsWhy). */
+  runsWhy?: string;
 };
 
 export async function planFacts(
@@ -1030,7 +1062,7 @@ export async function planFacts(
     const est = estimateWorkout(p.workout);
     runs.set(-id, { label: `Run "${p.workout.name}"`, run: { durationS: est.durationSeconds, distanceM: est.distanceMeters } });
   }
-  return { runs, weeks, labels, placed };
+  return { runs, weeks, labels, placed, ...(scope.runsWhy && { runsWhy: scope.runsWhy }) };
 }
 
 /**
@@ -1093,7 +1125,9 @@ export function evaluateLimits(
   if (!lc.endurance) {
     for (const rule of LIMIT_RULES) notChecked.push({ rule, why: NO_ENDURANCE });
   } else {
-    if (lc.runs) {
+    if (lc.runs && after.runsWhy && after.runs.size === 0) {
+      notChecked.push({ rule: "long_run_cap", why: after.runsWhy });
+    } else if (lc.runs) {
       checked.push("long_run_cap");
       const changes = [...after.runs].map(([id, a]) => ({
         label: a.label,
