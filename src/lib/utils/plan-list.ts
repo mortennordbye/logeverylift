@@ -14,7 +14,6 @@ import {
   daysBetweenStr,
   nextPhase,
   runLength,
-  runLengthDays,
   seasonPaused,
   seasonTimeline,
   shortDay,
@@ -166,16 +165,15 @@ export type HeroView =
 
 /**
  * "Week 3 of 6 · Rotation", or "Starts Mon 16 Nov · Week 1 of 8" for a block
- * that has not started. A running block counts its weeks to the day another
- * block's scheduled start (`otherStart`) cuts it.
+ * that has not started. The weeks are the block's own, also when another
+ * block's scheduled start cuts it: the hero's Ends line gives that day
+ * (runningEnd), so a cut block never reads "Week 1 of 1" (round 8).
  */
-export function heroLabel(c: CycleLike, today: string, active: boolean, otherStart: string | null = null): string {
+export function heroLabel(c: CycleLike, today: string, active: boolean): string {
   const start = active ? c.startDate! : c.scheduledStartDate!;
   if (!active) return `Starts ${shortDay(start)} · Week 1 of ${c.durationWeeks}`;
-  const runDays = runLengthDays(start, lengthDays(c), otherStart);
-  const weeks = runDays === lengthDays(c) ? c.durationWeeks : Math.ceil(runDays / 7);
-  const week = Math.min(Math.floor(Math.max(daysBetweenStr(start, today), 0) / 7) + 1, weeks);
-  return `Week ${week} of ${weeks} · ${scheduleWords(c.scheduleType)}`;
+  const week = Math.min(Math.floor(Math.max(daysBetweenStr(start, today), 0) / 7) + 1, c.durationWeeks);
+  return `Week ${week} of ${c.durationWeeks} · ${scheduleWords(c.scheduleType)}`;
 }
 
 export type WeekSession = {

@@ -68,6 +68,8 @@ describe("another block's scheduled start ends the running phase (J4-18)", () =>
 
     const list = await loadPlanList(me, false);
     expect(list.hero?.ends).toBe(`Ends ${dayMonth(day(2))}`);
+    // The weeks are the block's own; the Ends line says it is cut (round 8).
+    expect(list.hero?.label).toBe("Week 1 of 4 · Same days each week");
     const card = list.seasons.find((s) => s.id === seasonId)!;
     expect(card.phases[0].sub).toContain(dayMonth(day(2)));
     expect(card.phases[0].badge).toBe("Now");
