@@ -331,11 +331,11 @@ export function AddPhaseCancel({ seasonId, cycleId, name }: { seasonId: number; 
       </button>
       <BottomSheet open={open} onClose={() => setOpen(false)}>
         {open && (
-          <PlanSheetPanel label="Remove this phase?">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-xl font-semibold">Remove this phase?</h2>
-              <p className="text-sm text-muted-foreground">{name} and the sessions you added are deleted.</p>
-            </div>
+          <PlanSheetPanel
+            label="Remove this phase?"
+            title="Remove this phase?"
+            sub={<p className="text-sm text-muted-foreground">{name} and the sessions you added are deleted.</p>}
+          >
             {error && (
               <p role="alert" className="text-sm text-[#ff6b5a]">
                 {error}

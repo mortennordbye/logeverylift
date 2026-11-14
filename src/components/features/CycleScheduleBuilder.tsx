@@ -12,8 +12,8 @@
  *   row's options), add a session or a rest day.
  */
 
-import { PlanSheetPanel, SheetCloseButton } from "@/components/features/PlanSheetPanel";
-import { ButtonReason } from "@/components/features/season-ui";
+import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { ButtonReason, LABEL } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { createProgram } from "@/lib/actions/programs";
 import {
@@ -69,24 +69,6 @@ function isRest(slot: Slot): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared parts
 // ─────────────────────────────────────────────────────────────────────────────
-
-function SheetFrame({ title, onClose, children }: { title: string; onClose?: () => void; children: ReactNode }) {
-  return (
-    <section
-      aria-label={title}
-      data-plan-sheet=""
-      // Nothing shrinks, so the sheet scrolls as a whole (see PlanSheetPanel).
-      className="home-ui bg-widget rounded-t-[20px] px-4 pt-2 pb-6 max-h-[90dvh] overflow-y-auto overscroll-contain flex flex-col gap-1 [&>*]:shrink-0"
-    >
-      <span aria-hidden className="self-center mb-2 h-[5px] w-10 rounded-full bg-muted-foreground/50" />
-      <div className="flex items-center justify-between min-h-11">
-        <h2 className="text-[17px] font-semibold">{title}</h2>
-        {onClose && <SheetCloseButton onClick={onClose} />}
-      </div>
-      {children}
-    </section>
-  );
-}
 
 function Switch({ title, sub, on, onChange }: { title: string; sub: string; on: boolean; onChange: (next: boolean) => void }) {
   return (
@@ -170,8 +152,8 @@ export function ProgramPickerSheet({
   const row = "w-full flex items-center justify-between gap-3 px-4 py-2.5 min-h-14 text-left active:opacity-70";
   return (
     <BottomSheet open={open} onClose={onClose}>
-      <SheetFrame title="Pick a program" onClose={onClose}>
-        <label className="mt-2 flex items-center gap-2.5 h-11 px-3 rounded-xl bg-widget-2">
+      <PlanSheetPanel label="Pick a program" title="Pick a program">
+        <label className="flex items-center gap-2.5 h-11 px-3 rounded-xl bg-widget-2">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" className="text-muted-foreground" aria-hidden>
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" />
@@ -185,7 +167,7 @@ export function ProgramPickerSheet({
             className="flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
         </label>
-        <ul className="mt-2 flex flex-col rounded-2xl bg-widget-2 overflow-hidden">
+        <ul className="flex flex-col rounded-2xl bg-widget-2 overflow-hidden">
           {onRest && !q && (
             <li className="border-b border-hairline">
               <button type="button" onClick={onRest} className={`${row} text-muted-foreground text-[15px]`}>
@@ -254,7 +236,7 @@ export function ProgramPickerSheet({
           </li>
         </ul>
         <ErrorLine error={error ?? saveError ?? null} />
-      </SheetFrame>
+      </PlanSheetPanel>
     </BottomSheet>
   );
 }
@@ -318,12 +300,11 @@ function SlotSheet({
 
   const input = "w-full rounded-xl bg-widget-2 px-3 py-2.5 text-base outline-none focus:ring-2 ring-brand";
   return (
-    <PlanSheetPanel label={title}>
-      <div className="flex flex-col gap-1 -mt-2">
-        <h2 className="text-[17px] font-semibold">{title}</h2>
+    <PlanSheetPanel label={title} title={title}>
+      <div className="flex flex-col gap-1">
         <div className="flex items-center justify-between py-2 min-h-[52px] border-b border-hairline">
           <span className="flex flex-col gap-0.5 min-w-0">
-            <span className="text-xs text-muted-foreground">Program</span>
+            <span className={LABEL}>Program</span>
             <span className="text-base font-medium truncate">{slot.program?.name ?? (isRest(slot) ? "Rest" : slot.label ?? "Workout")}</span>
           </span>
           <button type="button" onClick={onChangeProgram} className="h-11 px-3 text-[15px] font-medium text-brand active:opacity-70">
@@ -349,11 +330,11 @@ function SlotSheet({
         {labelOpen && (
           <div className="flex flex-col gap-3 py-3 border-b border-hairline">
             <label className="flex flex-col gap-1.5">
-              <span className="text-xs text-muted-foreground">Label</span>
+              <span className={LABEL}>Label</span>
               <input value={label} maxLength={100} onChange={(e) => setLabel(e.target.value)} className={input} />
             </label>
             <label className="flex flex-col gap-1.5">
-              <span className="text-xs text-muted-foreground">Note</span>
+              <span className={LABEL}>Note</span>
               <textarea value={notes} maxLength={500} rows={2} onChange={(e) => setNotes(e.target.value)} className={`${input} resize-none`} />
             </label>
           </div>

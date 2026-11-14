@@ -8,7 +8,7 @@ import { PHASE_TYPE_LABELS, dayLabel, lengthShort, rangeLabel, shortDay, type Ra
 import { triathlonPhases } from "@/lib/utils/triathlon-phases";
 import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
-import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { useBack, useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
@@ -283,7 +283,7 @@ export function SeasonForm(props: Props) {
               ))}
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-foreground/75">Priority</span>
+              <span className={LABEL}>Priority</span>
               <Segmented
                 label="Priority"
                 value={priority}
@@ -414,13 +414,15 @@ export function SeasonForm(props: Props) {
 
       {initial && (
         <BottomSheet open={confirmDelete} onClose={() => setConfirmDelete(false)}>
-          <PlanSheetPanel label="Delete this season?">
-            <h2 className="text-lg font-semibold">Delete this season?</h2>
-            <p className="text-sm text-muted-foreground">Its cycles stay. You can restore it from Recently deleted for 90 days.</p>
+          <PlanSheetPanel
+            label="Delete this season?"
+            title="Delete this season?"
+            sub={<p className="text-sm text-muted-foreground">{keepDates("Its cycles stay. You can restore it from Recently deleted for 90 days.")}</p>}
+          >
             <button type="button" onClick={handleDelete} disabled={loading} className="min-h-[52px] rounded-2xl bg-[#c23a2e] text-base font-semibold text-white active:opacity-80">
               Delete season
             </button>
-            <button type="button" onClick={() => setConfirmDelete(false)} className="min-h-11 text-sm font-medium active:opacity-70">
+            <button type="button" onClick={() => setConfirmDelete(false)} className={SHEET_CANCEL}>
               Cancel
             </button>
           </PlanSheetPanel>

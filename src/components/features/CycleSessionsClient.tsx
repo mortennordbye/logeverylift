@@ -395,11 +395,13 @@ export function RotationSessionSheet({
   return (
     <BottomSheet open={row !== null} onClose={onClose}>
       {row && up && (
-        <PlanSheetPanel label={isToday ? "Today's session" : `${row.name}, position ${row.n} of ${count}`} testId="rotation-sheet">
-          <div className="flex flex-col gap-0.5">
-            <SectionLabel accent={isToday}>{label}</SectionLabel>
-            <h2 className="text-2xl font-semibold">{row.name}</h2>
-            {row.programId != null ? (
+        <PlanSheetPanel
+          label={isToday ? "Today's session" : `${row.name}, position ${row.n} of ${count}`}
+          testId="rotation-sheet"
+          kicker={<SectionLabel accent={isToday}>{label}</SectionLabel>}
+          title={row.name}
+          sub={
+            row.programId != null ? (
               <Link href={`/programs/${row.programId}`} className="flex items-center min-h-11 text-sm text-muted-foreground active:opacity-70">
                 Position {row.n} of {count} ·&nbsp;<span className="text-brand">See program ›</span>
               </Link>
@@ -407,8 +409,9 @@ export function RotationSessionSheet({
               <p className="flex items-center min-h-11 text-sm text-muted-foreground">
                 Position {row.n} of {count}
               </p>
-            )}
-          </div>
+            )
+          }
+        >
           {swapping ? (
             <PickList
               title="Swap program"
@@ -442,7 +445,7 @@ export function RotationSessionSheet({
                         ›
                       </span>
                     </button>
-                    <button type="button" disabled={pending} onClick={() => run({ op: "skip" })} className={`${sheetRow} border-b-0 text-muted-foreground`}>
+                    <button type="button" disabled={pending} onClick={() => run({ op: "skip" })} className={`${sheetRow} border-b-0`}>
                       Skip this time
                     </button>
                   </>

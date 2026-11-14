@@ -1,6 +1,7 @@
 "use client";
 
-import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SHEET_CANCEL, SectionLabel } from "@/components/features/PlanSheetPanel";
+import { LABEL, PRIMARY_BUTTON } from "@/components/features/season-ui";
 import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
@@ -269,20 +270,23 @@ export function PlannedSessionSheet({
   return (
     <BottomSheet open={s !== null} onClose={onClose}>
       {s && (
-        <PlanSheetPanel label={`Session on ${sessionDayLabel(s.date, "")}`} testId="session-sheet">
-          <div className="flex flex-col gap-0.5">
-            <SectionLabel accent={isToday}>{state ? `${sessionDayLabel(s.date, today)} · ${state}` : sessionDayLabel(s.date, today)}</SectionLabel>
-            <h2 className="text-2xl font-semibold">{s.summary ? `${s.name} · ${s.summary}` : s.name}</h2>
-            {(phaseLine || s.programId != null) &&
-              (s.programId != null ? (
-                <Link href={`/programs/${s.programId}`} className="flex items-center min-h-11 text-sm text-muted-foreground active:opacity-70">
-                  {phaseLine ? `${phaseLine} · ` : ""}
-                  <span className="text-brand">See program ›</span>
-                </Link>
-              ) : (
-                <p className="flex items-center min-h-11 text-sm text-muted-foreground">{phaseLine}</p>
-              ))}
-          </div>
+        <PlanSheetPanel
+          label={`Session on ${sessionDayLabel(s.date, "")}`}
+          testId="session-sheet"
+          kicker={<SectionLabel accent={isToday}>{state ? `${sessionDayLabel(s.date, today)} · ${state}` : sessionDayLabel(s.date, today)}</SectionLabel>}
+          title={s.summary ? `${s.name} · ${s.summary}` : s.name}
+          sub={
+            (phaseLine || s.programId != null) &&
+            (s.programId != null ? (
+              <Link href={`/programs/${s.programId}`} className="flex items-center min-h-11 text-sm text-muted-foreground active:opacity-70">
+                {phaseLine ? `${phaseLine} · ` : ""}
+                <span className="text-brand">See program ›</span>
+              </Link>
+            ) : (
+              <p className="flex items-center min-h-11 text-sm text-muted-foreground">{phaseLine}</p>
+            ))
+          }
+        >
 
           {view === "main" && (
             <>
@@ -424,22 +428,20 @@ export function PlannedSessionSheet({
                 run({ op: "change", id: s.id, label: label.trim() || null, notes: note.trim() || null });
               }}
             >
-              <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
-                Label
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Label</span>
                 <input value={label} onChange={(e) => setLabel(e.target.value)} maxLength={100} className="h-12 rounded-xl bg-widget-2 px-3 text-base text-foreground outline-none focus:ring-2 ring-brand" />
               </label>
-              <label className="flex flex-col gap-1.5 text-[13px] text-muted-foreground">
-                Note
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Note</span>
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} className="rounded-xl bg-widget-2 px-3 py-2.5 text-base text-foreground outline-none focus:ring-2 ring-brand resize-none" />
               </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button type="button" onClick={() => setView("main")} className="h-12 rounded-[14px] ring-1 ring-inset ring-foreground/15 text-[15px] font-semibold active:opacity-70">
-                  Cancel
-                </button>
-                <button type="submit" disabled={pending} className="h-12 rounded-[14px] bg-primary text-[15px] font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80">
-                  Save
-                </button>
-              </div>
+              <button type="submit" disabled={pending} className={PRIMARY_BUTTON}>
+                Save
+              </button>
+              <button type="button" onClick={() => setView("main")} className={SHEET_CANCEL}>
+                Cancel
+              </button>
             </form>
           )}
 

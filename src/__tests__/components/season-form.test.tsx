@@ -181,8 +181,9 @@ describe("New season while another block holds the start (fix round 4)", () => {
     fillPlan();
     fireEvent.click(screen.getByRole("button", { name: "Create season" }));
     const sheet = await screen.findByRole("region", { name: title });
-    expect(sheet.textContent).toContain(ends);
-    expect(sheet.textContent).toContain(drops);
+    const text = sheet.textContent!.replace(/\u00a0/g, " ");
+    expect(text).toContain(ends);
+    expect(text).toContain(drops);
     expect(mocks.generateTriathlonPlan).not.toHaveBeenCalled();
 
     fireEvent.click(within(sheet).getByRole("button", { name: "Create season" }));

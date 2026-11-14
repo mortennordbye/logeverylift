@@ -1,7 +1,7 @@
 "use client";
 
 import { HOME_UI } from "@/components/features/home/fonts";
-import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { FlagIcon, SeasonsSection } from "@/components/features/SeasonsSection";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
@@ -428,14 +428,9 @@ export function CyclesListClient({ data, deletedCount }: Props) {
 
       {/* The + menu (J1_AddSheet). */}
       <BottomSheet open={showAddSheet} onClose={() => setShowAddSheet(false)}>
-        <PlanSheetPanel label="New">
-          <h2 className="mx-1 -mt-2 text-[17px] font-semibold">New</h2>
+        <PlanSheetPanel label="New" title="New">
           <NewChoices onPick={() => setShowAddSheet(false)} />
-          <button
-            type="button"
-            onClick={() => setShowAddSheet(false)}
-            className="h-[52px] rounded-2xl bg-widget-2 text-base font-semibold active:opacity-70"
-          >
+          <button type="button" onClick={() => setShowAddSheet(false)} className={SHEET_CANCEL}>
             Cancel
           </button>
         </PlanSheetPanel>

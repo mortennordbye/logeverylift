@@ -197,6 +197,15 @@ describe("weekday week", () => {
     fireEvent.click(within(sheet).getByRole("button", { name: "Label and note" }));
     fireEvent.change(within(sheet).getByLabelText("Label"), { target: { value: "Hills" } });
     fireEvent.change(within(sheet).getByLabelText("Note"), { target: { value: "Keep it steady" } });
+    // The label style and button layout of the other Plan sheets (J5-06):
+    // uppercase labels, Save full width over a plain Cancel.
+    expect(within(sheet).getByText("Label").className).toContain("uppercase");
+    const save = within(sheet).getByRole("button", { name: "Save" });
+    const cancel = within(sheet).getByRole("button", { name: "Cancel" });
+    expect(save.className).toContain("w-full");
+    expect(save.compareDocumentPosition(cancel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(cancel.parentElement).toBe(save.parentElement);
+    expect(cancel.parentElement!.className).not.toContain("grid-cols-2");
     await act(async () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
     });
@@ -393,6 +402,8 @@ describe("rotation order", () => {
     expect(within(sheet).getByText("Today")).toBeTruthy();
     expect(within(sheet).getByText(/Position 2 of 4/)).toBeTruthy();
     expect(within(sheet).getByRole("link", { name: "Start workout" }).getAttribute("href")).toBe("/programs/2/workout");
+    // A real action: the normal row text, not the grey of a dimmed one (J3-03).
+    expect(within(sheet).getByRole("button", { name: "Skip this time" }).className).not.toContain("text-muted-foreground");
     await act(async () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Skip this time" }));
     });

@@ -2,7 +2,7 @@
 
 import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
-import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { ButtonReason, Chip, DESTRUCTIVE_TEXT, INNER_FIELD, LABEL, PRIMARY_BUTTON, SectionLabel, Segmented } from "@/components/features/season-ui";
 import {
   addRaceAction,
@@ -467,8 +467,7 @@ export function SeasonDetailClient(p: Props) {
       </div>
 
       <BottomSheet open={menu} onClose={() => toMenu(false)}>
-        <PlanSheetPanel label="Season actions">
-          <h2 className="truncate text-xl font-semibold">{p.season.name}</h2>
+        <PlanSheetPanel label="Season actions" title={p.season.name}>
           <div className="flex flex-col overflow-hidden rounded-2xl bg-widget-2">
             <Link href={`/seasons/${p.season.id}/edit`} className={MENU_ROW}>
               Edit details
@@ -491,16 +490,16 @@ export function SeasonDetailClient(p: Props) {
       </BottomSheet>
 
       <BottomSheet open={confirmDelete} onClose={() => toDelete(false)}>
-        <PlanSheetPanel label="Delete this season?">
-          <div className="flex flex-col gap-1">
-            <h2 className="text-xl font-semibold">Delete this season?</h2>
-            <p className="text-sm text-muted-foreground">Its cycles stay. You can restore it from Recently deleted for 90 days.</p>
-          </div>
+        <PlanSheetPanel
+          label="Delete this season?"
+          title="Delete this season?"
+          sub={<p className="text-sm text-muted-foreground">{keepDates("Its cycles stay. You can restore it from Recently deleted for 90 days.")}</p>}
+        >
           {errorLine}
           <button type="button" disabled={busy} onClick={deleteSeason} className={DESTRUCTIVE_BUTTON}>
             Delete season
           </button>
-          <button type="button" onClick={() => toDelete(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+          <button type="button" onClick={() => toDelete(false)} className={SHEET_CANCEL}>
             Cancel
           </button>
         </PlanSheetPanel>
@@ -508,11 +507,11 @@ export function SeasonDetailClient(p: Props) {
 
       <BottomSheet open={race != null && confirmRemoveRace} onClose={() => toRemoveRace(false)}>
         {race?.id && (
-          <PlanSheetPanel label="Remove this race?">
-            <div className="flex flex-col gap-1">
-              <h2 className="text-xl font-semibold">Remove this race?</h2>
-              <p className="text-sm text-muted-foreground">{race.name} leaves the season. Restore it from Change history.</p>
-            </div>
+          <PlanSheetPanel
+            label="Remove this race?"
+            title="Remove this race?"
+            sub={<p className="text-sm text-muted-foreground">{race.name} leaves the season. Restore it from Change history.</p>}
+          >
             {errorLine}
             <button
               type="button"
@@ -527,7 +526,7 @@ export function SeasonDetailClient(p: Props) {
             >
               Remove race
             </button>
-            <button type="button" onClick={() => toRemoveRace(false)} className="min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70">
+            <button type="button" onClick={() => toRemoveRace(false)} className={SHEET_CANCEL}>
               Cancel
             </button>
           </PlanSheetPanel>
@@ -536,8 +535,7 @@ export function SeasonDetailClient(p: Props) {
 
       <BottomSheet open={race != null && !confirmRemoveRace} onClose={() => toRace(null)}>
         {race && (
-          <PlanSheetPanel label={race.id ? "Edit race" : "New race"}>
-            <h2 className="text-xl font-semibold">{race.id ? "Edit race" : "New race"}</h2>
+          <PlanSheetPanel label={race.id ? "Edit race" : "New race"} title={race.id ? "Edit race" : "New race"}>
             <label className="flex flex-col gap-1.5">
               <span className={LABEL}>Name</span>
               <input value={race.name} maxLength={100} onChange={(e) => setRace({ ...race, name: e.target.value })} className={INNER_FIELD} />
@@ -571,7 +569,7 @@ export function SeasonDetailClient(p: Props) {
               </label>
             )}
             <div className="flex items-center justify-between gap-3">
-              <span className="text-sm text-foreground/75">Priority</span>
+              <span className={LABEL}>Priority</span>
               <Segmented
                 label="Priority"
                 value={race.priority}
@@ -608,11 +606,11 @@ export function SeasonDetailClient(p: Props) {
 
       <BottomSheet open={phase != null} onClose={() => toPhase(null)}>
         {phase && (
-          <PlanSheetPanel label={phase.phase.name}>
-            <div className="flex flex-col gap-0.5">
-              <h2 className="text-xl font-semibold">{phase.phase.name}</h2>
-              <span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, phase.phase.end))}</span>
-            </div>
+          <PlanSheetPanel
+            label={phase.phase.name}
+            title={phase.phase.name}
+            sub={<span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, phase.phase.end))}</span>}
+          >
             <div className="flex gap-4">
               <Link href={`/cycles/${phase.phase.id}`} className="flex min-h-11 items-center text-sm font-medium text-primary active:opacity-70">
                 Open cycle

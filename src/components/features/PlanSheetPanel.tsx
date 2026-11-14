@@ -22,14 +22,32 @@ export function SheetCloseButton({ onClick, className = "" }: { onClick: () => v
 /**
  * The inside of a Plan bottom sheet (docs/design/plan-redesign/spec.md,
  * "Bottom sheet"): the card surface, top corners of 20 px, the grab handle,
- * in the home's look, and a 44 px close button when the sheet can close.
+ * in the home's look, and one header for every Plan sheet: the optional
+ * small label, the title and the lines under it on the left, the 44 px Close
+ * button on the same row at the right when the sheet can close (J2-11).
  * Put it inside a `BottomSheet`.
  *
  * The sheet scrolls as a whole when its content is taller than the screen.
  * No part of it shrinks: a list that shrank scrolled inside the sheet, cut a
  * row in half and hid the actions under it (320 px).
  */
-export function PlanSheetPanel({ label, children, testId }: { label: string; children: React.ReactNode; testId?: string }) {
+export function PlanSheetPanel({
+  label,
+  title,
+  kicker,
+  sub,
+  children,
+  testId,
+}: {
+  label: string;
+  title: React.ReactNode;
+  /** The small uppercase line over the title (a SectionLabel). */
+  kicker?: React.ReactNode;
+  /** Lines under the title, in the header. */
+  sub?: React.ReactNode;
+  children?: React.ReactNode;
+  testId?: string;
+}) {
   const close = useSheetClose();
   return (
     <section
@@ -38,18 +56,22 @@ export function PlanSheetPanel({ label, children, testId }: { label: string; chi
       data-plan-sheet=""
       className={`${HOME_UI} bg-widget rounded-t-[20px] px-4 pt-2 pb-8 flex flex-col gap-3.5 max-h-[90dvh] overflow-y-auto overscroll-contain [&>*]:shrink-0`}
     >
-      {close ? (
-        <div className="relative flex h-12 items-end justify-end -mb-2">
-          <span aria-hidden className="absolute left-1/2 top-0 -translate-x-1/2 w-10 h-[5px] rounded-full bg-muted-foreground/50" />
-          <SheetCloseButton onClick={close} className="-mr-1" />
+      <span aria-hidden className="self-center w-10 h-[5px] rounded-full bg-muted-foreground/50" />
+      <div className="flex items-start gap-3" data-testid="sheet-header">
+        <div className="flex min-w-0 flex-1 flex-col gap-1 pt-2">
+          {kicker}
+          <h2 className="text-xl font-semibold break-words">{title}</h2>
+          {sub}
         </div>
-      ) : (
-        <span aria-hidden className="self-center w-10 h-[5px] rounded-full bg-muted-foreground/50" />
-      )}
+        {close && <SheetCloseButton onClick={close} className="-mr-1" />}
+      </div>
       {children}
     </section>
   );
 }
+
+/** The plain Cancel under a sheet's full-width main button: every Plan sheet stacks them this way. */
+export const SHEET_CANCEL = "min-h-11 text-[15px] font-medium text-muted-foreground active:opacity-70";
 
 /** The 12 px uppercase label over a sheet title or a section. */
 export function SectionLabel({ children, accent = false }: { children: React.ReactNode; accent?: boolean }) {

@@ -10,7 +10,7 @@
 import type { AnswerSession } from "@/components/features/answer-session";
 import { IllnessSheet, type IllnessDraft } from "@/components/features/IllnessSheet";
 import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPanel";
-import { ButtonReason } from "@/components/features/season-ui";
+import { ButtonReason, LABEL } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useUnits } from "@/contexts/user-settings-context";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
@@ -344,16 +344,17 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
   const choice = (on: boolean) =>
     `h-12 rounded-[14px] text-[15px] font-semibold active:opacity-70 ring-1 ring-inset ${on ? "ring-brand bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]" : "ring-foreground/15"}`;
   const field = "h-12 w-full rounded-xl bg-widget-2 px-3 text-base text-foreground outline-none focus:ring-2 ring-brand";
-  const label = "flex flex-col gap-1.5 text-[13px] text-muted-foreground";
+  const label = "flex flex-col gap-1.5";
   return (
     <BottomSheet open={session !== null} onClose={onClose}>
       {session && (
-        <PlanSheetPanel label="Unconfirmed session" testId="did-you-do-it-sheet">
-          <div className="flex flex-col gap-1">
-            <SectionLabel>{dayLabel}</SectionLabel>
-            <h2 className="text-xl font-semibold">{session.summary ? `${session.name} · ${session.summary}` : session.name}</h2>
-            <p className="text-sm text-foreground/80">No {session.sport ? SPORT_WORD[session.sport] : "workout"} found for this day. Did you do it?</p>
-          </div>
+        <PlanSheetPanel
+          label="Unconfirmed session"
+          testId="did-you-do-it-sheet"
+          kicker={<SectionLabel>{dayLabel}</SectionLabel>}
+          title={session.summary ? `${session.name} · ${session.summary}` : session.name}
+          sub={<p className="text-sm text-foreground/80">No {session.sport ? SPORT_WORD[session.sport] : "workout"} found for this day. Did you do it?</p>}
+        >
           <div className="grid grid-cols-2 gap-2">
             <button type="button" aria-pressed={answer === "yes"} onClick={() => setAnswer("yes")} className={choice(answer === "yes")}>
               Yes, I did it
@@ -366,18 +367,18 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
             <>
               <div className="grid grid-cols-2 gap-2">
                 <label className={label}>
-                  Time (h:mm)
+                  <span className={LABEL}>Time (h:mm)</span>
                   <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="numeric" placeholder="1:05" className={field} />
                 </label>
                 <label className={label}>
-                  Distance, {unit} (optional)
+                  <span className={LABEL}>Distance, {unit} (optional)</span>
                   <input value={distance} onChange={(e) => setDistance(e.target.value)} inputMode="decimal" className={field} />
                 </label>
               </div>
               {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or h:mm, such as 1:30.</p>}
               {distanceBad && <p className="text-xs text-destructive">{DISTANCE_BAD}</p>}
               <fieldset className="flex flex-col gap-1.5">
-                <legend className="mb-1.5 text-[13px] text-muted-foreground">Effort, 1 (easy) to 10 (max)</legend>
+                <legend className={`mb-1.5 ${LABEL}`}>Effort, 1 (easy) to 10 (max)</legend>
                 <div className="grid grid-cols-5 gap-1.5">
                   {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                     <button
@@ -394,7 +395,7 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
                 </div>
               </fieldset>
               <label className={label}>
-                Notes
+                <span className={LABEL}>Notes</span>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}

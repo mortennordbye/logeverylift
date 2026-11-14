@@ -235,7 +235,7 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
         {!inSeason && (enduranceEnabled || cycle.raceDate) && (
           <div id="race" className="flex scroll-mt-4 flex-col gap-2">
             <label htmlFor="race-date" className={LABEL}>
-              Race <span className="font-normal normal-case">(optional)</span>
+              Race (optional)
             </label>
             <input id="race-date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={FIELD} />
             {raceDate && (
