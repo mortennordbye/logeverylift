@@ -55,6 +55,12 @@ export function daysBetweenStr(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
 }
 
+/** How far off a day on or after `today` is, for a line of text: "today", "tomorrow" or "in N days". */
+export function inDaysLabel(today: string, day: string): string {
+  const n = daysBetweenStr(today, day);
+  return n === 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`;
+}
+
 const lengthOf = (p: { durationWeeks: number; durationDays: number | null }) => p.durationDays ?? p.durationWeeks * 7;
 
 // ── Taper (2.5) ──────────────────────────────────────────────────────────────
