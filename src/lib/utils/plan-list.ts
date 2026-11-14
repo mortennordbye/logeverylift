@@ -69,15 +69,17 @@ const lengthDays = (c: { durationWeeks: number; durationDays: number | null }) =
 /** The last day of a block that starts on `start` (inclusive). */
 export const blockEnd = (start: string, c: { durationWeeks: number; durationDays: number | null }) => addDaysStr(start, lengthDays(c) - 1);
 
-export type CycleRow = { id: number; name: string; sub: string; starts: string | null };
+/** `starts` is drawn in the accent when it is a scheduled start. */
+export type CycleRow = { id: number; name: string; sub: string; starts: string | null; startsAccent: boolean };
 
-/** An "Up next" row: "4 weeks · Same days each week", and "Starts 21 Dec" when scheduled. */
+/** An "Up next" row: "4 weeks · Same days each week", and "Starts 21 Dec" when scheduled, else "Not started". */
 export function upNextRow(c: CycleLike, today: string): CycleRow {
   return {
     id: c.id,
     name: c.name,
     sub: `${plural(c.durationWeeks, "week")} · ${scheduleWords(c.scheduleType)}`,
-    starts: c.scheduledStartDate ? startsLabel(today, c.scheduledStartDate) : null,
+    starts: c.scheduledStartDate ? startsLabel(today, c.scheduledStartDate) : "Not started",
+    startsAccent: c.scheduledStartDate != null,
   };
 }
 
@@ -91,7 +93,7 @@ export function pastEnd(c: CycleLike, today: string): string | null {
 /** A "Past cycles" row: "8 weeks · ended 8 Nov". */
 export function pastRow(c: CycleLike, today: string): CycleRow {
   const end = pastEnd(c, today);
-  return { id: c.id, name: c.name, sub: `${plural(c.durationWeeks, "week")}${end ? ` · ended ${dayMonth(end)}` : ""}`, starts: null };
+  return { id: c.id, name: c.name, sub: `${plural(c.durationWeeks, "week")}${end ? ` · ended ${dayMonth(end)}` : ""}`, starts: null, startsAccent: false };
 }
 
 // ── Hero ─────────────────────────────────────────────────────────────────────
@@ -100,7 +102,7 @@ export type HeroDay = {
   date: string;
   /** "Mon". */
   day: string;
-  /** "Lift", "Bike", "Brick", "Rest". */
+  /** "Lift", "Bike", "Multi", "Brick", "Rest". */
   short: string;
   rest: boolean;
   key: boolean;
@@ -128,6 +130,8 @@ export type WeekSession = {
   date: string;
   name: string | null;
   sport: "swim" | "bike" | "run" | null;
+  /** Every endurance sport in the session; more than one (or a sport with lifts) leaves `sport` null. */
+  sports: ("swim" | "bike" | "run")[];
   key: boolean;
   brick: boolean;
   skipped: boolean;
@@ -142,7 +146,8 @@ export function weekDays(dates: string[], sessions: WeekSession[], today: string
     const mine = sessions.filter((s) => s.date === date && !s.skipped);
     const rest = mine.length === 0;
     const first = mine[0];
-    const word = (s: WeekSession) => (s.sport ? SPORT_WORDS[s.sport] : "Lift");
+    // A session with more than one sport, or a sport and lifts, is "Multi", never "Lift".
+    const word = (s: WeekSession) => (s.sport ? SPORT_WORDS[s.sport] : s.sports.length ? "Multi" : "Lift");
     const short = rest ? "Rest" : mine.some((s) => s.brick) ? "Brick" : mine.length > 1 ? `${word(first)} +${mine.length - 1}` : word(first);
     return {
       date,
@@ -156,11 +161,16 @@ export function weekDays(dates: string[], sessions: WeekSession[], today: string
   });
 }
 
-/** "6 sessions · about 7 h": the count, and the planned time when any is known. */
+/**
+ * "6 sessions · about 7 h": the count, and the planned time only when every
+ * session has one. A lift or a session planned by distance has no time, and a
+ * sum without them would read as the whole week.
+ */
 export function weekSummary(sessions: WeekSession[]): string {
   const live = sessions.filter((s) => !s.skipped);
-  const seconds = live.reduce((a, s) => a + (s.durationSeconds ?? 0), 0);
   const count = plural(live.length, "session");
+  if (live.some((s) => !s.durationSeconds)) return count;
+  const seconds = live.reduce((a, s) => a + (s.durationSeconds ?? 0), 0);
   if (seconds <= 0) return count;
   const time = seconds >= 3600 ? `about ${Math.round(seconds / 3600)} h` : `about ${Math.max(5, Math.round(seconds / 300) * 5)} min`;
   return `${count} · ${time}`;

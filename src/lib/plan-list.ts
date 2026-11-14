@@ -65,6 +65,7 @@ async function weekHero(userId: string, c: Cycle, today: string, active: boolean
       date: r.date,
       name: r.programName ?? r.label ?? r.workout?.name ?? null,
       sport: r.sport,
+      sports: r.sports,
       key: r.priority === "key",
       brick: r.brickParentId != null,
       skipped: r.status === "skipped",
