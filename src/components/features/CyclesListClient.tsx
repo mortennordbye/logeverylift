@@ -2,6 +2,7 @@
 
 import { HOME_UI } from "@/components/features/home/fonts";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
+import { ErrorLine } from "@/components/features/season-ui";
 import { FlagIcon, SeasonsSection } from "@/components/features/SeasonsSection";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
@@ -323,11 +324,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
               {warning}
             </p>
           )}
-          {error && (
-            <p role="alert" className="text-sm text-[#ff6b5a]">
-              {error}
-            </p>
-          )}
+          <ErrorLine error={error} />
           <button
             type="button"
             onClick={handleDelete}

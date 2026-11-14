@@ -3,7 +3,7 @@
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
+import { ButtonReason, Chip, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { addPhaseAction } from "@/lib/actions/seasons";
 import { deleteTrainingCycle } from "@/lib/actions/training-cycles";
@@ -267,11 +267,7 @@ export function AddPhaseForm(p: Props) {
           </fieldset>
         )}
 
-        {error && !confirmStart && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        {!confirmStart && <ErrorLine error={error} />}
       </div>
 
       <PinnedBar>
@@ -338,11 +334,7 @@ export function AddPhaseCancel({ seasonId, cycleId, name }: { seasonId: number; 
             title="Remove this phase?"
             sub={<p className="text-sm text-muted-foreground">{name} and the sessions you added are deleted.</p>}
           >
-            {error && (
-              <p role="alert" className="text-sm text-[#ff6b5a]">
-                {error}
-              </p>
-            )}
+            <ErrorLine error={error} />
             <button
               type="button"
               disabled={busy}

@@ -15,6 +15,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import {
   ButtonReason,
   DESTRUCTIVE_TEXT,
+  ErrorLine,
   FIELD,
   FormHeader,
   INNER_FIELD,
@@ -362,11 +363,7 @@ export function SeasonForm(props: Props) {
           </fieldset>
         )}
 
-        {error && !confirmStart && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        {!confirmStart && <ErrorLine error={error} />}
 
         {initial && (
           <button type="button" onClick={() => setConfirmDelete(true)} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>

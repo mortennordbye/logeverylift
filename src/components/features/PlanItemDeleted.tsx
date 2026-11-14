@@ -1,7 +1,7 @@
 "use client";
 
 import { HOME_UI } from "@/components/features/home/fonts";
-import { PRIMARY_BUTTON } from "@/components/features/season-ui";
+import { ErrorLine, PRIMARY_BUTTON } from "@/components/features/season-ui";
 import { BackLink } from "@/components/ui/BackLink";
 import { restorePlanRevision } from "@/lib/actions/plan-revisions";
 import type { DeletedItem } from "@/lib/plan-deleted";
@@ -45,11 +45,7 @@ export function PlanItemDeleted({ item }: { item: DeletedItem }) {
           <h1 className="text-xl font-semibold break-words">{item.name} was deleted.</h1>
           <p className="text-[15px] text-muted-foreground">{keepDates(`You can restore this ${item.what} for 90 days.`)}</p>
         </div>
-        {error && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
         {item.revisionId != null && (
           <button type="button" onClick={restore} disabled={busy} className={PRIMARY_BUTTON}>
             {busy ? "Restoring…" : "Restore"}

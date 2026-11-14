@@ -186,6 +186,16 @@ export function ButtonReason({ id, reason }: { id: string; reason: string | null
   );
 }
 
+/** A failed save's message, read out as an alert. Nothing renders for a null error. */
+export function ErrorLine({ error }: { error: string | null }) {
+  if (!error) return null;
+  return (
+    <p role="alert" className={`text-sm ${DESTRUCTIVE_TEXT}`}>
+      {error}
+    </p>
+  );
+}
+
 export const PRIMARY_BUTTON =
   "w-full min-h-[52px] rounded-2xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-transform";
 

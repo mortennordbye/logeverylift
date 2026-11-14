@@ -16,7 +16,7 @@
 
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
 import { PlanSheetPanel } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, FormHeader, PinnedBar, StepProgress } from "@/components/features/season-ui";
+import { ButtonReason, Chip, ErrorLine, FormHeader, PinnedBar, StepProgress } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
@@ -288,11 +288,7 @@ export function CreateCycleForm({
           />
         </label>
 
-        {error && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
       </div>
 
       <PinnedBar>
@@ -380,11 +376,7 @@ export function CycleSetupSessions({
         <StepProgress step={2} of={2} />
         <h2 className="text-[22px] font-semibold">{cycle.scheduleType === "rotation" ? "Rotation order" : "Build the week"}</h2>
         <CycleScheduleBuilder cycle={cycle} programs={programs} endurance={endurance} />
-        {error && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
       </div>
       <PinnedBar>
         <button type="button" onClick={create} disabled={loading || !hasSession} aria-describedby={hasSession ? undefined : "create-reason"} className={PRIMARY}>
@@ -399,11 +391,7 @@ export function CycleSetupSessions({
             title="Discard this cycle?"
             sub={<p className="text-sm text-muted-foreground">{cycle.name} and the sessions you added are deleted.</p>}
           >
-            {discardError && (
-              <p role="alert" className="text-sm text-[#ff6b5a]">
-                {discardError}
-              </p>
-            )}
+            <ErrorLine error={discardError} />
             <button
               type="button"
               onClick={discard}

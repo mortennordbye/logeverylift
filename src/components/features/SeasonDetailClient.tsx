@@ -3,7 +3,7 @@
 import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, DESTRUCTIVE_TEXT, INNER_FIELD, LABEL, PRIMARY_BUTTON, RACE_KIND_LABELS, RaceKindChips, RacePriorityRow, SectionLabel, Segmented, TriDistanceOptions } from "@/components/features/season-ui";
+import { ButtonReason, Chip, DESTRUCTIVE_TEXT, ErrorLine, INNER_FIELD, LABEL, PRIMARY_BUTTON, RACE_KIND_LABELS, RaceKindChips, RacePriorityRow, SectionLabel, Segmented, TriDistanceOptions } from "@/components/features/season-ui";
 import {
   addRaceAction,
   clearReplanAction,
@@ -281,11 +281,7 @@ export function SeasonDetailClient(p: Props) {
   // Why Save race or Save phase is off.
   const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
   const phaseReason = phase && !Number(phase.length) ? "Type a length." : null;
-  const errorLine = error && (
-    <p role="alert" className="text-sm text-[#ff6b5a]">
-      {error}
-    </p>
-  );
+  const errorLine = <ErrorLine error={error} />;
 
   return (
     <>

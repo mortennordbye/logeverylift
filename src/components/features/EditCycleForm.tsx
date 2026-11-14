@@ -7,7 +7,7 @@
  * sessions are built for it.
  */
 
-import { ButtonReason, Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
+import { ButtonReason, Chip, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
@@ -286,11 +286,7 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
           />
         </div>
 
-        {error && (
-          <p role="alert" className="text-sm text-[#ff6b5a]">
-            {error}
-          </p>
-        )}
+        <ErrorLine error={error} />
       </div>
 
       <PinnedBar>
