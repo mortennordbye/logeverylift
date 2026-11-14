@@ -51,6 +51,7 @@ import { useUnits } from "@/contexts/user-settings-context";
 import { METERS_PER_MILE, type Units } from "@/lib/utils/units";
 import { Activity, ChevronLeft, ChevronRight, Plus, TrendingUp, Trash2, Zap } from "lucide-react";
 import Link from "next/link";
+import { dayMonth } from "@/lib/home/labels";
 import { useState, useSyncExternalStore, useTransition } from "react";
 
 // ── Formatters ─────────────────────────────────────────────────────────────
@@ -72,9 +73,10 @@ const MUSCLE_LABELS: Record<string, string> = {
   cardio: "Cardio",
 };
 
+// Fixed month names, not toLocaleDateString: Node's ICU writes "Sept" for en-GB
+// and WebKit writes "Sep", a hydration error (#418) on every WebKit load.
 function formatWeekLabel(weekStart: string): string {
-  const d = new Date(weekStart + "T00:00:00");
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return dayMonth(weekStart);
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
