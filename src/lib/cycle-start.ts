@@ -12,7 +12,7 @@ import { liveCycles } from "@/lib/plan-live";
 import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import type { RunningCycle, ScheduledDraft } from "@/lib/utils/cycle-start";
 import type { RunningBlock } from "@/lib/utils/season-start";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 
 /**
  * The running cycle, with the live season it is a phase of, and the draft
@@ -58,6 +58,33 @@ export async function startBlocks(userId: string) {
       }
     : null;
   return { running, scheduled };
+}
+
+/**
+ * The block scheduled to start next: its id, name, start day and the season
+ * it is a phase of. One cycle is scheduled at a time.
+ */
+export async function upcomingCycle(userId: string) {
+  const [row] = await db
+    .select({
+      id: trainingCycles.id,
+      name: trainingCycles.name,
+      startsOn: trainingCycles.scheduledStartDate,
+      seasonName: seasons.name,
+    })
+    .from(trainingCycles)
+    .leftJoin(seasons, and(eq(seasons.id, trainingCycles.seasonId), isNull(seasons.deletedAt)))
+    .where(
+      and(
+        eq(trainingCycles.userId, userId),
+        eq(trainingCycles.status, "draft"),
+        isNotNull(trainingCycles.scheduledStartDate),
+        liveCycles,
+      ),
+    )
+    .orderBy(asc(trainingCycles.scheduledStartDate))
+    .limit(1);
+  return row?.startsOn ? { id: row.id, name: row.name, startsOn: row.startsOn, seasonName: row.seasonName } : null;
 }
 
 export async function cycleStartContext(userId: string, today: string): Promise<{ running: RunningCycle | null; scheduled: ScheduledDraft | null }> {

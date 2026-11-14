@@ -27,14 +27,15 @@ import { homeEndurance } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { getUserSettings, type UserSettings } from "@/lib/user-settings";
 import { cycleLengthDays, parseDateStr } from "@/lib/utils/cycle-position";
+import { upcomingCycle } from "@/lib/cycle-start";
 import { cutByStart, runLengthDays } from "@/lib/utils/seasons";
 import type { requireSession } from "@/lib/utils/session";
 import { weekDatesOf } from "@/lib/utils/user-date";
 import { db } from "@/db";
-import { exercises, programExercises, programSets, programs, seasons, trainingCycles } from "@/db/schema";
+import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { todayPlanFrom } from "@/lib/home/today-plan";
-import { liveCycles, liveProgramExercises, livePrograms, liveProgramSets } from "@/lib/plan-live";
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { liveProgramExercises, livePrograms, liveProgramSets } from "@/lib/plan-live";
+import { and, asc, eq } from "drizzle-orm";
 import { cache } from "react";
 import { dateLabel } from "@/lib/utils/date-label";
 
@@ -122,33 +123,6 @@ async function enduranceHome(userId: string, today: string) {
     console.error("[Home] endurance_read_failed", { error: e instanceof Error ? e.name : "unknown" });
     return { enabled: true, home: null };
   }
-}
-
-/**
- * The block scheduled to start next: its id, name, start day and the season
- * it is a phase of. One cycle is scheduled at a time.
- */
-export async function upcomingCycle(userId: string) {
-  const [row] = await db
-    .select({
-      id: trainingCycles.id,
-      name: trainingCycles.name,
-      startsOn: trainingCycles.scheduledStartDate,
-      seasonName: seasons.name,
-    })
-    .from(trainingCycles)
-    .leftJoin(seasons, and(eq(seasons.id, trainingCycles.seasonId), isNull(seasons.deletedAt)))
-    .where(
-      and(
-        eq(trainingCycles.userId, userId),
-        eq(trainingCycles.status, "draft"),
-        isNotNull(trainingCycles.scheduledStartDate),
-        liveCycles,
-      ),
-    )
-    .orderBy(asc(trainingCycles.scheduledStartDate))
-    .limit(1);
-  return row?.startsOn ? { id: row.id, name: row.name, startsOn: row.startsOn, seasonName: row.seasonName } : null;
 }
 
 /**

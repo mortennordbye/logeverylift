@@ -2,7 +2,8 @@ import { db } from "@/db";
 import { seasons, trainingCycles } from "@/db/schema";
 import { selectToday } from "@/components/features/home/widgets/today/View";
 import { selectTitle } from "@/components/features/home/widgets/title/View";
-import { activeCycle, loadHomeCore, upcomingCycle } from "@/lib/home/core";
+import { upcomingCycle } from "@/lib/cycle-start";
+import { activeCycle, loadHomeCore } from "@/lib/home/core";
 import { getUserSettings } from "@/lib/user-settings";
 import { todayIn } from "@/lib/utils/user-date";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +12,7 @@ import { asUser } from "./setup";
 
 /**
  * With no active cycle, Today shows the block scheduled to start next
- * (`upcomingCycle` in src/lib/home/core.ts): only a live, scheduled draft of
+ * (`upcomingCycle` in src/lib/cycle-start.ts): only a live, scheduled draft of
  * this user, with its season's name.
  */
 

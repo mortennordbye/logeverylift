@@ -11,8 +11,8 @@
 
 import { db } from "@/db";
 import { racePlans, seasonRaces, seasons, trainingCycles, type PhaseType, type RaceDiscipline, type RacePriority, type TriDistance } from "@/db/schema";
+import { upcomingCycle } from "@/lib/cycle-start";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { liveCycles } from "@/lib/plan-live";
 import {
   PlanNotFoundError,
   PlanStateError,
@@ -129,17 +129,6 @@ export type SeasonDetail = {
 
 const dayDiff = (a: string, b: string) => Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 
-/** The day the user's scheduled draft starts, or null. That start completes the running cycle. */
-async function scheduledStartDay(userId: string): Promise<string | null> {
-  const [row] = await db
-    .select({ day: trainingCycles.scheduledStartDate })
-    .from(trainingCycles)
-    .where(and(eq(trainingCycles.userId, userId), liveCycles, eq(trainingCycles.status, "draft"), isNotNull(trainingCycles.scheduledStartDate)))
-    .orderBy(asc(trainingCycles.scheduledStartDate))
-    .limit(1);
-  return row?.day ?? null;
-}
-
 /** One of the user's live seasons with its races, its phase timeline and the taper fit. Null if not found. */
 export async function getSeasonDetail(userId: string, seasonId: number): Promise<SeasonDetail | null> {
   const [season] = await db
@@ -155,7 +144,8 @@ export async function getSeasonDetail(userId: string, seasonId: number): Promise
       .where(eq(seasonRaces.seasonId, seasonId))
       .orderBy(asc(seasonRaces.raceDate), asc(seasonRaces.id)),
     seasonPhases(db, seasonId),
-    scheduledStartDay(userId),
+    // The day the scheduled draft starts: that start completes the running cycle.
+    upcomingCycle(userId).then((c) => c?.startsOn ?? null),
   ]);
   const versions = new Map(rows.map((r) => [r.id, r.version]));
   // The scheduled start ends a running phase the day before; a paused chain is dated from Resume (J4-18).
