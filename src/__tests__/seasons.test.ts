@@ -295,6 +295,8 @@ describe("season row words (docs/design/plan-redesign/spec.md)", () => {
   it("shows a range with the month once when both days share it", () => {
     expect(rangeLabel("2026-11-16", "2027-01-10")).toBe("16 Nov – 10 Jan");
     expect(rangeLabel("2027-08-17", "2027-08-26")).toBe("17 – 26 Aug");
+    // A one-day phase is one day, not "28 – 28 May" (round 8).
+    expect(rangeLabel("2027-05-28", "2027-05-28")).toBe("28 May");
   });
 
   it("shows a length as weeks or days", () => {

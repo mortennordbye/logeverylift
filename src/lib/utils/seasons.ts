@@ -356,10 +356,11 @@ export function lengthField(p: { durationWeeks: number; durationDays: number | n
   return { length: String(p.durationDays != null ? p.durationDays / 7 : p.durationWeeks), unit: "weeks" };
 }
 
-/** Two days as a range: "16 Nov – 10 Jan", or "17 – 26 Aug" in one month. */
+/** Two days as a range: "16 Nov – 10 Jan", "17 – 26 Aug" in one month, or "28 May" for one day. */
 export function rangeLabel(start: string, end: string): string {
   const a = shortDay(start).slice(4);
   const b = shortDay(end).slice(4);
+  if (start === end) return b;
   if (start.slice(0, 7) === end.slice(0, 7)) return `${a.split(" ")[0]} – ${b}`;
   return `${a} – ${b}`;
 }
