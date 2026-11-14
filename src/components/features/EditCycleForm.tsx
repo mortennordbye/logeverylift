@@ -1,7 +1,7 @@
 "use client";
 
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
-import { cycleLengthDays } from "@/lib/utils/cycle-position";
+import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
@@ -26,9 +26,11 @@ type Props = {
   enduranceEnabled: boolean;
   /** The live season the cycle is a phase of; null for none or a deleted one (it then acts as a cycle with no season). */
   liveSeasonId?: number | null;
+  /** Today in the user's time zone, `YYYY-MM-DD`. */
+  today: string;
 };
 
-export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null }: Props) {
+export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, today }: Props) {
   const router = useRouter();
   const [name, setName] = useState(cycle.name);
   const [durationWeeks, setDurationWeeks] = useState(cycle.durationWeeks);
@@ -48,16 +50,9 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null }: 
 
   // Warn if the selected duration would immediately end an active cycle
   const durationWarning = useMemo(() => {
-    if (cycle.status !== "active" || !cycle.startDate) return null;
-    const start = new Date(cycle.startDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const elapsed = Math.floor((today.getTime() - start.getTime()) / 86400000);
-    if (cycleLengthDays({ durationWeeks, durationDays: durationWeeks === cycle.durationWeeks ? cycle.durationDays : null }) <= elapsed) {
-      return "This duration is shorter than time already elapsed — the cycle would end immediately.";
-    }
-    return null;
-  }, [cycle.status, cycle.startDate, cycle.durationWeeks, cycle.durationDays, durationWeeks]);
+    if (!wouldEndActiveCycle(cycle, durationWeeks, parseDateStr(today))) return null;
+    return "This duration is shorter than time already elapsed — the cycle would end immediately.";
+  }, [cycle, durationWeeks, today]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
