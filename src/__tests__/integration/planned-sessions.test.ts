@@ -286,7 +286,7 @@ describe("changing one session", () => {
       `${name} on Mon 9 Nov, planned again`,
       `Skipped ${name} on Mon 16 Nov`,
       `Moved ${name} from Mon 9 Nov to Wed 11 Nov`,
-      `Heavy on Wed 11 Nov, label set to Heavy`,
+      `${name} on Wed 11 Nov, label set to Heavy`,
     ]);
   });
 
