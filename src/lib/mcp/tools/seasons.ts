@@ -309,7 +309,7 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
         "Add, change or remove a race on a season (endurance features only).",
         `operation='add': name, date, discipline (${RACE_DISCIPLINES.join(", ")}), priority (${RACE_PRIORITIES.join(", ")}); for a triathlon a distance (${TRI_DISTANCES.join(", ")}); for any other discipline distanceMeters. At most ${SEASON_MAX_RACES} races.`,
         "operation='update': raceId and any of those. operation='remove': raceId.",
-        "The A race decides where the taper goes. A date change of any race, an A race added or removed, or a priority change to or from A flags the season for a re-plan; the result says so. Nothing else changes by itself.",
+        "The A race decides where the taper goes. A season has one A race: a race added or changed to A makes the old A race a B race. A date change of any race, an A race added or removed, or a priority change to or from A flags the season for a re-plan; the result says so. Nothing else changes by itself.",
         `Every operation requires reason and expectedVersion (the season's version). ${REVISION_RULES}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },

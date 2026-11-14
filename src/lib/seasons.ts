@@ -473,6 +473,14 @@ async function placeRaceDate(
   if (end !== season.endDate) await w.tx.update(seasons).set({ endDate: end, updatedAt: new Date() }).where(eq(seasons.id, seasonId));
 }
 
+/** A season has one A race (round 8): a race set to A makes any other A race of the season a B race. */
+async function keepOneARace(w: PlanWriteSession, seasonId: number, aRaceId: number) {
+  await w.tx
+    .update(seasonRaces)
+    .set({ priority: "B" })
+    .where(and(eq(seasonRaces.seasonId, seasonId), eq(seasonRaces.priority, "A"), ne(seasonRaces.id, aRaceId)));
+}
+
 export async function addRace(ctx: PlanWriteContext, seasonId: number, input: RaceInput, expectedVersion?: number) {
   return raceWrite(ctx, seasonId, expectedVersion, async (w) => {
     const existing = await w.tx.select({ id: seasonRaces.id }).from(seasonRaces).where(eq(seasonRaces.seasonId, seasonId));
@@ -482,6 +490,7 @@ export async function addRace(ctx: PlanWriteContext, seasonId: number, input: Ra
       .insert(seasonRaces)
       .values({ ...cleanRace(input), seasonId, userId: ctx.userId })
       .returning();
+    if (row.priority === "A") await keepOneARace(w, seasonId, row.id);
     return row;
   });
 }
@@ -514,6 +523,7 @@ export async function updateRace(
     });
     await placeRaceDate(w, seasonId, { id: raceId, raceDate: merged.raceDate, priority: merged.priority }, current);
     const [row] = await w.tx.update(seasonRaces).set(merged).where(eq(seasonRaces.id, raceId)).returning();
+    if (row.priority === "A") await keepOneARace(w, seasonId, row.id);
     return row;
   });
 }

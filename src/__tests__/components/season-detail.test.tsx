@@ -384,6 +384,24 @@ describe("Resume asks first (fix round 4)", () => {
   });
 });
 
+describe("one A race per season (round 8)", () => {
+  it("the race sheet says before Save that the old A race becomes a B race", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    fireEvent.click(within(within(sheet).getByRole("group", { name: "Priority" })).getByRole("button", { name: "B" }));
+    expect(within(sheet).queryByText(/becomes a B race/)).toBeNull();
+    fireEvent.click(within(within(sheet).getByRole("group", { name: "Priority" })).getByRole("button", { name: "A" }));
+    expect(within(sheet).getByText("“Jevnaker Halv Full Distanse” becomes a B race.")).toBeTruthy();
+  });
+
+  it("says nothing when the race edited is the A race", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: /Jevnaker Halv Full Distanse/ }));
+    expect(screen.queryByText(/becomes a B race/)).toBeNull();
+  });
+});
+
 describe("errors belong to the sheet that caused them (fix round 4)", () => {
   it("a race error is gone once the race sheet closes, on the page and in the Delete season confirm", async () => {
     actions.addRaceAction.mockImplementation(async () => ({ success: false, error: "Pick a race date from today on" }) as never);

@@ -563,6 +563,15 @@ export function SeasonDetailClient(p: Props) {
               </label>
             )}
             <RacePriorityRow value={race.priority} onChange={(v) => setRace({ ...race, priority: v })} />
+            {/* A season has one A race: saving this one as A makes the old one a B race (keepOneARace). */}
+            {race.priority === "A" &&
+              p.races
+                .filter((r) => r.priority === "A" && r.id !== race.id)
+                .map((r) => (
+                  <span key={r.id} className="text-[13px] text-muted-foreground">
+                    “{r.name}” becomes a B race.
+                  </span>
+                ))}
             <div>
               <button type="button" disabled={busy || raceReason != null} aria-describedby={raceReason ? "race-reason" : undefined} onClick={saveRace} className={PRIMARY_BUTTON}>
                 Save race
