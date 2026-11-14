@@ -54,12 +54,12 @@ describe("step 1: the basics", () => {
   it("makes a rotation draft and opens step 2 with the start day", async () => {
     render(<CreateCycleForm days={days} />);
     expect(screen.getByText("Step 1 of 2")).toBeTruthy();
-    fireEvent.change(screen.getByPlaceholderText("For example: Upper / Lower hypertrophy"), { target: { value: "Upper / Lower" } });
+    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Upper / Lower" } });
     fireEvent.click(screen.getByLabelText(/Rotation/));
     fireEvent.click(screen.getByRole("button", { name: "6 weeks" }));
     fireEvent.click(screen.getByRole("button", { name: "Next Monday · 16 Nov" }));
     fireEvent.click(screen.getByRole("button", { name: "Deload week" }));
-    fireEvent.click(screen.getByRole("button", { name: "Next: put the sessions in order" }));
+    fireEvent.click(screen.getByRole("button", { name: "Put the sessions in order" }));
 
     await waitFor(() => expect(router.replace).toHaveBeenCalledWith("/cycles/new?cycle=5&start=2026-11-16"));
     expect(createTrainingCycle).toHaveBeenCalledWith({
@@ -74,9 +74,9 @@ describe("step 1: the basics", () => {
   it("needs a day for Pick a date, and offers After current cycle only while a cycle runs", async () => {
     const { unmount } = render(<CreateCycleForm days={days} />);
     expect(screen.queryByRole("button", { name: "After current cycle" })).toBeNull();
-    fireEvent.change(screen.getByPlaceholderText("For example: Upper / Lower hypertrophy"), { target: { value: "Block" } });
+    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Block" } });
     fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
-    const next = screen.getByRole("button", { name: "Next: build the week" }) as HTMLButtonElement;
+    const next = screen.getByRole("button", { name: "Build the week" }) as HTMLButtonElement;
     expect(next.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-01" } });
     expect(next.disabled).toBe(false);
@@ -95,7 +95,7 @@ describe("step 1: the basics", () => {
     expect(screen.getByRole("button", { name: "Next Monday · 16 Nov" }).getAttribute("aria-pressed")).toBe("true");
     expect(screen.getByRole("button", { name: "16 weeks" }).getAttribute("aria-pressed")).toBe("true");
     expect((screen.getByLabelText(/Same days each week/) as HTMLInputElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "Next: put the sessions in order" }));
+    fireEvent.click(screen.getByRole("button", { name: "Put the sessions in order" }));
     await waitFor(() => expect(updateTrainingCycle).toHaveBeenCalledWith({ id: 5, name: "Block", durationWeeks: 16, endAction: "none", endMessage: null }));
     expect(createTrainingCycle).not.toHaveBeenCalled();
   });
@@ -103,8 +103,8 @@ describe("step 1: the basics", () => {
   it("shows a refused write and stays on step 1", async () => {
     vi.mocked(createTrainingCycle).mockResolvedValue({ success: false, error: "Failed to create the cycle" });
     render(<CreateCycleForm days={days} />);
-    fireEvent.change(screen.getByPlaceholderText("For example: Upper / Lower hypertrophy"), { target: { value: "Block" } });
-    fireEvent.click(screen.getByRole("button", { name: "Next: build the week" }));
+    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Block" } });
+    fireEvent.click(screen.getByRole("button", { name: "Build the week" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Failed to create the cycle"));
     expect(router.replace).not.toHaveBeenCalled();
   });

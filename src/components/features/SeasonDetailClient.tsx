@@ -248,7 +248,7 @@ export function SeasonDetailClient(p: Props) {
             {dayLabel(p.season.startDate)} to {dayLabel(p.season.endDate)}
           </span>
           {p.season.goal && <span className="text-sm text-foreground/75">{p.season.goal}</span>}
-          {p.season.nextGoal && <span className="text-[13px] text-muted-foreground">Next: {p.season.nextGoal}</span>}
+          {p.season.nextGoal && <span className="text-[13px] text-muted-foreground">Next goal is {p.season.nextGoal}</span>}
         </div>
 
         {race == null && phase == null && !confirmDelete && errorLine}
@@ -333,7 +333,7 @@ export function SeasonDetailClient(p: Props) {
           {p.next && !p.next.scheduled && (
             <div className="mx-1 flex items-center justify-between gap-3">
               <p className="text-[13px] text-muted-foreground">
-                {phases.some((ph) => ph.state !== "planned") ? "Paused: the next phase is not scheduled." : `“${p.next.name}” is not started.`}
+                {phases.some((ph) => ph.state !== "planned") ? "Paused. The next phase is not scheduled." : `“${p.next.name}” is not started.`}
               </p>
               <button type="button" disabled={busy} onClick={() => run(resumeSeasonAction({ seasonId: p.season.id }))} className="min-h-11 shrink-0 text-sm font-medium text-primary active:opacity-70">
                 {phases.some((ph) => ph.state !== "planned") ? "Resume" : "Start"}

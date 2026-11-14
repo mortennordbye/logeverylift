@@ -155,7 +155,7 @@ describe("the Plan list", () => {
     render(<CyclesListClient data={{ ...none, empty: true }} deletedCount={0} />);
     expect(screen.getByRole("heading", { name: "Plan", level: 1 })).toBeTruthy();
     expect(screen.getByRole("heading", { name: "Plan your training" })).toBeTruthy();
-    expect(screen.getByText("Cycles and seasons: when you train")).toBeTruthy();
+    expect(screen.getByText("When you train, in cycles and seasons")).toBeTruthy();
     // One way in per action: the card replaces the + menu while the list is empty.
     expect(screen.queryByRole("button", { name: "New cycle or season" })).toBeNull();
     // The same two choices as the + menu; the new cycle form asks how you train.

@@ -384,7 +384,7 @@ export function CyclesListClient({ data, deletedCount }: Props) {
             )}
           </div>
         </div>
-        <p className="text-sm text-muted-foreground">Cycles and seasons: when you train</p>
+        <p className="text-sm text-muted-foreground">When you train, in cycles and seasons</p>
       </header>
 
       <div className="flex flex-1 flex-col gap-5 overflow-y-auto px-4 pt-2">

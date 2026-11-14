@@ -198,7 +198,7 @@ export function CreateCycleForm({
             value={name}
             maxLength={100}
             onChange={(e) => setName(e.target.value)}
-            placeholder="For example: Upper / Lower hypertrophy"
+            placeholder="Upper / Lower hypertrophy"
             className="h-12 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand placeholder:text-muted-foreground"
           />
         </label>
@@ -304,7 +304,7 @@ export function CreateCycleForm({
             value={endMessage}
             maxLength={500}
             onChange={(e) => setEndMessage(e.target.value)}
-            placeholder="For example: Test your 1RM"
+            placeholder="Test your 1RM"
             rows={2}
             className="px-3.5 py-3 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand resize-none placeholder:text-muted-foreground"
           />
@@ -319,7 +319,7 @@ export function CreateCycleForm({
 
       <PinnedBar>
         <button type="submit" disabled={loading || !name.trim() || !startDay} className={PRIMARY}>
-          {scheduleType === "rotation" ? "Next: put the sessions in order" : "Next: build the week"}
+          {scheduleType === "rotation" ? "Put the sessions in order" : "Build the week"}
         </button>
       </PinnedBar>
     </form>

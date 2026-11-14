@@ -121,7 +121,7 @@ export function AddPhaseForm(p: Props) {
             <label htmlFor="phase-name" className={LABEL}>
               Name
             </label>
-            <input id="phase-name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} placeholder="For example: Swim, intervals, bricks" className={FIELD} />
+            <input id="phase-name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} placeholder="Swim, intervals, bricks" className={FIELD} />
           </div>
         ) : (
           <fieldset className="flex flex-col gap-2">
@@ -204,7 +204,7 @@ export function AddPhaseForm(p: Props) {
 
       <PinnedBar>
         <button type="submit" disabled={busy || !valid} className={PRIMARY_BUTTON}>
-          {busy ? "Saving…" : source === "new" ? "Next: build the week" : "Add phase"}
+          {busy ? "Saving…" : source === "new" ? "Build the week" : "Add phase"}
         </button>
       </PinnedBar>
     </form>

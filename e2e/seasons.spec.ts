@@ -81,7 +81,7 @@ test("make a season with a race and phases, fit the taper, drag a phase, and ans
   // Picking Taper sets the A race's taper length.
   await page.getByRole("button", { name: "Taper", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Length", exact: true })).toHaveValue("10");
-  await page.getByRole("button", { name: "Next: build the week" }).click();
+  await page.getByRole("button", { name: "Build the week" }).click();
   await settle();
   await expect(page).toHaveURL(/\/cycles\/\d+\/template$/);
 

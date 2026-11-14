@@ -148,7 +148,7 @@ export function CycleWeek({
             const inner = (
               <>
                 {dayCol(i === 0)}
-                {s.brick && <Link2 role="img" aria-label="Brick: linked to the ride" className="w-4 h-4 shrink-0 text-muted-foreground" />}
+                {s.brick && <Link2 role="img" aria-label="Brick, linked to the ride" className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1 min-w-0 flex flex-col">
                   <span className={`text-[15px] font-medium truncate ${s.status === "skipped" ? "text-muted-foreground line-through" : ""}`}>{s.name}</span>
                   {sub && <span className="text-[13px] text-muted-foreground truncate">{sub}</span>}

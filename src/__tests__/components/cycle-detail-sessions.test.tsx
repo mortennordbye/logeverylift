@@ -112,7 +112,7 @@ describe("weekday week", () => {
     expect(rows).toHaveLength(8);
     expect(rows[2].textContent).toContain("Rest");
     expect(within(rows[6]).getByText("Key")).toBeTruthy();
-    expect(within(rows[7]).getByRole("img", { name: "Brick: linked to the ride" })).toBeTruthy();
+    expect(within(rows[7]).getByRole("img", { name: "Brick, linked to the ride" })).toBeTruthy();
     // A done session does not open a sheet.
     expect(rows[0].tagName).toBe("DIV");
     expect(rows[0].textContent).toContain("Done");
