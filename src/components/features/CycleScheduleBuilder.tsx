@@ -474,7 +474,8 @@ function RotationBuilder({
   }
 
   async function handleAddSlot() {
-    const nextOrder = localSlots.length + 1;
+    // After the last position, not the count: a gap must never make it land on a slot.
+    const nextOrder = Math.max(0, ...localSlots.map((s) => s.orderIndex ?? 0)) + 1;
     await callAction(upsertCycleSlot({
       trainingCycleId: cycle.id,
       orderIndex: nextOrder,
