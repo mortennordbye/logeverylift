@@ -1,8 +1,8 @@
 import { SharedProgramsClient } from "@/components/features/SharedProgramsClient";
 import { getIncomingShares } from "@/lib/actions/program-shares";
 import { requireSession } from "@/lib/utils/session";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
+import { BackLink } from "@/components/ui/BackLink";
 
 export default async function SharedProgramsPage() {
   await requireSession();
@@ -12,10 +12,7 @@ export default async function SharedProgramsPage() {
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more/friends" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Friends</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/friends", label: "Friends" }} />
       </div>
 
       <div className="px-4 pt-2 pb-4 shrink-0">

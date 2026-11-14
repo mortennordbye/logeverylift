@@ -2,9 +2,9 @@
 
 import { markFeedbackRead, type FeedbackWithUser } from "@/lib/actions/feedback";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
 import { useState } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 const TYPE_LABELS: Record<string, string> = {
   bug: "Bug",
@@ -43,10 +43,7 @@ export function AdminFeedbackClient({ initial }: { initial: FeedbackWithUser[] }
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more/admin" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Admin Tools</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/admin", label: "Admin Tools" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0 flex items-baseline gap-3">
         <h1 className="text-3xl font-bold tracking-tight">Feedback</h1>

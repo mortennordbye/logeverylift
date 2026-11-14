@@ -1,9 +1,9 @@
 import { WorkoutReactions } from "@/components/features/WorkoutReactions";
 import { getFriendSessionDetail } from "@/lib/actions/friends";
 import { formatDateLong, formatDuration } from "@/lib/utils/format";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 const FEELING_EMOJI: Record<string, string> = {
   Tired: "😓",
@@ -25,13 +25,7 @@ export default async function FriendSessionPage({
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link
-          href={`/more/friends/${userId}`}
-          className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">{detail.ownerName}</span>
-        </Link>
+        <BackLink fallback={{ href: `/more/friends/${userId}`, label: detail.ownerName }} />
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 pb-nav-safe">

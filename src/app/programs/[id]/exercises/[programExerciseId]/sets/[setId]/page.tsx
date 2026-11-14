@@ -7,9 +7,9 @@
 import { SetEditView } from "@/components/features/SetEditView";
 import { getProgramWithExercises } from "@/lib/actions/programs";
 import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
-import { ChevronLeftIcon } from "lucide-react";
-import Link from "next/link";
+
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 type Props = {
   params: Promise<{
@@ -49,13 +49,7 @@ export default async function ProgramSetEditPage({ params, searchParams }: Props
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-6 pb-4 shrink-0">
-        <Link
-          href={`/programs/${programId}/exercises/${peId}${edit === "true" ? "?edit=true" : ""}`}
-          className="flex items-center gap-1 text-primary"
-        >
-          <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Sets</span>
-        </Link>
+        <BackLink fallback={{ href: `/programs/${programId}/exercises/${peId}${edit === "true" ? "?edit=true" : ""}`, label: "Sets" }} />
         <div className="text-lg font-bold">Edit Set</div>
         <div className="w-16" />
       </div>

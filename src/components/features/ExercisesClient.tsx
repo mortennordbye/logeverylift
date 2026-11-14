@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useBack } from "@/components/ui/BackLink";
 import { useEffect, useState } from "react";
 
 type Category = "strength" | "cardio" | "flexibility";
@@ -472,6 +473,7 @@ export function ExercisesClient({
   enduranceEnabled?: boolean;
 }) {
   const router = useRouter();
+  const back = useBack({ href: "/more", label: "More" });
   const [view, setView] = useState<ViewId | "menu">("menu");
   const [subCategory, setSubCategory] = useState<string | null>(null);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
@@ -586,8 +588,10 @@ export function ExercisesClient({
     if (subCategory !== null) { setSubCategory(null); return; }
     if (view !== "menu") { setView("menu"); return; }
     if (onBack) { onBack(); return; }
-    router.push("/more");
+    back.go();
   }
+  // In the library's own views Back steps up a view; at the top it leaves the page.
+  const atTop = !editingExercise && !selectedExercise && subCategory === null && view === "menu" && !onBack;
 
   // ── Compute right header action ────────────────────────────────────────────
   const headerRight = selectedExercise?.isCustom && !editingExercise ? (
@@ -764,7 +768,7 @@ export function ExercisesClient({
           className="flex items-center gap-0.5 min-h-[44px] text-primary active:opacity-70 -ml-1"
         >
           <ChevronLeft className="w-5 h-5" />
-          <span className="text-base">Back</span>
+          <span className="text-base">{atTop ? back.label : "Back"}</span>
         </button>
         {headerRight}
       </div>

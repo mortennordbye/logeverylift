@@ -20,7 +20,7 @@ import {
   zoneSeconds,
 } from "@/lib/garmin/charts/activity";
 import type { ActivityDetail } from "@/lib/garmin/queries";
-import { Award, BatteryMedium, ChartLine, ChevronLeft, ClipboardCheck, Droplets, Fuel, Medal, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, MountainSnow, Route as RouteIcon, Scale, Smile, Thermometer, Timer, TimerReset, TrendingUp, Trophy, Watch, Wind, Zap, type LucideIcon } from "lucide-react";
+import { Award, BatteryMedium, ChartLine, ClipboardCheck, Droplets, Fuel, Medal, MousePointerSquareDashed, X, Dumbbell, Flag, Flame, Gauge, HeartPulse, Map as MapIcon, Mountain, MountainSnow, Route as RouteIcon, Scale, Smile, Thermometer, Timer, TimerReset, TrendingUp, Trophy, Watch, Wind, Zap, type LucideIcon } from "lucide-react";
 
 const STAT_ICON: Record<string, LucideIcon> = {
   Duration: Timer,
@@ -53,6 +53,7 @@ import { useMemo, useState } from "react";
 import { saveFuelLogAction } from "@/lib/actions/nutrition";
 import { FuelForm } from "@/components/features/nutrition/FuelForm";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { BackLink, useBack } from "@/components/ui/BackLink";
 
 
 function ZoneBars({ seconds, colors, label }: { seconds: number[]; colors: string[]; label: (i: number) => string }) {
@@ -233,9 +234,9 @@ function Streams({
 
 export function GarminActivityView({ d }: { d: ActivityDetail }) {
   const theme = useVizTheme();
-  const router = useRouter();
-  // Swipe right anywhere outside a chart or the map: back to the list.
-  const swipe = useSwipe({ onRight: () => (window.history.length > 1 ? router.back() : router.replace("/more/garmin?tab=activities")) });
+  // Swipe right anywhere outside a chart or the map: back, as the Back link does.
+  const back = useBack({ href: "/more/garmin?tab=activities", label: "Activities" });
+  const swipe = useSwipe({ onRight: back.go });
   const [cursor, setCursor] = useState<number | null>(null);
   const [span, setSpan] = useState<Span | null>(null);
   const zones = useMemo(() => zoneSeconds(d), [d]);
@@ -252,10 +253,7 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more/garmin?tab=activities" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Activities</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/garmin?tab=activities", label: "Activities" }} />
       </div>
       <main {...swipe.handlers} style={swipe.style} className="flex-1 overflow-y-auto px-4 pb-nav-safe-lg space-y-4">
         <header className="space-y-1 pt-1">

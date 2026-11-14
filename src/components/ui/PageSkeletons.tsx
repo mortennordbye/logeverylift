@@ -1,3 +1,4 @@
+import { BackLabel } from "@/components/ui/BackLink";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ChevronLeftIcon } from "lucide-react";
 
@@ -12,13 +13,13 @@ import { ChevronLeftIcon } from "lucide-react";
  */
 
 /** Back / Edit header used by WorkoutSetsClient, ProgramDetailClient. */
-export function BackEditHeader({ backLabel = "Back" }: { backLabel?: string }) {
+export function BackEditHeader({ backLabel }: { backLabel?: string }) {
   return (
     <div className="flex items-center px-4 pt-6 pb-4 shrink-0">
       <div className="w-20 shrink-0 flex items-center">
         <span className="flex items-center gap-0.5 text-primary -ml-1 min-h-[44px]">
           <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">{backLabel}</span>
+          <span className="text-sm font-medium">{backLabel ?? <BackLabel />}</span>
         </span>
       </div>
       <div className="flex-1" />
@@ -132,7 +133,9 @@ export function ListPageSkeleton({
       <div className="px-4 pt-6 pb-2 shrink-0">
         <span className="flex items-center gap-0.5 text-primary -ml-1 min-h-[44px]">
           <ChevronLeftIcon className="h-5 w-5" />
-          <span className="text-sm font-medium">Back</span>
+          <span className="text-sm font-medium">
+            <BackLabel />
+          </span>
         </span>
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">

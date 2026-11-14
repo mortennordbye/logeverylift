@@ -7,9 +7,9 @@
 import { SetEditView } from "@/components/features/SetEditView";
 import { getProgramWithExercises } from "@/lib/actions/programs";
 import { syncActiveCyclePeriodization } from "@/lib/actions/training-cycles";
-import { ChevronLeftIcon } from "lucide-react";
-import Link from "next/link";
+
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 type Props = {
   params: Promise<{
@@ -50,13 +50,7 @@ export default async function SetEditPage({ params }: Props) {
           variable-width back link, so the title was never actually centred. */}
       <div className="flex items-center px-4 pt-6 pb-4">
         <div className="w-16 shrink-0">
-          <Link
-            href={`/programs/${programId}/workout/exercises/${peId}`}
-            className="flex items-center gap-1 text-primary"
-          >
-            <ChevronLeftIcon className="h-5 w-5" />
-            <span className="text-sm font-medium">Sets</span>
-          </Link>
+          <BackLink fallback={{ href: `/programs/${programId}/workout/exercises/${peId}`, label: "Sets" }} />
         </div>
         <div className="flex-1 text-center text-lg font-bold">Edit Set</div>
         <div className="w-16 shrink-0" />

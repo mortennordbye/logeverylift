@@ -14,10 +14,11 @@ import { heatOption, paceMin, paceTick } from "@/lib/garmin/charts/trends";
 import type { RaceData } from "@/lib/garmin/queries";
 import { phaseLabel } from "@/lib/utils/periodization";
 import { formatDateShort } from "@/lib/utils/format";
-import { Bike, ChevronLeft, CloudSun, Droplets, Flag, Footprints, Gauge, Layers, Mountain, TrendingUp } from "lucide-react";
+import { Bike, CloudSun, Droplets, Flag, Footprints, Gauge, Layers, Mountain, TrendingUp } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+
 import { useMemo } from "react";
+import { BackLink, useBack } from "@/components/ui/BackLink";
 
 /**
  * The race page: countdown and taper, fitness and form to race day, the
@@ -31,10 +32,7 @@ function Header({ title }: { title: string }) {
   return (
     <>
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more/garmin?tab=overview" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Garmin</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/garmin?tab=overview", label: "Garmin" }} />
       </div>
       <div className="px-4 pt-1 pb-3 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">{title}</h1>
@@ -45,8 +43,8 @@ function Header({ title }: { title: string }) {
 
 export function GarminRaceView({ data }: { data: RaceData | null }) {
   const theme = useVizTheme();
-  const router = useRouter();
-  const swipe = useSwipe({ onRight: () => (window.history.length > 1 ? router.back() : router.replace("/more/garmin")) });
+  const back = useBack({ href: "/more/garmin?tab=overview", label: "Garmin" });
+  const swipe = useSwipe({ onRight: back.go });
   const opts = useMemo(
     () =>
       theme && data

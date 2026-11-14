@@ -30,10 +30,11 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { ProgramShareButton } from "@/components/features/ProgramShareButton";
 import type { FriendWithActivity } from "@/types/workout";
-import { ChevronLeft, ChevronRight, GripVertical, Minus, Plus } from "lucide-react";
+import { ChevronRight, GripVertical, Minus, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 type ProgramExItem = {
   id: number;
@@ -294,10 +295,7 @@ export function ProgramDetailClient({
               Cancel
             </button>
           ) : (
-            <Link href="/programs" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-              <ChevronLeft className="h-5 w-5" />
-              <span className="text-sm font-medium">Back</span>
-            </Link>
+            <BackLink fallback={{ href: "/programs", label: "Programs" }} />
           )}
         </div>
         <div className="flex-1" />

@@ -83,7 +83,8 @@ test("a reaction to my workout shows a badge until I open Friends", async ({ pag
     await page.getByRole("link", { name: "More" }).first().click();
     await page.waitForURL("**/more");
     await expect(page.getByLabel("1 new")).toBeHidden();
-    await page.goBack();
+    // That Back was a history pop, so Friends is now one step forward.
+    await page.goForward();
 
     await page.getByRole("link", { name: new RegExp(`${friend.name} 🔥 your`) }).click();
     await expect(page.getByText(`🔥 ${friend.name}`)).toBeVisible();

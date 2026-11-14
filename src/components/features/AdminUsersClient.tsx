@@ -4,10 +4,10 @@ import { setUserEndurance } from "@/lib/actions/admin";
 import { authClient } from "@/lib/auth-client";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { BottomSheet } from "@/components/ui/BottomSheet";
-import { ChevronLeft, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
+import { Plus, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 type User = {
   id: string;
@@ -94,10 +94,7 @@ export function AdminUsersClient({ users }: { users: User[] }) {
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more/admin" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Admin</span>
-        </Link>
+        <BackLink fallback={{ href: "/more/admin", label: "Admin" }} />
         <button
           onClick={openCreate}
           className="w-9 h-9 flex items-center justify-center rounded-full active:bg-muted/50"

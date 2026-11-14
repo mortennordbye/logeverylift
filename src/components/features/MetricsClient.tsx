@@ -49,10 +49,10 @@ import {
 import { callAction } from "@/lib/utils/stale-bundle";
 import { useUnits } from "@/contexts/user-settings-context";
 import { METERS_PER_MILE, type Units } from "@/lib/utils/units";
-import { Activity, ChevronLeft, ChevronRight, Plus, TrendingUp, Trash2, Zap } from "lucide-react";
-import Link from "next/link";
+import { Activity, ChevronRight, Plus, TrendingUp, Trash2, Zap } from "lucide-react";
 import { dayMonth } from "@/lib/home/labels";
 import { useState, useSyncExternalStore, useTransition } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 // ── Formatters ─────────────────────────────────────────────────────────────
 
@@ -1520,13 +1520,7 @@ export function MetricsClient({
   return (
     <div className="h-[100dvh] flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link
-          href="/more"
-          className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1"
-        >
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">More</span>
-        </Link>
+        <BackLink fallback={{ href: "/more", label: "More" }} />
       </div>
       <div className="px-4 pt-2 pb-3 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight mb-3">Progress</h1>

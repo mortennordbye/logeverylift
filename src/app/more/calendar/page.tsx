@@ -12,8 +12,8 @@ import { addDaysStr } from "@/lib/utils/planned-sessions";
 import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { requireSession } from "@/lib/utils/session";
 import { listWorkouts } from "@/lib/workouts";
-import { ChevronLeft } from "lucide-react";
-import Link from "next/link";
+
+import { BackLink } from "@/components/ui/BackLink";
 
 export default async function CalendarPage() {
   const session = await requireSession();
@@ -68,10 +68,7 @@ export default async function CalendarPage() {
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">More</span>
-        </Link>
+        <BackLink fallback={{ href: "/more", label: "More" }} />
       </div>
 
       <div className="px-4 pt-2 pb-4 shrink-0">

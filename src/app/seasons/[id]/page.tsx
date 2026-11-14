@@ -3,9 +3,10 @@ import { SeasonDetailClient } from "@/components/features/SeasonDetailClient";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { getSeasonDetail, seasonlessCycles } from "@/lib/seasons";
 import { requireSession } from "@/lib/utils/session";
-import { ChevronLeftIcon } from "lucide-react";
+
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 /** A season: goal, races, phases and the re-plan flag (docs/plans/seasons.md, 2.10). */
 export default async function SeasonPage({ params }: { params: Promise<{ id: string }> }) {
@@ -24,10 +25,7 @@ export default async function SeasonPage({ params }: { params: Promise<{ id: str
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-y-auto">
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
-        <Link href="/cycles" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeftIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">Cycles</span>
-        </Link>
+        <BackLink fallback={{ href: "/cycles", label: "Cycles" }} />
         <div className="flex items-center gap-4">
           <Link href={`/seasons/${s.id}/history`} className="text-primary text-sm font-medium min-h-[44px] flex items-center active:opacity-70">
             History

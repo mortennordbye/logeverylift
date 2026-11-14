@@ -3,9 +3,10 @@
 import { adminResetUserData, adminSeedFakeData, adminPrepareDemoUser } from "@/lib/actions/admin";
 import { authClient } from "@/lib/auth-client";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
-import { BarChart3, Bot, ChevronLeft, ChevronRight, DatabaseZap, Key, MessageSquare, MonitorPlay, Trash2, Users } from "lucide-react";
+import { BarChart3, Bot, ChevronRight, DatabaseZap, Key, MessageSquare, MonitorPlay, Trash2, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 type Status = { type: "success" | "error"; message: string } | null;
 
@@ -105,10 +106,7 @@ export function AdminPanelClient() {
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">More</span>
-        </Link>
+        <BackLink fallback={{ href: "/more", label: "More" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">Admin Tools</h1>

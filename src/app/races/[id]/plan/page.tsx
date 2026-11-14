@@ -5,9 +5,9 @@ import { getUserSettings } from "@/lib/user-settings";
 import { minSec, paceUnitLabel, paceUnitMeters, speedToPace } from "@/lib/utils/thresholds";
 import { requireSession } from "@/lib/utils/session";
 import { shortDay } from "@/lib/utils/seasons";
-import { ChevronLeftIcon } from "lucide-react";
-import Link from "next/link";
+
 import { notFound, redirect } from "next/navigation";
+import { BackLink } from "@/components/ui/BackLink";
 
 /** A race-day plan (docs/plans/nutrition-and-race-day.md, 6): timeline, pacing per leg, fuel schedule. */
 export default async function RacePlanPage({ params }: { params: Promise<{ id: string }> }) {
@@ -49,10 +49,7 @@ export default async function RacePlanPage({ params }: { params: Promise<{ id: s
   return (
     <div className="min-h-[100dvh] pb-nav-safe bg-background">
       <div className="flex items-center px-4 pt-6 pb-2">
-        <Link href={`/seasons/${p.race.seasonId}`} className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1 min-h-[44px]">
-          <ChevronLeftIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">Season</span>
-        </Link>
+        <BackLink fallback={{ href: `/seasons/${p.race.seasonId}`, label: "Season" }} />
       </div>
       <div className="px-4 pt-2 pb-4">
         <h1 className="text-3xl font-bold tracking-tight">Race plan</h1>

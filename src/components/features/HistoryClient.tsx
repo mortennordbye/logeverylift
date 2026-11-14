@@ -2,9 +2,10 @@
 
 import { formatDuration } from "@/lib/utils/format";
 import type { SessionWithStats } from "@/types/workout";
-import { Calendar, ChevronLeft, Search } from "lucide-react";
+import { Calendar, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { BackLink } from "@/components/ui/BackLink";
 
 function formatDate(d: Date): string {
   return d.toLocaleDateString("en-US", {
@@ -28,10 +29,7 @@ export function HistoryClient({ sessions }: { sessions: SessionWithStats[] }) {
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <Link href="/more" className="flex items-center gap-0.5 text-primary active:opacity-70 -ml-1">
-          <ChevronLeft className="w-5 h-5" />
-          <span className="text-sm font-medium">Back</span>
-        </Link>
+        <BackLink fallback={{ href: "/more", label: "More" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">History</h1>

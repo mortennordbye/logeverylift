@@ -1,3 +1,4 @@
+import { BackLabel } from "@/components/ui/BackLink";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ChevronLeftIcon } from "lucide-react";
 
@@ -9,7 +10,7 @@ export default function CycleDetailLoading() {
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
         <span className="flex items-center gap-0.5 text-primary -ml-1 min-h-[44px]">
           <ChevronLeftIcon className="w-5 h-5" />
-          <span className="text-sm font-medium">Back</span>
+          <span className="text-sm font-medium"><BackLabel fallback={{ href: "/cycles", label: "Cycles" }} /></span>
         </span>
         <span className="text-primary text-sm font-medium min-h-[44px] flex items-center">
           Edit
