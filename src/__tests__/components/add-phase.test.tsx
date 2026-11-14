@@ -42,6 +42,14 @@ beforeEach(() => {
 });
 
 describe("Add a phase", () => {
+  it("a dimmed Cycle I already have says why, and the source cards stack (J4-09)", () => {
+    render(<AddPhaseForm {...props} />);
+    const radio = screen.getByRole("radio", { name: /Cycle I already have/ }) as HTMLInputElement;
+    expect(radio.disabled).toBe(true);
+    expect(screen.getByText("No cycle can be added. Only a draft or the running cycle outside a season can be a phase.")).toBeTruthy();
+    expect(radio.closest("fieldset")!.className).toContain("flex-col");
+  });
+
   it("step 1 goes on to the season's step 2 for the new phase", async () => {
     render(<AddPhaseForm {...props} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Swim, intervals, bricks" } });
