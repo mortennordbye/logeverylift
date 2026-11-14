@@ -68,8 +68,8 @@ describe("buildTriathlonPlan", () => {
       d.exercises.some((e) => e.exerciseType != null),
     );
     expect(strengthDays.map((d) => d.label)).toEqual([
-      "Workout A — Squat & Horizontal",
-      "Workout B — Hinge & Vertical",
+      "Workout A · Squat & horizontal",
+      "Workout B · Hinge & vertical",
     ]);
   });
 
@@ -106,8 +106,8 @@ describe("buildTriathlonPlan", () => {
     // Sunday keeps the long bike+brick; strength days untouched.
     expect(byDay(7).label).toBe("Long Bike + Brick Run");
     expect(byDay(7).exercises.map((e) => e.name)).toEqual(["Bike", "Run"]);
-    expect(byDay(1).label).toBe("Workout A — Squat & Horizontal");
-    expect(byDay(4).label).toBe("Workout B — Hinge & Vertical");
+    expect(byDay(1).label).toBe("Workout A · Squat & horizontal");
+    expect(byDay(4).label).toBe("Workout B · Hinge & vertical");
 
     // The long run survives — relocated onto Tuesday (the freed interval slot).
     const longRun = plan.days.find((d) => d.label === "Long Run")!;
@@ -189,7 +189,7 @@ describe("buildTriathlonPlan", () => {
 
   it("tags only the interval run's hard reps as phase-varying 'work' sets", () => {
     const plan = buildTriathlonPlan({ weeks: 24 });
-    const quality = plan.days.find((d) => d.label === "Run — Threshold Intervals")!;
+    const quality = plan.days.find((d) => d.label === "Run · Threshold intervals")!;
     const sets = quality.exercises[0].sets;
     // Warmup (first) and cooldown (last) are not work; the middle reps are.
     expect(sets[0].sessionRole).toBeUndefined();
@@ -400,5 +400,22 @@ describe("buildTriathlonPlan for a season phase", () => {
     expect(phase.days.map((d) => [d.dayOfWeek, d.label, d.exercises.map((e) => e.name)])).toEqual(
       block.days.map((d) => [d.dayOfWeek, d.label, d.exercises.map((e) => e.name)]),
     );
+  });
+});
+
+describe("names a new plan writes", () => {
+  it("no cycle or session name has an em dash or a colon", () => {
+    for (const strengthGoal of ["keep_muscle", "stronger", "minimal", null] as const) {
+      for (const level of ["novice", "intermediate", "advanced"] as const) {
+        for (const goal of ["build", "maintain"] as const) {
+          const plan = buildTriathlonPlan({ weeks: 16, strengthGoal, level, goal });
+          for (const name of [plan.cycleName, ...plan.days.map((d) => d.label)]) expect(name).not.toMatch(/[—:]/);
+        }
+      }
+    }
+  });
+
+  it("names the run day with a middle dot", () => {
+    expect(buildTriathlonPlan({ weeks: 16 }).days.map((d) => d.label)).toContain("Run · Threshold intervals");
   });
 });

@@ -11,6 +11,7 @@ import {
   Chip,
   DESTRUCTIVE_TEXT,
   FIELD,
+  FormHeader,
   INNER_FIELD,
   LABEL,
   PRIMARY_BUTTON,
@@ -162,13 +163,14 @@ export function SeasonForm(props: Props) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col pb-40">
-      <header className="flex items-center justify-between px-2 pt-4">
-        <button type="button" onClick={cancel.go} className="min-h-11 px-2 text-base text-primary active:opacity-70">
-          Cancel
-        </button>
-        <h1 className="text-base font-semibold">{initial ? "Edit season" : "New season"}</h1>
-        <span className="w-[70px]" aria-hidden="true" />
-      </header>
+      <FormHeader
+        title={initial ? "Edit season" : "New season"}
+        left={
+          <button type="button" onClick={cancel.go} className="min-h-11 px-2 text-base text-primary active:opacity-70">
+            Cancel
+          </button>
+        }
+      />
 
       <div className="flex flex-col gap-5 px-4 pt-2">
         <div className="flex flex-col gap-2">

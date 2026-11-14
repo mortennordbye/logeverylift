@@ -150,6 +150,17 @@ describe("MCP tool registration", () => {
     });
   });
 
+  it("manage_season says a completed cycle cannot be added as a phase (addPhase refuses it)", () => {
+    let description = "";
+    const stub = {
+      registerTool(name: string, config: { description?: string }) {
+        if (name === "manage_season") description = config.description ?? "";
+      },
+    } as unknown as McpServer;
+    registerSeasonTools(stub, "test-user");
+    expect(description).toContain("A completed cycle cannot be added as a phase; a draft or the running cycle can.");
+  });
+
   it("registers the dated session tools: list is read, manage is write", () => {
     expect(hints(registerPlannedSessionTools)).toEqual({ list_planned_sessions: true, manage_planned_session: false });
   });

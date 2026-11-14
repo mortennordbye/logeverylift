@@ -154,10 +154,25 @@ describe("a start that ends the running cycle", () => {
   });
 
   it("says when the start drops another draft's scheduled start", () => {
-    render(<StartCycleButton cycle={cycle} otherScheduled={{ id: 7, name: "Strength peak", day: "2026-11-23" }} />);
+    render(<StartCycleButton cycle={cycle} otherScheduled={{ id: 7, name: "Strength peak", day: "2026-11-23", season: null }} />);
     fireEvent.click(screen.getByRole("button", { name: "Start cycle" }));
     expect(startTrainingCycle).not.toHaveBeenCalled();
     expect(screen.getByText(/Strength peak no longer starts Mon 23 Nov\./)).toBeTruthy();
+  });
+
+  it("says the season pauses when the start drops its next phase", () => {
+    const phase = { id: 8, name: "Build 2", day: "2026-11-16", season: { id: 4, name: "Jevnaker Half 2027" } };
+    render(<StartCycleButton cycle={cycle} scheduledFor="2026-11-30" otherScheduled={phase} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start today instead" }));
+    expect(startTrainingCycle).not.toHaveBeenCalled();
+    expect(screen.getByText(/Jevnaker Half 2027 pauses\. Its next phase no longer starts Mon 16 Nov\. You can resume it from the season\./)).toBeTruthy();
+  });
+
+  it("a later phase of the same season does not say its own season pauses", async () => {
+    const phase = { id: 8, name: "Build 2", day: "2026-11-16", season: { id: 4, name: "Jevnaker Half 2027" } };
+    render(<StartCycleButton cycle={{ ...cycle, seasonId: 4 } as TrainingCycle} otherScheduled={phase} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start cycle" }));
+    await waitFor(() => expect(startTrainingCycle).toHaveBeenCalledWith(3));
   });
 
   it("Restart of another cycle names the running one", () => {

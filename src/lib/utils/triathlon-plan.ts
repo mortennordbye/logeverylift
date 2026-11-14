@@ -296,15 +296,15 @@ export function buildTriathlonPlan({
 
   const strengthDays: { mon: { label: string; exercises: PlanExercise[] }; thu: { label: string; exercises: PlanExercise[] } } =
     strengthGoal === "minimal"
-      ? { mon: { label: "Strength — Full Body", exercises: fullBody }, thu: { label: "Rest", exercises: [] } }
+      ? { mon: { label: "Strength · Full body", exercises: fullBody }, thu: { label: "Rest", exercises: [] } }
       : strengthGoal === "stronger"
         ? {
-            mon: { label: "Workout A — Heavy Squat & Jumps", exercises: strongerA },
-            thu: { label: "Workout B — Heavy Hinge & Hops", exercises: strongerB },
+            mon: { label: "Workout A · Heavy squat & jumps", exercises: strongerA },
+            thu: { label: "Workout B · Heavy hinge & hops", exercises: strongerB },
           }
         : {
-            mon: { label: "Workout A — Squat & Horizontal", exercises: workoutA },
-            thu: { label: "Workout B — Hinge & Vertical", exercises: workoutB },
+            mon: { label: "Workout A · Squat & horizontal", exercises: workoutA },
+            thu: { label: "Workout B · Hinge & vertical", exercises: workoutB },
           };
 
   // Each session is built from structured segments — not one distance blob — so it
@@ -371,14 +371,14 @@ export function buildTriathlonPlan({
     },
     {
       dayOfWeek: 2,
-      label: "Run — Threshold Intervals",
+      label: "Run · Threshold intervals",
       exercises: [intervalRun("Run", v.runTempo, 4)],
     },
     {
       dayOfWeek: 3,
       // The endurance swim freed from the old 3-strength-day week rides alongside
       // the mid bike here, keeping total swim volume unchanged.
-      label: "Bike — Endurance + Swim",
+      label: "Bike · Endurance + swim",
       exercises: [steady("Bike", v.bikeMid), swimEndurance("Swim", v.swimLong, 5)],
     },
     {
@@ -446,7 +446,7 @@ export function buildTriathlonPlan({
 
   const goalLabel = goal === "maintain" ? "Maintain" : "Build";
   return {
-    cycleName: `Triathlon ${goalLabel} · ${LEVEL_LABELS[level]} — ${durationWeeks} wk`,
+    cycleName: `Triathlon ${goalLabel} · ${LEVEL_LABELS[level]} · ${durationWeeks} wk`,
     durationWeeks,
     goal,
     level,

@@ -116,7 +116,7 @@ export function StartCycleButton({
   if (cycle.status !== "draft") return null;
 
   const skippedLine = skippedPhases > 0 ? `${skippedPhases === 1 ? "1 earlier phase" : `${skippedPhases} earlier phases`} will be skipped and the dates after it move.` : null;
-  const consequences = [skippedLine, endsRunningLine(cycle.id, running), dropsScheduledLine(cycle.id, otherScheduled)].filter(Boolean);
+  const consequences = [skippedLine, endsRunningLine(cycle.id, running), dropsScheduledLine(cycle.id, otherScheduled, cycle.seasonId)].filter(Boolean);
   const start = () => (consequences.length > 0 ? setConfirming(true) : handleStart());
   const errorLine = !confirming && error && (
     <p role="alert" className="text-sm text-destructive">

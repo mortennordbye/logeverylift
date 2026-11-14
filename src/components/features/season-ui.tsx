@@ -124,6 +124,17 @@ export function PinnedBar({ children }: { children: React.ReactNode }) {
 export const PRIMARY_BUTTON =
   "w-full min-h-[52px] rounded-2xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-transform";
 
+/** The top row of a form screen: a control on the left (Cancel or Back), the title centred, and an optional control on the right. */
+export function FormHeader({ title, left, right }: { title: string; left: React.ReactNode; right?: React.ReactNode }) {
+  return (
+    <header className="grid shrink-0 grid-cols-[1fr_auto_1fr] items-center px-2 pt-4">
+      <div className="justify-self-start">{left}</div>
+      <h1 className="text-base font-semibold">{title}</h1>
+      <div className="justify-self-end">{right}</div>
+    </header>
+  );
+}
+
 /** "Step 1 of 2" and a two-part bar. */
 export function StepProgress({ step, of }: { step: number; of: number }) {
   return (

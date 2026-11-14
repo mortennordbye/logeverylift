@@ -1,7 +1,7 @@
 "use client";
 
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
-import { Chip, FIELD, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
+import { Chip, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
 import { addPhaseAction } from "@/lib/actions/seasons";
 import type { PhaseType } from "@/lib/utils/periodization";
 import { PHASE_TYPE_LABELS, shortDay } from "@/lib/utils/seasons";
@@ -85,13 +85,14 @@ export function AddPhaseForm(p: Props) {
 
   return (
     <form onSubmit={submit} className="flex flex-col pb-40">
-      <header className="flex items-center justify-between px-2 pt-4">
-        <button type="button" onClick={cancel.go} className="min-h-11 px-2 text-base text-primary active:opacity-70">
-          Cancel
-        </button>
-        <h1 className="text-base font-semibold">Add a phase</h1>
-        <span className="w-[70px]" aria-hidden="true" />
-      </header>
+      <FormHeader
+        title="Add a phase"
+        left={
+          <button type="button" onClick={cancel.go} className="min-h-11 px-2 text-base text-primary active:opacity-70">
+            Cancel
+          </button>
+        }
+      />
 
       <div className="flex flex-col gap-5 px-4 pt-1">
         <div className="flex flex-col gap-2">

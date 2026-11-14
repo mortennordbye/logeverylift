@@ -29,13 +29,20 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Touchpoints:** `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
 
 ### Plan redesign: what the four packages left for later
-- **What:** Three gaps found while building the Plan tab (`docs/plans/plan-tab-redesign.md`):
+- **What:** Two gaps found while building the Plan tab (`docs/plans/plan-tab-redesign.md`):
   - The triathlon plan gives every phase its own copy of the generator's programs, so Programs lists names like "Long Run" once per phase.
-  - Scheduling a draft for a later day clears any other cycle's scheduled start (only one can be scheduled), and the setup flow does not warn about it.
   - Server Actions outside `src/lib/actions/training-cycles.ts` can still return `String(err)` to the client (the bug pass fixed only that file).
-- **Why deferred:** Out of the packages' scope; each needs its own decision (shared programs across phases, a warning text) or a sweep of every action file.
-- **Unblocked by:** An owner choice on shared vs per-phase programs; a confirm line in step 1 of the new cycle flow; a grep for `String(err)` and `String(e)` in `src/lib/actions/` with the canonical error pattern from `CLAUDE.md`.
-- **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/training-cycles.ts` (`startTrainingCycle`), `src/components/features/CreateCycleForm.tsx`, `src/lib/actions/`.
+- **Why deferred:** Out of the packages' scope; each needs its own decision (shared programs across phases) or a sweep of every action file.
+- **Unblocked by:** An owner choice on shared vs per-phase programs; a grep for `String(err)` and `String(e)` in `src/lib/actions/` with the canonical error pattern from `CLAUDE.md`.
+- **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/`.
+
+### UI text outside the Plan tab that still uses colons
+- **What:** The owner's copy rule (no colons and no em dashes in user-facing text) is met in the Plan tab, but the change history and the assistant changes page still show names and lines with a colon:
+  - `snapshotName` names a library workout "Workout: Tempo" (`src/lib/utils/plan-revisions.ts:96`) and an injury "Injury: left knee" (`src/lib/utils/plan-revisions.ts:93`). The names show on `/more/assistants/changes` (`getAssistantChanges` through `listAssistantChangeSets` in `src/lib/plan-revisions.ts`), and the injury name also goes into "Added injury: …" lines in `diffSnapshots`.
+  - The first entry of the athlete profile lists each field as "Experience: novice", "Days: …" (`diffSnapshots`, `src/lib/utils/plan-revisions.ts:419`), shown as the change lines of an assistant change set on the same page.
+- **Why deferred:** Out of the Plan tab fix rounds' scope. The same lines also go to the assistant over MCP (`diffSnapshots` in `src/lib/mcp/revisions.ts`), so a change needs a check of the MCP texts and their tests too.
+- **Unblocked by:** Nothing. Pick plain words ("Tempo workout", "Left knee injury", "Experience novice" or "Experience set to novice"), change `snapshotName` and `diffSnapshots`, and update the tests that read those strings (`grep -rn "Workout: \|Injury: " src/__tests__`).
+- **Touchpoints:** `src/lib/utils/plan-revisions.ts` (`snapshotName`, `diffSnapshots`), `src/lib/plan-revisions.ts`, `src/lib/mcp/revisions.ts`, `src/app/more/assistants/changes/page.tsx`.
 
 ### Triathlon plan: one library function for the action and the demo seed
 - **What:** `generateTriathlonPlan` is a Server Action and reads the user from the browser session, so `scripts/seed-plan-demo.ts` copies its body to make the demo triathlon season. Extract a library function that takes a userId and a plan-write context, and call it from both the action and the seed.

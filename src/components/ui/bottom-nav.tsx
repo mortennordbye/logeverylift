@@ -9,6 +9,9 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LEGAL_PATHS } from "@/lib/constants/legal";
 
+/** The Plan form routes: each pins its primary button where the tab bar sits. */
+const PLAN_FORM = /^\/(cycles\/new|cycles\/\d+\/edit|seasons\/new|seasons\/\d+\/edit|seasons\/\d+\/phases\/new|seasons\/\d+\/phases\/\d+\/week)$/;
+
 const staticNavItems = [
   {
     label: "Workout",
@@ -66,8 +69,9 @@ export function BottomNav() {
   // between More, Friends and the rest, where the count changes. On Friends
   // itself it is all on screen, so the dot is off and nothing is fetched: the
   // page marks it seen in its streamed part, which can land after this effect.
-  // Form screens with a pinned bottom bar (the cycle setup and Edit details) show no tab bar.
-  const hideNav = pathname === "/cycles/new" || /^\/cycles\/\d+\/edit$/.test(pathname) || pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
+  // Plan form screens with a pinned bottom bar (cycle setup, Edit details, the
+  // season forms and Add phase) show no tab bar.
+  const hideNav = PLAN_FORM.test(pathname) || pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
   const badgeScope = pathname === "/more" ? "more" : pathname.startsWith("/more/friends") ? "friends" : "other";
   useEffect(() => {
     if (hideNav || badgeScope === "friends") return;

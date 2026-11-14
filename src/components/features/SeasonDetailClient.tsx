@@ -23,6 +23,7 @@ import {
   daysBetweenStr,
   lengthShort,
   rangeLabel,
+  seasonPaused,
   shortDay,
   type RaceDiscipline,
   type RacePriority,
@@ -240,6 +241,7 @@ export function SeasonDetailClient(p: Props) {
 
   const countdownTo = aRace?.raceDate ?? p.season.endDate;
   const daysLeft = daysBetweenStr(p.today, countdownTo);
+  const paused = seasonPaused(p.next, phases, p.today);
 
   function badge(ph: SeasonPhaseView): string {
     if (ph.state === "active") return "Now";
@@ -369,10 +371,10 @@ export function SeasonDetailClient(p: Props) {
           {p.next && !p.next.scheduled && (
             <div className="mx-1 flex items-center justify-between gap-3">
               <p className="text-[13px] text-muted-foreground">
-                {phases.some((ph) => ph.state !== "planned") ? "Paused. The next phase is not scheduled." : `“${p.next.name}” is not started.`}
+                {paused ? "Paused. The next phase is not scheduled." : `“${p.next.name}” is not started.`}
               </p>
               <button type="button" disabled={busy} onClick={() => run(resumeSeasonAction({ seasonId: p.season.id }))} className="min-h-11 shrink-0 text-sm font-medium text-primary active:opacity-70">
-                {phases.some((ph) => ph.state !== "planned") ? "Resume" : "Start"}
+                {paused ? "Resume" : "Start"}
               </button>
             </div>
           )}

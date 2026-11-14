@@ -164,6 +164,22 @@ export function nextPhase(timeline: TimelinePhase[]): TimelinePhase | null {
   return timeline.slice(lastStarted + 1).find((p) => p.state === "planned") ?? null;
 }
 
+/**
+ * The season's chain is paused: its next phase is not scheduled although the
+ * season is under way, or that phase was due to start on a later day. Another
+ * block took the one scheduled start (scheduleCycle), and Resume picks the
+ * chain up again. False when nothing has started and the next phase is due
+ * today or earlier: that season is not started yet.
+ */
+export function seasonPaused(
+  next: { scheduled: boolean; plannedStart: string } | null,
+  phases: { state: TimelinePhase["state"] }[],
+  today: string,
+): boolean {
+  if (!next || next.scheduled) return false;
+  return phases.some((p) => p.state !== "planned") || next.plannedStart > today;
+}
+
 /** How many planned phases before this one a start today skips: 0 for the next phase, or a phase that is not planned. */
 export function phasesSkippedBy(timeline: TimelinePhase[], cycleId: number): number {
   const next = nextPhase(timeline);
