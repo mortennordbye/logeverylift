@@ -27,11 +27,12 @@ const readiness: Readiness = {
 const ctx = { userId: "u1", role: "admin", today: "2026-11-13" };
 
 describe("Garmin readiness", () => {
-  it("S shows the score and the word", () => {
+  it("S shows the score, the word and two contributors", () => {
     render(<>{w.View({ data: { connected: true, readiness }, size: "s" })}</>);
     expect(screen.getByText("72")).toBeTruthy();
     expect(screen.getByText("Train as planned")).toBeTruthy();
-    expect(screen.queryByRole("img", { name: "HRV 64 of 100" })).toBeNull();
+    expect(screen.getByRole("img", { name: "HRV 64 of 100" })).toBeTruthy();
+    expect(screen.queryByText("5 of 6 signals")).toBeNull();
   });
 
   it("M adds the contributor bars", () => {

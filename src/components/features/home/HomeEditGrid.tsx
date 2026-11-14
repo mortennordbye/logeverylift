@@ -80,9 +80,9 @@ function Badge({ item, onHide }: { item: ResolvedItem; onHide: (id: WidgetId) =>
       aria-label={`Hide ${titleOf(item.id)}`}
       data-control="hide"
       onClick={() => onHide(item.id)}
-      className="absolute -top-3 -left-3 z-10 h-11 w-11 flex items-center justify-center active:opacity-60 focus-visible:outline-none group"
+      className="absolute -top-4 -left-4 z-10 h-11 w-11 flex items-center justify-center active:opacity-60 focus-visible:outline-none group"
     >
-      <span className="h-6 w-6 rounded-full bg-foreground text-background flex items-center justify-center shadow group-focus-visible:ring-2 group-focus-visible:ring-primary">
+      <span className="h-[26px] w-[26px] rounded-full bg-[#8e8e93] text-white flex items-center justify-center shadow-[0_2px_6px_rgb(0_0_0/0.3)] group-focus-visible:ring-2 group-focus-visible:ring-brand">
         <Minus className="h-3.5 w-3.5" strokeWidth={3} aria-hidden />
       </span>
     </button>
@@ -96,9 +96,9 @@ function TileBody({ item, children, ...rest }: { item: ResolvedItem; children: R
       {...rest}
       data-control="tile"
       aria-label={`${titleOf(item.id)}, ${SIZE_LABEL[item.size].toLowerCase()}. Enter for options.`}
-      className="block w-full rounded-2xl text-left cursor-grab touch-manipulation outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      className="block h-full w-full rounded-widget text-left cursor-grab touch-manipulation outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-home"
     >
-      <div inert className="pointer-events-none select-none">
+      <div inert className="h-full pointer-events-none select-none">
         {children}
       </div>
     </div>
@@ -115,7 +115,7 @@ function SortableTile({ item, index, props }: { item: ResolvedItem; index: numbe
       data-testid="edit-tile"
       data-edit-tile={item.id}
     >
-      <div className="home-jiggle" style={{ animationDelay: `${-(index % 3) * 0.09}s` }}>
+      <div className="home-jiggle h-full" data-size={item.size} style={{ animationDelay: `${-(index % 3) * 0.09}s` }}>
         <TileBody
           item={item}
           {...attributes}
@@ -137,6 +137,9 @@ function SortableTile({ item, index, props }: { item: ResolvedItem; index: numbe
         </TileBody>
       </div>
       <Badge item={item} onHide={props.onHide} />
+      <span className="pointer-events-none absolute right-2.5 bottom-2.5 z-10 rounded-full bg-black/55 px-2 py-[3px] text-[11px] font-bold text-white backdrop-blur-sm" aria-hidden>
+        {item.size.toUpperCase()}
+      </span>
     </div>
   );
 }
@@ -225,7 +228,7 @@ export function HomeEditGrid(props: Props) {
                 }
               }}
             >
-              <div className="rounded-2xl bg-muted py-2">{content(header)}</div>
+              <div className="px-1 py-1">{content(header)}</div>
             </TileBody>
           </div>
           <Badge item={header} onHide={onHide} />
@@ -253,7 +256,7 @@ export function HomeEditGrid(props: Props) {
         </SortableContext>
         <DragOverlay dropAnimation={null}>
           {active ? (
-            <div className="rounded-2xl shadow-2xl scale-[1.03] opacity-95">
+            <div className="rounded-widget shadow-2xl scale-[1.03] opacity-95">
               <div inert className="pointer-events-none">{content(active)}</div>
             </div>
           ) : null}

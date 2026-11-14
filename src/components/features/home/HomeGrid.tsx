@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { Fragment, useEffect, useReducer, useRef, useState, useTransition, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { HomeEditGrid, type Previews } from "./HomeEditGrid";
+import { HOME_UI } from "./fonts";
 import { WidgetGallerySheet } from "./WidgetGallerySheet";
 import { WidgetSheet } from "./WidgetSheet";
 import { useLongPress } from "./use-long-press";
@@ -54,10 +55,13 @@ export type HomeGridProps = {
 
 /** The "Edit home" pencil: 44x44, theme tokens, a visible focus ring, tap feedback. */
 const PENCIL =
-  "h-11 w-11 inline-flex items-center justify-center rounded-full text-muted-foreground active:opacity-60 active:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary";
+  "h-11 w-11 shrink-0 inline-flex items-center justify-center rounded-full bg-widget-2 transition-transform active:scale-[0.94] active:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
+/** The header pills of the locked design: 44 px, round, on the inner surface. */
 const BAR_BTN =
-  "min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 px-2 text-sm font-medium active:opacity-60 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary rounded-xl";
+  "min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 rounded-full bg-widget-2 px-4 text-[15px] font-semibold transition-transform active:scale-[0.94] active:opacity-80 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
+const SMALL_BTN =
+  "min-h-11 inline-flex items-center justify-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-muted-foreground active:opacity-60 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
 const ENTER_TEXT = "Editing home. Drag a widget to move it, or tap it for its size, Move up and Move down.";
 
@@ -226,50 +230,57 @@ export function HomeGrid(props: HomeGridProps) {
     return (
       <>
         {liveRegion}
-        <div className="px-4 pt-4 shrink-0 space-y-1">
+        <div className="px-4 pt-4 shrink-0">
           <div className="flex items-center justify-between gap-2">
-            <button type="button" onClick={cancel} disabled={busy} className={`${BAR_BTN} text-base text-muted-foreground`}>
+            <button type="button" onClick={cancel} disabled={busy} className={`${BAR_BTN} text-muted-foreground`}>
               Cancel
             </button>
-            <h1 className="text-lg font-semibold">Edit home</h1>
-            <button type="button" onClick={done} disabled={busy} className={`${BAR_BTN} text-base font-semibold text-primary`}>
-              {busy ? "Saving…" : "Done"}
-            </button>
+            <h1 className="home-display text-[24px] uppercase">Edit home</h1>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setGalleryOpen(true)}
+                disabled={hidden.length === 0}
+                aria-label="Add widget"
+                className={`${BAR_BTN} w-11 px-0`}
+              >
+                <Plus className="h-5 w-5" aria-hidden />
+              </button>
+              <button type="button" onClick={done} disabled={busy} className={`${BAR_BTN} bg-brand-fill text-white`}>
+                {busy ? "Saving…" : "Done"}
+              </button>
+            </div>
           </div>
-          <div className="flex items-center justify-center gap-1">
-            <button type="button" onClick={() => setGalleryOpen(true)} disabled={hidden.length === 0} className={`${BAR_BTN} text-primary`}>
-              <Plus className="h-4 w-4" aria-hidden />
-              Add widget
-            </button>
-            <button type="button" onClick={() => act({ type: "undo" }, null, "Undone")} disabled={!dirty} className={BAR_BTN}>
+          <div className="flex items-center justify-center gap-1 pt-1">
+            <button type="button" onClick={() => act({ type: "undo" }, null, "Undone")} disabled={!dirty} className={SMALL_BTN}>
               <Undo2 className="h-4 w-4" aria-hidden />
               Undo
             </button>
-            <button type="button" onClick={reset} disabled={busy} className={`${BAR_BTN} text-destructive`}>
+            <button type="button" onClick={reset} disabled={busy} className={SMALL_BTN}>
               <RotateCcw className="h-4 w-4" aria-hidden />
               Reset
             </button>
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-4 space-y-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-4 pb-4 space-y-3">
           {status?.kind === "error" && (
-            <p role="alert" className="rounded-xl bg-destructive/10 px-3 py-2 text-sm text-destructive" data-testid="home-save-error">
+            <p role="alert" className="rounded-[14px] bg-destructive/10 px-3 py-2 text-sm text-destructive" data-testid="home-save-error">
               {status.text}
             </p>
           )}
           {status?.kind === "conflict" && (
-            <div role="alert" className="rounded-xl bg-amber-500/10 border border-amber-500/30 px-3 py-2 space-y-2" data-testid="home-conflict">
+            <div role="alert" className="rounded-[14px] bg-widget ring-1 ring-inset ring-hairline px-3 py-2 space-y-2" data-testid="home-conflict">
               <p className="text-sm">Your home was changed on another device.</p>
               <div className="flex gap-2">
-                <button type="button" onClick={() => window.location.reload()} className="min-h-11 rounded-xl border border-border px-3 text-sm active:opacity-70">
+                <button type="button" onClick={() => window.location.reload()} className="min-h-11 rounded-full bg-widget-2 px-4 text-sm font-semibold active:opacity-70">
                   Reload
                 </button>
                 <button
                   type="button"
                   onClick={() => void save(retry.current ? retry.current.items : toStored(state.items), true)}
                   disabled={busy}
-                  className="min-h-11 rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground active:opacity-80 disabled:opacity-40"
+                  className="min-h-11 rounded-full bg-brand-fill px-4 text-sm font-semibold text-white active:opacity-80 disabled:opacity-40"
                 >
                   Save mine
                 </button>
@@ -291,12 +302,12 @@ export function HomeGrid(props: HomeGridProps) {
             fixed bar to the layer instead of the screen, under the nav. */}
         {createPortal(
           <div
-            className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background"
+            className={`${HOME_UI} fixed inset-x-0 bottom-0 z-40 border-t border-hairline bg-home`}
             style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)" }}
             data-testid="home-edit-bar"
           >
-            <p className="flex items-center justify-center h-16 max-w-lg mx-auto px-4 text-center text-xs text-muted-foreground">
-              Drag a widget to move it. Tap it for its size and more.
+            <p className="flex items-center justify-center h-16 max-w-lg mx-auto px-4 text-center text-[13px] text-muted-foreground">
+              Drag to reorder. Tap a widget for its size and more.
             </p>
           </div>,
           document.body,
@@ -344,16 +355,10 @@ export function HomeGrid(props: HomeGridProps) {
     <>
       {liveRegion}
       {titleShown ? (
-        <div className="relative px-6 pt-6 pb-3 shrink-0" data-widget="title" {...longPress}>
-          {title}
-          <button
-            type="button"
-            ref={editTitleRef}
-            onClick={() => enter("title")}
-            aria-label="Edit home"
-            className={`${PENCIL} absolute right-3 top-5`}
-          >
-            <Pencil className="h-5 w-5" aria-hidden />
+        <div className="flex items-end justify-between gap-3 pl-5 pr-4 pt-5 pb-2.5 shrink-0" data-widget="title" {...longPress}>
+          <div className="min-w-0">{title}</div>
+          <button type="button" ref={editTitleRef} onClick={() => enter("title")} aria-label="Edit home" className={PENCIL}>
+            <Pencil className="h-[18px] w-[18px]" aria-hidden />
           </button>
         </div>
       ) : (
@@ -364,7 +369,7 @@ export function HomeGrid(props: HomeGridProps) {
         </div>
       )}
 
-      <div className="flex-1 flex flex-col gap-3 px-6 min-h-0 overflow-y-auto pb-4" data-testid="home-content" {...longPress}>
+      <div className="flex-1 flex flex-col gap-3 px-4 pt-1 min-h-0 overflow-y-auto pb-4" data-testid="home-content" {...longPress}>
         {topNotices}
         {after < 0 && afterTraining}
         {rows.map((row, n) => {
@@ -398,7 +403,7 @@ export function HomeGrid(props: HomeGridProps) {
             aria-label="Edit home"
             className={`${PENCIL} shrink-0 self-center`}
           >
-            <Pencil className="h-5 w-5" aria-hidden />
+            <Pencil className="h-[18px] w-[18px]" aria-hidden />
           </button>
         )}
       </div>

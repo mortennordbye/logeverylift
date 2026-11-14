@@ -1,6 +1,6 @@
 import { EnduranceTodayCard, type EnduranceTodayRow } from "@/components/features/guided/EnduranceTodayCard";
 import { defineWidget } from "@/components/features/home/define-widget";
-import { PreviewBox } from "@/components/features/home/widget-ui";
+import { CARD, PreviewBox } from "@/components/features/home/widget-ui";
 import Link from "next/link";
 
 /**
@@ -20,15 +20,15 @@ export const enduranceTodayWidget = defineWidget<EnduranceTodayRow[]>({
   Skeleton: ({ size }) => <PreviewBox title="Endurance today" size={size} />,
   Preview: ({ size }) => <PreviewBox title="Endurance today" size={size} />,
   Error: () => (
-    <div className="rounded-2xl bg-muted p-4" role="status" data-testid="widget-error">
+    <div className={CARD} role="status" data-testid="widget-error">
       <p className="text-sm text-muted-foreground mb-3">Couldn&apos;t load this.</p>
       <div className="flex gap-2 flex-wrap">
-        <Link href="/week" className="inline-flex min-h-11 items-center rounded-xl border border-border px-4 text-sm font-medium active:opacity-70">
+        <Link href="/week" className="inline-flex min-h-11 items-center rounded-[14px] bg-widget-2 px-4 text-sm font-semibold active:scale-[0.97] transition-transform">
           This week
         </Link>
         <Link
           href="/new-workout"
-          className="inline-flex min-h-11 items-center rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground active:opacity-80"
+          className="inline-flex min-h-11 items-center rounded-[14px] bg-brand-fill px-4 text-sm font-semibold text-white active:scale-[0.97] transition-transform"
         >
           Start a Workout
         </Link>

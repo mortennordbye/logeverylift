@@ -26,7 +26,8 @@ describe("Title", () => {
 describe("Cycle progress", () => {
   it("S shows the week; M the name, bar and end date", () => {
     const s = render(<>{cycleWidget.View({ data: cycle, size: "s" })}</>);
-    expect(screen.getByText("Week 2/4")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Block, week 2 of 4" }).getAttribute("href")).toBe("/cycles");
+    expect(screen.getByText("2")).toBeTruthy();
     s.unmount();
     render(<>{cycleWidget.View({ data: cycle, size: "m" })}</>);
     expect(screen.getByText("Block")).toBeTruthy();
@@ -43,7 +44,8 @@ describe("Weekly goal", () => {
   it("shows workouts against the goal at S and M", () => {
     for (const size of ["s", "m"] as const) {
       const r = render(<>{weeklyGoalWidget.View({ data: { thisWeekWorkouts: 3 }, size })}</>);
-      expect(screen.getByText("3/4")).toBeTruthy();
+      expect(screen.getByText("3")).toBeTruthy();
+      expect(screen.getByText("of 4")).toBeTruthy();
       expect(screen.getByText("1 more to reach your goal")).toBeTruthy();
       r.unmount();
     }
