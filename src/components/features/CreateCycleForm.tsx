@@ -359,11 +359,6 @@ export function CycleSetupSessions({
       <FormHeader
         title="New cycle"
         left={
-          <Link replace href={setupHref(cycle.id, start, true)} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
-            ‹ Back
-          </Link>
-        }
-        right={
           <button
             type="button"
             onClick={() => {
@@ -374,6 +369,11 @@ export function CycleSetupSessions({
           >
             Cancel
           </button>
+        }
+        right={
+          <Link replace href={setupHref(cycle.id, start, true)} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
+            Back
+          </Link>
         }
       />
       <div className="flex flex-col gap-[18px] px-4 pt-3">

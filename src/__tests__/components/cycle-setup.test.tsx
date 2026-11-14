@@ -212,10 +212,20 @@ describe("step 2", () => {
   it("Create cycle starts or schedules the draft for the chosen day", async () => {
     render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-11-16" endurance={false} />);
     expect(screen.getByRole("heading", { name: "Rotation order" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: "‹ Back" }).getAttribute("href")).toBe("/cycles/new?cycle=3&start=2026-11-16&step=1");
+    expect(screen.getByRole("link", { name: "Back" }).getAttribute("href")).toBe("/cycles/new?cycle=3&start=2026-11-16&step=1");
     fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
     await waitFor(() => expect(returnTo).toHaveBeenCalledWith("/cycles/3"));
     expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-16");
+  });
+
+  it("puts Cancel on the left on both steps, as step 1 does (J2-07)", () => {
+    const { unmount } = render(<CreateCycleForm days={days} />);
+    const leftOf = () => screen.getByTestId("form-header").firstElementChild as HTMLElement;
+    expect(within(leftOf()).getByRole("button", { name: "Cancel" })).toBeTruthy();
+    unmount();
+    render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-11-16" endurance={false} />);
+    expect(within(leftOf()).getByRole("button", { name: "Cancel" })).toBeTruthy();
+    expect(within(screen.getByTestId("form-header").lastElementChild as HTMLElement).getByRole("link", { name: "Back" })).toBeTruthy();
   });
 
   it("Create cycle stays off with a reason until the cycle has a session", () => {
