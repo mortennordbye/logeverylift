@@ -11,12 +11,14 @@ import { CycleCompletionBanner, type NextCycle } from "@/components/features/Cyc
 import { CycleMenu, StartCycleButton } from "@/components/features/CycleDetailClient";
 import { CycleWeek, RotationOrder, TemplateWeek } from "@/components/features/CycleSessionsClient";
 import { HOME_UI } from "@/components/features/home/fonts";
+import { PlanItemDeleted } from "@/components/features/PlanItemDeleted";
 import { BackLink } from "@/components/ui/BackLink";
 import { getProgramsWithExercises } from "@/lib/actions/programs";
 import { getPrograms } from "@/lib/actions/programs";
 import { getActiveCycleForUser, getCyclePeriodization, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
 import { cycleStartContext } from "@/lib/cycle-start";
 import { enduranceEnabledFor } from "@/lib/endurance";
+import { ownDeletedCycle } from "@/lib/plan-deleted";
 import { listPlanned } from "@/lib/planned-sessions";
 import { seasonOfCycle } from "@/lib/seasons";
 import { moveSuggestion } from "@/lib/session-answers";
@@ -58,6 +60,8 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
     getPrograms(),
     getCyclePeriodization(cycleId),
   ]);
+  // Delete in the menu renders this page again in its response.
+  if (!cycleResult.success && (await ownDeletedCycle(userId, cycleId))) return <PlanItemDeleted what="cycle" />;
   if (!cycleResult.success) notFound();
 
   const cycle = cycleResult.data;
