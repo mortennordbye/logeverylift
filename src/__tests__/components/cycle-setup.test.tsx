@@ -60,7 +60,7 @@ describe("step 1: the basics", () => {
   it("makes a rotation draft and opens step 2 with the start day", async () => {
     render(<CreateCycleForm days={days} />);
     expect(screen.getByText("Step 1 of 2")).toBeTruthy();
-    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Upper / Lower" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Upper / Lower" } });
     fireEvent.click(screen.getByLabelText(/Rotation/));
     fireEvent.click(screen.getByRole("button", { name: "6 weeks" }));
     fireEvent.click(screen.getByRole("button", { name: "Next Monday · 16 Nov" }));
@@ -79,7 +79,7 @@ describe("step 1: the basics", () => {
 
   it("Custom takes any number of weeks from 1 to 52", async () => {
     render(<CreateCycleForm days={days} />);
-    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Odd block" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Odd block" } });
     fireEvent.click(screen.getByRole("button", { name: "Custom" }));
     const weeks = screen.getByLabelText("Length in weeks");
     fireEvent.change(weeks, { target: { value: "60" } });
@@ -90,10 +90,29 @@ describe("step 1: the basics", () => {
     await waitFor(() => expect(createTrainingCycle).toHaveBeenCalledWith(expect.objectContaining({ name: "Odd block", durationWeeks: 7 })));
   });
 
+  it("the Custom field has no native spin buttons, which are under 44 px: a text field with a number keypad (round 8)", () => {
+    render(<CreateCycleForm days={days} />);
+    fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+    const weeks = screen.getByLabelText("Length in weeks") as HTMLInputElement;
+    expect(weeks.type).toBe("text");
+    expect(weeks.inputMode).toBe("numeric");
+    fireEvent.change(weeks, { target: { value: "1x2" } });
+    expect(weeks.value).toBe("12");
+  });
+
+  it("labels Start day as the other fields are, and says the picked day in words (round 8)", () => {
+    render(<CreateCycleForm days={days} />);
+    fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
+    const label = screen.getByText("Start day");
+    expect(label.className).toContain("uppercase");
+    fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-07" } });
+    expect(screen.getByText("Starts Mon 7 Dec")).toBeTruthy();
+  });
+
   it("needs a day for Pick a date, and offers After current cycle only while a cycle runs", async () => {
     const { unmount } = render(<CreateCycleForm days={days} />);
     expect(screen.queryByRole("button", { name: "After current cycle" })).toBeNull();
-    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Block" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Block" } });
     fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
     const next = screen.getByRole("button", { name: "Build the week" }) as HTMLButtonElement;
     expect(next.disabled).toBe(true);
@@ -146,6 +165,7 @@ describe("step 1: the basics", () => {
   it("says the start ends the running cycle, at the week it is in on the start day (J2-01, J2-05)", () => {
     const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
     render(<CreateCycleForm days={{ ...days, afterCurrent: "2026-12-12" }} running={running} />);
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
     expect(screen.getByText("This ends Upper / Lower hypertrophy at week 3 of 6.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
     fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-07" } });
@@ -155,12 +175,34 @@ describe("step 1: the basics", () => {
     expect(screen.queryByText(/^This ends/)).toBeNull();
   });
 
+  it("starts after the running cycle by default, so nothing ends or is dropped until the user picks Today (round 8)", () => {
+    const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
+    const scheduled = { id: 7, name: "Strength peak", day: "2026-12-14", season: null };
+    render(<CreateCycleForm days={{ ...days, afterCurrent: "2026-12-12" }} running={running} scheduled={scheduled} />);
+    expect(screen.getByRole("button", { name: "After current cycle" }).getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("button", { name: "Today" }).getAttribute("aria-pressed")).toBe("false");
+    expect(screen.queryByText(/^This ends/)).toBeNull();
+    // Today stays one tap away.
+    fireEvent.click(screen.getByRole("button", { name: "Today" }));
+    expect(screen.getByText("This ends Upper / Lower hypertrophy at week 3 of 6.")).toBeTruthy();
+  });
+
+  it("starts today by default when no cycle runs", () => {
+    render(<CreateCycleForm days={days} />);
+    expect(screen.getByRole("button", { name: "Today" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("the Name placeholder is neutral, not a cycle name the user may have (round 8)", () => {
+    render(<CreateCycleForm days={days} />);
+    expect((screen.getByLabelText("Name") as HTMLInputElement).placeholder).toBe("Cycle name");
+  });
+
   it("a dimmed Build the week says what is missing (J2-01)", () => {
     render(<CreateCycleForm days={days} />);
     const next = screen.getByRole("button", { name: "Build the week" }) as HTMLButtonElement;
     expect(next.disabled).toBe(true);
     expect(reasonOf(next)).toBe("Give the cycle a name.");
-    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Block" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Block" } });
     fireEvent.click(screen.getByRole("button", { name: "Pick a date" }));
     expect(reasonOf(next)).toBe("Pick a start day.");
     fireEvent.change(screen.getByLabelText("Start day"), { target: { value: "2026-12-01" } });
@@ -171,7 +213,7 @@ describe("step 1: the basics", () => {
   it("shows a refused write and stays on step 1", async () => {
     vi.mocked(createTrainingCycle).mockResolvedValue({ success: false, error: "Failed to create the cycle" });
     render(<CreateCycleForm days={days} />);
-    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Block" } });
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Block" } });
     fireEvent.click(screen.getByRole("button", { name: "Build the week" }));
     await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("Failed to create the cycle"));
     expect(router.replace).not.toHaveBeenCalled();
@@ -216,6 +258,35 @@ describe("step 2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
     await waitFor(() => expect(returnTo).toHaveBeenCalledWith("/cycles/3"));
     expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-16");
+  });
+
+  it("asks first when the start ends the running cycle or drops a scheduled start (round 8 B14)", async () => {
+    const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
+    const scheduled = { id: 7, name: "Strength peak", day: "2026-11-23", season: null };
+    render(
+      <CycleSetupSessions cycle={{ ...rotation, name: "Push / Pull" }} programs={programs} start="2026-11-14" endurance={false} running={running} scheduled={scheduled} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
+    expect(startTrainingCycle).not.toHaveBeenCalled();
+    const sheet = screen.getByRole("region", { name: "Start Push / Pull Sat 14 Nov?" });
+    expect(sheet.textContent!.replace(/ /g, " ")).toContain("This ends Upper / Lower hypertrophy at week 3 of 6.");
+    expect(sheet.textContent!.replace(/ /g, " ")).toContain("Strength peak no longer starts Mon 23 Nov.");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Create cycle" }));
+    await waitFor(() => expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-14"));
+  });
+
+  it("creates at once when the start ends and drops nothing", async () => {
+    const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6, startDate: "2026-10-31", durationDays: null };
+    render(<CycleSetupSessions cycle={rotation} programs={programs} start="2026-12-12" endurance={false} running={running} scheduled={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Create cycle" }));
+    await waitFor(() => expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-12-12"));
+  });
+
+  it("names the cycle being built under the title (round 8)", () => {
+    render(<CycleSetupSessions cycle={{ ...rotation, name: "Push / Pull rotation" }} programs={programs} start="2026-11-16" endurance={false} />);
+    const header = screen.getByTestId("form-header");
+    expect(within(header).getByRole("heading", { level: 1 }).textContent).toBe("New cycle");
+    expect(within(header).getByText("Push / Pull rotation")).toBeTruthy();
   });
 
   it("puts Cancel on the left on both steps, as step 1 does (J2-07)", () => {
@@ -310,6 +381,25 @@ describe("rotation builder", () => {
     );
   });
 
+  it("fast adds each take their own place, before the page has refreshed (round 8 B12)", async () => {
+    // The writes stay open, so the slots on screen do not change between taps.
+    const pending: (() => void)[] = [];
+    vi.mocked(upsertCycleSlot).mockImplementation(
+      () => new Promise((resolve) => pending.push(() => resolve({ success: true, data: {} as never }))),
+    );
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    const rest = screen.getByRole("button", { name: "+ Add rest day" });
+    fireEvent.click(rest);
+    fireEvent.click(rest);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add session" }));
+    fireEvent.click(within(screen.getByRole("region", { name: "Pick a program" })).getByRole("button", { name: /^Lower A/ }));
+    fireEvent.click(rest);
+    await waitFor(() => expect(upsertCycleSlot).toHaveBeenCalledTimes(4));
+    const orders = vi.mocked(upsertCycleSlot).mock.calls.map((c) => (c[0] as { orderIndex: number }).orderIndex);
+    expect(orders).toEqual([4, 5, 6, 7]);
+    pending.forEach((done) => done());
+  });
+
   it("moves a session up from its options", async () => {
     render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
     fireEvent.click(screen.getByRole("button", { name: "Options for Lower A" }));
@@ -330,6 +420,14 @@ describe("rotation builder", () => {
     fireEvent.click(screen.getByRole("button", { name: "Options for Upper A" }));
     fireEvent.click(screen.getByRole("button", { name: "Remove session" }));
     await waitFor(() => expect(removeCycleSlot).toHaveBeenCalledWith(21, 3));
+  });
+
+  it("puts Remove session at the bottom of the options sheet, under Done (round 8)", () => {
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    fireEvent.click(screen.getByRole("button", { name: "Options for Upper A" }));
+    const done = screen.getByRole("button", { name: "Done" });
+    const remove = screen.getByRole("button", { name: "Remove session" });
+    expect(done.compareDocumentPosition(remove) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("names the drag instructions the same on every render, so the server HTML hydrates", () => {

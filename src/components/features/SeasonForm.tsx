@@ -25,6 +25,7 @@ import {
   RaceKindChips,
   RacePriorityRow,
   RadioCard,
+  SelectField,
   TriDistanceOptions,
 } from "@/components/features/season-ui";
 import Link from "next/link";
@@ -112,9 +113,19 @@ export function SeasonForm(props: Props) {
         : "Phases from the start date to race day, made for you.";
   const triBlocked = !create?.interviewDone || !triReady || typeof triPhases === "string";
 
+  // The race day the server would refuse (placeRaceDate), named before the end it moves.
+  const raceDayProblem =
+    !create || !hasRace || raceDate === ""
+      ? null
+      : raceDate < create.today
+        ? "Pick a race day from today on."
+        : startDate !== "" && raceDate < startDate
+          ? "Pick a race day on or after the season start."
+          : null;
   const valid =
     name.trim() !== "" &&
     startDate !== "" &&
+    raceDayProblem == null &&
     (source === "triathlon" ? !triBlocked : end !== "" && end >= startDate) &&
     (!hasRace || raceComplete) &&
     (source !== "cycles" || picked.length > 0);
@@ -129,7 +140,9 @@ export function SeasonForm(props: Props) {
           ? "Give the race a name."
           : hasRace && raceDate === ""
             ? "Pick the race day."
-            : source === "triathlon"
+            : raceDayProblem
+              ? raceDayProblem
+              : source === "triathlon"
               ? !create?.interviewDone
                 ? "Answer the athlete questions first."
                 : typeof triPhases === "string"
@@ -257,16 +270,25 @@ export function SeasonForm(props: Props) {
             {/* One column below 360 px: a half-width date field cut the year. */}
             <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2" data-testid="race-fields">
               <input aria-label="Race name" value={raceName} maxLength={100} onChange={(e) => setRaceName(e.target.value)} placeholder="Race name" className={`${INNER_FIELD} min-[360px]:col-span-2`} />
-              <input aria-label="Race date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={INNER_FIELD} />
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Date</span>
+                <input aria-label="Race date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={INNER_FIELD} />
+              </label>
               {discipline === "triathlon" ? (
-                <select aria-label="Distance" value={distance} onChange={(e) => setDistance(e.target.value as TriDistance)} className={INNER_FIELD}>
-                  <TriDistanceOptions />
-                </select>
+                <label className="flex flex-col gap-1.5">
+                  <span className={LABEL}>Distance</span>
+                  <SelectField value={distance} onChange={(v) => setDistance(v as TriDistance)}>
+                    <TriDistanceOptions />
+                  </SelectField>
+                </label>
               ) : (
-                <input aria-label="Distance in km" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} placeholder="km" className={INNER_FIELD} />
+                <label className="flex flex-col gap-1.5">
+                  <span className={LABEL}>Distance · km</span>
+                  <input aria-label="Distance in km" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} className={INNER_FIELD} />
+                </label>
               )}
             </div>
-            <RaceKindChips label="Race kind" value={discipline} onChange={setDiscipline} />
+            <RaceKindChips value={discipline} onChange={setDiscipline} />
             <RacePriorityRow value={priority} onChange={setPriority} />
             {hasRace && !raceComplete && <p className="text-[13px] text-muted-foreground">Give the race a name and a date, or leave both empty.</p>}
           </section>

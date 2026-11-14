@@ -26,7 +26,7 @@ test("Edit details saves the name and the end, and the history says so in senten
   const id = await draftCycle(testInfo.parallelIndex);
 
   await page.goto(`/cycles/${id}/edit`);
-  await expect(page.getByRole("heading", { level: 1, name: "Edit cycle" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Edit details" })).toBeVisible();
   await expect(page.getByRole("radio", { name: /Rotation/ })).toBeChecked();
   await expect(page.getByRole("radio", { name: /Rotation/ })).toBeDisabled();
   // A form screen shows its pinned Save bar, not the tab bar under it.
@@ -53,12 +53,12 @@ test("Edit details saves the name and the end, and the history says so in senten
   await page.screenshot({ path: testInfo.outputPath("cycle-history.png"), fullPage: true });
 });
 
-test("Edit cycle has the form header of New cycle: Cancel, the title centred, whatever the cycle's name", async ({ page }, testInfo) => {
+test("Edit details has the form header of New cycle: Cancel, the title centred, whatever the cycle's name", async ({ page }, testInfo) => {
   const id = await draftCycle(testInfo.parallelIndex, "Base block with three sessions on Wednesdays and a long easy ride every Saturday morning");
   for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 800 });
     await page.goto(`/cycles/${id}/edit`);
-    const title = page.getByRole("heading", { level: 1, name: "Edit cycle" });
+    const title = page.getByRole("heading", { level: 1, name: "Edit details" });
     await expect(title).toBeVisible();
     const cancel = (await page.getByTestId("form-header").getByRole("button", { name: "Cancel" }).boundingBox())!;
     const heading = (await title.boundingBox())!;

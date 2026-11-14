@@ -161,6 +161,10 @@ describe("parseDuration", () => {
   it("reads minutes or h:mm, and refuses the rest", () => {
     expect(parseDuration("45")).toBe(2700);
     expect(parseDuration(" 1:30 ")).toBe(5400);
+    // The number keypad has a decimal key but no colon (round 8 B16).
+    expect(parseDuration("1.30")).toBe(5400);
+    expect(parseDuration("1,05")).toBe(3900);
+    expect(parseDuration("1.5")).toBeNull();
     expect(parseDuration("0")).toBeNull();
     expect(parseDuration("1:75")).toBeNull();
     expect(parseDuration("45 min")).toBeNull();

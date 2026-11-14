@@ -36,12 +36,12 @@ const cycle = {
 afterEach(cleanup);
 
 describe("the Edit details screen", () => {
-  it("has the form header of New cycle: Cancel, then Edit cycle centred; Cancel goes back to the cycle", () => {
+  it("has the form header of New cycle: Cancel, then Edit details centred, the words of the menu item; Cancel goes back to the cycle", () => {
     render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
     const header = screen.getByTestId("form-header");
     // Two equal side columns keep the title in the middle, whatever is on the left.
     expect(header.className).toContain("grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]");
-    expect(within(header).getByRole("heading", { level: 1 }).textContent).toBe("Edit cycle");
+    expect(within(header).getByRole("heading", { level: 1 }).textContent).toBe("Edit details");
     expect(screen.queryByTestId("back-link")).toBeNull();
     fireEvent.click(within(header).getByRole("button", { name: "Cancel" }));
     expect(replace).toHaveBeenCalledWith("/cycles/3");
@@ -91,5 +91,20 @@ describe("the Edit details screen", () => {
     expect(save.getAttribute("aria-describedby")).toBeNull();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: " " } });
     expect(reasonOf(save)).toBe("Give the cycle a name.");
+  });
+});
+
+describe("two tabs (round 8 B13)", () => {
+  it("sends the version it read, so a stale tab cannot undo another tab's save", async () => {
+    render(<EditCycleForm cycle={{ ...cycle, version: 4 } as TrainingCycle} enduranceEnabled={false} today="2026-11-14" />);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(updateTrainingCycle).toHaveBeenCalledWith(expect.objectContaining({ id: 3, expectedVersion: 4 })));
+  });
+
+  it("shows the refusal of a stale save", async () => {
+    vi.mocked(updateTrainingCycle).mockResolvedValueOnce({ success: false, error: "This cycle changed in another tab. Reload to see it." });
+    render(<EditCycleForm cycle={{ ...cycle, version: 4 } as TrainingCycle} enduranceEnabled={false} today="2026-11-14" />);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toBe("This cycle changed in another tab. Reload to see it."));
   });
 });

@@ -365,6 +365,29 @@ describe("errors belong to the sheet that caused them (fix round 4)", () => {
   });
 });
 
+describe("field errors show under their field (round 8)", () => {
+  it("a refused race date shows under Date, not under Save race", async () => {
+    const msg = "Pick a race date from today on.";
+    actions.addRaceAction.mockImplementation(async () => ({ success: false, error: msg, fieldErrors: { raceDate: [msg] } }) as never);
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    fireEvent.change(within(sheet).getByLabelText("Name"), { target: { value: "Old race" } });
+    const date = within(sheet).getByLabelText("Date");
+    fireEvent.change(date, { target: { value: "2026-01-01" } });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Save race" }));
+    const alert = await waitFor(() => within(sheet).getByRole("alert"));
+    expect(alert.textContent).toBe(msg);
+    expect(date.getAttribute("aria-invalid")).toBe("true");
+    expect(date.getAttribute("aria-describedby")).toBe(alert.id);
+    const save = within(sheet).getByRole("button", { name: "Save race" });
+    expect(alert.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // A new date clears it.
+    fireEvent.change(date, { target: { value: "2027-01-01" } });
+    expect(within(sheet).queryByRole("alert")).toBeNull();
+  });
+});
+
 describe("phase length in weeks or days (fix round 4)", () => {
   // Fit the taper set Build to 105 days: a whole number of weeks.
   const fitted = [phases[0], { ...phases[1], durationWeeks: 15, durationDays: 105, end: "2027-04-25", lengthDays: 105 }, phases[2]];
@@ -432,5 +455,24 @@ describe("the phase bar and badges match the Plan list (fix round 6)", () => {
   it("gives a start inside the week with its date (J4-17)", () => {
     render(<SeasonDetailClient {...base} />);
     expect(screen.getAllByTestId("phase-row")[0].textContent?.replace(/\u00a0/g, " ")).toContain("Starts Mon 16 Nov");
+  });
+});
+
+describe("the race sheet's choices (round 8)", () => {
+  it("labels the sport chips on screen", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    expect(within(sheet).getByRole("group", { name: "Sport" })).toBeTruthy();
+    expect(within(sheet).getByText("Sport").className).toContain("uppercase");
+  });
+
+  it("draws the chosen priority with the same tint as the chosen sport", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    const pressed = Array.from(sheet.querySelectorAll('button[aria-pressed="true"]'));
+    expect(pressed.map((b) => b.textContent)).toEqual(["Triathlon", "A"]);
+    expect(pressed[1].className).toBe(pressed[0].className);
   });
 });

@@ -339,12 +339,13 @@ function SlotSheet({
           </div>
         )}
         {extra}
-        <button type="button" onClick={onRemove} className="self-start min-h-11 text-[15px] font-medium text-[#ff6b5a] active:opacity-70">
-          Remove session
-        </button>
         <ErrorLine error={error} />
         <button type="button" onClick={done} className={`mt-2 ${PRIMARY}`}>
           Done
+        </button>
+        {/* The destructive action goes at the bottom. */}
+        <button type="button" onClick={onRemove} className="mt-1 min-h-11 text-[15px] font-medium text-[#ff6b5a] active:opacity-70">
+          Remove session
         </button>
       </div>
     </PlanSheetPanel>
@@ -620,11 +621,19 @@ function RotationBuilder({
     );
   }
 
-  // After the last position, not the count: a gap must never make it land on a slot.
-  const nextOrder = Math.max(0, ...localSlots.map((s) => s.orderIndex ?? 0)) + 1;
+  // The last place an add took. The slots on screen change only after the
+  // refresh, so fast adds would all take the same place and overwrite each
+  // other; each add takes the place after this one instead.
+  const claimed = useRef(0);
+  /** The next free place: after the last position, not the count, so a gap never lands on a slot. */
+  function claimNext(): number {
+    const next = Math.max(claimed.current, ...localSlots.map((s) => s.orderIndex ?? 0)) + 1;
+    claimed.current = next;
+    return next;
+  }
 
   async function pick(program: { id: number; name: string }) {
-    const orderIndex = picking === "edit" && editing ? (editing.orderIndex ?? nextOrder) : nextOrder;
+    const orderIndex = picking === "edit" && editing && editing.orderIndex != null ? editing.orderIndex : claimNext();
     const saved = await save(() =>
       upsertCycleSlot({ trainingCycleId: cycle.id, orderIndex, programId: program.id, label: program.name }),
     );
@@ -641,7 +650,8 @@ function RotationBuilder({
 
   async function addRest() {
     setError(null);
-    await save(() => upsertCycleSlot({ trainingCycleId: cycle.id, orderIndex: nextOrder, programId: null, label: "Rest" }));
+    const orderIndex = claimNext();
+    await save(() => upsertCycleSlot({ trainingCycleId: cycle.id, orderIndex, programId: null, label: "Rest" }));
   }
 
   async function saveSheet(changes: SlotChanges) {

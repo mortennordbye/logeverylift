@@ -96,6 +96,7 @@ export default async function NewCyclePage({
         programs={programs.map((p) => ({ ...p, exerciseCount: countOf.get(p.id) ?? 0 }))}
         start={start}
         endurance={endurance}
+        {...await startContext()}
       />
     </div>
   );

@@ -94,6 +94,29 @@ describe("a dimmed Create season says what is missing", () => {
   });
 });
 
+describe("a race day that cannot be (round 8 B17)", () => {
+  const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+  const race = (date: string) => {
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Plain season" } });
+    fireEvent.change(screen.getByLabelText("Race name"), { target: { value: "Old race" } });
+    fireEvent.change(screen.getByLabelText("Race date"), { target: { value: date } });
+  };
+
+  it("says a race day in the past is the problem, not the end day", () => {
+    render(<SeasonForm {...create} />);
+    race("2026-11-01");
+    const button = screen.getByRole("button", { name: "Create season" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(reasonOf(button)).toBe("Pick a race day from today on.");
+  });
+
+  it("says a race day before the season start is the problem", () => {
+    render(<SeasonForm {...create} />);
+    race("2026-11-15");
+    expect(reasonOf(screen.getByRole("button", { name: "Create season" }))).toBe("Pick a race day on or after the season start.");
+  });
+});
+
 describe("New season with the endurance switch", () => {
   function fillRace(date = "2027-08-29") {
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jevnaker Half 2027" } });
@@ -227,5 +250,28 @@ describe("New season while another block holds the start (fix round 4)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create season" }));
     await waitFor(() => expect(mocks.createSeasonAction).toHaveBeenCalledTimes(2));
     expect(screen.queryByRole("region", { name: title })).toBeNull();
+  });
+});
+
+describe("the race fields of New season (round 8)", () => {
+  const TINT = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
+
+  it("draws every selected choice the same way: the accent tint, never a solid accent fill", () => {
+    render(<SeasonForm {...create} />);
+    const pressed = Array.from(document.querySelectorAll('button[aria-pressed="true"]'));
+    // Triathlon and priority A are chosen to start with.
+    expect(pressed.map((b) => b.textContent)).toEqual(["Triathlon", "A"]);
+    for (const b of pressed) {
+      expect(b.className).toContain(TINT);
+      expect(b.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    }
+  });
+
+  it("labels the distance and the sport on screen", () => {
+    render(<SeasonForm {...create} />);
+    const fields = screen.getByTestId("race-fields");
+    expect(within(fields).getByText("Distance")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Sport" })).toBeTruthy();
+    expect(screen.getByText("Sport").className).toContain("uppercase");
   });
 });

@@ -18,18 +18,22 @@ import { confirmPlannedDone } from "@/lib/actions/workouts-compliance";
 import { normalizeDecimal } from "@/lib/utils/format";
 import type { ComplianceBand, SessionState } from "@/lib/utils/session-compliance";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { fieldToMeters, fieldUnit } from "@/lib/utils/units";
+import { fieldToMeters, fieldUnit, type FieldUnit } from "@/lib/utils/units";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+/** The distance unit in words, for a screen reader. */
+const UNIT_WORD: Record<FieldUnit, string> = { m: "metres", km: "kilometres", yd: "yards", mi: "miles" };
+
 /**
  * A typed time as seconds: whole minutes ("45") or hours and minutes
- * ("1:30"). Null when it is not one of those, or under a minute.
+ * ("1:30", or "1.30" and "1,30" from the number keypad, which has no colon).
+ * Null when it is not one of those, or under a minute.
  */
 export function parseDuration(text: string): number | null {
   const t = text.trim();
   let minutes: number | null = null;
-  const hm = /^(\d{1,2}):(\d{2})$/.exec(t);
+  const hm = /^(\d{1,2})[:.,](\d{2})$/.exec(t);
   if (/^\d{1,4}$/.test(t)) minutes = Number(t);
   else if (hm && Number(hm[2]) < 60) minutes = Number(hm[1]) * 60 + Number(hm[2]);
   if (minutes == null || minutes < 1 || minutes > 24 * 60) return null;
@@ -241,10 +245,10 @@ function ConfirmDoneSheet({
               {session.summary && <p className="text-sm text-muted-foreground">{session.summary}</p>}
             </div>
             <label className="block">
-              <span className="text-xs text-muted-foreground">Time (minutes, or h:mm)</span>
-              <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="numeric" placeholder="45" aria-label="Time" className={field} />
+              <span className="text-xs text-muted-foreground">Time in minutes, or hours and minutes</span>
+              <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="decimal" placeholder="45" aria-label="Time" className={field} />
             </label>
-            {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or h:mm, such as 1:30.</p>}
+            {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or hours and minutes, such as 1.30.</p>}
             <label className="block">
               <span className="text-xs text-muted-foreground">Distance in {unit} (optional)</span>
               <input value={distance} onChange={(e) => setDistance(e.target.value)} inputMode="decimal" aria-label="Distance" className={field} />
@@ -367,15 +371,27 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
             <>
               <div className="grid grid-cols-2 gap-2">
                 <label className={label}>
-                  <span className={LABEL}>Time (h:mm)</span>
-                  <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="numeric" placeholder="1:05" className={field} />
+                  <span className={LABEL}>Time</span>
+                  <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="decimal" placeholder="1.05" className={field} />
                 </label>
+                {/* As short as the Time label, so both fields line up at 320 px; the unit sits in the field. */}
                 <label className={label}>
-                  <span className={LABEL}>Distance, {unit} (optional)</span>
-                  <input value={distance} onChange={(e) => setDistance(e.target.value)} inputMode="decimal" className={field} />
+                  <span className={LABEL}>Distance</span>
+                  <span className="relative">
+                    <input
+                      value={distance}
+                      onChange={(e) => setDistance(e.target.value)}
+                      inputMode="decimal"
+                      aria-label={`Distance in ${UNIT_WORD[unit]}`}
+                      className={`${field} pr-12`}
+                    />
+                    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-base text-muted-foreground">
+                      {unit}
+                    </span>
+                  </span>
                 </label>
               </div>
-              {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or h:mm, such as 1:30.</p>}
+              {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or hours and minutes, such as 1.30.</p>}
               {distanceBad && <p className="text-xs text-destructive">{DISTANCE_BAD}</p>}
               <fieldset className="flex flex-col gap-1.5">
                 <legend className={`mb-1.5 ${LABEL}`}>Effort, 1 (easy) to 10 (max)</legend>
@@ -387,7 +403,7 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
                       aria-pressed={rpe === n}
                       aria-label={`Effort ${n}`}
                       onClick={() => setRpe(rpe === n ? null : n)}
-                      className={`h-11 rounded-xl text-[15px] font-semibold active:opacity-70 ${rpe === n ? "bg-primary text-primary-foreground" : "bg-widget-2"}`}
+                      className={`h-11 rounded-xl text-[15px] font-semibold active:opacity-70 ${rpe === n ? "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)] ring-1 ring-inset ring-brand" : "bg-widget-2"}`}
                     >
                       {n}
                     </button>

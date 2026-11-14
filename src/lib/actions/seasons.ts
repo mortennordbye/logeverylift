@@ -58,6 +58,9 @@ async function run<S extends z.ZodTypeAny, T>(
     for (const p of paths(parsed.data, out)) revalidatePath(p);
     return { success: true, data: out };
   } catch (e) {
+    if (e instanceof PlanStateError && e.field) {
+      return { success: false, error: e.message, fieldErrors: { [e.field]: [e.message] } };
+    }
     if (e instanceof PlanNotFoundError || e instanceof PlanStateError || e instanceof PlanConflictError || e instanceof OpenWorkoutError) {
       return { success: false, error: e.message };
     }

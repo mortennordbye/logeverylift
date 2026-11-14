@@ -50,6 +50,11 @@ describe("Add a phase", () => {
     expect(radio.closest("fieldset")!.className).toContain("flex-col");
   });
 
+  it("the Name placeholder is neutral, not a phase name the season may have (round 8)", () => {
+    render(<AddPhaseForm {...props} />);
+    expect((screen.getByLabelText("Name") as HTMLInputElement).placeholder).toBe("Phase name");
+  });
+
   it("step 1 goes on to the season's step 2 for the new phase", async () => {
     render(<AddPhaseForm {...props} />);
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Swim, intervals, bricks" } });
@@ -162,5 +167,19 @@ describe("Add a phase, fix round 4", () => {
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     fireEvent.click(screen.getByRole("button", { name: "Keep building" }));
     expect(cycles.deleteTrainingCycle).not.toHaveBeenCalled();
+  });
+});
+
+describe("one selected style on the form (round 8)", () => {
+  it("draws the chosen length unit with the same accent tint as the chosen phase type", () => {
+    render(<AddPhaseForm {...props} />);
+    fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    const unit = screen.getByRole("button", { name: "Weeks" });
+    const type = screen.getByRole("button", { name: "Build" });
+    expect(unit.getAttribute("aria-pressed")).toBe("true");
+    const tint = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
+    expect(type.className).toContain(tint);
+    expect(unit.className).toContain(tint);
+    expect(unit.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
   });
 });

@@ -190,7 +190,7 @@ export function AddPhaseForm(p: Props) {
             <label htmlFor="phase-name" className={LABEL}>
               Name
             </label>
-            <input id="phase-name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} placeholder="Swim, intervals, bricks" className={FIELD} />
+            <input id="phase-name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} placeholder="Phase name" className={FIELD} />
           </div>
         ) : (
           <fieldset className="flex flex-col gap-2">

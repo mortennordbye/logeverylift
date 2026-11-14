@@ -441,12 +441,12 @@ async function placeRaceDate(
 ) {
   if (was && was.raceDate === race.raceDate) return;
   const [season] = await w.tx.select().from(seasons).where(and(eq(seasons.id, seasonId), isNull(seasons.deletedAt)));
-  if (race.raceDate < (await today(w.ctx.userId))) throw new PlanStateError("Pick a race date from today on.");
-  if (race.raceDate < season.startDate) throw new PlanStateError(`Pick a race date on or after the season start, ${dayLabel(season.startDate)}.`);
+  if (race.raceDate < (await today(w.ctx.userId))) throw new PlanStateError("Pick a race date from today on.", "raceDate");
+  if (race.raceDate < season.startDate) throw new PlanStateError(`Pick a race date on or after the season start, ${dayLabel(season.startDate)}.`, "raceDate");
   const follows = race.priority === "A" && (race.raceDate > season.endDate || (was?.priority === "A" && was.raceDate === season.endDate));
   if (!follows) {
     if (race.raceDate > season.endDate) {
-      throw new PlanStateError(`Pick a race date on or before the season end, ${dayLabel(season.endDate)}, or move the season end first.`);
+      throw new PlanStateError(`Pick a race date on or before the season end, ${dayLabel(season.endDate)}, or move the season end first.`, "raceDate");
     }
     return;
   }

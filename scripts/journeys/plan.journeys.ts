@@ -100,7 +100,7 @@ const set: JourneySet = {
         });
         // J2 needs the running cycle and the scheduled draft of this account.
         await step("J2 step1", async () => {
-          const weeks = () => page.getByRole("spinbutton", { name: "Length in weeks" });
+          const weeks = () => page.getByRole("textbox", { name: "Length in weeks" });
           await go("/cycles/new");
           await shot(2, 1, "new-cycle-step1", "New cycle step 1, defaults");
           await page.getByRole("button", { name: "Custom" }).click();

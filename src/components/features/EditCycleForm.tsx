@@ -7,12 +7,13 @@
  * sessions are built for it.
  */
 
-import { ButtonReason, Chip, ChipGroup, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard } from "@/components/features/season-ui";
+import { ButtonReason, Chip, ChipGroup, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, WeeksField } from "@/components/features/season-ui";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
 import { END_ACTIONS, MAIN_LENGTHS, SCHEDULE_MODES, type EndAction } from "@/lib/utils/cycle-setup";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { shortDay } from "@/lib/utils/seasons";
 import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
 import Link from "next/link";
@@ -27,6 +28,9 @@ type Props = {
   /** Today in the user's time zone, `YYYY-MM-DD`. */
   today: string;
 };
+
+/** "Sun 29 Aug 2027": a race can be in another year. */
+const longDay = (d: string) => `${shortDay(d)} ${d.slice(0, 4)}`;
 
 export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, today }: Props) {
   const returnTo = useReturnTo();
@@ -47,6 +51,8 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
 
   // A cycle in a season stores no race (D8).
   const inSeason = liveSeasonId != null;
+  // The race is part of the endurance add-on, hidden without it (D18).
+  const showRace = enduranceEnabled && !inSeason;
 
   // Warn if the selected duration would immediately end an active cycle
   const durationWarning = useMemo(() => {
@@ -71,13 +77,16 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
 
     const result = await callAction(updateTrainingCycle({
       id: cycle.id,
+      // The version this form read: a save from a tab another tab has saved over is refused.
+      expectedVersion: cycle.version,
       name: name.trim(),
       // Only a changed length: an unchanged one would drop a length in days (T8).
       durationWeeks: weeks !== cycle.durationWeeks ? weeks : undefined,
       endAction,
       endMessage: endMessage.trim() || null,
-      raceDate: raceDate || null,
-      raceDistance: raceDate ? raceDistance : null,
+      // A cycle in a season stores no race. Without the endurance add-on the
+      // race is hidden, and a stored one stays as it is.
+      ...(inSeason || showRace ? { raceDate: (showRace && raceDate) || null, raceDistance: showRace && raceDate ? raceDistance : null } : {}),
     }));
 
     if (result.success) {
@@ -92,7 +101,7 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
     <form onSubmit={handleSubmit} className="flex flex-col" style={{ paddingBottom: "calc(140px + var(--kb-height, 0px))" }}>
       {/* The form header of New cycle and Add a phase: Cancel, the title centred. */}
       <FormHeader
-        title="Edit cycle"
+        title="Edit details"
         left={
           <button type="button" onClick={back.go} className="flex items-center min-h-11 px-2 text-base text-brand active:opacity-70">
             Cancel
@@ -163,42 +172,13 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
                 Custom
               </Chip>
             </ChipGroup>
-            {custom && (
-              <label className="-mt-2 flex flex-col gap-2">
-                <span className="text-[13px] text-muted-foreground">
-                  {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks
-                </span>
-                <span className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={MIN_CYCLE_WEEKS}
-                    max={MAX_CYCLE_WEEKS}
-                    step={1}
-                    value={customWeeks}
-                    onChange={(e) => setCustomWeeks(e.target.value)}
-                    aria-label="Length in weeks"
-                    aria-invalid={!weeksOk}
-                    aria-describedby={weeksOk ? undefined : "length-error"}
-                    className={`${FIELD} !w-24 aria-[invalid=true]:border-[#ff6b5a]`}
-                  />
-                  <span className="text-base text-muted-foreground">weeks</span>
-                </span>
-                {!weeksOk && (
-                  <span id="length-error" className="text-[13px] text-[#ff6b5a]">
-                    Pick {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks.
-                  </span>
-                )}
-              </label>
-            )}
+            {custom && <WeeksField value={customWeeks} onChange={setCustomWeeks} ok={weeksOk} min={MIN_CYCLE_WEEKS} max={MAX_CYCLE_WEEKS} />}
             {durationWarning && <p className="-mt-2 text-[13px] text-[#ff6b5a]">{durationWarning}</p>}
           </>
         )}
 
-        {/* Race: what the Garmin race views count down to. Part of the endurance
-            add-on; a cycle that already has a race keeps showing it, so no stored
-            value is hidden from its owner. */}
-        {inSeason && (
+        {/* Race: the race views count down to it. Part of the endurance add-on. */}
+        {inSeason && enduranceEnabled && (
           <div id="race" className="flex scroll-mt-4 flex-col gap-2">
             <span className={LABEL}>Race</span>
             <p className="text-[13px] text-muted-foreground" data-testid="season-race-note">
@@ -206,14 +186,15 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
             </p>
           </div>
         )}
-        {!inSeason && (enduranceEnabled || cycle.raceDate) && (
+        {showRace && (
           <div id="race" className="flex scroll-mt-4 flex-col gap-2">
             <label htmlFor="race-date" className={LABEL}>
-              Race (optional)
+              Race day (optional)
             </label>
             <input id="race-date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={FIELD} />
+            {raceDate && <p className="text-[13px] text-muted-foreground">{longDay(raceDate)}</p>}
             {raceDate && (
-              <div className="flex flex-wrap gap-2" role="group" aria-label="Race distance">
+              <ChipGroup label="Race distance">
                 {([["full", "Ironman"], ["half", "70.3"]] as const).map(([value, label]) => (
                   <Chip key={value} pressed={raceDistance === value} onClick={() => setRaceDistance(raceDistance === value ? null : value)}>
                     {label}
@@ -229,11 +210,9 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
                 >
                   Clear
                 </button>
-              </div>
+              </ChipGroup>
             )}
-            <p className="text-[13px] text-muted-foreground">
-              The Garmin page counts down to this date and checks your training against the race distance.
-            </p>
+            <p className="text-[13px] text-muted-foreground">The race countdown uses this day, and your training is checked against the distance.</p>
           </div>
         )}
 

@@ -3,7 +3,7 @@
 import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, DESTRUCTIVE_TEXT, ErrorLine, INNER_FIELD, LABEL, PRIMARY_BUTTON, RACE_KIND_LABELS, RaceKindChips, RacePriorityRow, SectionLabel, Segmented, TriDistanceOptions } from "@/components/features/season-ui";
+import { ButtonReason, Chip, DESTRUCTIVE_TEXT, ErrorLine, INNER_FIELD, LABEL, PRIMARY_BUTTON, RACE_KIND_LABELS, RaceKindChips, RacePriorityRow, SectionLabel, Segmented, SelectField, TriDistanceOptions } from "@/components/features/season-ui";
 import {
   addRaceAction,
   clearReplanAction,
@@ -145,6 +145,8 @@ export function SeasonDetailClient(p: Props) {
   const leaveDeleted = useLeaveDeleted();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The input a refused write named (fieldErrors), so its error shows under that field.
+  const [errorField, setErrorField] = useState<string | null>(null);
   const [race, setRace] = useState<RaceDraft | null>(null);
   const [phase, setPhase] = useState<PhaseDraft | null>(null);
   const [menu, setMenu] = useState(false);
@@ -157,6 +159,7 @@ export function SeasonDetailClient(p: Props) {
     <T,>(set: (v: T) => void) =>
     (v: T) => {
       setError(null);
+      setErrorField(null);
       set(v);
     };
   const toRace = sheet(setRace);
@@ -189,10 +192,12 @@ export function SeasonDetailClient(p: Props) {
   async function run<T>(promise: Promise<ActionResult<T>>, after?: () => void) {
     setBusy(true);
     setError(null);
+    setErrorField(null);
     const result = await callAction(promise);
     setBusy(false);
     if (!result.success) {
       setError(result.error);
+      setErrorField("fieldErrors" in result && result.fieldErrors?.raceDate ? "raceDate" : null);
       return false;
     }
     after?.();
@@ -281,6 +286,7 @@ export function SeasonDetailClient(p: Props) {
   // Why Save race or Save phase is off.
   const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
   const phaseReason = phase && !Number(phase.length) ? "Type a length." : null;
+  const dateError = error != null && errorField === "raceDate";
   const errorLine = <ErrorLine error={error} />;
 
   return (
@@ -531,16 +537,31 @@ export function SeasonDetailClient(p: Props) {
             </label>
             <label className="flex flex-col gap-1.5">
               <span className={LABEL}>Date</span>
-              <input type="date" value={race.raceDate} onChange={(e) => setRace({ ...race, raceDate: e.target.value })} className={INNER_FIELD} />
+              <input
+                type="date"
+                value={race.raceDate}
+                aria-invalid={dateError ? true : undefined}
+                aria-describedby={dateError ? "race-date-error" : undefined}
+                onChange={(e) => {
+                  if (dateError) toRace({ ...race, raceDate: e.target.value });
+                  else setRace({ ...race, raceDate: e.target.value });
+                }}
+                className={INNER_FIELD}
+              />
             </label>
-            <RaceKindChips label="Kind" value={race.discipline} onChange={(d) => setRace({ ...race, discipline: d })} />
+            {dateError && (
+              <p id="race-date-error" role="alert" className="-mt-1 text-sm text-[#ff6b5a]">
+                {error}
+              </p>
+            )}
+            <RaceKindChips value={race.discipline} onChange={(d) => setRace({ ...race, discipline: d })} />
             {race.discipline === "triathlon" ? (
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>Distance</span>
-                <select value={race.distance ?? ""} onChange={(e) => setRace({ ...race, distance: (e.target.value || null) as TriDistance | null })} className={INNER_FIELD}>
+                <SelectField value={race.distance ?? ""} onChange={(v) => setRace({ ...race, distance: (v || null) as TriDistance | null })}>
                   <TriDistanceOptions />
                   <option value="">Not set</option>
-                </select>
+                </SelectField>
               </label>
             ) : (
               <label className="flex flex-col gap-1.5">
@@ -555,7 +576,7 @@ export function SeasonDetailClient(p: Props) {
               </button>
               <ButtonReason id="race-reason" reason={raceReason} />
             </div>
-            {errorLine}
+            {!dateError && errorLine}
             {race.id && (
               <button
                 type="button"

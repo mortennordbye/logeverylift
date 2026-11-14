@@ -16,7 +16,8 @@
 
 import { CycleScheduleBuilder, type PickerProgram } from "@/components/features/CycleScheduleBuilder";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, ChipGroup, ErrorLine, FormHeader, LABEL, PinnedBar, StepProgress } from "@/components/features/season-ui";
+import { ButtonReason, Chip, ChipGroup, ErrorLine, FormHeader, LABEL, PinnedBar, StepProgress, WeeksField } from "@/components/features/season-ui";
+import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
@@ -75,7 +76,8 @@ export function CreateCycleForm({
   const weeks = moreLengths ? Number(customWeeks) : durationWeeks;
   const weeksOk = Number.isInteger(weeks) && weeks >= MIN_CYCLE_WEEKS && weeks <= MAX_CYCLE_WEEKS;
   const [choice, setChoice] = useState<StartChoice>(() => {
-    const c = start ? choiceFor(start, days) : "today";
+    // While a cycle runs, a new one starts after it unless the user picks Today.
+    const c = start ? choiceFor(start, days) : days.afterCurrent ? "after" : "today";
     return c === "after" && !days.afterCurrent ? "today" : c;
   });
   const [picked, setPicked] = useState(start && choiceFor(start, days) === "date" ? start : "");
@@ -131,7 +133,7 @@ export function CreateCycleForm({
             value={name}
             maxLength={100}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Upper / Lower hypertrophy"
+            placeholder="Cycle name"
             className="h-12 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand placeholder:text-muted-foreground"
           />
         </label>
@@ -188,34 +190,7 @@ export function CreateCycleForm({
           ))}
           <Chip pressed={moreLengths} onClick={() => setMoreLengths(true)}>Custom</Chip>
         </ChipGroup>
-        {moreLengths && (
-          <label className="flex flex-col gap-2 -mt-2">
-            <span className="text-[13px] text-muted-foreground">
-              {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks
-            </span>
-            <span className="flex items-center gap-3">
-              <input
-                type="number"
-                inputMode="numeric"
-                min={MIN_CYCLE_WEEKS}
-                max={MAX_CYCLE_WEEKS}
-                step={1}
-                value={customWeeks}
-                onChange={(e) => setCustomWeeks(e.target.value)}
-                aria-label="Length in weeks"
-                aria-invalid={!weeksOk}
-                aria-describedby={weeksOk ? undefined : "length-error"}
-                className="h-12 w-24 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand aria-[invalid=true]:border-[#ff6b5a]"
-              />
-              <span className="text-base text-[#c4c4c9]">weeks</span>
-            </span>
-            {!weeksOk && (
-              <span id="length-error" className="text-[13px] text-[#ff6b5a]">
-                Pick {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks.
-              </span>
-            )}
-          </label>
-        )}
+        {moreLengths && <WeeksField value={customWeeks} onChange={setCustomWeeks} ok={weeksOk} min={MIN_CYCLE_WEEKS} max={MAX_CYCLE_WEEKS} />}
 
         <ChipGroup label="Start">
           <Chip pressed={choice === "today"} onClick={() => setChoice("today")}>Today</Chip>
@@ -225,7 +200,7 @@ export function CreateCycleForm({
         </ChipGroup>
         {choice === "date" && (
           <label className="flex flex-col gap-2 -mt-2">
-            <span className="text-[13px] text-muted-foreground">Start day</span>
+            <span className={LABEL}>Start day</span>
             <input
               type="date"
               value={picked}
@@ -236,8 +211,8 @@ export function CreateCycleForm({
             />
           </label>
         )}
-        {choice === "after" && days.afterCurrent && (
-          <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(days.afterCurrent)}</p>
+        {(choice === "after" || choice === "date") && startDay && (
+          <p className="-mt-2 text-[13px] text-muted-foreground">Starts {shortDay(startDay)}</p>
         )}
         {endsLine && <p className="-mt-2 text-[13px] text-muted-foreground">{endsLine}</p>}
         {dropsLine && <p className="-mt-2 text-[13px] text-muted-foreground">{dropsLine}</p>}
@@ -282,16 +257,23 @@ export function CycleSetupSessions({
   programs,
   start,
   endurance,
+  running,
+  scheduled,
 }: {
   cycle: TrainingCycleWithSlots;
   programs: PickerProgram[];
   /** The first day: today starts the cycle, a later day schedules it. */
   start: string;
   endurance: boolean;
+  /** The running cycle and the scheduled draft: what Create ends and drops, asked first (spec, decisions). */
+  running?: RunningCycle | null;
+  scheduled?: ScheduledDraft | null;
 }) {
   const returnTo = useReturnTo();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const startLines = [endsRunningLine(cycle.id, runningOn(running, start)), dropsScheduledLine(cycle.id, scheduled)].filter((l): l is string => l != null);
   const [discarding, setDiscarding] = useState(false);
   const [discardBusy, setDiscardBusy] = useState(false);
   const [discardError, setDiscardError] = useState("");
@@ -326,6 +308,7 @@ export function CycleSetupSessions({
     <div className="flex flex-col" style={{ paddingBottom: "140px" }}>
       <FormHeader
         title="New cycle"
+        sub={cycle.name}
         left={
           <button
             type="button"
@@ -348,14 +331,34 @@ export function CycleSetupSessions({
         <StepProgress step={2} of={2} />
         <h2 className="text-[22px] font-semibold">{cycle.scheduleType === "rotation" ? "Rotation order" : "Build the week"}</h2>
         <CycleScheduleBuilder cycle={cycle} programs={programs} endurance={endurance} />
-        <ErrorLine error={error} />
+        <ErrorLine error={confirming ? null : error} />
       </div>
       <PinnedBar>
-        <button type="button" onClick={create} disabled={loading || !hasSession} aria-describedby={hasSession ? undefined : "create-reason"} className={PRIMARY}>
+        <button
+          type="button"
+          onClick={() => {
+            if (startLines.length === 0) return void create();
+            setError("");
+            setConfirming(true);
+          }}
+          disabled={loading || !hasSession} aria-describedby={hasSession ? undefined : "create-reason"} className={PRIMARY}>
           Create cycle
         </button>
         <ButtonReason id="create-reason" reason={hasSession ? null : "Add a session first."} />
       </PinnedBar>
+      <TakeStartSheet
+        open={confirming}
+        title={`Start ${cycle.name} ${shortDay(start)}?`}
+        lines={startLines}
+        action="Create cycle"
+        busy={loading}
+        error={error || null}
+        onConfirm={create}
+        onClose={() => {
+          setError("");
+          setConfirming(false);
+        }}
+      />
       <BottomSheet open={discarding} onClose={() => setDiscarding(false)}>
         {discarding && (
           <PlanSheetPanel
