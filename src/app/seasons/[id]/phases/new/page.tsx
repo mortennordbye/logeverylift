@@ -7,7 +7,7 @@ import { requireSession } from "@/lib/utils/session";
 
 import { notFound } from "next/navigation";
 
-/** Add a phase to a season (J4_AddPhase); a new cycle continues to /cycles/[id]/template for its week. */
+/** Add a phase to a season (J4_AddPhase); a new cycle continues to /seasons/[id]/phases/[cycleId]/week for its week. */
 export default async function AddPhasePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const seasonId = Number(id);
