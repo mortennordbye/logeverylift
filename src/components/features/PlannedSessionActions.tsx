@@ -1,7 +1,7 @@
 "use client";
 
 import { PlanSheetPanel, SHEET_CANCEL, SectionLabel } from "@/components/features/PlanSheetPanel";
-import { LABEL, PRIMARY_BUTTON } from "@/components/features/season-ui";
+import { ACCENT_TINT, LABEL, PRIMARY_BUTTON } from "@/components/features/season-ui";
 import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
@@ -337,7 +337,7 @@ export function PlannedSessionSheet({
                                 onClick={() => run({ op: "move", id: s.id, date: d })}
                                 className={`h-[52px] min-w-0 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[13px] font-semibold active:opacity-70 ${
                                   current
-                                    ? "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)] text-brand"
+                                    ? `${ACCENT_TINT} text-brand`
                                     : `bg-widget ${key ? "ring-1 ring-inset ring-brand" : ""} ${closed ? "opacity-40" : ""}`
                                 }`}
                               >
