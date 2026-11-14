@@ -3,7 +3,7 @@ import { CycleCompletionBanner } from "@/components/features/CycleCompletionBann
 import { CycleWeek, RotationOrder } from "@/components/features/CycleSessionsClient";
 import { blockWeeks, type DetailSession, rotationRows } from "@/lib/utils/cycle-detail";
 import type { ProgramWithExercises, TrainingCycle } from "@/types/workout";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -260,6 +260,53 @@ describe("Did you do it? from a past row", () => {
     });
     expect(updatePlannedSession).toHaveBeenCalledWith({ op: "miss", id: 1 });
     expect(confirmPlannedDone).not.toHaveBeenCalled();
+  });
+
+  it("says why Save is off for a negative distance", () => {
+    renderWeek({ sessions: past });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.change(within(sheet).getByLabelText("Time (h:mm)"), { target: { value: "1:05" } });
+    fireEvent.change(within(sheet).getByLabelText(/^Distance/), { target: { value: "-5" } });
+    expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(within(sheet).getByText("Type a distance of 0 or more.")).toBeTruthy();
+  });
+});
+
+describe("a missed key session", () => {
+  const missed = session({ id: 7, date: "2026-11-16", name: "Long ride", programId: null, status: "missed", key: true, moveTo: { date: "2026-11-21" } });
+
+  it("offers the suggested day, as home does, and moves it there", async () => {
+    renderWeek({ sessions: [missed] });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Long ride/ }));
+    const sheet = screen.getByTestId("session-sheet");
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Move to Sat 21 Nov" }));
+    });
+    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 7, date: "2026-11-21" });
+  });
+
+  it("says why there is no day to move to", () => {
+    renderWeek({ sessions: [{ ...missed, moveTo: { date: null, reason: "No free day this week. Skip it and go on." } }] });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Long ride/ }));
+    expect(within(screen.getByTestId("session-sheet")).getByText("No free day this week. Skip it and go on.")).toBeTruthy();
+  });
+});
+
+describe("closing a Plan sheet", () => {
+  it("closes on Escape and on its 44 px close button", async () => {
+    renderWeek();
+    fireEvent.click(screen.getByRole("button", { name: /^Tue 17 Nov: Strength A/ }));
+    expect(screen.getByTestId("session-sheet")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("session-sheet")).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Tue 17 Nov: Strength A/ }));
+    const close = within(screen.getByTestId("session-sheet")).getByRole("button", { name: "Close" });
+    expect(close.className).toMatch(/\bw-11\b/);
+    expect(close.className).toMatch(/\bh-11\b/);
+    fireEvent.click(close);
+    await waitFor(() => expect(screen.queryByTestId("session-sheet")).toBeNull());
   });
 });
 

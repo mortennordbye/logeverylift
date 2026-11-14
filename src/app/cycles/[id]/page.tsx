@@ -19,6 +19,7 @@ import { cycleStartContext } from "@/lib/cycle-start";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { listPlanned } from "@/lib/planned-sessions";
 import { seasonOfCycle } from "@/lib/seasons";
+import { moveSuggestion } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { syncLimitWarnings } from "@/lib/training-limits";
 import { userToday } from "@/lib/user-settings";
@@ -26,6 +27,7 @@ import { type DetailSession, blockWeeks, dayMonth, rotationRows, weekIndexOf } f
 import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
+import { mondayOf } from "@/lib/utils/session-compliance";
 import { PHASE_TYPE_LABELS, lengthLabel, shortDay } from "@/lib/utils/seasons";
 import { requireSession } from "@/lib/utils/session";
 import { listWorkouts } from "@/lib/workouts";
@@ -89,6 +91,12 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   const showEndurance = endurance && weekday && blockStart != null && lastDay != null && cycle.status !== "completed";
   const [compliance, library] = showEndurance ? await Promise.all([sessionCompliance(userId, blockStart, lastDay, { cycleId: cycle.id }), listWorkouts(userId)]) : [[], []];
   const complianceById = new Map(compliance.map((c) => [c.id, c]));
+  // A missed key session of this week gets the day home suggests for it (D19).
+  const moveTo = new Map(
+    await Promise.all(
+      compliance.filter((c) => c.priority === "key" && c.status === "missed" && c.date >= mondayOf(today)).map(async (c) => [c.id, await moveSuggestion(userId, c)] as const),
+    ),
+  );
   const sessions: DetailSession[] = dated.map((p) => {
     const c = complianceById.get(p.id!);
     return {
@@ -107,6 +115,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
       key: c?.priority === "key",
       brick: c?.brickParentId != null,
       answer: c?.state === "unconfirmed" ? answerSession(c) : null,
+      moveTo: moveTo.get(p.id!) ?? null,
     };
   });
 

@@ -1,5 +1,8 @@
 import { db } from "@/db";
-import { trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
+import { plannedSessions, trainingCycleSlots, trainingCycles, workoutSessions } from "@/db/schema";
+import { updatePlannedSession } from "@/lib/actions/planned-sessions";
+import { homeEndurance } from "@/lib/session-answers";
+import { and, eq } from "drizzle-orm";
 import CycleDetailPage from "@/app/cycles/[id]/page";
 import { CycleCompletionBanner } from "@/components/features/CycleCompletionBanner";
 import { CycleWeek, RotationOrder, TemplateWeek } from "@/components/features/CycleSessionsClient";
@@ -125,6 +128,24 @@ describe("cycle detail page", () => {
     expect(banner.next).toEqual({ id: next, name: "Peak", startsLabel: "Mon 30 Nov", startsTomorrow: false });
     expect(banner.endedLabel).toBe("ended 28 Oct");
     expect(banner.running).toBeNull();
+  });
+
+  it("a missed key session carries the day home suggests for it", async () => {
+    me = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+    asUser(me);
+    const runEx = await createExercise({ name: `Run ${Math.random()}`, category: "cardio", discipline: "run" });
+    // 90 min: the week's long run is key.
+    const longRun = (await createProgram(me, [{ exerciseId: runEx.id, sets: [{ durationSeconds: 5400, targetReps: null, weightKg: null }] }])).program.id;
+    const [c] = await db.insert(trainingCycles).values({ userId: me, name: "Base", durationWeeks: 4, status: "active", startDate: "2026-11-16" }).returning();
+    await db.insert(trainingCycleSlots).values({ trainingCycleId: c.id, dayOfWeek: 2, daySlot: 1, programId: longRun });
+    await page(c.id); // the lazy backfill makes the dated sessions
+    const [tue] = await db.select().from(plannedSessions).where(and(eq(plannedSessions.cycleId, c.id), eq(plannedSessions.date, "2026-11-17")));
+    expect((await updatePlannedSession({ op: "miss", id: tue.id })).success).toBe(true);
+
+    const home = await homeEndurance(me);
+    expect(home.missedKey.map((m) => m.suggestion)).toEqual([{ date: "2026-11-19" }]);
+    const week = propsOf<Parameters<typeof CycleWeek>[0]>(await page(c.id), CycleWeek)!;
+    expect(week.sessions.find((s) => s.id === tue.id)?.moveTo).toEqual(home.missedKey[0].suggestion);
   });
 
   it("a start or a completed card knows the running cycle, its week, and the draft scheduled next", async () => {

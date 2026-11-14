@@ -246,6 +246,7 @@ function ConfirmDoneSheet({
               <span className="text-xs text-muted-foreground">Distance in {unit} (optional)</span>
               <input value={distance} onChange={(e) => setDistance(e.target.value)} inputMode="decimal" aria-label="Distance" className={field} />
             </label>
+            {distanceBad && <p className="text-xs text-destructive">{DISTANCE_BAD}</p>}
             <div role="radiogroup" aria-label="How hard (RPE)">
               <p className="text-xs text-muted-foreground mb-1">How hard, 1 to 10 (optional)</p>
               <div className="grid grid-cols-5 gap-1.5">
@@ -297,6 +298,9 @@ function ConfirmDoneSheet({
     </BottomSheet>
   );
 }
+
+/** Why Save is off for a distance below 0 or one that is not a number. */
+const DISTANCE_BAD = "Type a distance of 0 or more.";
 
 const SPORT_WORD: Record<NonNullable<AnswerSession["sport"]>, string> = { swim: "swim", bike: "ride", run: "run" };
 
@@ -364,6 +368,7 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
                 </label>
               </div>
               {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or h:mm, such as 1:30.</p>}
+              {distanceBad && <p className="text-xs text-destructive">{DISTANCE_BAD}</p>}
               <fieldset className="flex flex-col gap-1.5">
                 <legend className="mb-1.5 text-[13px] text-muted-foreground">Effort, 1 (easy) to 10 (max)</legend>
                 <div className="grid grid-cols-5 gap-1.5">

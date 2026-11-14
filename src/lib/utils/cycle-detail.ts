@@ -6,6 +6,7 @@
 
 import type { AnswerSession } from "@/components/features/answer-session";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
+import type { MoveSuggestion } from "@/lib/utils/session-compliance";
 import { shortDay } from "@/lib/utils/seasons";
 
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -34,6 +35,8 @@ export type DetailSession = {
   brick: boolean;
   /** Endurance only: set on a past session nobody has answered yet. */
   answer: AnswerSession | null;
+  /** Endurance only: a missed key session's suggested day, as home offers it (D19). */
+  moveTo?: MoveSuggestion | null;
 };
 
 /** A row opens the session sheet, "Did you do it?", or nothing (done, rest, a past skip). */
