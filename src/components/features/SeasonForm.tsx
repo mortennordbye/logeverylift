@@ -34,12 +34,12 @@ export function SeasonForm({ initial, defaultStart }: { initial?: Initial; defau
       const result = await callAction(updateSeasonAction({ seasonId: initial.id, ...fields }));
       setLoading(false);
       if (!result.success) return setError(result.error);
-      router.push(`/seasons/${initial.id}`);
+      router.replace(`/seasons/${initial.id}`);
     } else {
       const result = await callAction(createSeasonAction(fields));
       setLoading(false);
       if (!result.success) return setError(result.error);
-      router.push(`/seasons/${result.data.id}`);
+      router.replace(`/seasons/${result.data.id}`);
     }
   }
 
@@ -49,7 +49,7 @@ export function SeasonForm({ initial, defaultStart }: { initial?: Initial; defau
     const result = await callAction(deleteSeasonAction({ seasonId: initial.id }));
     setLoading(false);
     if (!result.success) return setError(result.error);
-    router.push("/cycles");
+    router.replace("/cycles");
   }
 
   return (

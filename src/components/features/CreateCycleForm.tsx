@@ -52,7 +52,7 @@ export function CreateCycleForm() {
 
     setLoading(false);
     if (result.success) {
-      router.push(`/cycles/${result.data.id}`);
+      router.replace(`/cycles/${result.data.id}`);
     } else {
       setError(result.error);
     }

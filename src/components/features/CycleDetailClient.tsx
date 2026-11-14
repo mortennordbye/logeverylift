@@ -124,7 +124,7 @@ export function DeleteCycleButton({ cycleId }: { cycleId: number }) {
       setLoading(false);
       return;
     }
-    router.push("/cycles");
+    router.replace("/cycles");
   }
 
   if (confirming) {

@@ -5,7 +5,7 @@ import type { StoredHomeItem } from "../src/lib/home/stored-layout";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
 import { expect, test } from "./fixtures/test";
-import { backLink } from "./helpers";
+import { backLink, trackActions } from "./helpers";
 
 /**
  * Back goes where the user came from (docs/plans/back-navigation.md).
@@ -135,4 +135,24 @@ test("two levels from the home: Friends' activity > Friends > Add Friends > Back
   await expect(back(page)).toHaveText("Home");
   await back(page).click();
   await page.waitForURL(atPath("/"));
+});
+
+test("a saved form does not stay in history: New season > Create > Back lands on Cycles", async ({ page }, testInfo) => {
+  const settle = trackActions(page);
+  await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
+  await page.goto("/cycles");
+  await page.getByRole("link", { name: "New season" }).click();
+  await page.waitForURL(atPath("/seasons/new"));
+  await page.getByLabel("Name").fill("Back test");
+  await page.getByLabel("Start").fill("2027-01-04");
+  await page.getByLabel("End").fill("2027-05-02");
+  await page.getByRole("button", { name: "Create season" }).click();
+  await settle();
+  await expect(page).toHaveURL(/\/seasons\/\d+$/);
+  await expect(back(page)).toHaveText("Cycles");
+  await back(page).click();
+  await page.waitForURL(atPath("/cycles"));
+  // The form is gone from history: forward is the season, not the form.
+  await page.goForward();
+  await expect(page).toHaveURL(/\/seasons\/\d+$/);
 });

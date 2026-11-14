@@ -60,7 +60,7 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
       return;
     }
     setPicked(null);
-    router.push(gym ? "/more/gyms" : "/more/account");
+    router.replace(gym ? "/more/gyms" : "/more/account");
   }
 
   return (

@@ -82,7 +82,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
       showToast({ variant: "error", message: result.error });
       return;
     }
-    router.push("/history");
+    router.replace("/history");
   }
 
   // Done saves the date and notes, as iOS does, so leaving edit mode never

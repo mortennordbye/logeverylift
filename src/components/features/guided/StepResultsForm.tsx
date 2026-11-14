@@ -114,7 +114,7 @@ export function StepResultsForm({ session, units, existing, fromPlayer }: { sess
         // Nothing to clear.
       }
     }
-    router.push(`/planned/${session.plannedSessionId}`);
+    router.replace(`/planned/${session.plannedSessionId}`);
     router.refresh();
   };
 

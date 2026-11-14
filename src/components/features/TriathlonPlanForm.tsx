@@ -78,7 +78,7 @@ export function TriathlonPlanForm({
       ...(restDays.length > 0 ? { restDays } : {}),
     }));
     if (result.success) {
-      router.push(`/cycles/${result.data.cycleId}`);
+      router.replace(`/cycles/${result.data.cycleId}`);
     } else {
       setError(result.error);
       setSaving(false);
