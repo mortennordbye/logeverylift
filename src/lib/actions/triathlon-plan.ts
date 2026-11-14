@@ -2,35 +2,51 @@
 
 import { db } from "@/db";
 import {
+  TRI_DISTANCES,
   exercises,
   programExercises,
   programSets,
   programs,
+  seasonRaces,
+  seasons,
   trainingCycleSlots,
   trainingCycles,
 } from "@/db/schema";
 import {
   buildTriathlonPlan,
+  planDefaultsFromProfile,
   planExerciseNames,
+  type PlanBlueprint,
   type PlanExercise,
   type PlanProgressionAdvance,
 } from "@/lib/utils/triathlon-plan";
+import { triathlonPhases } from "@/lib/utils/triathlon-phases";
 import { getAthleteProfile } from "@/lib/athlete-profile";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { planWrite } from "@/lib/plan-revisions";
+import { chainSeason, planWrite, type PlanWriteSession } from "@/lib/plan-revisions";
 import { requireSession } from "@/lib/utils/session";
+import { seasonFieldsSchema } from "@/lib/validators/seasons";
 import type { ActionResult } from "@/types/workout";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
-const generateTriathlonPlanSchema = z.object({
-  weeks: z.number().int().min(1).max(52),
+/**
+ * "Make a triathlon plan" in New season (docs/plans/plan-tab-redesign.md, P4):
+ * a season that ends on the A race, with one phase cycle per phase (general,
+ * base, build, peak, taper) sized from the race date by triathlonPhases, the
+ * taper ending on race day. Each phase gets the generator's week, its own
+ * copy, with week 1 on that phase's curve.
+ */
+const generateTriathlonPlanSchema = seasonFieldsSchema.omit({ endDate: true }).extend({
+  race: z.object({
+    name: z.string().trim().min(1).max(100),
+    raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+    distance: z.enum(TRI_DISTANCES),
+  }),
   restDays: z.array(z.number().int().min(1).max(7)).max(2).optional(),
-  goal: z.enum(["build", "maintain"]).default("build"),
-  level: z.enum(["novice", "intermediate", "advanced"]).default("intermediate"),
+  level: z.enum(["novice", "intermediate", "advanced"]).optional(),
 });
-
 // Canonical exercises the plan references. Endurance ones are new (discipline-tagged);
 // the strength/plyometric lifts match the seed names so existing rows are reused, and
 // a fresh (unseeded) DB still gets them. Inserted with onConflictDoNothing on name.
@@ -60,9 +76,7 @@ const ENSURED_EXERCISES = [
 
 const ENDURANCE_NAMES = ["Swim", "Bike", "Run"] as const;
 
-export async function generateTriathlonPlan(
-  data: unknown,
-): Promise<ActionResult<{ cycleId: number; cycleName: string }>> {
+export async function generateTriathlonPlan(data: unknown): Promise<ActionResult<{ seasonId: number }>> {
   const auth = await requireSession();
   const parsed = generateTriathlonPlanSchema.safeParse(data);
   if (!parsed.success) {
@@ -72,105 +86,163 @@ export async function generateTriathlonPlan(
       fieldErrors: parsed.error.flatten().fieldErrors,
     };
   }
+  const input = parsed.data;
 
   try {
-    // Part of the endurance add-on; the page hides it, this holds the gate.
+    // Part of the endurance add-on; the form hides it, this holds the gate.
     if (!(await enduranceEnabledFor(auth.user.id))) {
       return { success: false, error: "Endurance features are not on for this account" };
     }
-    // The strength part follows the goal the athlete gave in the intake
-    // interview (docs/plans/athlete-profile.md, 2.7). Read here, not taken from
-    // the form: the profile owns it.
+    const race = { raceDate: input.race.raceDate, discipline: "triathlon" as const, distance: input.race.distance, distanceMeters: null };
+    const phases = triathlonPhases(input.startDate, race);
+    if (typeof phases === "string") return { success: false, error: phases };
+
+    // The level, rest days and strength part follow the athlete profile
+    // (docs/plans/athlete-profile.md, 2.7). Read here, not taken from the
+    // form: the profile owns them.
     const profile = await getAthleteProfile(auth.user.id);
-    const plan = buildTriathlonPlan({ ...parsed.data, strengthGoal: profile?.strengthGoal ?? null });
-    const neededNames = planExerciseNames(plan);
+    const defaults = planDefaultsFromProfile({
+      availableDays: profile?.availableDays ?? null,
+      enduranceLevel: profile?.enduranceLevel ?? null,
+    });
+    const level = input.level ?? defaults.level;
+    const restDays = input.restDays ?? defaults.restDays;
+    const plans = phases.map((p) =>
+      buildTriathlonPlan({
+        weeks: p.durationWeeks,
+        restDays: restDays.length > 0 ? restDays : undefined,
+        level,
+        strengthGoal: profile?.strengthGoal ?? null,
+        phaseType: p.phaseType,
+      }),
+    );
+    const nameToId = await ensurePlanExercises([...new Set(plans.flatMap(planExerciseNames))]);
+    if (!nameToId) return { success: false, error: "Could not resolve required exercises" };
 
-    // Ensure all referenced exercises exist (idempotent — keeps existing rows).
-    await db
-      .insert(exercises)
-      .values(ENSURED_EXERCISES.map((e) => ({ ...e, isCustom: false })))
-      .onConflictDoNothing({ target: exercises.name, where: isNull(exercises.userId) });
-
-    // Backfill discipline on the canonical endurance rows if a pre-existing row lacked it.
-    for (const name of ENDURANCE_NAMES) {
-      const discipline = ENSURED_EXERCISES.find((e) => e.name === name)!.discipline!;
-      await db
-        .update(exercises)
-        .set({ discipline })
-        .where(and(eq(exercises.name, name), isNull(exercises.userId), isNull(exercises.discipline)));
-    }
-
-    // Resolve names → ids.
-    const rows = await db
-      .select({ id: exercises.id, name: exercises.name })
-      .from(exercises)
-      // System rows only: another user may have a custom exercise of the same name.
-      .where(and(inArray(exercises.name, neededNames), isNull(exercises.userId)));
-    const nameToId = new Map(rows.map((r) => [r.name, r.id]));
-    const missing = neededNames.filter((n) => !nameToId.has(n));
-    if (missing.length > 0) {
-      console.error("[generateTriathlonPlan] unresolved exercises", { missing });
-      return { success: false, error: "Could not resolve required exercises" };
-    }
-
-    const { result: cycleId } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
-      const tx = w.tx;
-      const [cycle] = await tx
-        .insert(trainingCycles)
+    const { result: seasonId } = await planWrite({ userId: auth.user.id, writer: "user" }, async (w) => {
+      const [season] = await w.tx
+        .insert(seasons)
         .values({
           userId: auth.user.id,
-          name: plan.cycleName,
-          durationWeeks: plan.durationWeeks,
-          scheduleType: "day_of_week",
-          goal: plan.goal,
-          athleteLevel: plan.level,
-          status: "draft",
+          name: input.name,
+          goal: input.goal ?? null,
+          startDate: input.startDate,
+          endDate: input.race.raceDate,
+          nextGoal: input.nextGoal ?? null,
         })
-        .returning({ id: trainingCycles.id });
-      w.create({ type: "cycle", id: cycle.id });
+        .returning({ id: seasons.id });
+      w.create({ type: "season", id: season.id });
+      // A new season's first race: nothing was planned before it, so no re-plan flag.
+      await w.tx.insert(seasonRaces).values({
+        seasonId: season.id,
+        userId: auth.user.id,
+        name: input.race.name,
+        raceDate: input.race.raceDate,
+        discipline: "triathlon",
+        distance: input.race.distance,
+        priority: "A",
+      });
 
-      for (const day of plan.days) {
-        // Rest day: a slot with no program.
-        if (day.exercises.length === 0) {
-          await tx.insert(trainingCycleSlots).values({
-            trainingCycleId: cycle.id,
-            dayOfWeek: day.dayOfWeek,
-            label: day.label,
-            programId: null,
-          });
-          continue;
-        }
-
-        const [program] = await tx
-          .insert(programs)
-          .values({ userId: auth.user.id, name: day.label, createdByCycleId: cycle.id })
-          .returning({ id: programs.id });
-        w.create({ type: "program", id: program.id });
-
-        let orderIndex = 0;
-        for (const ex of day.exercises) {
-          await insertPlanExercise(tx, program.id, nameToId.get(ex.name)!, orderIndex, ex);
-          orderIndex++;
-        }
-
-        await tx.insert(trainingCycleSlots).values({
-          trainingCycleId: cycle.id,
-          dayOfWeek: day.dayOfWeek,
-          label: day.label,
-          programId: program.id,
-          autoComplete: day.autoComplete,
-        });
+      for (const [i, phase] of phases.entries()) {
+        const [cycle] = await w.tx
+          .insert(trainingCycles)
+          .values({
+            userId: auth.user.id,
+            name: phase.name,
+            durationWeeks: phase.durationWeeks,
+            durationDays: phase.durationDays,
+            scheduleType: "day_of_week",
+            goal: "build",
+            athleteLevel: level,
+            status: "draft",
+            seasonId: season.id,
+            phaseOrder: i + 1,
+            phaseType: phase.phaseType,
+          })
+          .returning({ id: trainingCycles.id });
+        w.create({ type: "cycle", id: cycle.id });
+        await insertPlanWeek(w, cycle.id, plans[i], nameToId);
       }
-
-      return cycle.id;
+      // A season that starts later gets its first phase scheduled for its start.
+      await chainSeason(w, season.id);
+      return season.id;
     });
 
     revalidatePath("/cycles");
+    revalidatePath(`/seasons/${seasonId}`);
     revalidatePath("/");
-    return { success: true, data: { cycleId, cycleName: plan.cycleName } };
+    return { success: true, data: { seasonId } };
   } catch (err) {
     console.error("[generateTriathlonPlan] failed", err);
     return { success: false, error: "Failed to generate plan" };
+  }
+}
+
+/** Make sure the plan's system exercises exist, and map their names to ids. Null when one cannot be found. */
+async function ensurePlanExercises(neededNames: string[]): Promise<Map<string, number> | null> {
+  // Ensure all referenced exercises exist (idempotent — keeps existing rows).
+  await db
+    .insert(exercises)
+    .values(ENSURED_EXERCISES.map((e) => ({ ...e, isCustom: false })))
+    .onConflictDoNothing({ target: exercises.name, where: isNull(exercises.userId) });
+
+  // Backfill discipline on the canonical endurance rows if a pre-existing row lacked it.
+  for (const name of ENDURANCE_NAMES) {
+    const discipline = ENSURED_EXERCISES.find((e) => e.name === name)!.discipline!;
+    await db
+      .update(exercises)
+      .set({ discipline })
+      .where(and(eq(exercises.name, name), isNull(exercises.userId), isNull(exercises.discipline)));
+  }
+
+  const rows = await db
+    .select({ id: exercises.id, name: exercises.name })
+    .from(exercises)
+    // System rows only: another user may have a custom exercise of the same name.
+    .where(and(inArray(exercises.name, neededNames), isNull(exercises.userId)));
+  const nameToId = new Map(rows.map((r) => [r.name, r.id]));
+  const missing = neededNames.filter((n) => !nameToId.has(n));
+  if (missing.length > 0) {
+    console.error("[generateTriathlonPlan] unresolved exercises", { missing });
+    return null;
+  }
+  return nameToId;
+}
+
+/** One cycle's week: a slot per day, each training day with its own program. */
+async function insertPlanWeek(w: PlanWriteSession, cycleId: number, plan: PlanBlueprint, nameToId: Map<string, number>) {
+  const tx = w.tx;
+  for (const day of plan.days) {
+    // Rest day: a slot with no program.
+    if (day.exercises.length === 0) {
+      await tx.insert(trainingCycleSlots).values({
+        trainingCycleId: cycleId,
+        dayOfWeek: day.dayOfWeek,
+        label: day.label,
+        programId: null,
+      });
+      continue;
+    }
+
+    const [program] = await tx
+      .insert(programs)
+      .values({ userId: w.ctx.userId, name: day.label, createdByCycleId: cycleId })
+      .returning({ id: programs.id });
+    w.create({ type: "program", id: program.id });
+
+    let orderIndex = 0;
+    for (const ex of day.exercises) {
+      await insertPlanExercise(tx, program.id, nameToId.get(ex.name)!, orderIndex, ex);
+      orderIndex++;
+    }
+
+    await tx.insert(trainingCycleSlots).values({
+      trainingCycleId: cycleId,
+      dayOfWeek: day.dayOfWeek,
+      label: day.label,
+      programId: program.id,
+      autoComplete: day.autoComplete,
+    });
   }
 }
 

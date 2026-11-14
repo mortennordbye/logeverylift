@@ -378,3 +378,27 @@ describe("planDefaultsFromProfile", () => {
     expect(planDefaultsFromProfile({ availableDays: null, enduranceLevel: "advanced" })).toEqual({ restDays: [5, 6], level: "advanced", note: null });
   });
 });
+
+describe("buildTriathlonPlan for a season phase", () => {
+  const longRun = (plan: ReturnType<typeof buildTriathlonPlan>) =>
+    plan.days.find((d) => d.label === "Long Run")!.exercises[0].sets[0];
+
+  it("keeps the phase length as it is and starts week 1 on the phase's curve", () => {
+    const taper = buildTriathlonPlan({ weeks: 2, phaseType: "taper" });
+    const general = buildTriathlonPlan({ weeks: 7, phaseType: "general" });
+    expect(taper.durationWeeks).toBe(2);
+    expect(general.durationWeeks).toBe(7);
+    // Same peak; the taper starts at 0.60 of it and a general phase at 0.80.
+    expect(longRun(taper).peakDistanceMeters).toBe(26000);
+    expect(longRun(taper).distanceMeters).toBe(15600);
+    expect(longRun(general).distanceMeters).toBe(20800);
+  });
+
+  it("gives the same days and sessions as the block plan", () => {
+    const block = buildTriathlonPlan({ weeks: 16 });
+    const phase = buildTriathlonPlan({ weeks: 16, phaseType: "build" });
+    expect(phase.days.map((d) => [d.dayOfWeek, d.label, d.exercises.map((e) => e.name)])).toEqual(
+      block.days.map((d) => [d.dayOfWeek, d.label, d.exercises.map((e) => e.name)]),
+    );
+  });
+});

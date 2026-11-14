@@ -284,8 +284,13 @@ function checkDates(start: string, end: string) {
   if (end < start) throw new PlanStateError("The season must end on or after its start.");
 }
 
-export async function createSeason(ctx: PlanWriteContext, input: SeasonInput) {
+/**
+ * Make a season. `race` is its first race, written in the same change: a new
+ * season has no plan yet, so it is not flagged for a re-plan.
+ */
+export async function createSeason(ctx: PlanWriteContext, input: SeasonInput & { race?: RaceInput }) {
   checkDates(input.startDate, input.endDate);
+  if (input.race && !(await enduranceEnabledFor(ctx.userId))) throw new PlanStateError(RACES_OFF);
   const { result } = await planWrite(ctx, async (w) => {
     const [row] = await w.tx
       .insert(seasons)
@@ -299,6 +304,7 @@ export async function createSeason(ctx: PlanWriteContext, input: SeasonInput) {
       })
       .returning();
     w.create({ type: "season", id: row.id });
+    if (input.race) await w.tx.insert(seasonRaces).values({ ...cleanRace(input.race), seasonId: row.id, userId: ctx.userId });
     return row;
   });
   return { season: result, version: 1 };

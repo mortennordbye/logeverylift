@@ -4,7 +4,7 @@ import { setUserEndurance } from "@/lib/actions/admin";
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createUser } from "./factories";
 import { asUser } from "./setup";
@@ -71,9 +71,14 @@ describe("the race on a cycle", () => {
 });
 
 describe("generateTriathlonPlan", () => {
+  const plan = { name: "Half 2027", startDate: "2027-01-04", race: { name: "Haugesund 70.3", raceDate: "2027-06-27", distance: "half" } };
+  /** The first phase of the season the plan made. */
+  const firstPhase = async (seasonId: number) =>
+    (await db.select({ id: trainingCycles.id }).from(trainingCycles).where(and(eq(trainingCycles.seasonId, seasonId), eq(trainingCycles.phaseOrder, 1))))[0].id;
+
   it("refuses while the switch is off and writes nothing", async () => {
     asUser(athlete);
-    const result = await generateTriathlonPlan({ weeks: 12 });
+    const result = await generateTriathlonPlan(plan);
     expect(result.success).toBe(false);
     expect(await db.select().from(trainingCycles).where(eq(trainingCycles.userId, athlete))).toHaveLength(0);
   });
@@ -81,16 +86,16 @@ describe("generateTriathlonPlan", () => {
   it("builds the plan once the switch is on", async () => {
     await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, athlete));
     asUser(athlete);
-    const result = await generateTriathlonPlan({ weeks: 12 });
+    const result = await generateTriathlonPlan(plan);
     expect(result.success).toBe(true);
-    expect(await db.select().from(trainingCycles).where(eq(trainingCycles.userId, athlete))).toHaveLength(1);
+    expect(await db.select().from(trainingCycles).where(eq(trainingCycles.userId, athlete))).toHaveLength(5);
   });
 
   it("builds the strength part from the profile's strength goal (docs/plans/athlete-profile.md, 2.7)", async () => {
     await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, athlete));
     asUser(athlete);
     await db.insert(athleteProfiles).values({ userId: athlete, strengthGoal: "stronger" });
-    const result = await generateTriathlonPlan({ weeks: 12 });
+    const result = await generateTriathlonPlan(plan);
     expect(result.success, JSON.stringify(result)).toBe(true);
     if (!result.success) return;
     const names = await db
@@ -98,13 +103,14 @@ describe("generateTriathlonPlan", () => {
       .from(programExercises)
       .innerJoin(programs, eq(programs.id, programExercises.programId))
       .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
-      .where(eq(programs.createdByCycleId, result.data.cycleId));
+      .where(eq(programs.createdByCycleId, await firstPhase(result.data.seasonId)));
     expect(names.map((n) => n.name)).toEqual(expect.arrayContaining(["Box Jump", "Pogo Hops"]));
 
-    await db.update(athleteProfiles).set({ strengthGoal: "minimal" }).where(eq(athleteProfiles.userId, athlete));
-    const minimal = await generateTriathlonPlan({ weeks: 12 });
+    // Free every day, so no rest day moves a session onto Thursday.
+    await db.update(athleteProfiles).set({ strengthGoal: "minimal", availableDays: [1, 2, 3, 4, 5, 6, 7] }).where(eq(athleteProfiles.userId, athlete));
+    const minimal = await generateTriathlonPlan(plan);
     if (!minimal.success) throw new Error(minimal.error);
-    const slots = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, minimal.data.cycleId));
+    const slots = await db.select().from(trainingCycleSlots).where(eq(trainingCycleSlots.trainingCycleId, await firstPhase(minimal.data.seasonId)));
     expect(slots.find((s) => s.dayOfWeek === 4)).toMatchObject({ programId: null, label: "Rest" });
   });
 });

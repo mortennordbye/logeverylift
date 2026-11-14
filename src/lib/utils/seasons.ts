@@ -210,7 +210,7 @@ export function raceKindLabel(r: Pick<RaceLike, "discipline" | "distance" | "dis
 }
 
 export const PHASE_TYPE_LABELS: Record<PhaseType, string> = {
-  general: "General prep",
+  general: "General",
   base: "Base",
   build: "Build",
   peak: "Peak",
@@ -243,6 +243,20 @@ const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Se
 export function shortDay(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
   return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}`;
+}
+
+/** A short phase length for a list row: "8 wk" or "10 days" (docs/design/plan-redesign/spec.md). */
+export function lengthShort(p: { durationWeeks: number; durationDays: number | null }): string {
+  if (p.durationDays != null) return `${p.durationDays} day${p.durationDays === 1 ? "" : "s"}`;
+  return `${p.durationWeeks} wk`;
+}
+
+/** Two days as a range: "16 Nov – 10 Jan", or "17 – 26 Aug" in one month. */
+export function rangeLabel(start: string, end: string): string {
+  const a = shortDay(start).slice(4);
+  const b = shortDay(end).slice(4);
+  if (start.slice(0, 7) === end.slice(0, 7)) return `${a.split(" ")[0]} – ${b}`;
+  return `${a} – ${b}`;
 }
 
 /** A phase length in words: "10 days" or "6 weeks". */

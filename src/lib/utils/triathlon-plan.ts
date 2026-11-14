@@ -38,10 +38,10 @@
 import type { StrengthGoal } from "@/db/schema/athlete-profile";
 import type { ExerciseType } from "@/lib/utils/exercise-type";
 import {
-  deloadCadenceForLevel,
-  periodizedLoad,
+  cycleLoad,
   scaledDistance,
   type AthleteLevel,
+  type PhaseType,
   type TrainingGoal,
 } from "@/lib/utils/periodization";
 import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
@@ -131,6 +131,11 @@ export type BuildTriathlonPlanParams = {
   level?: AthleteLevel;
   /** The strength goal from the athlete profile; none keeps the A/B template. */
   strengthGoal?: StrengthGoal | null;
+  /**
+   * A phase of a season: week 1 follows this phase's curve, and `weeks` is
+   * used as it is (a phase may have any length), not snapped.
+   */
+  phaseType?: PhaseType | null;
 };
 
 /** Peak (race-prep) per-session distances in meters for each endurance slot. */
@@ -185,9 +190,10 @@ export function buildTriathlonPlan({
   goal = "build",
   level = "intermediate",
   strengthGoal = null,
+  phaseType = null,
 }: BuildTriathlonPlanParams): PlanBlueprint {
-  const durationWeeks = snapWeeks(weeks);
-  const week1Load = periodizedLoad(1, durationWeeks, goal, deloadCadenceForLevel(level));
+  const durationWeeks = phaseType ? weeks : snapWeeks(weeks);
+  const week1Load = cycleLoad({ goal, athleteLevel: level, phaseType }, 1, durationWeeks);
   const week1Multiplier = week1Load.multiplier;
   const v = PEAK_VOLUMES[level];
 
