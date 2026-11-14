@@ -30,7 +30,7 @@ import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils
 import { formatPeriodizationSummary } from "@/lib/utils/periodization";
 import { addDaysStr } from "@/lib/utils/planned-sessions";
 import { mondayOf } from "@/lib/utils/session-compliance";
-import { PHASE_TYPE_LABELS, lengthLabel, shortDay } from "@/lib/utils/seasons";
+import { PHASE_TYPE_LABELS, lengthFromDays, lengthLabel, runLengthDays, shortDay } from "@/lib/utils/seasons";
 import { requireSession } from "@/lib/utils/session";
 import { listWorkouts } from "@/lib/workouts";
 import type { ProgramWithExercises } from "@/types/workout";
@@ -75,8 +75,15 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   const today = toDateStr(await userToday(userId));
   const endurance = await enduranceEnabledFor(userId);
 
+  // A start names what it ends or drops: the running cycle and the draft scheduled next.
+  const { running, scheduled } = await cycleStartContext(userId, today);
+  const otherRunning = running && running.id !== cycle.id ? running : null;
+  const otherScheduled = scheduled && scheduled.id !== cycle.id ? scheduled : null;
+
   const lengthDays = cycleLengthDays(cycle);
-  const totalWeeks = Math.ceil(lengthDays / 7);
+  // A running block shows the length it runs: a draft scheduled inside it ends it the day before.
+  const runDays = cycle.status === "active" && cycle.startDate ? runLengthDays(cycle.startDate, lengthDays, otherScheduled?.day ?? null) : lengthDays;
+  const totalWeeks = Math.ceil(runDays / 7);
   const weekday = cycle.scheduleType === "day_of_week";
   // The block's first day: a running block's start, or the day a scheduled draft starts.
   const blockStart = cycle.status === "active" ? cycle.startDate : cycle.status === "draft" ? cycle.scheduledStartDate : null;
@@ -124,10 +131,6 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
     };
   });
 
-  // A start names what it ends or drops: the running cycle and the draft scheduled next.
-  const { running, scheduled } = await cycleStartContext(userId, today);
-  const otherRunning = running && running.id !== cycle.id ? running : null;
-  const otherScheduled = scheduled && scheduled.id !== cycle.id ? scheduled : null;
   // A completed cycle names the cycle scheduled next, if there is one. A
   // completed phase names its season's next phase, even when the chain is
   // paused and another cycle holds the scheduled start (J8-09).
@@ -147,7 +150,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   const endedLabel = plannedLast && plannedLast < today ? `ended ${dayMonth(plannedLast)}` : "ended early";
 
   const { headline: periodizationHeadline, note: periodizationNote } = periodization ? formatPeriodizationSummary(periodization) : { headline: "", note: "" };
-  const subLine = cycleSubLine(cycle.scheduleType, lengthLabel(cycle), currentWeek, totalWeeks);
+  const subLine = cycleSubLine(cycle.scheduleType, runDays === lengthDays ? lengthLabel(cycle) : lengthLabel(lengthFromDays(runDays)), currentWeek, totalWeeks);
   const phaseLine = season ? `Phase ${season.position}${cycle.phaseType ? ` · ${PHASE_TYPE_LABELS[cycle.phaseType]}` : ""}` : null;
   const templateHref = `/cycles/${cycle.id}/template`;
   // Days the template names with no session, such as "Mobility" (only a weekday cycle has days).

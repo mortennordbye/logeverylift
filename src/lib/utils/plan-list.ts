@@ -12,8 +12,8 @@ import {
   addDaysStr,
   cutByStart,
   daysBetweenStr,
-  lengthShort,
   nextPhase,
+  runLength,
   seasonPaused,
   seasonTimeline,
   shortDay,
@@ -46,8 +46,8 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 
 /** "Build · 12 wk · 5 Apr – 27 Jun". */
-export function phaseSub(p: Pick<TimelinePhase, "phaseType" | "durationWeeks" | "durationDays" | "start" | "end">): string {
-  return [p.phaseType ? PHASE_TYPE_NAMES[p.phaseType] : null, lengthShort(p), dateRange(p.start, p.end)].filter(Boolean).join(" · ");
+export function phaseSub(p: Pick<TimelinePhase, "phaseType" | "lengthDays" | "start" | "end">): string {
+  return [p.phaseType ? PHASE_TYPE_NAMES[p.phaseType] : null, runLength(p), dateRange(p.start, p.end)].filter(Boolean).join(" · ");
 }
 
 /** "Starts today", "Starts tomorrow", "Starts Mon 16 Nov" inside a week, else "Starts 21 Dec". A weekday never comes without its date (J4-17). */

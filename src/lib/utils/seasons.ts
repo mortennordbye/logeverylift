@@ -105,6 +105,11 @@ export function cutByStart(start: string, end: string, otherStart: string | null
   return otherStart && otherStart > start && otherStart <= end ? addDaysStr(otherStart, -1) : end;
 }
 
+/** How many days a running block of `lengthDays` from `start` runs, cut as cutByStart cuts it. */
+export function runLengthDays(start: string, lengthDays: number, otherStart: string | null): number {
+  return daysBetweenStr(start, cutByStart(start, addDaysStr(start, lengthDays - 1), otherStart)) + 1;
+}
+
 /**
  * Each phase's dates, forward from the season start: a started phase keeps
  * its real start, a scheduled one its scheduled day, and any other phase
@@ -299,6 +304,20 @@ export function shortDay(day: string): string {
 export function lengthShort(p: { durationWeeks: number; durationDays: number | null }): string {
   if (p.durationDays != null && p.durationDays % 7 !== 0) return `${p.durationDays} day${p.durationDays === 1 ? "" : "s"}`;
   return `${p.durationDays != null ? p.durationDays / 7 : p.durationWeeks} wk`;
+}
+
+/** A length in days as a phase length: whole weeks as weeks, else days. */
+export function lengthFromDays(days: number): { durationWeeks: number; durationDays: number | null } {
+  return days % 7 === 0 ? { durationWeeks: days / 7, durationDays: null } : { durationWeeks: Math.ceil(days / 7), durationDays: days };
+}
+
+/**
+ * The length a phase runs, by its dates: "1 wk" for a 7 week phase that a
+ * scheduled start cuts after one week (cutByStart). The planned length shows
+ * only where the user edits it.
+ */
+export function runLength(p: { lengthDays: number }): string {
+  return lengthShort(lengthFromDays(p.lengthDays));
 }
 
 export type LengthUnit = "weeks" | "days";

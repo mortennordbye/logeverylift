@@ -17,6 +17,8 @@ import {
   fitTaperChange,
   lengthShort,
   rangeLabel,
+  runLength,
+  runLengthDays,
   nextPhase,
   phasesSkippedBy,
   replanReason,
@@ -308,5 +310,24 @@ describe("season row words (docs/design/plan-redesign/spec.md)", () => {
     expect(lengthShort({ durationWeeks: 1, durationDays: 1 })).toBe("1 day");
     // Days that make whole weeks read as weeks (Fit the taper writes days).
     expect(lengthShort({ durationWeeks: 15, durationDays: 105 })).toBe("15 wk");
+  });
+
+  it("shows the length a phase runs, so a phase cut by a scheduled start shows its cut length (fix round 7)", () => {
+    const [cut] = seasonTimeline(
+      "2026-11-09",
+      [{ id: 1, name: "Base", phaseOrder: 1, phaseType: "base", durationWeeks: 7, durationDays: null, status: "active", startDate: "2026-11-09", scheduledStartDate: null }],
+      "2026-11-16",
+    );
+    expect(runLength(cut)).toBe("1 wk");
+    expect(runLength({ lengthDays: 49 })).toBe("7 wk");
+    expect(runLength({ lengthDays: 10 })).toBe("10 days");
+    expect(runLength({ lengthDays: 1 })).toBe("1 day");
+  });
+
+  it("counts the days a running block runs, cut by a scheduled start inside it", () => {
+    expect(runLengthDays("2026-11-09", 49, "2026-11-16")).toBe(7);
+    expect(runLengthDays("2026-11-09", 49, "2026-11-19")).toBe(10);
+    expect(runLengthDays("2026-11-09", 49, "2026-12-28")).toBe(49);
+    expect(runLengthDays("2026-11-09", 49, null)).toBe(49);
   });
 });

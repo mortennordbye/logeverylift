@@ -379,6 +379,22 @@ describe("phase length in weeks or days (fix round 4)", () => {
   });
 });
 
+describe("a phase cut by a scheduled start (fix round 7)", () => {
+  // Base was planned for 7 weeks; a draft scheduled for 16 Nov ends it on 15 Nov.
+  const cut = [{ ...phase(1, "Base", "base", "2026-11-09", "2026-11-15", 7), durationWeeks: 7, durationDays: null, state: "active" as const }, phases[1], phases[2]];
+
+  it("shows the length it runs in the row, and the planned length in the sheet's length field", () => {
+    render(<SeasonDetailClient {...base} phases={cut} />);
+    const row = screen.getAllByTestId("phase-row")[0];
+    // keepDates joins the dates with no-break spaces.
+    const text = row.textContent!.replace(/\u00a0/g, " ");
+    expect(text).toContain("1 wk · 9 – 15 Nov");
+    expect(text).not.toContain("7 wk");
+    fireEvent.click(within(row).getAllByRole("button")[1]);
+    expect((screen.getByLabelText("Length") as HTMLInputElement).value).toBe("7");
+  });
+});
+
 describe("the phase bar and badges match the Plan list (fix round 6)", () => {
   const tones = () => [...screen.getByTestId("phase-bar").children].map((c) => c.getAttribute("data-tone"));
 

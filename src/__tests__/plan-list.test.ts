@@ -63,6 +63,18 @@ describe("plan list words", () => {
     expect(runningEnd("2026-11-09", "2026-12-27", null)).toBe("2026-12-27");
   });
 
+  it("a season row shows the length a phase runs when a scheduled start cuts it (fix round 7)", () => {
+    const card = seasonCard(
+      { id: 9, name: "Winter", startDate: "2026-11-09", endDate: "2027-03-01", replanFlaggedAt: null },
+      [phase(1, "Base", "base", { w: 7 }, { status: "active", startDate: "2026-11-09" }), phase(2, "Build", "build", { d: 10 })],
+      null,
+      TODAY,
+      "2026-11-16",
+    );
+    expect(card.phases[0].sub).toBe("Base · 1 wk · 9 – 15 Nov");
+    expect(card.phases[1].sub).toBe("Build · 10 days · 16 – 25 Nov");
+  });
+
   it("labels the hero of a running and of a scheduled block", () => {
     const rotation = { id: 1, name: "UL", durationWeeks: 6, durationDays: null, scheduleType: "rotation" as const, startDate: "2026-11-02", scheduledStartDate: null };
     expect(heroLabel(rotation, TODAY, true)).toBe("Week 2 of 6 · Rotation");
