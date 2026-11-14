@@ -204,7 +204,7 @@ describe("add_phase and the one scheduled start", () => {
    * sends takeStart (after asking the user), as the app asks before it does.
    */
   async function whileABlockRuns() {
-    const userId = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+    const userId = (await createUser({ enduranceEnabled: true })).id;
     const [block] = await db.insert(trainingCycles).values({ userId, name: "Strength block", durationWeeks: 8 }).returning();
     await activateCycle({ userId, writer: "user" }, block.id);
     const [waiting] = await db.insert(trainingCycles).values({ userId, name: "Next block", durationWeeks: 4, scheduledStartDate: day(20) }).returning();

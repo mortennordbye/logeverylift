@@ -11,6 +11,7 @@ import { startTrainingCycle } from "@/lib/actions/training-cycles";
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { getSeasonDetail } from "@/lib/seasons";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
+import { todayIn } from "@/lib/utils/user-date";
 import { eq } from "drizzle-orm";
 import { isValidElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -26,7 +27,9 @@ import { asUser } from "./setup";
  * say so first.
  */
 
-const day = (offset: number) => toDateStr(addDays(new Date(), offset));
+// Days in the user's zone (UTC), as the app counts them. The runtime's own
+// date is a day off near midnight wherever the local date is not the UTC one.
+const day = (offset: number) => toDateStr(addDays(todayIn("UTC"), offset));
 let me: string;
 
 beforeEach(async () => {
