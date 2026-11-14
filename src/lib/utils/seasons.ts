@@ -6,6 +6,7 @@
  */
 
 import type { PhaseType } from "@/lib/utils/periodization";
+import { dateLabel } from "@/lib/utils/date-label";
 
 export type RaceDiscipline = "triathlon" | "run" | "ride" | "swim" | "other";
 export type TriDistance = "full" | "half" | "olympic" | "sprint";
@@ -214,7 +215,7 @@ export const SEASON_CYCLE_LENGTH = "This cycle is a phase of a season. Change it
 
 /** `YYYY-MM-DD` as "22 Aug 2027", by the calendar (no time zone). */
 export function dayLabel(day: string): string {
-  return new Date(`${day}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  return dateLabel(day, "d MMM yyyy");
 }
 
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];

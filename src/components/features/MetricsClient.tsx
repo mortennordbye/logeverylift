@@ -93,7 +93,7 @@ function SummaryStatsRow({ stats }: { stats: SummaryStats }) {
   const cards = [
     {
       label: "Sessions",
-      value: stats.totalSessions.toLocaleString(),
+      value: stats.totalSessions.toLocaleString("en-US"),
     },
     {
       label: "Week streak",

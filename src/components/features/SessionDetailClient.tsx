@@ -12,6 +12,7 @@ import { ChevronRight, Dumbbell, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BackLink } from "@/components/ui/BackLink";
+import { dateLabel } from "@/lib/utils/date-label";
 
 const FEELING_COLORS: Record<string, string> = {
   Tired: "bg-red-500/20 text-red-500",
@@ -21,11 +22,7 @@ const FEELING_COLORS: Record<string, string> = {
 };
 
 function formatDate(d: Date): string {
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  return dateLabel(d, "EEEE, MMMM d");
 }
 
 function formatDuration(ms: number): string {
@@ -151,7 +148,7 @@ export function SessionDetailClient({ detail }: { detail: SessionDetail }) {
           )}
           {totalVolume > 0 && (
             <span className="text-sm text-muted-foreground">
-              · {totalVolume.toLocaleString()}kg total
+              · {totalVolume.toLocaleString("en-US")}kg total
             </span>
           )}
           {totalDistanceM > 0 && (

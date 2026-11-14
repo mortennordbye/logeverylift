@@ -53,6 +53,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { Check, GripVertical, Minus, Play, Plus, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1538,13 +1539,8 @@ export function WorkoutSetsList({
 
 /** "Mon 3 Jun" from the session's stored date, which is already a plain date. */
 function formatSessionDate(date: string): string {
-  const parsed = new Date(`${date}T00:00:00`);
-  if (isNaN(parsed.getTime())) return date;
-  return parsed.toLocaleDateString("en-GB", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return date;
+  return dateLabel(date, "EEE d MMM");
 }
 
 /** One session's line in the dot detail sheet. */

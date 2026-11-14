@@ -12,6 +12,7 @@ import { useVizTheme } from "@/components/charts/viz-theme";
 import { Readout } from "@/components/features/garmin/GarminUi";
 import { signalDays, signalOption } from "@/lib/garmin/charts/body";
 import { useMemo, useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 /**
  * The Overview's body signals, each in the view that suits it: arc gauges
@@ -766,7 +767,7 @@ function StepsCard({ data, onOpen }: { data: OverviewData; onOpen: (k: BodyKey) 
       </span>
       <span className="grid grid-cols-7 gap-1.5 text-center text-[11px] text-muted-foreground" aria-hidden>
         {data.stepsWeek.map((d) => (
-          <span key={d.date}>{new Date(`${d.date}T00:00:00Z`).toLocaleDateString("en-GB", { weekday: "narrow", timeZone: "UTC" })}</span>
+          <span key={d.date}>{dateLabel(d.date, "EEEEE")}</span>
         ))}
       </span>
     </button>

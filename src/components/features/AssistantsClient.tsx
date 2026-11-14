@@ -7,13 +7,14 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 type Assistant = { id: string; name: string | null; access: McpAccess | null; connectedAt: string };
 
 const ACCESS_LABEL: Record<McpAccess, string> = { read: "Read only", write: "Read and change" };
 
 function formatDate(iso: string) {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  return dateLabel(new Date(iso), "d MMM yyyy", { utc: true });
 }
 
 /** The list on More → Connected assistants, with a confirm sheet for disconnect. */

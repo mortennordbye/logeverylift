@@ -7,6 +7,7 @@ import { formatEnduranceDistance, formatEndurancePace } from "@/lib/utils/format
 import { useUnits } from "@/contexts/user-settings-context";
 import { DEFAULT_UNITS, type Units } from "@/lib/utils/units";
 import { Trophy } from "lucide-react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 const PR_TYPE_LABEL: Record<string, string> = {
   weight: "Heaviest set",
@@ -44,12 +45,7 @@ export function formatPrValue(pr: PrFeedEntry, units: Units = DEFAULT_UNITS): st
 }
 
 function formatAchievedAt(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+  return dateLabel(new Date(iso), "EEE, MMM d, yyyy");
 }
 
 /** The newest PR, with its exercise moving when there is a drawing of it. */

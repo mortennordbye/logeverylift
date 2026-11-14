@@ -6,7 +6,7 @@ import {
   reorderProgramExercises,
   updateProgram,
 } from "@/lib/actions/programs";
-import { buildRunSetSummary, buildSetSummary } from "@/lib/utils/format";
+import { buildRunSetSummary, buildSetSummary, formatDateShort } from "@/lib/utils/format";
 import { useUnits } from "@/contexts/user-settings-context";
 import type { Discipline } from "@/lib/utils/discipline";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -359,7 +359,7 @@ export function ProgramDetailClient({
                 Last session
               </span>
               <span className="text-[10px] text-muted-foreground">
-                · {new Date(lastSession.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                · {formatDateShort(lastSession.date)}
                 {lastSession.durationMinutes > 0 && ` · ${lastSession.durationMinutes}m`}
               </span>
               {lastSession.feeling && FEELING_COLORS[lastSession.feeling] && (

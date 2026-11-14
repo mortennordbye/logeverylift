@@ -54,6 +54,7 @@ import { saveFuelLogAction } from "@/lib/actions/nutrition";
 import { FuelForm } from "@/components/features/nutrition/FuelForm";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { BackLink, useBack } from "@/components/ui/BackLink";
+import { dateLabel } from "@/lib/utils/date-label";
 
 
 function ZoneBars({ seconds, colors, label }: { seconds: number[]; colors: string[]; label: (i: number) => string }) {
@@ -259,7 +260,7 @@ export function GarminActivityView({ d }: { d: ActivityDetail }) {
         <header className="space-y-1 pt-1">
           <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
             <SportBadge sport={d.sport} size="md" />
-            {SPORT_LABEL[d.sport]} · {date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })} {date.toISOString().slice(11, 16)}
+            {SPORT_LABEL[d.sport]} · {dateLabel(date, "EEE, d MMM yyyy", { utc: true })} {date.toISOString().slice(11, 16)}
           </div>
           <h1 className="text-2xl font-bold tracking-tight">{d.name}</h1>
           <p className="text-base leading-snug">{verdict(d)}</p>

@@ -16,6 +16,7 @@ import { Dumbbell, UserPlus, Users, ChevronRight, Check, X, UserMinus, Gift, Tro
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 interface Props {
   friends: FriendWithActivity[];
@@ -173,7 +174,7 @@ function relativeDay(date: Date | null): string {
 
 function formatTime(date: Date | null): string {
   if (!date) return "";
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return dateLabel(date, "HH:mm");
 }
 
 function ActivityFeedCard({ item }: { item: FriendActivityItem }) {
@@ -212,7 +213,7 @@ function ActivityFeedCard({ item }: { item: FriendActivityItem }) {
             )}
             <p className="text-xs text-muted-foreground mt-0.5">
               {item.exerciseCount} exercise{item.exerciseCount !== 1 ? "s" : ""} · {item.setCount} sets
-              {item.totalVolumeKg > 0 && ` · ${Math.round(item.totalVolumeKg).toLocaleString()}kg`}
+              {item.totalVolumeKg > 0 && ` · ${Math.round(item.totalVolumeKg).toLocaleString("en-US")}kg`}
             </p>
           </div>
         </div>
@@ -263,7 +264,7 @@ function LeaderboardSection({ entries }: { entries: LeaderboardEntry[] }) {
             {hasAnyVolume && (
               <p className={`text-sm font-semibold shrink-0 tabular-nums ${entry.totalVolumeKg > 0 ? "" : "text-muted-foreground"}`}>
                 {entry.totalVolumeKg > 0
-                  ? `${Math.round(entry.totalVolumeKg).toLocaleString()}kg`
+                  ? `${Math.round(entry.totalVolumeKg).toLocaleString("en-US")}kg`
                   : "—"}
               </p>
             )}

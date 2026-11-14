@@ -7,6 +7,7 @@ import { Key, Plus, Share2, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BackLink } from "@/components/ui/BackLink";
+import { dateLabel } from "@/lib/utils/date-label";
 
 type InviteToken = {
   id: string;
@@ -174,7 +175,7 @@ export function AdminTokensClient({ tokens }: { tokens: InviteToken[] }) {
                         )}
                         {token.expiresAt && !isExpired(token) && (
                           <span className="text-xs text-muted-foreground">
-                            Expires {token.expiresAt.toLocaleDateString()}
+                            Expires {dateLabel(token.expiresAt, "d MMM yyyy")}
                           </span>
                         )}
                       </div>

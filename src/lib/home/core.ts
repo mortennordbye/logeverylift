@@ -35,6 +35,7 @@ import { todayPlanFrom } from "@/lib/home/today-plan";
 import { liveProgramExercises, livePrograms, liveProgramSets } from "@/lib/plan-live";
 import { and, asc, eq } from "drizzle-orm";
 import { cache } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 type Session = Awaited<ReturnType<typeof requireSession>>;
 type CycleResult = Awaited<ReturnType<typeof getActiveCycleForUser>>;
@@ -212,7 +213,7 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     ? Math.min(((info.currentWeek - 1) / info.cycle.durationWeeks) * 100, 100)
     : 0;
   const endFormatted = info
-    ? parseDateStr(info.endDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    ? dateLabel(info.endDate, "MMM d")
     : null;
 
   return {

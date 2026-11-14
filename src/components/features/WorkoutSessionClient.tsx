@@ -8,7 +8,7 @@ import { useToast } from "@/contexts/toast-context";
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { ExerciseInsight, WorkoutInsight } from "@/lib/actions/workout-sets";
-import { formatTime } from "@/lib/utils/format";
+import { formatTime, formatDateShort } from "@/lib/utils/format";
 import type { Discipline } from "@/lib/utils/discipline";
 import {
     removeExerciseFromProgram,
@@ -215,7 +215,7 @@ export function WorkoutSessionClient({
                 Last session
               </span>
               <span className="text-[10px] text-muted-foreground">
-                · {new Date(lastSession.date + "T00:00:00").toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                · {formatDateShort(lastSession.date)}
                 {lastSession.durationMinutes > 0 && ` · ${lastSession.durationMinutes}m`}
               </span>
               {lastSession.feeling && FEELING_COLORS[lastSession.feeling] && (

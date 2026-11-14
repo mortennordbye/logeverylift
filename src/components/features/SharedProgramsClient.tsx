@@ -6,6 +6,7 @@ import type { IncomingShare } from "@/types/workout";
 import { CheckCircle2, Copy, Gift } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { dateLabel } from "@/lib/utils/date-label";
 
 interface Props {
   shares: IncomingShare[];
@@ -76,7 +77,7 @@ export function SharedProgramsClient({ shares }: Props) {
                   Shared by {share.sharedByName}
                 </p>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {new Date(share.sharedAt).toLocaleDateString()}
+                  {dateLabel(new Date(share.sharedAt), "d MMM yyyy")}
                 </p>
               </div>
               {alreadyCopied ? (

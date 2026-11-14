@@ -1,6 +1,7 @@
 import { disciplineConfig, type Discipline } from "@/lib/utils/discipline";
 import { DEFAULT_UNITS, METERS_PER_MILE, METERS_PER_YARD, type Units } from "@/lib/utils/units";
 import type { ProgramSet } from "@/types/workout";
+import { dateLabel } from "@/lib/utils/date-label";
 
 /** Normalize a locale decimal separator (comma) to a period. */
 export function normalizeDecimal(raw: string): string {
@@ -25,17 +26,16 @@ export function formatTime(totalSeconds: number): string {
 }
 
 export function formatTimeOfDay(d: Date): string {
-  return d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+  return dateLabel(d, "HH:mm");
 }
 
 export function formatDateLong(d: Date): string {
-  return d.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" });
+  return dateLabel(d, "EEEE, MMMM d");
 }
 
-/** "5 Mar" for a YYYY-MM-DD date. */
+/** "5 Mar" for a YYYY-MM-DD date. Fixed names: see date-label.ts. */
 export function formatDateShort(date: string): string {
-  const d = new Date(date + "T00:00:00");
-  return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return dateLabel(date, "d MMM");
 }
 
 /** Training volume: "850 kg", or tonnes from 1000 kg ("1.2t"). */

@@ -6,6 +6,7 @@
 
 import type { SleepTabData } from "../queries";
 import type { VizTheme } from "./theme";
+import { dateLabel } from "@/lib/utils/date-label";
 
 const DAY_MS = 86_400_000;
 /** The timing chart's y axis runs from 18:00 to 12:00 the next day, in minutes after 18:00. */
@@ -27,7 +28,7 @@ function median(xs: number[]) {
   return s.length ? (s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2) : null;
 }
 
-const shortDate = (date: string) => new Date(`${date}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });
+const shortDate = (date: string) => dateLabel(date, "d MMM");
 const SIDES = { left: 38, right: 10 };
 
 function ax(theme: VizTheme) {

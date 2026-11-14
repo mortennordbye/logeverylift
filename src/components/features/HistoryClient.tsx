@@ -6,13 +6,10 @@ import { Calendar, Search } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { BackLink } from "@/components/ui/BackLink";
+import { dateLabel } from "@/lib/utils/date-label";
 
 function formatDate(d: Date): string {
-  return d.toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  return dateLabel(d, "EEEE, MMMM d");
 }
 
 export function HistoryClient({ sessions }: { sessions: SessionWithStats[] }) {
@@ -108,7 +105,7 @@ export function HistoryClient({ sessions }: { sessions: SessionWithStats[] }) {
                         </span>
                         {session.totalVolumeKg > 0 && (
                           <span className="text-xs bg-muted rounded-full px-2.5 py-1">
-                            {session.totalVolumeKg.toLocaleString()}kg
+                            {session.totalVolumeKg.toLocaleString("en-US")}kg
                           </span>
                         )}
                         {session.source === "assistant" && (

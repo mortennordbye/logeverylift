@@ -5,6 +5,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 
 import { useState } from "react";
 import { BackLink } from "@/components/ui/BackLink";
+import { dateLabel } from "@/lib/utils/date-label";
 
 const TYPE_LABELS: Record<string, string> = {
   bug: "Bug",
@@ -19,13 +20,7 @@ const TYPE_COLORS: Record<string, string> = {
 };
 
 function formatDate(date: Date) {
-  return new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(date));
+  return dateLabel(new Date(date), "d MMM yyyy, HH:mm");
 }
 
 export function AdminFeedbackClient({ initial }: { initial: FeedbackWithUser[] }) {
