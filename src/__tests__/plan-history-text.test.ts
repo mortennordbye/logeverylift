@@ -153,6 +153,12 @@ describe("dated session history text", () => {
     noColon(lines);
   });
 
+  it("a skip names the session and the day, with the reason after (J8-04)", () => {
+    expect(sessionChangeLine("Long ride on Sun 22 Nov", "Skipped (Work trip)")).toBe("Skipped Long ride on Sun 22 Nov (Work trip)");
+    expect(sessionChangeLine("Long ride on Sun 22 Nov", "Skipped")).toBe("Skipped Long ride on Sun 22 Nov");
+    expect(sessionChangeLine("Long ride on Sun 22 Nov", "Skipped Long ride on Sun 22 Nov")).toBe("Skipped Long ride on Sun 22 Nov");
+  });
+
   it("joins a change to the session it is about with a comma", () => {
     expect(sessionChangeLine("Squat day on Wed 4 Nov", "Moved from Wed 4 Nov to Fri 6 Nov")).toBe(
       "Squat day on Wed 4 Nov, moved from Wed 4 Nov to Fri 6 Nov",
