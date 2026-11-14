@@ -64,7 +64,7 @@ brief here before code. Inputs: the audit (`docs/triathlon-coach-audit.md`) and 
 | A4 | [Revisions, stable ids and plan versions](revisions.md) | done |
 | B1, B4, D2 part 1 | [AI coach: MCP parity, coach memory, first training limits](ai-coach.md) | done |
 | C1 | [Seasons, races and phases](seasons.md) | done |
-| C2 (the quick workout follows as C2b) | [Session model: several slots a day, dated sessions](sessions.md) | building |
+| C2 (the quick workout follows as C2b) | [Session model: several slots a day, dated sessions](sessions.md) | done (#229) |
 | C3 | [Athlete profile, thresholds and intake interview](athlete-profile.md) | done |
 | C4, C5 | [Structured workouts, planned vs done, missed sessions and sick periods](workouts-and-compliance.md) | done |
 | C6, D1 (the step editor follows as C6b) | [Endurance in the app (views, guided player, pool view, step results) and load without Garmin](endurance-app.md) | done |

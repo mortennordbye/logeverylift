@@ -8,7 +8,7 @@ T7), `CLAUDE.md`, `TESTING.md`, the draft brief [`quick-workout-and-swap.md`](qu
 [`revisions.md`](revisions.md), [`ai-coach.md`](ai-coach.md), [`seasons.md`](seasons.md) (C1) and
 [`athlete-profile.md`](athlete-profile.md) (C3).
 
-Status: built on `feat/sessions-c2`, 2026-11-13, on top of C1 (#227) and C3 (#226). The hub
+Status: done, merged in #229. Built on `feat/sessions-c2`, 2026-11-13, on top of C1 (#227) and C3 (#226). The hub
 decided the open questions (section 14, "Decisions"). The characterization tests (8.1) merged
 first (#225) and pass unchanged after the build. Section 19 says where the build differs from
 this brief, and section 11 what C1 changed. The **Findings** describe `main` at 2bdac35 (after
