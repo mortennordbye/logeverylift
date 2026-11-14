@@ -20,8 +20,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-/** `startsLabel` is null for a season's next phase that is not scheduled: the season is paused. */
-export type NextCycle = { id: number; name: string; startsLabel: string | null; startsTomorrow: boolean };
+/**
+ * `startsLabel` is null for a season's next phase that is not scheduled: the
+ * season is paused. `started` marks the cycle that already started after this
+ * one; `startsLabel` is then the day it started.
+ */
+export type NextCycle = { id: number; name: string; startsLabel: string | null; startsTomorrow: boolean; started?: true };
 
 const primary = "flex h-[52px] items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50";
 
@@ -61,7 +65,7 @@ export function CycleCompletionBanner({
 
   const newCycle = !next && (cycle.endAction === "new_cycle" || cycle.endAction === "deload");
   // A paused phase starts from its own page, whose Start says what it drops.
-  const canStartNext = next != null && next.startsLabel != null && !next.startsTomorrow && running == null;
+  const canStartNext = next != null && !next.started && next.startsLabel != null && !next.startsTomorrow && running == null;
 
   return (
     <div className="flex flex-col gap-3.5 rounded-[20px] bg-widget p-[18px]" data-testid="cycle-complete">
@@ -78,7 +82,13 @@ export function CycleCompletionBanner({
             <span className="text-xs font-semibold tracking-[1px] uppercase text-muted-foreground">Next</span>
             <span className="text-base font-medium">
               {/* The chevron stays with the last word, never on a line of its own. */}
-              {next.startsLabel ? <>{next.name} starts {keepDates(next.startsLabel)}</> : next.name}
+              {next.startsLabel ? (
+                <>
+                  {next.name} {next.started ? "started" : "starts"} {keepDates(next.startsLabel)}
+                </>
+              ) : (
+                next.name
+              )}
               {"\u00a0"}
               <span className="text-brand">›</span>
             </span>

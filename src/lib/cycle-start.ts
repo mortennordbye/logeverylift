@@ -11,7 +11,7 @@ import { seasons, trainingCycles } from "@/db/schema";
 import { liveCycles } from "@/lib/plan-live";
 import { cycleWeek, parseDateStr } from "@/lib/utils/cycle-position";
 import type { RunningCycle, ScheduledDraft } from "@/lib/utils/cycle-start";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, ne } from "drizzle-orm";
 
 export async function cycleStartContext(userId: string, today: string): Promise<{ running: RunningCycle | null; scheduled: ScheduledDraft | null }> {
   const rows = await db
@@ -54,4 +54,31 @@ export async function cycleStartContext(userId: string, today: string): Promise<
         }
       : null,
   };
+}
+
+/**
+ * The cycle that started first after `cycle` started: what really followed a
+ * completed cycle. A draft scheduled later is not it when another block ran
+ * in between.
+ */
+export async function cycleStartedAfter(
+  userId: string,
+  cycle: { id: number; startDate: string | null },
+): Promise<{ id: number; name: string; startDate: string } | null> {
+  if (!cycle.startDate) return null;
+  const [row] = await db
+    .select({ id: trainingCycles.id, name: trainingCycles.name, startDate: trainingCycles.startDate })
+    .from(trainingCycles)
+    .where(
+      and(
+        eq(trainingCycles.userId, userId),
+        liveCycles,
+        ne(trainingCycles.id, cycle.id),
+        inArray(trainingCycles.status, ["active", "completed"]),
+        gt(trainingCycles.startDate, cycle.startDate),
+      ),
+    )
+    .orderBy(asc(trainingCycles.startDate), asc(trainingCycles.id))
+    .limit(1);
+  return row ? { id: row.id, name: row.name, startDate: row.startDate! } : null;
 }

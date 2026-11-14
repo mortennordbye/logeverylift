@@ -158,6 +158,17 @@ describe("cycle detail page", () => {
     expect(banner.running).toBeNull();
   });
 
+  it("a completed cycle another cycle followed names that one, not a later scheduled draft", async () => {
+    const five = await weekdayCycle({ name: "Strength 5×5", status: "completed", startDate: "2026-09-01" });
+    const intro = await weekdayCycle({ name: "Intro", status: "completed", startDate: "2026-07-01" });
+    const ul = await weekdayCycle({ name: "Upper / Lower hypertrophy", durationWeeks: 6, status: "active", startDate: "2026-11-02" });
+    await weekdayCycle({ name: "Strength peak", scheduledStartDate: "2026-12-14" });
+    const fiveBanner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await page(five), CycleCompletionBanner)!;
+    expect(fiveBanner.next).toEqual({ id: ul, name: "Upper / Lower hypertrophy", startsLabel: "Mon 2 Nov", startsTomorrow: false, started: true });
+    const introBanner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await page(intro), CycleCompletionBanner)!;
+    expect(introBanner.next).toMatchObject({ id: five, name: "Strength 5×5", started: true });
+  });
+
   it("a missed key session carries the day home suggests for it", async () => {
     me = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
     asUser(me);

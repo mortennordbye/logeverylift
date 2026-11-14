@@ -574,6 +574,12 @@ describe("completed cycle", () => {
     expect(screen.queryByRole("button", { name: "Start now instead" })).toBeNull();
   });
 
+  it("names the cycle that already followed it as started, with no start", () => {
+    render(<CycleCompletionBanner cycle={done} lengthLabel="6 weeks" endedLabel="ended 20 Dec" next={{ id: 9, name: "Upper / Lower hypertrophy", startsLabel: "Mon 2 Nov", startsTomorrow: false, started: true }} />);
+    expect(screen.getByRole("link", { name: /Upper \/ Lower hypertrophy started Mon\s2\sNov/ }).getAttribute("href")).toBe("/cycles/9");
+    expect(screen.queryByRole("button", { name: "Start now instead" })).toBeNull();
+  });
+
   it("hides on Not now", () => {
     render(<CycleCompletionBanner cycle={done} lengthLabel="6 weeks" endedLabel="ended 20 Dec" next={{ id: 8, name: "Strength peak", startsLabel: "Mon 28 Dec", startsTomorrow: false }} />);
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
