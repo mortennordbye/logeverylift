@@ -457,3 +457,22 @@ describe("the phase bar and badges match the Plan list (fix round 6)", () => {
     expect(screen.getAllByTestId("phase-row")[0].textContent?.replace(/\u00a0/g, " ")).toContain("Starts Mon 16 Nov");
   });
 });
+
+describe("the race sheet's choices (round 8)", () => {
+  it("labels the sport chips on screen", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    expect(within(sheet).getByRole("group", { name: "Sport" })).toBeTruthy();
+    expect(within(sheet).getByText("Sport").className).toContain("uppercase");
+  });
+
+  it("draws the chosen priority with the same tint as the chosen sport", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    const pressed = Array.from(sheet.querySelectorAll('button[aria-pressed="true"]'));
+    expect(pressed.map((b) => b.textContent)).toEqual(["Triathlon", "A"]);
+    expect(pressed[1].className).toBe(pressed[0].className);
+  });
+});

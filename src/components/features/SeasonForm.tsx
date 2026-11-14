@@ -14,16 +14,16 @@ import { useBack, useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink"
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import {
   ButtonReason,
-  Chip,
+  ChipChoice,
   DESTRUCTIVE_TEXT,
   FIELD,
   FormHeader,
   INNER_FIELD,
   LABEL,
   PRIMARY_BUTTON,
+  PRIORITIES,
   PinnedBar,
   RadioCard,
-  Segmented,
 } from "@/components/features/season-ui";
 import Link from "next/link";
 import { useState } from "react";
@@ -263,40 +263,29 @@ export function SeasonForm(props: Props) {
             {/* One column below 360 px: a half-width date field cut the year. */}
             <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2" data-testid="race-fields">
               <input aria-label="Race name" value={raceName} maxLength={100} onChange={(e) => setRaceName(e.target.value)} placeholder="Race name" className={`${INNER_FIELD} min-[360px]:col-span-2`} />
-              <input aria-label="Race date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={INNER_FIELD} />
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Date</span>
+                <input aria-label="Race date" type="date" value={raceDate} onChange={(e) => setRaceDate(e.target.value)} className={INNER_FIELD} />
+              </label>
               {discipline === "triathlon" ? (
-                <select aria-label="Distance" value={distance} onChange={(e) => setDistance(e.target.value as TriDistance)} className={INNER_FIELD}>
-                  <option value="sprint">Sprint</option>
-                  <option value="olympic">Olympic</option>
-                  <option value="half">Half</option>
-                  <option value="full">Full</option>
-                </select>
+                <label className="flex flex-col gap-1.5">
+                  <span className={LABEL}>Distance</span>
+                  <select value={distance} onChange={(e) => setDistance(e.target.value as TriDistance)} className={INNER_FIELD}>
+                    <option value="sprint">Sprint</option>
+                    <option value="olympic">Olympic</option>
+                    <option value="half">Half</option>
+                    <option value="full">Full</option>
+                  </select>
+                </label>
               ) : (
-                <input aria-label="Distance in km" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} placeholder="km" className={INNER_FIELD} />
+                <label className="flex flex-col gap-1.5">
+                  <span className={LABEL}>Distance · km</span>
+                  <input aria-label="Distance in km" inputMode="decimal" value={km} onChange={(e) => setKm(e.target.value)} className={INNER_FIELD} />
+                </label>
               )}
             </div>
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Race kind">
-              {DISCIPLINES.map((d) => (
-                <Chip key={d.value} pressed={discipline === d.value} onClick={() => setDiscipline(d.value)}>
-                  {d.label}
-                </Chip>
-              ))}
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className={LABEL}>Priority</span>
-              <Segmented
-                label="Priority"
-                value={priority}
-                onChange={setPriority}
-                track="bg-widget-2"
-                className="w-[168px]"
-                options={[
-                  { value: "A", label: "A" },
-                  { value: "B", label: "B" },
-                  { value: "C", label: "C" },
-                ]}
-              />
-            </div>
+            <ChipChoice id="season-race-sport" label="Sport" value={discipline} options={DISCIPLINES} onChange={setDiscipline} />
+            <ChipChoice id="season-race-priority" label="Priority" value={priority} options={PRIORITIES} onChange={setPriority} />
             {hasRace && !raceComplete && <p className="text-[13px] text-muted-foreground">Give the race a name and a date, or leave both empty.</p>}
           </section>
         )}

@@ -3,7 +3,7 @@
 import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
-import { ButtonReason, Chip, DESTRUCTIVE_TEXT, INNER_FIELD, LABEL, PRIMARY_BUTTON, SectionLabel, Segmented } from "@/components/features/season-ui";
+import { ButtonReason, Chip, ChipChoice, DESTRUCTIVE_TEXT, INNER_FIELD, LABEL, PRIMARY_BUTTON, PRIORITIES, SectionLabel, Segmented } from "@/components/features/season-ui";
 import {
   addRaceAction,
   clearReplanAction,
@@ -566,13 +566,7 @@ export function SeasonDetailClient(p: Props) {
                 {error}
               </p>
             )}
-            <div className="flex flex-wrap gap-1.5" role="group" aria-label="Kind">
-              {DISCIPLINES.map((d) => (
-                <Chip key={d.value} pressed={race.discipline === d.value} onClick={() => setRace({ ...race, discipline: d.value })}>
-                  {d.label}
-                </Chip>
-              ))}
-            </div>
+            <ChipChoice id="race-sport" label="Sport" value={race.discipline} options={DISCIPLINES} onChange={(v) => setRace({ ...race, discipline: v })} />
             {race.discipline === "triathlon" ? (
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>Distance</span>
@@ -590,21 +584,7 @@ export function SeasonDetailClient(p: Props) {
                 <input inputMode="decimal" value={race.km} onChange={(e) => setRace({ ...race, km: e.target.value })} className={INNER_FIELD} />
               </label>
             )}
-            <div className="flex items-center justify-between gap-3">
-              <span className={LABEL}>Priority</span>
-              <Segmented
-                label="Priority"
-                value={race.priority}
-                onChange={(v) => setRace({ ...race, priority: v })}
-                track="bg-widget-2"
-                className="w-[168px]"
-                options={[
-                  { value: "A", label: "A" },
-                  { value: "B", label: "B" },
-                  { value: "C", label: "C" },
-                ]}
-              />
-            </div>
+            <ChipChoice id="race-priority" label="Priority" value={race.priority} options={PRIORITIES} onChange={(v) => setRace({ ...race, priority: v })} />
             <div>
               <button type="button" disabled={busy || raceReason != null} aria-describedby={raceReason ? "race-reason" : undefined} onClick={saveRace} className={PRIMARY_BUTTON}>
                 Save race

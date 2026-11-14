@@ -69,12 +69,48 @@ export function Chip({ pressed, onClick, children }: { pressed: boolean; onClick
       type="button"
       aria-pressed={pressed}
       onClick={onClick}
-      className={`min-h-11 rounded-full border px-3.5 text-sm font-medium active:opacity-70 ${pressed ? `border-primary ${ACCENT_TINT} text-foreground` : "border-hairline text-foreground/75"}`}
+      className={`min-h-11 min-w-11 rounded-full border px-3.5 text-sm font-medium active:opacity-70 ${pressed ? `border-primary ${ACCENT_TINT} text-foreground` : "border-hairline text-foreground/75"}`}
     >
       {children}
     </button>
   );
 }
+
+/** A labelled row of chips, one of them chosen: the label is on screen and names the group. */
+export function ChipChoice<T extends string>({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span id={id} className={LABEL}>
+        {label}
+      </span>
+      <div role="group" aria-labelledby={id} className="flex flex-wrap gap-1.5">
+        {options.map((o) => (
+          <Chip key={o.value} pressed={value === o.value} onClick={() => onChange(o.value)}>
+            {o.label}
+          </Chip>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export const PRIORITIES: { value: "A" | "B" | "C"; label: string }[] = [
+  { value: "A", label: "A" },
+  { value: "B", label: "B" },
+  { value: "C", label: "C" },
+];
 
 /** Two or three equal choices in one rounded track; the chosen one is filled with the accent. */
 export function Segmented<T extends string>({

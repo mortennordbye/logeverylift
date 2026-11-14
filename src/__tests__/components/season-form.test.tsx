@@ -229,3 +229,26 @@ describe("New season while another block holds the start (fix round 4)", () => {
     expect(screen.queryByRole("region", { name: title })).toBeNull();
   });
 });
+
+describe("the race fields of New season (round 8)", () => {
+  const TINT = "bg-[color-mix(in_oklab,var(--brand)_18%,transparent)]";
+
+  it("draws every selected choice the same way: the accent tint, never a solid accent fill", () => {
+    render(<SeasonForm {...create} />);
+    const pressed = Array.from(document.querySelectorAll('button[aria-pressed="true"]'));
+    // Triathlon and priority A are chosen to start with.
+    expect(pressed.map((b) => b.textContent)).toEqual(["Triathlon", "A"]);
+    for (const b of pressed) {
+      expect(b.className).toContain(TINT);
+      expect(b.className).not.toMatch(/(^|\s)bg-primary(\s|$)/);
+    }
+  });
+
+  it("labels the distance and the sport on screen", () => {
+    render(<SeasonForm {...create} />);
+    const fields = screen.getByTestId("race-fields");
+    expect(within(fields).getByText("Distance")).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Sport" })).toBeTruthy();
+    expect(screen.getByText("Sport").className).toContain("uppercase");
+  });
+});
