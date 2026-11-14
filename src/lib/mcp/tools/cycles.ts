@@ -37,7 +37,7 @@ import { countTouchedFuture, removeSlotInTx, upsertSlotInTx } from "@/lib/planne
 import { raceForCycle } from "@/lib/seasons";
 import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
 import { addDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
-import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
+import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -45,9 +45,8 @@ import { z } from "zod";
 const durationWeeks = z
   .number()
   .int()
-  .refine((v) => CYCLE_DURATION_WEEKS.includes(v), {
-    message: `Duration must be one of ${CYCLE_DURATION_WEEKS.join(", ")} weeks`,
-  });
+  .min(MIN_CYCLE_WEEKS, `A cycle is ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks`)
+  .max(MAX_CYCLE_WEEKS, `A cycle is ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks`);
 const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 
@@ -138,7 +137,7 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     {
       description: [
         "Create, update, delete, start or schedule a training cycle, or change this week's volume.",
-        `operation='create': requires name and durationWeeks (${CYCLE_DURATION_WEEKS.join("/")}); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage, and the endurance fields below.`,
+        `operation='create': requires name and durationWeeks (${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS}); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage, and the endurance fields below.`,
         "operation='update': requires cycleId; any of name, durationWeeks, endAction, endMessage, status ('draft'|'active'|'completed'), the endurance fields, and scheduledStartDate: null (cancels a scheduled start) are applied.",
         "Endurance fields (need the user's endurance features on): raceDate (YYYY-MM-DD) and raceDistance ('full' Ironman or 'half' 70.3), null to clear, only on a cycle in no season (a phase of a season reads the season's races: use manage_race); goal ('build' ramps endurance volume to a peak then tapers, 'maintain' holds it flat); athleteLevel ('novice' recovers every 3rd week, 'intermediate'/'advanced' every 4th). A new goal or level re-derives this week's targets.",
         "operation='delete': requires cycleId. The cycle and the programs it generated can be restored in the app for 90 days, and with restore_revision.",

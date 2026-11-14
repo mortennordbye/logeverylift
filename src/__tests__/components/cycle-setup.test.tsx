@@ -71,6 +71,18 @@ describe("step 1: the basics", () => {
     });
   });
 
+  it("Custom takes any number of weeks from 1 to 52", async () => {
+    render(<CreateCycleForm days={days} />);
+    fireEvent.change(screen.getByPlaceholderText("Upper / Lower hypertrophy"), { target: { value: "Odd block" } });
+    fireEvent.click(screen.getByRole("button", { name: "Custom" }));
+    const weeks = screen.getByLabelText("Length in weeks");
+    fireEvent.change(weeks, { target: { value: "60" } });
+    expect((screen.getByRole("button", { name: "Build the week" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.change(weeks, { target: { value: "7" } });
+    fireEvent.click(screen.getByRole("button", { name: "Build the week" }));
+    await waitFor(() => expect(createTrainingCycle).toHaveBeenCalledWith(expect.objectContaining({ name: "Odd block", durationWeeks: 7 })));
+  });
+
   it("needs a day for Pick a date, and offers After current cycle only while a cycle runs", async () => {
     const { unmount } = render(<CreateCycleForm days={days} />);
     expect(screen.queryByRole("button", { name: "After current cycle" })).toBeNull();
@@ -93,7 +105,9 @@ describe("step 1: the basics", () => {
     const draft = { id: 5, name: "Block", durationWeeks: 16, scheduleType: "rotation", endAction: "none", endMessage: null } as unknown as TrainingCycle;
     render(<CreateCycleForm days={days} draft={draft} start="2026-11-16" />);
     expect(screen.getByRole("button", { name: "Next Monday · 16 Nov" }).getAttribute("aria-pressed")).toBe("true");
-    expect(screen.getByRole("button", { name: "16 weeks" }).getAttribute("aria-pressed")).toBe("true");
+    // 16 is not a main chip, so Custom is on with 16 in its field.
+    expect(screen.getByRole("button", { name: "Custom" }).getAttribute("aria-pressed")).toBe("true");
+    expect((screen.getByLabelText("Length in weeks") as HTMLInputElement).value).toBe("16");
     expect((screen.getByLabelText(/Same days each week/) as HTMLInputElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Put the sessions in order" }));
     await waitFor(() => expect(updateTrainingCycle).toHaveBeenCalledWith({ id: 5, name: "Block", durationWeeks: 16, endAction: "none", endMessage: null }));

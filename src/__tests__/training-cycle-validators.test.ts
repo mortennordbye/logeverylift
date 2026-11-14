@@ -31,8 +31,8 @@ describe("createTrainingCycleSchema", () => {
     }
   });
 
-  it("rejects invalid durationWeeks values", () => {
-    for (const weeks of [3, 5, 7, 14, 20, 100]) {
+  it("rejects durationWeeks outside 1 to 52 or not whole", () => {
+    for (const weeks of [0, -4, 53, 100, 2.5]) {
       expect(createTrainingCycleSchema.safeParse({ ...valid, durationWeeks: weeks }).success).toBe(false);
     }
   });
@@ -104,9 +104,9 @@ describe("updateTrainingCycleSchema", () => {
     expect(updateTrainingCycleSchema.safeParse({ id: 1, endMessage: null }).success).toBe(true);
   });
 
-  it("rejects invalid durationWeeks", () => {
-    expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: 5 }).success).toBe(false);
-    expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: 100 }).success).toBe(false);
+  it("accepts any whole number of weeks from 1 to 52, like a season phase", () => {
+    for (const weeks of [1, 5, 7, 52]) expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: weeks }).success).toBe(true);
+    for (const weeks of [0, 53, 100, 2.5]) expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: weeks }).success).toBe(false);
   });
 
   it("accepts every block length the triathlon generator can produce", () => {

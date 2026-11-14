@@ -20,7 +20,7 @@ import { addDays, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { choiceFor, startDayFor, type StartChoice, type StartDays } from "@/lib/utils/cycle-setup";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
+import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle, TrainingCycleWithSlots } from "@/types/workout";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -30,7 +30,6 @@ type ScheduleType = "day_of_week" | "rotation";
 type EndAction = "none" | "deload" | "new_cycle" | "rest";
 
 const MAIN_LENGTHS = [4, 6, 8, 12];
-const MORE_LENGTHS = CYCLE_DURATION_WEEKS.filter((w) => !MAIN_LENGTHS.includes(w));
 
 const MODES: { value: ScheduleType; title: string; sub: string }[] = [
   { value: "day_of_week", title: "Same days each week", sub: "Monday upper, Thursday lower" },
@@ -145,7 +144,11 @@ export function CreateCycleForm({
   const [name, setName] = useState(draft?.name ?? "");
   const [scheduleType, setScheduleType] = useState<ScheduleType>((draft?.scheduleType as ScheduleType) ?? "day_of_week");
   const [durationWeeks, setDurationWeeks] = useState(draft?.durationWeeks ?? 8);
-  const [moreLengths, setMoreLengths] = useState(MORE_LENGTHS.includes(draft?.durationWeeks ?? 8));
+  const [moreLengths, setMoreLengths] = useState(!MAIN_LENGTHS.includes(draft?.durationWeeks ?? 8));
+  // The Custom field keeps what was typed, so it can be empty while the user types.
+  const [customWeeks, setCustomWeeks] = useState(String(draft?.durationWeeks ?? 10));
+  const weeks = moreLengths ? Number(customWeeks) : durationWeeks;
+  const weeksOk = Number.isInteger(weeks) && weeks >= MIN_CYCLE_WEEKS && weeks <= MAX_CYCLE_WEEKS;
   const [choice, setChoice] = useState<StartChoice>(() => {
     const c = start ? choiceFor(start, days) : "today";
     return c === "after" && !days.afterCurrent ? "today" : c;
@@ -161,11 +164,11 @@ export function CreateCycleForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !startDay) return;
+    if (!name.trim() || !startDay || !weeksOk) return;
     setLoading(true);
     setError("");
 
-    const fields = { name: name.trim(), durationWeeks, endAction };
+    const fields = { name: name.trim(), durationWeeks: weeks, endAction };
     const result = draft
       ? await callAction(updateTrainingCycle({ id: draft.id, ...fields, endMessage: endMessage.trim() || null }))
       : await callAction(createTrainingCycle({ ...fields, scheduleType, endMessage: endMessage.trim() || undefined }));
@@ -252,21 +255,29 @@ export function CreateCycleForm({
               }}
             />
           ))}
-          <Chip
-            label="Custom"
-            on={moreLengths}
-            onClick={() => {
-              setMoreLengths(true);
-              if (!MORE_LENGTHS.includes(durationWeeks)) setDurationWeeks(MORE_LENGTHS[0]);
-            }}
-          />
+          <Chip label="Custom" on={moreLengths} onClick={() => setMoreLengths(true)} />
         </ChipGroup>
         {moreLengths && (
-          <ChipGroup label="Custom length">
-            {MORE_LENGTHS.map((w) => (
-              <Chip key={w} label={`${w} weeks`} on={durationWeeks === w} onClick={() => setDurationWeeks(w)} />
-            ))}
-          </ChipGroup>
+          <label className="flex flex-col gap-2 -mt-2">
+            <span className="text-[13px] text-muted-foreground">
+              {MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS} weeks
+            </span>
+            <span className="flex items-center gap-3">
+              <input
+                type="number"
+                inputMode="numeric"
+                min={MIN_CYCLE_WEEKS}
+                max={MAX_CYCLE_WEEKS}
+                step={1}
+                value={customWeeks}
+                onChange={(e) => setCustomWeeks(e.target.value)}
+                aria-label="Length in weeks"
+                aria-invalid={!weeksOk}
+                className="h-12 w-24 px-3.5 rounded-xl border border-[rgba(244,244,245,0.12)] bg-widget text-base outline-none focus:ring-2 ring-brand aria-[invalid=true]:border-[#ff6b5a]"
+              />
+              <span className="text-base text-[#c4c4c9]">weeks</span>
+            </span>
+          </label>
         )}
 
         <ChipGroup label="Start">
@@ -318,7 +329,7 @@ export function CreateCycleForm({
       </div>
 
       <PinnedBar>
-        <button type="submit" disabled={loading || !name.trim() || !startDay} className={PRIMARY}>
+        <button type="submit" disabled={loading || !name.trim() || !startDay || !weeksOk} className={PRIMARY}>
           {scheduleType === "rotation" ? "Put the sessions in order" : "Build the week"}
         </button>
       </PinnedBar>

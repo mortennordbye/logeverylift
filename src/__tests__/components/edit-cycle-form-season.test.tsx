@@ -45,7 +45,7 @@ describe("a cycle that is a phase of a season", () => {
     expect(screen.queryByLabelText("Race (optional)")).toBeNull();
     expect(screen.getByTestId("season-race-note").textContent).toContain("Races are set on the season");
     expect(screen.getByRole("link", { name: "season page" }).getAttribute("href")).toBe("/seasons/7");
-    expect(screen.queryByRole("button", { name: "8w" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "8 weeks" })).toBeNull();
   });
 
   it("acts as a cycle with no season once its season is deleted: the race field is back", () => {

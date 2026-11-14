@@ -4,12 +4,18 @@ const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
 const scheduleTypeEnum = z.enum(["day_of_week", "rotation"]);
 const statusEnum = z.enum(["draft", "active", "completed"]);
 
-/** Every block length a cycle can have, including the triathlon generator's long blocks. */
+/** The block lengths the triathlon generator rounds to. A cycle itself can be any length in the range below. */
 export const CYCLE_DURATION_WEEKS = [4, 6, 8, 10, 12, 16, 24, 36, 52];
 
-const durationWeeks = z.number().int().refine((v) => CYCLE_DURATION_WEEKS.includes(v), {
-  message: `Duration must be one of ${CYCLE_DURATION_WEEKS.join(", ")} weeks`,
-});
+/** A cycle is a whole number of weeks in this range, the same as a season phase. */
+export const MIN_CYCLE_WEEKS = 1;
+export const MAX_CYCLE_WEEKS = 52;
+
+const durationWeeks = z
+  .number()
+  .int()
+  .min(MIN_CYCLE_WEEKS, `A cycle is ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks.`)
+  .max(MAX_CYCLE_WEEKS, `A cycle is ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks.`);
 
 export const createTrainingCycleSchema = z.object({
   name: z.string().min(1).max(100),

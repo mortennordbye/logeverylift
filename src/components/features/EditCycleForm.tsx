@@ -3,13 +3,14 @@
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
+import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
-const DURATION_OPTIONS = CYCLE_DURATION_WEEKS;
+/** The lengths offered as chips; any other length goes in the Custom field. */
+const MAIN_LENGTHS = [4, 6, 8, 12];
 
 const END_ACTION_OPTIONS = [
   { value: "none", label: "None" },
@@ -34,6 +35,11 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
   const router = useRouter();
   const [name, setName] = useState(cycle.name);
   const [durationWeeks, setDurationWeeks] = useState(cycle.durationWeeks);
+  const [custom, setCustom] = useState(!MAIN_LENGTHS.includes(cycle.durationWeeks));
+  // The Custom field keeps what was typed, so it can be empty while the user types.
+  const [customWeeks, setCustomWeeks] = useState(String(cycle.durationWeeks));
+  const weeks = custom ? Number(customWeeks) : durationWeeks;
+  const weeksOk = Number.isInteger(weeks) && weeks >= MIN_CYCLE_WEEKS && weeks <= MAX_CYCLE_WEEKS;
   const [endAction, setEndAction] = useState<EndAction>(
     (cycle.endAction as EndAction) ?? "none",
   );
@@ -50,13 +56,13 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
 
   // Warn if the selected duration would immediately end an active cycle
   const durationWarning = useMemo(() => {
-    if (!wouldEndActiveCycle(cycle, durationWeeks, parseDateStr(today))) return null;
-    return "This duration is shorter than time already elapsed — the cycle would end immediately.";
-  }, [cycle, durationWeeks, today]);
+    if (!weeksOk || !wouldEndActiveCycle(cycle, weeks, parseDateStr(today))) return null;
+    return "This length is shorter than the time already done, so the cycle would end at once.";
+  }, [cycle, weeks, weeksOk, today]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || durationWarning) return;
+    if (!name.trim() || durationWarning || !weeksOk) return;
     setLoading(true);
     setError("");
 
@@ -64,7 +70,7 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
       id: cycle.id,
       name: name.trim(),
       // Only a changed length: an unchanged one would drop a length in days (T8).
-      durationWeeks: durationWeeks !== cycle.durationWeeks ? durationWeeks : undefined,
+      durationWeeks: weeks !== cycle.durationWeeks ? weeks : undefined,
       endAction,
       endMessage: endMessage.trim() || null,
       raceDate: raceDate || null,
@@ -109,22 +115,56 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
           Duration
         </label>
         <div className="flex gap-2 flex-wrap">
-          {DURATION_OPTIONS.map((w) => (
+          {MAIN_LENGTHS.map((w) => (
             <button
               key={w}
               type="button"
-              onClick={() => setDurationWeeks(w)}
+              aria-pressed={!custom && durationWeeks === w}
+              onClick={() => {
+                setCustom(false);
+                setDurationWeeks(w);
+              }}
               className={`
-                px-4 py-2 rounded-full text-sm font-semibold border-2 transition-colors
-                ${durationWeeks === w
+                min-h-11 px-4 py-2 rounded-full text-sm font-semibold border-2 transition-colors
+                ${!custom && durationWeeks === w
                   ? "border-primary bg-primary/10 text-primary"
                   : "border-border text-muted-foreground"}
               `}
             >
-              {w}w
+              {w} weeks
             </button>
           ))}
+          <button
+            type="button"
+            aria-pressed={custom}
+            onClick={() => setCustom(true)}
+            className={`
+              min-h-11 px-4 py-2 rounded-full text-sm font-semibold border-2 transition-colors
+              ${custom ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}
+            `}
+          >
+            Custom
+          </button>
         </div>
+        {custom && (
+          <label className="flex items-center gap-3">
+            <input
+              type="number"
+              inputMode="numeric"
+              min={MIN_CYCLE_WEEKS}
+              max={MAX_CYCLE_WEEKS}
+              step={1}
+              value={customWeeks}
+              onChange={(e) => setCustomWeeks(e.target.value)}
+              aria-label="Length in weeks"
+              aria-invalid={!weeksOk}
+              className="h-12 w-24 rounded-xl border border-border bg-card px-3.5 text-base outline-none focus:ring-2 ring-primary aria-[invalid=true]:border-destructive"
+            />
+            <span className="text-base text-muted-foreground">
+              weeks ({MIN_CYCLE_WEEKS} to {MAX_CYCLE_WEEKS})
+            </span>
+          </label>
+        )}
         {durationWarning && (
           <p className="text-sm text-destructive">{durationWarning}</p>
         )}
@@ -259,7 +299,7 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
 
       <button
         type="submit"
-        disabled={loading || !name.trim() || !!durationWarning}
+        disabled={loading || !name.trim() || !!durationWarning || !weeksOk}
         className="rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-95 transition-transform"
       >
         {loading ? "Saving…" : "Save Changes"}
