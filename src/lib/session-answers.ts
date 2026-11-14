@@ -58,8 +58,10 @@ export async function confirmDone(ctx: PlanWriteContext, plannedSessionId: numbe
   if (s.date > today) throw new PlanStateError("This session's day has not come yet.");
   if (s.state === "done") throw new PlanStateError("This session is already done.");
   if (s.state === "skipped") throw new PlanStateError("This session was skipped; plan it again first.");
-  if (!s.sport) throw new PlanStateError("Log a strength session in the app or with log_session.");
-  const exerciseId = await sportExerciseId(s.sport);
+  // A mixed session (bike and swim) logs its time on its first sport.
+  const sport = s.sport ?? s.sports[0];
+  if (!sport) throw new PlanStateError("Log a strength session in the app or with log_session.");
+  const exerciseId = await sportExerciseId(sport);
   if (exerciseId == null) throw new PlanStateError("No built-in exercise for this sport.");
   const { timeZone } = await getUserSettings(ctx.userId);
   const start = new Date(Math.min(instantInZone(s.date, 12, 0, timeZone).getTime(), Date.now()));

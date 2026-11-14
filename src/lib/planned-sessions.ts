@@ -539,15 +539,16 @@ export async function weekdayToday(params: {
   let sessions = await loadSessions();
   let match = matchPlanned(forMatch, sessions);
 
-  // With the endurance switch on, a session with a sport goes through Garmin
-  // or "Did you do it?" instead of an auto row, and leaves the missed list for
-  // that card (docs/plans/workouts-and-compliance.md, 6.2 and 7). Lifters: no change.
+  // With the endurance switch on, a session with a sport (a mixed one too, such
+  // as bike and swim) goes through Garmin or "Did you do it?" instead of an
+  // auto row, and leaves the missed list for that card
+  // (docs/plans/workouts-and-compliance.md, 6.2 and 7). Lifters: no change.
   const { enduranceEnabledFor } = await import("@/lib/endurance");
   const sportSessions = new Set<number>();
   if (await enduranceEnabledFor(userId)) {
-    const { programSports } = await import("@/lib/session-compliance");
-    const sports = await programSports(rows.map((r) => r.row.programId!));
-    for (const { row } of rows) if (sports.get(row.programId!)) sportSessions.add(row.id);
+    const { enduranceProgramIds } = await import("@/lib/session-compliance");
+    const endurance = await enduranceProgramIds(rows.map((r) => r.row.programId!));
+    for (const { row } of rows) if (endurance.has(row.programId!)) sportSessions.add(row.id);
   }
 
   // Days tracked outside the app: a session not done by its own workout or

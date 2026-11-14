@@ -47,7 +47,7 @@ import {
 } from "@/lib/utils/session-compliance";
 import { currentThresholds } from "@/lib/utils/thresholds";
 import { describeWorkout, estimateWorkout, isHardWorkout, parseWorkout, type ThresholdValues, type Workout } from "@/lib/utils/workout-steps";
-import { and, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, lte, or } from "drizzle-orm";
 
 export type Amount = { durationSeconds: number | null; distanceMeters: number | null };
 
@@ -60,6 +60,8 @@ export type SessionCompliance = {
   programName: string | null;
   label: string | null;
   sport: Sport | null;
+  /** Every endurance sport in the session, in exercise order: more than one (or one with lifts) leaves `sport` null. */
+  sports: Sport[];
   /** The stored priority, null = derived. */
   storedPriority: "key" | "support" | "optional" | null;
   priority: "key" | "support" | "optional";
@@ -101,9 +103,12 @@ export function storedWorkout(json: unknown, id: number): Workout | null {
   return null;
 }
 
-/** Per program: its sport (one discipline for every exercise) and the planned time and distance of those sets. */
+/**
+ * Per program: its sport (one discipline for every exercise), every endurance
+ * sport in it in exercise order, and the planned time and distance of those sets.
+ */
 async function programFacts(programIds: number[]) {
-  const out = new Map<number, { sport: Sport | null; planned: Amount }>();
+  const out = new Map<number, { sport: Sport | null; sports: Sport[]; planned: Amount }>();
   if (!programIds.length) return out;
   const rows = await db
     .select({
@@ -116,13 +121,15 @@ async function programFacts(programIds: number[]) {
     .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
     .innerJoin(programs, eq(programs.id, programExercises.programId))
     .leftJoin(programSets, and(eq(programSets.programExerciseId, programExercises.id), liveProgramSets))
-    .where(and(inArray(programExercises.programId, programIds), liveProgramExercises, livePrograms));
+    .where(and(inArray(programExercises.programId, programIds), liveProgramExercises, livePrograms))
+    .orderBy(asc(programExercises.orderIndex), asc(programExercises.id));
   for (const id of programIds) {
     const mine = rows.filter((r) => r.programId === id);
     const disciplines = new Set(mine.map((r) => r.discipline));
     const sport = disciplines.size === 1 && !disciplines.has(null) ? ([...disciplines][0] as Sport) : null;
+    const sports = [...disciplines].filter((d): d is Sport => d != null);
     const sum = (k: "durationSeconds" | "distanceMeters") => mine.reduce((a, r) => a + (r[k] ?? 0), 0) || null;
-    out.set(id, { sport, planned: sport ? { durationSeconds: sum("durationSeconds"), distanceMeters: sum("distanceMeters") } : { durationSeconds: null, distanceMeters: null } });
+    out.set(id, { sport, sports, planned: sport ? { durationSeconds: sum("durationSeconds"), distanceMeters: sum("distanceMeters") } : { durationSeconds: null, distanceMeters: null } });
   }
   return out;
 }
@@ -131,6 +138,12 @@ async function programFacts(programIds: number[]) {
 export async function programSports(programIds: number[]): Promise<Map<number, Sport | null>> {
   const facts = await programFacts([...new Set(programIds)]);
   return new Map([...facts].map(([id, f]) => [id, f.sport]));
+}
+
+/** The programs that hold any endurance sport, mixed ones (bike and swim, or a run with lifts) included. */
+export async function enduranceProgramIds(programIds: number[]): Promise<Set<number>> {
+  const facts = await programFacts([...new Set(programIds)]);
+  return new Set([...facts].filter(([, f]) => f.sports.length > 0).map(([id]) => id));
 }
 
 /** Completed workouts in [from, to] or linked to these rows, with time and distance per discipline. */
@@ -230,6 +243,7 @@ export async function sessionCompliance(userId: string, from: string, to: string
     const programId = programDeletedAt ? null : row.programId;
     const pf = programId != null ? facts.get(programId) : undefined;
     const sport: Sport | null = workout ? workout.sport : (pf?.sport ?? null);
+    const sports: Sport[] = workout ? [workout.sport] : (pf?.sports ?? []);
     const est = workout ? estimateWorkout(workout, thresholds) : null;
     const planned: Amount = est
       ? { durationSeconds: est.durationComplete && est.durationSeconds ? est.durationSeconds : null, distanceMeters: est.distanceComplete && est.distanceMeters ? est.distanceMeters : null }
@@ -240,6 +254,7 @@ export async function sessionCompliance(userId: string, from: string, to: string
       programName: programDeletedAt ? null : programName,
       workout,
       sport,
+      sports,
       planned,
       hard: workout ? isHardWorkout(workout, thresholds) : programId != null ? (hard.get(programId) ?? false) : false,
     };
@@ -299,7 +314,8 @@ export async function sessionCompliance(userId: string, from: string, to: string
       date: r.date!,
       today,
       status: r.status,
-      sport: v.sport,
+      // Only whether it is an endurance session counts here: a mixed one asks too.
+      sport: v.sport ?? v.sports[0] ?? null,
       endurance,
       linked: linkedId != null,
       picked: r.garminActivityId != null,
@@ -328,6 +344,7 @@ export async function sessionCompliance(userId: string, from: string, to: string
       programName: v.programName,
       label: r.label,
       sport: v.sport,
+      sports: v.sports,
       storedPriority: r.priority,
       priority: priorities.get(r.id)!,
       hard: v.hard,
