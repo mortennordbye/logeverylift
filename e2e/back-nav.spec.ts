@@ -16,11 +16,11 @@ import { backLink, openFirstExercise, openFirstSetEditor, openWorkout, trackActi
  * page's parent. `goForward()` after Back proves it was a pop, not a push.
  */
 
-async function homeWith(workerIndex: number, ids: string[]) {
+async function homeWith(workerIndex: number, ids: string[], size: StoredHomeItem["size"] = "l") {
   const items: StoredHomeItem[] = [
     { id: "title", size: "m", hidden: false },
     { id: "today", size: "l", hidden: false },
-    ...ids.map((id): StoredHomeItem => ({ id, size: "l", hidden: false })),
+    ...ids.map((id): StoredHomeItem => ({ id, size, hidden: false })),
   ];
   await testDb()
     .update(users)
@@ -63,7 +63,7 @@ test("home widget > Progress > Back lands on home, as a pop", async ({ page }, t
     };
     requestAnimationFrame(tick);
   });
-  await page.getByTestId("recent-prs").getByRole("link", { name: "All records →" }).click();
+  await page.getByTestId("recent-prs").click();
   await page.waitForURL("**/more/metrics?tab=records");
   await expect(back(page)).toHaveText("Home");
   // Never painted with the wrong name first.
@@ -76,6 +76,24 @@ test("home widget > Progress > Back lands on home, as a pop", async ({ page }, t
   await page.goForward();
   await page.waitForURL("**/more/metrics?tab=records");
 });
+
+// The owner's case: the redesign's widgets that open Progress.
+for (const [id, testId] of [
+  ["bodyWeight", "body-weight"],
+  ["streak", "streak"],
+  ["weeklySets", "weekly-sets"],
+] as const) {
+  test(`home ${testId} widget > Progress > Back lands on home`, async ({ page }, testInfo) => {
+    await homeWith(testInfo.parallelIndex, [id], "s");
+    await page.goto("/");
+    await page.getByTestId(testId).click();
+    await page.waitForURL(atPath("/more/metrics"));
+    await expect(back(page)).toHaveText("Home");
+    await back(page).click();
+    await page.waitForURL(atPath("/"));
+    await expect(page.getByTestId(testId)).toBeVisible();
+  });
+}
 
 test("More > Progress > Back lands on More", async ({ page }) => {
   await openMore(page);
@@ -99,7 +117,7 @@ test("after a reload Back still knows where the user came from", async ({ page }
   await withPr(testInfo.parallelIndex);
   await homeWith(testInfo.parallelIndex, ["recentPrs"]);
   await page.goto("/");
-  await page.getByTestId("recent-prs").getByRole("link", { name: "All records →" }).click();
+  await page.getByTestId("recent-prs").click();
   await page.waitForURL("**/more/metrics?tab=records");
   await page.reload();
   await expect(back(page)).toHaveText("Home");
@@ -124,7 +142,8 @@ test("two levels: Settings > Add to iPhone > Back > Back", async ({ page }) => {
 test("two levels from the home: Friends' activity > Friends > Add Friends > Back > Back", async ({ page }, testInfo) => {
   await homeWith(testInfo.parallelIndex, ["friendsActivity"]);
   await page.goto("/");
-  await page.getByTestId("friends-activity").getByRole("link").first().click();
+  // The card is the link, or holds one when there is no activity yet.
+  await page.locator('a[data-testid="friends-activity"], [data-testid="friends-activity"] a').first().click();
   await page.waitForURL(atPath("/more/friends"));
   await expect(back(page)).toHaveText("Home");
   await page.getByRole("link", { name: "Add Friends" }).first().click();
