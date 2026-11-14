@@ -1,7 +1,6 @@
 # Plan tab redesign
 
-Status: building on the local branch `feat/plan-redesign` (2026-11-14). Do not push: the owner
-tests it locally first.
+Status: built on the local branch `feat/plan-redesign` (2026-11-14), all four packages merged. Not pushed: the owner tests it locally first.
 
 ## Why
 
