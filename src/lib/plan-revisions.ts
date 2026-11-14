@@ -434,6 +434,11 @@ export class PlanWriteSession {
     this.created.push(target);
   }
 
+  /** Whether this write made the object: it has no earlier state to lock or record. */
+  wasCreated(target: PlanTarget): boolean {
+    return this.created.some((t) => key(t) === key(target));
+  }
+
   /**
    * Store a write that was not applied (a queued change that met a newer
    * plan), so the user can see it in the history. Returns the revision id.

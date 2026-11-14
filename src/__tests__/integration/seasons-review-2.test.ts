@@ -31,6 +31,78 @@ async function draft(name = "Block") {
   return c.id;
 }
 
+describe("New season with cycles I already have is one change", () => {
+  it("refuses the same cycle twice and makes no season", async () => {
+    const c = await draft();
+    const r = await createSeasonAction({ name: "Twice", startDate: day(0), endDate: day(100), cycleIds: [c, c] });
+    expect(r.success).toBe(false);
+    expect(await seasonsOf(me)).toEqual([]);
+    expect((await cycleRow(c)).seasonId).toBeNull();
+  });
+
+  it("a phase add that fails leaves no season, no race and no earlier phase", async () => {
+    const a = await draft("A");
+    // Completed after the form listed it: the add refuses it inside the write.
+    const [done] = await db.insert(trainingCycles).values({ userId: me, name: "Done", durationWeeks: 4, status: "completed", startDate: day(-60) }).returning();
+    await expect(
+      createSeason(
+        { userId: me, writer: "user" },
+        {
+          name: "Half",
+          startDate: day(0),
+          endDate: day(100),
+          race: { name: "Half", raceDate: day(100), discipline: "triathlon", distance: "half", priority: "A" },
+          cycleIds: [a, done.id],
+        },
+      ),
+    ).rejects.toThrow();
+    expect(await seasonsOf(me)).toEqual([]);
+    expect(await db.select().from(seasonRaces).where(eq(seasonRaces.userId, me))).toEqual([]);
+    expect((await cycleRow(a)).seasonId).toBeNull();
+    expect(await db.select().from(planRevisions).where(and(eq(planRevisions.userId, me), eq(planRevisions.objectType, "season")))).toEqual([]);
+  });
+
+  it("joins the picked cycles in order, and stores one create revision for the season", async () => {
+    const a = await draft("A");
+    const b = await draft("B");
+    const r = await createSeasonAction({ name: "Both", startDate: day(0), endDate: day(100), cycleIds: [a, b] });
+    if (!r.success) throw new Error(r.error);
+    expect(await cycleRow(a)).toMatchObject({ seasonId: r.data.id, phaseOrder: 1 });
+    expect(await cycleRow(b)).toMatchObject({ seasonId: r.data.id, phaseOrder: 2 });
+    const revs = await db.select().from(planRevisions).where(and(eq(planRevisions.objectType, "season"), eq(planRevisions.objectId, r.data.id)));
+    expect(revs.map((x) => x.action)).toEqual(["create"]);
+  });
+
+  it("refreshes home, whose up-next card a first phase can change", async () => {
+    vi.mocked(revalidatePath).mockClear();
+    const r = await createSeasonAction({ name: "Home", startDate: day(0), endDate: day(100), cycleIds: [await draft()] });
+    expect(r.success).toBe(true);
+    expect(vi.mocked(revalidatePath)).toHaveBeenCalledWith("/");
+  });
+});
+
+describe("the first race of a new season gets the race date checks", () => {
+  const race = { name: "Tune-up", discipline: "triathlon" as const, distance: "sprint" as const };
+
+  it("refuses a B race after the season end, a past race and one before the start", async () => {
+    for (const r of [
+      { ...race, raceDate: day(60), priority: "B" as const },
+      { ...race, raceDate: day(-1), priority: "A" as const },
+      { ...race, raceDate: day(5), priority: "B" as const },
+    ]) {
+      const out = await createSeasonAction({ name: "Season", startDate: day(10), endDate: day(30), race: r });
+      expect(out).toMatchObject({ success: false, fieldErrors: { raceDate: [expect.any(String)] } });
+    }
+    expect(await seasonsOf(me)).toEqual([]);
+  });
+
+  it("an A race after the end moves the end to race day", async () => {
+    const out = await createSeasonAction({ name: "Season", startDate: day(0), endDate: day(30), race: { ...race, raceDate: day(60), priority: "A" } });
+    if (!out.success) throw new Error(out.error);
+    expect((await seasonRow(out.data.id)).endDate).toBe(day(60));
+  });
+});
+
 describe("addPhase takes the scheduled start only when asked", () => {
   it("a first phase with no takeStart leaves the running block and the other scheduled start", async () => {
     const s = await createSeasonAction({ name: "Running", startDate: day(0), endDate: day(200) });
