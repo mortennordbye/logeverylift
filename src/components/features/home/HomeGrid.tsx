@@ -59,7 +59,7 @@ const PENCIL =
 
 /** The header pills of the locked design: 44 px, round, on the inner surface. */
 const BAR_BTN =
-  "min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 rounded-full bg-widget-2 px-4 text-[15px] font-semibold transition-transform active:scale-[0.94] active:opacity-80 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
+  "min-h-11 min-w-11 inline-flex items-center justify-center gap-1.5 rounded-full px-4 text-[15px] font-semibold transition-transform active:scale-[0.94] active:opacity-80 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 const SMALL_BTN =
   "min-h-11 inline-flex items-center justify-center gap-1.5 rounded-full px-3 text-[13px] font-semibold text-muted-foreground active:opacity-60 disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand";
 
@@ -232,7 +232,7 @@ export function HomeGrid(props: HomeGridProps) {
         {liveRegion}
         <div className="px-4 pt-4 shrink-0">
           <div className="flex items-center justify-between gap-2">
-            <button type="button" onClick={cancel} disabled={busy} className={`${BAR_BTN} text-muted-foreground`}>
+            <button type="button" onClick={cancel} disabled={busy} className={`${BAR_BTN} bg-widget-2 text-muted-foreground`}>
               Cancel
             </button>
             <h1 className="home-display text-[24px] uppercase">Edit home</h1>
@@ -242,7 +242,7 @@ export function HomeGrid(props: HomeGridProps) {
                 onClick={() => setGalleryOpen(true)}
                 disabled={hidden.length === 0}
                 aria-label="Add widget"
-                className={`${BAR_BTN} w-11 px-0`}
+                className={`${BAR_BTN} bg-widget-2 w-11 px-0`}
               >
                 <Plus className="h-5 w-5" aria-hidden />
               </button>

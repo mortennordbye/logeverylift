@@ -193,7 +193,7 @@ Phase: **1** = this PR (section 6; "built" once merged code has it), **2** = nex
 | Weekly goal | Ring and count | Ring and label | - | `getWorkoutStats`, `weeklyGoal` | all | none | 1, built |
 | Next session | Name and day | Name, day, summary, start link | - | cycle info, planned sessions | cycle | low | 2 |
 | Season phase | Phase, week x of y | Plus phase bar | - | `listSeasons` (`src/lib/seasons.ts:83`) | endurance with a season | low | 2 |
-| Race countdown | Days to race | Race, date, days, phase | - | `listSeasons`; `training_cycles.race_date` | users with a race | low | 2 |
+| Race countdown | Days to race | Race, date, days, phase | - | `listSeasons`; `training_cycles.race_date` | users with a race | low | 2, built (S) |
 | Missed this week, Make up | - | - | - | notice N5 | | | 1 (notice) |
 | Did you do these? | - | - | - | notice N4 | | | 1 (notice) |
 | Readiness swap | - | - | - | notice, package D4 | endurance | | with D4 |
@@ -210,9 +210,9 @@ Phase: **1** = this PR (section 6; "built" once merged code has it), **2** = nex
 
 | Widget | S | M | L | Data source | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
-| Training streak | Weeks in a row | Plus last 8 weeks | - | `getSummaryStats` (`src/lib/actions/metrics.ts:1369`, streak at `:1430`) | all | medium | 2 |
-| Weekly volume | Sets this week | Top muscles vs target | All muscle bars | `getWeeklyMuscleVolume` (`src/lib/actions/metrics.ts:1113`) | all | medium | 2 |
-| Body weight | Latest and change | 30-day line | 90-day line | `getWeightHistory` (`src/lib/actions/profile.ts:65`) | users who log weight | low | 2 |
+| Training streak | Weeks in a row | Plus last 8 weeks | - | `getSummaryStats` (`src/lib/actions/metrics.ts:1369`, streak at `:1430`) | all | medium | 2, built |
+| Weekly volume | Sets this week | Top muscles vs target | All muscle bars | `getWeeklyMuscleVolume` (`src/lib/actions/metrics.ts:1113`) | all | medium | 2, built (S, as "Weekly sets") |
+| Body weight | Latest and change | 30-day line | 90-day line | `getWeightHistory` (`src/lib/actions/profile.ts:65`) | users who log weight | low | 2, built (S, M) |
 | Consistency | Weeks goal met, last 8 | Heatmap, 12 weeks | Heatmap, 26 weeks | `getHeatmapData` (`src/lib/actions/metrics.ts:1083`) | all | medium | 2 |
 | Compliance | Planned vs done this week | Per sport | - | `sessionCompliance` (`src/lib/session-compliance.ts:217`) | endurance | medium | 2 |
 | Summary totals | Workouts, sets | Workouts, sets, reps | - | `getWorkoutStats` | all | none | 3 |
@@ -230,7 +230,7 @@ Garmin access is on only for admin accounts where the key is set
 | HRV | Last night vs baseline | 7-day dots | - | `getTodayData` (`hrvNight`, `metrics`) | medium | 2 |
 | Sleep | Hours and score | Stages bar | 7 nights | `getTodayData(...).sleep`; `getSleepData` (`src/lib/garmin/queries.ts:317`) | medium | 2 |
 | Body battery | At wake and now | High, low, charged, drained | - | `getTodayData(...).summary.bb*` | medium | 2 |
-| Training load and form | Form and band | 6-week fitness, fatigue, form | Per sport | `getLoadSeries` (`src/lib/garmin/queries.ts:50`); without Garmin, `getTrainingLoad` (`src/lib/training-load.ts:149`) | medium | 2 |
+| Training load and form | Form and band | 6-week fitness, fatigue, form | Per sport | `getLoadSeries` (`src/lib/garmin/queries.ts:50`); without Garmin, `getTrainingLoad` (`src/lib/training-load.ts:149`) | medium | 2, built (M, L) |
 | Today's activity | Steps | Steps, active kcal, intensity min, activities | - | `getTodayData(...).summary`, `.activities` | medium | 2 |
 | VO2 max | Latest value | 180-day line | - | `getOverviewData` (`src/lib/garmin/queries.ts:638`, VO2 rows at `:660-668`) | medium | 3 |
 | Recent activities | Last one | Last 3 | Last 6 | `getActivitiesData(userId, limit)` (`src/lib/garmin/queries.ts:389`) | low | 2 |
@@ -941,3 +941,48 @@ Where the build differs from sections 6 and 7, and why. The code is the referenc
   default layout. An edit after the failure drops it, and the draft is sent.
 - **Long-press and text selection.** `[data-widget]` has `user-select: none`, so holding a
   widget on iOS does not start a text selection.
+
+### Redesign and phase 2 widgets (2026-11-14)
+
+The home now follows the locked design, `docs/design/home-redesign/home-locked.html`.
+Where the build differs from it or from section 4, and why:
+
+- **Fonts and tokens.** Big Shoulders (the current Google family that replaced Big Shoulders
+  Display; its `opsz` axis is set to 72 for the display look) and Work Sans load through
+  `next/font` in `src/components/features/home/fonts.ts`, for the home page and its sheets
+  only. The rest of the app keeps Inter. The tokens `--brand`, `--brand-fill`, `--pos`,
+  `--font-display`, `--font-ui` and the home surfaces are in `src/app/globals.css`.
+  `.home-ui` maps the shared tokens (`--muted`, `--primary`, `--muted-foreground`) to the
+  home's look, so the notices and Endurance today match without their own changes.
+- **The user's accent colour does not reach the home.** `.home-ui` sets `--primary` to
+  `--brand`, so the accent picked in settings is not used there. Open question for the owner.
+- **Edit entry stays the pencil** (decision 16), restyled as the design's round pill, and not
+  the design's "Edit" text button. Edit mode keeps Cancel, Undo and Reset, which the design
+  does not show.
+- **Title.** M is the title alone, as before; the date eyebrow is the L size.
+- **Today.** The design's exercise list, "Day 2", set count, duration and the per-lift tip
+  need data the home does not read; the hero shows the name, the cycle segments, the end
+  date and the existing insight banner. The no-cycle prompt has no "Browse programs" link:
+  every size of Today must keep the same actions (C1).
+- **Week.** L has the ring beside the days and a legend; the design's sets, volume and time
+  tiles are not built (no source on the home). Past planned days not done show as missed.
+- **Recent PRs** has no gain pill or confetti: `getRecentPRs` returns no previous value.
+- **Friends' activity** has no reaction button: a reaction is a write, and "Reactions to my
+  workouts" is its own widget (4.5).
+- **Streak** (S, M). The bars are sessions per week from `getHeatmapData`; there is no
+  "best streak", which no action returns. `getSummaryStats` computes weeks in UTC on the
+  server, as the Progress page does.
+- **Body weight** (S, M) shows kg; the app has no weight unit setting. It links to Progress,
+  where weight is logged.
+- **Training load** (M, L) reads `getTrainingLoad`, which picks the source itself: the stored
+  Garmin series when `garminAllowedFor` is true and there are days, else the app's sessions.
+  It is available to endurance and Garmin users and links to `/week`. The line is the 7-day
+  fatigue (ATL); the design's "sweet spot" band is left out, since the bars' scale has no
+  agreed band.
+- **Weekly sets** (S) is the catalogue's "Weekly volume". Its week starts on the server's
+  Monday, as on the Progress page.
+- **Race countdown** (S) is for endurance users: the soonest A race on or after today from
+  `listSeasons`. A cycle's own `race_date` is not read.
+- Sizes from section 4 that the design does not show (Weekly volume M and L, Body weight L,
+  Training load S and per-sport L, Race countdown M) are in `BACKLOG.md`.
+

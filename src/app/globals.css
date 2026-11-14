@@ -426,6 +426,10 @@ select {
    and shared cards inside the home match its widgets without their own
    changes. The rest of the app is unchanged. */
 .home-ui {
+  /* Set again here, where the next/font variables exist: at :root they are
+     undefined, so the theme's copies there resolve to nothing. */
+  --font-display: var(--font-big-shoulders), system-ui, sans-serif;
+  --font-ui: var(--font-work-sans), system-ui, sans-serif;
   --foreground: var(--home-fg);
   --muted: var(--widget);
   --muted-foreground: var(--home-muted);

@@ -10,6 +10,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
+### Home widgets: catalogue sizes the locked design left out
+- **What:** Sizes from the widget catalogue (`docs/home-widgets-audit.md`, section 4) not built with the redesign: Weekly volume M (top muscles vs target) and L (all muscle bars), Body weight L (90-day line), Training load S (form and band) and per-sport L, Race countdown M (race, date, days, phase).
+- **Why deferred:** The locked design (`docs/design/home-redesign/home-locked.html`) gives these widgets only the sizes that were built, and the redesign built to it.
+- **Unblocked by:** A design for each size from the owner. The data is already read by each widget's loader, except the race's season phase (`listSeasons` returns `currentPhase`).
+- **Touchpoints:** `src/lib/home/widgets/weekly-sets.ts`, `body-weight.ts`, `training-load.ts`, `race-countdown.ts`; `src/components/features/home/widgets/*/View.tsx`.
+
 ### Garmin for every user
 - **What:** Open the Garmin section (connection, More → Garmin, background import, AI tools) to all users. Today it is on in prod for admin accounts only (`garminAllowed` in `src/lib/garmin/access.ts`), which is the owner's own data.
 - **Why deferred:** The Garmin Connect Personal API Supplemental Terms (last updated 2026-10-01, section 1) say: "Any API key issued to you is personal to you and may be used only by you in connection with applications, services, or tools that you develop or operate for your own use. You may not sell, transfer, sublicense, distribute, disclose, or otherwise share your API key with any third party." So letting other users paste their own key is ruled out: they would disclose it to us and use a tool they do not operate. Violations can lead to key revocation (section 3). The owner's own use is allowed, which is what runs in prod. The route for other users is the Garmin Connect Developer Program (Garmin's consent screen, no shared keys); its Starter tier is reported free for up to about 1,000 users, Enterprise has a $1,000 entry fee and confidential per-user fees from April 2027 at the earliest. The owner chose owner-only on 2026-11-12.

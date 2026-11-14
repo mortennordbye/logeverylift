@@ -217,17 +217,17 @@ const SET_UP_CLASS =
 function NoCycle({ size }: { size: WidgetSize }) {
   if (size === "s") {
     return (
-      <div className={`${CARD} items-center justify-center text-center p-3`} data-testid="cycle-setup">
+      <div className={`${CARD} items-center justify-center text-center p-3!`} data-testid="cycle-setup">
         <PlanArt width={84} />
         <p className="my-2 text-sm font-semibold">Plan your first block</p>
-        <Link href="/cycles" aria-label="Set up a Cycle →" className={`${SET_UP_CLASS} w-full min-h-11 text-sm`}>
+        <Link href="/cycles" aria-label="Set up a Cycle →" className={`${SET_UP_CLASS} w-full min-h-11! text-sm!`}>
           Set up
         </Link>
       </div>
     );
   }
   return (
-    <div className={`${CARD} items-center justify-center text-center p-5`} data-testid="cycle-setup">
+    <div className={`${CARD} items-center justify-center text-center p-5!`} data-testid="cycle-setup">
       <PlanArt width={size === "l" ? 132 : 84} />
       <h2 className="home-display mt-3.5 mb-1.5 text-[30px]">Plan your first block</h2>
       <p className="mb-[18px] max-w-[270px] text-[15px] leading-snug text-muted-foreground">
@@ -263,7 +263,7 @@ function ActionLink({ a }: { a: Extract<TodayAction, { kind: "link" }> }) {
 function TodaySmall({ data }: { data: TodayData }) {
   const { primary, more } = todayActions({ ...data, hasCycle: true });
   return (
-    <div className={`${HERO} p-3.5 gap-2`} data-testid="today-card">
+    <div className={`${HERO} p-3.5! gap-2`} data-testid="today-card">
       <div className="min-w-0">
         <p className="text-[13px] font-semibold uppercase tracking-[0.05em] opacity-75">Today</p>
         <p className="home-display text-[24px] uppercase leading-[1.05] break-words line-clamp-2">{todayName(data)}</p>

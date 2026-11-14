@@ -164,7 +164,7 @@ export function WidgetError() {
 export function PreviewBox({ title, size, lines = 2 }: { title: string; size: WidgetSize; lines?: number }) {
   const n = size === "l" ? lines + 2 : lines;
   return (
-    <div className={`${CARD} ${SIZE_HEIGHT[size]} gap-2`} aria-hidden="true">
+    <div className={`${CARD} ${SIZE_HEIGHT[size]}! gap-2`} aria-hidden="true">
       <p className="text-[13px] font-semibold text-muted-foreground truncate">{title}</p>
       <div className="mt-1 space-y-2">
         <div className="h-6 w-1/3 rounded-lg bg-widget-2" />
