@@ -124,5 +124,21 @@ describe("cycle detail page", () => {
     const banner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await page(id), CycleCompletionBanner)!;
     expect(banner.next).toEqual({ id: next, name: "Peak", startsLabel: "Mon 30 Nov", startsTomorrow: false });
     expect(banner.endedLabel).toBe("ended 28 Oct");
+    expect(banner.running).toBeNull();
+  });
+
+  it("a start or a completed card knows the running cycle, its week, and the draft scheduled next", async () => {
+    const runningId = await weekdayCycle({ name: "Upper / Lower hypertrophy", durationWeeks: 6, status: "active", startDate: "2026-11-02" });
+    const peak = await weekdayCycle({ name: "Peak", scheduledStartDate: "2026-11-30" });
+    const draft = await weekdayCycle({ name: "Later" });
+    const start = propsOf<Parameters<typeof StartCycleButton>[0]>(await page(draft), StartCycleButton)!;
+    expect(start.running).toEqual({ id: runningId, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6 });
+    expect(start.otherScheduled).toEqual({ id: peak, name: "Peak", day: "2026-11-30" });
+    // The scheduled draft itself: its own start is no other draft's.
+    expect(propsOf<Parameters<typeof StartCycleButton>[0]>(await page(peak), StartCycleButton)!.otherScheduled).toBeNull();
+
+    const old = await weekdayCycle({ status: "completed", startDate: "2026-09-01" });
+    const banner = propsOf<Parameters<typeof CycleCompletionBanner>[0]>(await page(old), CycleCompletionBanner)!;
+    expect(banner.running).toMatchObject({ id: runningId });
   });
 });

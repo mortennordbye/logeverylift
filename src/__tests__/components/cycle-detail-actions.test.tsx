@@ -131,3 +131,39 @@ describe("a scheduled draft", () => {
     await waitFor(() => expect(startTrainingCycle).toHaveBeenCalledWith(3));
   });
 });
+
+describe("a start that ends the running cycle", () => {
+  const running = { id: 2, name: "Upper / Lower hypertrophy", week: 3, totalWeeks: 6 };
+
+  it("Start today instead asks first and names the running cycle and its week", async () => {
+    vi.mocked(startTrainingCycle).mockResolvedValue({ success: true, data: cycle });
+    render(<StartCycleButton cycle={cycle} scheduledFor="2026-11-16" running={running} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start today instead" }));
+    expect(startTrainingCycle).not.toHaveBeenCalled();
+    expect(screen.getByText(/This ends Upper \/ Lower hypertrophy at week 3 of 6\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Start Build" }));
+    await waitFor(() => expect(startTrainingCycle).toHaveBeenCalledWith(3));
+  });
+
+  it("Start cycle asks first too, and Cancel starts nothing", () => {
+    render(<StartCycleButton cycle={cycle} running={running} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start cycle" }));
+    expect(screen.getByText(/This ends Upper \/ Lower hypertrophy at week 3 of 6\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(startTrainingCycle).not.toHaveBeenCalled();
+  });
+
+  it("says when the start drops another draft's scheduled start", () => {
+    render(<StartCycleButton cycle={cycle} otherScheduled={{ id: 7, name: "Strength peak", day: "2026-11-23" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start cycle" }));
+    expect(startTrainingCycle).not.toHaveBeenCalled();
+    expect(screen.getByText(/Strength peak no longer starts Mon 23 Nov\./)).toBeTruthy();
+  });
+
+  it("Restart of another cycle names the running one", () => {
+    render(<CycleMenu cycle={{ ...cycle, status: "completed" } as TrainingCycle} running={running} />);
+    fireEvent.click(screen.getByRole("button", { name: "More actions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart cycle" }));
+    expect(screen.getByText(/This ends Upper \/ Lower hypertrophy at week 3 of 6\./)).toBeTruthy();
+  });
+});

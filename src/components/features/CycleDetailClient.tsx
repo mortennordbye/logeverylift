@@ -4,8 +4,9 @@
  * CycleDetailClient
  *
  * The cycle detail's own actions (docs/design/plan-redesign/J5_CycleDetailWeek.dc.html):
- * - Start a draft, or "Start today instead" for a scheduled one. A later
- *   season phase asks first, since a start today skips the phases before it.
+ * - Start a draft, or "Start today instead" for a scheduled one. A start asks
+ *   first when it ends the running cycle, drops another draft's scheduled
+ *   start, or skips the season phases before it.
  * - The ⋯ menu: Edit details, Change history, Restart, Delete. Restart and
  *   Delete each ask in a confirm sheet.
  */
@@ -14,6 +15,7 @@ import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPan
 import { useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { deleteTrainingCycle, restartTrainingCycle, startTrainingCycle } from "@/lib/actions/training-cycles";
+import { dropsScheduledLine, endsRunningLine, type RunningCycle, type ScheduledDraft } from "@/lib/utils/cycle-start";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { TrainingCycle } from "@/types/workout";
@@ -80,12 +82,18 @@ export function StartCycleButton({
   cycle,
   skippedPhases = 0,
   scheduledFor = null,
+  running = null,
+  otherScheduled = null,
 }: {
   cycle: TrainingCycle;
   /** A season phase after the next one: how many planned phases before it a start today skips. */
   skippedPhases?: number;
   /** The day a scheduled draft starts: the card then offers "Start today instead". */
   scheduledFor?: string | null;
+  /** The running cycle: a start today ends it. */
+  running?: RunningCycle | null;
+  /** Another draft's scheduled start: a start today drops it. */
+  otherScheduled?: ScheduledDraft | null;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -107,7 +115,9 @@ export function StartCycleButton({
 
   if (cycle.status !== "draft") return null;
 
-  const start = () => (skippedPhases > 0 ? setConfirming(true) : handleStart());
+  const skippedLine = skippedPhases > 0 ? `${skippedPhases === 1 ? "1 earlier phase" : `${skippedPhases} earlier phases`} will be skipped and the dates after it move.` : null;
+  const consequences = [skippedLine, endsRunningLine(cycle.id, running), dropsScheduledLine(cycle.id, otherScheduled)].filter(Boolean);
+  const start = () => (consequences.length > 0 ? setConfirming(true) : handleStart());
   const errorLine = !confirming && error && (
     <p role="alert" className="text-sm text-destructive">
       {error}
@@ -146,7 +156,7 @@ export function StartCycleButton({
       <ConfirmSheet
         open={confirming}
         title={`Start ${cycle.name} now?`}
-        body={`This starts ${cycle.name} today. ${skippedPhases === 1 ? "1 earlier phase" : `${skippedPhases} earlier phases`} will be skipped and the dates after it move.`}
+        body={[`This starts ${cycle.name} today.`, ...consequences].join(" ")}
         action={`Start ${cycle.name}`}
         busyAction="Starting…"
         loading={loading}
@@ -159,7 +169,7 @@ export function StartCycleButton({
 }
 
 /** The 44 px ⋯ button at the top right of the detail, and the sheets it opens. */
-export function CycleMenu({ cycle }: { cycle: TrainingCycle }) {
+export function CycleMenu({ cycle, running = null }: { cycle: TrainingCycle; running?: RunningCycle | null }) {
   const router = useRouter();
   const returnTo = useReturnTo();
   const [open, setOpen] = useState(false);
@@ -235,7 +245,13 @@ export function CycleMenu({ cycle }: { cycle: TrainingCycle }) {
       <ConfirmSheet
         open={confirm === "restart"}
         title="Restart this cycle?"
-        body={`The cycle starts again from today, at week 1.${cycle.status === "completed" ? " It becomes the running cycle again." : ""}`}
+        body={[
+          "The cycle starts again from today, at week 1.",
+          cycle.status === "completed" ? "It becomes the running cycle again." : null,
+          endsRunningLine(cycle.id, running),
+        ]
+          .filter(Boolean)
+          .join(" ")}
         action="Yes, restart"
         busyAction="Restarting…"
         loading={loading}

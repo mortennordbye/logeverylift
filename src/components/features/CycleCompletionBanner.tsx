@@ -5,11 +5,13 @@
  *
  * The completed state of the cycle detail (docs/design/plan-redesign/J3_CycleDone.dc.html):
  * "Cycle complete", the user's end message, and what comes next. A scheduled
- * next cycle can start now, unless it starts tomorrow anyway; with nothing
+ * next cycle can start now, unless it starts tomorrow anyway or another cycle
+ * is running (a start would end it, so the card only links on); with nothing
  * next, the end action can lead to a new cycle. "Not now" hides the card.
  */
 
 import { startTrainingCycle } from "@/lib/actions/training-cycles";
+import type { RunningCycle } from "@/lib/utils/cycle-start";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { TrainingCycle } from "@/types/workout";
 import { Check } from "lucide-react";
@@ -21,7 +23,20 @@ export type NextCycle = { id: number; name: string; startsLabel: string; startsT
 
 const primary = "flex h-[52px] items-center justify-center rounded-2xl bg-primary text-base font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50";
 
-export function CycleCompletionBanner({ cycle, lengthLabel, endedLabel, next }: { cycle: TrainingCycle; lengthLabel: string; endedLabel: string; next: NextCycle | null }) {
+export function CycleCompletionBanner({
+  cycle,
+  lengthLabel,
+  endedLabel,
+  next,
+  running = null,
+}: {
+  cycle: TrainingCycle;
+  lengthLabel: string;
+  endedLabel: string;
+  next: NextCycle | null;
+  /** Another cycle that is running: then the card offers no start. */
+  running?: RunningCycle | null;
+}) {
   const router = useRouter();
   const [dismissed, setDismissed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -43,6 +58,7 @@ export function CycleCompletionBanner({ cycle, lengthLabel, endedLabel, next }: 
   }
 
   const newCycle = !next && (cycle.endAction === "new_cycle" || cycle.endAction === "deload");
+  const canStartNext = next != null && !next.startsTomorrow && running == null;
 
   return (
     <div className="flex flex-col gap-3.5 rounded-[20px] bg-widget p-[18px]" data-testid="cycle-complete">
@@ -63,7 +79,7 @@ export function CycleCompletionBanner({ cycle, lengthLabel, endedLabel, next }: 
               {next.name} starts {next.startsLabel} <span className="text-brand">›</span>
             </span>
           </Link>
-          {!next.startsTomorrow && (
+          {canStartNext && (
             <button type="button" onClick={startNext} disabled={loading} className={primary}>
               {loading ? "Starting…" : "Start now instead"}
             </button>
@@ -80,7 +96,7 @@ export function CycleCompletionBanner({ cycle, lengthLabel, endedLabel, next }: 
           {error}
         </p>
       )}
-      {(next ? !next.startsTomorrow : newCycle) && (
+      {(next ? canStartNext : newCycle) && (
         <button type="button" onClick={() => setDismissed(true)} className="min-h-11 text-[15px] font-medium text-foreground/80 active:opacity-70">
           Not now
         </button>
