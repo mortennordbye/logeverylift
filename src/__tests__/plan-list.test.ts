@@ -74,6 +74,17 @@ describe("plan list words", () => {
     expect(card.phases[1].sub).toBe("Build · 10 days · 28 Dec – 6 Jan");
   });
 
+  it("dates the next phase from today when the phases before it were deleted (fix round 8)", () => {
+    // The running phase and the one after it went to Recently deleted: only a draft is left, on a chain that starts in the past.
+    const card = seasonCard(
+      { id: 9, name: "Winter", startDate: "2026-10-31", endDate: "2027-03-01", replanFlaggedAt: null },
+      [phase(3, "Peak and test", "peak", { w: 3 })],
+      null,
+      TODAY,
+    );
+    expect(card.phases[0]).toMatchObject({ sub: "Peak · 3 wk · 14 Nov – 4 Dec", badge: "Next" });
+  });
+
   it("labels the hero of a running and of a scheduled block", () => {
     const rotation = { id: 1, name: "UL", durationWeeks: 6, durationDays: null, scheduleType: "rotation" as const, startDate: "2026-11-02", scheduledStartDate: null };
     expect(heroLabel(rotation, TODAY, true)).toBe("Week 2 of 6 · Rotation");
