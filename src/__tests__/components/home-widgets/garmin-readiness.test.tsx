@@ -27,11 +27,12 @@ const readiness: Readiness = {
 const ctx = { userId: "u1", role: "admin", today: "2026-11-13" };
 
 describe("Garmin readiness", () => {
-  it("S shows the score and the word", () => {
+  it("S shows the score, the word and two contributors", () => {
     render(<>{w.View({ data: { connected: true, readiness }, size: "s" })}</>);
     expect(screen.getByText("72")).toBeTruthy();
     expect(screen.getByText("Train as planned")).toBeTruthy();
-    expect(screen.queryByRole("img", { name: "HRV 64 of 100" })).toBeNull();
+    expect(screen.getByRole("img", { name: "HRV 64 of 100" })).toBeTruthy();
+    expect(screen.queryByText("5 of 6 signals")).toBeNull();
   });
 
   it("M adds the contributor bars", () => {
@@ -39,6 +40,26 @@ describe("Garmin readiness", () => {
     expect(screen.getByText("72")).toBeTruthy();
     expect(screen.getByRole("img", { name: "HRV 64 of 100" })).toBeTruthy();
     expect(screen.getByText("5 of 6 signals")).toBeTruthy();
+  });
+
+  it("M names both sleep rows in full, with no cut-off label (owner report, 2026-11-14)", () => {
+    const all: Readiness = {
+      ...readiness,
+      contributors: [
+        { key: "restingHr", score: 0, detail: "49 bpm, normal 45" },
+        { key: "sleep", score: 100, detail: "110 % of need" },
+        { key: "sleepDebt", score: 96, detail: "0.4 h over 14 nights" },
+        { key: "form", score: 74, detail: "TSB 0" },
+      ],
+    };
+    const m = render(<>{w.View({ data: { connected: true, readiness: all }, size: "m" })}</>);
+    expect(screen.getByText("Sleep")).toBeTruthy();
+    expect(screen.getByText("Sleep debt")).toBeTruthy();
+    expect(m.container.querySelector("li .truncate")).toBeNull();
+    m.unmount();
+    const s = render(<>{w.View({ data: { connected: true, readiness: { ...all, contributors: all.contributors.slice(1) } }, size: "s" })}</>);
+    expect(screen.getByText("Debt")).toBeTruthy();
+    expect(s.container.querySelector("li .truncate")).toBeNull();
   });
 
   it("without a connection it offers Connect Garmin", () => {

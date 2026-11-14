@@ -1,13 +1,34 @@
-import { defineWidget } from "@/components/features/home/define-widget";
-import { PreviewBox } from "@/components/features/home/widget-ui";
+import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
+import { SAMPLE_CYCLE } from "@/components/features/home/samples";
+import { Cap, Card, Label, Num, PreviewBox } from "@/components/features/home/widget-ui";
 import type { HomeCore } from "@/lib/home/core";
+import { Repeat } from "lucide-react";
 import Link from "next/link";
 
-/** Cycle progress: S the week, M the name, week, bar and end date (the old card's header). */
+/** Cycle progress: S the week as a big number, M the name, week, a segment per week and the end date. */
 
 type CycleData = { name: string; currentWeek: number; durationWeeks: number; progressPct: number; endFormatted: string };
 
-export const cycleWidget = defineWidget<CycleData>({
+function Segments({ current, total }: { current: number; total: number }) {
+  if (total > 16) {
+    return (
+      <div className="h-1.5 overflow-hidden rounded-full bg-widget-2" aria-hidden>
+        <div className="h-full rounded-full bg-brand" style={{ width: `${Math.min(100, ((current - 0.5) / total) * 100)}%` }} />
+      </div>
+    );
+  }
+  return (
+    <div className="flex gap-1" aria-hidden>
+      {Array.from({ length: total }, (_, i) => (
+        <i key={i} className={`relative h-1.5 flex-1 overflow-hidden rounded-full ${i < current - 1 ? "bg-brand" : "bg-widget-2"}`}>
+          {i === current - 1 && <span className="absolute inset-y-0 left-0 w-1/2 rounded-full bg-brand" />}
+        </i>
+      ))}
+    </div>
+  );
+}
+
+export const cycleWidget: Renderer<CycleData> = defineWidget<CycleData>({
   select: (core: HomeCore) =>
     core.info
       ? {
@@ -20,34 +41,36 @@ export const cycleWidget = defineWidget<CycleData>({
       : null,
   View: ({ data, size }) =>
     size === "s" ? (
-      <Link href="/cycles" className="rounded-2xl bg-muted p-3 h-full flex flex-col justify-between active:opacity-70" data-testid="cycle-widget">
-        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">{data.name}</span>
-        <span className="text-2xl font-bold tabular-nums">
-          Week {data.currentWeek}/{data.durationWeeks}
-        </span>
-      </Link>
+      <Card href="/cycles" testId="cycle-widget" ariaLabel={`${data.name}, week ${data.currentWeek} of ${data.durationWeeks}`}>
+        <Label icon={<Repeat />}>Cycle</Label>
+        <div className="mt-auto">
+          <p className="text-[13px] font-semibold text-muted-foreground">Week</p>
+          <Num size={54} unit={`of ${data.durationWeeks}`}>
+            {data.currentWeek}
+          </Num>
+          <p className="mt-1 truncate text-sm font-semibold">{data.name}</p>
+        </div>
+      </Card>
     ) : (
-      <Link href="/cycles" className="block rounded-2xl bg-muted px-4 py-3 active:opacity-70" data-testid="cycle-widget">
-        <div className="flex items-center justify-between mb-1">
-          <span className="text-sm font-semibold">{data.name}</span>
-          <span className="text-xs text-muted-foreground">Week {data.currentWeek}/{data.durationWeeks}</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="flex-1 h-1 bg-border rounded-full overflow-hidden">
-            <div className="h-full bg-primary rounded-full" style={{ width: `${data.progressPct}%` }} />
-          </div>
-          <span className="text-xs text-muted-foreground shrink-0">ends {data.endFormatted}</span>
-        </div>
-      </Link>
+      <Card href="/cycles" testId="cycle-widget" className="gap-3">
+        <Label icon={<Repeat />} more={`Week ${data.currentWeek} of ${data.durationWeeks}`}>
+          Cycle
+        </Label>
+        <p className="home-display text-[26px] uppercase truncate">{data.name}</p>
+        <Segments current={data.currentWeek} total={data.durationWeeks} />
+        <Cap className="mt-auto">ends {data.endFormatted}</Cap>
+      </Card>
     ),
   Empty: () => (
-    <div className="rounded-2xl bg-muted p-3 h-full" data-testid="cycle-widget">
-      <p className="text-sm text-muted-foreground">No training cycle.</p>
-      <Link href="/cycles" className="min-h-11 inline-flex items-center text-sm font-semibold text-primary active:opacity-70">
+    <Card testId="cycle-widget">
+      <Label icon={<Repeat />}>Cycle</Label>
+      <p className="mt-2 text-sm text-muted-foreground">No training cycle.</p>
+      <Link href="/cycles" className="mt-auto min-h-11 inline-flex items-center text-[15px] font-semibold text-brand active:opacity-60">
         Set up a Cycle →
       </Link>
-    </div>
+    </Card>
   ),
   Skeleton: ({ size }) => <PreviewBox title="Cycle progress" size={size} />,
   Preview: ({ size }) => <PreviewBox title="Cycle progress" size={size} />,
+  Sample: ({ size }) => cycleWidget.View({ data: SAMPLE_CYCLE, size }),
 });

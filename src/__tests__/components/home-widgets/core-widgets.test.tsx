@@ -8,6 +8,7 @@ vi.mock("@/components/ui/theme-provider", () => ({ useTheme: () => ({ weeklyGoal
 
 const { titleWidget } = await import("@/components/features/home/widgets/title/View");
 const { cycleWidget } = await import("@/components/features/home/widgets/cycle/View");
+const { dateWidget } = await import("@/components/features/home/widgets/date/View");
 const { weeklyGoalWidget } = await import("@/components/features/home/widgets/weekly-goal/View");
 
 const cycle = { name: "Block", currentWeek: 2, durationWeeks: 4, progressPct: 25, endFormatted: "Dec 4" };
@@ -26,7 +27,8 @@ describe("Title", () => {
 describe("Cycle progress", () => {
   it("S shows the week; M the name, bar and end date", () => {
     const s = render(<>{cycleWidget.View({ data: cycle, size: "s" })}</>);
-    expect(screen.getByText("Week 2/4")).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Block, week 2 of 4" }).getAttribute("href")).toBe("/cycles");
+    expect(screen.getByText("2")).toBeTruthy();
     s.unmount();
     render(<>{cycleWidget.View({ data: cycle, size: "m" })}</>);
     expect(screen.getByText("Block")).toBeTruthy();
@@ -43,9 +45,20 @@ describe("Weekly goal", () => {
   it("shows workouts against the goal at S and M", () => {
     for (const size of ["s", "m"] as const) {
       const r = render(<>{weeklyGoalWidget.View({ data: { thisWeekWorkouts: 3 }, size })}</>);
-      expect(screen.getByText("3/4")).toBeTruthy();
+      expect(screen.getByText("3")).toBeTruthy();
+      expect(screen.getByText("of 4")).toBeTruthy();
       expect(screen.getByText("1 more to reach your goal")).toBeTruthy();
       r.unmount();
     }
+  });
+});
+
+describe("Date (owner decision B)", () => {
+  it("shows today's date from the user's zone, built on the server", () => {
+    // 2026-11-14 is a Saturday; core.today is already the user's local day.
+    const label = dateWidget.select!({ today: new Date(2026, 10, 14), info: null } as never)!;
+    expect(label).toEqual({ label: "Saturday, 14 November" });
+    render(<>{dateWidget.View({ data: label, size: "m" })}</>);
+    expect(screen.getByTestId("date-widget").textContent).toBe("Saturday, 14 November");
   });
 });

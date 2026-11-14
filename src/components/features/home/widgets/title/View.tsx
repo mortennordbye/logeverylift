@@ -1,5 +1,4 @@
 import { defineWidget } from "@/components/features/home/define-widget";
-import { PreviewBox } from "@/components/features/home/widget-ui";
 import type { HomeCore } from "@/lib/home/core";
 
 /**
@@ -16,28 +15,43 @@ type TitleData = { date: string; cycleWeek: string | null };
 export function selectTitle(core: HomeCore): TitleData {
   const d = core.today;
   return {
-    date: `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`,
+    date: `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`,
     cycleWeek: core.info ? `Week ${core.info.currentWeek} of ${core.info.cycle.durationWeeks}` : null,
   };
 }
 
-const H1 = <h1 className="text-2xl font-bold tracking-tight text-center" data-testid="home-title">LogEveryLift</h1>;
+/** The heading: Big Shoulders, in capitals (CSS only, so its name stays "LogEveryLift"). */
+const H1 = (
+  <h1 className="home-display text-[38px] uppercase leading-[1.1]" data-testid="home-title">
+    LogEveryLift
+  </h1>
+);
 
 export const titleWidget = defineWidget<TitleData>({
   select: selectTitle,
   View: ({ data, size }) =>
     size === "l" ? (
-      <div className="text-center">
-        {H1}
-        <p className="text-sm text-muted-foreground mt-0.5">
+      <div>
+        <p className="text-[13px] font-semibold uppercase tracking-[0.04em] text-muted-foreground">
           {data.date}
           {data.cycleWeek && ` · ${data.cycleWeek}`}
         </p>
+        {H1}
       </div>
     ) : (
       H1
     ),
   Empty: () => H1,
   Skeleton: () => H1,
-  Preview: ({ size }) => <PreviewBox title="LogEveryLift" size={size} lines={0} />,
+  Preview: ({ size }) => (
+    <div aria-hidden="true" className="px-1">
+      {size === "l" && <div className="mb-1.5 h-2.5 w-36 rounded-full bg-widget-2" />}
+      <p className="home-display text-[38px] uppercase leading-[1.1]">LogEveryLift</p>
+    </div>
+  ),  Sample: ({ size }) => (
+    <div aria-hidden="true" className="px-1">
+      {size === "l" && <div className="mb-1.5 h-2.5 w-36 rounded-full bg-widget-2" />}
+      <p className="home-display text-[38px] uppercase leading-[1.1]">LogEveryLift</p>
+    </div>
+  ),
 });

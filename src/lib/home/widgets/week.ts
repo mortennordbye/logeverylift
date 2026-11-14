@@ -9,7 +9,6 @@ export const week = {
   sizes: ["m", "l"],
   defaultSize: "l",
   critical: false,
-  stretch: true,
   source: "core",
   available: () => true,
   defaultVisible: () => true,

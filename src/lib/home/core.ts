@@ -29,6 +29,11 @@ import { getUserSettings, type UserSettings } from "@/lib/user-settings";
 import { parseDateStr } from "@/lib/utils/cycle-position";
 import type { requireSession } from "@/lib/utils/session";
 import { weekDatesOf } from "@/lib/utils/user-date";
+import { db } from "@/db";
+import { exercises, programExercises, programSets, programs } from "@/db/schema";
+import { todayPlanFrom } from "@/lib/home/today-plan";
+import { liveProgramExercises, livePrograms, liveProgramSets } from "@/lib/plan-live";
+import { and, asc, eq } from "drizzle-orm";
 import { cache } from "react";
 
 type Session = Awaited<ReturnType<typeof requireSession>>;
@@ -54,6 +59,34 @@ async function enduranceToday(userId: string, today: string): Promise<EnduranceT
       ].filter(Boolean);
       return { id: s.id, name: a.name, sport: s.sport!, summary: a.summary, amount: parts.length ? parts.join(" · ") : null, done: s.state === "done" };
     });
+}
+
+/**
+ * Today's program for the Today widget: its exercises and sets in one read,
+ * filtered by the program's owner, deleted rows left out (owner decision A,
+ * 2026-11-14).
+ */
+export async function readTodayPlan(userId: string, programId: number) {
+  const rows = await db
+    .select({
+      programExerciseId: programExercises.id,
+      name: exercises.name,
+      setType: programSets.setType,
+      targetReps: programSets.targetReps,
+      repRangeMin: programSets.repRangeMin,
+      repRangeMax: programSets.repRangeMax,
+      weightKg: programSets.weightKg,
+      durationSeconds: programSets.durationSeconds,
+      distanceMeters: programSets.distanceMeters,
+      restTimeSeconds: programSets.restTimeSeconds,
+    })
+    .from(programExercises)
+    .innerJoin(programs, and(eq(programs.id, programExercises.programId), eq(programs.userId, userId), livePrograms))
+    .innerJoin(exercises, eq(exercises.id, programExercises.exerciseId))
+    .leftJoin(programSets, and(eq(programSets.programExerciseId, programExercises.id), liveProgramSets))
+    .where(and(eq(programExercises.programId, programId), liveProgramExercises))
+    .orderBy(asc(programExercises.orderIndex), asc(programExercises.id), asc(programSets.setNumber));
+  return todayPlanFrom(rows);
 }
 
 /**
@@ -106,7 +139,7 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
   const info = cycleResult.success ? cycleResult.data : null;
   const todayProgram = info?.todaySlot?.program ?? null;
 
-  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, enduranceRead] = await Promise.all([
+  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, enduranceRead, todayPlan] = await Promise.all([
     getWorkoutStats(),
     getCompletedSessions(monday),
     todayProgram
@@ -115,6 +148,14 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     getPendingCheckin(),
     needsPolicyNotice(session),
     enduranceHome(session.user.id, todayStr),
+    // A day with several sessions lists them instead (TodaySessionsList).
+    // A failed read shows Today without its plan, not the error page.
+    todayProgram && (info?.todaySessions.length ?? 0) <= 1
+      ? readTodayPlan(session.user.id, todayProgram.id).catch((e: unknown) => {
+          console.error("[Home] today_plan_read_failed", { error: e instanceof Error ? e.name : "unknown" });
+          return null;
+        })
+      : Promise.resolve(null),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
   const endurance = enduranceRead.home;
@@ -181,6 +222,7 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     weekDates,
     info,
     todayProgram,
+    todayPlan,
     stats,
     completedDates,
     todaySessions,

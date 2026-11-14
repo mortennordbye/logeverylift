@@ -1,12 +1,19 @@
 import { RENDERERS } from "@/components/features/home/widgets";
 import { loadFriendsActivity } from "@/components/features/home/widgets/friends-activity/load";
 import { loadGarminReadiness } from "@/components/features/home/widgets/garmin-readiness/load";
+import { loadBodyWeight } from "@/components/features/home/widgets/body-weight/load";
+import { loadRaceCountdown } from "@/components/features/home/widgets/race-countdown/load";
 import { loadRecentPrs } from "@/components/features/home/widgets/recent-prs/load";
+import { loadStreak } from "@/components/features/home/widgets/streak/load";
+import { loadTrainingLoad } from "@/components/features/home/widgets/training-load/load";
+import { loadWeeklySets } from "@/components/features/home/widgets/weekly-sets/load";
 import { db } from "@/db";
-import { exercisePrs, friendships, garminConnections, garminDailyMetrics } from "@/db/schema";
+import { exercisePrs, friendships, garminConnections, garminDailyMetrics, seasonRaces, seasons, userWeightEntries, workoutSets } from "@/db/schema";
+import { readTodayPlan } from "@/lib/home/core";
 import { WIDGETS } from "@/lib/home/widgets";
+import { localDateStr, weekDatesOf } from "@/lib/utils/user-date";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createExercise, createSession, createUser } from "./factories";
+import { createExercise, createProgram, createSession, createUser } from "./factories";
 import { asUser } from "./setup";
 
 /**
@@ -109,5 +116,113 @@ describe("Garmin readiness loader (I2)", () => {
     await db.insert(garminConnections).values({ userId: me, encryptedKey: "v1.x.y.z" });
     await db.insert(garminDailyMetrics).values({ userId: other.id, day: today, modelVersion: 3, metrics: { readiness } });
     expect(await loadGarminReadiness(ctx("admin"))).toEqual({ connected: true, readiness: null });
+  });
+});
+
+describe("phase 2 loaders read only the caller's data", () => {
+  const day = (offset: number) => new Date(Date.parse(`${today}T00:00:00Z`) + offset * 86_400_000).toISOString().slice(0, 10);
+
+  it("Body weight: the caller's entries only, latest and 30-day change; null without any", async () => {
+    expect(await loadBodyWeight(ctx())).toBeNull();
+    const other = await createUser();
+    await db.insert(userWeightEntries).values([
+      { id: "w1", userId: me, weightKg: 83.1, recordedAt: new Date(`${day(-10)}T08:00:00Z`) },
+      { id: "w2", userId: me, weightKg: 82.4, recordedAt: new Date(`${today}T08:00:00Z`) },
+      { id: "w3", userId: other.id, weightKg: 120, recordedAt: new Date(`${day(-1)}T08:00:00Z`) },
+    ]);
+    const w = await loadBodyWeight(ctx());
+    expect(w).toEqual({ latestKg: 82.4, changeKg: -0.7, lowKg: 82.4, highKg: 83.1, series: [83.1, 82.4], sinceDate: day(-10), oldDate: null });
+  });
+
+  it("Race countdown: the caller's next A race, not another user's, not a past one", async () => {
+    const other = await createUser();
+    const [mine] = await db.insert(seasons).values({ userId: me, name: "2026", startDate: day(-30), endDate: day(60) }).returning();
+    const [theirs] = await db.insert(seasons).values({ userId: other.id, name: "Theirs", startDate: day(-30), endDate: day(60) }).returning();
+    await db.insert(seasonRaces).values([
+      { seasonId: theirs.id, userId: other.id, name: "Their race", raceDate: day(3), discipline: "run", priority: "A" },
+      { seasonId: mine.id, userId: me, name: "Past race", raceDate: day(-2), discipline: "run", priority: "A" },
+    ]);
+    expect(await loadRaceCountdown(ctx())).toBeNull();
+    await db.insert(seasonRaces).values({ seasonId: mine.id, userId: me, name: "Oslo Half", raceDate: day(22), discipline: "run", priority: "A" });
+    expect(await loadRaceCountdown(ctx())).toMatchObject({ name: "Oslo Half", days: 22, seasonId: mine.id });
+  });
+
+  it("Weekly sets and Streak: only the caller's sessions count", async () => {
+    expect(await loadWeeklySets(ctx())).toBeNull();
+    expect(await loadStreak(ctx())).toBeNull();
+    const other = await createUser();
+    const lift = await createExercise({ name: "Bench", muscleGroup: "chest" });
+    const theirs = await createSession(other.id, null, { isCompleted: true, endTime: new Date() });
+    await db.insert(workoutSets).values({ sessionId: theirs.id, exerciseId: lift.id, setNumber: 1, actualReps: 5, weightKg: "100", restTimeSeconds: 90, isCompleted: true });
+    expect(await loadWeeklySets(ctx())).toBeNull();
+    expect(await loadStreak(ctx())).toBeNull();
+
+    const mine = await createSession(me, null, { isCompleted: true, endTime: new Date() });
+    await db.insert(workoutSets).values([1, 2, 3].map((n) => ({ sessionId: mine.id, exerciseId: lift.id, setNumber: n, actualReps: 5, weightKg: "100", restTimeSeconds: 90, isCompleted: true })));
+    expect(await loadWeeklySets(ctx())).toEqual({ total: 3, muscles: [{ name: "chest", sets: 3, target: 10 }] });
+    const streak = await loadStreak(ctx());
+    expect(streak!.weeks).toBe(1);
+    expect(streak!.perWeek.at(-1)).toBe(1);
+  });
+
+  it("Training load: null with no load in four weeks", async () => {
+    expect(await loadTrainingLoad(ctx())).toBeNull();
+  });
+});
+
+describe("weeks in the user's zone (review 2026-11-14, finding 4)", () => {
+  const shift = (d: string, n: number) => new Date(Date.parse(`${d}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
+
+  async function setsOn(userId: string, date: string, startTime: Date) {
+    const lift = await createExercise({ muscleGroup: "chest" });
+    const s = await createSession(userId, null, { date, startTime, isCompleted: true, endTime: startTime });
+    await db.insert(workoutSets).values([1, 2].map((n) => ({ sessionId: s.id, exerciseId: lift.id, setNumber: n, actualReps: 5, weightKg: "100", restTimeSeconds: 90, isCompleted: true })));
+  }
+
+  it("Weekly sets: a New York user on Sunday 20:00 sees that week's sets, though the server's week has turned", async () => {
+    // Last week's Sunday stands in for "Sunday evening in New York": by then
+    // the server's UTC clock is in the next week.
+    const sunday = shift(weekDatesOf(localDateStr(new Date(), "America/New_York"))[0], -1);
+    const ny = await createUser({ timeZone: "America/New_York" });
+    asUser(ny.id);
+    await setsOn(ny.id, sunday, new Date(`${sunday}T18:00:00Z`));
+    expect(await loadWeeklySets({ userId: ny.id, role: "user", today: sunday })).toMatchObject({ total: 2 });
+    // The Monday after starts a new week.
+    expect(await loadWeeklySets({ userId: ny.id, role: "user", today: shift(sunday, 1) })).toBeNull();
+  });
+
+  it("Streak: an Oslo session at Monday 00:30 counts in the new week", async () => {
+    const today = localDateStr(new Date(), "Europe/Oslo");
+    const monday = weekDatesOf(today)[0];
+    const oslo = await createUser({ timeZone: "Europe/Oslo" });
+    asUser(oslo.id);
+    // Last Wednesday, and this Monday at 00:30 in Oslo (still Sunday in UTC).
+    await setsOn(oslo.id, shift(monday, -5), new Date(`${shift(monday, -5)}T17:00:00Z`));
+    await setsOn(oslo.id, monday, new Date(`${monday}T00:30:00+01:00`));
+    const streak = await loadStreak({ userId: oslo.id, role: "user", today });
+    expect(streak!.weeks).toBe(2);
+    expect(streak!.perWeek.slice(-2)).toEqual([1, 1]);
+  });
+});
+
+describe("Today's plan read (owner decision A)", () => {
+  it("reads the caller's program in order; another user's program gives null", async () => {
+    const bench = await createExercise({ name: "Bench" });
+    const row = await createExercise({ name: "Row" });
+    const { program } = await createProgram(me, [
+      { exerciseId: bench.id, sets: [{}, {}, {}] },
+      { exerciseId: row.id, sets: [{ weightKg: "70" }] },
+    ]);
+    expect(await readTodayPlan(me, program.id)).toMatchObject({
+      exerciseCount: 2,
+      setCount: 4,
+      exercises: [
+        { name: "Bench", sets: "3 × 8 · 80 kg" },
+        { name: "Row", sets: "1 × 8 · 70 kg" },
+      ],
+      more: [],
+    });
+    const other = await createUser();
+    expect(await readTodayPlan(other.id, program.id)).toBeNull();
   });
 });

@@ -68,6 +68,7 @@ describe("renderCoreWidget", () => {
       Empty: () => null,
       Skeleton: () => null,
       Preview: () => null,
+      Sample: () => null,
     });
     render(<>{renderCoreWidget("cycle", w, {} as HomeCore, "m")}</>);
     expect(screen.getByText("Couldn't load this.")).toBeTruthy();

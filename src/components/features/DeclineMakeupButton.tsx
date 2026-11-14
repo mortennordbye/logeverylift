@@ -29,7 +29,7 @@ export function DeclineMakeupButton({ date, plannedSessionId }: { date: string; 
     <button
       onClick={handleDecline}
       disabled={pending}
-      className="text-xs font-semibold text-muted-foreground px-3 py-1.5 rounded-full bg-muted active:opacity-70 disabled:opacity-50"
+      className="min-h-11 inline-flex items-center px-2 text-[13px] font-semibold text-muted-foreground active:opacity-60 disabled:opacity-50"
     >
       Decline
     </button>

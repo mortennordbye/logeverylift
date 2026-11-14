@@ -28,6 +28,7 @@ const base: TodayData = {
   isRestDay: false,
   rotationOverdueDays: 0,
   insight: undefined,
+  plan: null,
 };
 const prog = { id: 7, name: "Push" };
 const session = (id: number, programId: number | null, done: boolean, autoSessionId: number | null = null) =>
@@ -79,6 +80,14 @@ describe("Today keeps every action at every size (C1)", () => {
     expect(screen.getByRole("link", { name: "Start Today's Workout" }).getAttribute("href")).toBe("/programs/7/workout");
   });
 
+  it("no cycle: the set-up link's name has no arrow, at S and L", () => {
+    for (const size of ["s", "l"] as const) {
+      const r = render(<>{todayWidget.View({ data: STATES["no cycle"], size })}</>);
+      expect(screen.getByRole("link", { name: "Set up a Cycle" }).getAttribute("href")).toBe("/cycles");
+      r.unmount();
+    }
+  });
+
   it("S with several sessions starts the first open one", () => {
     render(<>{todayWidget.View({ data: STATES["several sessions"], size: "s" })}</>);
     expect(screen.getByText("3 sessions today")).toBeTruthy();
@@ -96,5 +105,45 @@ describe("error states keep a way to start (C1)", () => {
   it("Endurance today's error links to /new-workout", () => {
     render(<>{enduranceTodayWidget.Error!({ size: "m" })}</>);
     expect(screen.getByRole("link", { name: "Start a Workout" }).getAttribute("href")).toBe("/new-workout");
+  });
+});
+
+describe("today's plan (owner decision A)", () => {
+  const plan = {
+    exerciseCount: 6,
+    setCount: 24,
+    minutes: 55,
+    exercises: [
+      { name: "Bench Press", sets: "4 × 6–8 · 80 kg" },
+      { name: "Barbell Row", sets: "4 × 8 · 70 kg" },
+      { name: "Overhead Press", sets: "3 × 8 · 47.5 kg" },
+    ],
+    more: ["Pull-up", "Lateral Raise", "Triceps Pushdown"],
+  };
+  const data = { ...STATES["one program, not done"], plan };
+
+  it("L: the counts, the first three exercises and the rest by name", () => {
+    render(<>{todayWidget.View({ data, size: "l" })}</>);
+    expect(screen.getByText("6 exercises · 24 sets · about 55 min")).toBeTruthy();
+    expect(screen.getByText("4 × 6–8 · 80 kg")).toBeTruthy();
+    expect(screen.getByText("+ 3 more: Pull-up, Lateral Raise, Triceps Pushdown")).toBeTruthy();
+  });
+
+  it("M: the counts only; S: exercises and minutes", () => {
+    const m = render(<>{todayWidget.View({ data, size: "m" })}</>);
+    expect(screen.getByText("6 exercises · 24 sets · about 55 min")).toBeTruthy();
+    expect(screen.queryByTestId("today-plan")).toBeNull();
+    m.unmount();
+    render(<>{todayWidget.View({ data, size: "s" })}</>);
+    expect(screen.getByText("6 exercises · 55 min")).toBeTruthy();
+  });
+});
+
+
+describe("the insight as the hero's tip", () => {
+  it("shows the headline on one pill", () => {
+    const insight = { type: "stagnating", headline: "Holding the same weights" } as TodayData["insight"];
+    render(<>{todayWidget.View({ data: { ...STATES["one program, not done"], insight }, size: "l" })}</>);
+    expect(screen.getByTestId("today-tip").textContent).toBe("Holding the same weights");
   });
 });

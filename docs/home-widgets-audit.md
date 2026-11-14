@@ -186,6 +186,7 @@ Phase: **1** = this PR (section 6; "built" once merged code has it), **2** = nex
 | Widget | S | M | L | Data source (exists) | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
 | Title (header) | - | "LogEveryLift" (default) | Title, date, cycle week | none | all | none | 1, built |
+| Date | Day and date, as an eyebrow line | Same, full width | - | page data (today in the user's zone) | all | none | decision 19, built |
 | **Today** (cycle and no-cycle variants) | Name, primary action, "More" menu with every other action (6.3) | Card without the cycle header | Card as now (default) | as now | all | as now | 1, built |
 | Cycle progress | Week x/y | Name, week, bar, end date | - | `getActiveCycleForUser` (page data) | all; empty state without a cycle | none | 1, built |
 | Endurance today | - | Rows as now (default) | Rows with step summary | `sessionCompliance`, `answerSession` | endurance | as now | 1, built |
@@ -193,7 +194,7 @@ Phase: **1** = this PR (section 6; "built" once merged code has it), **2** = nex
 | Weekly goal | Ring and count | Ring and label | - | `getWorkoutStats`, `weeklyGoal` | all | none | 1, built |
 | Next session | Name and day | Name, day, summary, start link | - | cycle info, planned sessions | cycle | low | 2 |
 | Season phase | Phase, week x of y | Plus phase bar | - | `listSeasons` (`src/lib/seasons.ts:83`) | endurance with a season | low | 2 |
-| Race countdown | Days to race | Race, date, days, phase | - | `listSeasons`; `training_cycles.race_date` | users with a race | low | 2 |
+| Race countdown | Days to race | Race, date, days, phase | - | `listSeasons`; `training_cycles.race_date` | users with a race | low | 2, built (S) |
 | Missed this week, Make up | - | - | - | notice N5 | | | 1 (notice) |
 | Did you do these? | - | - | - | notice N4 | | | 1 (notice) |
 | Readiness swap | - | - | - | notice, package D4 | endurance | | with D4 |
@@ -210,9 +211,9 @@ Phase: **1** = this PR (section 6; "built" once merged code has it), **2** = nex
 
 | Widget | S | M | L | Data source | Who | Cost | Phase |
 |---|---|---|---|---|---|---|---|
-| Training streak | Weeks in a row | Plus last 8 weeks | - | `getSummaryStats` (`src/lib/actions/metrics.ts:1369`, streak at `:1430`) | all | medium | 2 |
-| Weekly volume | Sets this week | Top muscles vs target | All muscle bars | `getWeeklyMuscleVolume` (`src/lib/actions/metrics.ts:1113`) | all | medium | 2 |
-| Body weight | Latest and change | 30-day line | 90-day line | `getWeightHistory` (`src/lib/actions/profile.ts:65`) | users who log weight | low | 2 |
+| Training streak | Weeks in a row | Plus last 8 weeks | - | `getSummaryStats` (`src/lib/actions/metrics.ts:1369`, streak at `:1430`) | all | medium | 2, built |
+| Weekly volume | Sets this week | Top muscles vs target | All muscle bars | `getWeeklyMuscleVolume` (`src/lib/actions/metrics.ts:1113`) | all | medium | 2, built (S, as "Weekly sets") |
+| Body weight | Latest and change | 30-day line | 90-day line | `getWeightHistory` (`src/lib/actions/profile.ts:65`) | users who log weight | low | 2, built (S, M) |
 | Consistency | Weeks goal met, last 8 | Heatmap, 12 weeks | Heatmap, 26 weeks | `getHeatmapData` (`src/lib/actions/metrics.ts:1083`) | all | medium | 2 |
 | Compliance | Planned vs done this week | Per sport | - | `sessionCompliance` (`src/lib/session-compliance.ts:217`) | endurance | medium | 2 |
 | Summary totals | Workouts, sets | Workouts, sets, reps | - | `getWorkoutStats` | all | none | 3 |
@@ -230,7 +231,7 @@ Garmin access is on only for admin accounts where the key is set
 | HRV | Last night vs baseline | 7-day dots | - | `getTodayData` (`hrvNight`, `metrics`) | medium | 2 |
 | Sleep | Hours and score | Stages bar | 7 nights | `getTodayData(...).sleep`; `getSleepData` (`src/lib/garmin/queries.ts:317`) | medium | 2 |
 | Body battery | At wake and now | High, low, charged, drained | - | `getTodayData(...).summary.bb*` | medium | 2 |
-| Training load and form | Form and band | 6-week fitness, fatigue, form | Per sport | `getLoadSeries` (`src/lib/garmin/queries.ts:50`); without Garmin, `getTrainingLoad` (`src/lib/training-load.ts:149`) | medium | 2 |
+| Training load and form | Form and band | 6-week fitness, fatigue, form | Per sport | `getLoadSeries` (`src/lib/garmin/queries.ts:50`); without Garmin, `getTrainingLoad` (`src/lib/training-load.ts:149`) | medium | 2, built (M, L) |
 | Today's activity | Steps | Steps, active kcal, intensity min, activities | - | `getTodayData(...).summary`, `.activities` | medium | 2 |
 | VO2 max | Latest value | 180-day line | - | `getOverviewData` (`src/lib/garmin/queries.ts:638`, VO2 rows at `:660-668`) | medium | 3 |
 | Recent activities | Last one | Last 3 | Last 6 | `getActivitiesData(userId, limit)` (`src/lib/garmin/queries.ts:389`) | low | 2 |
@@ -844,6 +845,10 @@ Decided by the hub on 2026-11-13; the owner may change any of them.
 | 15 | Weekly leaderboard widget? | Only after `getFriendsLeaderboard` uses the user's week. |
 | 16 | Where is the way into edit mode? | Decided by the owner on 2026-11-13: only a pencil icon button ("Edit home") at the top right of the title row. No "Edit home" button at the end of the list, except when the title is hidden: then the pencil moves there. |
 | 17 | What does edit mode look like? | Decided by the owner on 2026-11-13, replacing the list in 6.9: the real grid, as on the iPhone home screen. Two columns (S one, M and L both; L is the taller content). Widgets jiggle (off with reduced motion). Enter by the pencil or a long-press on a widget. Drag the whole widget to reorder; a "−" badge on hideable widgets; a tap opens a sheet with Size, Move up, Move down (WCAG 2.5.7) and Hide; "+ Add widget", Undo and Reset at the top. |
+| 18 | Does Today show the day's exercises? | Decided by the owner on 2026-11-14: yes, as in the locked design. L: the counts, minutes, the first three exercises with their sets and "+ N more"; M: the counts; S: exercises and minutes. The per-lift tip only if the insight already gives it (it does not, so none). |
+| 19 | Where does the date go? | Decided by the owner on 2026-11-14: its own widget, "Date" (S, M), in the gallery and not on the default home. The title row stays first. |
+| 20 | Does the home follow the accent colour? | Decided by the owner on 2026-11-14: yes. `--brand` and `--brand-fill` follow the accent picked in settings, light and dark; blue stays the default; `--pos` does not change. |
+| 21 | Do the new fonts and look spread to the rest of the app? | Decided by the owner on 2026-11-14: no. They stay on the home, for good. |
 
 ## 10. Sources
 
@@ -941,3 +946,104 @@ Where the build differs from sections 6 and 7, and why. The code is the referenc
   default layout. An edit after the failure drops it, and the draft is sent.
 - **Long-press and text selection.** `[data-widget]` has `user-select: none`, so holding a
   widget on iOS does not start a text selection.
+
+### Redesign and phase 2 widgets (2026-11-14)
+
+The home now follows the locked design, `docs/design/home-redesign/home-locked.html`.
+Where the build differs from it or from section 4, and why:
+
+- **Fonts and tokens.** Big Shoulders (the current Google family that replaced Big Shoulders
+  Display; its `opsz` axis is set to 72 for the display look) and Work Sans load through
+  `next/font` in `src/components/features/home/fonts.ts`, for the home page and its sheets
+  only; by owner decision 21 they stay there. The tokens `--brand`, `--brand-fill`, `--pos`,
+  `--font-display`, `--font-ui` and the home surfaces are in `src/app/globals.css`.
+  `.home-ui` maps the shared tokens (`--muted`, `--primary`, `--muted-foreground`) to the
+  home's look, so the notices and Endurance today match without their own changes.
+- **Accent colour** (decision 20). The theme provider marks `<html>` with `data-accent`
+  (`src/components/ui/theme-provider.tsx`), and `globals.css` maps each accent to `--brand`
+  and `--brand-fill`, light and dark. Blue, green and orange use the design's values; the
+  design has no white or purple, which follow the same 4.5:1 rule. `.home-ui` sets `--primary`
+  to `--brand`, so the shared parts follow.
+  - The pre-paint script in `src/app/layout.tsx` (`prePaintThemeScript` in
+    `src/lib/utils/accent.ts`) sets `data-accent` and the custom tokens before the first
+    paint, from the same localStorage keys, so a non-blue accent does not paint blue first.
+  - A custom accent is not used as picked: `customAccentTokens` darkens (light theme) or
+    lightens (dark theme) it until brand text has 4.5:1 on every home surface, derives a fill
+    with 4.5:1 for white text, and picks white or #0b0b0c for text on the brand. They reach
+    the CSS as `--brand-custom`, `--brand-fill-custom` and `--on-brand-custom`.
+- **Edit entry stays the pencil** (decision 16), restyled as the design's round pill, and not
+  the design's "Edit" text button. Edit mode keeps Cancel, Undo and Reset, which the design
+  does not show.
+- **Title.** M is the title alone, as before. The date is the Date widget (decision 19); the
+  title's L size keeps its date and cycle week line, which was simpler than removing it.
+- **Today** (decision 18) reads the day's program in one more statement, `readTodayPlan`
+  in `src/lib/home/core.ts`, filtered by the program's owner, only on a day with one program.
+  That is why the T2 counts in `src/__tests__/integration/home-queries.test.ts` are 2 higher
+  for a user with a program today (the query and the pool checkout it makes). The minutes use
+  `estimateSessionMinutes`. There is no "Day 2" (the cycle has no day number to show) and no
+  per-lift tip or up chip: `WorkoutInsight` has no suggested weight per lift. The no-cycle
+  prompt has no "Browse programs" link:
+  every size of Today must keep the same actions (C1).
+- **Week.** L has the ring beside the days and a legend; the design's sets, volume and time
+  tiles are not built (no source on the home). Past planned days not done show as missed.
+- **Recent PRs** has no gain pill or confetti: `getRecentPRs` returns no previous value.
+- **Friends' activity** has no reaction button: a reaction is a write, and "Reactions to my
+  workouts" is its own widget (4.5).
+- **Streak** (S, M). The streak and the bars both come from `getHeatmapData`'s days
+  (`streakWeeks`, `weekCounts` in `src/lib/home/widget-data.ts`), in Monday-to-Sunday weeks
+  of the sessions' own dates around `ctx.today`, so a session at Monday 00:30 in Oslo counts
+  in the new week. The Progress page still uses `getSummaryStats`, which cuts weeks in UTC.
+  There is no "best streak", which no action returns. S says "Keep it lit." once this week
+  has a session, and "Train this week to keep it." before.
+- **Body weight** (S, M) shows kg; the app has no weight unit setting. It links to Progress,
+  where weight is logged. The sparkline draws every entry in the last 30 days (no limit or
+  downsampling), and the change is the newest minus the oldest entry in that window, named by
+  its date ("↓ 2.7 kg since 11 Nov"): the entries can cover only part of the 30 days. When the
+  latest entry is older than the window, the line gives its date ("82.4 kg on 3 Sep").
+- **Training load** (M, L) reads `getTrainingLoad`, which picks the source itself: the stored
+  Garmin series when `garminAllowedFor` is true and there are days, else the app's sessions.
+  It is available to endurance and Garmin users and links to `/week`. The line is the 7-day
+  fatigue (ATL); the design's "sweet spot" band is left out, since the bars' scale has no
+  agreed band. The 28 days are placed by date (`loadSummary` in
+  `src/lib/home/widget-data.ts`): a day the Garmin series lacks is a 0 bar, and its fatigue
+  decays from the day before as one rest day. The load figure is the last 7 calendar days.
+  Form is today's state, so when the newest day with data is older than yesterday the widget
+  shows the 7-day load as its number and no form (hub decision, 2026-11-14).
+- **Weekly sets** (S) is the catalogue's "Weekly volume". It counts the sessions dated in the
+  user's own Monday-to-Sunday week (`getWeeklyMuscleVolume` with a `week` range from
+  `ctx.today`). Without the range, as on the Progress page, the week is the server's UTC week.
+- **Race countdown** (S) is for endurance users: the soonest A race on or after today from
+  `listSeasons`. A cycle's own `race_date` is not read.
+- Sizes from section 4 that the design does not show (Weekly volume M and L, Body weight L,
+  Training load S and per-sport L, Race countdown M) are in `BACKLOG.md`.
+- **Samples and previews.** The "Add widget" gallery shows each widget's own view with
+  made-up data from `src/components/features/home/samples.ts` (`Sample` in the renderer),
+  the same for every user, as the design's "Add a widget" sheet does. Edit mode, at a size
+  other than the saved one, shows the neutral skeleton (`Preview`): the user's own home never
+  shows made-up numbers (hub decision, 2026-11-14; the owner may change it). No loader runs
+  for either.
+- **Second pass against the design** (hub, 2026-11-14), measured at 390 px with
+  `getBoundingClientRect`: Week no longer stretches to fill the screen and is as tall as its
+  content (164 px at M, as in the design); the hero's main action is the white 54 px button in
+  every state, the other action a ghost link; "Make up" in the missed notice is a small tinted
+  pill and Decline muted text, rows still 44 px; the insight shows in the hero as the design's
+  one-line tip pill (headline only), not the full banner; Readiness S uses the design's 24 px
+  number.
+- **Third pass against the design** (two reviews, 2026-11-14): the edit-mode jiggle is the
+  design's, one swing each way per 0.28 s, alternating, every second widget half a swing
+  behind; the streak's inner flame has its own flicker (`home-flicker2`) and the sparkline
+  area fades in (`home-fade`), both only without reduced motion; the no-cycle heading is
+  24 px, sheet titles 20 px, the Today name 34 px at line height 1.15. The set-up link's
+  accessible name is "Set up a Cycle", without the arrow.
+- **Done dot in dark** uses `--brand-fill` on purpose, not the design's `--brand`: white on
+  the fill has 5.5:1, white on the design's light blue 2.9:1.
+- **Light theme in the mockup.** The locked mockup's light theme still paints some parts with
+  its older tokens (a leak from before the v2 tokens). Light comparisons follow the v2 intent
+  (`--brand`, `--brand-fill`, neutrals), not those pixels.
+- **A failed plan read** (`readTodayPlan`) shows Today without its exercise list and logs
+  `[Home] today_plan_read_failed`; before, it showed the error page.
+- **Readiness labels** are short enough to fit at 390 px: "Sleep" and "Sleep debt" at M (a
+  66 px label column), "Debt" at S (44 px). A contributor scored 0 is a real score, not a
+  missing value: the readiness model leaves out a signal it has no value for. Resting HR
+  scores 0 at 1.5 standard deviations above its baseline, with the deviation at least 1.5
+  bpm, so about 2 bpm over is already 0.

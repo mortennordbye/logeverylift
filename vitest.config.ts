@@ -2,7 +2,11 @@ import path from "path";
 import { defineConfig } from "vitest/config";
 import { testDatabaseUrl } from "./scripts/lib/local-test-db";
 
-const alias = { "@": path.resolve(__dirname, "./src") };
+const alias = {
+  "@": path.resolve(__dirname, "./src"),
+  // The real loader only runs inside Next's compiler.
+  "next/font/google": path.resolve(__dirname, "./src/__tests__/stubs/next-font-google.ts"),
+};
 
 // Resolving the URL asks Docker for the compose Postgres's port, which fails
 // when it isn't running. Keep that from breaking `pnpm test` (unit only): the

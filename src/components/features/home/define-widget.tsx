@@ -21,8 +21,14 @@ export interface Renderer<D = unknown> {
   View(p: { data: D; size: WidgetSize; settings?: unknown }): ReactNode;
   Empty(p: SizeProps): ReactNode;
   Skeleton(p: SizeProps): ReactNode;
-  /** Static, for edit mode and the gallery. Never reads data. */
+  /** Static, for edit mode at a size other than the saved one. Never reads data. */
   Preview(p: SizeProps): ReactNode;
+  /**
+   * The widget with made-up data from samples.ts, the same for every user,
+   * for the "Add widget" gallery only. Never on the user's own home (hub
+   * decision, 2026-11-14): edit mode shows Preview.
+   */
+  Sample(p: SizeProps): ReactNode;
   /** Default: "Couldn't load this." */
   Error?(p: SizeProps): ReactNode;
 }

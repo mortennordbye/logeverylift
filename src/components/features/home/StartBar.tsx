@@ -1,3 +1,4 @@
+import { Play } from "lucide-react";
 import Link from "next/link";
 
 /**
@@ -7,11 +8,12 @@ import Link from "next/link";
  */
 export function StartBar() {
   return (
-    <div className="px-6 pb-4 shrink-0" data-testid="start-bar">
+    <div className="px-4 pb-3 pt-1 shrink-0" data-testid="start-bar">
       <Link
         href="/new-workout"
-        className="flex items-center justify-center w-full rounded-2xl bg-primary py-4 text-base font-semibold text-primary-foreground active:opacity-80"
+        className="flex min-h-[54px] w-full items-center justify-center gap-2 rounded-2xl bg-brand-fill text-[17px] font-bold text-white transition-transform active:scale-[0.97]"
       >
+        <Play className="h-[18px] w-[18px] fill-current" aria-hidden />
         Start a Workout
       </Link>
     </div>

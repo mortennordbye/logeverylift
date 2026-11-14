@@ -1,6 +1,6 @@
 "use server";
 
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql, type SQL } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lte, sql, type SQL } from "drizzle-orm";
 import { cycleLengthDays } from "@/lib/utils/cycle-position";
 import { db } from "@/db";
 import { liveCycles } from "@/lib/plan-live";
@@ -15,6 +15,7 @@ import {
   type PaceFormatter,
 } from "@/lib/utils/discipline";
 import { ActionResult } from "@/types/workout";
+import { z } from "zod";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -1110,8 +1111,19 @@ export async function getReadinessPerformance(): Promise<ActionResult<ReadinessP
   }
 }
 
-export async function getWeeklyMuscleVolume(): Promise<ActionResult<WeeklyMuscleVolume[]>> {
+const dateStr = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+const weekRangeSchema = z.object({ from: dateStr, to: dateStr }).strict().optional();
+
+/**
+ * Sets per muscle group this week. Without `week`, the week is the server's
+ * (Postgres `date_trunc('week', NOW())`, UTC), as on the Progress page. With
+ * `week`, it is those session dates: the home passes the user's own week.
+ */
+export async function getWeeklyMuscleVolume(week?: unknown): Promise<ActionResult<WeeklyMuscleVolume[]>> {
   const auth = await requireSession();
+  const parsed = weekRangeSchema.safeParse(week);
+  if (!parsed.success) return { success: false, error: "Invalid input" };
+  const range = parsed.data;
   try {
     const rows = await db
       .select({
@@ -1126,8 +1138,10 @@ export async function getWeeklyMuscleVolume(): Promise<ActionResult<WeeklyMuscle
           eq(workoutSessions.userId, auth.user.id),
           eq(workoutSessions.isCompleted, true),
           eq(workoutSets.isCompleted, true),
-          // ISO week start = Monday in PG with default LC_TIME
-          sql`${workoutSessions.startTime} >= date_trunc('week', NOW())`,
+          range
+            ? and(gte(workoutSessions.date, range.from), lte(workoutSessions.date, range.to))
+            : // ISO week start = Monday in PG with default LC_TIME
+              sql`${workoutSessions.startTime} >= date_trunc('week', NOW())`,
           isNotNull(exercises.muscleGroup),
         ),
       )

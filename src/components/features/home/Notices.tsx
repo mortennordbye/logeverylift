@@ -6,6 +6,7 @@ import { ReadinessSwapCard } from "@/components/features/ReadinessSwapCard";
 import { SharePromptLoader } from "@/components/features/SharePromptLoader";
 import type { HomeCore } from "@/lib/home/core";
 import { noticesIn, type NoticeId, type NoticeSlot } from "@/lib/home/notices";
+import { CalendarX2 } from "lucide-react";
 import Link from "next/link";
 import { Fragment, Suspense, type ReactNode } from "react";
 
@@ -30,25 +31,26 @@ function MissedThisWeek({ core }: { core: HomeCore }) {
   const dowMissed = core.dowMissed;
   if (dowMissed.length === 0) return null;
   return (
-    <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 px-4 py-3 shrink-0" data-testid="missed-week">
-      <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-2">
+    <div className="rounded-widget bg-widget ring-1 ring-inset ring-hairline p-3.5 shrink-0" data-testid="missed-week">
+      <h2 className="flex items-center gap-1.5 text-[13px] font-semibold text-muted-foreground mb-1">
+        <CalendarX2 className="h-[15px] w-[15px]" aria-hidden />
         Missed this week
-      </p>
-      <ul className="flex flex-col divide-y divide-amber-500/20">
+      </h2>
+      <ul className="flex flex-col">
         {dowMissed.map((m) =>
           m.slot.program ? (
-            <li key={`${m.date}-${m.plannedSessionId ?? m.slot.id}`} className="flex items-center justify-between gap-2 py-2">
+            <li key={`${m.date}-${m.plannedSessionId ?? m.slot.id}`} className="flex min-h-11 items-center justify-between gap-2 border-t border-hairline first:border-t-0">
               <span className="text-sm min-w-0">
-                <span className="text-muted-foreground">{dowLabel(m.date)} — </span>
-                <span className="font-medium">{m.slot.program.name}</span>
+                <span className="text-muted-foreground">{dowLabel(m.date)}: </span>
+                <span className="font-semibold">{m.slot.program.name}</span>
               </span>
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
                 <Link
                   href={`/programs/${m.slot.program.id}/workout?makeup=${m.date}`}
                   prefetch={true}
-                  className="text-xs font-semibold text-primary px-3 py-1.5 rounded-full bg-primary/10 active:opacity-70"
+                  className="group inline-flex min-h-11 items-center active:scale-[0.95] transition-transform"
                 >
-                  Make up
+                  <span className="rounded-full bg-brand/15 px-3 py-1 text-[13px] font-semibold text-brand">Make up</span>
                 </Link>
                 <DeclineMakeupButton date={m.date} plannedSessionId={m.plannedSessionId} />
               </div>

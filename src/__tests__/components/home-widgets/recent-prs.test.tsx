@@ -17,7 +17,8 @@ describe("Recent PRs", () => {
   it("S shows the newest PR and links to the records", () => {
     render(<>{w.View({ data: prs, size: "s" })}</>);
     expect(screen.getByText("Lift 1")).toBeTruthy();
-    expect(screen.getByText("100 kg")).toBeTruthy();
+    expect(screen.getByText("100")).toBeTruthy();
+    expect(screen.getByText("kg")).toBeTruthy();
     expect(screen.queryByText("Lift 2")).toBeNull();
     expect(screen.getByRole("link").getAttribute("href")).toBe("/more/metrics?tab=records");
   });
