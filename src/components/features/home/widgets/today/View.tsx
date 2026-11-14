@@ -7,7 +7,8 @@ import type { HomeCore } from "@/lib/home/core";
 import type { TodayPlan } from "@/lib/home/today-plan";
 import { todayActions, type TodayAction } from "@/lib/home/today-actions";
 import type { WidgetSize } from "@/lib/home/widgets/types";
-import { ArrowLeftRight, Check, Play, Sparkles, Zap } from "lucide-react";
+import { ArrowLeftRight, CalendarClock, Check, Play, Sparkles, Zap } from "lucide-react";
+import { dateLabel } from "@/lib/utils/date-label";
 import Link from "next/link";
 import { TodayMore } from "./TodayMore";
 
@@ -30,6 +31,8 @@ export type TodayData = {
   insight: HomeCore["insight"];
   /** Today's single program: counts, minutes and the first exercises. Null on other days. */
   plan: TodayPlan | null;
+  /** With no active cycle, the block scheduled to start next. */
+  upcoming: { id: number; name: string; startsOn: string; seasonName: string | null } | null;
 };
 
 export function selectToday(core: HomeCore): TodayData {
@@ -53,6 +56,7 @@ export function selectToday(core: HomeCore): TodayData {
     rotationOverdueDays: core.rotationOverdueDays,
     insight: core.insight,
     plan: core.todayPlan,
+    upcoming: core.upcoming,
   };
 }
 
@@ -282,6 +286,35 @@ function NoCycle({ size }: { size: WidgetSize }) {
   );
 }
 
+/** No active cycle, one scheduled: the block that starts next, at each size, with a link to it. */
+function Upcoming({ upcoming, size }: { upcoming: NonNullable<TodayData["upcoming"]>; size: WidgetSize }) {
+  const starts = `Starts ${dateLabel(upcoming.startsOn, "EEE, MMM d", { utc: true })}`;
+  if (size === "s") {
+    return (
+      <div className={`${CARD} justify-center p-3!`} data-testid="cycle-upcoming">
+        <p className="text-xs font-semibold uppercase tracking-[0.05em] text-muted-foreground">Next block</p>
+        <p className="my-1 line-clamp-2 text-sm font-semibold">{upcoming.name}</p>
+        <p className="mb-2 text-xs text-muted-foreground">{starts}</p>
+        <Link href={`/cycles/${upcoming.id}`} aria-label="See the plan" className={`${SET_UP_CLASS} w-full min-h-11! text-sm!`}>
+          See the plan
+        </Link>
+      </div>
+    );
+  }
+  return (
+    <div className={`${CARD} items-center justify-center text-center p-5!`} data-testid="cycle-upcoming">
+      <CalendarClock className="h-8 w-8 text-brand-fill" aria-hidden />
+      <p className="mt-3 text-[13px] font-semibold uppercase tracking-[0.05em] text-muted-foreground">Next block</p>
+      <h2 className="home-display mt-1 mb-1 text-[24px]">{upcoming.name}</h2>
+      <p className="text-[15px] font-medium">{starts}</p>
+      {upcoming.seasonName && <p className="mt-0.5 text-sm text-muted-foreground">{upcoming.seasonName}</p>}
+      <Link href={`/cycles/${upcoming.id}`} aria-label="See the plan" className={`${SET_UP_CLASS} mt-[18px]`}>
+        See the plan <span aria-hidden>→</span>
+      </Link>
+    </div>
+  );
+}
+
 function ActionLink({ a }: { a: Extract<TodayAction, { kind: "link" }> }) {
   return (
     <Link
@@ -340,7 +373,7 @@ export function TodayError() {
 export const todayWidget: Renderer<TodayData> = defineWidget<TodayData>({
   select: selectToday,
   View: ({ data, size }) => {
-    if (!data.cycle) return <NoCycle size={size} />;
+    if (!data.cycle) return data.upcoming ? <Upcoming upcoming={data.upcoming} size={size} /> : <NoCycle size={size} />;
     return size === "s" ? <TodaySmall data={data} /> : <TodayCard data={data} size={size} />;
   },
   // Today always has data: the no-cycle variant is part of View.

@@ -29,7 +29,9 @@ const base: TodayData = {
   rotationOverdueDays: 0,
   insight: undefined,
   plan: null,
+  upcoming: null,
 };
+const upcoming = { id: 29, name: "General: aerobic base + strength", startsOn: "2026-11-16", seasonName: "Jevnaker Half 2027" };
 const prog = { id: 7, name: "Push" };
 const session = (id: number, programId: number | null, done: boolean, autoSessionId: number | null = null) =>
   ({ plannedSessionId: id, slot: { program: programId ? { id: programId, name: `P${programId}` } : null, label: null }, done, autoSessionId }) as unknown as TodayData["todaySessions"][number];
@@ -47,6 +49,7 @@ const STATES: Record<string, TodayData> = {
   "no program": { ...base },
   "done, no program": { ...base, completedToday: true },
   "no cycle": { ...base, cycle: null },
+  "no cycle, one scheduled": { ...base, cycle: null, upcoming },
 };
 
 /** Every action on screen: link hrefs and skip buttons. */
@@ -84,6 +87,19 @@ describe("Today keeps every action at every size (C1)", () => {
     for (const size of ["s", "l"] as const) {
       const r = render(<>{todayWidget.View({ data: STATES["no cycle"], size })}</>);
       expect(screen.getByRole("link", { name: "Set up a Cycle" }).getAttribute("href")).toBe("/cycles");
+      r.unmount();
+    }
+  });
+
+  it("no active cycle but one scheduled: names it, its start and its season, at every size", () => {
+    for (const size of ["s", "m", "l"] as const) {
+      const r = render(<>{todayWidget.View({ data: STATES["no cycle, one scheduled"], size })}</>);
+      expect(screen.getByTestId("cycle-upcoming")).toBeTruthy();
+      expect(screen.getByText("General: aerobic base + strength")).toBeTruthy();
+      expect(screen.getByText(/Starts Mon, Nov 16/)).toBeTruthy();
+      expect(screen.getByRole("link", { name: /See the plan/ }).getAttribute("href")).toBe("/cycles/29");
+      expect(screen.queryByText("Plan your first block")).toBeNull();
+      if (size !== "s") expect(screen.getByText("Jevnaker Half 2027")).toBeTruthy();
       r.unmount();
     }
   });
