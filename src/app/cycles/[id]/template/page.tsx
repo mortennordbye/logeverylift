@@ -10,6 +10,8 @@ import { HOME_UI } from "@/components/features/home/fonts";
 import { BackLink } from "@/components/ui/BackLink";
 import { getPrograms } from "@/lib/actions/programs";
 import { getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
+import { enduranceEnabledFor } from "@/lib/endurance";
+import { requireSession } from "@/lib/utils/session";
 import { notFound } from "next/navigation";
 
 export default async function CycleTemplatePage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,7 +19,12 @@ export default async function CycleTemplatePage({ params }: { params: Promise<{ 
   const cycleId = Number(id);
   if (isNaN(cycleId)) notFound();
 
-  const [cycleResult, programsResult] = await Promise.all([getTrainingCycleWithSlots(cycleId), getPrograms()]);
+  const auth = await requireSession();
+  const [cycleResult, programsResult, endurance] = await Promise.all([
+    getTrainingCycleWithSlots(cycleId),
+    getPrograms(),
+    enduranceEnabledFor(auth.user.id),
+  ]);
   if (!cycleResult.success) notFound();
   const cycle = cycleResult.data;
   const programs = programsResult.success ? programsResult.data : [];
@@ -32,7 +39,7 @@ export default async function CycleTemplatePage({ params }: { params: Promise<{ 
           <h1 className="home-display text-[34px] leading-9 uppercase break-words">{cycle.scheduleType === "day_of_week" ? "Weekly template" : "Rotation order"}</h1>
           <span className="text-sm text-muted-foreground">{cycle.name}</span>
         </div>
-        <CycleScheduleBuilder cycle={cycle} programs={programs} />
+        <CycleScheduleBuilder cycle={cycle} programs={programs} endurance={endurance} />
       </div>
     </div>
   );

@@ -21,7 +21,7 @@ export async function PlanHistoryPage({ type, id }: { type: "program" | "cycle" 
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <BackLink fallback={{ href: back, label: deleted ? (type === "program" ? "Programs" : "Cycles") : name }} />
+        <BackLink fallback={{ href: back, label: deleted ? (type === "program" ? "Programs" : "Plan") : name }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <h1 className="text-3xl font-bold tracking-tight">History</h1>
