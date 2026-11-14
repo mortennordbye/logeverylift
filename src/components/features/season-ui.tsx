@@ -138,12 +138,23 @@ export function ButtonReason({ id, reason }: { id: string; reason: string | null
 export const PRIMARY_BUTTON =
   "w-full min-h-[52px] rounded-2xl bg-primary text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-[0.98] transition-transform";
 
-/** The top row of a form screen: a control on the left (Cancel or Back), the title centred, and an optional control on the right. */
-export function FormHeader({ title, left, right }: { title: string; left: React.ReactNode; right?: React.ReactNode }) {
+/**
+ * The top row of a form screen: a control on the left (Cancel or Back), the
+ * title centred with an optional sub line under it (the name of what is being
+ * built), and an optional control on the right.
+ */
+export function FormHeader({ title, sub, left, right }: { title: string; sub?: string; left: React.ReactNode; right?: React.ReactNode }) {
   return (
     <header className="grid shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-1 px-2 pt-4" data-testid="form-header">
       <div className="min-w-0 justify-self-start">{left}</div>
-      <h1 className="text-base font-semibold">{title}</h1>
+      {sub ? (
+        <div className="flex max-w-[55vw] flex-col items-center text-center">
+          <h1 className="text-base font-semibold">{title}</h1>
+          <span className="line-clamp-2 break-words text-[13px] text-muted-foreground">{sub}</span>
+        </div>
+      ) : (
+        <h1 className="text-base font-semibold">{title}</h1>
+      )}
       <div className="min-w-0 justify-self-end">{right}</div>
     </header>
   );

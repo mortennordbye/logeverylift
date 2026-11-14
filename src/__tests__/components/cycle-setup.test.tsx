@@ -260,6 +260,13 @@ describe("step 2", () => {
     expect(startTrainingCycle).toHaveBeenCalledWith(3, "2026-11-16");
   });
 
+  it("names the cycle being built under the title (round 8)", () => {
+    render(<CycleSetupSessions cycle={{ ...rotation, name: "Push / Pull rotation" }} programs={programs} start="2026-11-16" endurance={false} />);
+    const header = screen.getByTestId("form-header");
+    expect(within(header).getByRole("heading", { level: 1 }).textContent).toBe("New cycle");
+    expect(within(header).getByText("Push / Pull rotation")).toBeTruthy();
+  });
+
   it("puts Cancel on the left on both steps, as step 1 does (J2-07)", () => {
     const { unmount } = render(<CreateCycleForm days={days} />);
     const leftOf = () => screen.getByTestId("form-header").firstElementChild as HTMLElement;

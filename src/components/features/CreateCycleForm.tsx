@@ -332,6 +332,7 @@ export function CycleSetupSessions({
     <div className="flex flex-col" style={{ paddingBottom: "140px" }}>
       <FormHeader
         title="New cycle"
+        sub={cycle.name}
         left={
           <button
             type="button"
