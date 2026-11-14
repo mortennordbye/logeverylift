@@ -4,7 +4,7 @@ import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPan
 import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { updatePlannedSession } from "@/lib/actions/planned-sessions";
-import { type DetailSession, dayMonth, sessionDayLabel, weekdayShort } from "@/lib/utils/cycle-detail";
+import { type DetailSession, dayMonth, sessionDayLabel, sessionState, weekdayShort } from "@/lib/utils/cycle-detail";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import Link from "next/link";
@@ -251,6 +251,8 @@ export function PlannedSessionSheet({
 
   const s = session;
   const isToday = s?.date === today;
+  // The header line says the state too: "Tue 17 Nov · Skipped" (J5-08, J5-13).
+  const state = s ? sessionState(s) : null;
   const canReset = s != null && s.touched && s.templateDate != null && s.templateDate >= today;
   const otherKeys = keyDates.filter((d) => d !== s?.date);
   const anyPast = week.some((d) => d < today);
@@ -269,7 +271,7 @@ export function PlannedSessionSheet({
       {s && (
         <PlanSheetPanel label={`Session on ${sessionDayLabel(s.date, "")}`} testId="session-sheet">
           <div className="flex flex-col gap-0.5">
-            <SectionLabel accent={isToday}>{sessionDayLabel(s.date, today)}</SectionLabel>
+            <SectionLabel accent={isToday}>{state ? `${sessionDayLabel(s.date, today)} · ${state}` : sessionDayLabel(s.date, today)}</SectionLabel>
             <h2 className="text-2xl font-semibold">{s.summary ? `${s.name} · ${s.summary}` : s.name}</h2>
             {(phaseLine || s.programId != null) &&
               (s.programId != null ? (
