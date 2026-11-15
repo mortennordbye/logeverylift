@@ -47,6 +47,8 @@ export function ThresholdsClient({
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<ThresholdKind | null>(null);
+  // No rides and no automatic FTP: nothing to choose, so the plain editor stays.
+  const ftpChoice = bike !== null && (bike.numbers.estimate != null || bike.numbers.ftp?.source === "garmin");
   const [zonesOpen, setZonesOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const current = currentThresholds(rows);
@@ -82,8 +84,8 @@ export function ThresholdsClient({
       <div className="space-y-2">
         {THRESHOLD_KINDS.map((kind) => {
           const c = current[kind];
-          // With bike numbers, the FTP row shows the automatic estimate instead of a suggestion.
-          const autoFtp = kind === "ftp" && bike !== null;
+          // With rides to estimate from, the FTP row shows the automatic estimate instead of a suggestion.
+          const autoFtp = kind === "ftp" && ftpChoice;
           const s = autoFtp ? undefined : suggestions.find((x) => x.kind === kind);
           const watch = autoFtp ? watchFtpNote(bike.numbers) : null;
           return (
@@ -172,7 +174,7 @@ export function ThresholdsClient({
         {open && (
           <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4 max-h-[85dvh] overflow-y-auto">
             <h2 className="text-lg font-semibold">{THRESHOLD_LABEL[open]}</h2>
-            {open === "ftp" && bike ? (
+            {open === "ftp" && ftpChoice && bike ? (
               <FtpChoice
                 numbers={bike.numbers}
                 onSaved={() => {
