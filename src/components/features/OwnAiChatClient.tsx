@@ -61,13 +61,13 @@ export function OwnAiChatClient({
       parsed = JSON.parse(text);
     } catch {
       setStatus("error");
-      setError("Couldn't read the JSON — make sure you copied the full response from the AI, with no extra text before or after.");
+      setError("Couldn't read the answer. Copy the whole answer from the AI and paste it again.");
       return;
     }
 
     if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
       setStatus("error");
-      setError("Unexpected response format — the AI should return a single JSON object, not an array or plain value.");
+      setError("This is not a plan. Ask the AI to answer with the plan only, then paste it again.");
       return;
     }
 
@@ -91,7 +91,7 @@ export function OwnAiChatClient({
           <Check className="w-8 h-8 text-emerald-500" />
         </div>
         <div>
-          <p className="text-lg font-semibold mb-1">All done!</p>
+          <p className="text-lg font-semibold mb-1">Plan saved</p>
           <p className="text-sm text-muted-foreground leading-relaxed max-w-xs">{successMsg}</p>
         </div>
         <button
@@ -122,7 +122,7 @@ export function OwnAiChatClient({
           className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80"
         >
           {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-          {copied ? "Copied!" : "Copy prompt"}
+          {copied ? "Copied" : "Copy prompt"}
         </button>
       </div>
 
@@ -171,7 +171,7 @@ export function OwnAiChatClient({
                   // Clipboard permission denied: the textarea below still works.
                 }
               }}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80"
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-muted text-foreground py-3.5 text-sm font-semibold active:opacity-80"
             >
               <Clipboard className="w-4 h-4" />
               Paste from clipboard

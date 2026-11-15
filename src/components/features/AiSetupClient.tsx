@@ -417,6 +417,10 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
     setPriorities(p.priorities ?? []);
     setAvoid(p.avoid ?? []);
     setWeekdays(p.weekdays ?? null);
+    // A restored rare pick stays in sight under an open "More options".
+    if (p.weekdays || (p.sessionMinutes ?? 60) !== 60 || (p.split ?? "auto") !== "auto" || p.weeks !== 8 || p.priorities?.length || p.avoid?.length) {
+      setShowMore(true);
+    }
   }
 
   function restoreRequest(p: TemplateParams, requestChips: string[], text: string) {
@@ -690,7 +694,7 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
         <button
           type="button"
           onClick={() => { setStatus("idle"); setSuccessMsg(null); setCycleCreated(false); }}
-          className="text-sm text-muted-foreground active:opacity-70"
+          className="min-h-[44px] text-sm text-muted-foreground active:opacity-70"
         >
           Build another
         </button>
@@ -707,16 +711,13 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
       ? undefined
       : `${SPLIT_LABELS[split]} works with ${SPLIT_DAYS[split].join(", ")} days`;
 
-  // Rare picks sit under "More options", which opens by itself once one is set.
-  const moreSet = weekdays !== null || sessionMinutes !== 60 || split !== "auto" || weeks !== 8 || priorities.length > 0 || avoid.length > 0;
-  const moreOpen = showMore || moreSet;
 
   return (
     <div className="flex-1 flex flex-col gap-6 px-4 pb-8">
       {view === "building" ? (
         <BuildingScreen daysPerWeek={daysPerWeek} onDone={() => setView("preview")} />
       ) : view === "editing" && !isAdmin ? (
-        <div className="flex flex-col items-center text-center gap-5 py-6">
+        <div className="flex flex-col items-center text-center gap-5 py-6" role="status">
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="w-8 h-8 text-primary animate-pulse" />
           </div>
@@ -759,7 +760,7 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
               setAiGenerating(false);
               setView("picks");
             }}
-            className="text-sm text-muted-foreground active:opacity-70"
+            className="min-h-[44px] text-sm text-muted-foreground active:opacity-70"
           >
             Cancel and start over
           </button>
@@ -833,6 +834,7 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
                 onChange={(e) => { setEditText(e.target.value.slice(0, EDIT_TEXT_MAX)); setEditError(null); }}
                 maxLength={EDIT_TEXT_MAX}
                 rows={2}
+                aria-label="Describe the change"
                 placeholder={chips.includes("swap_named") ? "Which exercises? e.g. no lunges or dips" : "Anything else? e.g. add calf work on leg days"}
                 className="w-full rounded-xl bg-muted px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary resize-none"
               />
@@ -854,12 +856,12 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
             {editError !== OWN_AI_NEEDED && <p className="text-xs text-muted-foreground">
               {isAdmin
                 ? "Admin. A change with no saved answer goes to a free AI model and is saved for everyone."
-                : "Free. Your coach gives saved answers. For a new change, use your own AI."}
+                : "Free. Your coach answers changes others asked for before. For anything new, use your own AI."}
             </p>}
             <button
               type="button"
               onClick={() => handleEdit()}
-              disabled={!canEdit}
+              disabled={!canEdit || editError === OWN_AI_NEEDED}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-muted text-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
@@ -904,17 +906,16 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
           <button
             type="button"
             onClick={() => setShowMore((v) => !v)}
-            disabled={moreSet}
-            aria-expanded={moreOpen}
-            className="min-h-[44px] flex items-center justify-between gap-2 border-t border-border pt-3 text-left active:opacity-70 disabled:active:opacity-100"
+            aria-expanded={showMore}
+            className="min-h-[44px] flex items-center justify-between gap-2 border-t border-border pt-3 text-left active:opacity-70"
           >
             <span className="flex flex-col">
               <span className="text-sm font-medium">More options</span>
               <span className="text-xs text-muted-foreground">Training days, session length, split, cycle length, focus, go easy on</span>
             </span>
-            <ChevronDown className={`w-4 h-4 text-muted-foreground flex-none transition-transform ${moreOpen ? "rotate-180" : ""}`} />
+            <ChevronDown className={`w-4 h-4 text-muted-foreground flex-none transition-transform ${showMore ? "rotate-180" : ""}`} />
           </button>
-          {moreOpen && (<>
+          {showMore && (<>
           <Field
             label="Training days"
             hint={weekdays ? `${weekdays.length} of ${daysPerWeek} picked` : undefined}

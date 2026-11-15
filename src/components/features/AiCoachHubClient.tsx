@@ -18,7 +18,7 @@ type Props = {
   changesThisWeek: number;
 };
 
-const card = "rounded-2xl bg-card border border-border";
+const card = "rounded-2xl bg-card";
 const rowClass = "flex items-center gap-3 px-4 min-h-[56px] active:bg-muted/50 transition-colors";
 
 function Row({ href, icon: Icon, title, sub }: { href: string; icon: typeof Brain; title: string; sub: string }) {
@@ -47,10 +47,13 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
   const notes = memoryCount === 1 ? "1 note" : `${memoryCount} notes`;
 
   return (
-    <div className="flex flex-col gap-3 px-4 pt-2 pb-8">
+    <div className="flex-1 overflow-y-auto flex flex-col gap-3 px-4 pt-2 pb-8">
       {plan ? (
         <Link href={`/cycles/${plan.cycleId}`} className={`${card} p-4 active:opacity-80`} data-testid="coach-plan">
-          <div className="text-lg font-semibold">{plan.name}</div>
+          <div className="flex items-center gap-2">
+            <span className="flex-1 text-lg font-semibold">{plan.name}</span>
+            <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
+          </div>
           <div className="text-sm text-muted-foreground">
             Week {plan.week} of {plan.weeks}
           </div>
@@ -58,10 +61,11 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
             <div className="h-full rounded-full bg-primary" style={{ width: `${Math.round(((plan.week - 1) / plan.weeks) * 100)}%` }} />
           </div>
           {plan.weekdays && (
-            <div className="flex gap-1.5 mt-3">
+            <div className="flex gap-1.5 mt-3" role="img" aria-label={`Training days ${plan.weekdays.map((d) => WEEKDAYS[d - 1]).join(", ")}`}>
               {WEEKDAYS.map((d, i) => (
                 <span
                   key={d}
+                  aria-hidden="true"
                   className={`flex-1 text-center rounded-lg py-1.5 text-xs ${
                     plan.weekdays!.includes(i + 1) ? "bg-primary/15 text-foreground font-semibold" : "bg-muted text-muted-foreground"
                   }`}
@@ -107,16 +111,9 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
             </p>
           </div>
         ) : (
-          <Link href="/more/ai-coach/connect" className={`${card} p-4 active:opacity-80`} data-testid="coach-ask">
-            <div className="flex items-center gap-2 font-semibold">
-              <Sparkles className="w-4 h-4 text-primary" />
-              <span className="flex-1">Change your plan with your own AI</span>
-              <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
-            </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              Connect Claude or ChatGPT. It sees your plan and your notes, and can change your programs and days.
-            </p>
-          </Link>
+          <div className={`${card} overflow-hidden`} data-testid="coach-ask">
+            <Row href="/more/ai-coach/connect" icon={Sparkles} title="Change your plan with your own AI" sub="Connect Claude or ChatGPT" />
+          </div>
         ))}
 
       {!connected && (
@@ -138,10 +135,7 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
                   {first.name}
                   {assistants.length > 1 && <span className="text-muted-foreground font-normal"> and {assistants.length - 1} more</span>}
                 </div>
-                <div className="text-sm text-muted-foreground flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                  {first.access ? ACCESS_LABEL[first.access] : "No access"}
-                </div>
+                <div className="text-sm text-muted-foreground">{first.access ? ACCESS_LABEL[first.access] : "No access"}</div>
               </div>
               <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
             </Link>
@@ -166,7 +160,7 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
               {[
                 { href: "/more/assistants/changes", icon: History, label: "Changes", sub: `${changesThisWeek} in 7 days` },
                 { href: "/more/coach-memory", icon: Brain, label: "Memory", sub: notes },
-                { href: "/more/assistants", icon: Plug, label: "Connection", sub: "On" },
+                { href: "/more/assistants", icon: Plug, label: "Connection", sub: `${assistants.length} connected` },
               ].map((t, i) => (
                 <Link
                   key={t.label}

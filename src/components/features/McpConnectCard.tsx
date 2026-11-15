@@ -27,7 +27,7 @@ function CopyRow({
       aria-label={`Copy ${label}`}
       className="flex items-center gap-2 rounded-lg bg-muted px-3 py-2 text-left active:opacity-70 min-h-[44px]"
     >
-      <code className="flex-1 min-w-0 text-xs font-mono break-all">{value}</code>
+      <code className="flex-1 min-w-0 text-xs font-mono [overflow-wrap:anywhere]">{value}</code>
       {copied ? (
         <Check className="w-4 h-4 text-primary flex-none" />
       ) : (
@@ -63,7 +63,7 @@ export function McpConnectCard({ endpoint }: { endpoint: string }) {
         />
 
         <p className="text-sm text-muted-foreground">
-          Or add it to Claude Code with this command
+          For Claude Code, run this command
         </p>
         <CopyRow
           label="CLI command"
@@ -74,10 +74,9 @@ export function McpConnectCard({ endpoint }: { endpoint: string }) {
 
         <div className="bg-primary/10 rounded-xl px-3 py-2.5">
           <p className="text-sm text-primary">
-            <span className="font-semibold">Sign-in required.</span> The client
-            opens a one-time login in your browser and connects to your account
-            over OAuth. It can only read and change your own data, never anyone
-            else&apos;s.
+            <span className="font-semibold">You sign in once.</span> Your
+            assistant opens a sign-in page in your browser. After that it can
+            only read and change your own data, never anyone else&apos;s.
           </p>
         </div>
       </div>

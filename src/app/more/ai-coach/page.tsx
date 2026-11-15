@@ -44,7 +44,7 @@ export default async function AiCoachPage() {
   const now = Date.now();
 
   return (
-    <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-y-auto">
+    <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
         <BackLink fallback={{ href: "/more", label: "More" }} />
       </div>

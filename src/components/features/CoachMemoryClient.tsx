@@ -105,8 +105,7 @@ export function CoachMemoryClient({ entries, deleted }: { entries: MemoryRow[]; 
   return (
     <div className="flex-1 overflow-y-auto px-4 pb-28 space-y-5">
       <p className="text-sm text-muted-foreground">
-        What your coach knows about you. Your preferences, limits, what it noticed and what you agreed. Add notes
-        yourself, or your own connected AI adds them as you talk. Only your own AI reads them. Friends never see them.
+        What your coach knows about you. Only your own connected AI reads it, and friends never see it.
       </p>
       {entries.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="memory-empty">

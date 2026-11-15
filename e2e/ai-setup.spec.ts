@@ -205,4 +205,8 @@ test("a change with no saved answer sends nothing out and points to the user's o
   await expect(page.getByRole("heading", { name: "Turn on AI editing?" })).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Connect an assistant" })).toHaveAttribute("href", "/more/ai-coach/connect");
   await expect(page.getByRole("link", { name: "Use your own AI chat" })).toHaveAttribute("href", "/more/ai-coach/own-chat");
+  // The same request would get the same answer: the button waits for a new one.
+  await expect(edit).toBeDisabled();
+  await page.getByRole("textbox", { name: "Describe the change" }).fill("no lunges or dips");
+  await expect(edit).toBeEnabled();
 });
