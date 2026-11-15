@@ -237,3 +237,26 @@ The brief's phases stay. This list adds the journey gaps to them.
 3. Week view: a segment inside the Plan tab, or its own tab?
 4. Rest day card: is readiness plus tomorrow's preview enough?
 5. Run intervals with pace as main target and HR cap; easy runs with HR as main target. Agree?
+
+## 7. Review findings to fold in
+
+An audit of this document ([`audit/endurance-journeys-review.md`](../../audit/endurance-journeys-review.md))
+found these defects. They are open. The bike plan ([bike-sessions.md](bike-sessions.md)) already
+handles the bike items.
+
+- The `hr_zones` snapshot holds `DEFAULT` and `CYCLING` only. Run has no Garmin running zones;
+  run falls back to `DEFAULT`.
+- The watch RPE (`directWorkoutRpe`, scale 0-100) is shown as a tile on the activity page, not
+  "read nowhere".
+- Garmin step results have no storage: `workout_step_results.workoutSessionId` is NOT NULL and a
+  Garmin pair writes no session. Bike plan decision D4 answers this.
+- A Garmin Multisport activity maps to sport "other" and does not pair. Bricks must be two
+  activities.
+- "I'm sick" on home does not exist; a period starts from the "Yes" sheet or the athlete profile.
+- The band shows its word only, not the ratio.
+- "Keep the plan" on the low readiness card conflicts with a recorded decision
+  (`ReadinessSwapCard.tsx`, hub decision 12).
+- No path A journey, although the plan stays path A until the move.
+- Not covered: player finish against a Garmin pair, a "Yes" answer against a later sync, refresh
+  on the session page, fuel data, the workouts library, outdoor rides.
+- Build order: phase 1 shows targets that phase 2 adds; "the brief's phases stay" is false.

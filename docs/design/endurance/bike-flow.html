@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bike session flow</title>
+<style>
+  :root {
+    --bg: #0b0b0c; --fg: #f4f4f5; --muted: #8d8d93;
+    --widget: #161618; --widget-2: #222225; --hairline: rgb(255 255 255 / 0.07);
+    --brand: #6b95ff; --brand-fill: #2f5fe0;
+    --z1: #1c5cab; --z2: #2a78d6; --z3: #5598e7; --z4: #86b6ef; --z5: #b7d3f6;
+    --bike: #d95926; --ok: #3fae74; --warn: #d9a43a; --bad: #e0614f;
+    --display: "Big Shoulders Display", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #000; color: var(--fg); font: 15px/1.4 "Work Sans", Inter, system-ui, -apple-system, sans-serif; padding: 24px 16px 64px; }
+  h1 { font-family: var(--display); font-size: 34px; text-transform: uppercase; margin: 0; }
+  .intro { color: var(--muted); max-width: 820px; margin: 6px 0 24px; }
+  .flow { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 28px; align-items: start; }
+  .screen { max-width: 390px; }
+  .cap { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 0 4px 8px; }
+  .cap b { color: var(--brand); margin-right: 6px; }
+  .why { color: var(--muted); font-size: 13px; margin: 8px 4px 0; }
+  .phone { background: var(--bg); border: 1px solid var(--hairline); border-radius: 28px; padding: 16px; position: relative; overflow: hidden; }
+  .card { background: var(--widget); border-radius: 22px; padding: 16px; margin-bottom: 12px; }
+  .eyebrow { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--bike); margin-right: 6px; }
+  .link { color: var(--brand); text-transform: none; letter-spacing: 0; font-weight: 500; }
+  .title { font-family: var(--display); font-weight: 800; font-size: 28px; line-height: 1.05; text-transform: uppercase; margin: 8px 0 2px; }
+  .totals { font-weight: 600; } .totals span { color: var(--muted); font-weight: 400; }
+  .tnum { font-variant-numeric: tabular-nums; }
+  .lines { list-style: none; padding: 0; margin: 12px 0 0; border-top: 1px solid var(--hairline); }
+  .lines li { display: flex; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--hairline); font-size: 14px; }
+  .lines .k { color: var(--muted); width: 78px; flex: none; }
+  .lines .v { flex: 1; text-align: right; font-weight: 600; }
+  .lines .v small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+  .row { display: flex; gap: 10px; margin-top: 14px; }
+  .btn { flex: 1; min-height: 46px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 15px; background: var(--widget-2); color: var(--fg); border: 0; }
+  .btn.primary { background: var(--brand-fill); }
+  .btn.small { min-height: 36px; font-size: 13px; border-radius: 12px; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; background: var(--widget-2); border-radius: 999px; padding: 3px 9px; font-size: 12px; color: var(--fg); margin: 4px 4px 0 0; }
+  .chip.warn { background: rgb(217 164 58 / .18); color: #f3c66b; }
+  .chip.hr::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--bad); }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0; }
+  .tile { background: var(--widget); border-radius: 16px; padding: 10px 12px; }
+  .tile b { display: block; font-size: 22px; font-family: var(--display); }
+  .tile span { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  .section { font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin: 16px 2px 8px; display: flex; justify-content: space-between; }
+  .step { display: flex; gap: 12px; background: var(--widget); border-radius: 16px; padding: 12px; margin-bottom: 8px; border-left: 4px solid var(--c, var(--z2)); }
+  .step .dur { width: 56px; flex: none; }
+  .step .dur b { font-family: var(--display); font-size: 26px; display: block; line-height: 1; }
+  .step .dur span { color: var(--muted); font-size: 11px; }
+  .step .tgt b { font-size: 20px; } .step .tgt b small { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .step .tgt .sub { color: var(--muted); font-size: 12px; }
+  .step .note { font-size: 13px; margin-top: 4px; }
+  .repeat { background: var(--widget-2); border-radius: 18px; padding: 8px; margin-bottom: 8px; }
+  .repeat .rh { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin: 2px 4px 8px; }
+  .repeat .rh b { background: var(--brand-fill); color: #fff; border-radius: 8px; padding: 2px 8px; font-size: 14px; }
+  .alert { background: rgb(217 164 58 / .12); border: 1px solid rgb(217 164 58 / .35); border-radius: 18px; padding: 12px 14px; margin-bottom: 12px; font-size: 14px; }
+  .alert b { color: #f3c66b; }
+  .box { background: var(--widget); border-radius: 18px; padding: 12px 14px; font-size: 14px; margin-top: 12px; }
+  .box ol { margin: 6px 0 0; padding-left: 20px; } .box li { margin: 3px 0; }
+  .zt { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .zt td { padding: 5px 4px; border-bottom: 1px solid var(--hairline); }
+  .zt td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .muted { color: var(--muted); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #1c1c1f; border-radius: 24px 24px 0 0; padding: 14px 16px 18px; box-shadow: 0 -12px 40px rgb(0 0 0 / .6); }
+  .sheet .grab { width: 40px; height: 5px; border-radius: 3px; background: #444; margin: 0 auto 12px; }
+  .stepper { display: flex; align-items: center; justify-content: space-between; background: var(--widget-2); border-radius: 14px; padding: 8px 10px; margin: 8px 0; }
+  .stepper .lab { color: var(--muted); font-size: 13px; }
+  .stepper .val { font-weight: 700; font-size: 18px; }
+  .stepper .pm { display: flex; gap: 6px; } .stepper .pm span { width: 34px; height: 34px; border-radius: 10px; background: #333; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+  .dim { opacity: .35; }
+  .player { text-align: center; padding: 8px 0 0; min-height: 640px; display: flex; flex-direction: column; }
+  .player .lab { font-weight: 700; letter-spacing: .1em; text-transform: uppercase; font-size: 18px; }
+  .player .clock { font-size: 92px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: -2px; line-height: 1; margin: 12px 0 6px; }
+  .player .big { font-size: 40px; font-weight: 800; margin-top: 10px; }
+  .player .second { color: var(--muted); font-size: 16px; margin-top: 4px; }
+  .player .next { margin-top: auto; color: var(--muted); font-size: 15px; padding: 14px 0; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .res { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .res th { color: var(--muted); font-weight: 600; text-align: left; padding: 4px 3px; font-size: 11px; text-transform: uppercase; letter-spacing: .04em; }
+  .res td { padding: 7px 3px; border-top: 1px solid var(--hairline); vertical-align: top; font-variant-numeric: tabular-nums; }
+  .ok { color: var(--ok); } .under { color: var(--warn); } .over { color: var(--bad); }
+  .band { display: inline-block; background: rgb(63 174 116 / .18); color: #7fd7a6; border-radius: 999px; padding: 2px 10px; font-size: 12px; font-weight: 700; }
+  .chat { font-size: 14px; }
+  .chat .u { background: var(--brand-fill); border-radius: 16px 16px 4px 16px; padding: 8px 12px; margin: 0 0 8px 40px; }
+  .chat .a { background: var(--widget-2); border-radius: 16px 16px 16px 4px; padding: 8px 12px; margin: 0 40px 8px 0; }
+  .weekrow { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--hairline); font-size: 14px; }
+  .weekrow .d { width: 40px; color: var(--muted); }
+  .weekrow .n { flex: 1; } .weekrow .n small { display: block; color: var(--muted); }
+  svg text { font: 10px system-ui, sans-serif; fill: var(--muted); }
+  @media (max-width: 420px) { body { padding: 16px 8px 48px; } .flow { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<h1>Bike session flow</h1>
+<p class="intro">The owner's two real bike sessions, Bike tempo (Tuesday) and Long ride (Sunday), drawn as each screen will look. Numbers use FTP 180 W (the app value) and the Garmin CYCLING heart rate zones from the last sync. Plan: docs/plans/bike-sessions.md. Each screen states what is new.</p>
+
+<div class="flow" id="flow"></div>
+
+<script>
+const FTP = 180;
+const HRZ = [[101,120],[121,140],[141,160],[161,180],[181,201]];
+const pz = (pct) => pct < 55 ? 1 : pct < 75 ? 2 : pct < 90 ? 3 : pct < 105 ? 4 : 5;
+const W = (p) => Math.round(FTP * p / 100);
+
+const tempo = {
+  name: "Tempo 2 x 15 min", total: 65, hard: 30,
+  steps: [
+    { type: "Warm-up", min: 15, lo: 60, hi: 72, hr: "under 140", hrz: "Garmin Z2", cad: "85-95", note: "Build up in the last 5 min" },
+    { type: "Work", min: 15, lo: 75, hi: 80, hr: "141-160", hrz: "Garmin Z3", cad: "85-95", note: "Talk in short sentences", rep: 1 },
+    { type: "Easy", min: 5, lo: 50, hi: 60, hr: "under 140", hrz: "Garmin Z2", cad: "free", rep: 1 },
+    { type: "Work", min: 15, lo: 75, hi: 80, hr: "141-160", hrz: "Garmin Z3", cad: "85-95", note: "Same as block 1", rep: 2 },
+    { type: "Cool-down", min: 15, lo: 60, hi: 72, hr: "under 140", hrz: "Garmin Z2", cad: "free" }
+  ]
+};
+const longride = {
+  name: "Long ride 2:15", total: 135,
+  steps: [
+    { type: "Warm-up", min: 15, lo: 50, hi: 67, hr: "under 140", hrz: "Garmin Z2" },
+    { type: "Steady", min: 45, lo: 61, hi: 72, hr: "121-140", hrz: "Garmin Z2", note: "No surges" },
+    { type: "Steady", min: 20, lo: 61, hi: 72, hr: "121-140", hrz: "Garmin Z2", note: "Eat 15-20 g carbs now", fuel: 1 },
+    { type: "Steady", min: 20, lo: 61, hi: 72, hr: "121-140", hrz: "Garmin Z2", note: "Eat 15-20 g carbs now", fuel: 1 },
+    { type: "Steady", min: 20, lo: 61, hi: 72, hr: "121-140", hrz: "Garmin Z2", note: "Eat 15-20 g carbs now", fuel: 1 },
+    { type: "Steady", min: 10, lo: 61, hi: 72, hr: "121-140", hrz: "Garmin Z2", note: "Eat 15-20 g carbs now", fuel: 1 },
+    { type: "Cool-down", min: 5, lo: 40, hi: 60, hr: "under 120", hrz: "Garmin Z1" }
+  ]
+};
+
+function chart(w, { height = 90, axis = true, ftpLine = true, actual = null, marker = null } = {}) {
+  const total = w.steps.reduce((s, x) => s + x.min, 0), H = height, maxPct = 110, Wd = 358;
+  let x = 0, out = "";
+  for (const s of w.steps) {
+    const wpx = s.min / total * Wd, mid = (s.lo + s.hi) / 2, h = mid / maxPct * (H - 14);
+    out += `<rect x="${x + 0.5}" y="${H - 14 - h}" width="${Math.max(wpx - 1, 1)}" height="${h}" rx="2" fill="var(--z${pz(mid)})" opacity="${actual ? .45 : 1}"/>`;
+    if (s.fuel) out += `<circle cx="${x + 3}" cy="${H - 14 - h - 6}" r="3" fill="var(--warn)"/>`;
+    x += wpx;
+  }
+  if (ftpLine) { const y = H - 14 - 100 / maxPct * (H - 14); out += `<line x1="0" x2="${Wd}" y1="${y}" y2="${y}" stroke="#777" stroke-dasharray="3 3"/><text x="${Wd - 2}" y="${y - 3}" text-anchor="end">FTP ${FTP} W</text>`; }
+  if (actual) {
+    const pts = actual.map(([m, pct]) => `${m / total * Wd},${H - 14 - pct / maxPct * (H - 14)}`).join(" ");
+    out += `<polyline points="${pts}" fill="none" stroke="#fff" stroke-width="1.6"/>`;
+  }
+  if (marker != null) { const mx = marker / total * Wd; out += `<line x1="${mx}" x2="${mx}" y1="0" y2="${H - 14}" stroke="#fff" stroke-width="2"/>`; }
+  if (axis) out += `<text x="0" y="${H - 2}">0</text><text x="${Wd / 2}" y="${H - 2}" text-anchor="middle">${Math.round(total / 2)} min</text><text x="${Wd}" y="${H - 2}" text-anchor="end">${total}</text>`;
+  return `<svg viewBox="0 0 ${Wd} ${H}" width="100%" height="${H}">${out}</svg>`;
+}
+const wr = (s) => `${W(s.lo)}-${W(s.hi)}`;
+function stepCard(s, opts = {}) {
+  const mid = (s.lo + s.hi) / 2;
+  return `<div class="step ${opts.dim ? "dim" : ""}" style="--c: var(--z${pz(mid)})">
+    <div class="dur"><b>${s.min}</b><span>min${s.type === "Work" ? " · hard" : ""}</span></div>
+    <div class="tgt"><b>${wr(s)} <small>W</small></b><div class="sub">${s.lo}-${s.hi} % FTP · power Z${pz(mid)}</div>
+      <span class="chip hr">${s.hr} bpm · ${s.hrz}</span>${s.cad ? `<span class="chip">${s.cad} rpm</span>` : ""}
+      ${s.note ? `<div class="note">${s.note}</div>` : ""}</div></div>`;
+}
+
+const screens = [];
+
+// 1 Today card
+screens.push({ n: 1, cap: "Home, Today card", why: "New: path B on the Today card (no more Rest Day), block chart, three lines with watts and bpm, the numbers chip.", html: `
+  <div class="card">
+    <div class="eyebrow"><span><span class="dot"></span>Today · Bike · Indoor</span><span class="link">This week</span></div>
+    <div class="title">${tempo.name}</div>
+    <div class="totals tnum">65 min <span>total ·</span> 30 min <span>at 135-144 W</span></div>
+    <div style="margin-top:12px">${chart(tempo, { height: 64, axis: false, ftpLine: false })}</div>
+    <ul class="lines">
+      <li><span class="k">Warm-up</span><span class="v">15 min · 108-130 W<small>HR under 140</small></span></li>
+      <li><span class="k">Main set</span><span class="v">2 x 15 min · 135-144 W<small>5 min easy between · HR 141-160 · 85-95 rpm</small></span></li>
+      <li><span class="k">Cool-down</span><span class="v">15 min · 108-130 W</span></li>
+    </ul>
+    <span class="chip warn" style="margin-top:10px">Numbers differ: watch FTP 266 W</span>
+    <div class="row"><div class="btn">Details</div><div class="btn primary">Start guided</div></div>
+  </div>
+  <div class="card"><div class="eyebrow"><span>Strength</span></div><div style="margin-top:6px;font-weight:600">Workout A · Squat and horizontal</div><div class="muted" style="font-size:13px">Front squat, bench, Pendlay row</div><div class="row"><div class="btn">Start</div></div></div>` });
+
+// 2 Session page before
+screens.push({ n: 2, cap: "Session page, before the ride", why: "New: chart, coach note, grouped step cards with watts, % FTP, power zone, HR in bpm from Garmin zones, cadence; the numbers card. Long page, shown in full.", html: `
+  <div class="link" style="margin-bottom:8px">&lsaquo; Week</div>
+  <div class="eyebrow"><span><span class="dot"></span>Tue 17 Nov · Bike · Indoor trainer</span><span>Support</span></div>
+  <div class="title">${tempo.name}</div>
+  <div class="tiles"><div class="tile"><b>65 min</b><span>Total</span></div><div class="tile"><b>30 min</b><span>Hard</span></div><div class="tile"><b>~55</b><span>Load</span></div></div>
+  <div class="card" style="padding:12px">${chart(tempo)}</div>
+  <div class="alert"><b>Numbers differ.</b> Your watch uses FTP 266 W. This plan uses 180 W (app, 14 Nov). Your best 20 min this month was 189 W.
+    <div class="row"><div class="btn small">Keep 180</div><div class="btn small">Use 266</div><div class="btn small primary">Plan a test</div></div></div>
+  <div class="box"><span class="muted">Coach note</span><br>Not a hard session. You must be able to talk in short sentences.</div>
+  <div class="section"><span>Warm-up</span><span>15 min</span></div>${stepCard(tempo.steps[0])}
+  <div class="section"><span>Main set</span><span>35 min</span></div>
+  <div class="repeat"><div class="rh"><b>2 x</b> Do both, the second time without the easy step</div>${stepCard(tempo.steps[1])}${stepCard(tempo.steps[2])}</div>
+  <div class="section"><span>Cool-down</span><span>15 min</span></div>${stepCard(tempo.steps[4])}
+  <div class="section"><span>Your numbers</span><span class="link">Thresholds</span></div>
+  <div class="card" style="padding:12px"><table class="zt">
+    <tr><td colspan="2" class="muted">Heart rate · Garmin cycling zones (max 201)</td></tr>
+    ${HRZ.map((z, i) => `<tr><td><span class="sw" style="background:var(--z${i + 1})"></span>Z${i + 1}</td><td>${z[0]}-${z[1]} bpm</td></tr>`).join("")}
+    <tr><td colspan="2" class="muted" style="padding-top:10px">Power · FTP ${FTP} W</td></tr>
+    ${[[0,54],[55,74],[75,89],[90,104],[105,120]].map((z, i) => `<tr><td><span class="sw" style="background:var(--z${i + 1})"></span>Z${i + 1}</td><td>${i ? W(z[0]) : "0"}-${W(z[1])} W</td></tr>`).join("")}
+  </table></div>
+  <div class="box"><b>Record on Garmin</b><ol>
+    <li>Activity: Indoor Bike. Pair the trainer for watts.</li>
+    <li>Auto Lap off. It is on now: your last rides have a lap every 5 km.</li>
+    <li>Auto Pause off.</li>
+    <li>Start at the warm-up. Press Lap at each step change: 4 times.</li>
+    <li>Keep recording in the easy step. Stop after the cool-down.</li></ol></div>
+  <div class="row"><div class="btn">Edit</div><div class="btn">Move</div><div class="btn">Skip</div></div>
+  <div class="row" style="margin-top:8px"><div class="btn primary">Start guided</div></div>` });
+
+// 3 Edit
+screens.push({ n: 3, cap: "Edit, in the app (D3)", why: "New: tap Edit, tap a step, change numbers, save for this session or for all later Bike tempo sessions. Steps cannot be added here; ask the assistant for that.", html: `
+  <div class="eyebrow"><span>Editing</span><span class="link">Cancel</span></div>
+  <div class="title" style="font-size:24px">${tempo.name}</div>
+  <div class="row" style="margin-top:8px"><div class="btn small">Easier 5 %</div><div class="btn small">Harder 5 %</div></div>
+  <div class="section"><span>Main set</span><span>tap a step</span></div>
+  <div class="repeat"><div class="rh"><b>2 x</b> <span>Repeat</span><span style="margin-left:auto">&minus; &nbsp; 2 &nbsp; +</span></div>${stepCard(tempo.steps[1])}${stepCard(tempo.steps[2], { dim: true })}</div>
+  <div style="height:330px"></div>
+  <div class="sheet"><div class="grab"></div>
+    <div style="font-weight:700;margin-bottom:4px">Work step</div>
+    <div class="stepper"><span class="lab">Duration</span><span class="val">15 min</span><span class="pm"><span>&minus;</span><span>+</span></span></div>
+    <div class="stepper"><span class="lab">Power</span><span class="val">135-144 W <small class="muted" style="font-size:12px">75-80 %</small></span><span class="pm"><span>&minus;</span><span>+</span></span></div>
+    <div class="stepper"><span class="lab">HR</span><span class="val">Garmin Z3 · 141-160</span><span class="pm"><span>&lsaquo;</span><span>&rsaquo;</span></span></div>
+    <div class="stepper"><span class="lab">Cadence</span><span class="val">85-95 rpm</span><span class="pm"><span>&minus;</span><span>+</span></span></div>
+    <div class="row"><div class="btn">This session</div><div class="btn primary">This and later</div></div>
+  </div>` });
+
+// 4 Edit via assistant
+screens.push({ n: 4, cap: "Edit, by the assistant (exists)", why: "Exists: the assistant changes the session over MCP with a reason. The limits check it and the change has Undo in the app.", html: `
+  <div class="chat">
+    <div class="u">Make Tuesday's tempo 3 x 12 min, I only have 60 min.</div>
+    <div class="a">Changed Tue 17 Nov: warm-up 12 min, 3 x 12 min at 135-144 W with 3 min easy, cool-down 6 min. Total 60 min, 36 min hard. Limits: passed. Undo is in the app under Plan history.</div>
+  </div>
+  <div class="card" style="margin-top:12px"><div class="eyebrow"><span>Plan history</span></div>
+    <div style="margin-top:8px;font-size:14px">Tue 17 Nov · Tempo 3 x 12 min<br><span class="muted">By your assistant · "60 min available"</span></div>
+    <div class="row"><div class="btn small">Undo</div></div></div>` });
+
+// 5 Player
+screens.push({ n: 5, cap: "Start guided, running", why: "Exists: step clock, target, note, next. New: second line with % FTP, HR and cadence; profile bar with a now marker; Press Lap cue.", html: `
+  <div class="player">
+    <div class="muted" style="font-size:13px">Step 2 of 5 · 22:14 done</div>
+    <div style="margin:10px 0">${chart(tempo, { height: 46, axis: false, ftpLine: false, marker: 22.2 })}</div>
+    <div class="lab">Work · 1 of 2</div>
+    <div class="clock">07:46</div>
+    <div class="muted">left in this step</div>
+    <div class="big">135-144 W</div>
+    <div class="second">75-80 % FTP · HR 141-160 · 85-95 rpm</div>
+    <div style="margin-top:12px">Talk in short sentences</div>
+    <div class="next">Next: Easy 5 min · 90-108 W</div>
+    <div class="grid4"><div class="btn" style="grid-column:span 2;background:var(--brand-fill)">Pause</div><div class="btn">+30 s</div><div class="btn">Skip</div></div>
+    <div class="btn" style="margin-top:8px;min-height:38px;flex:none">Finish</div>
+  </div>` });
+
+// 6 After
+const act = [[0,58],[5,62],[10,66],[15,70],[15.3,76],[20,78],[25,79],[30,80],[30.3,55],[35,56],[35.3,77],[40,79],[45,81],[50,82],[50.3,68],[55,66],[60,64],[65,60]];
+screens.push({ n: 6, cap: "After the ride, session page", why: "New: the paired Garmin ride, the real power line over the plan, a step table from the 5 laps, time in the HR zone, effort. Numbers here are an example.", html: `
+  <div class="eyebrow"><span><span class="dot"></span>Tue 17 Nov · Bike</span><span class="band">On plan · 65 of 65 min</span></div>
+  <div class="title">${tempo.name}</div>
+  <div class="card" style="padding:12px;margin-top:10px">
+    <div style="font-size:14px"><b>Recorded on Garmin</b> · Indoor Cycling · 65:12 · 27.1 km<br><span class="muted">NP 141 W · avg HR 147 · cadence 86</span></div>
+    <div class="row"><div class="btn small">Open activity</div><div class="btn small">Not this activity</div></div></div>
+  <div class="card" style="padding:12px">${chart(tempo, { actual: act })}<div class="muted" style="font-size:12px">Blocks: plan. White line: your power.</div></div>
+  <div class="section"><span>Step by step</span><span>matched by laps: 5 of 5</span></div>
+  <div class="card" style="padding:10px"><table class="res">
+    <tr><th>Step</th><th>Plan</th><th>Done</th><th>HR</th></tr>
+    <tr><td>Warm-up</td><td>108-130 W</td><td class="ok">118 W</td><td>124 / 136</td></tr>
+    <tr><td>Work 1</td><td>135-144 W</td><td class="ok">141 W<br><span class="muted">88 rpm</span></td><td>148 / 156<br><span class="muted">96 % in Z3</span></td></tr>
+    <tr><td>Easy</td><td>90-108 W</td><td class="under">99 W</td><td>131 / 142</td></tr>
+    <tr><td>Work 2</td><td>135-144 W</td><td class="over">151 W<br><span class="muted">over by 5 %</span></td><td>155 / 163<br><span class="muted">71 % in Z3</span></td></tr>
+    <tr><td>Cool-down</td><td>108-130 W</td><td class="ok">114 W</td><td>138 / 146</td></tr>
+  </table></div>
+  <div class="section"><span>How did it feel?</span></div>
+  <div class="row" style="margin-top:0">${[3,4,5,6,7,8].map(n => `<div class="btn small" ${n === 5 ? 'style="background:var(--brand-fill)"' : ""}>${n}</div>`).join("")}</div>
+  <div class="muted" style="font-size:12px;margin-top:6px">RPE 1-10. Taken from the watch when you set it there.</div>` });
+
+// 7 Not this activity
+screens.push({ n: 7, cap: "Not this activity", why: "New: fix a wrong pair in the app. MCP only today, and there is no way to unpair.", html: `
+  <div class="title" style="font-size:24px">${tempo.name}</div>
+  <div style="height:260px"></div>
+  <div class="sheet"><div class="grab"></div>
+    <div style="font-weight:700">Which ride was this session?</div>
+    <div class="muted" style="font-size:13px;margin-bottom:6px">Rides on Mon 16 to Wed 18 Nov</div>
+    <div class="weekrow"><span class="d">Tue</span><span class="n">Indoor Cycling 65:12<small>NP 141 W · avg HR 147 · paired now</small></span><span class="ok">&#10003;</span></div>
+    <div class="weekrow"><span class="d">Tue</span><span class="n">Indoor Cycling 12:40<small>NP 96 W · avg HR 118</small></span></div>
+    <div class="weekrow"><span class="d">Wed</span><span class="n">Indoor Cycling 61:05<small>NP 139 W · avg HR 145</small></span></div>
+    <div class="row"><div class="btn">None of these</div><div class="btn primary">Save</div></div>
+  </div>` });
+
+// 8 Long ride
+screens.push({ n: 8, cap: "Long ride, before (Sunday)", why: "The fuel rule from the note becomes steps: the watch beeps and the player says Eat now. HR uses Garmin Z2 (D2).", html: `
+  <div class="eyebrow"><span><span class="dot"></span>Sun 22 Nov · Bike · Indoor trainer</span><span>Key</span></div>
+  <div class="title">${longride.name}</div>
+  <div class="tiles"><div class="tile"><b>2:15</b><span>Total</span></div><div class="tile"><b>40-60 g</b><span>Carbs per h</span></div><div class="tile"><b>~120</b><span>Load</span></div></div>
+  <div class="card" style="padding:12px">${chart(longride)}<div class="muted" style="font-size:12px">Yellow dots: eat 15-20 g carbs.</div></div>
+  <div class="alert"><b>HR changed.</b> The old note said HR 142-155. That is Garmin Z3 on your watch. This ride uses Garmin Z2: 121-140 bpm.</div>
+  <div class="section"><span>Warm-up</span><span>15 min</span></div>${stepCard(longride.steps[0])}
+  <div class="section"><span>Steady</span><span>1 h 55 min</span></div>${stepCard(longride.steps[1])}
+  <div class="repeat"><div class="rh"><b>3 x</b> 20 min, eat at the start of each</div>${stepCard(longride.steps[2])}</div>
+  ${stepCard(longride.steps[5])}
+  <div class="section"><span>Cool-down</span><span>5 min</span></div>${stepCard(longride.steps[6])}
+  <div class="box"><b>Record on Garmin</b><ol><li>Indoor Bike, trainer paired, Auto Lap off, Auto Pause off.</li><li>Press Lap at each step change: 6 times.</li><li>Have 4 portions of 15-20 g carbs ready.</li></ol></div>` });
+
+// 9 Week
+screens.push({ n: 9, cap: "Week, bike rows", why: "Change: every row links to the session page, with a two-line summary. Done rows show the band and NP.", html: `
+  <div class="title" style="font-size:24px">16 to 22 Nov</div>
+  <div class="card" style="margin-top:10px">
+    <div class="weekrow"><span class="d">Tue</span><span class="n">Tempo 2 x 15 min<small>65 min · 135-144 W · HR 141-160</small></span><span class="band">On plan</span></div>
+    <div class="weekrow"><span class="d">Sun</span><span class="n">Long ride 2:15<small>110-130 W · HR 121-140 · eat 40-60 g/h</small></span><span class="muted">&rsaquo;</span></div>
+    <div style="margin-top:10px;font-size:14px"><span class="muted">Bike</span> 1:05 of 3:20 · load 52 of ~175</div>
+  </div>` });
+
+const flow = document.getElementById("flow");
+flow.innerHTML = screens.map(s => `<div class="screen"><div class="cap"><b>${s.n}</b>${s.cap}</div><div class="phone">${s.html}</div><p class="why">${s.why}</p></div>`).join("");
+</script>
+</body>
+</html>
