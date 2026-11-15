@@ -47,22 +47,34 @@ Consequences on the watch today:
 - A 60 min ride at 186 W average with average HR 143 is above an FTP of 180. FTP 180 is too
   low, and 266 is far above the best 20 min power. The true FTP is unknown.
 
-Rules the plan sets:
+Rules the plan sets (D1 and D2, decided 2026-11-15: automatic from Garmin data, with override):
 
-1. HR targets resolve from the Garmin CYCLING zones, in bpm, labelled "Garmin Z2". The app's
-   Friel tables are the fallback only, labelled "estimate".
-2. Power targets resolve from one FTP. The session page shows which FTP and its source. When the
-   app FTP and the watch FTP differ by more than 5 %, the page shows a "Numbers differ" card.
-3. The card offers: use the app FTP, use the watch FTP, or plan an FTP test (section 7.3).
-   The owner chooses. The app never picks one in silence.
-
-Decision D1 (owner): which FTP to use until a test. Recommended: plan a 20 min test this week
-and keep 180 W until then, because the watts in the notes are built on 180.
+1. FTP is estimated automatically from the Garmin rides of the last 90 days. Today the estimate
+   is 95 % of the best 20 min power (`thresholdHistory`, `src/lib/garmin/analytics/trends.ts`,
+   `FTP_FACTOR`). That gives 180 W and misses rides with no hard 20 min. The new estimate takes
+   the highest of: 95 % of the best 20 min power, the best 60 min average power, and critical
+   power (`criticalFit`, same file). With the real data: max(180, 186, CP). The estimate shows
+   its basis: "186 W, best 60 min on 10 Nov".
+2. The estimate updates itself after each sync when it moves by 3 % or more. Each update is a
+   threshold revision with source `garmin`, so it shows in the plan history and has Undo. The
+   session page says "FTP changed from 180 to 186 W" once.
+3. Override: on the session page and on Thresholds the user sets an FTP by hand. A manual or
+   test value pins the FTP until the user removes it, or until a newer test. The override sheet
+   holds a short "How to test" note: 20 min warm-up, 5 min hard, 10 min easy, 20 min steady all
+   out, take 95 % of the average; or the in-app FTP test workout (7.3).
+4. The watch FTP (266 W, `functionalThresholdPower`) is shown next to it. When it differs by
+   more than 5 %, the page says so and tells the user to set the watch FTP to the app value, so
+   the watch power zones match.
+5. HR targets resolve from the Garmin CYCLING zones of the last sync, in bpm, labelled "Garmin
+   Z2". They follow Garmin automatically. Override: the user can set custom bike HR zones on
+   Thresholds; the label then says "Your Z2". The Friel tables are the fallback when no Garmin
+   zones exist, labelled "estimate".
 
 ## 4. The bike sessions as structured workouts
 
 Both sessions move to structured workouts (path B). Numbers below use FTP 180 and the Garmin
-CYCLING zones. They change when D1 changes.
+CYCLING zones. The new FTP estimate (section 3) is about 186 W with the real data, so every watt
+target rises about 3 % when phase 0 ships. HR follows the Garmin zones.
 
 ### 4.1 Bike tempo, 65 min, hard 30 min
 
@@ -91,8 +103,8 @@ The fuel rule becomes steps, so the watch beeps and the player shows "Eat now".
 Total 135 min. Fuel: cues at 60, 80, 100 and 120 min = 40-60 g per hour. Laps: 7 steps, press
 Lap 6 times.
 
-Decision D2 (owner): HR for the long ride. Garmin Z2 is 121-140. The note said 142-155. Recent
-rides at 159-186 W averaged HR 136-143. Recommended: Garmin Z2 with a cap at 140.
+D2 decided: the long ride uses Garmin Z2 (121-140 bpm today) and follows Garmin when the zones
+change. The old note said 142-155, which is Garmin Z3.
 
 ## 5. Screens
 
@@ -108,7 +120,7 @@ what it shows, its data source, and the state of the code.
 | Totals | "65 min · 30 min at 135-144 W" | `estimateWorkout`, new `hardSeconds` | NEW |
 | Block chart | 5 blocks, height = % FTP, colour = power zone | steps, FTP | NEW |
 | Lines | Warm-up 15 min 108-130 W; Main 2 x 15 min 135-144 W, HR 141-160; Cool-down 15 min | new `groupWorkout` | NEW |
-| "Numbers differ" chip | shown when D1 is open | thresholds against Garmin FTP | NEW |
+| FTP chip | "FTP 186 W · from your rides"; "Watch FTP differs" when the watch is more than 5 % off | FTP estimate, ride `functionalThresholdPower` | NEW |
 | Details | opens the session page | | EXISTS (row link) |
 | Start guided | opens the player | | EXISTS |
 
@@ -125,39 +137,94 @@ Day" (audit 2.12 #8).
 | Coach note | "Not a hard session: you must be able to talk in short sentences." | `workout.description` | CHANGE (not shown today) |
 | Step cards | grouped: Warm-up / Main set / Cool-down. Each card: big duration, big watts, % FTP and power zone, HR chip "141-160 bpm · Garmin Z3", cadence chip, gradient chip when set, step note | resolver | CHANGE |
 | Your numbers | FTP 180 W (app, 14 Nov) · Garmin CYCLING HR zones Z1-Z5 in bpm · power zones in W | thresholds, `hr_zones` snapshot | NEW |
-| Numbers differ card | "Your watch uses FTP 266 W. This plan uses 180 W." with three choices | thresholds, last ride `functionalThresholdPower` | NEW |
+| FTP line | "FTP 186 W, from your rides (best 60 min, 10 Nov)" with "Change". Once after an update: "FTP changed from 180 to 186 W". When the watch differs: "Your watch uses 266 W. Set it to 186 W so the watch power zones match." | FTP estimate, threshold revisions, ride `functionalThresholdPower` | NEW |
+| Change FTP sheet | Automatic (from your rides) or Set by hand; "How to test" note; "Plan an FTP test" adds the test workout (7.3) | `manage_thresholds` path in the app | NEW |
 | Record on Garmin | "Indoor Bike. Trainer paired. Auto Lap off (it is on: your rides have 5 km laps). Auto Pause off. Start with the warm-up. Press Lap 4 times, at each step change. Do not pause in the easy step." | built from the steps; Auto Lap hint from `lapTrigger: distance` in the last ride | NEW |
 | Actions | Start guided · Edit · Move · Skip | | Start EXISTS; Edit NEW; Move, Skip on this page NEW |
 
-### 5.3 Edit
+### 5.3 Edit: the full workout editor
 
-Two ways, same result: the session's workout changes, a revision is written, and Undo exists.
+Decision D3 (2026-11-15): a full editor in the app. Rule for the whole app: everything the
+assistant can do over MCP, the user can do in the app without AI. The assistant stays a helper.
 
-A. Ask the assistant (MCP, EXISTS): "Make Tuesday's tempo 3 x 12 min". The assistant calls
-`manage_planned_session set_workout` with a reason. The training limits check it.
+Both paths write the same thing: the workout JSON, checked by the same `parseWorkout`, saved as a
+revision with Undo. The assistant path is unchanged (`manage_planned_session set_workout`,
+`manage_workout`).
 
-B. In the app (NEW, small): "Edit" on the session page opens edit mode.
+Where the editor opens:
 
-| Control | Does | Writes |
+| From | Opens with | State |
 |---|---|---|
-| Tap a step | opens the step sheet | |
-| Step sheet: duration stepper (1 min) | changes the step time | |
-| Step sheet: power stepper (5 W), shown with % FTP | moves the target range | |
-| Step sheet: HR cap picker (Garmin zone or bpm) | sets the secondary target | |
-| Step sheet: cadence range | sets cadence | |
-| Repeat count stepper on a repeat | changes "2 x" | |
-| "Easier 5 %" / "Harder 5 %" on the session | scales every work target | |
-| Save | "This session" or "This and later Bike tempo sessions" | op `set_workout` (this session); `manage_workout update` of the library copy (later sessions) |
-| Cancel | drops the changes | |
+| Session page "Edit" | this session's workout | NEW |
+| Workouts library row "Edit" | the library workout | NEW (library has rename, duplicate, delete only) |
+| Workouts library "New workout" | an empty bike workout | NEW (no create in the app today) |
+| Template builder slot "Use a workout" | pick a library workout for the slot | NEW (app slot schema has no `workoutId`) |
+| Calendar day "Add session" | pick a library workout or "New" | NEW (app `add` needs a `programId`) |
 
-What edit does not do: add or remove steps, change step types, build a workout from nothing.
-That stays with the assistant (decision D3).
+Editor screen, top to bottom:
 
-Rules: a done or started session cannot change. The app runs the training limits in warn mode
-and shows a broken rule before Save. Every save is a revision with writer `user`.
+| Element | Does |
+|---|---|
+| Name | text field, required |
+| Sport and place | Bike · Indoor or Outdoor |
+| Coach note | the workout description, max 1000 characters |
+| Live summary | total time, hard time, planned load, profile chart; updates on each change |
+| Step list | one card per step, in order; a repeat shows as a block with its count |
+| Drag handle | reorders steps, and moves a step into or out of a repeat |
+| Step menu | Duplicate, Delete |
+| "Add" | Step, Repeat, or a block from a template |
+| "Easier 5 %" / "Harder 5 %" | scales every work and steady target |
+| Save | opens the save sheet |
+| Cancel | asks before it drops unsaved changes |
 
-Decision D3 (owner): in-app edit as above, or assistant only. Recommended: the small editor,
-because changing "15 min" to "12 min" on the way to the trainer should not need a chat.
+Step sheet:
+
+| Field | Values |
+|---|---|
+| Type | Warm-up, Work, Recovery, Steady, Cool-down, Rest |
+| Ends by | Time (minutes and seconds), Distance (km), or Lap button |
+| Main target | Power: W, % FTP or power zone; or HR: bpm or Garmin zone. A range, or one side only ("under 140") |
+| Second target | the same choices; for example HR under 140 on a power step |
+| Cadence | rpm range, or none |
+| Gradient | %, or none (sim trainers and outdoor climbs) |
+| Note | max 140 characters, shown in the player |
+
+Every number shows its other forms as you type: "140 W = 78 % FTP, power Z3".
+
+Repeat block: count stepper (2-50), "Add step to repeat", "Ungroup". One level, as the schema
+allows.
+
+Templates for "Add": Warm-up 15 min, Tempo 2 x 15 min, Sweet spot 3 x 12 min, Threshold
+2 x 20 min, VO2 5 x 4 min, Over-unders 3 x (2 + 1) min, Fuel cue (20 min steady with "Eat
+15-20 g carbs now"), Cool-down 10 min, FTP test (7.3). A template inserts normal steps the user
+can change.
+
+Save sheet:
+
+| Choice | Writes |
+|---|---|
+| This session | the session's workout copy (`set_workout`) |
+| This and later sessions | the library workout (`manage_workout update`); untouched later sessions follow. Sessions changed by hand keep their version, and the sheet lists them: "Tue 1 Dec keeps its own version" |
+| Save as a new library workout | `manage_workout create` |
+
+Rules:
+
+- A done or started session cannot change.
+- Errors show at the field, with the text `parseWorkout` returns.
+- The training limits run in warn mode. A broken rule shows in the save sheet before Save.
+- Every save is a revision with writer `user`. Undo is in Plan history.
+
+In-app parity for the bike scope (MCP only today, audit 1.9 #1-#4):
+
+| Capability | In-app control |
+|---|---|
+| Create and edit workout steps | the editor |
+| Workout on a template slot | template builder "Use a workout" |
+| Add a dated workout session | calendar "Add session" |
+| Priority on a dated session | session page menu: Key, Support, Optional |
+| Pull the newest library copy (`update_from_library`) | session page menu "Update from library" |
+| Pair and unpair a Garmin ride (`pick`, new `unpick`) | "Not this activity" (5.5) |
+| Undo a missed mark (`unmiss`) | session page "Not missed" |
 
 ### 5.4 Start: guided player `/planned/[id]/play`
 
@@ -249,30 +316,32 @@ two real sessions.
 
 | Phase | Content | Done when |
 |---|---|---|
-| 0 Numbers | Garmin CYCLING zones in the resolver; FTP source shown; "Numbers differ" card; D1 settled | the session page shows the same HR zone the watch shows |
+| 0 Numbers | new FTP estimate and its auto update, override with "How to test", Garmin CYCLING zones in the resolver, custom zone override, watch FTP note | the session page shows the same HR zone the watch shows, and an FTP with its basis |
 | 1 Before | Today card with path B (and the Rest Day fix), session page before (5.2), record box, links from `/week`, the cycle sheet and the calendar | the owner can read Tuesday's tempo on one screen with no note |
 | 2 Step model | `secondary`, one-sided range, `gradePercent`; player second line and progress bar (5.4) | tempo steps show watts and HR together |
-| 3 Edit | in-app edit (5.3), if D3 says yes | "15 min" becomes "12 min" in three taps, with Undo |
+| 3a Editor | the editor and step sheet on a session (5.3), save sheet, Undo | the tempo becomes 3 x 12 min in the app, with Undo |
+| 3b Library and templates | create, edit and templates in the library; "Use a workout" on a slot; "Add session" on the calendar | a new bike workout is built and planned with no AI |
+| 3c Parity | priority, update from library, not missed | every bike action over MCP has an app control |
 | 4 After | stored pairing with source `garmin` (D4), step matching, after view (5.5), pick and unpick | after a ride, the page shows the step table with no typing |
 | 5 Move the plan | the assistant rewrites the future bike sessions as workouts (4.1, 4.2) | no bike session left on path A |
 | 6 Optional | Download .fit for the watch | the watch runs the steps |
 
-### 7.3 FTP test session (if D1 picks a test)
+### 7.3 FTP test session
 
 A library workout the assistant adds this week: 20 min warm-up with 2 x 1 min high cadence,
 5 min easy, 5 min hard, 10 min easy, 20 min all out (steady), 10 min cool-down. The after view
 reads the 20 min step's average power, and offers "Set FTP to 95 % of 20 min power (N W)". Save
 writes `manage_thresholds` with source `test`.
 
-## 8. Decisions for the owner
+## 8. Decisions
 
-| # | Decision | Recommended |
+| # | Decision | Answer (2026-11-15) |
 |---|---|---|
-| D1 | FTP until a test: 180 (app), 266 (watch), or a test this week | keep 180, test this week |
-| D2 | Long ride HR: Garmin Z2 121-140, or the note's 142-155 | Garmin Z2, cap 140 |
-| D3 | In-app edit, or assistant only | small in-app editor |
+| D1 | FTP | automatic estimate from Garmin rides, updates itself; manual override with a "How to test" note (section 3) |
+| D2 | Bike HR | Garmin CYCLING zones, automatic; override with custom zones (section 3) |
+| D3 | Edit | full editor in the app; everything works without AI (5.3) |
 | D4 | Store Garmin pairs as `workout_sessions` rows with source `garmin` | yes |
-| D5 | Pairing minimum: a ride under 50 % of the planned time does not pair | yes |
+| D5 | Pairing minimum | a ride under 50 % of the planned time does not pair by itself; it can be picked by hand |
 | D6 | Fuel cues as steps on long rides | yes |
 
 ## 9. Tests per phase
