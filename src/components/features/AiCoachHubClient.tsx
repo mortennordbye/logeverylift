@@ -110,7 +110,8 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
           <Link href="/more/ai-coach/connect" className={`${card} p-4 active:opacity-80`} data-testid="coach-ask">
             <div className="flex items-center gap-2 font-semibold">
               <Sparkles className="w-4 h-4 text-primary" />
-              Change your plan with your own AI
+              <span className="flex-1">Change your plan with your own AI</span>
+              <ChevronRight className="w-4 h-4 text-muted-foreground flex-none" />
             </div>
             <p className="text-sm text-muted-foreground mt-1">
               Connect Claude or ChatGPT. It sees your plan and your notes, and can change your programs and days.
@@ -120,7 +121,7 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
 
       {!connected && (
         <div className={`${card} overflow-hidden`}>
-          <Row href="/more/coach-memory" icon={Brain} title="What your coach knows" sub={memoryCount > 0 ? notes : "Notes for your own AI"} />
+          <Row href="/more/coach-memory" icon={Brain} title="Memory" sub={memoryCount > 0 ? `What your coach knows · ${notes}` : "What your coach knows · none yet"} />
         </div>
       )}
 

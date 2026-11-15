@@ -193,7 +193,7 @@ export function CoachMemoryClient({ entries, deleted }: { entries: MemoryRow[]; 
               maxLength={1000}
               rows={4}
               aria-label="Entry"
-              placeholder="For example: long rides on Saturday, never before 8"
+              placeholder="For example, long rides on Saturday, never before 8"
               className="w-full rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2 ring-primary"
             />
             {draft.id && (
@@ -214,6 +214,13 @@ export function CoachMemoryClient({ entries, deleted }: { entries: MemoryRow[]; 
               className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
             >
               Save
+            </button>
+            <button
+              onClick={() => setDraft(null)}
+              disabled={saving}
+              className="w-full rounded-xl bg-muted py-4 text-sm font-semibold disabled:opacity-50 active:opacity-80"
+            >
+              Cancel
             </button>
             {draft.id &&
               (confirmDelete ? (
