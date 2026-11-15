@@ -388,6 +388,29 @@ test("at 320 px a season page phase row keeps its name to two lines, the badge o
   await page.screenshot({ path: testInfo.outputPath("season-phases-320.png") });
 });
 
+test.describe("at 390 px", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("a long badge sits under the phase name, so the name and the dates keep one line (round 10)", async ({ page }, testInfo) => {
+    const { seasonId, cycleId } = await plan(testInfo.parallelIndex);
+    // The first phase starts tomorrow: its badge is the long "Starts tomorrow".
+    await testDb().update(trainingCycles).set({ status: "draft", startDate: null, scheduledStartDate: dayStr(1) }).where(eq(trainingCycles.id, cycleId));
+
+    await page.goto(`/seasons/${seasonId}`);
+    await expect(page.getByTestId("phase-row")).toHaveCount(3);
+    const first = page.getByTestId("phase-row").first();
+    await expect(first.getByTestId("phase-badge")).toHaveText("Starts tomorrow");
+    await expect(first.getByTestId("phase-name")).toBeVisible();
+    // Polled: the page can still be drawing in when the badge text is first found.
+    await expect.poll(async () => (await lineCounts(first, "[data-testid=phase-name]"))[0].lines, { message: "name on one line" }).toBe(1);
+    await expect.poll(async () => (await lineCounts(first, "[data-testid=phase-sub]"))[0].lines, { message: "dates on one line" }).toBe(1);
+    const nameBox = (await first.getByTestId("phase-name").boundingBox())!;
+    const badgeBox = (await first.getByTestId("phase-badge").boundingBox())!;
+    expect(badgeBox.y, "badge under the name").toBeGreaterThanOrEqual(nameBox.y + nameBox.height - 1);
+    await page.screenshot({ path: testInfo.outputPath("season-phases-390.png") });
+  });
+});
+
 /**
  * `target` is on screen and the element at its centre is itself, not the
  * pinned footer: both when it is scrolled into view from the top of `sheet`
