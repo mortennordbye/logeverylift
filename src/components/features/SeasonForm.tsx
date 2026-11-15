@@ -368,7 +368,8 @@ export function SeasonForm(props: Props) {
                   onChange={() => setSource("triathlon")}
                   title="Make a triathlon plan"
                   sub={triSub}
-                  disabled={!triReady && source !== "triathlon"}
+                  // Off whenever it cannot make a plan (no race yet, or the dates do not fit), as its line says.
+                  disabled={triBlocked && source !== "triathlon"}
                 >
                   {source === "triathlon" && Array.isArray(triPhases) && (
                     <ol aria-label="Planned phases" className="ml-[34px] flex flex-col gap-1 text-[13px] text-foreground/75">
