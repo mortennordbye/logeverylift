@@ -31,6 +31,8 @@ import {
   lengthField,
   lengthReason,
   rangeLabel,
+  replanTitle,
+  seasonEndAfterRace,
   runLength,
   seasonPaused,
   shortDay,
@@ -264,11 +266,8 @@ export function SeasonDetailClient(p: Props) {
   const misfit = !paused && (fit.status === "early" || fit.status === "late");
   const fitLine = misfit ? `Taper ends ${fit.days} day${fit.days === 1 ? "" : "s"} ${fit.status === "early" ? "before" : "after"} the race` : null;
   const showBanner = p.replan != null || (misfit && showRaces);
-  const bannerTitle = p.replan
-    ? misfit
-      ? "Race date changed. The taper no longer ends on race day."
-      : "Your races changed. The phases stay as they are."
-    : "The taper does not end on race day.";
+  // The title says what changed, from the stored reason lines (round 11 I2).
+  const bannerTitle = p.replan ? replanTitle(p.replan.reason, misfit) : "The taper does not end on race day.";
 
   const countdownTo = aRace?.raceDate ?? p.season.endDate;
   const daysLeft = daysBetweenStr(p.today, countdownTo);
@@ -292,6 +291,7 @@ export function SeasonDetailClient(p: Props) {
   const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
   const phaseReason = phase ? lengthReason(phase.length, phase.unit) : null;
   const dateError = error != null && errorField === "raceDate";
+  const raceEndMoves = race ? seasonEndAfterRace(p.season.endDate, p.races, race) : null;
   // The sheet's dates follow the length as it is typed; an unchanged length keeps the phase's own end (a cut one too).
   const sheetEnd = (() => {
     if (!phase || lengthReason(phase.length, phase.unit)) return phase?.phase.end ?? "";
@@ -618,9 +618,11 @@ export function SeasonDetailClient(p: Props) {
                 .filter((r) => r.priority === "A" && r.id !== race.id)
                 .map((r) => (
                   <span key={r.id} className="text-[13px] text-muted-foreground">
-                    “{r.name}” becomes a B race.
+                    {keepDates(`“${r.name}” on ${dayLabel(r.raceDate)} becomes a B race.`)}
                   </span>
                 ))}
+            {/* An A race past the season end takes the end with it (placeRaceDate): say so before save (round 11 I2). */}
+            {raceEndMoves && <span className="text-[13px] text-muted-foreground">{keepDates(`The season end moves to ${dayLabel(raceEndMoves)}.`)}</span>}
           </PlanSheetPanel>
         )}
       </BottomSheet>

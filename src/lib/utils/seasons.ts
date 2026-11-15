@@ -278,7 +278,8 @@ export function replanFlag(before: RaceLike[], after: RaceLike[]): ReplanFlag | 
     }
     if (was.raceDate !== r.raceDate) out.push({ raceId: r.id, text: `${raceLabel(r)} moved from ${dayLabel(was.raceDate)} to ${dayLabel(r.raceDate)}` });
     if (was.priority !== r.priority && (was.priority === "A" || r.priority === "A")) {
-      out.push({ raceId: r.id, text: `"${r.name}" changed from ${was.priority} priority to ${r.priority} priority` });
+      // The date tells two races with the same name apart (round 11 I2).
+      out.push({ raceId: r.id, text: `"${r.name}" on ${dayLabel(r.raceDate)} changed from ${was.priority} priority to ${r.priority} priority` });
     }
   }
   for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push({ raceId: r.id, text: `${raceLabel(r)} on ${dayLabel(r.raceDate)} removed` });
@@ -286,6 +287,56 @@ export function replanFlag(before: RaceLike[], after: RaceLike[]): ReplanFlag | 
 }
 
 export const replanReason = (before: RaceLike[], after: RaceLike[]): string | null => replanFlag(before, after)?.replanReason ?? null;
+
+/** The kind of one stored reason line (replanFlag), read with the race names taken out. */
+function reasonKind(line: string): "moved" | "added" | "removed" | "priority" | null {
+  const words = line.replace(/"[^"]*"/g, '""');
+  if (/ moved from .+ to /.test(words)) return "moved";
+  if (/ added on /.test(words)) return "added";
+  if (/ removed$/.test(words)) return "removed";
+  if (/ changed from [ABC] priority to [ABC] priority$/.test(words)) return "priority";
+  return null;
+}
+
+/**
+ * The re-plan banner title, from the stored reason lines: "Race date changed"
+ * only when a date moved. A new A race makes the old one a B race, so that
+ * pair reads as an A race added (round 11 I2). `misfit`: the taper no longer
+ * ends on race day.
+ */
+export function replanTitle(reason: string | null, misfit: boolean): string {
+  const kinds = new Set(reason ? reason.split("; ").map(reasonKind) : [null]);
+  const only = (...allowed: (string | null)[]) => [...kinds].every((k) => allowed.includes(k));
+  const what = only("moved")
+    ? "Race date changed."
+    : kinds.has("added") && only("added", "priority")
+      ? "An A race was added."
+      : kinds.has("removed") && only("removed", "priority")
+        ? "An A race was removed."
+        : only("priority")
+          ? "Race priority changed."
+          : "Your races changed.";
+  return `${what} ${misfit ? "The taper no longer ends on race day." : "The phases stay as they are."}`;
+}
+
+/**
+ * The day the season end moves to when this race is saved, or null when it
+ * stays: the rule placeRaceDate in src/lib/seasons.ts applies. An A race past
+ * the season end, or the A race the season ended on moved, takes the end to
+ * the last race day.
+ */
+export function seasonEndAfterRace(
+  seasonEnd: string,
+  races: { id: number; raceDate: string; priority: RacePriority }[],
+  draft: { id?: number; raceDate: string; priority: RacePriority },
+): string | null {
+  const was = races.find((r) => r.id === draft.id);
+  if (!draft.raceDate || (was && was.raceDate === draft.raceDate)) return null;
+  const follows = draft.priority === "A" && (draft.raceDate > seasonEnd || (was?.priority === "A" && was.raceDate === seasonEnd));
+  if (!follows) return null;
+  const end = [draft.raceDate, ...races.filter((r) => r.id !== draft.id).map((r) => r.raceDate)].sort().at(-1)!;
+  return end !== seasonEnd ? end : null;
+}
 
 /**
  * The flag once a race is removed: its own lines go, by race id. A reason
