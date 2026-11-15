@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Endurance journeys</title>
+<style>
+  :root {
+    --bg: #0b0b0c; --fg: #f4f4f5; --muted: #8d8d93;
+    --widget: #161618; --widget-2: #222225; --hairline: rgb(255 255 255 / 0.07);
+    --brand: #6b95ff; --bike: #d95926; --run: #199e70; --swim: #3aa0d8; --brick: #c79a2b; --rest: #8d8d93;
+    --exists: #3d8a5c; --change: #b98a2a; --new: #6b95ff;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #000; color: var(--fg); font: 14px/1.45 "Work Sans", Inter, system-ui, -apple-system, sans-serif; padding: 24px 16px 48px; }
+  h1 { font-size: 26px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .02em; }
+  .sub { color: var(--muted); margin: 0 0 16px; max-width: 900px; }
+  .legend { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; font-size: 12px; color: var(--muted); }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 1px 6px; border-radius: 6px; margin-right: 6px; vertical-align: 1px; color: #000; }
+  .tag.EXISTS { background: var(--exists); } .tag.CHANGE { background: var(--change); } .tag.NEW { background: var(--new); }
+  .grid { display: grid; grid-template-columns: 130px repeat(5, minmax(0, 1fr)); gap: 8px; }
+  .head { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; padding: 4px 8px; }
+  .lane { background: var(--widget); border-radius: 14px; padding: 12px; font-weight: 700; border-left: 4px solid var(--c); }
+  .lane small { display: block; color: var(--muted); font-weight: 400; margin-top: 4px; }
+  .cell { background: var(--widget); border-radius: 14px; padding: 10px 12px; }
+  .cell .ph { display: none; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+  .cell ul { margin: 0; padding: 0; list-style: none; }
+  .cell li { padding: 4px 0; border-bottom: 1px solid var(--hairline); }
+  .cell li:last-child { border-bottom: 0; }
+  section { margin-top: 36px; }
+  h2 { font-size: 18px; text-transform: uppercase; letter-spacing: .04em; margin: 0 0 12px; }
+  .loop { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .step { background: var(--widget); border-radius: 14px; padding: 12px; position: relative; }
+  .step b { display: block; margin-bottom: 4px; }
+  .step .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; margin-top: 8px; }
+  .rails { margin-top: 8px; background: var(--widget-2); border-radius: 14px; padding: 12px; color: var(--muted); }
+  .rails b { color: var(--fg); }
+  table { border-collapse: collapse; width: 100%; max-width: 1100px; }
+  td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+    .head { display: none; }
+    .lane { margin-top: 16px; }
+    .cell .ph { display: block; }
+    .loop { grid-template-columns: 1fr; }
+    table { font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+<h1>Endurance journeys</h1>
+<p class="sub">Bike, run, swim, brick, rest. The watch records, the phone tells, the AI plans. Every endurance session uses one structured workout and one session page. Strength stays as it is. Full detail in docs/plans/endurance-journeys.md.</p>
+<div class="legend"><span><span class="tag EXISTS">EXISTS</span>works today</span><span><span class="tag CHANGE">CHANGE</span>exists, must change</span><span><span class="tag NEW">NEW</span>does not exist</span></div>
+
+<div class="grid" id="map">
+  <div class="head"></div><div class="head">Plan</div><div class="head">Before</div><div class="head">During</div><div class="head">After</div><div class="head">Adapt</div>
+</div>
+
+<section>
+  <h2>AI planning loop over MCP</h2>
+  <div class="loop" id="loop"></div>
+  <div class="rails"><b>Guard rails.</b> Every write takes a reason and expectedVersion. Six training limits check it; an override needs a reason the user sees. Every write is a revision the user can undo. The weekly sync never touches workouts, so the weekly review is the only volume change for these sessions. The AI applies only what the user agrees to.</div>
+</section>
+
+<section>
+  <h2>Data the AI needs</h2>
+  <table id="data"><tr><th>Data</th><th>Tool</th><th>State</th></tr></table>
+</section>
+
+<section>
+  <h2>Build order</h2>
+  <table id="phases"><tr><th>Phase</th><th>Content</th></tr></table>
+</section>
+
+<script>
+const PH = ["Plan", "Before", "During", "After", "Adapt"];
+const lanes = [
+  { name: "Bike", note: "indoor trainer", c: "--bike", cells: [
+    [["EXISTS","AI writes the workout over MCP"],["CHANGE","Step: W + HR cap, cadence, gradient"]],
+    [["CHANGE","Today card lists it, with chart and 3 lines"],["CHANGE","Session page: grouped steps, W, %FTP, zone"],["NEW","HR in bpm from Garmin cycling zones"],["NEW","Record on Garmin box"]],
+    [["EXISTS","Watch: Indoor Bike, Lap per step"],["EXISTS","Phone: Start guided"],["CHANGE","Player shows HR cap and cadence"]],
+    [["EXISTS","Auto pair by sport and day"],["NEW","Paired activity shown, Not this activity"],["NEW","Step results from laps or time cuts"],["NEW","Watch RPE used"]],
+    [["EXISTS","Readiness swap, Make it easy"],["CHANGE","AI reads step results with Garmin data"],["EXISTS","FTP update from Garmin trends"]]
+  ]},
+  { name: "Run", note: "road or treadmill", c: "--run", cells: [
+    [["EXISTS","AI writes the workout"],["NEW","Pace main target, HR cap secondary"]],
+    [["CHANGE","Pace once, not 4:05-4:05"],["NEW","Split per rep: 3:16 per 800 m"],["NEW","HR from Garmin running zones"],["NEW","Record on Garmin box"]],
+    [["EXISTS","Watch: Run, Lap per step, keep jogging"],["EXISTS","Player: Lap ends a distance step"]],
+    [["NEW","Pace and HR per rep from laps"],["NEW","Paired activity shown"]],
+    [["EXISTS","Long-run cap"],["CHANGE","AI reads pace per rep and HR drift"]]
+  ]},
+  { name: "Swim", note: "pool", c: "--swim", cells: [
+    [["EXISTS","Whole lengths, CSS pace, send-offs"]],
+    [["CHANGE","Session page: sets, pace per 100 m"],["NEW","Record on Garmin box: Pool Swim"]],
+    [["EXISTS","Pool view, one block per tap"],["CHANGE","Last block: Done opens the session page"]],
+    [["NEW","Step results from watch intervals"]],
+    [["CHANGE","AI reads pace per set against CSS"]]
+  ]},
+  { name: "Brick", note: "ride then run", c: "--brick", cells: [
+    [["EXISTS","Two linked sessions"],["CHANGE","Generator stops the one-program brick"]],
+    [["NEW","Brick group on Today card"],["NEW","Leg 1 of 2 and link to the other leg"],["NEW","Box: stop bike, start Run at once"]],
+    [["EXISTS","Two activities on the watch"]],
+    [["EXISTS","Band per leg"],["NEW","One brick line: run pace off the bike"]],
+    [["EXISTS","AI compares run off the bike"]]
+  ]},
+  { name: "Rest", note: "rest or recovery", c: "--rest", cells: [
+    [["EXISTS","Slot with no session"],["EXISTS","Recovery: easy session, optional"]],
+    [["CHANGE","Rest day card: readiness against normal"],["NEW","Tomorrow preview with Details"]],
+    [["EXISTS","Nothing"]],
+    [["EXISTS","Nothing to log"]],
+    [["NEW","AI reads sleep and HRV series"]]
+  ]}
+];
+const map = document.getElementById("map");
+for (const l of lanes) {
+  const lane = document.createElement("div");
+  lane.className = "lane"; lane.style.setProperty("--c", `var(${l.c})`);
+  lane.innerHTML = `${l.name}<small>${l.note}</small>`;
+  map.appendChild(lane);
+  l.cells.forEach((items, i) => {
+    const cell = document.createElement("div");
+    cell.className = "cell";
+    cell.innerHTML = `<div class="ph">${PH[i]}</div><ul>` + items.map(([t, s]) => `<li><span class="tag ${t}">${t}</span>${s}</li>`).join("") + "</ul>";
+    map.appendChild(cell);
+  });
+}
+const loop = [
+  ["Block start", "New phase or cycle", "Season, races, profile, thresholds, Garmin trends, injuries, coach memory", "Weekly template: library workouts, priorities, brick links"],
+  ["Weekly review", "User asks, Sunday", "Bands, matched activities, step results, load and ramp, readiness and sleep series, illness, memory", "Next week: exact targets per session, moves, skips, threshold updates, a decision note"],
+  ["Morning check", "User asks, or swap shows", "Readiness, HRV, sleep, Body Battery, today's session", "Readiness swap, only after a yes"],
+  ["After a key session", "User asks", "Step results, laps", "Nothing by default; a note in coach memory"]
+];
+document.getElementById("loop").innerHTML = loop.map(([n, w, r, o]) =>
+  `<div class="step"><b>${n}</b><span style="color:var(--muted)">${w}</span><div class="k">Reads</div>${r}<div class="k">Writes</div>${o}</div>`).join("");
+const data = [
+  ["Plan, bands, matched activity", "list_planned_sessions", "EXISTS"],
+  ["Step results with Garmin numbers", "get_step_results", "CHANGE"],
+  ["Load, ramp, form", "get_training_load", "EXISTS"],
+  ["Readiness today", "get_garmin_status", "EXISTS"],
+  ["Sleep, HRV, resting HR, Body Battery by day", "none", "NEW"],
+  ["Garmin HR zone bounds per sport", "get_athlete_profile", "NEW"],
+  ["Lap pace and cadence", "get_garmin_activity", "CHANGE"],
+  ["Watch RPE and feel", "get_garmin_activity", "NEW"],
+  ["FTP, LTHR, critical speed trends", "get_garmin_trends", "EXISTS"],
+  ["Stale MCP text (no guided player, strength count)", "instructions.ts, app-rules.md", "CHANGE"]
+];
+document.getElementById("data").innerHTML += data.map(([d, t, s]) => `<tr><td>${d}</td><td>${t}</td><td><span class="tag ${s}">${s}</span></td></tr>`).join("");
+const phases = [
+  ["1 Display and navigation", "Session page before part, Today card with path B and the Rest Day fix, Garmin HR zones, Record on Garmin box, links from cycle sheet, calendar and week, Week in the Plan tab, player shows HR cap and cadence, MCP text fixes"],
+  ["2 Step model", "Secondary target, one-sided range, gradient"],
+  ["3 After", "Shown pairing, pick and unpick, step results from laps or time cuts, watch RPE, Garmin-done in history, Did you do it and Move on the session page, pool view Done, activity page links to the plan"],
+  ["4 AI data", "Readiness series tool, zone bounds, lap pace and cadence, watch RPE over MCP, weekly review text"],
+  ["5 Move the plan", "AI rewrites future endurance sessions as workouts; bricks as two sessions"],
+  ["6 Optional", "Download .fit so the watch runs the steps"]
+];
+document.getElementById("phases").innerHTML += phases.map(([p, c]) => `<tr><td style="white-space:nowrap">${p}</td><td>${c}</td></tr>`).join("");
+</script>
+</body>
+</html>

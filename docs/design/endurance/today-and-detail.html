@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Endurance today mockup</title>
+<style>
+  :root {
+    --bg: #0b0b0c; --fg: #f4f4f5; --muted: #8d8d93;
+    --widget: #161618; --widget-2: #222225; --hairline: rgb(255 255 255 / 0.07);
+    --brand: #6b95ff; --brand-fill: #2f5fe0;
+    --z1: #1c5cab; --z2: #2a78d6; --z3: #5598e7; --z4: #86b6ef; --z5: #b7d3f6;
+    --bike: #d95926; --run: #199e70;
+    --display: "Big Shoulders Display", "Oswald", "Arial Narrow", "Helvetica Neue", sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: #000; color: var(--fg); font: 15px/1.4 "Work Sans", Inter, system-ui, -apple-system, sans-serif; padding: 24px 0 48px; }
+  .wrap { display: flex; flex-wrap: wrap; gap: 32px; justify-content: center; }
+  .col { width: 390px; max-width: 100%; }
+  .caption { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .08em; font-weight: 600; margin: 0 16px 8px; }
+  .phone { background: var(--bg); border: 1px solid var(--hairline); border-radius: 28px; padding: 16px; margin-bottom: 28px; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /* today card */
+  .card { background: var(--widget); border-radius: 24px; padding: 16px; }
+  .eyebrow { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .eyebrow a { color: var(--brand); text-decoration: none; text-transform: none; letter-spacing: 0; }
+  .sport { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .title { font-family: var(--display); font-weight: 800; font-size: 28px; line-height: 1.05; text-transform: uppercase; letter-spacing: .01em; margin: 8px 0 2px; }
+  .totals { color: var(--fg); font-size: 15px; font-weight: 600; }
+  .totals span { color: var(--muted); font-weight: 400; }
+  svg.profile { display: block; width: 100%; margin: 12px 0 10px; }
+  .lines { list-style: none; padding: 0; border-top: 1px solid var(--hairline); }
+  .lines li { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--hairline); font-size: 14px; }
+  .lines .k { color: var(--muted); flex: none; width: 82px; }
+  .lines .v { flex: 1; font-weight: 600; text-align: right; }
+  .lines .v small { display: block; font-weight: 400; color: var(--muted); font-size: 12px; }
+  .btns { display: flex; gap: 8px; margin-top: 14px; }
+  .btn { flex: 1; min-height: 48px; border-radius: 16px; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 15px; text-decoration: none; }
+  .btn.pri { background: var(--brand); color: #0b0b0c; }
+  .btn.sec { border: 1px solid rgb(255 255 255 / .15); color: var(--fg); }
+
+  /* detail */
+  .back { color: var(--brand); font-size: 14px; font-weight: 500; margin-bottom: 14px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 12px 0 4px; }
+  .tile { background: var(--widget); border-radius: 14px; padding: 10px 12px; }
+  .tile b { display: block; font-family: var(--display); font-size: 24px; font-weight: 800; line-height: 1.1; }
+  .tile span { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .chartbox { background: var(--widget); border-radius: 14px; padding: 10px 12px 8px; margin-top: 8px; }
+  .axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+  .sect { display: flex; justify-content: space-between; align-items: baseline; margin: 18px 4px 6px; font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+  .step { display: grid; grid-template-columns: 4px 76px 1fr; gap: 0 12px; background: var(--widget); border-radius: 14px; padding: 12px 12px 12px 0; align-items: start; }
+  .step + .step { margin-top: 4px; }
+  .bar { align-self: stretch; border-radius: 0 4px 4px 0; }
+  .len { font-family: var(--display); font-weight: 800; font-size: 22px; line-height: 1.1; padding-top: 2px; }
+  .len small { display: block; font: 400 11px/1.3 system-ui, sans-serif; color: var(--muted); white-space: nowrap; }
+  .tgt { font-size: 20px; font-weight: 700; line-height: 1.15; }
+  .tgt i { font-style: normal; font-size: 13px; font-weight: 500; color: var(--muted); }
+  .rel { font-size: 13px; color: var(--muted); margin-top: 2px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .chip { background: var(--widget-2); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; }
+  .chip b { font-weight: 600; }
+  .chip span { color: var(--muted); }
+  .repeat { border: 1px solid rgb(255 255 255 / .12); border-radius: 18px; padding: 4px; position: relative; }
+  .repeat .x { display: flex; align-items: center; gap: 8px; padding: 8px 10px 8px; font-size: 13px; color: var(--muted); }
+  .repeat .x b { font-family: var(--display); font-size: 22px; font-weight: 800; color: var(--fg); background: var(--brand-fill); border-radius: 10px; padding: 0 9px; line-height: 1.4; }
+  .why { background: var(--widget); border-radius: 14px; padding: 12px; margin-top: 18px; font-size: 14px; color: #c9c9ce; }
+  .why b { display: block; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 4px; }
+  .anchors { font-size: 12.5px; color: var(--muted); margin: 10px 4px 0; }
+  .anchors a { color: var(--brand); text-decoration: none; }
+  .legend { display: flex; gap: 10px; font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 4px; }
+  h1.pg { font: 600 14px system-ui, sans-serif; color: var(--muted); text-align: center; margin-bottom: 20px; }
+</style>
+</head>
+<body>
+<h1 class="pg">Mockup, 390 px. Left column bike, right column run. Each column shows the home today card, then the session detail.</h1>
+<div class="wrap">
+
+<!-- ================= BIKE ================= -->
+<div class="col">
+  <p class="caption">Home, today card</p>
+  <div class="phone">
+    <div class="card">
+      <div class="eyebrow"><span class="sport"><span class="dot" style="background:var(--bike)"></span>Today · Bike · Key</span><a href="#">This week</a></div>
+      <div class="title">5 × 4 min at 280 W</div>
+      <div class="totals tnum">55 min <span>total ·</span> 20 min <span>at 280 W</span></div>
+      <svg class="profile" data-chart="bike" data-h="56"></svg>
+      <ul class="lines tnum">
+        <li><span class="k">Warm-up</span><span class="v">10 min · 150-195 W</span></li>
+        <li><span class="k">Main set</span><span class="v">5 × 4 min at 280 W<small>3 min at 150 W between · 90-100 rpm · HR under 170</small></span></li>
+        <li><span class="k">Cool-down</span><span class="v">10 min · under 162 W</span></li>
+      </ul>
+      <div class="btns"><a class="btn sec" href="#">Details</a><a class="btn pri" href="#">Start guided</a></div>
+    </div>
+  </div>
+
+  <p class="caption">Session detail, /planned/[id]</p>
+  <div class="phone">
+    <div class="back">&lsaquo; Week</div>
+    <div class="eyebrow"><span class="sport"><span class="dot" style="background:var(--bike)"></span>Sun 15 Nov · Bike · Key</span></div>
+    <div class="title">5 × 4 min at 280 W</div>
+    <div class="tiles tnum">
+      <div class="tile"><b>55 min</b><span>Total</span></div>
+      <div class="tile"><b>20 min</b><span>Hard</span></div>
+      <div class="tile"><b>48</b><span>Load</span></div>
+    </div>
+    <div class="chartbox">
+      <div class="axis"><span>FTP 300 W (dashed line)</span><span>Watts</span></div>
+      <svg class="profile" data-chart="bike" data-h="110" data-axis="1"></svg>
+      <div class="axis tnum"><span>0</span><span>10 min</span><span>45 min</span><span>55</span></div>
+      <div class="legend"><span><i style="background:var(--z1)"></i>Z1</span><span><i style="background:var(--z2)"></i>Z2</span><span><i style="background:var(--z3)"></i>Z3</span><span><i style="background:var(--z4)"></i>Z4</span><span><i style="background:var(--z5)"></i>Z5</span></div>
+    </div>
+
+    <div class="sect"><span>Warm-up</span><span class="tnum">10 min</span></div>
+    <div class="step">
+      <div class="bar" style="background:linear-gradient(var(--z1),var(--z2))"></div>
+      <div class="len tnum">10<small>min</small></div>
+      <div><div class="tgt tnum">150-195 <i>W</i></div><div class="rel">50-65% FTP · Z1 to Z2 · build up</div></div>
+    </div>
+
+    <div class="sect"><span>Main set</span><span class="tnum">35 min</span></div>
+    <div class="repeat">
+      <div class="x"><b>5 ×</b><span>Do both steps five times</span></div>
+      <div class="step">
+        <div class="bar" style="background:var(--z4)"></div>
+        <div class="len tnum">4<small>min · hard</small></div>
+        <div>
+          <div class="tgt tnum">280 <i>W</i></div><div class="rel">93% FTP · Z4</div>
+          <div class="chips tnum">
+            <span class="chip"><span>Cadence</span> <b>90-100 rpm</b></span>
+            <span class="chip"><span>HR</span> <b>under 170 bpm</b> <span>· Z4</span></span>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="bar" style="background:var(--z1)"></div>
+        <div class="len tnum">3<small>min · easy</small></div>
+        <div><div class="tgt tnum">150 <i>W</i></div><div class="rel">50% FTP · Z1</div></div>
+      </div>
+    </div>
+
+    <div class="sect"><span>Cool-down</span><span class="tnum">10 min</span></div>
+    <div class="step">
+      <div class="bar" style="background:var(--z1)"></div>
+      <div class="len tnum">10<small>min</small></div>
+      <div><div class="tgt tnum">under 162 <i>W</i></div><div class="rel">Z1 · under 54% FTP</div></div>
+    </div>
+
+    <div class="why"><b>Why this session</b>Threshold work for the bike leg. Hold 280 W for each rep. If heart rate goes above 170, lower the power for the rest of that rep.</div>
+    <p class="anchors">Your numbers: FTP 300 W · threshold HR 172 bpm. <a href="#">Thresholds</a></p>
+    <div class="btns"><a class="btn sec" href="#">Log results</a><a class="btn pri" href="#">Start guided</a></div>
+  </div>
+</div>
+
+<!-- ================= RUN ================= -->
+<div class="col">
+  <p class="caption">Home, today card</p>
+  <div class="phone">
+    <div class="card">
+      <div class="eyebrow"><span class="sport"><span class="dot" style="background:var(--run)"></span>Today · Run · Key</span><a href="#">This week</a></div>
+      <div class="title">6 × 800 m at 4:05 /km</div>
+      <div class="totals tnum">10.3 km <span>· about</span> 52 min <span>· 4.8 km at 4:05</span></div>
+      <svg class="profile" data-chart="run" data-h="56"></svg>
+      <ul class="lines tnum">
+        <li><span class="k">Warm-up</span><span class="v">2 km · 5:30-6:00 /km</span></li>
+        <li><span class="k">Main set</span><span class="v">6 × 800 m at 4:05 /km<small>3:16 per rep · 90 s jog between · HR 165-175</small></span></li>
+        <li><span class="k">Cool-down</span><span class="v">2 km · 5:30-6:00 /km</span></li>
+      </ul>
+      <div class="btns"><a class="btn sec" href="#">Details</a><a class="btn pri" href="#">Start guided</a></div>
+    </div>
+  </div>
+
+  <p class="caption">Session detail, /planned/[id]</p>
+  <div class="phone">
+    <div class="back">&lsaquo; Week</div>
+    <div class="eyebrow"><span class="sport"><span class="dot" style="background:var(--run)"></span>Tue 17 Nov · Run · Key</span></div>
+    <div class="title">6 × 800 m at 4:05 /km</div>
+    <div class="tiles tnum">
+      <div class="tile"><b>10.3 km</b><span>Total</span></div>
+      <div class="tile"><b>~52 min</b><span>Time</span></div>
+      <div class="tile"><b>4.8 km</b><span>Hard</span></div>
+    </div>
+    <div class="chartbox">
+      <div class="axis"><span>Threshold 4:10 /km (dashed line)</span><span>Pace</span></div>
+      <svg class="profile" data-chart="run" data-h="110" data-axis="1"></svg>
+      <div class="axis tnum"><span>0</span><span>2 km</span><span>8.3 km</span><span>10.3</span></div>
+      <div class="legend"><span><i style="background:var(--z1)"></i>Z1</span><span><i style="background:var(--z2)"></i>Z2</span><span><i style="background:var(--z3)"></i>Z3</span><span><i style="background:var(--z4)"></i>Z4</span><span><i style="background:var(--z5)"></i>Z5</span></div>
+    </div>
+
+    <div class="sect"><span>Warm-up</span><span class="tnum">2 km · about 11:30</span></div>
+    <div class="step">
+      <div class="bar" style="background:var(--z2)"></div>
+      <div class="len tnum">2<small>km</small></div>
+      <div>
+        <div class="tgt tnum">5:30-6:00 <i>/km</i></div><div class="rel">Easy · 69-76% of threshold speed</div>
+        <div class="chips tnum"><span class="chip"><span>HR</span> <b>under 150 bpm</b> <span>· Z2</span></span></div>
+      </div>
+    </div>
+
+    <div class="sect"><span>Main set</span><span class="tnum">6.3 km · about 28:40</span></div>
+    <div class="repeat">
+      <div class="x"><b>6 ×</b><span>Do both steps six times</span></div>
+      <div class="step">
+        <div class="bar" style="background:var(--z4)"></div>
+        <div class="len tnum">800<small>m · hard</small></div>
+        <div>
+          <div class="tgt tnum">4:05 <i>/km</i></div><div class="rel">3:16 per rep · 102% of threshold speed</div>
+          <div class="chips tnum">
+            <span class="chip"><span>HR</span> <b>165-175 bpm</b> <span>· Z4</span></span>
+            <span class="chip"><span>Incline</span> <b>1%</b></span>
+          </div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="bar" style="background:var(--z1)"></div>
+        <div class="len tnum">90<small>s · jog</small></div>
+        <div><div class="tgt tnum">6:00 <i>/km or slower</i></div><div class="rel">About 250 m</div></div>
+      </div>
+    </div>
+
+    <div class="sect"><span>Cool-down</span><span class="tnum">2 km · about 11:30</span></div>
+    <div class="step">
+      <div class="bar" style="background:var(--z2)"></div>
+      <div class="len tnum">2<small>km</small></div>
+      <div><div class="tgt tnum">5:30-6:00 <i>/km</i></div><div class="rel">Easy · 69-76% of threshold speed</div></div>
+    </div>
+
+    <div class="why"><b>Why this session</b>Speed above threshold with short recovery. Run each 800 m at the same pace. The incline chip shows only when the step has one, for example on a treadmill.</div>
+    <p class="anchors">Your numbers: threshold pace 4:10 /km · threshold HR 176 bpm. <a href="#">Thresholds</a></p>
+    <div class="btns"><a class="btn sec" href="#">Log results</a><a class="btn pri" href="#">Start guided</a></div>
+  </div>
+</div>
+</div>
+
+<script>
+// The profile is drawn from the same step data the list shows: width = time, height = share of threshold, colour = zone.
+// pct is a [from, to] pair so a ramp draws as a slope.
+var rep = function (n, steps) { var out = []; for (var i = 0; i < n; i++) out = out.concat(steps); return out; };
+var DATA = {
+  bike: [{ min: 10, pct: [50, 65], z: 2 }]
+    .concat(rep(5, [{ min: 4, pct: [93, 93], z: 4 }, { min: 3, pct: [50, 50], z: 1 }]))
+    .concat([{ min: 10, pct: [54, 54], z: 1 }]),
+  run: [{ min: 11.5, pct: [72, 72], z: 2 }]
+    .concat(rep(6, [{ min: 3.27, pct: [102, 102], z: 4 }, { min: 1.5, pct: [69, 69], z: 1 }]))
+    .concat([{ min: 11.5, pct: [72, 72], z: 2 }])
+};
+var ZONE = ["", "#1c5cab", "#2a78d6", "#5598e7", "#86b6ef", "#b7d3f6"];
+document.querySelectorAll("svg.profile").forEach(function (svg) {
+  var steps = DATA[svg.dataset.chart], H = +svg.dataset.h, W = 340, top = 115;
+  var total = steps.reduce(function (a, s) { return a + s.min; }, 0);
+  var y = function (p) { return H - (p / top) * H; };
+  svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", "Intensity profile of the session");
+  var x = 0, html = "";
+  steps.forEach(function (s) {
+    var w = (s.min / total) * W, x2 = x + Math.max(w - 1.5, 1);
+    html += '<polygon fill="' + ZONE[s.z] + '" points="' +
+      [x.toFixed(1) + "," + H, x.toFixed(1) + "," + y(s.pct[0]).toFixed(1), x2.toFixed(1) + "," + y(s.pct[1]).toFixed(1), x2.toFixed(1) + "," + H].join(" ") + '"/>';
+    x += w;
+  });
+  if (svg.dataset.axis) html += '<line x1="0" x2="' + W + '" y1="' + y(100) + '" y2="' + y(100) + '" stroke="#f4f4f5" stroke-opacity=".45" stroke-dasharray="3 4"/>';
+  svg.innerHTML = html;
+});
+</script>
+</body>
+</html>
