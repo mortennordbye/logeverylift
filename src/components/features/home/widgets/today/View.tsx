@@ -250,18 +250,13 @@ function RideCard({ ride, size }: { ride: EnduranceTodayRow; size: WidgetSize })
       {ride.bike && <BikeSummary view={ride.bike} compact={size === "s"} />}
       <div className="flex-1 min-h-3" />
       <div className="flex gap-2.5">
+        {/* A done ride can still be started again. */}
         <Link href={`/planned/${ride.id}`} className={`${RIDE_BUTTON} bg-widget-2`}>
-          Details
+          {ride.done ? "Results" : "Details"}
         </Link>
-        {ride.done ? (
-          <Link href={`/planned/${ride.id}/results`} className={`${RIDE_BUTTON} bg-brand-fill text-white`}>
-            Results
-          </Link>
-        ) : (
-          <Link href={`/planned/${ride.id}/play`} className={`${RIDE_BUTTON} bg-brand-fill text-white`}>
-            Start guided
-          </Link>
-        )}
+        <Link href={`/planned/${ride.id}/play`} className={`${RIDE_BUTTON} bg-brand-fill text-white`}>
+          Start guided
+        </Link>
       </div>
     </div>
   );

@@ -67,6 +67,14 @@ describe("Today on a bike day", () => {
     }
   });
 
+  it("a done ride shows Results and can still be started", () => {
+    const doneCore = { ...core, endurance: { today: [{ ...ride, done: true }] } } as unknown as HomeCore;
+    render(<>{todayWidget.View({ data: selectToday(doneCore), size: "l" })}</>);
+    const card = screen.getByTestId("today-card");
+    expect(within(card).getByRole("link", { name: "Results" }).getAttribute("href")).toBe("/planned/41");
+    expect(within(card).getByRole("link", { name: "Start guided" }).getAttribute("href")).toBe("/planned/41/play");
+  });
+
   it("L shows the totals, the lines and the FTP chip", () => {
     render(<>{todayWidget.View({ data: selectToday(core), size: "l" })}</>);
     const card = screen.getByTestId("today-card");

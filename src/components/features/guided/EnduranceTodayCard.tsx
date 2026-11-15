@@ -84,16 +84,14 @@ export function EnduranceTodayCard({ rows }: { rows: EnduranceTodayRow[] }) {
                   Results
                 </Link>
               ) : (
-                <>
-                  <SavedRunLink plannedSessionId={r.id} compact />
-                  <Link
-                    href={r.sport === "swim" ? `/planned/${r.id}/pool` : `/planned/${r.id}/play`}
-                    className="min-h-11 inline-flex items-center rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground active:opacity-80"
-                  >
-                    {r.sport === "swim" ? "Pool view" : "Start guided"}
-                  </Link>
-                </>
+                <SavedRunLink plannedSessionId={r.id} compact />
               )}
+              <Link
+                href={r.sport === "swim" ? `/planned/${r.id}/pool` : `/planned/${r.id}/play`}
+                className="min-h-11 inline-flex items-center rounded-xl bg-primary px-3 text-sm font-semibold text-primary-foreground active:opacity-80"
+              >
+                {r.sport === "swim" ? "Pool view" : "Start guided"}
+              </Link>
             </div>
           </li>
         ))}

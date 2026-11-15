@@ -92,7 +92,7 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
 
       <div className="mt-auto flex flex-col gap-2 px-4 pt-4 pb-6">
         {!done && <SavedRunLink plannedSessionId={id} />}
-        {!done && !swim && (
+        {!swim && (
           <Link href={`/planned/${id}/play`} className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-center text-base font-semibold text-primary-foreground active:opacity-80">
             Start guided
           </Link>
@@ -200,11 +200,9 @@ async function BikeSession({ userId, id, v }: { userId: string; id: number; v: P
 
         <div className="mt-2 flex flex-col gap-2">
           {!done && <SavedRunLink plannedSessionId={id} />}
-          {!done && (
-            <Link href={`/planned/${id}/play`} className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-center text-base font-semibold text-primary-foreground active:opacity-80">
-              Start guided
-            </Link>
-          )}
+          <Link href={`/planned/${id}/play`} className="min-h-12 rounded-2xl bg-primary px-4 py-3 text-center text-base font-semibold text-primary-foreground active:opacity-80">
+            Start guided
+          </Link>
           {session.garminActivityId == null && (
             <Link href={`/planned/${id}/results`} className="min-h-12 rounded-2xl border border-border px-4 py-3 text-center text-base font-medium active:opacity-70">
               {v.results ? "Step results" : done ? "Add step results" : "Log results by hand"}

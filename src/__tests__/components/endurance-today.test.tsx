@@ -25,10 +25,10 @@ describe("EnduranceTodayCard", () => {
     expect(within(s).getByRole("link", { name: "Pool view" }).getAttribute("href")).toBe("/planned/42/pool");
   });
 
-  it("a done session links to its results", () => {
+  it("a done session links to its results and can still be started", () => {
     render(<EnduranceTodayCard rows={[{ ...ride, done: true }]} />);
     expect(screen.getByRole("link", { name: "Results" }).getAttribute("href")).toBe("/planned/41/results");
-    expect(screen.queryByRole("link", { name: "Start guided" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Start guided" }).getAttribute("href")).toBe("/planned/41/play");
   });
 
   // Review fix 9: an unfinished run expires after 24 h; a finished, unsaved one never does.
