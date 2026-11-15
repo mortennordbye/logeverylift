@@ -6,6 +6,7 @@
  * updateUserProfile.
  */
 
+import { chip } from "@/components/features/AthleteProfileParts";
 import { updateUserProfile } from "@/lib/actions/profile";
 import { GOAL_VALUES, type Goal } from "@/lib/utils/goals";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -42,11 +43,6 @@ export const GENDER_LABELS: Record<Gender, string> = {
 };
 
 type SaveProps = { onSaved: () => void };
-
-const chip = (on: boolean) =>
-  `px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors active:opacity-70 ${
-    on ? "bg-primary text-primary-foreground border-primary" : "bg-transparent text-foreground border-border"
-  }`;
 
 function useProfileSave(onSaved: () => void) {
   const [saving, setSaving] = useState(false);
@@ -106,7 +102,7 @@ export function GoalsStep({ initial, onSaved }: SaveProps & { initial: Goal[] })
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
         {GOAL_VALUES.map((g) => (
-          <button key={g} aria-pressed={goals.includes(g)} onClick={() => toggle(g)} className={chip(goals.includes(g))}>
+          <button key={g} aria-pressed={goals.includes(g)} onClick={() => toggle(g)} className={`${chip(goals.includes(g))} px-4`}>
             {GOAL_LABELS[g]}
           </button>
         ))}
@@ -135,7 +131,7 @@ export function PickerStep<T extends string>({
             key={opt}
             aria-pressed={value === opt}
             onClick={() => setValue(value === opt ? null : opt)}
-            className={`${chip(value === opt)} ${hints ? "w-full px-4 py-3 text-left" : ""}`}
+            className={`${chip(value === opt)} px-4 ${hints ? "w-full py-3 text-left" : ""}`}
           >
             <span className="block">{labels[opt]}</span>
             {hints && <span className={`block text-xs font-normal ${value === opt ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{hints[opt]}</span>}

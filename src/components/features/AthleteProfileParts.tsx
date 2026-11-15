@@ -63,7 +63,7 @@ export type InjuryView = {
 
 type SaveProps = { changeSetId?: string; onSaved: () => void; submitLabel?: string };
 
-const chip = (on: boolean) =>
+export const chip = (on: boolean) =>
   `min-h-[44px] rounded-xl text-sm font-medium active:opacity-70 ${on ? "bg-primary text-primary-foreground" : "bg-muted"}`;
 
 function SubmitButton({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
