@@ -55,7 +55,7 @@ export function RadioCard({
 }) {
   return (
     <label
-      className={`flex flex-col gap-2.5 rounded-2xl bg-widget px-4 py-3.5 min-h-11 border ${checked ? "border-primary" : "border-transparent"} ${disabled ? "opacity-60" : "active:opacity-80"}`}
+      className={`flex flex-col gap-2.5 rounded-2xl bg-widget px-4 py-3.5 min-h-11 border ${checked ? "border-primary" : "border-transparent"} ${disabled ? "" : "active:opacity-80"}`}
     >
       <span className="flex items-center gap-3">
         <input type="radio" name={name} checked={checked} onChange={onChange} disabled={disabled} className="peer sr-only" />
@@ -66,7 +66,8 @@ export function RadioCard({
           <span className={`h-2.5 w-2.5 rounded-full ${checked ? "bg-primary" : ""}`} />
         </span>
         <span className="flex min-w-0 flex-col gap-0.5">
-          <span className="text-[15px] font-semibold">{title}</span>
+          {/* Off: the title in the muted colour, not the card at 60%, which put the sub line under 4.5:1. */}
+          <span className={`text-[15px] font-semibold ${disabled ? "text-muted-foreground" : ""}`}>{title}</span>
           {sub && <span className="text-[13px] text-muted-foreground">{sub}</span>}
         </span>
       </span>

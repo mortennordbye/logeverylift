@@ -98,7 +98,7 @@ describe("over MCP", () => {
     const call = mcpTools(registerCoachMemoryTools, me);
     const { id } = (await call("manage_coach_memory", { operation: "add", kind: "decision", text: "Strength stays 2x in build", reason: "Agreed" })).data;
     const [set] = await listAssistantChangeSets(me);
-    expect(set.objects).toEqual([expect.objectContaining({ type: "memory", id, changes: ['Added decision "Strength stays 2x in build"'] })]);
+    expect(set.objects).toEqual([expect.objectContaining({ type: "memory", id, changes: ['Added decision “Strength stays 2x in build”'] })]);
 
     await restoreChangeSet({ userId: me, writer: "user" }, set.changeSetId);
     expect((await rowOf(id)).deletedAt).not.toBeNull();

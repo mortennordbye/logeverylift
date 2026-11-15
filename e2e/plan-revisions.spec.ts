@@ -51,7 +51,7 @@ test("a rename shows in the history, and restoring the earlier version brings th
 
   await page.getByRole("link", { name: "Change history", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/programs/${program.id}/history$`));
-  await expect(page.getByText(`Renamed "${program.name}" → "${program.name} renamed"`)).toBeVisible();
+  await expect(page.getByText(`Renamed “${program.name}” → “${program.name} renamed”`)).toBeVisible();
   await expect(page.getByText("Before history started", { exact: true })).toBeVisible();
 
   // Only the older entry can be restored; the newest is the current state.

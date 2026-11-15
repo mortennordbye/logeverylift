@@ -336,7 +336,7 @@ export function SeasonForm(props: Props) {
               checked={source === "cycles"}
               onChange={() => setSource("cycles")}
               title="Use cycles I already have"
-              sub={create.candidates.length ? "Pick cycles, the active one too." : "You have no cycles outside a season yet."}
+              sub={create.candidates.length ? "Pick cycles, the active one too." : "No cycle can be added. Only a draft or the running cycle outside a season can be a phase."}
               disabled={create.candidates.length === 0}
             />
             {source === "cycles" && (

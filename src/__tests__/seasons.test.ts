@@ -162,7 +162,7 @@ describe("taper (2.5)", () => {
       phase(1, { status: "completed", startDate: "2027-06-01", durationWeeks: 8 }),
       phase(2, { phaseType: "taper", durationWeeks: 2, durationDays: 10 }),
     ]);
-    expect(fitTaperChange(ended, { raceDate: "2027-08-09" }, "2027-07-30")).toMatch(/has ended/);
+    expect(fitTaperChange(ended, { raceDate: "2027-08-09" }, "2027-07-30")).toMatch(/^“.+” has ended/);
     const first = seasonTimeline("2027-06-01", [phase(2, { phaseType: "taper", durationDays: 10, durationWeeks: 2 })]);
     expect(fitTaperChange(first, { raceDate: "2027-08-09" }, "2027-06-01")).toMatch(/first phase/);
   });
@@ -288,7 +288,7 @@ describe("season history text", () => {
   });
 
   it("describes a create, field changes, races, phases and the flag", () => {
-    expect(diffSnapshots(null, snap())).toEqual(['Created season "2027"']);
+    expect(diffSnapshots(null, snap())).toEqual(['Created season “2027”']);
     const after = snap({
       season: { ...snap().season, endDate: "2027-10-15", replanFlaggedAt: "2027-01-10T10:00:00.000Z", replanReason: "moved" },
       races: [{ id: 5, name: "Haugesund", raceDate: "2027-08-22", priority: "A" }],
@@ -297,11 +297,11 @@ describe("season history text", () => {
     expect(diffSnapshots(snap(), after)).toEqual([
       "End changed from 30 Sep 2027 to 15 Oct 2027",
       "Flagged for a re-plan (moved)",
-      'Added A race "Haugesund" on 22 Aug 2027',
-      'Phase "Base" added',
+      'Added A race “Haugesund” on 22 Aug 2027',
+      'Phase “Base” added',
     ]);
     expect(diffSnapshots(after, snap())).toContain("Marked as re-planned");
-    expect(diffSnapshots(after, snap())).toContain('Removed race "Haugesund"');
+    expect(diffSnapshots(after, snap())).toContain('Removed race “Haugesund”');
   });
 });
 

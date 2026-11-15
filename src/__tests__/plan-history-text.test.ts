@@ -114,12 +114,12 @@ describe("season history text", () => {
     expect(lines).toEqual([
       "End changed from 30 Sep 2027 to 15 Oct 2027",
       "Flagged for a re-plan (moved)",
-      'Race "Haugesund" date changed from 22 Aug 2027 to 29 Aug 2027',
-      'Phase "Base" moved from position 1 to 2',
-      'Phase "Base" type changed from Base to Build',
+      'Race “Haugesund” date changed from 22 Aug 2027 to 29 Aug 2027',
+      'Phase “Base” moved from position 1 to 2',
+      'Phase “Base” type changed from Base to Build',
     ]);
     noColon(lines);
-    expect(diffSnapshots(season(), before)).toContain('Added A race "Haugesund" on 22 Aug 2027');
+    expect(diffSnapshots(season(), before)).toContain('Added A race “Haugesund” on 22 Aug 2027');
   });
 });
 

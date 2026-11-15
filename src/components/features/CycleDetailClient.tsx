@@ -259,7 +259,11 @@ export function CycleMenu({ cycle, running = null }: { cycle: TrainingCycle; run
       <ConfirmSheet
         open={confirm === "delete"}
         title="Delete this cycle?"
-        body="It goes to Recently deleted. You can restore it for 90 days."
+        body={
+          cycle.status === "active"
+            ? `“${cycle.name}” is running. Deleting it ends it now. It goes to Recently deleted. You can restore it for 90 days.`
+            : `“${cycle.name}” goes to Recently deleted. You can restore it for 90 days.`
+        }
         action="Delete cycle"
         busyAction="Deleting…"
         destructive

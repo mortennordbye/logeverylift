@@ -27,8 +27,9 @@ test("Edit details saves the name and the end, and the history says so in senten
 
   await page.goto(`/cycles/${id}/edit`);
   await expect(page.getByRole("heading", { level: 1, name: "Edit details" })).toBeVisible();
-  await expect(page.getByRole("radio", { name: /Rotation/ })).toBeChecked();
-  await expect(page.getByRole("radio", { name: /Rotation/ })).toBeDisabled();
+  // The schedule type shows locked: the chosen one as text, no radio to tap.
+  await expect(page.getByTestId("schedule-type")).toContainText("Rotation");
+  await expect(page.getByRole("radio")).toHaveCount(0);
   // A form screen shows its pinned Save bar, not the tab bar under it.
   await expect(page.getByRole("link", { name: "Programs" })).toBeHidden();
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeInViewport();

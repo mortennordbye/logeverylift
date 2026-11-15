@@ -157,14 +157,28 @@ export function ProgramPickerSheet({
             <circle cx="11" cy="11" r="7" />
             <path d="M20 20l-3.5-3.5" />
           </svg>
+          {/* Text, not type=search: WebKit's own clear icon is under 44 px. Ours is 44. */}
           <input
-            type="search"
+            type="text"
+            enterKeyHint="search"
             aria-label="Search programs"
             placeholder="Search programs"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className="flex-1 bg-transparent text-base outline-none placeholder:text-muted-foreground"
+            className="flex-1 min-w-0 bg-transparent text-base outline-none placeholder:text-muted-foreground"
           />
+          {query && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setQuery("")}
+              className="-mr-3 h-11 w-11 shrink-0 flex items-center justify-center text-muted-foreground active:opacity-70"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden>
+                <path d="M6 6l12 12M18 6L6 18" />
+              </svg>
+            </button>
+          )}
         </label>
         <ul className="flex flex-col rounded-2xl bg-widget-2 overflow-hidden">
           {onRest && !q && (

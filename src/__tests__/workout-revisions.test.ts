@@ -14,7 +14,7 @@ const session = (over: Record<string, unknown> = {}): PlanSnapshot => ({
 describe("revision text", () => {
   it("names and diffs a library workout", () => {
     expect(snapshotName(workout())).toBe("Workout: Tempo");
-    expect(diffSnapshots(null, workout())).toEqual(['Added workout "Tempo"']);
+    expect(diffSnapshots(null, workout())).toEqual(['Added workout “Tempo”']);
     expect(diffSnapshots(workout(), workout({ name: "Threshold", workout: { steps: [2] }, priority: "key" }))).toEqual([
       "Name Tempo → Threshold",
       "Steps changed",

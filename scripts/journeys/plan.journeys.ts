@@ -158,7 +158,7 @@ const set: JourneySet = {
         await step("J2 step2 rotation", async () => {
           const addProgram = async (name: string) => {
             await page.getByRole("button", { name: "+ Add session" }).click();
-            await sheet().getByRole("searchbox", { name: "Search programs" }).fill("");
+            await sheet().getByRole("textbox", { name: "Search programs" }).fill("");
             await sheet().getByRole("button", { name: new RegExp(name) }).first().click();
             await settle();
           };
@@ -171,7 +171,7 @@ const set: JourneySet = {
           await shot(2, 7, "rotation-builder-empty", "Step 2, empty rotation order");
           await page.getByRole("button", { name: "+ Add session" }).click();
           await shot(2, 8, "program-picker", "Program picker sheet");
-          await page.getByRole("searchbox", { name: "Search programs" }).fill("upper");
+          await page.getByRole("textbox", { name: "Search programs" }).fill("upper");
           await shot(2, 9, "program-picker-search", "Program picker with search typed", { small: false });
           await sheet().getByRole("button", { name: /Upper A/ }).first().click();
           await settle();
@@ -188,6 +188,9 @@ const set: JourneySet = {
           await shot(2, 12, "discard-sheet", "Discard this cycle sheet");
           await page.getByRole("button", { name: "Keep building" }).click();
           await page.getByRole("button", { name: "Create cycle" }).click();
+          // The start drops the scheduled draft, so Create cycle asks first.
+          await shot(2, 15, "create-confirm", "Confirm sheet before Create cycle: Start Push / Pull rotation", { small: false });
+          await sheet().getByRole("button", { name: "Create cycle" }).click();
           await page.waitForURL((u) => !u.pathname.startsWith("/cycles/new"), { timeout: 20000 }).catch(() => {});
           await settle();
           await shot(2, 13, "created-cycle", "Right after Create cycle", { small: false });

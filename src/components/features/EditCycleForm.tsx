@@ -7,7 +7,7 @@
  * sessions are built for it.
  */
 
-import { ButtonReason, Chip, ChipGroup, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, WeeksField } from "@/components/features/season-ui";
+import { ButtonReason, Chip, ChipGroup, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, WeeksField } from "@/components/features/season-ui";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
 import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
@@ -16,6 +16,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import { shortDay } from "@/lib/utils/seasons";
 import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
+import { Lock } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -124,21 +125,20 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
           />
         </div>
 
-        <fieldset className="m-0 flex flex-col gap-2 border-0 p-0">
-          <legend className={`mb-2 ${LABEL}`}>How do you train?</legend>
-          {SCHEDULE_MODES.map((m) => (
-            <RadioCard
-              key={m.value}
-              name="scheduleType"
-              checked={cycle.scheduleType === m.value}
-              onChange={() => {}}
-              disabled
-              title={m.title}
-              sub={m.sub}
-            />
+        {/* Locked: the chosen type as plain text with a lock, not radio cards that look tappable (round 9). */}
+        <div className="flex flex-col gap-2">
+          <span className={LABEL}>How do you train?</span>
+          {SCHEDULE_MODES.filter((m) => m.value === cycle.scheduleType).map((m) => (
+            <div key={m.value} data-testid="schedule-type" className="flex items-center gap-3 rounded-2xl bg-widget px-4 py-3.5">
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-[15px] font-semibold">{m.title}</span>
+                <span className="text-[13px] text-muted-foreground">{m.sub}</span>
+              </span>
+              <Lock aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
+            </div>
           ))}
           <p className="mx-1 text-[13px] text-muted-foreground">The schedule type can&apos;t be changed after the cycle is made.</p>
-        </fieldset>
+        </div>
 
         {/* A phase of a season sets its length on the season page. */}
         {inSeason ? (
@@ -212,7 +212,10 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
                 </button>
               </ChipGroup>
             )}
-            <p className="text-[13px] text-muted-foreground">The race countdown uses this day, and your training is checked against the distance.</p>
+            {/* The distance chips show only once a day is set, so the helper names them only then. */}
+            <p className="text-[13px] text-muted-foreground">
+              {raceDate ? "The race countdown uses this day, and your training is checked against the race distance." : "The race countdown uses this day."}
+            </p>
           </div>
         )}
 

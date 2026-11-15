@@ -176,12 +176,12 @@ export function fitTaperChange(
   const i = timeline.findIndex((p) => p.id === fit.taperId);
   const before = timeline[i - 1];
   if (!before) return "The taper is the first phase, so there is no phase before it to lengthen or shorten.";
-  if (before.state === "done") return `"${before.name}" has ended, so its length cannot change.`;
+  if (before.state === "done") return `“${before.name}” has ended, so its length cannot change.`;
   const shift = fit.status === "early" ? fit.days : -fit.days;
   const durationDays = before.lengthDays + shift;
-  if (durationDays < 1) return `"${before.name}" would have no days left.`;
+  if (durationDays < 1) return `“${before.name}” would have no days left.`;
   if (before.state === "active" && addDaysStr(before.start, durationDays - 1) < today) {
-    return `"${before.name}" would end before today.`;
+    return `“${before.name}” would end before today.`;
   }
   return { cycleId: before.id, durationDays };
 }
@@ -238,6 +238,15 @@ export function phasesSkippedBy(timeline: TimelinePhase[], cycleId: number): num
 }
 
 // ── The re-plan flag (2.6, D17) ──────────────────────────────────────────────
+
+/**
+ * A stored re-plan reason as the UI shows it: each "name" in curly quotes,
+ * as every other name in the Plan UI. Stored reasons (replanReason) keep
+ * straight quotes, so rows already saved show the same.
+ */
+export function curlyQuotes(text: string): string {
+  return text.replace(/"([^"]*)"/g, "“$1”");
+}
 
 // "the A race", so the priority does not read as the article "a" (J4-11).
 const raceLabel = (r: Pick<RaceLike, "name" | "priority">) => `the ${r.priority} race "${r.name}"`;

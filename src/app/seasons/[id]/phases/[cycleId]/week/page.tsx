@@ -69,7 +69,7 @@ export default async function AddPhaseWeekPage({ params }: { params: Promise<{ i
         </div>
         <CycleScheduleBuilder cycle={cycle} programs={programs} endurance={endurance} />
       </div>
-      <AddPhaseFinish seasonId={seasonId} />
+      <AddPhaseFinish seasonId={seasonId} hasSession={cycle.slots.some((s) => s.programId != null || s.workoutId != null)} />
     </div>
   );
 }
