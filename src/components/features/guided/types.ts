@@ -33,6 +33,12 @@ export type PlayerStepView = {
   stroke: string | null;
   /** A swim rep that leaves on a send-off: `seconds` is the send-off. */
   sendOff: boolean;
+  /** Bike: "75-80 % FTP", the second line of the running screen. */
+  pctFtpText?: string | null;
+  /** The second target: "HR 141-160". */
+  secondaryText?: string | null;
+  /** "85-95 rpm". */
+  cadenceText?: string | null;
 };
 
 export type PlayerSession = {

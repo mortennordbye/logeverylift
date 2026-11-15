@@ -7,10 +7,12 @@
  * (4.4): each rep counts down to the next send-off.
  */
 
+import { ProfileChart } from "@/components/features/bike/ProfileChart";
 import { STEP_TONE, STEP_WORD, toPlaySteps, type PlayerSession, type PlayerStepView } from "@/components/features/guided/types";
 import { useGuidedPlayer } from "@/components/features/guided/useGuidedPlayer";
 import { formatTime } from "@/lib/utils/format";
 import { elapsedSeconds, remainingSeconds } from "@/lib/utils/workout-player";
+import type { ProfileBlock } from "@/lib/utils/workout-profile";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
@@ -24,7 +26,22 @@ function NextLine({ step }: { step: PlayerStepView | undefined }) {
   );
 }
 
-export function GuidedPlayer({ session, initialSoundHint = true }: { session: PlayerSession; initialSoundHint?: boolean }) {
+/** How long "Press Lap" stays in the step label after a step change. */
+const LAP_CUE_MS = 3000;
+
+export function GuidedPlayer({
+  session,
+  initialSoundHint = true,
+  profile = null,
+  record = null,
+}: {
+  session: PlayerSession;
+  initialSoundHint?: boolean;
+  /** Bike: the profile bar with a marker at now (docs/plans/bike-sessions.md, 5.4). */
+  profile?: ProfileBlock[] | null;
+  /** Bike: the "Record on Garmin" box in short form, on the ready screen. */
+  record?: string | null;
+}) {
   const router = useRouter();
   const steps = useMemo(() => toPlaySteps(session.steps), [session.steps]);
   const resultsHref = `/planned/${session.plannedSessionId}/results?from=player`;
@@ -36,12 +53,16 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
   });
   const [confirm, setConfirm] = useState<"leave" | "finish" | null>(null);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  // The time of the last step change, kept by its flash key: set during render, not in an effect.
+  const [lapCue, setLapCue] = useState({ key: flashKey, at: now });
+  if (lapCue.key !== flashKey) setLapCue({ key: flashKey, at: now });
   const live = state.status === "running" || state.status === "paused";
   const current = session.steps[state.index];
   const next = session.steps[state.index + 1];
   const remaining = remainingSeconds(state, steps, now);
   const elapsed = elapsedSeconds(state, now);
   const swim = session.sport === "swim";
+  const bike = session.sport === "bike";
 
   if (!restored) return <div className="flex-1" aria-busy="true" />;
 
@@ -54,6 +75,11 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
           {session.steps.length} steps. First: {first?.text}
           {first?.targetText ? ` · ${first.targetText}` : ""}
         </p>
+        {record && (
+          <p className="rounded-xl bg-muted px-3 py-2 text-sm" data-testid="player-record">
+            <span className="font-semibold">Record on Garmin:</span> {record}
+          </p>
+        )}
         {notice?.kind === "workout_changed" && (
           <p className="rounded-xl bg-amber-500/10 px-3 py-2 text-sm">A saved run was for an older version of this workout. It was not resumed.</p>
         )}
@@ -132,6 +158,9 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
   if (!live || !current) return <div className="flex-1" aria-busy="true" />;
 
   const big = remaining !== null ? formatTime(remaining) : formatTime(elapsed);
+  const pressLap = bike && flashKey > 0 && now - lapCue.at < LAP_CUE_MS;
+  const second = [current.pctFtpText, current.secondaryText, current.cadenceText].filter(Boolean).join(" · ");
+  const plannedSoFar = session.steps.slice(0, state.index).reduce((a, s) => a + (s.seconds ?? 0), 0) + Math.min(elapsed, current.seconds ?? 0);
   return (
     <div className={`fixed inset-0 z-50 flex flex-col bg-background`} data-testid="guided-player">
       <div key={flashKey} className={`absolute inset-0 -z-10 ${STEP_TONE[current.type]} ${flashKey > 0 ? "animate-pulse [animation-iteration-count:1]" : ""}`} />
@@ -164,10 +193,22 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
         </button>
       )}
 
+      {profile && profile.length > 0 && (
+        <div className="mx-6 mt-3" data-testid="player-profile">
+          <ProfileChart blocks={profile} height={46} axis={false} nowSeconds={plannedSoFar} />
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
         <p className="text-lg font-semibold uppercase tracking-wider" data-testid="player-step-type">
-          {STEP_WORD[current.type]}
-          {current.round ? ` · ${swim ? "Rep" : "Round"} ${current.round.index} of ${current.round.of}` : ""}
+          {pressLap ? (
+            "Press Lap"
+          ) : (
+            <>
+              {STEP_WORD[current.type]}
+              {current.round ? ` · ${swim ? "Rep" : "Round"} ${current.round.index} of ${current.round.of}` : ""}
+            </>
+          )}
         </p>
         <p className="text-8xl font-bold tabular-nums tracking-tight" data-testid="player-time">
           {big}
@@ -182,6 +223,11 @@ export function GuidedPlayer({ session, initialSoundHint = true }: { session: Pl
         {current.targetText && (
           <p className="text-3xl font-bold" data-testid="player-target">
             {current.targetText}
+          </p>
+        )}
+        {second && (
+          <p className="text-base text-muted-foreground" data-testid="player-second">
+            {second}
           </p>
         )}
         {current.note && <p className="text-sm">{current.note}</p>}

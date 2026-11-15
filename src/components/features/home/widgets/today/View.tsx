@@ -1,4 +1,5 @@
 import { SkipAutoDayButton } from "@/components/features/SkipAutoDayButton";
+import { BikeSummary, type EnduranceTodayRow } from "@/components/features/guided/EnduranceTodayCard";
 import { SAMPLE_TODAY } from "@/components/features/home/samples";
 import { TodaySessionsList } from "@/components/features/TodaySessionsList";
 import { defineWidget, type Renderer } from "@/components/features/home/define-widget";
@@ -33,6 +34,11 @@ export type TodayData = {
   plan: TodayPlan | null;
   /** With no active cycle, the block scheduled to start next. */
   upcoming: { id: number; name: string; startsOn: string; seasonName: string | null } | null;
+  /**
+   * Today's bike workout on a day with no program: the card replaces the
+   * strength hero, which read "Rest Day" because the slot has no program.
+   */
+  ride?: EnduranceTodayRow | null;
 };
 
 export function selectToday(core: HomeCore): TodayData {
@@ -57,6 +63,7 @@ export function selectToday(core: HomeCore): TodayData {
     insight: core.insight,
     plan: core.todayPlan,
     upcoming: core.upcoming,
+    ride: !core.todayProgram && !core.severalToday ? (core.endurance?.today.find((r) => r.bike) ?? null) : null,
   };
 }
 
@@ -227,6 +234,39 @@ function PlanList({ plan }: { plan: TodayPlan }) {
   );
 }
 
+const PRIORITY_TEXT = { key: "Key", support: "Support", optional: "Optional" } as const;
+const RIDE_BUTTON = "flex min-h-[46px] flex-1 items-center justify-center rounded-2xl px-3 text-[15px] font-semibold active:scale-[0.97] transition-transform";
+
+/** Today's bike workout (docs/plans/bike-sessions.md, 5.1). S keeps the name, the totals and both actions. */
+function RideCard({ ride, size }: { ride: EnduranceTodayRow; size: WidgetSize }) {
+  const kicker = ["Today", "Bike", ride.priority ? PRIORITY_TEXT[ride.priority] : null].filter(Boolean).join(" · ");
+  return (
+    <div className={`${CARD} ${size === "s" ? "" : "p-4!"}`} data-testid="today-card">
+      <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-orange-600" aria-hidden />
+        <span>{kicker}</span>
+      </p>
+      <p className={`home-display mt-2 mb-0.5 uppercase leading-[1.05] break-words ${size === "s" ? "text-[22px] line-clamp-2" : "text-[28px]"}`}>{ride.name}</p>
+      {ride.bike && <BikeSummary view={ride.bike} compact={size === "s"} />}
+      <div className="flex-1 min-h-3" />
+      <div className="flex gap-2.5">
+        <Link href={`/planned/${ride.id}`} className={`${RIDE_BUTTON} bg-widget-2`}>
+          Details
+        </Link>
+        {ride.done ? (
+          <Link href={`/planned/${ride.id}/results`} className={`${RIDE_BUTTON} bg-brand-fill text-white`}>
+            Results
+          </Link>
+        ) : (
+          <Link href={`/planned/${ride.id}/play`} className={`${RIDE_BUTTON} bg-brand-fill text-white`}>
+            Start guided
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** The no-cycle picture from the locked design: a calendar with three days done and a plus. */
 function PlanArt({ width }: { width: number }) {
   return (
@@ -374,6 +414,7 @@ export const todayWidget: Renderer<TodayData> = defineWidget<TodayData>({
   select: selectToday,
   View: ({ data, size }) => {
     if (!data.cycle) return data.upcoming ? <Upcoming upcoming={data.upcoming} size={size} /> : <NoCycle size={size} />;
+    if (data.ride) return <RideCard ride={data.ride} size={size} />;
     return size === "s" ? <TodaySmall data={data} /> : <TodayCard data={data} size={size} />;
   },
   // Today always has data: the no-cycle variant is part of View.

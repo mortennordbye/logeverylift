@@ -307,3 +307,59 @@ describe("GuidedPlayer", () => {
     expect(screen.getByTestId("player-ready").textContent).toContain("older version of this workout");
   });
 });
+
+describe("GuidedPlayer on a bike (docs/plans/bike-sessions.md, 5.4)", () => {
+  const blocks = [
+    { seconds: 10, pct: 66, zone: 2, fuel: false },
+    { seconds: 5, pct: 90, zone: 4, fuel: false },
+  ];
+  const bikeSession: PlayerSession = {
+    ...session,
+    steps: [
+      { ...step("s1", "warmup", 10, "10 s warm-up", "125-175 W"), pctFtpText: "50-70 % FTP", secondaryText: "HR under 140", cadenceText: "85-95 rpm" },
+      step("s2", "work", 5, "5 s 88-93% FTP", "220-233 W"),
+      step("s3", "cooldown", null, "to lap cool-down"),
+    ],
+  };
+
+  async function startBike() {
+    render(<GuidedPlayer session={bikeSession} profile={blocks} record="Indoor Bike · Auto Lap off · Auto Pause off · press Lap 2 times" />);
+    await act(async () => {});
+    expect(screen.getByTestId("player-record").textContent).toBe("Record on Garmin: Indoor Bike · Auto Lap off · Auto Pause off · press Lap 2 times");
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await act(async () => {});
+  }
+
+  it("shows the second line, and the profile bar with the marker at now", async () => {
+    await startBike();
+    expect(screen.getByTestId("player-second").textContent).toBe("50-70 % FTP · HR under 140 · 85-95 rpm");
+    const x = () => Number(screen.getByTestId("profile-now").getAttribute("x1"));
+    expect(x()).toBe(0);
+    await advance(5_000);
+    // 5 of 15 planned seconds.
+    expect(x()).toBeCloseTo(358 / 3);
+  });
+
+  it("says Press Lap in the step label for 3 s after a step change", async () => {
+    await startBike();
+    expect(screen.getByTestId("player-step-type").textContent).toBe("Warm-up");
+    await advance(10_000);
+    expect(stepCount()).toBe("Step 2 of 3");
+    expect(screen.getByTestId("player-step-type").textContent).toBe("Press Lap");
+    await advance(2_500);
+    expect(screen.getByTestId("player-step-type").textContent).toBe("Press Lap");
+    await advance(750);
+    expect(screen.getByTestId("player-step-type").textContent).toBe("Work");
+    expect(screen.queryByTestId("player-second")).toBeNull();
+  });
+
+  it("a run gets no Press Lap label and no profile bar", async () => {
+    render(<GuidedPlayer session={{ ...session, sport: "run" }} />);
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await act(async () => {});
+    await advance(10_000);
+    expect(screen.getByTestId("player-step-type").textContent).toBe("Work");
+    expect(screen.queryByTestId("player-profile")).toBeNull();
+  });
+});
