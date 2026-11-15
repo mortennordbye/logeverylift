@@ -22,6 +22,8 @@ test("a row opens its editor and saves that field", async ({ page }, testInfo) =
   await testDb().update(users).set({ heightCm: null, gender: null }).where(eq(users.id, uid));
 
   await page.goto("/more/account");
+  await page.getByTestId("account-group-body-and-health").click();
+  await page.waitForURL("**/more/account/body-and-health");
   await page.getByTestId("account-height").click();
   await page.getByRole("spinbutton", { name: "Height" }).fill("182");
   await page.getByRole("button", { name: "Save", exact: true }).click();
@@ -43,7 +45,7 @@ test("injuries and sick periods open their list and editor from Account", async 
   const uid = await userId(testInfo.parallelIndex);
   await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.id, uid));
 
-  await page.goto("/more/account");
+  await page.goto("/more/account/body-and-health");
   await page.getByTestId("account-injuries").click();
   await page.getByRole("button", { name: "Add an injury" }).click();
   await page.getByRole("textbox", { name: "What happens" }).fill("Sore after long runs");
@@ -63,4 +65,20 @@ test("injuries and sick periods open their list and editor from Account", async 
   expect(await testDb().select({ id: athleteInjuries.id }).from(athleteInjuries).where(eq(athleteInjuries.userId, uid))).toHaveLength(1);
   const [sick] = await testDb().select().from(illnessPeriods).where(eq(illnessPeriods.userId, uid));
   expect(sick.endedOn).toBeNull();
+});
+
+test("the goal chips sit on the Goals and training page, and the top page sums them up", async ({ page }, testInfo) => {
+  const settle = trackActions(page);
+  const uid = await userId(testInfo.parallelIndex);
+  await testDb().update(users).set({ goals: null }).where(eq(users.id, uid));
+
+  await page.goto("/more/account/goals-and-training");
+  await page.getByRole("button", { name: "Endurance", exact: true }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await settle();
+
+  await page.goto("/more/account");
+  await expect(page.getByTestId("account-group-goals-and-training")).toContainText("Endurance");
+  const [row] = await testDb().select({ goals: users.goals }).from(users).where(eq(users.id, uid));
+  expect(row.goals).toBe(JSON.stringify(["endurance"]));
 });

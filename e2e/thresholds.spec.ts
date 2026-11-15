@@ -25,8 +25,8 @@ test("a lifter enters, deletes and restores a threshold", async ({ page }, testI
   await page.goto("/more");
   await page.getByRole("link", { name: /Account/ }).click();
   await expect(page).toHaveURL(/\/more\/account$/);
-  await expect(page.getByTestId("account-strength-goal")).toHaveCount(0);
-  await expect(page.getByTestId("account-sick-periods")).toHaveCount(0);
+  await page.getByTestId("account-group-training-numbers").click();
+  await expect(page).toHaveURL(/\/more\/account\/training-numbers$/);
   await expect(page.getByTestId("account-threshold-ftp")).toContainText("Not set");
 
   await page.getByTestId("account-threshold-ftp").click();
@@ -48,6 +48,11 @@ test("a lifter enters, deletes and restores a threshold", async ({ page }, testI
   await page.getByRole("button", { name: "Restore", exact: true }).click();
   await settle();
   await expect(page.getByTestId("account-threshold-ftp")).toContainText("255 W");
+
+  await page.goto("/more/account/goals-and-training");
+  await expect(page.getByTestId("account-strength-goal")).toHaveCount(0);
+  await page.goto("/more/account/body-and-health");
+  await expect(page.getByTestId("account-sick-periods")).toHaveCount(0);
 
   const [row] = await rows(uid);
   expect(row.deletedAt).toBeNull();

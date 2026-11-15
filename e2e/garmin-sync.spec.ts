@@ -21,18 +21,22 @@ async function withSyncedFtp(workerIndex: number, role: "admin" | "user") {
 }
 
 test("a Premium user sees the switch and the From Garmin line", async ({ page, context }, testInfo) => {
-  const settle = trackActions(page);
   const uid = await withSyncedFtp(testInfo.parallelIndex, "admin");
   // Better Auth caches the session, role included, in a cookie; drop it so the new role is read.
   await context.clearCookies({ name: /session_data/ });
 
-  await page.goto("/more/account");
-  const sync = page.getByRole("switch", { name: /Sync from Garmin/ });
-  await expect(sync).toHaveAttribute("aria-checked", "true");
-  await expect(page.getByText(/Keeps body weight, max HR, threshold HR, FTP, run pace, availability, time zone and units up to date/)).toBeVisible();
+  await page.goto("/more/account/training-numbers");
   await expect(page.getByTestId("account-threshold-ftp")).toContainText("262 W");
   await expect(page.getByTestId("account-threshold-ftp-note")).toContainText("From Garmin · Sun 1 Nov");
 
+  await page.goto("/more/account");
+  await expect(page.getByTestId("account-group-training-numbers")).toContainText("FTP 262 W");
+  const sync = page.getByRole("switch", { name: /Sync from Garmin/ });
+  await expect(sync).toHaveAttribute("aria-checked", "true");
+  await expect(page.getByText(/Keeps body weight, max HR, threshold HR, FTP, run pace, availability, time zone and units up to date/)).toBeVisible();
+
+  // Tracked from here: an on-load action the goto above cut off never reports as finished.
+  const settle = trackActions(page);
   await sync.click();
   await settle();
   await expect(sync).toHaveAttribute("aria-checked", "false");
@@ -41,12 +45,18 @@ test("a Premium user sees the switch and the From Garmin line", async ({ page, c
     .toBe(false);
 });
 
-test("a user without Premium sees no Garmin text", async ({ page }, testInfo) => {
+test("a user without Premium sees no Garmin text", async ({ page, context }, testInfo) => {
   await withSyncedFtp(testInfo.parallelIndex, "user");
+  // A role cached in the session cookie by an earlier spec must not count.
+  await context.clearCookies({ name: /session_data/ });
 
   await page.goto("/more/account");
+  await expect(page.getByTestId("account-group-training-numbers")).toContainText("FTP 262 W");
+  await expect(page.getByRole("switch", { name: /Sync from Garmin/ })).toHaveCount(0);
+  await expect(page.getByText(/Garmin/)).toHaveCount(0);
+
+  await page.goto("/more/account/training-numbers");
   await expect(page.getByTestId("account-threshold-ftp")).toContainText("262 W");
   await expect(page.getByTestId("account-threshold-ftp-note")).toContainText("Sun 1 Nov");
-  await expect(page.getByRole("switch", { name: /Sync from Garmin/ })).toHaveCount(0);
   await expect(page.getByText(/Garmin/)).toHaveCount(0);
 });

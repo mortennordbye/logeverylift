@@ -106,6 +106,20 @@ test("More > Progress > Back lands on More", async ({ page }) => {
   await page.waitForURL(atPath("/more/metrics"));
 });
 
+test("Account > Goals and training > Back lands on Account, and a deep link's Back goes to Account", async ({ page }) => {
+  await page.goto("/more/account");
+  await page.getByTestId("account-group-goals-and-training").click();
+  await page.waitForURL(atPath("/more/account/goals-and-training"));
+  await expect(back(page)).toHaveText("Account");
+  await back(page).click();
+  await page.waitForURL(atPath("/more/account"));
+
+  await page.goto("/more/account/training-numbers");
+  await expect(back(page)).toHaveText("Account");
+  await back(page).click();
+  await page.waitForURL(atPath("/more/account"));
+});
+
 test("a deep link has no in-app page behind it, so Back goes to the parent", async ({ page }) => {
   await page.goto("/more/metrics");
   await expect(back(page)).toHaveText("More");
