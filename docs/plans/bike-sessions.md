@@ -1,6 +1,8 @@
 # Bike sessions: the full plan
 
-Status: plan, no build yet. Scope: the indoor trainer bike session, from plan to result. Run,
+Status: on hold. Built on branch `feat/bike-sessions` (all five packages merged, `pnpm verify` and
+the bike e2e specs pass, tested by the owner in the local dev stack). Not merged to `main`. It waits
+for the endurance rework; see section 11 before it continues.
 swim and brick follow later, by the same pattern ([endurance journeys](endurance-journeys.md)).
 Screens: [`docs/design/endurance/bike-flow.html`](../design/endurance/bike-flow.html).
 
@@ -461,3 +463,23 @@ Notes per spoke:
 - Phase 5: the assistant rewrites the future bike sessions as workouts 4.1 and 4.2 over MCP in
   production. The hub asks the owner before it writes to production data.
 - Phase 6 (.fit download) is not in this build. It goes to `BACKLOG.md` when the PR merges.
+
+## 11. On hold: input for the endurance rework
+
+The owner stopped the build after the local test. These owner decisions come first when the work
+continues; rebase `feat/bike-sessions` on the rework and adapt it:
+
+1. One app for every user. A user with the endurance switch off gets the same bike sessions, the
+   same screens, Start, the editor and the after view. The only difference between users is the AI
+   setup (the endurance interview and the AI-made plan). Today `enduranceEnabledFor` gates about 66
+   files (`src/lib/endurance.ts`); that gate goes everywhere except the AI setup.
+2. One model for an endurance session. A bike, run or swim session is always a structured workout,
+   however it was made (triathlon plan, template builder, AI setup, assistant, by hand). Programs
+   are for strength only. Existing endurance program sessions convert once: set type to step type,
+   duration or distance to the step end, HR zone to the target, the program note to the coach note.
+   Watts are not in programs, so converted steps get HR targets only.
+3. A done session can always be started again (built, commit `ca28e7f`).
+
+Local state when it stopped: the dev stack ran this branch with migrations `0092_bike_hr_zones` and
+`0093_garmin_pairs` applied to the local database, and the owner's local account had the tempo
+(17 Nov) and long ride (15 Nov) as structured workouts.
