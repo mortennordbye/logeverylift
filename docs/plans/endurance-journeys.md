@@ -1,7 +1,7 @@
 # Endurance user journeys
 
 Scope: bike (indoor trainer), run, swim, brick days, rest and recovery days, and the AI planning
-loop over MCP. Strength stays as it is. Facts come from [`endurance-journeys-audit.md`](endurance-journeys-audit.md) (audit at `main`
+loop over MCP. Strength stays as it is. Facts come from [`audit/endurance-journeys.md`](../../audit/endurance-journeys.md) (audit at `main`
 feafb9f) and [`endurance-session-clarity.md`](endurance-session-clarity.md). Section numbers in brackets point to the audit.
 
 Tags: EXISTS (works today), CHANGE (exists, must change), NEW (does not exist).

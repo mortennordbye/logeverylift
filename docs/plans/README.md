@@ -31,7 +31,7 @@ when the brief was written.
 | 10 | [Home screen widgets](../home-widgets-audit.md) (audit, catalogue and build brief; section 6 is the brief, one PR) | phases 1a and 1b built (registry, edit mode, Recent PRs, Friends' activity, Garmin readiness); locked redesign and phase 2 widgets built (Streak, Body weight, Training load, Weekly sets, Race countdown); other phase 2 widgets todo | yes | yes (home start entries) |
 | 11 | [Back navigation](back-navigation.md) (Back goes where you came from) | built on `fix/back-navigation` | no | yes (set pages' Back) |
 | 12 | [Plan tab redesign](plan-tab-redesign.md) (Cycles becomes Plan; four packages) | built on `feat/plan-redesign`, waiting for the owner's local test | no | no |
-| 13 | [Endurance journeys](endurance-journeys.md) (bike, run, swim, brick, rest; AI loop). Inputs: [session clarity](endurance-session-clarity.md), [audit](endurance-journeys-audit.md). Bike plan first. | planning, no build yet | yes (step model, JSON only) | yes (home today card) |
+| 13 | [Endurance journeys](endurance-journeys.md) (bike, run, swim, brick, rest; AI loop). Inputs: [session clarity](endurance-session-clarity.md), [audit](../../audit/endurance-journeys.md). Bike plan first. | planning, no build yet | yes (step model, JSON only) | yes (home today card) |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.
