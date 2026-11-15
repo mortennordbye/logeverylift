@@ -105,7 +105,7 @@ test("make a season with a race and phases, fit the taper, drag a phase, and ans
   await expect(page.getByRole("button", { name: "Add phase" })).toBeDisabled();
   await expect(page.getByText("Add a session first.")).toBeVisible();
   await page.getByRole("button", { name: "Add a session on Mon" }).click();
-  await page.getByRole("region", { name: "Pick a program" }).getByRole("button", { name: /^Zed taper / }).click();
+  await page.getByRole("region", { name: "Pick a program" }).getByRole("button", { name: "Zed taper", exact: true }).click();
   await settle();
   await page.getByRole("button", { name: "Add phase" }).click();
   await expect(page).toHaveURL(seasonUrl);
