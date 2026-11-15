@@ -22,8 +22,10 @@ test("add, edit, switch off and delete a coach memory entry", async ({ page }, t
   const settle = trackActions(page);
   const uid = await userId(testInfo.parallelIndex);
 
+  // Every user reaches memory from the AI coach hub (docs/plans/ai-coach-hub.md).
   await page.goto("/more");
-  await page.getByRole("link", { name: /Coach memory/ }).click();
+  await page.getByRole("link", { name: /AI coach/ }).click();
+  await page.getByRole("link", { name: /What your coach knows/ }).click();
   await expect(page).toHaveURL(/\/more\/coach-memory$/);
   await expect(page.getByTestId("memory-empty")).toBeVisible();
 

@@ -11,7 +11,7 @@ import { z } from "zod";
 const disconnectSchema = z.object({ id: z.string().min(1) });
 
 /**
- * Disconnect an AI assistant (More → Connected assistants). Deletes the user's
+ * Disconnect an AI assistant (More → AI coach → Connection). Deletes the user's
  * consent for that client and revokes its refresh and opaque access tokens.
  * The JWT access token the assistant still holds then fails the consent check
  * on its next MCP request (src/lib/mcp/access.ts). The client row stays: a

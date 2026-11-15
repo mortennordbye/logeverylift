@@ -7,7 +7,7 @@ import { desc, eq } from "drizzle-orm";
 
 import { BackLink } from "@/components/ui/BackLink";
 
-/** The AI assistants the user has connected over MCP, with a way to disconnect each. */
+/** Connection, under the AI coach hub: the assistants the user connected over MCP, with a way to disconnect each. */
 export default async function AssistantsPage() {
   const auth = await requireSession();
   const rows = await db
@@ -25,10 +25,10 @@ export default async function AssistantsPage() {
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <BackLink fallback={{ href: "/more", label: "More" }} />
+        <BackLink fallback={{ href: "/more/ai-coach", label: "AI coach" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">Connected assistants</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Connection</h1>
       </div>
       <AssistantsClient
         assistants={rows.map((r) => ({

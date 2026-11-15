@@ -105,12 +105,11 @@ export function CoachMemoryClient({ entries, deleted }: { entries: MemoryRow[]; 
   return (
     <div className="flex-1 overflow-y-auto px-4 pb-28 space-y-5">
       <p className="text-sm text-muted-foreground">
-        What your connected assistant keeps between conversations: your preferences, limits, what it noticed and what
-        you agreed. Only your own assistant reads it. Friends never see it.
+        What your coach knows about you. Only your own connected AI reads it, and friends never see it.
       </p>
       {entries.length === 0 && (
         <p className="text-sm text-muted-foreground" data-testid="memory-empty">
-          Nothing yet. Your assistant adds entries as you talk, or add one yourself.
+          Nothing yet. Add a note, or your own AI adds them as you talk.
         </p>
       )}
       {KINDS.map((k) => {
@@ -193,7 +192,7 @@ export function CoachMemoryClient({ entries, deleted }: { entries: MemoryRow[]; 
               maxLength={1000}
               rows={4}
               aria-label="Entry"
-              placeholder="For example: long rides on Saturday, never before 8"
+              placeholder="For example, long rides on Saturday, never before 8"
               className="w-full rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2 ring-primary"
             />
             {draft.id && (
@@ -214,6 +213,13 @@ export function CoachMemoryClient({ entries, deleted }: { entries: MemoryRow[]; 
               className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
             >
               Save
+            </button>
+            <button
+              onClick={() => setDraft(null)}
+              disabled={saving}
+              className="w-full rounded-xl bg-muted py-4 text-sm font-semibold disabled:opacity-50 active:opacity-80"
+            >
+              Cancel
             </button>
             {draft.id &&
               (confirmDelete ? (

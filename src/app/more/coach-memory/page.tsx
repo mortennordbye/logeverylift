@@ -26,10 +26,10 @@ export default async function CoachMemoryPage() {
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <BackLink fallback={{ href: "/more/assistants", label: "Connected assistants" }} />
+        <BackLink fallback={{ href: "/more/ai-coach", label: "AI coach" }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">Coach memory</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Memory</h1>
       </div>
       <CoachMemoryClient
         entries={entries.map((e) => ({

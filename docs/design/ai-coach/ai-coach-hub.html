@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI coach hub</title>
+<style>
+  :root {
+    --bg: #000; --page: #0a0a0a; --fg: #fafafa; --muted: #a1a1a1; --line: rgb(255 255 255 / .09);
+    --card: #161616; --card-2: #222; --brand: #6b95ff; --brand-2: #a78bfa; --ok: #3d8a5c; --warn: #c79a2b; --red: #e5484d;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 system-ui, -apple-system, sans-serif; padding: 24px 16px 64px; }
+  main { max-width: 1240px; margin: 0 auto; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -.02em; }
+  h2 { font-size: 20px; margin: 56px 0 6px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); max-width: 78ch; margin: 0 0 18px; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; }
+  nav.toc a { background: var(--card); color: var(--fg); text-decoration: none; padding: 7px 12px; border-radius: 999px; font-size: 13px; }
+  svg.i { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  .tbl { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .tbl table { min-width: 760px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+  td small { color: var(--muted); display: block; }
+  .k { display: inline-block; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; padding: 2px 7px; border-radius: 6px; white-space: nowrap; }
+  .k.ai { background: rgb(167 139 250 / .2); color: var(--brand-2); }
+  .k.rules { background: var(--card-2); color: var(--muted); }
+  .k.ext { background: rgb(107 149 255 / .18); color: var(--brand); }
+  .who-n { color: var(--ok); font-weight: 600; } .who-p { color: var(--brand); font-weight: 600; } .who-a { color: var(--muted); }
+
+  .screens { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 24px; align-items: start; }
+  .who { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 6px 4px; }
+  .who em { font-style: normal; color: var(--brand); }
+  .phone { background: var(--page); border: 1px solid #2a2a2a; border-radius: 34px; overflow: hidden; min-height: 600px; padding-bottom: 18px; position: relative; }
+  .cap { color: var(--muted); font-size: 12.5px; margin: 10px 6px 0; }
+  .back { color: var(--brand); font-size: 15px; padding: 20px 16px 0; }
+  .ttl { font-size: 30px; font-weight: 700; letter-spacing: -.02em; padding: 6px 16px 4px; }
+  .hdr { padding: 24px 16px 14px; border-bottom: 1px solid var(--line); font-size: 30px; font-weight: 700; letter-spacing: -.02em; }
+  .lede { color: var(--muted); font-size: 13.5px; padding: 0 16px; }
+  .sec { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 20px 16px 8px; }
+
+  .hero { margin: 16px 16px 0; border-radius: 22px; padding: 18px; background: radial-gradient(120% 90% at 100% 0%, rgb(167 139 250 / .28), transparent 60%), radial-gradient(120% 100% at 0% 100%, rgb(107 149 255 / .22), transparent 60%), #141414; border: 1px solid rgb(255 255 255 / .06); }
+  .spark { width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center; background: rgb(255 255 255 / .08); color: #c9b8ff; margin-bottom: 12px; }
+  .hero b { display: block; font-size: 19px; letter-spacing: -.01em; }
+  .hero p { color: var(--muted); font-size: 13.5px; margin: 4px 0 0; }
+  .btn { display: flex; align-items: center; justify-content: center; gap: 8px; background: var(--fg); color: #000; font-weight: 600; border-radius: 14px; min-height: 48px; margin-top: 16px; font-size: 15px; }
+  .btn.soft { background: rgb(255 255 255 / .08); color: var(--fg); }
+  .btn.red { background: var(--red); color: #fff; }
+  .pin { position: absolute; left: 0; right: 0; bottom: 0; padding: 12px 16px 22px; background: linear-gradient(transparent, var(--page) 30%); }
+  .pin .btn { margin-top: 8px; }
+
+  .card { margin: 0 16px; border-radius: 18px; background: #141414; border: 1px solid rgb(255 255 255 / .06); overflow: hidden; }
+  .plan { margin: 16px 16px 0; border-radius: 22px; padding: 16px; background: #141414; border: 1px solid rgb(255 255 255 / .06); }
+  .plan b { display: block; font-size: 17px; }
+  .plan small { color: var(--muted); font-size: 12.5px; }
+  .bar { height: 6px; background: var(--card-2); border-radius: 99px; margin: 12px 0 4px; overflow: hidden; }
+  .bar i { display: block; height: 100%; width: 37%; background: linear-gradient(90deg, var(--brand), var(--brand-2)); border-radius: 99px; }
+  .days { display: flex; gap: 6px; margin-top: 12px; }
+  .days span { flex: 1; text-align: center; border-radius: 10px; padding: 7px 0; font-size: 11.5px; background: var(--card-2); color: var(--muted); }
+  .days span.on { background: rgb(107 149 255 / .18); color: var(--fg); font-weight: 600; }
+
+  .ask { margin: 12px 16px 0; border-radius: 18px; background: #141414; border: 1px solid rgb(255 255 255 / .06); padding: 14px; }
+  .ask .h { display: flex; gap: 8px; align-items: center; font-weight: 600; font-size: 14.5px; }
+  .ask .h svg { color: #c9b8ff; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .chips span { background: var(--card-2); border-radius: 999px; padding: 7px 12px; font-size: 12.5px; }
+  .chips span.on { background: var(--fg); color: #000; font-weight: 600; }
+  .input { margin-top: 10px; background: var(--card-2); border-radius: 12px; padding: 11px 12px; color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .input span { color: var(--brand); font-weight: 600; }
+  .hint { color: var(--muted); font-size: 11.5px; margin-top: 8px; }
+
+  .check { margin: 12px 16px 0; border-radius: 18px; padding: 14px; background: rgb(199 154 43 / .1); border: 1px solid rgb(199 154 43 / .3); }
+  .check b { display: block; font-size: 14px; }
+  .check small { color: var(--muted); }
+  .two { display: flex; gap: 8px; margin-top: 10px; }
+  .two span { flex: 1; text-align: center; border-radius: 12px; padding: 10px 0; font-size: 13px; font-weight: 600; background: rgb(255 255 255 / .08); }
+
+  .more { margin: 22px 16px 0; display: flex; align-items: center; gap: 12px; color: var(--muted); font-size: 13px; padding: 12px 2px; border-top: 1px solid var(--line); }
+  .more .t { flex: 1; }
+  .more b { color: var(--fg); font-weight: 500; display: block; font-size: 14px; }
+
+  .asst .head { display: flex; gap: 12px; align-items: center; padding: 14px; }
+  .avatar { width: 38px; height: 38px; border-radius: 12px; background: #2a2018; color: #e3a57a; display: grid; place-items: center; font-weight: 700; flex: none; }
+  .avatar.g { background: #13261e; color: #6fcf97; }
+  .asst .head .t { flex: 1; }
+  .asst .head b { display: block; font-size: 15px; }
+  .asst .head small { color: var(--muted); font-size: 12px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); display: inline-block; margin-right: 6px; }
+  .last { padding: 0 14px 14px; font-size: 13px; }
+  .last .h { color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; }
+  .last .h a { color: var(--brand); font-weight: 600; }
+  .last ul { margin: 4px 0 0; padding-left: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); border-top: 1px solid var(--line); }
+  .tiles div { padding: 12px 6px; text-align: center; border-left: 1px solid var(--line); font-size: 12.5px; }
+  .tiles div:first-child { border-left: 0; }
+  .tiles svg { display: block; margin: 0 auto 4px; color: var(--muted); }
+  .tiles b { display: block; font-size: 13px; font-weight: 600; }
+  .tiles small { color: var(--muted); font-size: 11px; }
+
+  .row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; min-height: 54px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row .t { flex: 1; min-width: 0; }
+  .row b { display: block; font-weight: 500; font-size: 14px; }
+  .row small { color: var(--muted); font-size: 12px; display: block; }
+  .row .v { color: var(--muted); font-size: 13.5px; }
+  .row > svg { color: var(--muted); }
+  .row.gone { box-shadow: inset 3px 0 0 var(--red); }
+  .row.gone b, .row.gone small { text-decoration: line-through; text-decoration-color: rgb(229 72 77 / .7); }
+  .row.new { box-shadow: inset 3px 0 0 var(--ok); }
+  .list { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .grp { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); padding: 18px 16px 6px; }
+
+  .field { padding: 0 16px; margin-top: 14px; }
+  .field .l { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .field .chips { margin-top: 0; }
+  .seg { display: flex; background: var(--card); border-radius: 12px; padding: 3px; }
+  .seg span { flex: 1; text-align: center; padding: 8px 0; border-radius: 9px; font-size: 13px; color: var(--muted); }
+  .seg span.on { background: var(--card-2); color: var(--fg); font-weight: 600; }
+
+  .build { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 70px 24px 20px; gap: 14px; }
+  .orb { width: 92px; height: 92px; border-radius: 50%; background: conic-gradient(from 200deg, var(--brand), var(--brand-2), #4dd4ff, var(--brand)); filter: blur(.5px); box-shadow: 0 0 50px rgb(167 139 250 / .45); position: relative; }
+  .orb::after { content: ""; position: absolute; inset: 10px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #1d2440, #0a0a0a 75%); }
+  .build b { font-size: 19px; }
+  .steps { list-style: none; padding: 0; margin: 6px 0 0; text-align: left; font-size: 13.5px; }
+  .steps li { padding: 5px 0; color: var(--muted); }
+  .steps li.done { color: var(--fg); }
+  .steps li.done::before { content: "\2713\00a0\00a0"; color: var(--ok); }
+  .steps li.now::before { content: "\25CF\00a0\00a0"; color: var(--brand-2); }
+  .steps li.wait::before { content: "\25CB\00a0\00a0"; }
+
+  .day { padding: 12px 14px; border-top: 1px solid var(--line); }
+  .day:first-child { border-top: 0; }
+  .day .h { display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .day .h b { color: var(--fg); font-size: 14px; font-weight: 600; }
+  .day p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); }
+  .day.chg { box-shadow: inset 3px 0 0 var(--brand-2); }
+  .day.chg p ins { text-decoration: none; color: var(--brand-2); }
+
+  .steps2 { padding: 4px 16px 0; font-size: 13.5px; }
+  .steps2 div { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .steps2 i { font-style: normal; width: 22px; height: 22px; border-radius: 50%; background: var(--card-2); display: grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; }
+  .area { margin: 12px 16px 0; background: var(--card); border-radius: 14px; padding: 12px; min-height: 90px; color: var(--muted); font-size: 13px; }
+  .url { font: 12px ui-monospace, Menlo, monospace; background: var(--card-2); border-radius: 12px; padding: 12px; margin: 10px 14px 14px; display: flex; justify-content: space-between; gap: 8px; }
+  .url span { color: var(--brand); font-family: system-ui; font-weight: 600; }
+  .note { color: var(--muted); font-size: 12.5px; padding: 8px 16px 0; }
+  .tabs { display: flex; gap: 6px; padding: 0 14px 12px; }
+  .tabs span { background: var(--card-2); border-radius: 999px; padding: 6px 12px; font-size: 12.5px; color: var(--muted); }
+  .tabs span.on { background: var(--fg); color: #000; font-weight: 600; }
+
+  .chg2 { padding: 12px 14px; border-top: 1px solid var(--line); }
+  .chg2:first-child { border-top: 0; }
+  .chg2 .h { display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: var(--muted); }
+  .chg2 .h a { color: var(--brand); font-weight: 600; font-size: 13px; }
+  .chg2 q { display: block; font-size: 13px; margin: 4px 0 2px; quotes: none; }
+  .chg2 ul { margin: 4px 0 0; padding-left: 16px; font-size: 13px; }
+  .chg2.undone { opacity: .5; }
+
+  .mem { padding: 11px 14px; border-top: 1px solid var(--line); }
+  .mem:first-child { border-top: 0; }
+  .mem b { font-weight: 500; font-size: 14px; display: block; }
+  .mem small { color: var(--muted); font-size: 11.5px; }
+  .kind { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); padding: 14px 16px 6px; }
+
+  .dim { position: absolute; inset: 0; background: rgb(0 0 0 / .6); }
+  .sheet { position: absolute; left: 0; right: 0; bottom: 0; background: #1a1a1a; border-radius: 24px 24px 0 0; padding: 10px 16px 24px; }
+  .sheet .grab { width: 38px; height: 5px; border-radius: 3px; background: #444; margin: 0 auto 14px; }
+  .sheet h3 { margin: 0 0 6px; font-size: 18px; }
+  .sheet p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  .sheet ul { margin: 10px 0 0; padding-left: 18px; font-size: 13.5px; }
+  .faint { opacity: .35; }
+
+  .grow { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+  .lv { background: var(--card); border-radius: 16px; padding: 14px; border-top: 3px solid var(--c); }
+  .lv .st { font-size: 10.5px; font-weight: 700; letter-spacing: .08em; color: var(--c); }
+  .lv b { display: block; margin: 4px 0; }
+  .lv span { color: var(--muted); font-size: 12.5px; }
+  .open li { margin: 6px 0; color: var(--muted); }
+  .open li b { color: var(--fg); font-weight: 600; }
+</style>
+</head>
+<body>
+<main>
+  <svg width="0" height="0" style="position:absolute">
+    <symbol id="spark" viewBox="0 0 24 24"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></symbol>
+    <symbol id="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="plug" viewBox="0 0 24 24"><path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/></symbol>
+    <symbol id="hist" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l3 2"/></symbol>
+    <symbol id="brain" viewBox="0 0 24 24"><path d="M9 4a3 3 0 0 0-3 3 3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V5a3 3 0 0 0-3-1z"/><path d="M15 4a3 3 0 0 1 3 3 3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1"/></symbol>
+    <symbol id="chat" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="send" viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></symbol>
+    <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="copy" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+  </svg>
+
+  <h1>AI coach hub</h1>
+  <p class="sub">Every page of the hub, in the order a user meets them. A normal user sees a simple plan helper. The power pages show only after the user connects an assistant.</p>
+  <nav class="toc">
+    <a href="#today">0. AI parts today</a><a href="#more">1. More</a><a href="#hub">2. The hub</a><a href="#build">3. Get a plan</a><a href="#ask">4. Ask your coach</a><a href="#options">5. More options</a><a href="#connection">6. Connection</a><a href="#changes">7. Changes</a><a href="#memory">8. Memory</a><a href="#open">9. Open points</a>
+  </nav>
+
+  <h2 id="today">0. What we have today</h2>
+  <p class="sub">Eleven parts on eight screens. Only the AI change calls a real AI model. The rest are rules, or an outside assistant over MCP.</p>
+  <div class="tbl"><table>
+    <tr><th>Part</th><th>How it works</th><th>Where it is today</th><th>Who uses it</th></tr>
+    <tr><td><b>Plan builder</b><small>Goal, experience, days, session length, equipment, cycle length. Preview, then Import.</small></td><td><span class="k rules">RULES</span> instant</td><td>More, AI Setup. Also from the welcome page and the first-run tutorial.</td><td class="who-n">Normal</td></tr>
+    <tr><td><b>Change it with AI</b><small>Quick choices or a line of text on the preview. 1 to 3 minutes, safe to leave.</small></td><td><span class="k ai">AI MODEL</span> 5 a day</td><td>AI Setup preview</td><td class="who-n">Normal</td></tr>
+    <tr><td><b>AI consent</b><small>A sheet before the first AI change. A switch to take it back.</small></td><td>Setting</td><td>Sheet in AI Setup. Switch in Account.</td><td class="who-n">Normal</td></tr>
+    <tr><td><b>One-week check-in</b><small>"Does the plan fit you?" "Not really" opens a revised plan.</small></td><td><span class="k rules">RULES</span> + AI change</td><td>Home card</td><td class="who-n">Normal</td></tr>
+    <tr><td><b>Use your own AI chat</b><small>Copy a prompt, paste the answer back.</small></td><td><span class="k ext">YOUR CHAT</span></td><td>AI Setup, under "Power-user options"</td><td class="who-p">Power</td></tr>
+    <tr><td><b>Connect an assistant</b><small>MCP address with Copy. Sign-in and access page.</small></td><td><span class="k ext">MCP</span></td><td>AI Setup, under "Power-user options". The /consent page.</td><td class="who-p">Power</td></tr>
+    <tr><td><b>Connected assistants</b><small>The list, access level, Disconnect.</small></td><td><span class="k ext">MCP</span></td><td>More, App group</td><td class="who-p">Power</td></tr>
+    <tr><td><b>Assistant changes</b><small>What it changed, by conversation, with Undo.</small></td><td><span class="k ext">MCP</span></td><td>Link on Connected assistants</td><td class="who-p">Power</td></tr>
+    <tr><td><b>Coach memory</b><small>Preferences, life limits, observations, decisions. Add, edit, delete, restore for 90 days.</small></td><td><span class="k ext">MCP</span></td><td>More, App group</td><td class="who-p">Power</td></tr>
+    <tr><td><b>Athlete profile and interview</b><small>Injuries, availability, thresholds. The assistant reads them.</small></td><td><span class="k rules">FORM</span></td><td>More, endurance users only</td><td class="who-p">Power</td></tr>
+    <tr><td><b>AI models</b><small>Which models the AI change uses, in order.</small></td><td>Setting</td><td>Admin tools</td><td class="who-a">Admin</td></tr>
+  </table></div>
+  <p class="cap">Not AI, so not in the hub: the triathlon plan in a season, and the "Make it easy" readiness card. Both stay where they are.</p>
+
+  <!-- 1. MORE -->
+  <h2 id="more">1. The More page</h2>
+  <p class="sub">Three rows go, one row comes in. "AI coach" takes the place of AI Setup. The Training group does not change.</p>
+  <div class="screens">
+    <div>
+      <div class="who">Today</div>
+      <div class="phone" style="min-height:520px">
+        <div class="hdr">More</div>
+        <div class="grp">Plan &amp; share</div>
+        <div class="list">
+          <div class="row gone"><svg class="i"><use href="#spark"/></svg><div class="t"><b>AI Setup</b><small>Generate your programs and training schedule with AI</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Friends</b><small>Connect and share programs with friends</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Gym map</b><small>See who trains at your gym</small></div><svg class="i"><use href="#chev"/></svg></div>
+        </div>
+        <div class="grp">App</div>
+        <div class="list">
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Account</b><small>Profile and sign out</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row gone"><svg class="i"><use href="#plug"/></svg><div class="t"><b>Connected assistants</b><small>AI assistants with access to your data</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row gone"><svg class="i"><use href="#brain"/></svg><div class="t"><b>Coach memory</b><small>What your assistant keeps between conversations</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Feedback</b><small>Report issues or suggest features</small></div><svg class="i"><use href="#chev"/></svg></div>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div class="who">After</div>
+      <div class="phone" style="min-height:520px">
+        <div class="hdr">More</div>
+        <div class="grp">Plan &amp; share</div>
+        <div class="list">
+          <div class="row new"><svg class="i" style="color:#c9b8ff"><use href="#spark"/></svg><div class="t"><b>AI coach</b><small>Get a plan and change it</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Friends</b><small>Connect and share programs with friends</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Gym map</b><small>See who trains at your gym</small></div><svg class="i"><use href="#chev"/></svg></div>
+        </div>
+        <div class="grp">App</div>
+        <div class="list">
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Account</b><small>Profile and sign out</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Feedback</b><small>Report issues or suggest features</small></div><svg class="i"><use href="#chev"/></svg></div>
+        </div>
+      </div>
+      <p class="cap">A connected user sees "Get a plan and change it &middot; Claude connected" as the second line.</p>
+    </div>
+  </div>
+
+  <!-- 2. HUB -->
+  <h2 id="hub">2. The hub page</h2>
+  <p class="sub">There is no "simple mode" switch. A part draws when the user has the data for it. A normal user never sees "MCP", "assistant" or "memory".</p>
+  <div class="grow">
+    <div class="lv" style="--c:var(--ok)"><div class="st">NORMAL &middot; NO PLAN</div><b>One big button</b><span>"Get a plan", and a closed "More options" row.</span></div>
+    <div class="lv" style="--c:var(--ok)"><div class="st">NORMAL &middot; HAS A PLAN</div><b>Plan and "Ask your coach"</b><span>The plan card, the AI change box, the check-in when it is due.</span></div>
+    <div class="lv" style="--c:var(--brand)"><div class="st">POWER &middot; CONNECTED</div><b>Your assistant card</b><span>The last change, and tiles to Changes, Memory and Connection.</span></div>
+  </div>
+  <div class="screens" style="margin-top:22px">
+    <div>
+      <div class="who">2a &middot; Normal, no plan</div>
+      <div class="phone">
+        <div class="back">&lsaquo; More</div>
+        <div class="ttl">AI coach</div>
+        <div class="hero">
+          <div class="spark"><svg class="i"><use href="#spark"/></svg></div>
+          <b>Get a plan that fits your week</b>
+          <p>Tell us your goal, how many days you train and what gym you have. Your coach builds the programs and the schedule.</p>
+          <div class="btn"><svg class="i"><use href="#spark"/></svg>Get a plan</div>
+        </div>
+        <div style="height:220px"></div>
+        <div class="more"><div class="t"><b>More options</b>Use your own AI chat, or connect one</div><svg class="i"><use href="#down"/></svg></div>
+      </div>
+      <p class="cap">"Get a plan" opens 3a.</p>
+    </div>
+    <div>
+      <div class="who">2b &middot; Normal, has a plan</div>
+      <div class="phone">
+        <div class="back">&lsaquo; More</div>
+        <div class="ttl">AI coach</div>
+        <div class="plan">
+          <b>Upper / Lower</b><small>Week 3 of 8 &middot; built 2 Nov</small>
+          <div class="bar"><i></i></div>
+          <div class="days"><span class="on">Mon</span><span class="on">Tue</span><span>Wed</span><span class="on">Thu</span><span class="on">Fri</span><span>Sat</span><span>Sun</span></div>
+        </div>
+        <div class="check"><b>You had a week on Upper / Lower</b><small>Does the plan fit you?</small><div class="two"><span>Yes</span><span>Not really</span></div></div>
+        <div class="ask">
+          <div class="h"><svg class="i"><use href="#spark"/></svg>Ask your coach</div>
+          <div class="chips"><span>More variety</span><span>Shorter sessions</span><span>Prefer machines</span><span>Add cardio</span></div>
+          <div class="input">e.g. no lunges, sore knee <span><svg class="i"><use href="#send"/></svg></span></div>
+          <div class="hint">3 of 5 changes left today</div>
+        </div>
+        <div class="card" style="margin-top:12px"><div class="row"><svg class="i"><use href="#brain"/></svg><div class="t"><b>What your coach knows</b><small>3 notes &middot; preferences and limits</small></div><svg class="i"><use href="#chev"/></svg></div></div>
+        <div class="more"><div class="t"><b>More options</b>New plan, your own AI chat, connect one</div><svg class="i"><use href="#down"/></svg></div>
+      </div>
+      <p class="cap">The plan card opens the cycle. The check-in shows only in its week. "Ask your coach" opens 4a. "What your coach knows" opens Memory, 8a.</p>
+    </div>
+    <div>
+      <div class="who">2c &middot; <em>Power</em>, connected</div>
+      <div class="phone">
+        <div class="back">&lsaquo; More</div>
+        <div class="ttl">AI coach</div>
+        <div class="plan"><b>Upper / Lower</b><small>Week 3 of 8 &middot; built 2 Nov</small><div class="bar"><i></i></div></div>
+        <div class="ask">
+          <div class="h"><svg class="i"><use href="#spark"/></svg>Ask your coach</div>
+          <div class="input">e.g. no lunges, sore knee <span><svg class="i"><use href="#send"/></svg></span></div>
+        </div>
+        <div class="sec">Your assistant</div>
+        <div class="card asst">
+          <div class="head"><div class="avatar">C</div><div class="t"><b>Claude</b><small><span class="dot"></span>Read and change</small></div><svg class="i" style="color:var(--muted)"><use href="#chev"/></svg></div>
+          <div class="last"><div class="h"><span>Last change &middot; today 08.12</span><a>Undo</a></div><ul><li>Bench press 80 to 82.5 kg</li><li>Leg day moved Sat to Sun</li></ul></div>
+          <div class="tiles">
+            <div><svg class="i"><use href="#hist"/></svg><b>Changes</b><small>3 this week</small></div>
+            <div><svg class="i"><use href="#brain"/></svg><b>Memory</b><small>12 notes</small></div>
+            <div><svg class="i"><use href="#plug"/></svg><b>Connection</b><small>On</small></div>
+          </div>
+        </div>
+        <div class="more"><div class="t"><b>More options</b>New plan, your own AI chat, add another</div><svg class="i"><use href="#down"/></svg></div>
+      </div>
+      <p class="cap">Changes opens 7a. Memory opens 8a. Connection and the Claude row open 6a.</p>
+    </div>
+  </div>
+
+  <!-- 3. BUILD -->
+  <h2 id="build">3. Get a plan</h2>
+  <p class="sub">The builder of today, with a calmer first screen. Rules build the plan at once. The "building" screen gives it the feel of a coach at work.</p>
+  <div class="screens">
+    <div>
+      <div class="who">3a &middot; Your picks</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="ttl">Your plan</div>
+        <div class="lede">Four questions. You can change all of it later.</div>
+        <div class="field"><div class="l">Goal</div><div class="chips"><span class="on">Get stronger</span><span>Build muscle</span><span>Lose fat</span><span>General fitness</span></div></div>
+        <div class="field"><div class="l">Experience</div><div class="seg"><span>New</span><span class="on">Some</span><span>A lot</span></div></div>
+        <div class="field"><div class="l">Days per week</div><div class="seg"><span>2</span><span>3</span><span class="on">4</span><span>5</span><span>6</span></div></div>
+        <div class="field"><div class="l">Equipment</div><div class="chips"><span class="on">Full gym</span><span>Dumbbells</span><span>Home</span></div></div>
+        <div class="more" style="margin-top:14px"><div class="t"><b>More options</b>Session length, weeks, split, focus, go easy on</div><svg class="i"><use href="#down"/></svg></div>
+        <div class="pin"><div class="btn"><svg class="i"><use href="#spark"/></svg>Build my plan</div></div>
+      </div>
+      <p class="cap">Experience and days fill from Account. The rare fields of today sit under "More options".</p>
+    </div>
+    <div>
+      <div class="who">3b &middot; Building</div>
+      <div class="phone">
+        <div class="back faint">&lsaquo; Your plan</div>
+        <div class="build">
+          <div class="orb"></div>
+          <b>Building your plan</b>
+          <ul class="steps">
+            <li class="done">Reading your goal and experience</li>
+            <li class="done">Picking exercises for a full gym</li>
+            <li class="now">Setting sets, reps and weights</li>
+            <li class="wait">Placing 4 sessions in your week</li>
+          </ul>
+        </div>
+      </div>
+      <p class="cap">About 3 seconds, one line at a time. The result is kept, so Back and reopen show the same plan.</p>
+    </div>
+    <div>
+      <div class="who">3c &middot; Preview</div>
+      <div class="phone">
+        <div class="back">&lsaquo; Your picks</div>
+        <div class="ttl">Upper / Lower</div>
+        <div class="lede">4 days &middot; 8 weeks &middot; about 60 min</div>
+        <div class="sec">Your week</div>
+        <div class="card">
+          <div class="day"><div class="h"><b>Upper A</b><span>Mon</span></div><p>Bench press, row, overhead press, pull-up, curl, triceps</p></div>
+          <div class="day"><div class="h"><b>Lower A</b><span>Tue</span></div><p>Squat, Romanian deadlift, split squat, calves, core</p></div>
+          <div class="day"><div class="h"><b>Upper B</b><span>Thu</span></div><p>Incline press, pulldown, dips, rear delt, hammer curl</p></div>
+          <div class="day"><div class="h"><b>Lower B</b><span>Fri</span></div><p>Deadlift, leg press, hip thrust, hamstring curl, core</p></div>
+        </div>
+        <div class="pin">
+          <div class="btn soft"><svg class="i"><use href="#spark"/></svg>Ask your coach to change it</div>
+          <div class="btn">Start this plan</div>
+        </div>
+      </div>
+      <p class="cap">"Start this plan" is today's Import. It opens 2b. "Ask your coach" opens 4a on the preview.</p>
+    </div>
+  </div>
+
+  <!-- 4. ASK -->
+  <h2 id="ask">4. Ask your coach</h2>
+  <p class="sub">This is the one real AI step. It is today's "Change it with AI", with the same limit of 5 a day and the same consent.</p>
+  <div class="screens">
+    <div>
+      <div class="who">4a &middot; What to change</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="ttl">Ask your coach</div>
+        <div class="lede">Pick one or more, or write it in your own words.</div>
+        <div class="field"><div class="chips"><span class="on">More variety</span><span>Shorter sessions</span><span>Prefer machines</span><span>Add cardio</span><span>Mobility warm-up</span><span>Swap exercises I name</span></div></div>
+        <div class="area">No lunges, my left knee is sore</div>
+        <p class="note">3 of 5 changes left today. The plan builder is always free.</p>
+        <div class="pin"><div class="btn"><svg class="i"><use href="#spark"/></svg>Change my plan</div></div>
+      </div>
+      <p class="cap">First time only, 4b shows before the change starts.</p>
+    </div>
+    <div>
+      <div class="who">4b &middot; Consent, first time</div>
+      <div class="phone">
+        <div class="faint"><div class="back">&lsaquo; AI coach</div><div class="ttl">Ask your coach</div></div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h3>Turn on AI editing?</h3>
+          <p>AI editing sends your request through OpenRouter to a free AI model run by another company, possibly outside Europe, including the USA.</p>
+          <p style="margin-top:8px;font-size:12.5px">Sent: your age band, gender, goals and experience level, what you picked, the exercise names available to you, the draft plan and the change you typed. Not sent: your name, email, body weight, weights lifted or training history.</p>
+          <div class="btn">I agree, turn on AI editing</div>
+          <div class="btn soft">Cancel</div>
+        </div>
+      </div>
+      <p class="cap">Today's AI consent sheet, shortened here. The build keeps its full text.</p>
+    </div>
+    <div>
+      <div class="who">4c &middot; Working</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="build" style="padding-top:60px">
+          <div class="orb"></div>
+          <b>Your coach is on it</b>
+          <p class="lede" style="padding:0">This takes 1 to 3 minutes. You can leave. We tell you when it is ready.</p>
+        </div>
+        <div class="pin"><div class="btn soft">Leave and tell me</div></div>
+      </div>
+      <p class="cap">Today's "Editing your plan" screen, with a softer text.</p>
+    </div>
+    <div>
+      <div class="who">4d &middot; What changed</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="ttl">Upper / Lower</div>
+        <div class="lede">2 changes from your coach</div>
+        <div class="sec">Your week</div>
+        <div class="card">
+          <div class="day"><div class="h"><b>Upper A</b><span>Mon</span></div><p>Bench press, row, overhead press, pull-up, curl, triceps</p></div>
+          <div class="day chg"><div class="h"><b>Lower A</b><span>Tue</span></div><p>Squat, Romanian deadlift, <ins>step-up to a low box</ins>, calves, core</p></div>
+          <div class="day"><div class="h"><b>Upper B</b><span>Thu</span></div><p>Incline press, pulldown, dips, rear delt, hammer curl</p></div>
+          <div class="day chg"><div class="h"><b>Lower B</b><span>Fri</span></div><p>Deadlift, <ins>leg press, short range</ins>, hip thrust, core</p></div>
+        </div>
+        <div class="pin">
+          <div class="btn soft">Undo the change</div>
+          <div class="btn">Keep it</div>
+        </div>
+      </div>
+      <p class="cap">Changed days get a purple mark. Undo goes back to the plan before.</p>
+    </div>
+  </div>
+
+  <!-- 5. MORE OPTIONS -->
+  <h2 id="options">5. More options</h2>
+  <p class="sub">The one door to the power parts for a user who has not used them. Today this is "Power-user options" inside AI Setup.</p>
+  <div class="screens">
+    <div>
+      <div class="who">5a &middot; More options, open</div>
+      <div class="phone">
+        <div class="back">&lsaquo; More</div>
+        <div class="ttl">AI coach</div>
+        <div class="plan"><b>Upper / Lower</b><small>Week 3 of 8 &middot; built 2 Nov</small><div class="bar"><i></i></div></div>
+        <div class="more"><div class="t"><b>More options</b></div><svg class="i" style="transform:rotate(180deg)"><use href="#down"/></svg></div>
+        <div class="card">
+          <div class="row"><svg class="i"><use href="#spark"/></svg><div class="t"><b>Build a new plan</b><small>Start again with new picks</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><svg class="i"><use href="#chat"/></svg><div class="t"><b>Use your own AI chat</b><small>ChatGPT, Gemini or Claude. Copy and paste.</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><svg class="i"><use href="#plug"/></svg><div class="t"><b>Connect an assistant</b><small>Let Claude or ChatGPT read and change your training</small></div><svg class="i"><use href="#chev"/></svg></div>
+        </div>
+      </div>
+      <p class="cap">Build a new plan opens 3a. The others open 5b and 5c.</p>
+    </div>
+    <div>
+      <div class="who">5b &middot; Use your own AI chat</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="ttl">Your own AI chat</div>
+        <div class="lede">For when you already pay for an AI chat. Nothing is linked to your account.</div>
+        <div class="steps2">
+          <div><i>1</i>Copy the prompt. It holds your picks and your records.</div>
+          <div><i>2</i>Paste it in ChatGPT, Gemini or Claude.</div>
+          <div><i>3</i>Copy the whole answer and paste it below.</div>
+        </div>
+        <div class="btn soft" style="margin:14px 16px 0"><svg class="i"><use href="#copy"/></svg>Copy prompt</div>
+        <div class="area">Paste the answer here</div>
+        <div class="pin"><div class="btn">See the plan</div></div>
+      </div>
+      <p class="cap">"See the plan" opens the preview, 3c.</p>
+    </div>
+    <div>
+      <div class="who">5c &middot; Connect an assistant</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="ttl">Connect an assistant</div>
+        <div class="lede">Your assistant can then read your training, plan with you and change your programs. You see every change here, and you can undo it.</div>
+        <div class="sec">Your address</div>
+        <div class="card">
+          <div class="url">logeverylift.com/api/mcp <span>Copy</span></div>
+        </div>
+        <div class="tabs" style="padding:14px 16px 4px"><span class="on">Claude</span><span>ChatGPT</span><span>Other</span></div>
+        <div class="steps2">
+          <div><i>1</i>Settings, Connectors, Add custom connector</div>
+          <div><i>2</i>Paste the address</div>
+          <div><i>3</i>Sign in and pick Read only or Read and change</div>
+        </div>
+      </div>
+      <p class="cap">After the sign-in, the user comes back to 2c with the assistant card.</p>
+    </div>
+  </div>
+
+  <!-- 6. CONNECTION -->
+  <h2 id="connection">6. Connection</h2>
+  <p class="sub">Today's Connected assistants page. One row per assistant, with a sheet to disconnect.</p>
+  <div class="screens">
+    <div>
+      <div class="who">6a &middot; <em>Power</em> &middot; Connection</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="ttl">Connection</div>
+        <div class="lede">Assistants that can use your training. A disconnect stops the access at once.</div>
+        <div class="sec">Connected</div>
+        <div class="card">
+          <div class="row"><div class="avatar">C</div><div class="t"><b>Claude</b><small>Read and change &middot; since 4 Oct 2026</small></div><svg class="i"><use href="#chev"/></svg></div>
+          <div class="row"><div class="avatar g">G</div><div class="t"><b>ChatGPT</b><small>Read only &middot; since 1 Nov 2026</small></div><svg class="i"><use href="#chev"/></svg></div>
+        </div>
+        <div class="card" style="margin-top:12px">
+          <div class="row"><svg class="i"><use href="#plus"/></svg><div class="t"><b>Connect another</b></div><svg class="i"><use href="#chev"/></svg></div>
+        </div>
+      </div>
+      <p class="cap">"Connect another" opens 5c.</p>
+    </div>
+    <div>
+      <div class="who">6b &middot; One assistant</div>
+      <div class="phone">
+        <div class="faint"><div class="back">&lsaquo; AI coach</div><div class="ttl">Connection</div></div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div style="display:flex;gap:12px;align-items:center"><div class="avatar">C</div><div><h3 style="margin:0">Claude</h3><p>Connected 4 Oct 2026</p></div></div>
+          <div class="card" style="margin:14px 0 0">
+            <div class="row"><div class="t"><b>Access</b></div><span class="v">Read and change</span></div>
+            <div class="row"><div class="t"><b>Last change</b></div><span class="v">Today 08.12</span></div>
+          </div>
+          <div class="btn red">Disconnect Claude</div>
+        </div>
+      </div>
+      <p class="cap">Disconnect asks once more. Changes and memory stay after it.</p>
+    </div>
+  </div>
+
+  <!-- 7. CHANGES -->
+  <h2 id="changes">7. Changes</h2>
+  <p class="sub">Today's Assistant changes page. Each conversation is one block with its reason and one Undo.</p>
+  <div class="screens">
+    <div>
+      <div class="who">7a &middot; <em>Power</em> &middot; Changes</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="ttl">Changes</div>
+        <div class="lede">What your assistants changed, newest first.</div>
+        <div class="sec">This week</div>
+        <div class="card">
+          <div class="chg2"><div class="h"><span>Claude &middot; today 08.12</span><a>Undo</a></div><q>"Bench moved well for 3 weeks, so up a step."</q><ul><li>Bench press 80 to 82.5 kg</li><li>Leg day moved Sat to Sun</li></ul></div>
+          <div class="chg2"><div class="h"><span>Claude &middot; Mon 10 Nov</span><a>Undo</a></div><ul><li>Face pulls added to Upper A</li></ul></div>
+        </div>
+        <div class="sec">Last week</div>
+        <div class="card">
+          <div class="chg2 undone"><div class="h"><span>ChatGPT &middot; 6 Nov</span><span>Undone</span></div><ul><li>Deload week added</li></ul></div>
+        </div>
+      </div>
+      <p class="cap">A changed item opens its program or cycle.</p>
+    </div>
+    <div>
+      <div class="who">7b &middot; Undo sheet</div>
+      <div class="phone">
+        <div class="faint"><div class="back">&lsaquo; AI coach</div><div class="ttl">Changes</div></div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h3>Undo these changes?</h3>
+          <p>From Claude, today 08.12. These go back</p>
+          <ul><li>Bench press back to 80 kg</li><li>Leg day back to Saturday</li></ul>
+          <div class="btn">Undo these changes</div>
+          <div class="btn soft">Cancel</div>
+        </div>
+      </div>
+      <p class="cap">Then a notice. "Undone. The undo is in each plan's history, so you can restore the changes again."</p>
+    </div>
+  </div>
+
+  <!-- 8. MEMORY -->
+  <h2 id="memory">8. Memory</h2>
+  <p class="sub">Today's Coach memory page. What the assistant keeps between chats, in four kinds. The user can add and edit too.</p>
+  <div class="screens">
+    <div>
+      <div class="who">8a &middot; <em>Power</em> &middot; Memory</div>
+      <div class="phone">
+        <div class="back">&lsaquo; AI coach</div>
+        <div class="ttl">Memory</div>
+        <div class="lede">Your assistant reads this at the start of each chat.</div>
+        <div class="kind">Preferences</div>
+        <div class="card">
+          <div class="mem"><b>Trains early, 45 min max on weekdays</b><small>Claude &middot; 3 Nov</small></div>
+          <div class="mem"><b>Barbell before machines</b><small>Added by you &middot; 20 Oct</small></div>
+        </div>
+        <div class="kind">Limits in your life</div>
+        <div class="card">
+          <div class="mem"><b>No training Wednesday, kids</b><small>Claude &middot; 28 Oct</small></div>
+        </div>
+        <div class="kind">Observations</div>
+        <div class="card">
+          <div class="mem"><b>Left knee sore after lunges</b><small>Claude &middot; 12 Nov</small></div>
+        </div>
+        <div class="kind">Decisions</div>
+        <div class="card">
+          <div class="mem"><b>Deload every 4th week</b><small>Claude &middot; 1 Nov</small></div>
+        </div>
+        <div class="pin"><div class="btn soft"><svg class="i"><use href="#plus"/></svg>New entry</div></div>
+      </div>
+      <p class="cap">Tap an entry to edit it, 8b. Deleted entries can be restored for 90 days, at the bottom of the list.</p>
+    </div>
+    <div>
+      <div class="who">8b &middot; Edit entry</div>
+      <div class="phone">
+        <div class="faint"><div class="back">&lsaquo; AI coach</div><div class="ttl">Memory</div></div>
+        <div class="dim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <h3>Edit entry</h3>
+          <div class="field" style="padding:0"><div class="l">Kind</div><div class="chips"><span>Preference</span><span>Life limit</span><span class="on">Observation</span><span>Decision</span></div></div>
+          <div class="area" style="margin:12px 0 0;color:var(--fg)">Left knee sore after lunges</div>
+          <div class="btn">Save</div>
+          <div class="btn soft" style="color:var(--red)">Delete</div>
+        </div>
+      </div>
+      <p class="cap">The same sheet for "New entry", with an empty text.</p>
+    </div>
+  </div>
+
+  <h2 id="open">9. Open points</h2>
+  <ul class="open">
+    <li><b>"Ask your coach" on a running plan.</b> Today the AI change works only on the preview before Import. On a running plan it must change the programs in place. That is new work. The other choice is a plan card with "Change it" that opens the builder with the current plan.</li>
+    <li><b>The name.</b> "AI coach" on the More row. A normal user may like "Coach" or "My plan" better.</li>
+    <li><b>The "building" moment (3b).</b> About 3 seconds while the rules finish at once. Yes or no?</li>
+    <li><b>Memory for a normal user.</b> In this draft only a connected user sees Memory. If a normal user can write notes like "sore knee", the plan builder and "Ask your coach" must read them. That is new work.</li>
+  </ul>
+</main>
+</body>
+</html>

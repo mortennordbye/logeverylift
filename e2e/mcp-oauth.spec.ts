@@ -175,8 +175,16 @@ test("an MCP client connects through consent and calls a tool with its token", a
     expect(read.body.result?.contents?.[0]?.text, read.text).toMatch(/^<!-- version \d{4}-\d{2}-\d{2}\+[0-9a-f]{12} -->/);
   }
 
+  // The AI coach hub shows the connected assistant instead of the memory row.
+  await page.goto("/more/ai-coach");
+  const yours = page.getByRole("region", { name: "Your assistant" });
+  await expect(yours.getByText("E2E Assistant")).toBeVisible();
+  await expect(yours.getByText("Read only")).toBeVisible();
+  await expect(page.getByRole("link", { name: /What your coach knows/ })).toHaveCount(0);
+  await yours.getByRole("link", { name: /Connection/ }).click();
+  await expect(page).toHaveURL(/\/more\/assistants$/);
+
   // Disconnect in the app; the same token stops working at once.
-  await page.goto("/more/assistants");
   await expect(page.getByText("E2E Assistant")).toBeVisible();
   await expect(page.getByText(/Read only · Connected/)).toBeVisible();
   await page.getByRole("button", { name: "Disconnect" }).first().click();

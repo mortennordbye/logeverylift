@@ -31,6 +31,7 @@ when the brief was written.
 | 10 | [Home screen widgets](../home-widgets-audit.md) (audit, catalogue and build brief; section 6 is the brief, one PR) | phases 1a and 1b built (registry, edit mode, Recent PRs, Friends' activity, Garmin readiness); locked redesign and phase 2 widgets built (Streak, Body weight, Training load, Weekly sets, Race countdown); other phase 2 widgets todo | yes | yes (home start entries) |
 | 11 | [Back navigation](back-navigation.md) (Back goes where you came from) | built on `fix/back-navigation` | no | yes (set pages' Back) |
 | 12 | [Plan tab redesign](plan-tab-redesign.md) (Cycles becomes Plan; four packages) | built on `feat/plan-redesign`, waiting for the owner's local test | no | no |
+| 17 | [AI coach hub](ai-coach-hub.md) (one More row for AI; the built-in AI gives saved answers, a running plan changes through the user's own AI). Rows 13 to 16 are on the `docs/endurance-journeys` branch. | built on `feat/ai-coach-hub` | no | no |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.

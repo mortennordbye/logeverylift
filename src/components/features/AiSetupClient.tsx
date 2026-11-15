@@ -1,15 +1,13 @@
 "use client";
 
 import { AiConsentSheet } from "@/components/features/AiConsentSheet";
-import { McpConnectCard } from "@/components/features/McpConnectCard";
 import { recordAiSetupImport, type RevisionStart } from "@/lib/actions/ai-checkin";
 import { editPlanWithAi } from "@/lib/actions/ai-generate";
-import { importProgram } from "@/lib/actions/programs";
-import { importCycle } from "@/lib/actions/training-cycles";
-import { EDIT_CHIPS, EDIT_TEXT_MAX, type EditChipId, type EditRequest } from "@/lib/utils/ai-edit";
+import { importPlanPayload } from "@/lib/import-plan";
+import { EDIT_CHIPS, EDIT_TEXT_MAX, OWN_AI_NEEDED, type EditChipId, type EditRequest } from "@/lib/utils/ai-edit";
 import { aiGeneratingStartedAt, isAiGenerating, setAiGenerating } from "@/lib/utils/ai-generating";
 import { aiPlanSchema, matchLibraryNames, toImportPayload, uniqueProgramNames, type AiPlan } from "@/lib/utils/ai-plan";
-import { buildManualClipboardPrompt, type PrData } from "@/lib/utils/ai-prompt";
+import { type PrData } from "@/lib/utils/ai-prompt";
 import {
   AVOID_AREAS,
   buildTemplatePlan,
@@ -31,10 +29,10 @@ import {
   type TemplateParams,
   type TemplateSplit,
 } from "@/lib/utils/plan-templates";
-import { callAction } from "@/lib/utils/stale-bundle";
 import { templateParamsSchema } from "@/lib/validators/ai-setup";
 import type { Exercise } from "@/types/workout";
-import { ArrowLeft, Check, ChevronDown, Clipboard, Copy, Sparkles, Undo2, Zap } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Sparkles, Undo2 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
@@ -253,6 +251,50 @@ function exerciseSummary(exercise: PlanExercise): string {
   return `${warmups > 0 ? `${warmups} warm-up + ` : ""}${working.length} × ${target}${load}`;
 }
 
+// Each line of the building screen shows this long; the plan itself is ready at once.
+const BUILD_STEP_MS = 650;
+
+/**
+ * "Building your plan": the rules build the plan at once, so this screen gives
+ * the coach a moment to work, one line at a time (docs/plans/ai-coach-hub.md).
+ */
+function BuildingScreen({ daysPerWeek, onDone }: { daysPerWeek: number; onDone: () => void }) {
+  const steps = [
+    "Reading your goal and experience",
+    "Picking exercises for your equipment",
+    "Setting sets, reps and starting weights",
+    `Placing ${daysPerWeek} sessions in your week`,
+  ];
+  const [done, setDone] = useState(0);
+
+  // The parent doesn't re-render while this shows, so onDone stays the same.
+  useEffect(() => {
+    const t = setTimeout(() => (done < steps.length ? setDone(done + 1) : onDone()), BUILD_STEP_MS);
+    return () => clearTimeout(t);
+  }, [done, steps.length, onDone]);
+
+  return (
+    <div className="flex flex-col items-center text-center gap-5 py-10" role="status" aria-live="polite">
+      <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+        <Sparkles className="w-9 h-9 text-primary animate-pulse" />
+      </div>
+      <p className="text-lg font-semibold">Building your plan</p>
+      <ul className="flex flex-col gap-2 text-left text-sm">
+        {steps.map((step, i) => (
+          <li key={step} className={`flex items-center gap-2 ${i < done ? "text-foreground" : "text-muted-foreground"}`}>
+            {i < done ? (
+              <Check className="w-4 h-4 text-emerald-500 flex-none" />
+            ) : (
+              <span className={`w-2 h-2 m-1 rounded-full flex-none ${i === done ? "bg-primary animate-pulse" : "bg-muted-foreground/40"}`} />
+            )}
+            {step}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PlanPreview({ plan }: { plan: AiPlan }) {
   const days = plan.cycle?.slots.filter((s) => s.day !== null).sort((a, b) => a.day! - b.day!) ?? [];
   return (
@@ -288,32 +330,27 @@ function PlanPreview({ plan }: { plan: AiPlan }) {
 type Props = {
   exercises: Exercise[];
   userProfile: UserProfile;
-  generationsToday: number;
-  dailyLimit: number;
   prs: PrData[];
   existingProgramNames: string[];
-  mcpEndpoint: string;
   /** Set when opened from a check-in answered "doesn't fit". */
   revision: RevisionStart | null;
+  /** Admins call a model on a cache miss; users get saved answers only. */
+  isAdmin: boolean;
   /** Whether the user has opted in to sending requests to outside models. */
   aiConsented: boolean;
 };
 
-type View = "picks" | "preview" | "editing" | "waiting" | "importing";
+type View = "picks" | "building" | "preview" | "editing" | "waiting" | "importing";
 
-export function AiSetupClient({ exercises, userProfile, generationsToday, dailyLimit, prs, existingProgramNames, mcpEndpoint, revision, aiConsented: initialAiConsented }: Props) {
+export function AiSetupClient({ exercises, userProfile, prs, existingProgramNames, revision, isAdmin, aiConsented: initialAiConsented }: Props) {
   const [aiConsented, setAiConsented] = useState(initialAiConsented);
   const [showAiConsent, setShowAiConsent] = useState(false);
   const router = useRouter();
 
-  // Manual flow state
-  const [copied, setCopied] = useState(false);
-  const [pasteJson, setPasteJson] = useState("");
-  const [status, setStatus] = useState<"idle" | "importing" | "error" | "success">("idle");
-  const [error, setError] = useState<string | null>(null);
+  const [status, setStatus] = useState<"idle" | "success">("idle");
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [cycleCreated, setCycleCreated] = useState(false);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   // Picks
   const defaults = templateDefaults(userProfile.goals, userProfile.experienceLevel);
@@ -339,7 +376,6 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
   const [editError, setEditError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [returnError, setReturnError] = useState<string | null>(null);
-  const [remaining, setRemaining] = useState(dailyLimit - generationsToday);
   // The request behind editedPlan, recorded with the import for the check-in.
   const [appliedRequest, setAppliedRequest] = useState<EditRequest | null>(null);
   const [revisionOf, setRevisionOf] = useState<number | null>(null);
@@ -381,6 +417,10 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     setPriorities(p.priorities ?? []);
     setAvoid(p.avoid ?? []);
     setWeekdays(p.weekdays ?? null);
+    // A restored rare pick stays in sight under an open "More options".
+    if (p.weekdays || (p.sessionMinutes ?? 60) !== 60 || (p.split ?? "auto") !== "auto" || p.weeks !== 8 || p.priorities?.length || p.avoid?.length) {
+      setShowMore(true);
+    }
   }
 
   function restoreRequest(p: TemplateParams, requestChips: string[], text: string) {
@@ -479,7 +519,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
       [
         ...rev.changes,
         repickLabel ? `Pick ${repickLabel} below, then build` : null,
-        rev.request && !repickLabel ? "Your request is filled in below; tap Edit with AI to apply it" : null,
+        rev.request && !repickLabel ? "Your request is filled in below. Tap Change my plan to apply it" : null,
         rev.request && repickLabel ? "Your request will be filled in under the plan" : null,
       ]
         .filter(Boolean)
@@ -511,12 +551,13 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     }
     setEditError(null);
     setImportError(null);
-    setView("preview");
+    setView("building");
   }
 
   async function handleEdit(consented = aiConsented) {
     if (view === "editing") return;
-    if (!consented) {
+    // Only an admin's miss goes to an outside model, so only admins consent.
+    if (isAdmin && !consented) {
       setShowAiConsent(true);
       return;
     }
@@ -550,7 +591,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
           const pending: PendingError = { error: result.error, picks: sent, chips: request.chips, text: request.text };
           writeStorage(AI_PENDING_ERROR_KEY, JSON.stringify(pending));
           if ("Notification" in window && Notification.permission === "granted") {
-            new Notification("AI edit failed", { body: "Come back to AI Setup to try again.", icon: "/icon-192x192.png" });
+            new Notification("AI edit failed", { body: "Come back to Your plan to try again.", icon: "/icon-192x192.png" });
           }
         }
         setAiGenerating(false);
@@ -569,7 +610,6 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
         setView("preview");
         return;
       }
-      setRemaining(result.data.dailyLimit - result.data.generationsToday);
       setEditedPlan(result.data.plan);
       setAppliedRequest(request);
       setEditNote(
@@ -602,127 +642,18 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
     setAppliedRequest(null);
   }
 
-  function handleCopyPrompt() {
-    navigator.clipboard.writeText(
-      buildManualClipboardPrompt(userProfile, exercises, prs, existingProgramNames, { daysPerWeek, equipment, cycleDurationWeeks: weeks }),
-    );
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }
-
-  type ImportResult =
-    | { success: true; successMsg: string; cycleId: number | null }
-    | { success: false; error: string };
-
-  async function handleImportParsed(raw: Record<string, unknown>): Promise<ImportResult> {
-    const hasProgramData = raw.program !== undefined || raw.programs !== undefined;
-    const hasCycle = raw.cycle !== undefined && raw.cycle !== null;
-
-    if (!hasProgramData && !hasCycle) {
-      return { success: false, error: 'The JSON doesn\'t contain any programs or a cycle. Make sure you pasted the full AI response and that it includes a "programs" or "cycle" key.' };
-    }
-
-    let programCount = 0;
-    let cycleName: string | null = null;
-    let cycleId: number | null = null;
-    const warnings: string[] = [];
-
-    if (hasProgramData) {
-      const result = await callAction(importProgram(raw));
-      if (!result.success) {
-        return { success: false, error: result.error ?? "Failed to import programs." };
-      }
-      programCount = result.data.count;
-      if (result.data.skippedExercises.length > 0) {
-        warnings.push(`Some exercises couldn't be resolved and were skipped: "${result.data.skippedExercises.join('", "')}".`);
-      }
-    }
-
-    if (hasCycle) {
-      const result = await callAction(importCycle(raw.cycle));
-      if (!result.success) {
-        warnings.push(`Cycle couldn't be created: ${result.error ?? "unknown error"}`);
-      } else {
-        cycleName = result.data.cycleName;
-        cycleId = result.data.cycleId;
-        if (result.data.unresolvedPrograms.length > 0) {
-          warnings.push(
-            `Some cycle slots couldn't be linked: "${result.data.unresolvedPrograms.join('", "')}". You can assign them manually in the cycle editor.`,
-          );
-        }
-      }
-    }
-
-    const parts: string[] = [];
-    if (programCount > 0) parts.push(`${programCount} program${programCount > 1 ? "s" : ""}`);
-    if (cycleName) parts.push(`cycle "${cycleName}"`);
-
-    const base =
-      parts.length > 0
-        ? `Created ${parts.join(" and ")}.`
-        : "Nothing was created — the response may have been empty.";
-    const suffix = cycleName
-      ? " Go to your cycles and start it when you're ready."
-      : programCount > 0
-        ? " You can find your programs in the Programs tab."
-        : "";
-
-    const successMsg = warnings.length > 0 ? `${base}${suffix}\n\n⚠️ ${warnings.join(" ")}` : `${base}${suffix}`;
-    router.refresh();
-    return { success: true, successMsg, cycleId };
-  }
-
-  async function handleImport() {
-    if (!pasteJson.trim()) return;
-    setStatus("importing");
-    setError(null);
-
-    let text = pasteJson.trim();
-    text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
-    const firstBrace = text.indexOf("{");
-    const lastBrace = text.lastIndexOf("}");
-    if (firstBrace > 0 && lastBrace > firstBrace) {
-      text = text.slice(firstBrace, lastBrace + 1);
-    }
-
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      setStatus("error");
-      setError("Couldn't read the JSON — make sure you copied the full response from the AI, with no extra text before or after.");
-      return;
-    }
-
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      setStatus("error");
-      setError("Unexpected response format — the AI should return a single JSON object, not an array or plain value.");
-      return;
-    }
-
-    const result = await handleImportParsed(parsed as Record<string, unknown>);
-    if (!result.success) {
-      setStatus("error");
-      setError(result.error);
-    } else {
-      setSuccessMsg(result.successMsg);
-      setCycleCreated(result.cycleId !== null);
-      setStatus("success");
-      setPasteJson("");
-    }
-  }
-
   async function handleConfirmImport() {
     const plan = editedPlan ?? builtPlan;
     if (!plan) return;
     setView("importing");
     setImportError(null);
-    const result = await handleImportParsed(toImportPayload(plan) as Record<string, unknown>);
+    const result = await importPlanPayload(toImportPayload(plan) as Record<string, unknown>);
     if (!result.success) {
       setImportError(result.error);
       setView("preview");
       return;
     }
+    router.refresh();
     if (result.cycleId !== null) {
       // For the one-week check-in. Losing this only loses the check-in, so the import stands either way.
       await recordAiSetupImport({
@@ -763,7 +694,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
         <button
           type="button"
           onClick={() => { setStatus("idle"); setSuccessMsg(null); setCycleCreated(false); }}
-          className="text-sm text-muted-foreground active:opacity-70"
+          className="min-h-[44px] text-sm text-muted-foreground active:opacity-70"
         >
           Build another
         </button>
@@ -780,9 +711,19 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
       ? undefined
       : `${SPLIT_LABELS[split]} works with ${SPLIT_DAYS[split].join(", ")} days`;
 
+
   return (
     <div className="flex-1 flex flex-col gap-6 px-4 pb-8">
-      {view === "editing" ? (
+      {view === "building" ? (
+        <BuildingScreen daysPerWeek={daysPerWeek} onDone={() => setView("preview")} />
+      ) : view === "editing" && !isAdmin ? (
+        <div className="flex flex-col items-center text-center gap-5 py-6" role="status">
+          <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+            <Sparkles className="w-8 h-8 text-primary animate-pulse" />
+          </div>
+          <p className="text-base font-semibold">Your coach is on it</p>
+        </div>
+      ) : view === "editing" ? (
         <div className="flex flex-col items-center text-center gap-5 py-6">
           <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
             <Sparkles className="w-8 h-8 text-primary animate-pulse" />
@@ -819,7 +760,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
               setAiGenerating(false);
               setView("picks");
             }}
-            className="text-sm text-muted-foreground active:opacity-70"
+            className="min-h-[44px] text-sm text-muted-foreground active:opacity-70"
           >
             Cancel and start over
           </button>
@@ -871,14 +812,14 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
             className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
           >
             <Check className="w-4 h-4" />
-            {view === "importing" ? "Importing…" : "Import"}
+            {view === "importing" ? "Starting…" : "Start this plan"}
           </button>
 
           <div className="flex flex-col gap-3 pt-2 border-t border-border">
             <div className="flex flex-col gap-1 pt-3">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Change it with AI</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ask your coach to change it</p>
               <p className="text-sm text-muted-foreground">
-                Pick what to change, or describe it. The AI edits this plan and keeps the rest.
+                Pick what to change, or describe it. Your coach changes this plan and keeps the rest.
               </p>
             </div>
             <MultiChips
@@ -893,28 +834,38 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
                 onChange={(e) => { setEditText(e.target.value.slice(0, EDIT_TEXT_MAX)); setEditError(null); }}
                 maxLength={EDIT_TEXT_MAX}
                 rows={2}
+                aria-label="Describe the change"
                 placeholder={chips.includes("swap_named") ? "Which exercises? e.g. no lunges or dips" : "Anything else? e.g. add calf work on leg days"}
                 className="w-full rounded-xl bg-muted px-3 py-3 text-sm text-foreground placeholder:text-muted-foreground outline-none focus:ring-2 focus:ring-primary resize-none"
               />
               <p className="text-xs text-muted-foreground text-right">{editText.length}/{EDIT_TEXT_MAX}</p>
             </div>
-            {editError && <p className="text-xs text-destructive">{editError}</p>}
-            <p className="text-xs text-muted-foreground">
-              {dailyLimit === Infinity
-                ? "Unlimited AI edits (admin)."
-                : remaining > 0
-                  ? `${remaining} of ${dailyLimit} new AI edits left today.`
-                  : "No new AI edits left today."}{" "}
-              Edits someone already asked for are saved and free.
-            </p>
+            {editError === OWN_AI_NEEDED ? (
+              <div className="rounded-xl bg-muted px-4 py-3 flex flex-col gap-1" role="status">
+                <p className="text-sm">{OWN_AI_NEEDED}</p>
+                <Link href="/more/ai-coach/connect" className="min-h-[44px] flex items-center text-sm font-medium text-primary active:opacity-70">
+                  Connect an assistant
+                </Link>
+                <Link href="/more/ai-coach/own-chat" className="min-h-[44px] flex items-center text-sm font-medium text-primary active:opacity-70">
+                  Use your own AI chat
+                </Link>
+              </div>
+            ) : (
+              editError && <p className="text-xs text-destructive">{editError}</p>
+            )}
+            {editError !== OWN_AI_NEEDED && <p className="text-xs text-muted-foreground">
+              {isAdmin
+                ? "Admin. A change with no saved answer goes to a free AI model and is saved for everyone."
+                : "Free. Your coach answers changes others asked for before. For anything new, use your own AI."}
+            </p>}
             <button
               type="button"
               onClick={() => handleEdit()}
-              disabled={!canEdit}
+              disabled={!canEdit || editError === OWN_AI_NEEDED}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-muted text-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4" />
-              Edit with AI
+              Change my plan
             </button>
           </div>
         </div>
@@ -926,6 +877,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
               <p className="text-xs text-primary/80 mt-0.5">{revisionNote}</p>
             </div>
           )}
+          <p className="text-sm text-muted-foreground -mt-2">Four questions. You can change all of it later.</p>
           {returnError && (
             <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex flex-col gap-1">
               <p className="text-xs font-semibold text-destructive">Last AI edit failed</p>
@@ -948,6 +900,22 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
           <Field label="Days per week">
             <Chips label="Days per week" options={DAY_OPTIONS} value={daysPerWeek} onChange={handleDaysChange} />
           </Field>
+          <Field label="Equipment">
+            <Chips label="Equipment" options={EQUIPMENT_OPTIONS} value={equipment} onChange={setEquipment} />
+          </Field>
+          <button
+            type="button"
+            onClick={() => setShowMore((v) => !v)}
+            aria-expanded={showMore}
+            className="min-h-[44px] flex items-center justify-between gap-2 border-t border-border pt-3 text-left active:opacity-70"
+          >
+            <span className="flex flex-col">
+              <span className="text-sm font-medium">More options</span>
+              <span className="text-xs text-muted-foreground">Training days, session length, split, cycle length, focus, go easy on</span>
+            </span>
+            <ChevronDown className={`w-4 h-4 text-muted-foreground flex-none transition-transform ${showMore ? "rotate-180" : ""}`} />
+          </button>
+          {showMore && (<>
           <Field
             label="Training days"
             hint={weekdays ? `${weekdays.length} of ${daysPerWeek} picked` : undefined}
@@ -980,9 +948,6 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
               disabled={(s) => !splitSupports(s, daysPerWeek)}
             />
           </Field>
-          <Field label="Equipment">
-            <Chips label="Equipment" options={EQUIPMENT_OPTIONS} value={equipment} onChange={setEquipment} />
-          </Field>
           <Field label="Cycle length">
             <Chips label="Cycle length" options={WEEK_OPTIONS} value={weeks} onChange={setWeeks} />
           </Field>
@@ -1003,6 +968,7 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
               onChange={setAvoid}
             />
           </Field>
+          </>)}
           <div className="flex flex-col gap-2">
             <button
               type="button"
@@ -1010,120 +976,19 @@ export function AiSetupClient({ exercises, userProfile, generationsToday, dailyL
               disabled={weekdaysMissing}
               className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
             >
-              <Zap className="w-4 h-4" />
+              <Sparkles className="w-4 h-4" />
               Build my plan
             </button>
             {weekdaysMissing && (
               <p className="text-xs text-destructive">Pick {daysPerWeek} training days, or let us pick them.</p>
             )}
             <p className="text-xs text-muted-foreground">
-              Ready instantly, with starting weights from your logged lifts. You can review it, and change it with AI, before anything is created.
+              Starting weights come from your logged lifts. You see the plan before anything is created.
             </p>
           </div>
         </div>
       )}
 
-      {/* Power-user options umbrella — hidden by default */}
-      <button
-        type="button"
-        onClick={() => setShowAdvanced((v) => !v)}
-        className="flex items-center justify-center gap-2 text-xs text-muted-foreground active:opacity-70 py-1"
-      >
-        <span>Power-user options</span>
-        <ChevronDown
-          className={`w-3.5 h-3.5 transition-transform duration-200 ${showAdvanced ? "rotate-180" : ""}`}
-        />
-      </button>
-
-      {showAdvanced && (
-        <>
-          {/* Connect an AI assistant over MCP */}
-          <McpConnectCard endpoint={mcpEndpoint} />
-
-          {/* Manual: copy a prompt for your own AI, paste the response back */}
-          {/* Step 1 */}
-          <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Step 1 — Copy the prompt
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Tap the button below to copy a ready-made prompt to your clipboard. It includes your age, height,
-              body weight and best lifts, and goes only to the AI you paste it into.
-            </p>
-            <button
-              type="button"
-              onClick={handleCopyPrompt}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80"
-            >
-              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              {copied ? "Copied!" : "Copy Prompt"}
-            </button>
-          </div>
-
-          {/* Step 2 */}
-          <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Step 2 — Open ChatGPT, Gemini, or Claude
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Paste the prompt and send it. The AI will ask what you&apos;re looking for — describe your
-              goals, how many days a week you can train, and whether you want a weekly schedule or just
-              programs. You can ask for a full training block (e.g. &quot;12-week PPL, 4 days a
-              week&quot;) or just standalone programs. When it&apos;s done, copy the entire response.
-            </p>
-          </div>
-
-          {/* Step 3 */}
-          <div className="flex flex-col gap-2">
-            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Step 3 — Paste the response here
-            </p>
-            {pasteJson ? (
-              <>
-                <div className="rounded-xl bg-muted px-3 py-3 flex items-center justify-between gap-2">
-                  <p className="text-xs text-muted-foreground truncate">{pasteJson.slice(0, 60)}…</p>
-                  <button
-                    type="button"
-                    onClick={() => { setPasteJson(""); setStatus("idle"); setError(null); }}
-                    className="text-xs text-muted-foreground underline underline-offset-2 shrink-0 active:opacity-70"
-                  >
-                    Clear
-                  </button>
-                </div>
-                {error && <p className="text-xs text-destructive">{error}</p>}
-                <button
-                  type="button"
-                  onClick={handleImport}
-                  disabled={status === "importing"}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80 disabled:opacity-50"
-                >
-                  <Sparkles className="w-4 h-4" />
-                  {status === "importing" ? "Importing…" : "Import"}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      const text = await navigator.clipboard.readText();
-                      if (text) { setPasteJson(text); setStatus("idle"); setError(null); }
-                    } catch {
-                      // Clipboard permission denied — fall through to textarea
-                    }
-                  }}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary text-primary-foreground py-3.5 text-sm font-semibold active:opacity-80"
-                >
-                  <Clipboard className="w-4 h-4" />
-                  Paste from Clipboard
-                </button>
-                {error && <p className="text-xs text-destructive">{error}</p>}
-              </>
-            )}
-          </div>
-        </>
-      )}
       <div aria-hidden="true" style={{ height: "var(--kb-height, 0px)" }} />
       <AiConsentSheet
         open={showAiConsent}
