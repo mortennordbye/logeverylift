@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One user, Garmin plus</title>
+<style>
+  :root {
+    --bg: #000; --fg: #f4f4f5; --muted: #8d8d93;
+    --widget: #161618; --widget-2: #222225; --hairline: rgb(255 255 255 / 0.08);
+    --brand: #6b95ff; --garmin: #d95926; --opt: #c79a2b; --none: #3d8a5c;
+    --all: #3aa0d8; --endu: #b07cff; --gone: #5a5a60;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 14px/1.45 "Work Sans", Inter, system-ui, -apple-system, sans-serif; padding: 24px 16px 64px; }
+  main { max-width: 1100px; margin: 0 auto; }
+  h1 { font-size: 26px; margin: 0 0 4px; text-transform: uppercase; letter-spacing: .02em; }
+  h2 { font-size: 18px; text-transform: uppercase; letter-spacing: .04em; margin: 48px 0 6px; }
+  .sub { color: var(--muted); margin: 0 0 16px; max-width: 70ch; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .06em; padding: 1px 7px; border-radius: 6px; color: #000; vertical-align: 1px; white-space: nowrap; }
+  .t-garmin { background: var(--garmin); } .t-opt { background: var(--opt); } .t-none { background: var(--none); }
+  .t-all { background: var(--all); } .t-endu { background: var(--endu); } .t-new { background: var(--brand); } .t-gone { background: var(--gone); color: var(--fg); }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin: 8px 0 18px; }
+
+  /* 1. Gates */
+  .gates { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .gate { background: var(--widget); border-radius: 14px; padding: 14px; border-top: 4px solid var(--c); }
+  .gate h3 { margin: 0 0 2px; font-size: 15px; }
+  .gate .who { color: var(--muted); font-size: 12px; margin-bottom: 10px; }
+  .gate ul { margin: 0; padding-left: 18px; }
+  .gate li { margin: 3px 0; }
+  .stack { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 4px 0 0; }
+
+  /* 2. Before / after */
+  .ba { display: grid; grid-template-columns: 1fr 56px 1fr 56px 1fr; align-items: start; gap: 0; }
+  .phone { background: var(--widget); border-radius: 22px; padding: 16px 0 10px; border: 1px solid var(--hairline); }
+  .phone .ttl { font-size: 20px; font-weight: 700; padding: 0 16px 8px; }
+  .phone .grp { color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; padding: 10px 16px 4px; }
+  .row { display: flex; align-items: center; gap: 10px; padding: 9px 16px; border-top: 1px solid var(--hairline); }
+  .row:last-child { border-bottom: 1px solid var(--hairline); }
+  .row .lbl { flex: 1; }
+  .row .lbl small { display: block; color: var(--muted); font-size: 11px; }
+  .row .chev { color: var(--muted); }
+  .row.dim { opacity: .45; }
+  .row.hl { background: rgb(107 149 255 / .12); box-shadow: inset 3px 0 0 var(--brand); }
+  .row.gone { text-decoration: line-through; opacity: .5; }
+  .arrow { display: flex; align-items: center; justify-content: center; height: 100%; min-height: 200px; color: var(--muted); font-size: 28px; }
+  .cap { color: var(--muted); font-size: 12px; text-align: center; margin-top: 8px; }
+
+  /* 3. Matrix */
+  .matrix { display: grid; grid-template-columns: 180px repeat(3, 1fr); gap: 8px; }
+  .mh { color: var(--muted); font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .08em; padding: 4px 8px; }
+  .lane { background: var(--widget); border-radius: 12px; padding: 10px 12px; font-weight: 700; border-left: 4px solid var(--brand); }
+  .lane small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+  .cell { background: var(--widget); border-radius: 12px; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 48px; }
+  .chip { background: var(--widget-2); border-radius: 9px; padding: 7px 9px; border-left: 3px solid var(--c); font-size: 13px; }
+  .chip small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .chip .tag { margin-top: 5px; }
+  .empty { color: var(--muted); font-size: 12px; padding: 6px; }
+
+  /* 4. Split */
+  .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .box { background: var(--widget); border-radius: 14px; padding: 14px; border-top: 4px solid var(--c); }
+  .box h3 { margin: 0 0 8px; font-size: 15px; }
+  .box .chip { margin-bottom: 6px; }
+
+  /* 5. Steps */
+  .steps { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; counter-reset: s; }
+  .step { background: var(--widget); border-radius: 14px; padding: 12px; position: relative; }
+  .step::before { counter-increment: s; content: counter(s); display: inline-flex; width: 22px; height: 22px; border-radius: 50%; background: var(--brand); color: #000; font-weight: 700; font-size: 12px; align-items: center; justify-content: center; margin-bottom: 6px; }
+  .step b { display: block; margin-bottom: 4px; }
+  .step span { color: var(--muted); font-size: 12px; }
+  code { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; color: #c9d4ff; }
+
+  .open { display: grid; gap: 8px; }
+  .q { background: var(--widget); border-radius: 12px; padding: 10px 12px; display: grid; grid-template-columns: 28px 1fr; gap: 8px; }
+  .q .n { color: var(--brand); font-weight: 700; }
+  .q small { color: var(--muted); display: block; }
+
+  @media (max-width: 860px) {
+    .gates, .split, .steps { grid-template-columns: 1fr; }
+    .ba { grid-template-columns: 1fr; }
+    .arrow { min-height: 0; transform: rotate(90deg); padding: 6px 0; }
+    .matrix { grid-template-columns: 1fr; }
+    .mh { display: none; }
+    .cell::before { content: attr(data-h); color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+  }
+  .flow { display: grid; grid-template-columns: 1fr 40px 1fr 40px 1fr; align-items: stretch; }
+  .flow .arrow, .flow .plus { min-height: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 28px; }
+  .gp { display: grid; grid-template-columns: 170px 1fr 1fr; gap: 8px; }
+  .chip.gap { opacity: .6; }
+  .forks { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+  .fork { background: var(--widget); border-radius: 12px; padding: 12px; border-left: 4px solid var(--none); }
+  .fork.warn { border-left-color: var(--opt); }
+  .fork b { display: block; margin-bottom: 4px; }
+  .fork span { color: var(--muted); font-size: 12px; }
+  @media (max-width: 860px) {
+    .flow, .gp { grid-template-columns: 1fr; }
+    .flow .arrow { transform: rotate(90deg); padding: 6px 0; }
+    .flow .plus { padding: 6px 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>One user, Garmin plus</h1>
+  <p class="sub">The plan to merge normal and endurance users into one, with Garmin as an add-on, and to put the endurance pages behind one More row. Sources <code>docs/plans/one-user-garmin-plus.md</code> and <code>docs/plans/more-endurance-hub.md</code>.</p>
+
+  <h2>1. From two user types to one</h2>
+  <p class="sub">The endurance switch goes. Every user gets every feature from app data. Garmin is an add-on for the owner that adds richer data, and never unlocks or blocks a flow.</p>
+  <div class="flow">
+    <div class="gate" style="--c: var(--gone)">
+      <h3>Today</h3>
+      <div class="who">three levels</div>
+      <ul>
+        <li>Normal user: lifting, cycles, thresholds</li>
+        <li>Endurance user (<code>endurance_enabled</code>): week, player, workouts, nutrition, races</li>
+        <li>Garmin (<code>garminAllowed</code>, owner): auto-match, readiness, suggestions</li>
+      </ul>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div class="gate" style="--c: var(--all)">
+      <h3>Every user</h3>
+      <div class="who">app first, no switch</div>
+      <ul>
+        <li>Lifting, cycles, seasons, races</li>
+        <li>Swim, bike, run as structured workouts</li>
+        <li>Week view, guided player, pool view, step results</li>
+        <li>Thresholds, athlete profile, nutrition</li>
+        <li>Load, limits and compliance from app data</li>
+      </ul>
+    </div>
+    <div class="plus">+</div>
+    <div class="gate" style="--c: var(--garmin)">
+      <h3>Garmin plus</h3>
+      <div class="who">owner only, enriches</div>
+      <ul>
+        <li>Automatic match to Garmin activities</li>
+        <li>Garmin load series and runs</li>
+        <li>Readiness from HRV and resting HR</li>
+        <li>Threshold suggestions, wearable nudge</li>
+        <li>Garmin section and widget</li>
+      </ul>
+    </div>
+  </div>
+
+  <h2>2. The More list, before and after</h2>
+  <div class="legend">
+    <span><span class="tag t-all">ALL</span>every user</span>
+    <span><span class="tag t-endu">SWITCH</span>endurance switch on</span>
+    <span><span class="tag t-new">NEW</span>added by this plan</span>
+  </div>
+  <div class="ba">
+    <div>
+      <div class="phone">
+        <div class="ttl">More</div>
+        <div class="grp">Training, today</div>
+        <div class="row dim"><div class="lbl">History</div><span class="chev">&rsaquo;</span></div>
+        <div class="row dim"><div class="lbl">Progress</div><span class="chev">&rsaquo;</span></div>
+        <div class="row dim"><div class="lbl">Calendar</div><span class="chev">&rsaquo;</span></div>
+        <div class="row dim"><div class="lbl">Exercises</div><span class="chev">&rsaquo;</span></div>
+        <div class="row gone"><div class="lbl">Thresholds</div><span class="tag t-all">ALL</span></div>
+        <div class="row gone"><div class="lbl">Athlete profile</div><span class="tag t-endu">SWITCH</span></div>
+        <div class="row gone"><div class="lbl">Workouts</div><span class="tag t-endu">SWITCH</span></div>
+        <div class="row gone"><div class="lbl">Nutrition</div><span class="tag t-endu">SWITCH</span></div>
+        <div class="row dim"><div class="lbl">AI Setup</div><span class="chev">&rsaquo;</span></div>
+      </div>
+      <div class="cap">Four rows from the endurance work</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div>
+      <div class="phone">
+        <div class="ttl">More</div>
+        <div class="grp">Training, after</div>
+        <div class="row dim"><div class="lbl">History</div><span class="chev">&rsaquo;</span></div>
+        <div class="row dim"><div class="lbl">Progress</div><span class="chev">&rsaquo;</span></div>
+        <div class="row dim"><div class="lbl">Calendar</div><span class="chev">&rsaquo;</span></div>
+        <div class="row dim"><div class="lbl">Exercises</div><span class="chev">&rsaquo;</span></div>
+        <div class="row hl"><div class="lbl">Endurance<small>Thresholds, workouts, nutrition and athlete profile</small></div><span class="tag t-new">NEW</span></div>
+        <div class="row dim"><div class="lbl">AI Setup</div><span class="chev">&rsaquo;</span></div>
+      </div>
+      <div class="cap">One row, shown to every user</div>
+    </div>
+    <div class="arrow">&rarr;</div>
+    <div>
+      <div class="phone">
+        <div class="ttl">&lsaquo; More</div>
+        <div class="ttl" style="padding-top:0">Endurance</div>
+        <div class="grp"><code>/more/endurance</code></div>
+        <div class="row"><div class="lbl">Thresholds<small>/more/thresholds</small></div><span class="tag t-all">ALL</span></div>
+        <div class="row"><div class="lbl">Athlete profile<small>/more/athlete</small></div><span class="tag t-all">ALL</span></div>
+        <div class="row"><div class="lbl">Workouts<small>/more/workouts</small></div><span class="tag t-all">ALL</span></div>
+        <div class="row"><div class="lbl">Nutrition<small>/more/nutrition</small></div><span class="tag t-all">ALL</span></div>
+      </div>
+      <div class="cap">Same URLs. Every row for every user once the switch goes. Back from a page returns here.</div>
+    </div>
+  </div>
+
+  <h2>3. Garmin plus, feature by feature</h2>
+  <p class="sub">Left is what every user gets. Right is what Garmin adds for the owner. Only readiness has no app source today.</p>
+  <div class="gp">
+    <div class="mh">Feature</div><div class="mh" style="color:var(--all)">Every user, app data</div><div class="mh" style="color:var(--garmin)">Garmin plus adds</div>
+
+    <div class="lane" style="border-color:var(--none)">Session done</div>
+    <div class="chip" style="--c:var(--all)">"Did you do it?" with time, distance, RPE; step results</div>
+    <div class="chip" style="--c:var(--garmin)">Automatic match; pick a Garmin activity</div>
+
+    <div class="lane" style="border-color:var(--none)">Training load</div>
+    <div class="chip" style="--c:var(--all)">Loads from pace, CSS and RPE</div>
+    <div class="chip" style="--c:var(--garmin)">Garmin series, with app sessions Garmin missed</div>
+
+    <div class="lane" style="border-color:var(--none)">Long-run cap</div>
+    <div class="chip" style="--c:var(--all)">Runs logged in the app</div>
+    <div class="chip" style="--c:var(--garmin)">Garmin runs added</div>
+
+    <div class="lane" style="border-color:var(--none)">Weekly load ramp</div>
+    <div class="chip" style="--c:var(--all)">App load</div>
+    <div class="chip" style="--c:var(--garmin)">Garmin load</div>
+
+    <div class="lane" style="border-color:var(--none)">Fuel log</div>
+    <div class="chip" style="--c:var(--all)">On an app session</div>
+    <div class="chip" style="--c:var(--garmin)">On a Garmin activity</div>
+
+    <div class="lane" style="border-color:var(--none)">Weekly adaptation</div>
+    <div class="chip" style="--c:var(--all)">Adherence and RPE signals</div>
+    <div class="chip" style="--c:var(--garmin)">Wearable nudge (HRV, sleep debt, ramp)</div>
+
+    <div class="lane" style="border-color:var(--opt)">Thresholds</div>
+    <div class="chip" style="--c:var(--all)">Manual entry with history<small>later: suggest from a test workout</small></div>
+    <div class="chip" style="--c:var(--garmin)">Garmin estimates as suggestions</div>
+
+    <div class="lane" style="border-color:var(--garmin)">Readiness swap</div>
+    <div class="chip gap" style="--c:var(--gone)">Nothing today<small>open decision 1: daily check-in, or Garmin-only</small></div>
+    <div class="chip" style="--c:var(--garmin)">HRV and resting HR flag</div>
+
+    <div class="lane" style="border-color:var(--garmin)">Garmin section</div>
+    <div class="chip gap" style="--c:var(--gone)">Not shown</div>
+    <div class="chip" style="--c:var(--garmin)">Full Garmin data, readiness widget, MCP tools</div>
+  </div>
+
+  <h2>4. Logic that forks today</h2>
+  <p class="sub">The switch also changes logic for the same data. One behaviour wins. Recommended: the endurance one, for every user.</p>
+  <div class="forks">
+    <div class="fork"><b>Auto-complete of sport sessions</b><span>Goes to "Did you do it?". Moot once sport sessions are structured workouts.</span></div>
+    <div class="fork"><b><code>log_session</code> refuses sport programs</b><span>Moot after the same conversion.</span></div>
+    <div class="fork"><b>Compliance reads thresholds</b><span>Better planned amounts when thresholds exist.</span></div>
+    <div class="fork warn"><b>Adaptation from dated sessions</b><span>Visible change for lifters on weekday cycles. Open decision 3.</span></div>
+    <div class="fork"><b>Training limits on AI writes</b><span>Run for every user. A rule without data says "not checked".</span></div>
+  </div>
+
+  <h2>5. Order</h2>
+  <div class="steps">
+    <div class="step"><b>Remove the switch</b><span>About 45 files. Merge the forks. Keep the column one release.</span></div>
+    <div class="step"><b>Convert sport programs</b><span>Swim, bike, run sessions become structured workouts.</span></div>
+    <div class="step"><b>Bike sessions</b><span>Rebase <code>feat/bike-sessions</code> and finish it.</span></div>
+    <div class="step"><b>More hub</b><span>One Endurance row, four pages, no gates.</span></div>
+    <div class="step"><b>Readiness</b><span>Daily check-in, if decision 1 says so.</span></div>
+  </div>
+
+  <h2>6. Open decisions</h2>
+  <div class="open">
+    <div class="q"><span class="n">1</span><div>Readiness without Garmin<small>A: daily check-in for every user. B: Garmin-only extra. Recommended: B now, A later.</small></div></div>
+    <div class="q"><span class="n">2</span><div>Endurance today widget<small>Recommended: on for every user, draws nothing on a day without a session.</small></div></div>
+    <div class="q"><span class="n">3</span><div>Weekly sync for lifters<small>Recommended: accept the dated-session method for everyone.</small></div></div>
+    <div class="q"><span class="n">4</span><div>Hub row name<small>"Endurance", or "Training setup".</small></div></div>
+    <div class="q"><span class="n">5</span><div>Coach memory<small>Recommended: keep it in the AI group.</small></div></div>
+  </div>
+</main>
+</body>
+</html>

@@ -1,6 +1,8 @@
 # One More item for the endurance pages
 
-Status: plan, no build yet. Part of the endurance rework ([endurance journeys](endurance-journeys.md)).
+Status: plan, no build yet. Builds on [one user type, Garmin as an add-on](one-user-garmin-plus.md):
+that plan removes the endurance switch, so every row on the hub shows for every user. The gates
+below describe the code before that plan.
 
 ## 1. Goal
 
@@ -34,7 +36,8 @@ The hub lists the four pages. Every page keeps its URL and its content.
    `revalidatePath`, the back-nav label map and the e2e tests, for no user-visible gain.
 2. **The hub row shows for every user.** Thresholds is open to every user today, so a hub that
    only endurance users see would hide Thresholds from lifters.
-3. **Each row on the hub keeps its own gate.** The hub reads `enduranceEnabledFor` and shows
+3. **Each row on the hub keeps its own gate until the switch goes.** After
+   [one-user-garmin-plus.md](one-user-garmin-plus.md), every row shows for every user. The hub reads `enduranceEnabledFor` and shows
    Athlete profile, Workouts and Nutrition only when it is on, as `MoreClient` does now. When the
    rework removes a gate, only the hub's row condition changes. The hub works before and after the
    rework.
