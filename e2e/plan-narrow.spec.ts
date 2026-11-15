@@ -435,6 +435,8 @@ test("at 320 px a pinned sheet footer never covers the last row or note (round 9
   await phase.getByRole("button", { name: "Weeks" }).click();
   const note = phase.getByText(/is not a whole number of weeks/);
   await expect(note).toBeVisible();
+  // Right after the switch, with no scroll by hand, the note is on screen and over the footer (round 10).
+  await notCovered(page, note);
   await uncovered(page, phase, note);
   await uncovered(page, phase, phase.getByRole("button", { name: "Save phase" }));
   await page.screenshot({ path: testInfo.outputPath("phase-end-320.png") });

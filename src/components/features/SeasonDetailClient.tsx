@@ -691,7 +691,12 @@ export function SeasonDetailClient(p: Props) {
                   ]}
                 />
               </div>
-              {phase.unitNote && <span className="text-[13px] text-muted-foreground">{phase.unitNote}</span>}
+              {/* The note can land under the pinned Save bar: scroll it into view when it appears (round 10). */}
+              {phase.unitNote && (
+                <span ref={(el) => el?.scrollIntoView({ block: "nearest" })} className="text-[13px] text-muted-foreground">
+                  {phase.unitNote}
+                </span>
+              )}
             </div>
           </PlanSheetPanel>
         )}

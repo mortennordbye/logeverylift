@@ -82,6 +82,8 @@ const base = {
 const rowNames = () => screen.getAllByTestId("phase-name").map((n) => n.textContent);
 
 beforeEach(() => {
+  // jsdom has no scrollIntoView; the length note scrolls itself into view.
+  Element.prototype.scrollIntoView = vi.fn();
   for (const fn of Object.values(actions)) {
     fn.mockReset();
     fn.mockImplementation(async () => ({ success: true as const, data: null }));
