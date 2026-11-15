@@ -383,6 +383,23 @@ describe("rotation builder", () => {
     );
   });
 
+  it("the search clear button is a 44 px target, not the native one (round 9)", () => {
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add session" }));
+    const sheet = screen.getByRole("region", { name: "Pick a program" });
+    const search = within(sheet).getByLabelText("Search programs") as HTMLInputElement;
+    // type=search draws WebKit's own small clear icon.
+    expect(search.type).not.toBe("search");
+    expect(within(sheet).queryByRole("button", { name: "Clear search" })).toBeNull();
+    fireEvent.change(search, { target: { value: "low" } });
+    const clear = within(sheet).getByRole("button", { name: "Clear search" });
+    expect(clear.className).toMatch(/\bh-11\b/);
+    expect(clear.className).toMatch(/\bw-11\b/);
+    fireEvent.click(clear);
+    expect(search.value).toBe("");
+    expect(within(sheet).getByText("Upper A")).toBeTruthy();
+  });
+
   it("a dimmed Create for a new program says the name is missing", () => {
     render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
     fireEvent.click(screen.getByRole("button", { name: "+ Add session" }));
