@@ -311,8 +311,8 @@ No change to `program_sets`. Strength is untouched.
 
 ## 7. Build order (bike only)
 
-Each phase is one PR. Each ships alone and is tested in the local dev stack with a copy of the
-two real sessions.
+The phases are built in parallel by spokes and merged by the hub into one branch (section 10).
+The table gives the order of value and the "done when" check for each phase.
 
 | Phase | Content | Done when |
 |---|---|---|
@@ -353,3 +353,109 @@ writes `manage_thresholds` with source `test`.
   second sync does not duplicate.
 - E2E (local dev): the Today card and session page for the tempo session at 390 px; edit a
   step and Undo; after view from a fixture activity with 5 laps and one with 7 laps.
+
+## 10. Build: hub and spokes
+
+The hub (the main session) owns the integration branch, the contract, every merge and the
+checks. Each spoke builds one package in its own worktree, on a branch off the contract commit.
+A spoke commits with no trailers and never pushes. It stays inside its own files. When it needs
+a change in a file it does not own, it says so in its report, and the hub makes the change.
+
+### 10.1 Branches
+
+| Branch | Base | Holds |
+|---|---|---|
+| `feat/bike-sessions` | `docs/endurance-journeys` | the contract, then every spoke merge |
+| `feat/bike-s1-numbers` ... `feat/bike-s5-after` | the contract commit | one package each |
+
+One PR from `feat/bike-sessions` to `main` after the owner tests it in the local dev stack.
+
+### 10.2 H0 contract (hub, before any spoke starts)
+
+One commit on `feat/bike-sessions`. It fixes the shapes the spokes share, so all five can run at
+the same time.
+
+1. Step schema in `src/lib/utils/workout-steps.ts`: `secondary` (a target, optional),
+   `gradePercent` (optional, -20 to 20), and one-sided ranges (`low` or `high` may be absent, at
+   least one is present). `parseWorkout` accepts them. Old workouts parse unchanged.
+2. Types, with stub bodies: `ResolvedForms` (W, % FTP, power zone; bpm, HR zone and its label
+   "Garmin Z2", "Your Z2" or "estimate"), `ZoneSet` (source and five bpm bands), `WorkoutGroup`
+   (warm-up, main set, cool-down), `groupWorkout()`, and `hardSeconds` on `WorkoutEstimate`.
+   `resolveWorkout()` takes `{ units, zones }` as its third argument.
+3. `src/lib/bike-numbers.ts` (*new*): `getBikeNumbers(userId)` returns `{ ftp: { value, basis,
+   source, changedFrom }, watchFtp, zones }`. The stub reads the current FTP threshold only.
+4. `src/lib/garmin/after-sync.ts` (*new*): `afterActivitiesSynced(userId, activityIds)`, called
+   from the worker after activities and FIT files are stored. It calls two empty functions:
+   `updateFtpEstimate` (S1) and `storePairings` (S5), each in its own file.
+5. Mount points on the session page, as empty components: `<FtpLine/>` (S1), `<AfterRide/>`
+   (S5). S3 places them; their owners fill them.
+6. Fixtures in `src/__tests__/fixtures/bike-sessions.ts` (*new*): the tempo and long ride as
+   path B workouts (4.1, 4.2), the Garmin CYCLING zones and watch FTP from the real data, and
+   two FIT lap sets (5 laps; 7 laps with 2 distance laps). No user ids or activity ids from
+   production.
+
+Done when: `pnpm verify` passes on the contract commit.
+
+### 10.3 Packages
+
+| Spoke | Phases | Owns (files) |
+|---|---|---|
+| S1 Numbers | 0, FTP part of 7.3 | `src/lib/garmin/analytics/trends.ts`, `src/lib/garmin/analytics/thresholds.ts`, `src/lib/bike-numbers.ts`, `src/lib/garmin/ftp-estimate.ts` (*new*), `src/lib/athlete-profile.ts`, `ThresholdsClient`, `ThresholdEditor`, `src/app/more/thresholds/**`, `src/components/features/bike/FtpLine.tsx` and `FtpSheet.tsx` (*new*), migration A (custom bike HR zones) |
+| S2 Step library | model part of 2 | `src/lib/utils/workout-steps.ts` (resolver forms, labels for one-sided ranges, `hardSeconds`), `src/lib/utils/workout-group.ts` (*new*), `src/lib/planned-view.ts`, `docs/mcp/workout-steps.md`, the field descriptions in the MCP workout tools |
+| S3 Before and player | 1, player part of 2 | `src/components/features/home/widgets/today/View.tsx` (bike card, Rest Day fix), `src/app/planned/[id]/page.tsx`, `src/components/features/bike/{ProfileChart,StepCards,RecordBox,YourNumbers}.tsx` (*new*), `src/components/features/guided/**` except `StepResultsForm.tsx`, `src/app/planned/[id]/play/**`, `src/app/week/page.tsx`, `CycleDetailClient` (links only) |
+| S4 Editor and parity | 3a, 3b, 3c, FTP test workout of 7.3 | `src/components/features/workout-editor/**` (*new*), `src/app/planned/[id]/edit/**` (*new*), `src/app/more/workouts/**`, `WorkoutsLibraryClient`, `src/lib/workouts.ts`, `CycleScheduleBuilder`, `CycleCalendarClient`, `src/app/more/calendar/**`, `PlannedSessionActions`, the app cycle slot validator |
+| S5 After | 4, after view of 7.3 | `src/db/schema/workout-sessions.ts`, migration B (source `garmin`, link to the activity), `src/lib/garmin/pairing.ts` (*new*), `src/lib/session-compliance.ts`, `src/lib/utils/step-match.ts` (*new*), `src/lib/utils/step-results.ts`, `StepResultsForm.tsx`, `src/app/planned/[id]/results/**`, `src/components/features/bike/after/**` (*new*), op `unpick` in `src/lib/planned-sessions.ts`, its validator and the MCP planned sessions tool |
+
+Notes per spoke:
+
+- S1: the FTP estimate is max(95 % of best 20 min, best 60 min, CP) over 90 days, with its
+  basis text. An update of 3 % or more writes a threshold revision with source `garmin`. A
+  manual or test value pins the FTP. The HR resolver order is custom zones, Garmin CYCLING
+  zones, Friel estimate. Done when: with the fixtures, `getBikeNumbers` returns 186 W with the
+  basis "best 60 min", Garmin Z2 121-140, and the watch note for 266 W.
+- S2: pure functions only, unit tests for every form and label. Done when: the tempo fixture
+  resolves to the numbers in table 4.1, and `groupWorkout` gives warm-up, main 2 x 15 min,
+  cool-down.
+- S3: build against the contract and the fixtures. At 390 px, every screen matches
+  `bike-flow.html`. Done when: the e2e spec shows the tempo session on the Today card and the
+  session page with watts, % FTP, HR in bpm with the Garmin zone, and cadence.
+- S4: every save goes through `parseWorkout` and writes a revision with writer `user`. Done
+  when: the e2e spec changes the tempo to 3 x 12 min, saves for this session, and undoes it,
+  and builds a new library workout and plans it on the calendar with no AI.
+- S5: the matcher drops distance laps, then matches by lap count, else by time cuts. A pick or
+  unpick replaces the stored pair. A second sync does not make a second row. A ride under 50 %
+  of the planned time does not pair by itself (D5). Done when: the integration tests for the
+  5-lap and 7-lap fixtures pass, and the after view shows the step table.
+
+### 10.4 Rules for every spoke
+
+- Follow `CLAUDE.md` and `TESTING.md`: the Server Action template, `callAction()`, Zod, `userId`
+  from the session, tests at the right layer, a failing test first for a bug fix.
+- Touch targets of 44 px or more. Real buttons and labels. `aria-label` on icon buttons.
+- Every capability you add over MCP has an app control in the same package.
+- Run `pnpm verify` (in a worktree, set `TEST_DATABASE_URL` to the compose Postgres) before you
+  report.
+- New stored or shown user data: run the `privacy-compliance` skill (S1 custom zones, S5 stored
+  pairs).
+- The report lists: what was built, the tests added, files outside your list you needed, and
+  anything not done.
+
+### 10.5 Hub merge and checks
+
+1. Merge order: S2, S1, S5, S3, S4. The hub renumbers migrations A and B at merge and runs
+   `pnpm db:generate` so the Drizzle journal does not clash.
+2. After each merge: `pnpm verify`.
+3. After the last merge: wire `<FtpLine/>` "Plan an FTP test" to the S4 FTP test workout, then
+   `make e2e` and the smoke pass in `CLAUDE.md` (schema migration and the Today card are
+   critical flows).
+4. Local dev stack with a copy of the two real sessions as path B: check every "done when" in
+   section 7, phases 0 to 4, at 390 px.
+5. A Fable agent audits the merged branch, read only, against this plan. The hub fixes what
+   it finds.
+6. The owner tests locally. Then one PR to `main`, merged when CI is green.
+
+### 10.6 After the merge
+
+- Phase 5: the assistant rewrites the future bike sessions as workouts 4.1 and 4.2 over MCP in
+  production. The hub asks the owner before it writes to production data.
+- Phase 6 (.fit download) is not in this build. It goes to `BACKLOG.md` when the PR merges.
