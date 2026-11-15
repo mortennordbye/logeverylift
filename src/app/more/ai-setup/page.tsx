@@ -30,7 +30,6 @@ export default async function AiSetupPage({ searchParams }: Props) {
         </div>
         <div className="px-4 pt-2 pb-4 shrink-0">
           <h1 className="text-3xl font-bold tracking-tight">Your plan</h1>
-          <p className="text-sm text-muted-foreground mt-1">Four questions. You can change all of it later.</p>
         </div>
         <AiSetupClient
           exercises={data.exercises}

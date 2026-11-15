@@ -851,11 +851,11 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
             ) : (
               editError && <p className="text-xs text-destructive">{editError}</p>
             )}
-            <p className="text-xs text-muted-foreground">
+            {editError !== OWN_AI_NEEDED && <p className="text-xs text-muted-foreground">
               {isAdmin
                 ? "Admin. A change with no saved answer goes to a free AI model and is saved for everyone."
                 : "Free. Your coach gives saved answers. For a new change, use your own AI."}
-            </p>
+            </p>}
             <button
               type="button"
               onClick={() => handleEdit()}
@@ -875,6 +875,7 @@ export function AiSetupClient({ exercises, userProfile, prs, existingProgramName
               <p className="text-xs text-primary/80 mt-0.5">{revisionNote}</p>
             </div>
           )}
+          <p className="text-sm text-muted-foreground -mt-2">Four questions. You can change all of it later.</p>
           {returnError && (
             <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 flex flex-col gap-1">
               <p className="text-xs font-semibold text-destructive">Last AI edit failed</p>
