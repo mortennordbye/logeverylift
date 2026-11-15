@@ -105,3 +105,26 @@ Garmin text on Account or Settings.
    Garmin · <date>" or "Set by you · <date>".
 6. **Where it runs.** In the Garmin import after a sync, next to the weight sync that exists. Writes
    do not appear as assistant changes.
+
+## 7. Review fixes (locked by the owner)
+
+1. **Existing values are "set by you".** The migration backfills `field_sources`: availability
+   where it is set, units where they differ from the defaults, and time zone where it is set.
+2. **No long day from Garmin** leaves the stored long day as it is; compare and write the days only.
+3. **A deleted Garmin threshold stays deleted:** the sync does not add a value equal to the newest
+   deleted `garmin` row of that kind.
+4. **The sync checks Premium** and does nothing for a user without it.
+5. **Lock check and write are atomic:** thresholds re-read the current row inside the write
+   transaction; profile fields set value and source in one statement, and the sync skips a locked
+   field in that same statement.
+6. **One threshold kind at a time:** a failure in one kind does not stop the others. A Garmin value
+   for a kind that already has a `garmin` row dated today updates that row instead of adding one.
+7. **The Garmin switch shows its error** under the row.
+8. **Weigh-in dates use the user's time zone.**
+9. **"Garmin says · Use" shows only on locked fields,** and only on the row (not also inside the
+   threshold editor).
+10. **The assistant counts as "you".** An undo of an assistant change restores the field's
+    earlier source with its value.
+11. **Simpler sync:** no generic field wrapper; the page passes the data it already loaded instead
+    of the sync view reading it again. The two privacy switches become rows in the sections list.
+    `setGarminSync` stops returning the unused weight.
