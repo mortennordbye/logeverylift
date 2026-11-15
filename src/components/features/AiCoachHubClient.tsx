@@ -112,7 +112,7 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
           </div>
         ) : (
           <div className={`${card} overflow-hidden`} data-testid="coach-ask">
-            <Row href="/more/ai-coach/connect" icon={Sparkles} title="Change your plan with your own AI" sub="Connect Claude or ChatGPT" />
+            <Row href="/more/ai-coach/connect" icon={Sparkles} title="Change it with your own AI" sub="Connect Claude or ChatGPT" />
           </div>
         ))}
 
