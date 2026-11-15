@@ -202,8 +202,9 @@ test("make a triathlon plan: five phases from the start to race day", async ({ p
   const settle = trackActions(page);
   const [user] = await testDb().select({ id: users.id }).from(users).where(eq(users.email, e2eUser(testInfo.parallelIndex).email));
   await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.id, user.id));
-  // The plan starts with the intake interview (D10).
-  await testDb().insert(athleteProfiles).values({ userId: user.id, interviewCompletedAt: new Date() }).onConflictDoUpdate({ target: athleteProfiles.userId, set: { interviewCompletedAt: new Date() } });
+  // The plan needs an endurance level and training days.
+  const ready = { enduranceLevel: "intermediate" as const, availableDays: [1, 2, 3, 4, 7] };
+  await testDb().insert(athleteProfiles).values({ userId: user.id, ...ready }).onConflictDoUpdate({ target: athleteProfiles.userId, set: ready });
 
   // The old address leads to New season with the plan picked.
   await page.goto("/cycles/triathlon");
