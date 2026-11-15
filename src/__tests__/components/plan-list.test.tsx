@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
+
 import { CyclesListClient } from "@/components/features/CyclesListClient";
 import { deleteManyTrainingCycles } from "@/lib/actions/training-cycles";
 import type { PlanListData } from "@/lib/plan-list";
 import { seasonCard, weekDays, type HeroView } from "@/lib/utils/plan-list";
 import type { PhaseLike } from "@/lib/utils/seasons";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// A label shows the year of a date outside the current one (round 11 I2):
+// the clock stays in the year of the dates these tests use.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 /**
  * The Plan list's states (docs/plans/plan-tab-redesign.md, P1): first open,
@@ -244,7 +253,7 @@ describe("the Plan list", () => {
   it("gym user with a goal season: goal date, days left as the season page counts them, the running phase marked Now", () => {
     render(<CyclesListClient data={{ ...gym, seasons: [goalSeason] }} deletedCount={0} />);
     const card = screen.getByTestId("season-card");
-    expect(within(card).getByText("Season · Goal by 7 Feb")).toBeTruthy();
+    expect(within(card).getByText("Season · Goal by 7 Feb 2027")).toBeTruthy();
     expect(card.textContent).toContain("85days left");
     expect(within(card).getByText("Now").className).toContain("text-brand");
     expect(within(card).getByText("Starts 21 Dec").className).toContain("text-brand");

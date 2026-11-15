@@ -6,7 +6,7 @@
  */
 
 import type { PhaseType } from "@/lib/utils/periodization";
-import { dateLabel } from "@/lib/utils/date-label";
+import { dateLabel, thisYear, yearSuffix } from "@/lib/utils/date-label";
 
 export type RaceDiscipline = "triathlon" | "run" | "ride" | "swim" | "other";
 export type TriDistance = "full" | "half" | "olympic" | "sprint";
@@ -278,7 +278,8 @@ export function replanFlag(before: RaceLike[], after: RaceLike[]): ReplanFlag | 
     }
     if (was.raceDate !== r.raceDate) out.push({ raceId: r.id, text: `${raceLabel(r)} moved from ${dayLabel(was.raceDate)} to ${dayLabel(r.raceDate)}` });
     if (was.priority !== r.priority && (was.priority === "A" || r.priority === "A")) {
-      out.push({ raceId: r.id, text: `"${r.name}" changed from ${was.priority} priority to ${r.priority} priority` });
+      // The date tells two races with the same name apart (round 11 I2).
+      out.push({ raceId: r.id, text: `"${r.name}" on ${dayLabel(r.raceDate)} changed from ${was.priority} priority to ${r.priority} priority` });
     }
   }
   for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push({ raceId: r.id, text: `${raceLabel(r)} on ${dayLabel(r.raceDate)} removed` });
@@ -286,6 +287,56 @@ export function replanFlag(before: RaceLike[], after: RaceLike[]): ReplanFlag | 
 }
 
 export const replanReason = (before: RaceLike[], after: RaceLike[]): string | null => replanFlag(before, after)?.replanReason ?? null;
+
+/** The kind of one stored reason line (replanFlag), read with the race names taken out. */
+function reasonKind(line: string): "moved" | "added" | "removed" | "priority" | null {
+  const words = line.replace(/"[^"]*"/g, '""');
+  if (/ moved from .+ to /.test(words)) return "moved";
+  if (/ added on /.test(words)) return "added";
+  if (/ removed$/.test(words)) return "removed";
+  if (/ changed from [ABC] priority to [ABC] priority$/.test(words)) return "priority";
+  return null;
+}
+
+/**
+ * The re-plan banner title, from the stored reason lines: "Race date changed"
+ * only when a date moved. A new A race makes the old one a B race, so that
+ * pair reads as an A race added (round 11 I2). `misfit`: the taper no longer
+ * ends on race day.
+ */
+export function replanTitle(reason: string | null, misfit: boolean): string {
+  const kinds = new Set(reason ? reason.split("; ").map(reasonKind) : [null]);
+  const only = (...allowed: (string | null)[]) => [...kinds].every((k) => allowed.includes(k));
+  const what = only("moved")
+    ? "Race date changed."
+    : kinds.has("added") && only("added", "priority")
+      ? "An A race was added."
+      : kinds.has("removed") && only("removed", "priority")
+        ? "An A race was removed."
+        : only("priority")
+          ? "Race priority changed."
+          : "Your races changed.";
+  return `${what} ${misfit ? "The taper no longer ends on race day." : "The phases stay as they are."}`;
+}
+
+/**
+ * The day the season end moves to when this race is saved, or null when it
+ * stays: the rule placeRaceDate in src/lib/seasons.ts applies. An A race past
+ * the season end, or the A race the season ended on moved, takes the end to
+ * the last race day.
+ */
+export function seasonEndAfterRace(
+  seasonEnd: string,
+  races: { id: number; raceDate: string; priority: RacePriority }[],
+  draft: { id?: number; raceDate: string; priority: RacePriority },
+): string | null {
+  const was = races.find((r) => r.id === draft.id);
+  if (!draft.raceDate || (was && was.raceDate === draft.raceDate)) return null;
+  const follows = draft.priority === "A" && (draft.raceDate > seasonEnd || (was?.priority === "A" && was.raceDate === seasonEnd));
+  if (!follows) return null;
+  const end = [draft.raceDate, ...races.filter((r) => r.id !== draft.id).map((r) => r.raceDate)].sort().at(-1)!;
+  return end !== seasonEnd ? end : null;
+}
 
 /**
  * The flag once a race is removed: its own lines go, by race id. A reason
@@ -343,15 +394,20 @@ export function dayLabel(day: string): string {
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** `YYYY-MM-DD` as "Thu 14 Nov 2026": always with the year. */
+export function longDay(day: string): string {
+  return dateLabel(day, "EEE d MMM yyyy");
+}
+
 /**
- * `YYYY-MM-DD` as "Thu 14 Nov", by the calendar (no time zone). Written by
+ * `YYYY-MM-DD` as "Thu 14 Nov", or "Fri 1 Jan 2027" outside this year, by the calendar (no time zone). Written by
  * hand, not with Intl: engines format these options differently (Linux WebKit
  * gives "Thu, 14 Nov"), and client components render it on the server and in
  * the browser, which must agree for hydration.
  */
 export function shortDay(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
-  return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}`;
+  return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}${yearSuffix(day)}`;
 }
 
 /**
@@ -412,13 +468,19 @@ export function lengthField(p: { durationWeeks: number; durationDays: number | n
   return { length: String(p.durationDays != null ? p.durationDays / 7 : p.durationWeeks), unit: "weeks" };
 }
 
-/** Two days as a range: "16 Nov – 10 Jan", "17 – 26 Aug" in one month, or "28 May" for one day. */
+/**
+ * Two days as a range: "16 Nov – 10 Dec", "17 – 26 Aug" in one month, or
+ * "28 May" for one day. Ends in two years show both years ("6 Sep 2026 – 3 Sep
+ * 2027"); ends both in another year show it once at the end ("3 – 10 May 2027").
+ */
 export function rangeLabel(start: string, end: string): string {
-  const a = shortDay(start).slice(4);
-  const b = shortDay(end).slice(4);
-  if (start === end) return b;
-  if (start.slice(0, 7) === end.slice(0, 7)) return `${a.split(" ")[0]} – ${b}`;
-  return `${a} – ${b}`;
+  const dm = (d: string) => dateLabel(d, "d MMM");
+  const [ys, ye] = [Number(start.slice(0, 4)), Number(end.slice(0, 4))];
+  if (ys !== ye) return `${dm(start)} ${ys} – ${dm(end)} ${ye}`;
+  const year = ys === thisYear() ? "" : ` ${ye}`;
+  if (start === end) return `${dm(end)}${year}`;
+  if (start.slice(0, 7) === end.slice(0, 7)) return `${Number(start.slice(8))} – ${dm(end)}${year}`;
+  return `${dm(start)} – ${dm(end)}${year}`;
 }
 
 /** A phase length in words: "10 days" or "6 weeks". */

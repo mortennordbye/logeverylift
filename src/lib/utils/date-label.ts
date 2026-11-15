@@ -34,6 +34,21 @@ function fieldsOf(date: string | Date, utc: boolean): Fields {
     : { year: date.getFullYear(), month: date.getMonth(), day: date.getDate(), weekday: date.getDay(), hours: date.getHours(), minutes: date.getMinutes() };
 }
 
+/**
+ * The current year, in UTC: the server and the browser read the same year, so
+ * a label with or without it hydrates. A date shows its year only when it is
+ * not in this year (round 11 I2).
+ */
+export function thisYear(): number {
+  return new Date().getUTCFullYear();
+}
+
+/** " 2027" for a `YYYY-MM-DD` day outside the current year, else "". */
+export function yearSuffix(day: string): string {
+  const y = Number(day.slice(0, 4));
+  return y === thisYear() ? "" : ` ${y}`;
+}
+
 const TOKENS = /yyyy|MMMM|MMM|EEEEE|EEEE|EEE|HH|mm|d/g;
 
 export function dateLabel(date: string | Date, pattern: string, { utc = false }: { utc?: boolean } = {}): string {

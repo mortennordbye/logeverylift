@@ -15,7 +15,15 @@ import {
   type WeekSession,
 } from "@/lib/utils/plan-list";
 import type { PhaseLike } from "@/lib/utils/seasons";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// A label shows the year of a date outside the current one (round 11 I2):
+// the clock stays in the year of the dates these tests use.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 const TODAY = "2026-11-14"; // a Saturday
 
@@ -71,7 +79,7 @@ describe("plan list words", () => {
     );
     expect(card.phases[0].sub).toBe("Base · 1 wk · 9 – 15 Nov");
     // The chain is paused, so Build is dated from the day Resume gives it, not from the other start (J4-18).
-    expect(card.phases[1].sub).toBe("Build · 10 days · 28 Dec – 6 Jan");
+    expect(card.phases[1].sub).toBe("Build · 10 days · 28 Dec 2026 – 6 Jan 2027");
   });
 
   it("dates the next phase from today when the phases before it were deleted (fix round 8)", () => {
@@ -187,13 +195,13 @@ describe("the hero", () => {
 
 describe("the season card", () => {
   it("counts down to the A race and lays out the phases", () => {
-    expect(jevnaker.race).toEqual({ name: "Jevnaker Halv Full Distanse", when: "29 Aug", daysLeft: 288 });
+    expect(jevnaker.race).toEqual({ name: "Jevnaker Halv Full Distanse", when: "29 Aug 2027", daysLeft: 288 });
     expect(jevnaker.phases.map((p) => p.sub)).toEqual([
-      "General · 8 wk · 16 Nov – 10 Jan",
-      "Base · 12 wk · 11 Jan – 4 Apr",
-      "Build · 12 wk · 5 Apr – 27 Jun",
-      "Build · 7 wk 4 days · 28 Jun – 19 Aug",
-      "Taper · 10 days · 20 – 29 Aug",
+      "General · 8 wk · 16 Nov 2026 – 10 Jan 2027",
+      "Base · 12 wk · 11 Jan – 4 Apr 2027",
+      "Build · 12 wk · 5 Apr – 27 Jun 2027",
+      "Build · 7 wk 4 days · 28 Jun – 19 Aug 2027",
+      "Taper · 10 days · 20 – 29 Aug 2027",
     ]);
     // Nothing runs yet: the next phase is the accent one.
     expect(jevnaker.phases[0]).toMatchObject({ badge: "Starts 16 Nov", badgeAccent: true, mark: "accent" });
@@ -251,10 +259,10 @@ describe("the season card", () => {
       TODAY,
     );
     expect(goal.race).toBeNull();
-    expect(goal.goalBy).toBe("Goal by 7 Feb");
+    expect(goal.goalBy).toBe("Goal by 7 Feb 2027");
     // A season with no goal has no "goal by" line, only its end (round 8).
     const noGoal = seasonCard({ id: 4, name: "Restored season", startDate: "2026-11-09", endDate: "2027-01-10", replanFlaggedAt: null, goal: null }, [], null, TODAY);
-    expect(noGoal.goalBy).toBe("Ends 10 Jan");
+    expect(noGoal.goalBy).toBe("Ends 10 Jan 2027");
     // Days, as the season page counts (J6-01).
     expect(goal.daysLeft).toBe(85);
     expect(goal.bar.map((b) => b.tone)).toEqual(["current", "grey", "grey"]);
@@ -301,7 +309,7 @@ describe("the season card", () => {
       null,
       TODAY,
     );
-    expect(fitted.phases[0].sub).toBe("Build · 15 wk · 16 Nov – 28 Feb");
+    expect(fitted.phases[0].sub).toBe("Build · 15 wk · 16 Nov 2026 – 28 Feb 2027");
   });
 });
 

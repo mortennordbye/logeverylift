@@ -184,7 +184,7 @@ export async function loadPlanList(userId: string, endurance: boolean): Promise<
     past,
     pastSeasons: seasonList
       .filter((s) => s.status === "done")
-      .map((s) => ({ id: s.id, name: s.name, sub: `Season · ended ${dayMonth(s.endDate)}${s.endDate.slice(0, 4) !== today.slice(0, 4) ? ` ${s.endDate.slice(0, 4)}` : ""}` })),
+      .map((s) => ({ id: s.id, name: s.name, sub: `Season · ended ${dayMonth(s.endDate)}` })),
     select: {
       current: active && !inCard.has(active.id) ? [{ id: active.id, name: active.name, sub: hero?.label ?? "" }] : [],
       upNext: drafts.map((c) => selectRow(upNextRow(c, today))),

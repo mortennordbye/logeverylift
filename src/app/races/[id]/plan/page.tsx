@@ -4,7 +4,7 @@ import { getRacePlan } from "@/lib/race-plans";
 import { getUserSettings } from "@/lib/user-settings";
 import { minSec, paceUnitLabel, paceUnitMeters, speedToPace } from "@/lib/utils/thresholds";
 import { requireSession } from "@/lib/utils/session";
-import { shortDay } from "@/lib/utils/seasons";
+import { longDay } from "@/lib/utils/seasons";
 
 import { notFound, redirect } from "next/navigation";
 import { BackLink } from "@/components/ui/BackLink";
@@ -54,7 +54,7 @@ export default async function RacePlanPage({ params }: { params: Promise<{ id: s
       <div className="px-4 pt-2 pb-4">
         <h1 className="text-3xl font-bold tracking-tight">Race plan</h1>
         <p className="text-sm text-muted-foreground">
-          {p.race.name} · {shortDay(p.race.raceDate)} {p.race.raceDate.slice(0, 4)}
+          {p.race.name} · {longDay(p.race.raceDate)}
         </p>
       </div>
       <RacePlanClient plan={view} />

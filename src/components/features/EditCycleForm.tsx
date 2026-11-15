@@ -14,7 +14,7 @@ import { updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { parseDateStr, wouldEndActiveCycle } from "@/lib/utils/cycle-position";
 import { END_ACTIONS, MAIN_LENGTHS, SCHEDULE_MODES, type EndAction } from "@/lib/utils/cycle-setup";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { shortDay } from "@/lib/utils/seasons";
+import { longDay } from "@/lib/utils/seasons";
 import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { TrainingCycle } from "@/types/workout";
 import { Lock } from "lucide-react";
@@ -32,7 +32,6 @@ type Props = {
 };
 
 /** "Sun 29 Aug 2027": a race can be in another year. */
-const longDay = (d: string) => `${shortDay(d)} ${d.slice(0, 4)}`;
 
 export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, today }: Props) {
   const returnTo = useReturnTo();

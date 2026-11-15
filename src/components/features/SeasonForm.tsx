@@ -4,7 +4,7 @@ import { createSeasonAction, deleteSeasonAction, updateSeasonAction } from "@/li
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { keepDates } from "@/lib/utils/keep-dates";
-import { PHASE_TYPE_LABELS, dayLabel, lengthShort, rangeLabel, shortDay, type RaceDiscipline, type RacePriority, type TriDistance } from "@/lib/utils/seasons";
+import { PHASE_TYPE_LABELS, dayLabel, lengthShort, longDay, rangeLabel, shortDay, type RaceDiscipline, type RacePriority, type TriDistance } from "@/lib/utils/seasons";
 import { triathlonPhases } from "@/lib/utils/triathlon-phases";
 import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
@@ -58,7 +58,6 @@ type Props =
 const STATUS_WORD: Record<string, string> = { active: "Running now", draft: "Not started" };
 
 /** "Mon 16 Nov 2026". */
-const longDay = (d: string) => `${shortDay(d)} ${d.slice(0, 4)}`;
 
 /**
  * New season (J4_SeasonSetup) and Edit season. A new season takes an optional

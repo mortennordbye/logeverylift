@@ -21,16 +21,26 @@ import {
   nextPhase,
   phasesSkippedBy,
   replanFlag,
+  replanTitle,
   replanReason,
   replanWithoutRace,
   seasonARace,
+  seasonEndAfterRace,
   seasonTimeline,
   taperDaysFor,
   taperFit,
   type PhaseLike,
   type RaceLike,
 } from "@/lib/utils/seasons";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// A label shows the year of a date outside the current one (round 11 I2):
+// the clock stays in the year of the dates these tests use.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 /** docs/plans/seasons.md, section 5 (unit rows). */
 
@@ -265,6 +275,44 @@ describe("re-plan trigger (D17)", () => {
     expect(replanReason([race(1, { priority: "B" })], [race(1, { priority: "C" })])).toBeNull();
   });
 
+  it("dates a priority line, so two races with the same name differ (round 11 I2)", () => {
+    expect(replanReason([race(1)], [race(1, { priority: "B" }), race(2, { name: "R1", raceDate: "2027-09-05" })])).toBe(
+      '"R1" on 22 Aug 2027 changed from A priority to B priority; the A race "R1" added on 5 Sep 2027',
+    );
+  });
+
+  it("titles the banner by what happened, not always as a date change (round 11 I2)", () => {
+    const fits = (reason: string | null) => replanTitle(reason, false);
+    expect(replanTitle('The A race "R1" moved from 22 Aug 2027 to 29 Aug 2027', true)).toBe("Race date changed. The taper no longer ends on race day.");
+    expect(fits('The B race "R2" moved from 22 Aug 2027 to 1 Aug 2027')).toBe("Race date changed. The phases stay as they are.");
+    // A second A race makes the first a B race: an A race was added, no date changed.
+    expect(replanTitle('The A race "R1" added on 5 Sep 2027; "R1" on 22 Aug 2027 changed from A priority to B priority', true)).toBe(
+      "An A race was added. The taper no longer ends on race day.",
+    );
+    expect(fits('The A race "R1" on 22 Aug 2027 removed')).toBe("An A race was removed. The phases stay as they are.");
+    expect(fits('"R1" on 22 Aug 2027 changed from A priority to B priority')).toBe("Race priority changed. The phases stay as they are.");
+    // A name with a kind word in it does not decide the kind.
+    expect(fits('The A race "Moved from added on" moved from 22 Aug 2027 to 29 Aug 2027')).toBe("Race date changed. The phases stay as they are.");
+    expect(fits('The A race "R1" moved from 22 Aug 2027 to 29 Aug 2027; "R2" on 1 Aug 2027 changed from C priority to A priority')).toBe(
+      "Your races changed. The phases stay as they are.",
+    );
+    expect(replanTitle(null, true)).toBe("Your races changed. The taper no longer ends on race day.");
+  });
+
+  it("says where the season end moves when an A race takes it (round 11 I2)", () => {
+    const races = [race(1, { raceDate: "2027-08-22" })];
+    // A new A race past the season end takes the end with it.
+    expect(seasonEndAfterRace("2027-08-22", races, { raceDate: "2027-09-05", priority: "A" })).toBe("2027-09-05");
+    // A B race cannot go past the end; inside the season nothing moves.
+    expect(seasonEndAfterRace("2027-08-22", races, { raceDate: "2027-09-05", priority: "B" })).toBeNull();
+    expect(seasonEndAfterRace("2027-08-22", races, { raceDate: "2027-08-01", priority: "A" })).toBeNull();
+    // The A race the season ends on moves earlier: the end follows it, but not before a later race.
+    expect(seasonEndAfterRace("2027-08-22", races, { id: 1, raceDate: "2027-08-15", priority: "A" })).toBe("2027-08-15");
+    expect(seasonEndAfterRace("2027-08-22", [...races, race(2, { priority: "C", raceDate: "2027-08-18" })], { id: 1, raceDate: "2027-08-15", priority: "A" })).toBe("2027-08-18");
+    // An unchanged date moves nothing.
+    expect(seasonEndAfterRace("2027-08-22", races, { id: 1, raceDate: "2027-08-22", priority: "A" })).toBeNull();
+  });
+
   it("keeps the race of each line, and a removed race takes only its own lines", () => {
     const flag = replanFlag([race(1)], [race(1, { priority: "B" }), race(2, { name: "R1" })])!;
     expect(flag.replanRaceIds).toEqual([1, 2]);
@@ -307,10 +355,10 @@ describe("season history text", () => {
 
 describe("season row words (docs/design/plan-redesign/spec.md)", () => {
   it("shows a range with the month once when both days share it", () => {
-    expect(rangeLabel("2026-11-16", "2027-01-10")).toBe("16 Nov – 10 Jan");
-    expect(rangeLabel("2027-08-17", "2027-08-26")).toBe("17 – 26 Aug");
+    expect(rangeLabel("2026-11-16", "2026-12-10")).toBe("16 Nov – 10 Dec");
+    expect(rangeLabel("2026-11-17", "2026-11-26")).toBe("17 – 26 Nov");
     // A one-day phase is one day, not "28 – 28 May" (round 8).
-    expect(rangeLabel("2027-05-28", "2027-05-28")).toBe("28 May");
+    expect(rangeLabel("2026-11-28", "2026-11-28")).toBe("28 Nov");
   });
 
   it("shows a length as weeks or days", () => {

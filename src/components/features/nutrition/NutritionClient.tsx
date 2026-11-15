@@ -10,7 +10,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { FuelForm, type FuelProduct } from "@/components/features/nutrition/FuelForm";
 import { NUTRITION_DISCLAIMER, type Band, type GutTraining } from "@/lib/utils/fueling";
 import { hoursMinutes } from "@/lib/utils/race-plan";
-import { shortDay } from "@/lib/utils/seasons";
+import { longDay, shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { ChevronRight, PlusIcon } from "lucide-react";
 import Link from "next/link";
@@ -31,7 +31,6 @@ function Evidence({ label }: { label: string }) {
   return <p className="text-[11px] text-muted-foreground">Evidence: {label}</p>;
 }
 
-const dateWithYear = (d: string) => `${shortDay(d)} ${d.slice(0, 4)}`;
 
 export function NutritionClient(p: { gut: GutTraining; fluid: Band; sodium: Band; sessions: Session[]; tests: Test[]; products: FuelProduct[]; races: Race[] }) {
   const router = useRouter();
@@ -54,7 +53,7 @@ export function NutritionClient(p: { gut: GutTraining; fluid: Band; sodium: Band
                 <div className="flex-1 min-w-0">
                   <p className="font-medium truncate">{r.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {dateWithYear(r.raceDate)} · {r.distance === "full" ? "Full distance" : "Half distance"} · {r.priority} race
+                    {longDay(r.raceDate)} · {r.distance === "full" ? "Full distance" : "Half distance"} · {r.priority} race
                   </p>
                 </div>
                 <ChevronRight className="w-4 h-4 text-muted-foreground" />

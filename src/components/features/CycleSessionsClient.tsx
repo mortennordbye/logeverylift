@@ -90,6 +90,7 @@ export function CycleWeek({
   templateHref,
   dayLabels,
   dayNotes,
+  cut = false,
 }: {
   weeks: BlockWeek[];
   initialWeek: number;
@@ -104,6 +105,8 @@ export function CycleWeek({
   dayLabels?: Record<number, string>;
   /** The notes of those labelled days, by weekday. */
   dayNotes?: Record<number, string>;
+  /** A scheduled start ends the block early: "Week N" without "of M", as the Plan hero (round 10). */
+  cut?: boolean;
 }) {
   const units = useUnits();
   const [index, setIndex] = useState(initialWeek);
@@ -124,7 +127,7 @@ export function CycleWeek({
         </button>
         <div className="flex flex-col items-center" aria-live="polite">
           <span className="text-[15px] font-semibold">
-            Week {index + 1} of {weeks.length}
+            {cut ? `Week ${index + 1}` : `Week ${index + 1} of ${weeks.length}`}
           </span>
           <span className="text-[13px] text-muted-foreground">{keepDates(weekRangeLabel(week))}</span>
         </div>

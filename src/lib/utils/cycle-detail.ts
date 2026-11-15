@@ -9,7 +9,7 @@ import { dayMonth } from "@/lib/home/labels";
 import { dateLabel } from "@/lib/utils/date-label";
 import { addDaysStr, dowOf } from "@/lib/utils/planned-sessions";
 import type { MoveSuggestion } from "@/lib/utils/session-compliance";
-import { earlyLastDay, shortDay } from "@/lib/utils/seasons";
+import { earlyLastDay, rangeLabel, shortDay } from "@/lib/utils/seasons";
 
 export type BlockWeek = { from: string; to: string };
 
@@ -167,10 +167,10 @@ export function weekdayShort(day: string): string {
   return dateLabel(day, "EEE");
 }
 
-/** "16–22 Nov", or "30 Nov – 6 Dec" across two months. */
+/** "16–22 Nov", or "30 Nov – 6 Dec" across two months, with the year as rangeLabel shows it. */
 export function weekRangeLabel(week: BlockWeek): string {
   if (week.from.slice(0, 7) === week.to.slice(0, 7)) return `${Number(week.from.slice(8))}–${dayMonth(week.to)}`;
-  return `${dayMonth(week.from)} – ${dayMonth(week.to)}`;
+  return rangeLabel(week.from, week.to);
 }
 
 /** "Done Tue" in the last 6 days, else "Done 9 Nov". */

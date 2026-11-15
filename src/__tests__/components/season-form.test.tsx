@@ -1,7 +1,16 @@
 // @vitest-environment jsdom
+
 import { SeasonForm } from "@/components/features/SeasonForm";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// A label shows the year of a date outside the current one (round 11 I2):
+// the clock stays in the year of the dates these tests use.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 /**
  * New season (J4_SeasonSetup): the race and the triathlon plan only with the
@@ -176,11 +185,11 @@ describe("New season with the endurance switch", () => {
     fireEvent.click(radio);
     const planned = screen.getByRole("list", { name: "Planned phases" });
     expect(within(planned).getAllByRole("listitem").map((li) => li.textContent!.replace(/\u00a0/g, " "))).toEqual([
-      "General · 7 wk · 16 Nov – 3 Jan",
-      "Base · 15 wk · 4 Jan – 18 Apr",
-      "Build · 15 wk 4 days · 19 Apr – 5 Aug",
-      "Peak · 2 wk · 6 – 19 Aug",
-      "Taper · 10 days · 20 – 29 Aug",
+      "General · 7 wk · 16 Nov 2026 – 3 Jan 2027",
+      "Base · 15 wk · 4 Jan – 18 Apr 2027",
+      "Build · 15 wk 4 days · 19 Apr – 5 Aug 2027",
+      "Peak · 2 wk · 6 – 19 Aug 2027",
+      "Taper · 10 days · 20 – 29 Aug 2027",
     ]);
     fireEvent.click(screen.getByRole("button", { name: "Create season" }));
     await waitFor(() =>

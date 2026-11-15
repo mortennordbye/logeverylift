@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
+
 import { SeasonDetailClient, phaseAnnouncements, phaseDrop, type SeasonPhaseView } from "@/components/features/SeasonDetailClient";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// A label shows the year of a date outside the current one (round 11 I2):
+// the clock stays in the year of the dates these tests use.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 /**
  * Season detail (J4_SeasonDetail): the re-plan banner, drag to reorder the
@@ -349,7 +358,29 @@ describe("season detail text (fix round 2)", () => {
     render(<SeasonDetailClient {...base} replan={{ reason: 'B race "Tune-up" moved from 29 Aug 2027 to 12 Sep 2027' }} />);
     const banner = screen.getByTestId("replan-banner");
     expect(banner.textContent).not.toContain("A race changed");
-    expect(banner.textContent).toContain("Your races changed. The phases stay as they are.");
+    expect(banner.textContent).toContain("Race date changed. The phases stay as they are.");
+  });
+
+  it("a second A race added: the title says an A race was added, not that a date changed (round 11 I2)", () => {
+    const reason = 'The A race "Jevnaker" added on 1 May 2027; "Jevnaker" on 17 Apr 2027 changed from A priority to B priority';
+    render(<SeasonDetailClient {...base} replan={{ reason }} taperFit={{ status: "early", taperId: 3, days: 14 }} />);
+    const banner = screen.getByTestId("replan-banner");
+    expect(banner.textContent).toContain("An A race was added. The taper no longer ends on race day.");
+    expect(banner.textContent).not.toContain("Race date changed");
+  });
+
+  it("the race sheet says the season end moves before an A race past it is saved (round 11 I2)", () => {
+    render(<SeasonDetailClient {...base} />);
+    fireEvent.click(screen.getByRole("button", { name: "+ Add race" }));
+    const sheet = screen.getByRole("region", { name: "New race" });
+    fireEvent.change(within(sheet).getByLabelText("Name"), { target: { value: "Jevnaker Halv Full Distanse" } });
+    // A new race is an A race; the season ends on 17 Apr.
+    fireEvent.change(within(sheet).getByLabelText("Date"), { target: { value: "2027-05-01" } });
+    const text = () => sheet.textContent!.replace(/ /g, " ");
+    expect(text()).toContain("“Jevnaker Halv Full Distanse” on 17 Apr 2027 becomes a B race.");
+    expect(text()).toContain("The season end moves to 1 May 2027.");
+    fireEvent.change(within(sheet).getByLabelText("Date"), { target: { value: "2027-04-10" } });
+    expect(text()).not.toContain("The season end moves");
   });
 
   it("announces a drag with the phase names", () => {
@@ -424,7 +455,7 @@ describe("one A race per season (round 8)", () => {
     fireEvent.click(within(within(sheet).getByRole("group", { name: "Priority" })).getByRole("button", { name: "B" }));
     expect(within(sheet).queryByText(/becomes a B race/)).toBeNull();
     fireEvent.click(within(within(sheet).getByRole("group", { name: "Priority" })).getByRole("button", { name: "A" }));
-    expect(within(sheet).getByText("“Jevnaker Halv Full Distanse” becomes a B race.")).toBeTruthy();
+    expect(sheet.textContent!.replace(/\u00a0/g, " ")).toContain("“Jevnaker Halv Full Distanse” on 17 Apr 2027 becomes a B race.");
   });
 
   it("says nothing when the race edited is the A race", () => {
@@ -534,7 +565,7 @@ describe("phase length in weeks or days (fix round 4)", () => {
     fireEvent.click(within(screen.getAllByTestId("phase-row")[0]).getAllByRole("button")[1]);
     const sheet = screen.getByRole("region", { name: "Aerobic base + strength" });
     const text = () => sheet.textContent!.replace(/\u00a0/g, " ");
-    expect(text()).toContain("16 Nov – 10 Jan");
+    expect(text()).toContain("16 Nov 2026 – 10 Jan 2027");
     fireEvent.change(within(sheet).getByLabelText("Length"), { target: { value: "4" } });
     expect(text()).toContain("16 Nov – 13 Dec");
     fireEvent.click(within(sheet).getByRole("button", { name: "Days" }));
@@ -597,5 +628,17 @@ describe("the race sheet's choices (round 8)", () => {
     const pressed = Array.from(sheet.querySelectorAll('button[aria-pressed="true"]'));
     expect(pressed.map((b) => b.textContent)).toEqual(["Triathlon", "A"]);
     expect(pressed[1].className).toBe(pressed[0].className);
+  });
+});
+
+describe("dates across a year (round 11 I2)", () => {
+  it("a 52-week taper shows both years in its row and its sheet, so it does not read backwards", () => {
+    const long = [phase(1, "Long taper", "taper", "2026-09-06", "2027-09-03", 364)];
+    render(<SeasonDetailClient {...base} phases={long} next={null} taperFit={{ status: "fits", taperId: 1 }} />);
+    const row = screen.getByTestId("phase-row");
+    expect(within(row).getByTestId("phase-sub").textContent!.replace(/ /g, " ")).toContain("6 Sep 2026 – 3 Sep 2027");
+    fireEvent.click(within(row).getAllByRole("button")[1]);
+    const sheet = screen.getByRole("region", { name: "Long taper" });
+    expect(sheet.textContent!.replace(/ /g, " ")).toContain("6 Sep 2026 – 3 Sep 2027");
   });
 });
