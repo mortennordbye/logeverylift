@@ -29,6 +29,7 @@ import {
   type ThresholdView,
 } from "@/components/features/ThresholdEditor";
 import {
+  EXPERIENCE_HINTS,
   EXPERIENCE_LABELS,
   GENDER_LABELS,
   GOAL_LABELS,
@@ -199,7 +200,7 @@ export const SECTIONS: Section[] = [
         id: "experience-strength",
         label: "Experience, strength",
         value: (d) => (d.experienceLevel ? EXPERIENCE_LABELS[d.experienceLevel] : notSet),
-        editor: (d, done) => <PickerStep field="experienceLevel" initial={d.experienceLevel} labels={EXPERIENCE_LABELS} onSaved={done} />,
+        editor: (d, done) => <PickerStep field="experienceLevel" initial={d.experienceLevel} labels={EXPERIENCE_LABELS} hints={EXPERIENCE_HINTS} onSaved={done} />,
       },
       {
         id: "experience-endurance",

@@ -28,6 +28,12 @@ export const EXPERIENCE_LABELS: Record<ExperienceLevel, string> = {
   advanced: "Advanced",
 };
 
+export const EXPERIENCE_HINTS: Record<ExperienceLevel, string> = {
+  beginner: "New to lifting, or less than a year of steady training",
+  intermediate: "1 to 3 years, still adding weight most months",
+  advanced: "Several years, progress now comes slowly",
+};
+
 export const GENDER_LABELS: Record<Gender, string> = {
   male: "Male",
   female: "Female",
@@ -116,16 +122,23 @@ export function PickerStep<T extends string>({
   field,
   initial,
   labels,
+  hints,
   onSaved,
-}: SaveProps & { field: "experienceLevel" | "gender"; initial: T | null; labels: Record<T, string> }) {
+}: SaveProps & { field: "experienceLevel" | "gender"; initial: T | null; labels: Record<T, string>; hints?: Record<T, string> }) {
   const [value, setValue] = useState<T | null>(initial);
   const { saving, error, run } = useProfileSave(onSaved);
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
+      <div className={hints ? "space-y-2" : "flex flex-wrap gap-2"}>
         {(Object.keys(labels) as T[]).map((opt) => (
-          <button key={opt} aria-pressed={value === opt} onClick={() => setValue(value === opt ? null : opt)} className={chip(value === opt)}>
-            {labels[opt]}
+          <button
+            key={opt}
+            aria-pressed={value === opt}
+            onClick={() => setValue(value === opt ? null : opt)}
+            className={`${chip(value === opt)} ${hints ? "w-full px-4 py-3 text-left" : ""}`}
+          >
+            <span className="block">{labels[opt]}</span>
+            {hints && <span className={`block text-xs font-normal ${value === opt ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{hints[opt]}</span>}
           </button>
         ))}
       </div>
