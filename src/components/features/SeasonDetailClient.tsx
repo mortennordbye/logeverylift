@@ -416,7 +416,8 @@ export function SeasonDetailClient(p: Props) {
           <Link href={`/seasons/${p.season.id}/phases/new`} className="flex min-h-11 items-center self-start px-1 text-[15px] font-medium text-primary active:opacity-70">
             + Add phase
           </Link>
-          <span className="mx-1 text-[13px] text-muted-foreground">Each phase starts the day after the one before.</span>
+          {/* Paused, the later phases keep their dates from a resume, with a gap before them (round 9 F8). */}
+          <span className="mx-1 text-[13px] text-muted-foreground">{paused ? "The later phases start when you resume." : "Each phase starts the day after the one before."}</span>
           {p.next && !p.next.scheduled && (
             <div className="mx-1 flex items-center justify-between gap-3">
               <p className="text-[13px] text-muted-foreground">
@@ -546,7 +547,31 @@ export function SeasonDetailClient(p: Props) {
 
       <BottomSheet open={race != null && !confirmRemoveRace} onClose={() => toRace(null)}>
         {race && (
-          <PlanSheetPanel label={race.id ? "Edit race" : "New race"} title={race.id ? "Edit race" : "New race"}>
+          <PlanSheetPanel
+            label={race.id ? "Edit race" : "New race"}
+            title={race.id ? "Edit race" : "New race"}
+            footer={
+              <>
+                <div>
+                  <button type="button" disabled={busy || raceReason != null} aria-describedby={raceReason ? "race-reason" : undefined} onClick={saveRace} className={PRIMARY_BUTTON}>
+                    Save race
+                  </button>
+                  <ButtonReason id="race-reason" reason={raceReason} />
+                </div>
+                {!dateError && errorLine}
+                {race.id && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => toRemoveRace(true)}
+                    className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}
+                  >
+                    Remove race
+                  </button>
+                )}
+              </>
+            }
+          >
             <label className="flex flex-col gap-1.5">
               <span className={LABEL}>Name</span>
               <input value={race.name} maxLength={100} onChange={(e) => setRace({ ...race, name: e.target.value })} className={INNER_FIELD} />
@@ -570,7 +595,6 @@ export function SeasonDetailClient(p: Props) {
                 {error}
               </p>
             )}
-            <RaceKindChips value={race.discipline} onChange={(d) => setRace({ ...race, discipline: d })} />
             {race.discipline === "triathlon" ? (
               <label className="flex flex-col gap-1.5">
                 <span className={LABEL}>Distance</span>
@@ -585,6 +609,7 @@ export function SeasonDetailClient(p: Props) {
                 <input inputMode="decimal" value={race.km} onChange={(e) => setRace({ ...race, km: e.target.value })} className={INNER_FIELD} />
               </label>
             )}
+            <RaceKindChips value={race.discipline} onChange={(d) => setRace({ ...race, discipline: d })} />
             <RacePriorityRow value={race.priority} onChange={(v) => setRace({ ...race, priority: v })} />
             {/* A season has one A race: saving this one as A makes the old one a B race (keepOneARace). */}
             {race.priority === "A" &&
@@ -595,23 +620,6 @@ export function SeasonDetailClient(p: Props) {
                     “{r.name}” becomes a B race.
                   </span>
                 ))}
-            <div>
-              <button type="button" disabled={busy || raceReason != null} aria-describedby={raceReason ? "race-reason" : undefined} onClick={saveRace} className={PRIMARY_BUTTON}>
-                Save race
-              </button>
-              <ButtonReason id="race-reason" reason={raceReason} />
-            </div>
-            {!dateError && errorLine}
-            {race.id && (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => toRemoveRace(true)}
-                className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}
-              >
-                Remove race
-              </button>
-            )}
           </PlanSheetPanel>
         )}
       </BottomSheet>

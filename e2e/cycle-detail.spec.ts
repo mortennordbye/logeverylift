@@ -77,6 +77,7 @@ test("open a dated session on the cycle detail, move it to another day, then ski
   // Today's chip is open; a day in the past is not.
   await expect(sheet.getByRole("button", { name: label(dayStr(0)) })).toBeEnabled();
   await sheet.getByRole("button", { name: label(dayStr(3)) }).click();
+  await sheet.getByRole("button", { name: `Move to ${label(dayStr(3))}` }).click();
   await settle();
   await expect(sheet).toBeHidden();
   await expect.poll(async () => (await testDb().select().from(plannedSessions).where(eq(plannedSessions.id, tomorrow.id)))[0].date).toBe(dayStr(3));

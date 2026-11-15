@@ -235,6 +235,39 @@ test("at 320 px the race distance select is a 44 px tap target, on New season an
   await page.screenshot({ path: testInfo.outputPath("race-sheet-320.png") });
 });
 
+/** The tops of the race fields in `root`, in the New season card's order: name, date, distance, sport, priority. */
+async function raceFieldTops(root: Locator): Promise<number[]> {
+  const fields = [
+    root.getByRole("textbox", { name: /name/i }).first(),
+    root.getByLabel(/date/i).first(),
+    root.getByLabel(/distance/i).first(),
+    root.getByRole("group", { name: "Sport" }),
+    root.getByRole("group", { name: "Priority" }),
+  ];
+  const tops: number[] = [];
+  for (const f of fields) tops.push((await f.boundingBox())!.y);
+  return tops;
+}
+
+test("at 320 px the race sheet pins Save race and orders its fields as New season does (round 9 F2)", async ({ page }, testInfo) => {
+  const { seasonId } = await plan(testInfo.parallelIndex);
+  await page.goto("/seasons/new");
+  const card = page.getByTestId("race-fields").locator("..");
+  await expect(card).toBeVisible();
+  const onForm = await raceFieldTops(card);
+  expect(onForm).toEqual([...onForm].sort((a, b) => a - b));
+
+  await page.goto(`/seasons/${seasonId}`);
+  await page.getByRole("button", { name: "+ Add race" }).click();
+  const sheet = page.getByRole("region", { name: "New race" });
+  await expect(sheet).toBeVisible();
+  await inView(page, sheet, sheet.getByRole("button", { name: "Save race" }));
+  await expect(sheet.getByTestId("sheet-footer").getByRole("button", { name: "Save race" })).toBeVisible();
+  const inSheet = await raceFieldTops(sheet);
+  expect(inSheet).toEqual([...inSheet].sort((a, b) => a - b));
+  await page.screenshot({ path: testInfo.outputPath("race-sheet-footer-320.png") });
+});
+
 /** `target` is fully on screen and inside `sheet` as it opens, with no scrolling. */
 async function inView(page: Page, sheet: Locator, target: Locator) {
   const view = page.viewportSize()!;
@@ -353,4 +386,56 @@ test("at 320 px a season page phase row keeps its name to two lines, the badge o
   const subs = await lineCounts(rows, "[data-testid=phase-sub]");
   expect(subs.filter((n) => n.lines > 2)).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("season-phases-320.png") });
+});
+
+/**
+ * `target` is on screen and the element at its centre is itself, not the
+ * pinned footer: both when it is scrolled into view from the top of `sheet`
+ * (as a tap on the row above or a keyboard focus does) and with the sheet
+ * scrolled to its end.
+ */
+async function uncovered(page: Page, sheet: Locator, target: Locator) {
+  await sheet.evaluate((el) => el.scrollTo(0, 0));
+  await target.evaluate((el) => el.scrollIntoView({ block: "nearest" }));
+  await notCovered(page, target);
+  await sheet.evaluate((el) => el.scrollTo(0, el.scrollHeight));
+  await expect.poll(() => sheet.evaluate((el) => Math.ceil(el.scrollTop + el.clientHeight) >= el.scrollHeight - 1)).toBe(true);
+  await notCovered(page, target);
+}
+
+async function notCovered(page: Page, target: Locator) {
+  const view = page.viewportSize()!;
+  const t = (await target.boundingBox())!;
+  expect(t.y, "top on screen").toBeGreaterThanOrEqual(0);
+  expect(t.y + t.height, "bottom on screen").toBeLessThanOrEqual(view.height + 1);
+  const hit = await target.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    return at != null && (el === at || el.contains(at));
+  });
+  expect(hit, "not covered by the footer").toBe(true);
+}
+
+test("at 320 px a pinned sheet footer never covers the last row or note (round 9 F1)", async ({ page }, testInfo) => {
+  const { cycleId, seasonId } = await plan(testInfo.parallelIndex);
+
+  await page.goto(`/cycles/${cycleId}`);
+  await page.getByTestId("week-row").first().click();
+  const session = page.getByTestId("session-sheet");
+  await expect(session).toBeVisible();
+  await session.getByRole("button", { name: "Move to another day" }).click();
+  await uncovered(page, session, session.getByRole("button", { name: "Skip this session" }));
+  await uncovered(page, session, session.getByText("Only this day changes. The template stays the same."));
+  await page.screenshot({ path: testInfo.outputPath("session-end-320.png") });
+
+  await page.goto(`/seasons/${seasonId}`);
+  await page.getByTestId("phase-row").nth(2).click();
+  const phase = page.locator("[data-plan-sheet]");
+  await expect(phase.getByRole("button", { name: "Save phase" })).toBeVisible();
+  await phase.getByRole("button", { name: "Weeks" }).click();
+  const note = phase.getByText(/is not a whole number of weeks/);
+  await expect(note).toBeVisible();
+  await uncovered(page, phase, note);
+  await uncovered(page, phase, phase.getByRole("button", { name: "Save phase" }));
+  await page.screenshot({ path: testInfo.outputPath("phase-end-320.png") });
 });

@@ -181,9 +181,10 @@ describe("weekday week", () => {
     fireEvent.click(within(sheet).getByRole("button", { name: "Move to another day" }));
     expect((within(sheet).getByRole("button", { name: "Mon 16 Nov" }) as HTMLButtonElement).disabled).toBe(true);
     expect((within(sheet).getByRole("button", { name: "Thu 19 Nov, current day" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(within(sheet).getByText("Sun has a key session. You cannot pick a day in the past.")).toBeTruthy();
+    expect(within(sheet).getByText("You cannot pick a day in the past.")).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Sat 21 Nov" }));
     await act(async () => {
-      fireEvent.click(within(sheet).getByRole("button", { name: "Sat 21 Nov" }));
+      fireEvent.click(within(sheet).getByRole("button", { name: "Move to Sat 21 Nov" }));
     });
     expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 3, date: "2026-11-21" });
     expect(refresh).toHaveBeenCalled();
@@ -297,7 +298,7 @@ describe("Did you do it? from a past row", () => {
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     expect(within(sheet).getByRole("button", { name: "Yes, I did it" }).getAttribute("aria-pressed")).toBe("false");
     expect(within(sheet).getByRole("button", { name: "Missed" }).getAttribute("aria-pressed")).toBe("false");
-    expect(within(sheet).queryByLabelText("Time")).toBeNull();
+    expect(within(sheet).queryByLabelText("Time in minutes")).toBeNull();
     expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -307,7 +308,7 @@ describe("Did you do it? from a past row", () => {
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     expect(within(sheet).getByText("No run found for this day. Did you do it?")).toBeTruthy();
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
-    fireEvent.change(within(sheet).getByLabelText("Time"), { target: { value: "1:05" } });
+    fireEvent.change(within(sheet).getByLabelText("Time in minutes"), { target: { value: "1:05" } });
     fireEvent.click(within(sheet).getByRole("button", { name: "Effort 6" }));
     await act(async () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
@@ -321,7 +322,7 @@ describe("Did you do it? from a past row", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     fireEvent.click(within(sheet).getByRole("button", { name: "Missed" }));
-    expect(within(sheet).queryByLabelText("Time")).toBeNull();
+    expect(within(sheet).queryByLabelText("Time in minutes")).toBeNull();
     await act(async () => {
       fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
     });
@@ -334,8 +335,8 @@ describe("Did you do it? from a past row", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
-    expect(within(sheet).getByLabelText("Time")).toBeTruthy();
-    fireEvent.change(within(sheet).getByLabelText("Time"), { target: { value: "abc" } });
+    expect(within(sheet).getByLabelText("Time in minutes")).toBeTruthy();
+    fireEvent.change(within(sheet).getByLabelText("Time in minutes"), { target: { value: "abc" } });
     expect(within(sheet).getByText("Type minutes, such as 45, or hours and minutes, such as 1.30.")).toBeTruthy();
     expect(sheet.textContent).not.toMatch(/[:—]/);
   });
@@ -370,7 +371,7 @@ describe("Did you do it? from a past row", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
-    fireEvent.change(within(sheet).getByLabelText("Time"), { target: { value: "1:05" } });
+    fireEvent.change(within(sheet).getByLabelText("Time in minutes"), { target: { value: "1:05" } });
     fireEvent.change(within(sheet).getByLabelText(/^Distance/), { target: { value: "-5" } });
     expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(true);
     expect(within(sheet).getByText("Type a distance of 0 or more.")).toBeTruthy();
@@ -477,9 +478,9 @@ describe("rotation order", () => {
     expect(within(sheet).getByText(/Position 2 of 4/)).toBeTruthy();
     expect(within(sheet).getByRole("link", { name: "Start workout" }).getAttribute("href")).toBe("/programs/2/workout");
     // A real action: the normal row text, not the grey of a dimmed one (J3-03).
-    expect(within(sheet).getByRole("button", { name: "Skip this time" }).className).not.toContain("text-muted-foreground");
+    expect(within(sheet).getByRole("button", { name: "Skip this session" }).className).not.toContain("text-muted-foreground");
     await act(async () => {
-      fireEvent.click(within(sheet).getByRole("button", { name: "Skip this time" }));
+      fireEvent.click(within(sheet).getByRole("button", { name: "Skip this session" }));
     });
     expect(updateRotationSession).toHaveBeenCalledWith({ op: "skip", cycleId: 5, rotationPosition: 1 });
     expect(refresh).toHaveBeenCalled();
@@ -583,7 +584,7 @@ describe("a dimmed Save says what is missing (J5-10)", () => {
     expect(reasonOf(save)).toBe("Pick Yes or Missed.");
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
     expect(reasonOf(save)).toBe("Type a time.");
-    fireEvent.change(within(sheet).getByLabelText("Time"), { target: { value: "1:05" } });
+    fireEvent.change(within(sheet).getByLabelText("Time in minutes"), { target: { value: "1:05" } });
     expect(save.getAttribute("aria-describedby")).toBeNull();
     fireEvent.click(within(sheet).getByRole("button", { name: "Missed" }));
     expect(save.getAttribute("aria-describedby")).toBeNull();
@@ -638,5 +639,78 @@ describe("completed cycle", () => {
     render(<CycleCompletionBanner cycle={done} lengthLabel="6 weeks" endedLabel="ended 20 Dec" next={{ id: 8, name: "Strength peak", startsLabel: "Mon 28 Dec", startsTomorrow: false }} />);
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));
     expect(screen.queryByTestId("cycle-complete")).toBeNull();
+  });
+});
+
+describe("round 9 F: the session sheets", () => {
+  it("a changed key session shows its note and its Key mark in the sheet (F3)", () => {
+    renderWeek({
+      sessions: [session({ id: 8, date: "2026-11-19", name: "Hill repeats", touched: true, key: true, label: "Hill repeats", notes: "Find a hill of about 6 percent. Walk down." })],
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Hill repeats/ }));
+    const sheet = screen.getByTestId("session-sheet");
+    expect(within(sheet).getByText("Find a hill of about 6 percent. Walk down.")).toBeTruthy();
+    expect(within(sheet).getByText("Key")).toBeTruthy();
+  });
+
+  const slots = [
+    { id: 11, orderIndex: 1, programId: 1, label: null, programName: "Upper A" },
+    { id: 12, orderIndex: 2, programId: 2, label: null, programName: "Lower A" },
+  ];
+  const walk = [
+    { date: "2026-11-17", slotId: 11, rotationPosition: 0, programId: 1, programName: "Upper A", status: "planned" as const },
+    { date: "2026-11-18", slotId: 12, rotationPosition: 1, programId: 2, programName: "Lower A", status: "skipped" as const, skipReason: "Travel" },
+  ];
+
+  it("a skipped rotation row is struck through as a skipped dated row is, and its sheet says the reason (F4)", () => {
+    render(<RotationOrder cycleId={5} rows={rotationRows(slots, walk, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
+    const row = screen.getAllByTestId("rotation-row")[1];
+    const name = within(row).getByText("Lower A");
+    expect(name.className).toContain("line-through");
+    expect(name.className).toContain("text-muted-foreground");
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Lower A" }));
+    expect(within(screen.getByTestId("rotation-sheet")).getByText("Skipped · Travel")).toBeTruthy();
+  });
+
+  it("both sheets say Skip this session, in the plain row style, not red (F5)", () => {
+    render(<RotationOrder cycleId={5} rows={rotationRows(slots, walk.slice(0, 1), TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
+    fireEvent.click(screen.getByRole("button", { name: "Actions for Upper A" }));
+    const rotationSkip = within(screen.getByTestId("rotation-sheet")).getByRole("button", { name: "Skip this session" });
+    expect(rotationSkip.className).not.toContain("destructive");
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    renderWeek();
+    fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));
+    const datedSkip = within(screen.getByTestId("session-sheet")).getByRole("button", { name: "Skip this session" });
+    expect(datedSkip.className).not.toContain("destructive");
+    expect(datedSkip.className).toBe(rotationSkip.className);
+  });
+
+  it("the move grid names a key session only for the day picked, then moves there (F6)", async () => {
+    renderWeek();
+    fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));
+    const sheet = screen.getByTestId("session-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Move to another day" }));
+    expect(within(sheet).queryByText(/has a key session/)).toBeNull();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Sat 21 Nov" }));
+    expect(within(sheet).queryByText(/has a key session/)).toBeNull();
+    expect(updatePlannedSession).not.toHaveBeenCalled();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Sun 22 Nov, key session" }));
+    expect(within(sheet).getByText(/^Sun has a key session\./)).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Move to Sun 22 Nov" }));
+    });
+    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 3, date: "2026-11-22" });
+  });
+
+  it("the Time field says its unit, minutes, in the field (F7)", () => {
+    const answer = { id: 1, date: "2026-11-16", name: "Run aerobic", summary: "45 min", sport: "run" as const };
+    renderWeek({ sessions: [session({ id: 1, date: "2026-11-16", name: "Run aerobic", programId: null, status: "missed", answer })] });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    const field = within(sheet).getByLabelText("Time in minutes") as HTMLInputElement;
+    expect(field.placeholder).toBe("45");
+    expect(within(field.closest("label")!).getByText("min").getAttribute("aria-hidden")).toBe("true");
   });
 });

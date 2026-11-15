@@ -370,9 +370,15 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
           {answer === "yes" && (
             <>
               <div className="grid grid-cols-2 gap-2">
+                {/* The unit sits in the field, as Distance's does: plain minutes, the clearest to type (round 9 F7). */}
                 <label className={label}>
                   <span className={LABEL}>Time</span>
-                  <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="decimal" placeholder="1.05" className={field} />
+                  <span className="relative">
+                    <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="decimal" placeholder="45" aria-label="Time in minutes" className={`${field} pr-14`} />
+                    <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-base text-muted-foreground">
+                      min
+                    </span>
+                  </span>
                 </label>
                 {/* As short as the Time label, so both fields line up at 320 px; the unit sits in the field. */}
                 <label className={label}>
