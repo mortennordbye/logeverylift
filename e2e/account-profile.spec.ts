@@ -67,7 +67,7 @@ test("injuries and sick periods open their list and editor from Account", async 
   expect(sick.endedOn).toBeNull();
 });
 
-test("the goal chips sit on the Goals and training page, and the top page sums them up", async ({ page }, testInfo) => {
+test("the goal chips sit on the Goals and training page and save", async ({ page }, testInfo) => {
   const settle = trackActions(page);
   const uid = await userId(testInfo.parallelIndex);
   await testDb().update(users).set({ goals: null }).where(eq(users.id, uid));
@@ -77,8 +77,6 @@ test("the goal chips sit on the Goals and training page, and the top page sums t
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await settle();
 
-  await page.goto("/more/account");
-  await expect(page.getByTestId("account-group-goals-and-training")).toContainText("Endurance");
   const [row] = await testDb().select({ goals: users.goals }).from(users).where(eq(users.id, uid));
   expect(row.goals).toBe(JSON.stringify(["endurance"]));
 });

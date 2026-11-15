@@ -30,7 +30,6 @@ test("a Premium user sees the switch and the From Garmin line", async ({ page, c
   await expect(page.getByTestId("account-threshold-ftp-note")).toContainText("From Garmin · Sun 1 Nov");
 
   await page.goto("/more/account");
-  await expect(page.getByTestId("account-group-training-numbers")).toContainText("FTP 262 W");
   const sync = page.getByRole("switch", { name: /Sync from Garmin/ });
   await expect(sync).toHaveAttribute("aria-checked", "true");
   await expect(page.getByText(/Keeps body weight, max HR, threshold HR, FTP, run pace, availability, time zone and units up to date/)).toBeVisible();
@@ -51,7 +50,7 @@ test("a user without Premium sees no Garmin text", async ({ page, context }, tes
   await context.clearCookies({ name: /session_data/ });
 
   await page.goto("/more/account");
-  await expect(page.getByTestId("account-group-training-numbers")).toContainText("FTP 262 W");
+  await expect(page.getByTestId("account-group-training-numbers")).toBeVisible();
   await expect(page.getByRole("switch", { name: /Sync from Garmin/ })).toHaveCount(0);
   await expect(page.getByText(/Garmin/)).toHaveCount(0);
 

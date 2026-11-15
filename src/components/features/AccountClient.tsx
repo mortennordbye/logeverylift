@@ -255,8 +255,7 @@ export function AccountClient({ data, page }: AccountClientProps) {
                 {group.buttons.map((b) => (
                   <Link key={b.id} href={`/more/account/${b.id}`} className="flex items-center gap-3 px-4 min-h-[52px] py-3 active:opacity-60" data-testid={`account-group-${b.id}`}>
                     <b.icon className="w-5 h-5 text-muted-foreground shrink-0" />
-                    <span className="text-sm font-medium shrink-0">{b.title}</span>
-                    <span className="flex-1 min-w-0 text-sm text-muted-foreground text-right truncate">{b.summary(data)}</span>
+                    <span className="flex-1 text-sm font-medium">{b.title}</span>
                     <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                   </Link>
                 ))}

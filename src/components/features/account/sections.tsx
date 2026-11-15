@@ -326,59 +326,23 @@ export const SECTIONS: Section[] = [
   },
 ];
 
-/** A button on the top Account page: it opens /more/account/<id> and shows a one-line summary. */
-export type GroupButton = { id: SubPage; title: string; icon: LucideIcon; summary: (d: AccountData) => string };
-
-const current = (d: AccountData, kind: ThresholdKind) => {
-  const c = currentThresholds(d.thresholds)[kind];
-  return c ? formatThreshold(kind, c.value, d.units) : null;
-};
+/** A button on the top Account page: it opens /more/account/<id>. */
+export type GroupButton = { id: SubPage; title: string; icon: LucideIcon };
 
 export const GROUPS: { title: string; buttons: GroupButton[] }[] = [
   {
     title: "You",
     buttons: [
-      {
-        id: "goals-and-training",
-        title: SUB_PAGES["goals-and-training"],
-        icon: Target,
-        summary: (d) =>
-          [d.goals.map((g) => GOAL_LABELS[g]).join(", "), d.endurance && d.athlete?.availableDays?.length ? `${d.athlete.availableDays.length} days` : ""]
-            .filter(Boolean)
-            .join(" · ") || notSet,
-      },
-      {
-        id: "body-and-health",
-        title: SUB_PAGES["body-and-health"],
-        icon: HeartPulse,
-        summary: (d) => {
-          const injury = d.endurance ? d.injuries.find((i) => i.status !== "past") : undefined;
-          const where = injury ? `${injury.side ? `${injury.side} ` : ""}${injury.area.replace("_", " ")}` : "";
-          return [d.weightKg != null ? `${d.weightKg} kg` : "", where].filter(Boolean).join(" · ") || notSet;
-        },
-      },
-      {
-        id: "training-numbers",
-        title: SUB_PAGES["training-numbers"],
-        icon: Gauge,
-        summary: (d) => {
-          const ftp = current(d, "ftp");
-          const maxHr = current(d, "max_hr");
-          return [ftp ? `FTP ${ftp}` : "", maxHr ? `max HR ${maxHr}` : ""].filter(Boolean).join(" · ") || notSet;
-        },
-      },
+      { id: "goals-and-training", title: SUB_PAGES["goals-and-training"], icon: Target },
+      { id: "body-and-health", title: SUB_PAGES["body-and-health"], icon: HeartPulse },
+      { id: "training-numbers", title: SUB_PAGES["training-numbers"], icon: Gauge },
     ],
   },
   {
     title: "Account",
     buttons: [
-      {
-        id: "privacy-and-security",
-        title: SUB_PAGES["privacy-and-security"],
-        icon: Shield,
-        summary: (d) => (d.showActivityToFriends ? "Friends see workouts" : "Workouts hidden from friends"),
-      },
-      { id: "your-data", title: SUB_PAGES["your-data"], icon: Download, summary: () => "Export, delete" },
+      { id: "privacy-and-security", title: SUB_PAGES["privacy-and-security"], icon: Shield },
+      { id: "your-data", title: SUB_PAGES["your-data"], icon: Download },
     ],
   },
 ];
