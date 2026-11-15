@@ -58,15 +58,28 @@ describe("the Edit details screen", () => {
     await waitFor(() => expect(updateTrainingCycle).toHaveBeenCalledWith(expect.objectContaining({ id: 3, endAction: "rest" })));
   });
 
-  it("shows the schedule type read-only, in the setup form's words", () => {
+  it("shows the schedule type locked, in the setup form's words: no radio or press look to tap (round 9)", () => {
     const { rerender } = render(<EditCycleForm cycle={cycle} enduranceEnabled={false} today="2026-11-14" />);
-    const same = screen.getByRole("radio", { name: /Same days each week/ }) as HTMLInputElement;
-    expect(same.checked).toBe(true);
-    expect(same.disabled).toBe(true);
-    expect((screen.getByRole("radio", { name: /Rotation/ }) as HTMLInputElement).disabled).toBe(true);
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    const locked = screen.getByTestId("schedule-type");
+    expect(locked.tagName).not.toBe("LABEL");
+    expect(locked.className).not.toMatch(/active:/);
+    expect(locked.textContent).toContain("Same days each week");
+    expect(locked.textContent).not.toContain("Rotation");
     expect(screen.getByText("The schedule type can't be changed after the cycle is made.")).toBeTruthy();
     rerender(<EditCycleForm cycle={{ ...cycle, scheduleType: "rotation" }} enduranceEnabled={false} today="2026-11-14" />);
-    expect((screen.getByRole("radio", { name: /Rotation/ }) as HTMLInputElement).checked).toBe(true);
+    expect(screen.getByTestId("schedule-type").textContent).toContain("Rotation");
+  });
+
+  it("the Race day helper names no distance field before a race day is set (round 9)", () => {
+    render(<EditCycleForm cycle={cycle} enduranceEnabled today="2026-11-14" />);
+    expect(screen.queryByRole("group", { name: "Race distance" })).toBeNull();
+    expect(screen.getByText("The race countdown uses this day.")).toBeTruthy();
+    expect(document.body.textContent).not.toContain("the distance");
+    cleanup();
+    render(<EditCycleForm cycle={{ ...cycle, raceDate: "2027-08-22" }} enduranceEnabled today="2026-11-14" />);
+    expect(screen.getByRole("group", { name: "Race distance" })).toBeTruthy();
+    expect(screen.getByText("The race countdown uses this day, and your training is checked against the race distance.")).toBeTruthy();
   });
 
   it("has no colon or em dash in its text, with or without a season", () => {
