@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { trainingCycles } from "@/db/schema";
+import { athleteProfiles, trainingCycles } from "@/db/schema";
 import AddPhasePage from "@/app/seasons/[id]/phases/new/page";
 import SeasonPage from "@/app/seasons/[id]/page";
 import NewSeasonPage from "@/app/seasons/new/page";
@@ -34,6 +34,8 @@ let me: string;
 
 beforeEach(async () => {
   me = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+  // The plan needs an endurance level and training days; Fri and Sat off are the plan's own rest days.
+  await db.insert(athleteProfiles).values({ userId: me, enduranceLevel: "intermediate" as const, availableDays: [1, 2, 3, 4, 7] });
   asUser(me);
 });
 

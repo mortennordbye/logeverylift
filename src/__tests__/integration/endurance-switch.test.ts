@@ -15,6 +15,8 @@ let athlete: string;
 beforeEach(async () => {
   admin = (await createUser({ role: "admin" })).id;
   athlete = (await createUser()).id;
+  // The plan needs an endurance level and training days; Fri and Sat off are the plan's own rest days.
+  await db.insert(athleteProfiles).values({ userId: athlete, enduranceLevel: "intermediate" as const, availableDays: [1, 2, 3, 4, 7] });
 });
 
 describe("setUserEndurance", () => {
@@ -83,6 +85,16 @@ describe("generateTriathlonPlan", () => {
     expect(await db.select().from(trainingCycles).where(eq(trainingCycles.userId, athlete))).toHaveLength(0);
   });
 
+  it("refuses without an endurance level and training days, as the form says", async () => {
+    await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, athlete));
+    await db.update(athleteProfiles).set({ availableDays: null }).where(eq(athleteProfiles.userId, athlete));
+    asUser(athlete);
+    expect(await generateTriathlonPlan(plan)).toEqual({ success: false, error: "Set your endurance level and training days in Account first." });
+    await db.update(athleteProfiles).set({ availableDays: [1, 2, 3, 4, 7], enduranceLevel: null }).where(eq(athleteProfiles.userId, athlete));
+    expect((await generateTriathlonPlan(plan)).success).toBe(false);
+    expect(await db.select().from(trainingCycles).where(eq(trainingCycles.userId, athlete))).toHaveLength(0);
+  });
+
   it("builds the plan once the switch is on", async () => {
     await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, athlete));
     asUser(athlete);
@@ -94,7 +106,7 @@ describe("generateTriathlonPlan", () => {
   it("builds the strength part from the profile's strength goal (docs/plans/athlete-profile.md, 2.7)", async () => {
     await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, athlete));
     asUser(athlete);
-    await db.insert(athleteProfiles).values({ userId: athlete, strengthGoal: "stronger" });
+    await db.update(athleteProfiles).set({ strengthGoal: "stronger" }).where(eq(athleteProfiles.userId, athlete));
     const result = await generateTriathlonPlan(plan);
     expect(result.success, JSON.stringify(result)).toBe(true);
     if (!result.success) return;

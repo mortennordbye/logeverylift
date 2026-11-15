@@ -88,10 +88,11 @@ export async function createTriathlonPlan(ctx: PlanWriteContext, input: Triathlo
   // (docs/plans/athlete-profile.md, 2.7). Read here, not taken from the
   // form: the profile owns them.
   const profile = await getAthleteProfile(userId);
-  const defaults = planDefaultsFromProfile({
-    availableDays: profile?.availableDays ?? null,
-    enduranceLevel: profile?.enduranceLevel ?? null,
-  });
+  // The same gate as the form (docs/plans/account-profile.md, 11.9): no plan built from defaults.
+  if (!profile?.enduranceLevel || !profile.availableDays?.length) {
+    throw new PlanStateError("Set your endurance level and training days in Account first.");
+  }
+  const defaults = planDefaultsFromProfile({ availableDays: profile.availableDays, enduranceLevel: profile.enduranceLevel });
   const level = input.level ?? defaults.level;
   const restDays = input.restDays ?? defaults.restDays;
   const plans = phases.map((p) =>
@@ -99,7 +100,7 @@ export async function createTriathlonPlan(ctx: PlanWriteContext, input: Triathlo
       weeks: p.durationWeeks,
       restDays: restDays.length > 0 ? restDays : undefined,
       level,
-      strengthGoal: profile?.strengthGoal ?? null,
+      strengthGoal: profile.strengthGoal,
       phaseType: p.phaseType,
     }),
   );

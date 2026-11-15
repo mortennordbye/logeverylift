@@ -1,5 +1,5 @@
 import { db } from "@/db";
-import { planRevisions, programExercises, programSets, programs, seasonRaces, seasons, trainingCycles } from "@/db/schema";
+import { athleteProfiles, planRevisions, programExercises, programSets, programs, seasonRaces, seasons, trainingCycles } from "@/db/schema";
 import { createSeasonAction } from "@/lib/actions/seasons";
 import { generateTriathlonPlan } from "@/lib/actions/triathlon-plan";
 import { getSeasonDetail } from "@/lib/seasons";
@@ -25,6 +25,8 @@ beforeEach(async () => {
   me = (await createUser({ enduranceEnabled: true })).id;
   other = (await createUser({ enduranceEnabled: true })).id;
   lifter = (await createUser()).id;
+  // The plan needs an endurance level and training days; Fri and Sat off are the plan's own rest days.
+  await db.insert(athleteProfiles).values([me, other].map((userId) => ({ userId, enduranceLevel: "intermediate" as const, availableDays: [1, 2, 3, 4, 7] })));
 });
 
 const phasesOf = (seasonId: number) =>
