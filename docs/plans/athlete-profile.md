@@ -393,6 +393,9 @@ Changed:
 
 ### 2.9 UI
 
+Thresholds and the athlete profile are now sections of Account, and the two pages below are
+gone ([account-profile.md](account-profile.md)). The interview keeps its address.
+
 - **Thresholds** at `/more/thresholds` (*new*), for every user, in More under Training. One row
   per kind: the value in the user's units, the date, the source ("Field test", "Entered",
   "Garmin estimate"), and a stale line. Tap a row: a sheet with "Enter value", "Field test" (the
@@ -557,7 +560,7 @@ flow.
 New: `src/db/schema/athlete-profile.ts`, `src/lib/utils/thresholds.ts`,
 `src/lib/utils/strength-goal.ts`, `src/lib/athlete-profile.ts`,
 `src/lib/actions/athlete-profile.ts`, `src/lib/mcp/tools/athlete-profile.ts`,
-`src/app/more/thresholds/`, `src/app/more/athlete/` (with `interview/`), their components, the
+`src/app/more/athlete/interview/`, its components, the
 tests in section 5, one `drizzle/*.sql`.
 Changed: `src/db/schema/plan-revisions.ts`, `src/db/schema/index.ts`, `src/lib/plan-revisions.ts`,
 `src/lib/utils/plan-revisions.ts`, `src/lib/utils/triathlon-plan.ts`,

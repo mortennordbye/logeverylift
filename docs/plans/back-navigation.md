@@ -33,12 +33,10 @@ history pop) went to Progress, not to home, so Back and the swipe disagreed.
 | `/history/[sessionId]` | `SessionDetailClient` | `/history` "Back" | History list; exercise detail rows; Friends reactions; Garmin matched session | Yes |
 | `/exercises` | `ExercisesClient` button | in-page views, then `/more` "Back" | More list | no |
 | `/exercises/[id]` | `ExerciseDetailClient` button, `history.length` guess | "Back" | library; workout exercise heading | Yes |
-| `/more/thresholds` | page | `/more` "More" | More list; planned session page; athlete profile | Yes |
-| `/more/athlete` | page | `/more` "More" | More list; interview | Yes |
 | `/more/ai-setup` | page | `/more` "More" | More list; home AI check-in notice; onboarding | Yes |
 | `/more/install` | page | `/more` "Back" | Settings; onboarding | Yes |
 | `/settings` | `SettingsClient` | `/more` "More" | More list | no |
-| `/more/account` | page | `/more` "More" | More list; consent form; gym picker | Yes |
+| `/more/account` | page | `/more` "More" | More list; consent form; gym picker; planned session page; interview | Yes |
 | `/more/account/gym` | page | `/more/account` "Account" | Account; gym map | Yes |
 | `/more/gyms` | page | `/more` "More" | More list; gym picker | Yes |
 | `/more/assistants` | page | `/more` "More" | More list | no |
