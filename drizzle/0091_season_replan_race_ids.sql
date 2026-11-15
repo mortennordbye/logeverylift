@@ -1,0 +1,1 @@
+ALTER TABLE "seasons" ADD COLUMN "replan_race_ids" integer[];

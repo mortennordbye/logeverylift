@@ -622,7 +622,7 @@ export const MEMORY_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt
 /** `orphanedAt` (race plans) follows the race, never a revision. */
 export const ROW_KEPT = [...MEMORY_KEPT, "orphanedAt"] as const;
 /** Season fields a restore never writes back (the re-plan flag is recomputed). */
-export const SEASON_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt", "replanFlaggedAt", "replanReason"] as const;
+export const SEASON_KEPT = ["id", "userId", "createdAt", "updatedAt", "deletedAt", "replanFlaggedAt", "replanReason", "replanRaceIds"] as const;
 /** Program fields a restore never writes back. */
 export const PROGRAM_KEPT = ["id", "userId", "createdByCycleId", "createdAt"] as const;
 /** Exercise slot fields a restore never writes back (progressionConfigAt is recomputed). */

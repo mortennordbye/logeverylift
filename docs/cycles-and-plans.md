@@ -24,7 +24,7 @@ The home screen (`src/app/page.tsx`) surfaces scheduled workouts you skipped. Al
 
 It makes a season, not a cycle: "Make a triathlon plan" in New season (`/seasons/new`; `/cycles/triathlon` redirects there).
 - **Phase sizing** (pure): `src/lib/utils/triathlon-phases.ts` → `triathlonPhases(startDate, race)` sizes the phases (general, base, build, peak, taper) from the start date to the A race, the taper the race's default length and ending on race day. Unit-tested in `src/__tests__/triathlon-phases.test.ts`.
-- **Blueprint** (pure): `src/lib/utils/triathlon-plan.ts` → `buildTriathlonPlan({ weeks, restDays, goal, level, phaseType })` returns a `PlanBlueprint` (days → exercises → sets). With `phaseType`, week 1 follows that phase's curve. Unit-tested in `src/__tests__/triathlon-plan.test.ts`.
+- **Blueprint** (pure): `src/lib/utils/triathlon-plan.ts` → `buildTriathlonPlan({ weeks, restDays, level, strengthGoal, phaseType })` returns a `PlanBlueprint` (days → exercises → sets) for one season phase: week 1 follows that phase's curve, and `weeks` is used as it is. Unit-tested in `src/__tests__/triathlon-plan.test.ts`.
 - **Persistence** (DB): `src/lib/triathlon-plan.ts` → `createTriathlonPlan` (called by the `generateTriathlonPlan` action in `src/lib/actions/triathlon-plan.ts` and by `scripts/seed-plan-demo.ts`) ensures the referenced exercises exist (`ENSURED_EXERCISES`), resolves names→ids, then in one plan write inserts the season, its A race, and per phase a cycle with its own slots + programs + program_exercises + program_sets. Level and rest days come from the athlete profile. UI: `src/components/features/SeasonForm.tsx`.
 
 ### Current week layout (2 strength + endurance)

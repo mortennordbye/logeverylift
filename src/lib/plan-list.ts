@@ -10,11 +10,12 @@ import { db } from "@/db";
 import { trainingCycles } from "@/db/schema";
 import { getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
 import { liveCycles } from "@/lib/plan-live";
+import { cyclesCompletedAt } from "@/lib/plan-revisions";
 import { ensureCycleSessions, listPlanned } from "@/lib/planned-sessions";
 import { getSeasonDetail, listSeasons } from "@/lib/seasons";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { dayMonth } from "@/lib/home/labels";
-import { userToday } from "@/lib/user-settings";
+import { getUserSettings, userToday } from "@/lib/user-settings";
 import { blockWeeks, dayLabels, weekDays as blockWeekDays, rotationRows, weekIndexOf, type RotationWalkDay } from "@/lib/utils/cycle-detail";
 import { cycleLengthDays, toDateStr } from "@/lib/utils/cycle-position";
 import {
@@ -34,6 +35,7 @@ import {
   type WeekSession,
 } from "@/lib/utils/plan-list";
 import { addDaysStr } from "@/lib/utils/seasons";
+import { localDateStr } from "@/lib/utils/user-date";
 import { and, asc, eq } from "drizzle-orm";
 
 type Cycle = typeof trainingCycles.$inferSelect;
@@ -162,9 +164,12 @@ export async function loadPlanList(userId: string, endurance: boolean): Promise<
   const drafts = cycles
     .filter((c) => c.status === "draft" && !inCard.has(c.id))
     .sort((a, b) => (a.scheduledStartDate ?? "9999").localeCompare(b.scheduledStartDate ?? "9999"));
-  const completed = cycles
-    .filter((c) => c.status === "completed" && !inCard.has(c.id))
-    .sort((a, b) => (pastEnd(b, today) ?? "").localeCompare(pastEnd(a, today) ?? ""));
+  const done = cycles.filter((c) => c.status === "completed" && !inCard.has(c.id));
+  // The day each one completed, in the user's zone: an early end is dated by it.
+  const [completedAt, { timeZone }] = await Promise.all([cyclesCompletedAt(userId, done.map((c) => c.id)), getUserSettings(userId)]);
+  const completedOn = new Map([...completedAt].map(([id, at]) => [id, localDateStr(at, timeZone)]));
+  const endOf = (c: Cycle) => pastEnd(c, completedOn.get(c.id) ?? null) ?? "";
+  const past = done.sort((a, b) => endOf(b).localeCompare(endOf(a))).map((c) => pastRow(c, completedOn.get(c.id) ?? null));
   const selectRow = (r: CycleRow): SelectRow => ({ id: r.id, name: r.name, sub: r.starts ? `${r.sub} · ${r.starts}` : r.sub });
 
   return {
@@ -172,14 +177,14 @@ export async function loadPlanList(userId: string, endurance: boolean): Promise<
     hero,
     seasons,
     upNext: drafts.filter((c) => c.id !== heroCycle?.id).map((c) => upNextRow(c, today)),
-    past: completed.map((c) => pastRow(c, today)),
+    past,
     pastSeasons: seasonList
       .filter((s) => s.status === "done")
       .map((s) => ({ id: s.id, name: s.name, sub: `Season · ended ${dayMonth(s.endDate)}${s.endDate.slice(0, 4) !== today.slice(0, 4) ? ` ${s.endDate.slice(0, 4)}` : ""}` })),
     select: {
       current: active && !inCard.has(active.id) ? [{ id: active.id, name: active.name, sub: hero?.label ?? "" }] : [],
       upNext: drafts.map((c) => selectRow(upNextRow(c, today))),
-      past: completed.map((c) => selectRow(pastRow(c, today))),
+      past: past.map(selectRow),
     },
   };
 }

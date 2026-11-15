@@ -36,7 +36,8 @@ import { userToday } from "@/lib/user-settings";
 import { countTouchedFuture, removeSlotInTx, upsertSlotInTx } from "@/lib/planned-sessions";
 import { raceForCycle } from "@/lib/seasons";
 import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
-import { addDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
+import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
+import { MAX_SCHEDULE_DAYS, startDayProblem } from "@/lib/utils/cycle-start";
 import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq, isNull } from "drizzle-orm";
@@ -50,8 +51,6 @@ const durationWeeks = z
 const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 
-/** How far ahead a block can be scheduled to start. */
-export const MAX_SCHEDULE_DAYS = 120;
 /** The range of an assistant's one-week volume change (set_volume). */
 export const SET_VOLUME_MIN = 50;
 export const SET_VOLUME_MAX = 110;
@@ -367,10 +366,9 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
 
         // start: now, or scheduled for a later day.
         const start = args.startDate ?? today;
-        if (start < today) return fail("startDate is in the past");
-        if (start > toDateStr(addDays(parseDateStr(today), MAX_SCHEDULE_DAYS))) {
-          return fail(`startDate is more than ${MAX_SCHEDULE_DAYS} days ahead`);
-        }
+        const problem = startDayProblem(start, today);
+        if (problem === "past") return fail("startDate is in the past");
+        if (problem === "too_far") return fail(`startDate is more than ${MAX_SCHEDULE_DAYS} days ahead`);
         // The block's first week, as it will run: before, nothing of it is planned.
         const lc = await limitContext(userId);
         const scoped = await cycleScope(cycleId, 1);

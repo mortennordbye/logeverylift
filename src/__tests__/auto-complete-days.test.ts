@@ -120,13 +120,13 @@ describe("autoCompleteDue: rotation", () => {
 
 describe("buildTriathlonPlan autoComplete", () => {
   it("turns it on for swim/bike/run-only days and off for strength days", () => {
-    const plan = buildTriathlonPlan({ weeks: 12 });
+    const plan = buildTriathlonPlan({ weeks: 12, phaseType: "build" });
     expect(plan.days.map((day) => day.autoComplete)).toEqual([false, true, true, false, true, true, true]);
   });
 
   it("is off on rest days, and follows a relocated endurance session", () => {
     // Fri+Sat rest: the long run moves onto Tuesday.
-    const plan = buildTriathlonPlan({ weeks: 12, restDays: [5, 6] });
+    const plan = buildTriathlonPlan({ weeks: 12, restDays: [5, 6], phaseType: "build" });
     expect(plan.days.map((day) => day.autoComplete)).toEqual([false, true, true, false, false, false, true]);
   });
 });

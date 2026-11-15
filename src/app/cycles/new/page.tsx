@@ -17,11 +17,11 @@ import { getActiveCycleForUser, getTrainingCycleWithSlots } from "@/lib/actions/
 import { cycleStartContext } from "@/lib/cycle-start";
 import { getPrograms } from "@/lib/actions/programs";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { MAX_SCHEDULE_DAYS } from "@/lib/mcp/tools/cycles";
 import { ownDeletedCycle } from "@/lib/plan-deleted";
 import { userToday } from "@/lib/user-settings";
-import { addDays, toDateStr } from "@/lib/utils/cycle-position";
+import { toDateStr } from "@/lib/utils/cycle-position";
 import { nextMonday, type StartDays } from "@/lib/utils/cycle-setup";
+import { latestStartDay } from "@/lib/utils/cycle-start";
 import { requireSession } from "@/lib/utils/session";
 import { and, count, inArray, isNull } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
@@ -43,7 +43,7 @@ export default async function NewCyclePage({
     today,
     nextMonday: nextMonday(today),
     afterCurrent: active.success && active.data ? active.data.endDate : null,
-    latest: toDateStr(addDays(todayDate, MAX_SCHEDULE_DAYS)),
+    latest: latestStartDay(today),
   };
   const start = params.start && DAY.test(params.start) ? params.start : today;
   // Only one cycle runs and one is scheduled at a time (activateInSession,

@@ -6,7 +6,6 @@ import {
   updateTrainingCycleSchema,
   upsertCycleSlotSchema,
 } from "@/lib/validators/training-cycles";
-import { snapWeeks } from "@/lib/utils/triathlon-plan";
 
 // ─── createTrainingCycleSchema ────────────────────────────────────────────────
 
@@ -109,11 +108,6 @@ describe("updateTrainingCycleSchema", () => {
     for (const weeks of [0, 53, 100, 2.5]) expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: weeks }).success).toBe(false);
   });
 
-  it("accepts every block length the triathlon generator can produce", () => {
-    for (const weeks of [1, 20, 30, 45, 100].map(snapWeeks)) {
-      expect(updateTrainingCycleSchema.safeParse({ id: 1, durationWeeks: weeks }).success).toBe(true);
-    }
-  });
 });
 
 // ─── importCycleSchema ────────────────────────────────────────────────────────

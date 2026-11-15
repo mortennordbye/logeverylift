@@ -341,7 +341,7 @@ async function main() {
       nextGoal: "Hold it through the spring",
     });
     // Phase types are endurance only (PHASE_TYPE_OFF), so the phases have none.
-    const ph1 = await seasonsLib.addPhase(ctx, season.id, { name: "Upper / Lower hypertrophy", scheduleType: "rotation", durationWeeks: 6 });
+    const ph1 = await seasonsLib.addPhase(ctx, season.id, { name: "Upper / Lower hypertrophy", scheduleType: "rotation", durationWeeks: 6, takeStart: true });
     await addSlots(ctx, ph1.cycleId, rotationSlots(p.ua, p.la, p.ub, p.lb));
     const ph2 = await seasonsLib.addPhase(ctx, season.id, { name: "Strength peak", scheduleType: "day_of_week", durationWeeks: 4 });
     await addSlots(ctx, ph2.cycleId, weekdaySlots(p.ua, p.la, p.ub, p.lb));
@@ -510,7 +510,7 @@ async function main() {
       endDate: addDaysStr(pausedStart, 19 * 7 - 1),
       nextGoal: null,
     });
-    const pb1 = await seasonsLib.addPhase(ctx, paused.id, { name: "Aerobic base", scheduleType: "day_of_week", durationWeeks: 8, phaseType: "base" });
+    const pb1 = await seasonsLib.addPhase(ctx, paused.id, { name: "Aerobic base", scheduleType: "day_of_week", durationWeeks: 8, phaseType: "base", takeStart: true });
     await addSlots(ctx, pb1.cycleId, simpleWeek);
     const pb2 = await seasonsLib.addPhase(ctx, paused.id, { name: "Run build", scheduleType: "day_of_week", durationWeeks: 8, phaseType: "build" });
     await addSlots(ctx, pb2.cycleId, simpleWeek);
@@ -548,7 +548,7 @@ async function main() {
       nextGoal: null,
       race: { name: "Lanzarote Half Distance Triathlon presented by the island council", raceDate: raceDay, discipline: "triathlon", distance: "half", priority: "A" },
     });
-    await seasonsLib.addPhase(ctx, replan.id, { name: "Base", scheduleType: "day_of_week", durationWeeks: 10, phaseType: "base" });
+    await seasonsLib.addPhase(ctx, replan.id, { name: "Base", scheduleType: "day_of_week", durationWeeks: 10, phaseType: "base", takeStart: true });
     await seasonsLib.addPhase(ctx, replan.id, { name: "Swim, intervals and long bricks on Sundays", scheduleType: "day_of_week", durationWeeks: 13, phaseType: "build" });
     await seasonsLib.addPhase(ctx, replan.id, { name: "Taper", scheduleType: "day_of_week", durationDays: 14, phaseType: "taper" });
     const replanDetail = await seasonsLib.getSeasonDetail(userId, replan.id);
