@@ -27,6 +27,7 @@ export function WorkoutSessionInitializer({
 }) {
   const workoutSession = useWorkoutSession();
   const hydrateCompletedSetIds = workoutSession?.hydrateCompletedSetIds;
+  const completedSetsMark = workoutSession?.completedSetsMark;
   const sessionId = workoutSession?.sessionId ?? null;
   // Set when arriving via a "Make up" prompt (?makeup=YYYY-MM-DD): the original
   // missed day this session is making up for. Validated YYYY-MM-DD only.
@@ -47,15 +48,17 @@ export function WorkoutSessionInitializer({
   // but the toggles would otherwise come back empty and the workout would
   // look reset even though the DB still has the rows.
   useEffect(() => {
-    if (sessionId == null || !hydrateCompletedSetIds) return;
+    if (sessionId == null || !hydrateCompletedSetIds || !completedSetsMark) return;
     let ignore = false;
     const pull = async () => {
+      // A set tapped while this is in flight is not in the answer.
+      const since = completedSetsMark();
       // A Server Action rejects (rather than returning an error) when the
       // request never reaches the server — offline, or the fetch is cut off by
       // a navigation. Keep the toggles we have; the next foreground re-pulls.
       const result = await getActiveSessionCompletedProgramSetIds(sessionId).catch(() => null);
       if (ignore || !result?.success) return;
-      hydrateCompletedSetIds(new Set(result.data));
+      hydrateCompletedSetIds(new Set(result.data), since);
     };
     void pull();
     // Re-pull whenever the app returns to the foreground. After a long iOS
@@ -74,7 +77,7 @@ export function WorkoutSessionInitializer({
       window.removeEventListener('pageshow', onResume);
       window.removeEventListener('focus', onResume);
     };
-  }, [sessionId, hydrateCompletedSetIds]);
+  }, [sessionId, hydrateCompletedSetIds, completedSetsMark]);
 
   useEffect(() => {
     const raw = localStorage.getItem("activeWorkout");

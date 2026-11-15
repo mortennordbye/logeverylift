@@ -49,7 +49,9 @@ type WorkoutSessionContextValue = {
   completedSetIds: Set<number>;
   addCompletedSet: (id: number) => void;
   removeCompletedSet: (id: number) => void;
-  hydrateCompletedSetIds: (ids: Set<number>) => void;
+  /** How many toggles were made so far; pass it to hydrateCompletedSetIds. */
+  completedSetsMark: () => number;
+  hydrateCompletedSetIds: (ids: Set<number>, since: number) => void;
   restTimerEnds: Record<number, number>;
   setRestTimerEnd: (setId: number, endMs: number) => void;
   clearRestTimerEnd: (setId: number) => void;
@@ -196,23 +198,43 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
     setCompletedSetIds(new Set());
   };
 
-  const addCompletedSet = (id: number) =>
-    setCompletedSetIds((prev) => new Set(prev).add(id));
+  // Every toggle made on this phone, in order. A pull from the server answers
+  // with what was saved when it ran, so a toggle made while the pull was in
+  // flight is missing from its answer; hydrateCompletedSetIds replays these.
+  const toggles = useRef<{ id: number; done: boolean }[]>([]);
 
-  const removeCompletedSet = (id: number) =>
+  const addCompletedSet = (id: number) => {
+    toggles.current.push({ id, done: true });
+    setCompletedSetIds((prev) => new Set(prev).add(id));
+  };
+
+  const removeCompletedSet = (id: number) => {
+    toggles.current.push({ id, done: false });
     setCompletedSetIds((prev) => {
       const s = new Set(prev);
       s.delete(id);
       return s;
     });
+  };
+
+  const completedSetsMark = useCallback(() => toggles.current.length, []);
 
   // Replace the whole set, used to seed from the server on workout-page mount
   // (the JS context may have been evicted while the PWA was backgrounded, in
   // which case localStorage restores the session but completedSetIds is empty).
-  const hydrateCompletedSetIds = useCallback(
-    (ids: Set<number>) => setCompletedSetIds(new Set(ids)),
-    [],
-  );
+  // `since` is completedSetsMark() from when the pull started: the toggles
+  // made after it go on top of the server's answer.
+  const hydrateCompletedSetIds = useCallback((ids: Set<number>, since: number) => {
+    const later = toggles.current.slice(since);
+    setCompletedSetIds(() => {
+      const s = new Set(ids);
+      for (const t of later) {
+        if (t.done) s.add(t.id);
+        else s.delete(t.id);
+      }
+      return s;
+    });
+  }, []);
 
   const setRestTimerEnd = (setId: number, endMs: number) => {
     // Cancel any existing notification timeout so it can be rescheduled at the new end time
@@ -305,6 +327,7 @@ export function WorkoutSessionProvider({ children }: { children: React.ReactNode
         completedSetIds,
         addCompletedSet,
         removeCompletedSet,
+        completedSetsMark,
         hydrateCompletedSetIds,
         restTimerEnds,
         setRestTimerEnd,
