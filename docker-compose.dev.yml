@@ -8,6 +8,10 @@
 # standalone server and the entrypoint, and the container exits immediately.
 services:
   app:
+    # Clear Turbopack's cache on every start: the /app/.next volume survives
+    # `docker restart`, and a cache that no longer matches the source makes the
+    # dev server tell every page to reload in an endless loop.
+    command: ["sh", "-c", "rm -rf .next/dev/cache && exec pnpm next dev --turbo -H 0.0.0.0"]
     volumes:
       - .:/app
       - /app/node_modules
