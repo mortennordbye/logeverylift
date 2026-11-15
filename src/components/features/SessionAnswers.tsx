@@ -25,6 +25,12 @@ import { useState } from "react";
 /** The distance unit in words, for a screen reader. */
 const UNIT_WORD: Record<FieldUnit, string> = { m: "metres", km: "kilometres", yd: "yards", mi: "miles" };
 
+/** The planned time in whole minutes, as Yes fills it in; blank when the session has none (round 10). */
+function plannedTime(session: AnswerSession | null): string {
+  const s = session?.plannedSeconds;
+  return s != null && s >= 60 ? String(Math.round(s / 60)) : "";
+}
+
 /**
  * A typed time as seconds: whole minutes ("45") or hours and minutes
  * ("1:30", or "1.30" and "1,30" from the number keypad, which has no colon).
@@ -172,7 +178,7 @@ export function AnswerSheets({
  */
 function useConfirmDone(session: AnswerSession | null, onSaved: (id: number) => void) {
   const units = useUnits();
-  const [time, setTime] = useState("");
+  const [time, setTime] = useState(() => plannedTime(session));
   const [distance, setDistance] = useState("");
   const [rpe, setRpe] = useState<number | null>(null);
   const [notes, setNotes] = useState("");
@@ -182,7 +188,7 @@ function useConfirmDone(session: AnswerSession | null, onSaved: (id: number) => 
   if (session !== last) {
     setLast(session);
     if (session && session.id !== last?.id) {
-      setTime("");
+      setTime(plannedTime(session));
       setDistance("");
       setRpe(null);
       setNotes("");
@@ -246,7 +252,7 @@ function ConfirmDoneSheet({
             </div>
             <label className="block">
               <span className="text-xs text-muted-foreground">Time in minutes, or hours and minutes</span>
-              <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="decimal" placeholder="45" aria-label="Time" className={field} />
+              <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="decimal" aria-label="Time" className={field} />
             </label>
             {time.trim() !== "" && seconds == null && <p className="text-xs text-destructive">Type minutes, such as 45, or hours and minutes, such as 1.30.</p>}
             <label className="block">
@@ -374,7 +380,7 @@ export function DidYouDoItSheet({ session, dayLabel, onClose }: { session: Answe
                 <label className={label}>
                   <span className={LABEL}>Time</span>
                   <span className="relative">
-                    <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="decimal" placeholder="45" aria-label="Time in minutes" className={`${field} pr-14`} />
+                    <input value={time} onChange={(e) => setTime(e.target.value)} inputMode="decimal" aria-label="Time in minutes" className={`${field} pr-14`} />
                     <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-base text-muted-foreground">
                       min
                     </span>

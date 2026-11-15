@@ -326,6 +326,31 @@ describe("Did you do it? from a past row", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  it("fills in the planned time as a real value, so Save is on (round 10)", async () => {
+    const planned = [session({ id: 1, date: "2026-11-16", name: "Run aerobic", programId: null, status: "missed", answer: { ...answer, plannedSeconds: 65 * 60 } })];
+    renderWeek({ sessions: planned });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    expect((within(sheet).getByLabelText("Time in minutes") as HTMLInputElement).value).toBe("65");
+    expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
+    });
+    expect(confirmPlannedDone).toHaveBeenCalledWith(expect.objectContaining({ plannedSessionId: 1, durationSeconds: 3900 }));
+  });
+
+  it("leaves Time blank with no number in it when the session has no planned time (round 10)", () => {
+    renderWeek({ sessions: past });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    const time = within(sheet).getByLabelText("Time in minutes") as HTMLInputElement;
+    expect(time.value).toBe("");
+    expect(time.placeholder).not.toMatch(/\d/);
+    expect(within(sheet).getByText("Type a time.")).toBeTruthy();
+  });
+
   it("stores Missed", async () => {
     renderWeek({ sessions: past });
     fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
@@ -719,7 +744,8 @@ describe("round 9 F: the session sheets", () => {
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
     const field = within(sheet).getByLabelText("Time in minutes") as HTMLInputElement;
-    expect(field.placeholder).toBe("45");
+    // No grey "45" that reads like a value (round 10).
+    expect(field.placeholder).toBe("");
     expect(within(field.closest("label")!).getByText("min").getAttribute("aria-hidden")).toBe("true");
   });
 });
