@@ -66,7 +66,7 @@ export async function manageIllness(data: unknown): Promise<ActionResult<{ id: n
     } else if (d.op === "end") id = (await updateIllness(ctx, d.id, { endedOn: d.endedOn })).id;
     else id = (await updateIllness(ctx, d.id, { startedOn: d.startedOn, endedOn: d.endedOn, severity: d.severity, notes: d.notes })).id;
     revalidatePath("/");
-    revalidatePath("/more/athlete");
+    revalidatePath("/more/account");
     return { success: true, data: { id } };
   } catch (e) {
     const msg = known(e);

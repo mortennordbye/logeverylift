@@ -13,8 +13,7 @@ import {
   type InjuryView,
   type ProfileView,
 } from "@/components/features/AthleteProfileParts";
-import { ThresholdEditor, type SuggestionView } from "@/components/features/ThresholdEditor";
-import type { ThresholdView } from "@/components/features/ThresholdsClient";
+import { ThresholdEditor, type SuggestionView, type ThresholdView } from "@/components/features/ThresholdEditor";
 import { THRESHOLD_KINDS, type ThresholdKind } from "@/db/schema/athlete-profile";
 import { finishInterview, moveMemoryToProfile } from "@/lib/actions/athlete-profile";
 import { localPath } from "@/lib/utils/sign-in-redirect";
@@ -114,7 +113,7 @@ export function InterviewClient({
       setError(r.error);
       return;
     }
-    router.push(localPath(next, "/more/athlete"));
+    router.push(localPath(next, "/more/account"));
     router.refresh();
   }
 
@@ -128,7 +127,7 @@ export function InterviewClient({
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
         {index === 0 ? (
-          <Link href="/more/athlete" className="min-h-[44px] flex items-center text-sm font-medium text-primary active:opacity-70">
+          <Link href="/more/account" className="min-h-[44px] flex items-center text-sm font-medium text-primary active:opacity-70">
             Cancel
           </Link>
         ) : (

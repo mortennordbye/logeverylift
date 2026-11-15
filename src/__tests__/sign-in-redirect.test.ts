@@ -20,12 +20,12 @@ describe("signInRedirect", () => {
 
 describe("localPath (the interview's next page)", () => {
   it("keeps an app path", () => {
-    expect(localPath("/cycles/triathlon", "/more/athlete")).toBe("/cycles/triathlon");
+    expect(localPath("/cycles/triathlon", "/more/account")).toBe("/cycles/triathlon");
   });
 
   it("refuses protocol-relative, backslash, absolute and empty values", () => {
     for (const bad of ["//3627732462", "//evil.com/x", "/\\evil.com", "https://evil.com", "", undefined, "/a?b=//c"]) {
-      expect(localPath(bad, "/more/athlete")).toBe("/more/athlete");
+      expect(localPath(bad, "/more/account")).toBe("/more/account");
     }
   });
 });
