@@ -73,3 +73,35 @@ must return only the interview route.
   files or moved lines (`docs/plans/athlete-profile.md`, `docs/plans/back-navigation.md`,
   `docs/plans/workouts-and-compliance.md`).
 - Check `docs/privacy/data-inventory.md` for the old page names; no data changes.
+
+## 6. Garmin sync (locked by the owner)
+
+Garmin is Premium: an add-on that fills fields the user can also type. Only Premium users see any
+Garmin text on Account or Settings.
+
+1. **Premium check.** New `src/lib/premium.ts` (*new*): is premium by role, and premium for a
+   user id. For now Premium is the admin role. `garminAllowed` becomes the premium check plus the
+   key check. Account and Settings decide every Garmin line, switch and suggestion through it.
+2. **One switch.** "Sync from Garmin" replaces "Sync weight from Garmin". It sits in a small
+   "Garmin" section near the top of Account, Premium only, with the line "Keeps body weight, max
+   HR, threshold HR, FTP, run pace, availability, time zone and units up to date." The weight
+   sync flag on the Garmin connection becomes this one flag (rename by migration, keep the value).
+3. **What syncs when the switch is on:**
+   - Body weight: as today, every weigh-in, newest wins.
+   - Max HR, threshold HR bike, threshold HR run, FTP, run threshold pace: from the same
+     estimates `garminSuggestions` makes today, stored as threshold rows with source `garmin`, so
+     they show in each number's history.
+   - Availability (days and long day): from Garmin's available training days and preferred long
+     training days, when Garmin has them.
+   - Time zone and units (distance and swim): from the Garmin profile's time zone and measurement
+     system.
+   - Not synced: swim CSS, gender, year of birth, height, goals, levels, injuries, sick periods.
+4. **Typed wins.** A value the user types or tests locks that field: Garmin stops changing it. For
+   thresholds the lock is the stored source (`manual` or `test`). For availability, time zone and
+   units, one list on the user (*new*) names the locked fields, so a new synced field is one more
+   name. When a locked field has a different Garmin value, the row shows "Garmin says <value> ·
+   Use". Use stores the Garmin value and removes the lock.
+5. **Source line.** Each synced row shows where its value came from in its note line: "From
+   Garmin · <date>" or "Set by you · <date>".
+6. **Where it runs.** In the Garmin import after a sync, next to the weight sync that exists. Writes
+   do not appear as assistant changes.
