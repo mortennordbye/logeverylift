@@ -4,12 +4,15 @@ const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
 const scheduleTypeEnum = z.enum(["day_of_week", "rotation"]);
 const statusEnum = z.enum(["draft", "active", "completed"]);
 
-/** Every block length a cycle can have, including the triathlon generator's long blocks. */
-export const CYCLE_DURATION_WEEKS = [4, 6, 8, 10, 12, 16, 24, 36, 52];
+/** A cycle is a whole number of weeks in this range, the same as a season phase. */
+export const MIN_CYCLE_WEEKS = 1;
+export const MAX_CYCLE_WEEKS = 52;
 
-const durationWeeks = z.number().int().refine((v) => CYCLE_DURATION_WEEKS.includes(v), {
-  message: `Duration must be one of ${CYCLE_DURATION_WEEKS.join(", ")} weeks`,
-});
+const durationWeeks = z
+  .number()
+  .int()
+  .min(MIN_CYCLE_WEEKS, `A cycle is ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks.`)
+  .max(MAX_CYCLE_WEEKS, `A cycle is ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks.`);
 
 export const createTrainingCycleSchema = z.object({
   name: z.string().min(1).max(100),
@@ -28,6 +31,8 @@ export const updateTrainingCycleSchema = z.object({
   status: statusEnum.optional(),
   raceDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   raceDistance: z.enum(["full", "half"]).nullable().optional(),
+  /** The version the form read; a save based on an older one is refused (T9). */
+  expectedVersion: z.number().int().positive().optional(),
 });
 
 export const upsertCycleSlotSchema = z.object({
@@ -38,11 +43,21 @@ export const upsertCycleSlotSchema = z.object({
   orderIndex: z.number().int().positive().optional(),
   // day_of_week mode: the session's order in the day, 1-3 (docs/plans/sessions.md, 3.1)
   daySlot: z.number().int().min(1).max(3).optional(),
-  label: z.string().max(100).optional(),
+  // null clears the label or the note.
+  label: z.string().max(100).nullable().optional(),
   programId: z.number().int().positive().nullable().optional(),
-  notes: z.string().max(500).optional(),
+  notes: z.string().max(500).nullable().optional(),
   // Day tracked outside the app: completes itself (see autoCompleteDue).
   autoComplete: z.boolean().optional(),
+  // Endurance features only: a key session, and the next slot of the day as the run of a brick.
+  priority: z.enum(["key", "support", "optional"]).nullable().optional(),
+  brickWithNext: z.boolean().optional(),
+});
+
+export const startTrainingCycleSchema = z.object({
+  cycleId: z.number().int().positive(),
+  // The block's first day; today when omitted. A later day schedules the draft.
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
 
 export const reorderCycleSlotsSchema = z.object({

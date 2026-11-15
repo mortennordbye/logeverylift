@@ -1,5 +1,5 @@
 import { ListPageSkeleton } from "@/components/ui/PageSkeletons";
 
 export default function ProgramHistoryLoading() {
-  return <ListPageSkeleton title="History" rows={4} back={{ href: "", label: "Program" }} />;
+  return <ListPageSkeleton title="Change history" rows={4} back={{ href: "", label: "Program" }} />;
 }

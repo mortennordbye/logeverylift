@@ -1,40 +1,22 @@
 import { CyclesListClient } from "@/components/features/CyclesListClient";
-import { RecentlyDeleted } from "@/components/features/RecentlyDeleted";
-import { SeasonsSection } from "@/components/features/SeasonsSection";
-import { getDeletedPlans } from "@/lib/actions/plan-revisions";
-import { getActiveCycleForUser, getTrainingCycles } from "@/lib/actions/training-cycles";
+import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { listSeasons } from "@/lib/seasons";
-import { getUserSettings } from "@/lib/user-settings";
-import { localDateStr, shortDateTime } from "@/lib/utils/user-date";
+import { deletedPlanCount } from "@/lib/plan-deleted";
+import { loadPlanList } from "@/lib/plan-list";
 import { requireSession } from "@/lib/utils/session";
 
-export default async function CyclesPage() {
+/** The Plan tab (docs/plans/plan-tab-redesign.md, P1). The route keeps its old name. */
+export default async function PlanPage() {
   const session = await requireSession();
   // Like home: a block whose day has come starts, and one that is over completes, before the list is read.
-  await getActiveCycleForUser();
-  const [result, enduranceEnabled, deletedResult, deletedSeasonsResult, { timeZone }, seasons] = await Promise.all([
-    getTrainingCycles(),
-    enduranceEnabledFor(session.user.id),
-    getDeletedPlans({ type: "cycle" }),
-    getDeletedPlans({ type: "season" }),
-    getUserSettings(session.user.id),
-    listSeasons(session.user.id),
+  const [, enduranceEnabled] = await Promise.all([getActiveCycleForUser(), enduranceEnabledFor(session.user.id)]);
+  const [data, deletedCount] = await Promise.all([
+    loadPlanList(session.user.id, enduranceEnabled),
+    // A failed count hides Recently deleted, as a failed list read did.
+    deletedPlanCount(session.user.id).catch((e: unknown) => {
+      console.error("[PlanPage] deleted_count_failed", { error: e instanceof Error ? e.name : "unknown" });
+      return 0;
+    }),
   ]);
-  const cycles = result.success ? result.data : [];
-  const deletedOf = (r: typeof deletedResult) =>
-    r.success ? r.data.map((d) => ({ id: d.id, name: d.name, revisionId: d.revisionId, deletedOn: shortDateTime(d.deletedAt, timeZone) })) : [];
-  return (
-    <CyclesListClient
-      cycles={cycles}
-      enduranceEnabled={enduranceEnabled}
-      seasons={<SeasonsSection seasons={seasons} today={localDateStr(new Date(), timeZone)} enduranceEnabled={enduranceEnabled} />}
-      recentlyDeleted={
-        <>
-          <RecentlyDeleted kind="cycle" items={deletedOf(deletedResult)} />
-          <RecentlyDeleted kind="season" items={deletedOf(deletedSeasonsResult)} />
-        </>
-      }
-    />
-  );
+  return <CyclesListClient data={data} deletedCount={deletedCount} />;
 }

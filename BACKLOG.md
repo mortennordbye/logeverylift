@@ -28,12 +28,33 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** Nothing now: D1's load and the weekly load ramp (D2 part 2) are in. Build the projection from `getSeasonDetail` phases, each with its own curve (`cycleLoad`).
 - **Touchpoints:** `src/lib/garmin/analytics/projection.ts`, `src/lib/garmin/queries.ts` (`getRaceProjection`).
 
+### Plan redesign: what the four packages left for later
+- **What:** Two gaps found while building the Plan tab (`docs/plans/plan-tab-redesign.md`):
+  - The triathlon plan gives every phase its own copy of the generator's programs, so Programs lists names like "Long Run" once per phase.
+  - Server Actions outside `src/lib/actions/training-cycles.ts` can still return `String(err)` to the client (the bug pass fixed only that file).
+- **Why deferred:** Out of the packages' scope; each needs its own decision (shared programs across phases) or a sweep of every action file.
+- **Unblocked by:** An owner choice on shared vs per-phase programs; a grep for `String(err)` and `String(e)` in `src/lib/actions/` with the canonical error pattern from `CLAUDE.md`.
+- **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/`.
+
+### Tests that build date labels without a year
+- **What:** Plan date labels now show the year when a date is not in the current year (`dayMonth`, `shortDay`, `rangeLabel`, with `thisYear()` in `src/lib/utils/date-label.ts`). Some tests still build the label they expect from the real clock with no year, for example `shortDay` in `e2e/did-you-do-it.spec.ts` and the date helpers in `e2e/cycle-detail.spec.ts`. When a run's dates cross into the next year (late December), these tests expect "Fri 1 Jan" and the app shows "Fri 1 Jan 2027".
+- **Why deferred:** Found at the end of the Plan redesign fix rounds; the test files the change touched pin the clock, the others do not, and no test fails before late December.
+- **Unblocked by:** Nothing. Make the helpers use the app's own label functions, or pin the browser and server clock in those specs; grep `toLocaleDateString` in `e2e/` and `src/__tests__/`.
+- **Touchpoints:** `e2e/did-you-do-it.spec.ts`, `e2e/cycle-detail.spec.ts`, `src/lib/utils/date-label.ts`.
+
+### UI text outside the Plan tab that still uses colons
+- **What:** The owner's copy rule (no colons and no em dashes in user-facing text) is met in the Plan tab, but the change history and the assistant changes page still show names and lines with a colon:
+  - `snapshotName` names a library workout "Workout: Tempo" (`src/lib/utils/plan-revisions.ts:96`) and an injury "Injury: left knee" (`src/lib/utils/plan-revisions.ts:93`). The names show on `/more/assistants/changes` (`getAssistantChanges` through `listAssistantChangeSets` in `src/lib/plan-revisions.ts`), and the injury name also goes into "Added injury: …" lines in `diffSnapshots`.
+  - The first entry of the athlete profile lists each field as "Experience: novice", "Days: …" (`diffSnapshots`, `src/lib/utils/plan-revisions.ts:419`), shown as the change lines of an assistant change set on the same page.
+- **Why deferred:** Out of the Plan tab fix rounds' scope. The same lines also go to the assistant over MCP (`diffSnapshots` in `src/lib/mcp/revisions.ts`), so a change needs a check of the MCP texts and their tests too.
+- **Unblocked by:** Nothing. Pick plain words ("Tempo workout", "Left knee injury", "Experience novice" or "Experience set to novice"), change `snapshotName` and `diffSnapshots`, and update the tests that read those strings (`grep -rn "Workout: \|Injury: " src/__tests__`).
+- **Touchpoints:** `src/lib/utils/plan-revisions.ts` (`snapshotName`, `diffSnapshots`), `src/lib/plan-revisions.ts`, `src/lib/mcp/revisions.ts`, `src/app/more/assistants/changes/page.tsx`.
+
 ### Dated sessions: what C2 left for later
-- **What:** Three gaps left by the session model (C2, `docs/plans/sessions.md`):
+- **What:** Two gaps left by the session model (C2, `docs/plans/sessions.md`):
   - `dismissed_makeups` is still written when a whole day is declined, so an app from before C2 keeps hiding the day after a rollback (hub decision 13). Reads use the session's status only. Drop the writes and the table one release after C2.
   - The calendar shows no program on a rotation cycle's days (hub decision 14), though `listPlanned` can work them out.
-  - A rotation session can be skipped or changed over MCP only; the app has no button for it.
-- **Why deferred:** The first is a rollback safety net for one release. The other two were left out to keep the rotation lifter's screens unchanged in C2.
+- **Why deferred:** The first is a rollback safety net for one release. The calendar gap was left out to keep the rotation lifter's screens unchanged in C2. (Rotation skip and change now have app buttons on the cycle detail, Plan redesign P2.)
 - **Unblocked by:** One release of C2 in prod without a rollback (then a migration drops the table and `dismissIfDayClear` goes); and an owner choice on rotation days in the calendar.
 - **Touchpoints:** `src/lib/planned-sessions.ts` (`dismissIfDayClear`, `listPlanned`, `applyRotationOp`), `src/components/features/CycleCalendarClient.tsx` (`getDayInfo`), `src/db/schema/dismissed-makeups.ts`.
 
@@ -164,7 +185,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **What:** Remove the fixed triathlon plan generator (the "Triathlon plan" page and its action) once the assistant builds endurance plans from structured workouts and seasons.
 - **Why deferred:** It is still the only way to make an endurance plan in the app. Package C3 changed it lightly (the intake interview first, prefill from the profile, strength by goal) and decided with the owner on 2026-11-12 to retire it later (`docs/plans/athlete-profile.md`, 2.7 and 12). It plans a full distance from fixed volumes and ignores hours per week, the longest day, the race distance and thresholds.
 - **Unblocked by:** Package C4 (structured endurance workouts) is built, with C1's seasons, so the assistant can build a plan from parts (`docs/plans/workouts-and-compliance.md`). It still needs the owner's yes. Then delete the page, form, action and blueprint with their tests, and drop the cycles-list entry.
-- **Touchpoints:** `src/lib/utils/triathlon-plan.ts`, `src/lib/actions/triathlon-plan.ts`, `src/components/features/TriathlonPlanForm.tsx`, `src/app/cycles/triathlon/page.tsx`, `src/components/features/CyclesListClient.tsx` (the "Triathlon plan" entry), `src/__tests__/triathlon-plan.test.ts`.
+- **Touchpoints:** `src/lib/utils/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/triathlon-plan.ts`, `src/components/features/SeasonForm.tsx` (the "Make a triathlon plan" choice), `src/app/cycles/triathlon/page.tsx` (a redirect), `src/__tests__/triathlon-plan.test.ts`, `src/__tests__/triathlon-phases.test.ts`.
 
 ### Readiness without Garmin
 - **What:** The readiness flag (HRV below the band two days and resting HR up) and the rule `hard_after_low_readiness` read Garmin daily rows only. A user with no Garmin data gets "not checked", and no readiness swap is suggested.

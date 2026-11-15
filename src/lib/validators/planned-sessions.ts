@@ -6,7 +6,8 @@ const position = z.number().int().min(1).max(3);
 
 /** One change to one dated session from the app (docs/plans/sessions.md, 5). */
 export const plannedSessionOpSchema = z.discriminatedUnion("op", [
-  z.object({ op: z.literal("move"), id, date: day, position: position.optional() }),
+  // `suggested`: the day the app suggested for a missed key session (D19); the server checks it again.
+  z.object({ op: z.literal("move"), id, date: day, position: position.optional(), suggested: z.literal(true).optional() }),
   z.object({ op: z.literal("skip"), id, reason: z.string().max(200).nullable().optional() }),
   z.object({ op: z.literal("unskip"), id }),
   z.object({ op: z.literal("reset"), id }),
@@ -32,6 +33,16 @@ export const plannedSessionOpSchema = z.discriminatedUnion("op", [
   // The other session operations (bricks, Garmin picks, unmiss, update from library) are MCP only until the app has a control for them.
   z.object({ op: z.literal("set_workout"), id, workoutId: id }),
   z.object({ op: z.literal("miss"), id, reason: z.string().trim().max(200).nullable().optional() }),
+]);
+
+/**
+ * Skip, plan again or change one coming session of a rotation cycle, by its
+ * walk position (docs/plans/sessions.md, 4.3), from the cycle detail.
+ */
+export const rotationSessionOpSchema = z.discriminatedUnion("op", [
+  z.object({ op: z.literal("skip"), cycleId: id, rotationPosition: z.number().int().min(0) }),
+  z.object({ op: z.literal("unskip"), cycleId: id, rotationPosition: z.number().int().min(0) }),
+  z.object({ op: z.literal("change"), cycleId: id, rotationPosition: z.number().int().min(0), programId: id }),
 ]);
 
 /** "Yes, I did it" from the app (docs/plans/workouts-and-compliance.md, 6.5). */

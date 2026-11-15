@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>New season</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 1100px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; position: relative">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 16px 8px 0">
+    <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 8px; font-size: 16px; color: {{accent}}">Cancel</a>
+    <span style="font-size: 16px; font-weight: 600">New season</span>
+    <span style="width: 70px"></span>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 20px; padding: 8px 16px 0">
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <label for="sname" style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Name</label>
+      <input id="sname" value="Jevnaker Half 2027" style="height: 48px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(244,244,245,0.12); background: #161618; color: #f4f4f5; font: 500 16px 'Work Sans', sans-serif">
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <label for="sgoal" style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Goal</label>
+      <textarea id="sgoal" rows="2" placeholder="Bench 120 kg by summer, or finish a half Ironman" style="padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(244,244,245,0.12); background: #161618; color: #f4f4f5; font: 400 15px 'Work Sans', sans-serif; resize: none">Finish the race and run the whole half marathon without injury.</textarea>
+    </div>
+
+    <section style="display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 20px; background: #161618">
+      <h2 style="margin: 0; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Race (optional)</h2>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+        <input aria-label="Race name" value="Jevnaker Halv Full Distanse" style="grid-column: span 2; height: 44px; padding: 0 12px; border-radius: 10px; border: none; background: #222225; color: #f4f4f5; font: 400 15px 'Work Sans', sans-serif">
+        <input aria-label="Race date" value="29 Aug 2027" style="height: 44px; padding: 0 12px; border-radius: 10px; border: none; background: #222225; color: #f4f4f5; font: 400 15px 'Work Sans', sans-serif">
+        <select aria-label="Distance" style="height: 44px; padding: 0 12px; border-radius: 10px; border: none; background: #222225; color: #f4f4f5; font: 400 15px 'Work Sans', sans-serif"><option>Half</option></select>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <button style="height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid {{accent}}; background: rgba(107,149,255,0.18); color: #f4f4f5; font: 500 14px 'Work Sans', sans-serif">Triathlon</button>
+        <button style="height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid rgba(244,244,245,0.12); background: transparent; color: #c4c4c9; font: 500 14px 'Work Sans', sans-serif">Run</button>
+        <button style="height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid rgba(244,244,245,0.12); background: transparent; color: #c4c4c9; font: 500 14px 'Work Sans', sans-serif">Ride</button>
+        <button style="height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid rgba(244,244,245,0.12); background: transparent; color: #c4c4c9; font: 500 14px 'Work Sans', sans-serif">Swim</button>
+        <button style="height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid rgba(244,244,245,0.12); background: transparent; color: #c4c4c9; font: 500 14px 'Work Sans', sans-serif">Other</button>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between">
+        <span style="font-size: 14px; color: #c4c4c9">Priority</span>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 3px; border-radius: 12px; background: #222225; width: 168px">
+          <button style="height: 44px; border-radius: 10px; border: none; background: {{accent}}; color: #0b0b0c; font: 600 15px 'Work Sans', sans-serif">A</button>
+          <button style="height: 44px; border-radius: 10px; border: none; background: transparent; color: #f4f4f5; font: 500 15px 'Work Sans', sans-serif">B</button>
+          <button style="height: 44px; border-radius: 10px; border: none; background: transparent; color: #f4f4f5; font: 500 15px 'Work Sans', sans-serif">C</button>
+        </div>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; border-radius: 20px; background: #161618; overflow: hidden">
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; min-height: 52px; border-bottom: 1px solid rgba(244,244,245,0.08)">
+        <span style="font-size: 15px">Start</span>
+        <span style="display: flex; align-items: center; gap: 10px"><span style="font-size: 15px; color: #c4c4c9">Mon 16 Nov 2026</span><a href="#" style="min-height: 44px; display: flex; align-items: center; font-size: 14px">Change</a></span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0 16px; min-height: 52px">
+        <span style="font-size: 15px">End</span>
+        <span style="display: flex; align-items: center; gap: 10px"><span style="font-size: 15px; color: #c4c4c9">29 Aug 2027 · race day</span><a href="#" style="min-height: 44px; display: flex; align-items: center; font-size: 14px">Change</a></span>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Phases</h2>
+      <sc-for list="{{choices}}" as="c" hint-placeholder-count="3">
+        <label style="display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; border-radius: 16px; background: #161618; border: {{c.border}}">
+          <span style="display: flex; align-items: center; gap: 12px; min-height: 24px">
+            <span style="width: 22px; height: 22px; border-radius: 11px; box-sizing: border-box; border: {{c.ring}}; display: flex; align-items: center; justify-content: center; flex-shrink: 0"><span style="width: 10px; height: 10px; border-radius: 5px; background: {{c.dot}}"></span></span>
+            <span style="display: flex; flex-direction: column; gap: 2px">
+              <span style="font-size: 15px; font-weight: 600">{{c.title}}</span>
+              <span style="font-size: 13px; color: #8d8d93">{{c.sub}}</span>
+            </span>
+          </span>
+        </label>
+      </sc-for>
+    </section>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 16px 28px; background: #111113; border-top: 1px solid rgba(244,244,245,0.08)">
+    <button style="width: 100%; height: 52px; border-radius: 16px; border: none; background: {{accent}}; color: #0b0b0c; font: 600 16px 'Work Sans', sans-serif">Create season</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":1100}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#6b95ff';
+    const off = { border: '1px solid transparent', ring: '2px solid #8d8d93', dot: 'transparent' };
+    const on = { border: '1px solid ' + accent, ring: '2px solid ' + accent, dot: accent };
+    return {
+      accent,
+      choices: [
+        { title: 'Add phases later', sub: 'Start with an empty season.', ...off },
+        { title: 'Use cycles I already have', sub: 'Pick cycles, the active one too.', ...off },
+        { title: 'Make a triathlon plan', sub: 'Phases from the start date to race day, made for you.', ...on }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -15,15 +15,6 @@ export const seasonFieldsSchema = z.object({
   nextGoal: text.nullable().optional(),
 });
 
-export const createSeasonSchema = seasonFieldsSchema.refine((s) => s.endDate >= s.startDate, {
-  message: "The season must end on or after its start",
-  path: ["endDate"],
-});
-
-export const updateSeasonSchema = seasonFieldsSchema.partial().extend({ seasonId: id });
-
-export const seasonIdSchema = z.object({ seasonId: id });
-
 const raceFields = z.object({
   name: z.string().trim().min(1).max(100),
   raceDate: day,
@@ -32,6 +23,27 @@ const raceFields = z.object({
   distanceMeters: z.number().int().min(100).max(1_000_000).nullable().optional(),
   priority: z.enum(RACE_PRIORITIES),
 });
+
+/** New season (docs/plans/plan-tab-redesign.md, P4): an optional first race, and cycles to add as its phases, in order. */
+export const createSeasonSchema = seasonFieldsSchema
+  .extend({
+    race: raceFields.optional(),
+    cycleIds: z
+      .array(id)
+      .max(30)
+      .refine((ids) => new Set(ids).size === ids.length, "Pick each cycle once.")
+      .optional(),
+    /** The user confirmed the first phase takes the scheduled start (addPhase `takeStart`). */
+    takeStart: z.boolean().optional(),
+  })
+  .refine((s) => s.endDate >= s.startDate, {
+    message: "The season must end on or after its start",
+    path: ["endDate"],
+  });
+
+export const updateSeasonSchema = seasonFieldsSchema.partial().extend({ seasonId: id });
+
+export const seasonIdSchema = z.object({ seasonId: id });
 
 export const addRaceSchema = raceFields.extend({ seasonId: id });
 export const updateRaceSchema = raceFields.partial().extend({ seasonId: id, raceId: id });
@@ -50,6 +62,7 @@ export const addPhaseSchema = z
     scheduleType: z.enum(["day_of_week", "rotation"]).optional(),
     position: z.number().int().positive().optional(),
     phaseType: z.enum(PHASE_TYPES).nullable().optional(),
+    takeStart: z.boolean().optional(),
     ...length,
   })
   .refine((p) => p.cycleId != null || !!p.name, { message: "Pick a cycle or name a new one", path: ["name"] });

@@ -539,15 +539,16 @@ export async function weekdayToday(params: {
   let sessions = await loadSessions();
   let match = matchPlanned(forMatch, sessions);
 
-  // With the endurance switch on, a session with a sport goes through Garmin
-  // or "Did you do it?" instead of an auto row, and leaves the missed list for
-  // that card (docs/plans/workouts-and-compliance.md, 6.2 and 7). Lifters: no change.
+  // With the endurance switch on, a session with a sport (a mixed one too, such
+  // as bike and swim) goes through Garmin or "Did you do it?" instead of an
+  // auto row, and leaves the missed list for that card
+  // (docs/plans/workouts-and-compliance.md, 6.2 and 7). Lifters: no change.
   const { enduranceEnabledFor } = await import("@/lib/endurance");
   const sportSessions = new Set<number>();
   if (await enduranceEnabledFor(userId)) {
-    const { programSports } = await import("@/lib/session-compliance");
-    const sports = await programSports(rows.map((r) => r.row.programId!));
-    for (const { row } of rows) if (sports.get(row.programId!)) sportSessions.add(row.id);
+    const { enduranceProgramIds } = await import("@/lib/session-compliance");
+    const endurance = await enduranceProgramIds(rows.map((r) => r.row.programId!));
+    for (const { row } of rows) if (endurance.has(row.programId!)) sportSessions.add(row.id);
   }
 
   // Days tracked outside the app: a session not done by its own workout or
@@ -1104,12 +1105,35 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
           .limit(1);
         if (taken) throw new SessionInputError(`Position ${input.position} is taken on ${row.date}; move that session first.`);
       }
+      // A new program drops the label the template gave the day, which named
+      // the old one; a label the user set on this day stays.
+      let dropLabel = false;
+      if (input.programId != null && input.programId !== row.programId && input.label === undefined && row.label != null && row.slotId != null) {
+        const [slot] = await tx.select({ label: trainingCycleSlots.label }).from(trainingCycleSlots).where(eq(trainingCycleSlots.id, row.slotId));
+        dropLabel = slot?.label === row.label;
+      }
+      // A cleared label (empty or only spaces) gives the day back the
+      // template's label, while the day still runs the template's program.
+      let label = input.label;
+      if (label !== undefined && !label?.trim()) {
+        label = null;
+        if (row.slotId != null) {
+          const [slot] = await tx
+            .select({ label: trainingCycleSlots.label, programId: trainingCycleSlots.programId })
+            .from(trainingCycleSlots)
+            .where(eq(trainingCycleSlots.id, row.slotId));
+          if (slot && slot.programId === (input.programId ?? row.programId)) label = slot.label;
+        }
+      }
       set = {
+        ...(dropLabel && { label: null }),
         ...(input.programId != null && { programId: input.programId }),
-        ...(input.label !== undefined && { label: input.label }),
+        ...(label !== undefined && { label }),
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.position !== undefined && { position: input.position }),
       };
+      // Nothing differs: no change, so the day stays the template's and template edits still reach it.
+      if (Object.entries(set).every(([k, v]) => row[k as keyof typeof row] === v)) return row;
       break;
     }
     case "reset": {

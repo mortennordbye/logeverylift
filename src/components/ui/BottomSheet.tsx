@@ -1,6 +1,11 @@
 "use client";
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
+
+const SheetCloseContext = createContext<(() => void) | undefined>(undefined);
+
+/** The open sheet's close function, for a close button inside it; undefined outside a sheet. */
+export const useSheetClose = () => useContext(SheetCloseContext);
 
 type Props = {
   open: boolean;
@@ -40,6 +45,16 @@ export function BottomSheet({ open, onClose, children, blur = false }: Props) {
     const timer = setTimeout(() => setPointerEvents("none"), RELEASE_TAPS_MS);
     return () => clearTimeout(timer);
   }, [open]);
+
+  // Escape closes the sheet, as a tap on the backdrop does.
+  useEffect(() => {
+    if (!open || !onClose) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose!();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
 
   // Track keyboard height so the sheet lifts above the keyboard.
   // With interactiveWidget="resizes-visual" the visual viewport shrinks when
@@ -110,7 +125,7 @@ export function BottomSheet({ open, onClose, children, blur = false }: Props) {
             role="dialog"
             aria-modal="true"
           >
-            {children}
+            <SheetCloseContext.Provider value={onClose}>{children}</SheetCloseContext.Provider>
           </motion.div>
         </>
       )}

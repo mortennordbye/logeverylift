@@ -123,7 +123,10 @@ test("run the intake interview", async ({ page }, testInfo) => {
 test("the triathlon plan sends a user without the interview to it", async ({ page }, testInfo) => {
   const uid = await userId(testInfo.parallelIndex);
   await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.id, uid));
+  // The plan is made in New season now; the old address leads there.
   await page.goto("/cycles/triathlon");
-  await expect(page).toHaveURL(/\/more\/athlete\/interview\?next=%2Fcycles%2Ftriathlon|\/more\/athlete\/interview\?next=\/cycles\/triathlon/);
+  await expect(page).toHaveURL(/\/seasons\/new\?plan=triathlon$/);
+  await page.getByRole("link", { name: /Make a triathlon plan/ }).click();
+  await expect(page).toHaveURL(/\/more\/athlete\/interview\?next=(%2F|\/)seasons(%2F|\/)new$/);
   await expect(page.getByTestId("interview-progress")).toHaveText("Step 1 of 7");
 });

@@ -1,5 +1,7 @@
 "use client";
 
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
+import { PRIMARY_BUTTON } from "@/components/features/season-ui";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { applyRejectedChange, restorePlanRevision } from "@/lib/actions/plan-revisions";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -179,29 +181,24 @@ export function PlanHistoryClient({ kind, rows }: { kind: "program" | "cycle" | 
       )}
 
       <BottomSheet open={confirming !== null} onClose={() => setConfirming(null)} blur>
-        <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4">
-          <h2 className="text-lg font-semibold">Restore this version?</h2>
-          <p className="text-sm text-muted-foreground">
-            The {kind} goes back to how it was on {confirming?.when ?? ""}. Logged workouts do
-            not change. Weekly targets from the cycle, and weights or reps progression set since then, keep their
-            current values, and the weekly sync runs again. You can undo the restore from this list.
-          </p>
+        <PlanSheetPanel
+          label="Restore this version?"
+          title="Restore this version?"
+          sub={
+            <p className="text-sm text-muted-foreground">
+              The {kind} goes back to how it was on {confirming?.when ?? ""}. Logged workouts do not change. Weekly targets from the cycle, and weights or reps
+              progression set since then, keep their current values, and the weekly sync runs again. You can undo the restore from this list.
+            </p>
+          }
+        >
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <button
-            onClick={restore}
-            disabled={saving}
-            className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-          >
+          <button type="button" onClick={restore} disabled={saving} className={PRIMARY_BUTTON}>
             Restore
           </button>
-          <button
-            onClick={() => setConfirming(null)}
-            disabled={saving}
-            className="w-full rounded-xl bg-muted py-4 text-sm font-semibold disabled:opacity-50 active:opacity-80"
-          >
+          <button type="button" onClick={() => setConfirming(null)} disabled={saving} className={SHEET_CANCEL}>
             Cancel
           </button>
-        </div>
+        </PlanSheetPanel>
       </BottomSheet>
     </div>
   );

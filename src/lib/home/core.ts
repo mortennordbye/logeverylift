@@ -26,14 +26,16 @@ import { readinessSwapFor } from "@/lib/readiness-swap";
 import { homeEndurance } from "@/lib/session-answers";
 import { sessionCompliance } from "@/lib/session-compliance";
 import { getUserSettings, type UserSettings } from "@/lib/user-settings";
-import { parseDateStr } from "@/lib/utils/cycle-position";
+import { cycleLengthDays, parseDateStr } from "@/lib/utils/cycle-position";
+import { upcomingCycle } from "@/lib/cycle-start";
+import { cutByStart, runLengthDays } from "@/lib/utils/seasons";
 import type { requireSession } from "@/lib/utils/session";
 import { weekDatesOf } from "@/lib/utils/user-date";
 import { db } from "@/db";
-import { exercises, programExercises, programSets, programs, seasons, trainingCycles } from "@/db/schema";
+import { exercises, programExercises, programSets, programs } from "@/db/schema";
 import { todayPlanFrom } from "@/lib/home/today-plan";
-import { liveCycles, liveProgramExercises, livePrograms, liveProgramSets } from "@/lib/plan-live";
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { liveProgramExercises, livePrograms, liveProgramSets } from "@/lib/plan-live";
+import { and, asc, eq } from "drizzle-orm";
 import { cache } from "react";
 import { dateLabel } from "@/lib/utils/date-label";
 
@@ -128,33 +130,6 @@ async function enduranceHome(userId: string, today: string) {
  * pass. `settings` and `today` come from the page, which read them before the
  * cycle; `cycleResult` is the page's `activeCycle()`.
  */
-/**
- * The block scheduled to start next, when no cycle is active: its id, name,
- * start day and the season it is a phase of. One cycle is scheduled at a time.
- */
-export async function upcomingCycle(userId: string) {
-  const [row] = await db
-    .select({
-      id: trainingCycles.id,
-      name: trainingCycles.name,
-      startsOn: trainingCycles.scheduledStartDate,
-      seasonName: seasons.name,
-    })
-    .from(trainingCycles)
-    .leftJoin(seasons, and(eq(seasons.id, trainingCycles.seasonId), isNull(seasons.deletedAt)))
-    .where(
-      and(
-        eq(trainingCycles.userId, userId),
-        eq(trainingCycles.status, "draft"),
-        isNotNull(trainingCycles.scheduledStartDate),
-        liveCycles,
-      ),
-    )
-    .orderBy(asc(trainingCycles.scheduledStartDate))
-    .limit(1);
-  return row?.startsOn ? { id: row.id, name: row.name, startsOn: row.startsOn, seasonName: row.seasonName } : null;
-}
-
 export async function loadHomeCore(session: Session, settings: UserSettings, today: Date, cycleResult: CycleResult) {
   const todayStr = toDateStr(today);
   const weekDates = weekDatesOf(todayStr);
@@ -167,7 +142,7 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
   const info = cycleResult.success ? cycleResult.data : null;
   const todayProgram = info?.todaySlot?.program ?? null;
 
-  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, enduranceRead, todayPlan, upcoming] = await Promise.all([
+  const [statsResult, sessionsResult, insight, checkinResult, policyNotice, enduranceRead, todayPlan, scheduledNext] = await Promise.all([
     getWorkoutStats(),
     getCompletedSessions(monday),
     todayProgram
@@ -184,13 +159,11 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
           return null;
         })
       : Promise.resolve(null),
-    // No active cycle: the block that starts next, so Today shows it, not the set-up prompt.
-    info
-      ? Promise.resolve(null)
-      : upcomingCycle(session.user.id).catch((e: unknown) => {
-          console.error("[Home] upcoming_cycle_read_failed", { error: e instanceof Error ? e.name : "unknown" });
-          return null;
-        }),
+    // The block that starts next: Today shows it with no active cycle, and its start cuts a running one.
+    upcomingCycle(session.user.id).catch((e: unknown) => {
+      console.error("[Home] upcoming_cycle_read_failed", { error: e instanceof Error ? e.name : "unknown" });
+      return null;
+    }),
   ]);
   const checkin = checkinResult.success ? checkinResult.data : null;
   const endurance = enduranceRead.home;
@@ -243,11 +216,17 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
       ? await homeWeekPlanned(session.user.id, weekDates[0], weekDates[6], info.cycle.id)
       : [];
 
+  const upcoming = info ? null : scheduledNext;
+  // A running block ends the day before a draft scheduled inside it starts (cutByStart).
+  const otherStart = scheduledNext?.startsOn ?? null;
+  const plannedDays = info ? cycleLengthDays(info.cycle) : 0;
+  const runDays = info?.cycle.startDate ? runLengthDays(info.cycle.startDate, plannedDays, otherStart) : plannedDays;
+  const totalWeeks = info ? (runDays === plannedDays ? info.cycle.durationWeeks : Math.ceil(runDays / 7)) : 0;
   const progressPct = info
-    ? Math.min(((info.currentWeek - 1) / info.cycle.durationWeeks) * 100, 100)
+    ? Math.min(((info.currentWeek - 1) / totalWeeks) * 100, 100)
     : 0;
   const endFormatted = info
-    ? dateLabel(info.endDate, "MMM d")
+    ? dateLabel(info.cycle.startDate ? cutByStart(info.cycle.startDate, info.endDate, otherStart) : info.endDate, "MMM d")
     : null;
 
   return {
@@ -268,6 +247,8 @@ export async function loadHomeCore(session: Session, settings: UserSettings, tod
     rotationOverdueDays,
     dowMissed,
     weekPlanned,
+    /** The block's weeks, to the day a scheduled start cuts it. */
+    totalWeeks,
     progressPct,
     endFormatted,
     insight,

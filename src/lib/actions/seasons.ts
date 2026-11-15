@@ -19,6 +19,7 @@ import {
   removePhase,
   removeRace,
   resumeSeason,
+  seasonlessCycles,
   setPhase,
   updateRace,
   updateSeason,
@@ -58,6 +59,9 @@ async function run<S extends z.ZodTypeAny, T>(
     for (const p of paths(parsed.data, out)) revalidatePath(p);
     return { success: true, data: out };
   } catch (e) {
+    if (e instanceof PlanStateError && e.field) {
+      return { success: false, error: e.message, fieldErrors: { [e.field]: [e.message] } };
+    }
     if (e instanceof PlanNotFoundError || e instanceof PlanStateError || e instanceof PlanConflictError || e instanceof OpenWorkoutError) {
       return { success: false, error: e.message };
     }
@@ -73,8 +77,18 @@ export async function createSeasonAction(data: unknown) {
     "createSeasonAction",
     createSeasonSchema,
     data,
-    async (ctx, input) => ({ id: (await createSeason(ctx, input)).season.id }),
-    () => ["/cycles"],
+    async (ctx, { cycleIds, takeStart, ...input }) => {
+      // Checked before the season is made, so a wrong pick leaves nothing behind.
+      if (cycleIds?.length) {
+        const free = new Set((await seasonlessCycles(ctx.userId)).map((c) => c.id));
+        if (cycleIds.some((c) => !free.has(c))) throw new PlanStateError("Pick your own cycles that are in no season.");
+      }
+      // "Use cycles I already have": each joins in the order picked, in the
+      // same change as the season. The first takes the scheduled start only
+      // when the user confirmed what that ends.
+      return { id: (await createSeason(ctx, { ...input, cycleIds, takeStart: takeStart === true })).season.id };
+    },
+    (i, out) => [...seasonPaths(out.id), ...(i.cycleIds ?? []).map((c) => `/cycles/${c}`)],
   );
 }
 
@@ -152,8 +166,9 @@ export async function addPhaseAction(data: unknown) {
     "addPhaseAction",
     addPhaseSchema,
     data,
-    async (ctx, { seasonId, ...input }) => {
-      const done = await addPhase(ctx, seasonId, input);
+    async (ctx, { seasonId, takeStart, ...input }) => {
+      // A first phase takes the scheduled start only when the user confirmed what that ends.
+      const done = await addPhase(ctx, seasonId, { ...input, takeStart: takeStart === true });
       return { cycleId: done.cycleId, raceMoved: done.raceMoved };
     },
     (i, out) => [...seasonPaths(i.seasonId), `/cycles/${out.cycleId}`],

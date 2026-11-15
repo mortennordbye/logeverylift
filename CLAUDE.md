@@ -146,6 +146,7 @@ Full guide: [`TESTING.md`](TESTING.md). The rules that are not optional:
 - **Client code calls Server Actions through `callAction()`** (`src/lib/utils/stale-bundle.ts`) unless it already catches the rejection. A rejected action skips the failure handling and leaves the screen showing a change the server never saved.
 - **e2e specs import `test` from `e2e/fixtures/test.ts`**, find elements by role/name or `data-testid` (never Tailwind classes), and check what was written via `testDb()` when a flow writes data.
 - **No retries, no sleeps.** A flaky test is a bug in the test or the app; find out which.
+- **Major work, redesigns and changes to a critical flow also get a journey review** before the owner tests: every step screenshotted at 390 and 320 px with demo accounts, reviewed, fixed and captured again until a fresh pass finds nothing new. Use the `journey-review` skill (`.claude/skills/journey-review/SKILL.md`); tooling in `scripts/journeys/README.md`.
 
 ## Before reporting a task complete
 

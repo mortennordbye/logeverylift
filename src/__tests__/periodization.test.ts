@@ -6,6 +6,7 @@ import {
   intervalPhaseRecipe,
   meanLoggedRpe,
   periodizedLoad,
+  phaseLabel,
   phaseLayout,
   scaledDuration,
   uncoupledAcwr,
@@ -13,6 +14,7 @@ import {
   type TrainingGoal,
   reanchoredPeaks,
 } from "@/lib/utils/periodization";
+import { PHASE_TYPE_LABELS } from "@/lib/utils/seasons";
 
 describe("phaseLayout", () => {
   it("caps taper at 3 weeks and uses 2 peak weeks for long blocks", () => {
@@ -174,6 +176,22 @@ describe("computeAdaptationFactor — no-wearable nudge", () => {
     expect(computeAdaptationFactor({ adherence: 1, avgReadiness: 4.5, avgRpe: 5 }).pct).toBe(105);
   });
 
+  it("writes its notes as plain sentences, with no em dash", () => {
+    const notes = [
+      computeAdaptationFactor({ adherence: 0.4, avgReadiness: null, avgRpe: null }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: 2, avgRpe: 5 }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: 4.5, avgRpe: 5 }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: null, avgRpe: null, wearable: { hrvState: "fatigued", restingHrFlag: false, acwr: null, ramp: null, sleepDebtH: null } }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: null, avgRpe: null, wearable: { hrvState: "balanced", restingHrFlag: false, acwr: 1.5, ramp: null, sleepDebtH: null } }),
+      computeAdaptationFactor({ adherence: 1, avgReadiness: null, avgRpe: null, wearable: { hrvState: "balanced", restingHrFlag: false, acwr: null, ramp: null, sleepDebtH: 8 } }),
+    ].map((a) => a.note);
+    for (const n of notes) {
+      expect(n).not.toContain("—");
+      expect(n).toMatch(/^(Eased|Boosted) ~\d+%\. [A-Z].*\.$/);
+    }
+    expect(notes[0]).toBe("Eased ~10%. Under half of last week's sessions were completed.");
+  });
+
   it("stays neutral when there's no clear signal", () => {
     expect(computeAdaptationFactor({ adherence: 0.75, avgReadiness: null, avgRpe: null }).pct).toBe(100);
     expect(computeAdaptationFactor({ adherence: 0.75, avgReadiness: 3, avgRpe: 7 }).pct).toBe(100);
@@ -220,7 +238,16 @@ describe("formatPeriodizationSummary", () => {
   it("describes a ramping build week with weeks-until-peak and percent", () => {
     const { headline, note } = summary(1, 24, "build");
     expect(headline).toBe("Base · Week 1 of 24");
-    expect(note).toBe("Peak in 19 wks · this week ~60% of peak volume.");
+    expect(note).toBe("Peak in 19 wks · this week 60% of peak volume.");
+  });
+
+  it("drops \"of M\" from the headline of a cut block (round 10)", () => {
+    const load = periodizedLoad(1, 7, "build");
+    const { headline } = formatPeriodizationSummary(
+      { goal: "build", phase: load.phase, phaseLabel: "Base", currentWeek: 1, totalWeeks: 7, multiplier: load.multiplier, isDeload: false, weeksUntilPeak: 4, weeksUntilTaper: 6 },
+      { cut: true },
+    );
+    expect(headline).toBe("Base · Week 1");
   });
 
   it("flags deload weeks in the headline", () => {
@@ -230,7 +257,7 @@ describe("formatPeriodizationSummary", () => {
 
   it("singularizes the week unit when peak is one week away", () => {
     const { note } = summary(19, 24, "build"); // rampWeeks=19 → peak at 20
-    expect(note).toBe("Peak in 1 wk · this week ~100% of peak volume.");
+    expect(note).toBe("Peak in 1 wk · this week 100% of peak volume.");
   });
 
   it("announces taper countdown once at peak", () => {
@@ -240,7 +267,29 @@ describe("formatPeriodizationSummary", () => {
 
   it("describes the taper phase", () => {
     const { note } = summary(24, 24, "build");
-    expect(note).toBe("Tapering into race week - easing volume to arrive fresh.");
+    expect(note).toBe("Tapering into race week, easing volume to arrive fresh.");
+  });
+
+  it("never calls a general, base or build phase of a season a peak block", () => {
+    // A typed phase has no peak or taper inside it to count down to (getCyclePeriodization).
+    const phaseInput = (phase: PeriodizationSummaryInput["phase"], multiplier: number): PeriodizationSummaryInput => ({
+      goal: "build",
+      phase,
+      phaseLabel: "General",
+      currentWeek: 1,
+      totalWeeks: 8,
+      multiplier,
+      isDeload: false,
+      weeksUntilPeak: 0,
+      weeksUntilTaper: 0,
+    });
+    for (const phase of ["general", "base", "build", "transition"] as const) {
+      const { note } = formatPeriodizationSummary(phaseInput(phase, 0.8));
+      expect(note).not.toMatch(/peak block|race-prep/i);
+    }
+    expect(formatPeriodizationSummary(phaseInput("general", 0.8)).note).toBe("This week 80% of peak volume.");
+    expect(formatPeriodizationSummary(phaseInput("peak", 1)).note).toBe("Peak block at race-prep volume.");
+    expect(formatPeriodizationSummary(phaseInput("taper", 0.6)).note).toBe("Tapering into race week, easing volume to arrive fresh.");
   });
 
   it("holds steady for maintain goal", () => {
@@ -265,6 +314,24 @@ describe("formatPeriodizationSummary", () => {
       adaptationNote: "Eased ~10% — under half of last week's sessions were completed.",
     };
     expect(formatPeriodizationSummary(input).note).toContain("Eased ~10%");
+  });
+
+  it("shows a stored note written with an em dash as plain sentences", () => {
+    const input: PeriodizationSummaryInput = {
+      goal: "build",
+      phase: "taper",
+      phaseLabel: "Taper",
+      currentWeek: 8,
+      totalWeeks: 8,
+      multiplier: 0.6,
+      isDeload: false,
+      weeksUntilPeak: 0,
+      weeksUntilTaper: 0,
+      adaptationNote: "Eased ~10% — under half of last week's sessions were completed.",
+    };
+    const { note } = formatPeriodizationSummary(input);
+    expect(note).not.toContain("—");
+    expect(note).toContain("Eased ~10%. Under half of last week's sessions were completed.");
   });
 });
 
@@ -359,5 +426,12 @@ describe("computeAdaptationFactor with wearable signals (plan 2.14)", () => {
     expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, ramp: 8.5, sleepDebtH: 7 } }).pct).toBe(92);
     expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, sleepDebtH: 6.5 } }).pct).toBe(95);
     expect(computeAdaptationFactor({ ...strong, wearable: { ...calm, acwr: 1.3, ramp: 8, sleepDebtH: 6 } }).pct).toBe(105);
+  });
+});
+
+describe("phase names (round 8)", () => {
+  it("calls the general phase General, as the season and the Plan list do", () => {
+    expect(phaseLabel("general")).toBe(PHASE_TYPE_LABELS.general);
+    expect(phaseLabel("general")).toBe("General");
   });
 });

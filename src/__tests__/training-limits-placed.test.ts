@@ -21,7 +21,15 @@ import {
   type ReadinessDay,
 } from "@/lib/utils/training-limits";
 import { isHardWorkout, parseWorkout } from "@/lib/utils/workout-steps";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// A label shows the year of a date outside the current one (round 11 I2):
+// the clock stays in the year of the dates these tests use.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 /**
  * The placed-session rules of docs/plans/limits-strength-readiness.md:
@@ -318,8 +326,8 @@ describe("heavyLegsLines (the D3 calendar lines)", () => {
   it("gives the lift and the key session each a line, dates as short days", () => {
     const lines = heavyLegsLines([{ liftId: 1, keyId: 2, liftLabel: "Leg day", keyLabel: "Long run", liftDate: "2027-05-10", keyDate: "2027-05-11", daysBefore: 1 }]);
     expect(lines).toEqual({
-      1: ['Heavy legs 1 day before key "Long run" (Tue 11 May). Move it or make it upper body.'],
-      2: ['Heavy legs before this key session: "Leg day" (Mon 10 May).'],
+      1: ['Heavy legs 1 day before key "Long run" (Tue 11 May 2027). Move it or make it upper body.'],
+      2: ['Heavy legs before this key session: "Leg day" (Mon 10 May 2027).'],
     });
     const same = heavyLegsLines([{ liftId: 1, keyId: 2, liftLabel: "Legs", keyLabel: "Intervals", liftDate: "2027-05-11", keyDate: "2027-05-11", daysBefore: 0 }]);
     expect(same[1][0]).toContain("earlier the same day as key");

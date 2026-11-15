@@ -75,3 +75,6 @@ Thumbs.db
 
 # exercise illustration previews (pnpm art check)
 /.art-preview/
+
+# Journey review captures (pnpm journeys): screenshots of demo accounts, never committed
+/.journeys/

@@ -3,6 +3,7 @@ import { planRevisions, seasonRaces, seasons, trainingCycles } from "@/db/schema
 import { registerCycleTools } from "@/lib/mcp/tools/cycles";
 import { registerProgramTools } from "@/lib/mcp/tools/programs";
 import { registerSeasonTools } from "@/lib/mcp/tools/seasons";
+import { activateCycle } from "@/lib/plan-revisions";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { and, asc, eq } from "drizzle-orm";
 import { beforeEach, describe, expect, it } from "vitest";
@@ -59,7 +60,7 @@ describe("manage_season and the read tools", () => {
     const stale = await call("manage_season", { operation: "update", seasonId: id, goal: "Other", reason: "Goal", expectedVersion: 1 });
     expect(stale.isError).toBe(true);
     expect(stale.raw).toContain("Conflict");
-    expect(stale.raw).toContain("name 2027 → 2027 season");
+    expect(stale.raw).toContain("Name changed from 2027 to 2027 season");
     expect(await seasonRow(id)).toMatchObject({ goal: "First half", version: 2 });
     expect((await call("manage_season", { operation: "update", seasonId: id, goal: "x", reason: "x" })).raw).toContain("expectedVersion is required");
   });
@@ -153,7 +154,7 @@ describe("manage_race and the re-plan flag", () => {
     const renamed = await call("manage_race", { operation: "update", seasonId: id, raceId: add.data.raceId, name: "Haugesund", reason: "Name", expectedVersion: 3 });
     expect(renamed.data.replanFlagged).toBeNull();
     const moved = await call("manage_race", { operation: "update", seasonId: id, raceId: add.data.raceId, date: "2027-08-29", reason: "Date moved", expectedVersion: 4 });
-    expect(moved.data.replanFlagged).toContain("moved from 2027-08-22 to 2027-08-29");
+    expect(moved.data.replanFlagged).toContain("moved from 22 Aug 2027 to 29 Aug 2027");
     expect((await call("list_seasons")).data.seasons[0].replan).toMatchObject({ flagged: true, reason: expect.stringContaining("moved") });
     expect((await call("get_season", { seasonId: id })).data.replan).toMatchObject({ flagged: true });
     const removed = await call("manage_race", { operation: "remove", seasonId: id, raceId: add.data.raceId, reason: "Cancelled", expectedVersion: 5 });
@@ -194,5 +195,40 @@ describe("cycle tools in a season", () => {
     const restored = await programs("restore_revision", { revisionId: revs.data[1].revisionId, reason: "Old name was right" });
     expect(restored.isError, restored.raw).toBe(false);
     expect(await seasonRow(id)).toMatchObject({ name: "2027", version: 3 });
+  });
+});
+
+describe("add_phase and the one scheduled start", () => {
+  /**
+   * A season's first phase takes the scheduled start only when the assistant
+   * sends takeStart (after asking the user), as the app asks before it does.
+   */
+  async function whileABlockRuns() {
+    const userId = (await createUser({ enduranceEnabled: true })).id;
+    const [block] = await db.insert(trainingCycles).values({ userId, name: "Strength block", durationWeeks: 8 }).returning();
+    await activateCycle({ userId, writer: "user" }, block.id);
+    const [waiting] = await db.insert(trainingCycles).values({ userId, name: "Next block", durationWeeks: 4, scheduledStartDate: day(20) }).returning();
+    const { call, id } = await created(userId, day(5));
+    return { call, id, block: block.id, waiting: waiting.id };
+  }
+
+  it("without takeStart: the first phase waits, the running block and the other scheduled start stay", async () => {
+    const { call, id, block, waiting } = await whileABlockRuns();
+    const r = await call("manage_season", { operation: "add_phase", seasonId: id, name: "Base", durationWeeks: 6, reason: "Plan", expectedVersion: 1 });
+    expect(r.isError, r.raw).toBe(false);
+    expect((await cycleRow(r.data.cycleId)).scheduledStartDate).toBeNull();
+    expect((await cycleRow(waiting)).scheduledStartDate).toBe(day(20));
+    expect((await cycleRow(block)).status).toBe("active");
+    expect((await call("get_season", { seasonId: id })).data.chainPaused).toBe(true);
+  });
+
+  it("with takeStart: the first phase takes the start and the other scheduled start is dropped", async () => {
+    const { call, id, block, waiting } = await whileABlockRuns();
+    const r = await call("manage_season", { operation: "add_phase", seasonId: id, name: "Base", durationWeeks: 6, takeStart: true, reason: "The user agreed", expectedVersion: 1 });
+    expect(r.isError, r.raw).toBe(false);
+    expect((await cycleRow(r.data.cycleId)).scheduledStartDate).toBe(day(5));
+    expect((await cycleRow(waiting)).scheduledStartDate).toBeNull();
+    // The running block ends when the phase starts, not now.
+    expect((await cycleRow(block)).status).toBe("active");
   });
 });

@@ -2,20 +2,18 @@ import { BackLabel } from "@/components/ui/BackLink";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ChevronLeftIcon } from "lucide-react";
 
-/** Mirrors the cycle detail screen: Back/Edit header, cycle title, week strip,
- *  then the per-day slot rows. */
+/** Mirrors the cycle detail screen: Back and the round ⋯ button, cycle title,
+ *  week strip, then the per-day slot rows. */
 export default function CycleDetailLoading() {
   return (
     <div className="h-[100dvh] bg-background flex flex-col overflow-y-auto">
-      <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
+      <header className="flex items-center justify-between px-4 pt-4 shrink-0">
         <span className="flex items-center gap-0.5 text-primary -ml-1 min-h-[44px]">
           <ChevronLeftIcon className="w-5 h-5" />
-          <span className="text-sm font-medium"><BackLabel fallback={{ href: "/cycles", label: "Cycles" }} /></span>
+          <span className="text-sm font-medium"><BackLabel fallback={{ href: "/cycles", label: "Plan" }} /></span>
         </span>
-        <span className="text-primary text-sm font-medium min-h-[44px] flex items-center">
-          Edit
-        </span>
-      </div>
+        <span data-testid="more-spot" className="h-11 w-11 rounded-full bg-widget" aria-hidden />
+      </header>
       <div className="px-4 pt-2 pb-4 shrink-0">
         <Skeleton className="h-9 w-48" />
         <Skeleton className="h-4 w-32 mt-2" />

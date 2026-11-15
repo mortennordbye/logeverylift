@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Build the week</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; position: relative; overflow: hidden">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 16px 8px 0">
+    <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 8px; font-size: 16px; color: {{accent}}">‹ Back</a>
+    <span style="font-size: 16px; font-weight: 600">Build the week</span>
+    <span style="width: 70px"></span>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 16px 0">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Step 2 of 2</span>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; height: 4px">
+        <div style="border-radius: 2px; background: {{accent}}"></div>
+        <div style="border-radius: 2px; background: {{accent}}"></div>
+      </div>
+      <span style="font-size: 14px; color: #c4c4c9">Swim, intervals, bricks · Build</span>
+    </div>
+
+    <div style="display: flex; flex-direction: column; border-radius: 20px; background: #161618; overflow: hidden">
+      <sc-for list="{{days}}" as="d" hint-placeholder-count="7">
+        <div style="display: flex; align-items: center; gap: 10px; padding: 6px 8px 6px 14px; min-height: 56px; border-bottom: 1px solid rgba(244,244,245,0.08)">
+          <span style="width: 34px; font-size: 13px; font-weight: 600; color: #8d8d93; flex-shrink: 0">{{d.day}}</span>
+          <div style="flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center">
+            <sc-for list="{{d.sessions}}" as="s" hint-placeholder-count="1">
+              <button style="height: 44px; padding: 0 12px; border-radius: 12px; border: {{s.border}}; background: {{s.bg}}; color: {{s.fg}}; font: 500 14px 'Work Sans', sans-serif">{{s.name}}</button>
+            </sc-for>
+          </div>
+          <sc-if value="{{d.canAdd}}" hint-placeholder-val="{{ true }}">
+            <button aria-label="Add a session on {{d.day}}" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #222225; color: #f4f4f5; display: flex; align-items: center; justify-content: center; flex-shrink: 0">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+            </button>
+          </sc-if>
+          <sc-if value="{{d.full}}" hint-placeholder-val="{{ false }}">
+            <span style="font-size: 12px; color: #8d8d93; flex-shrink: 0; padding-right: 6px">3 of 3</span>
+          </sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 16px 28px; background: #111113; border-top: 1px solid rgba(244,244,245,0.08)">
+    <button style="width: 100%; height: 52px; border-radius: 16px; border: none; background: {{accent}}; color: #0b0b0c; font: 600 16px 'Work Sans', sans-serif">Add phase</button>
+  </div>
+
+  <!-- sheet -->
+  <div style="position: absolute; inset: 0; background: rgba(0,0,0,0.6)"></div>
+  <section aria-label="Sunday, session 2" style="position: absolute; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 4px; padding: 8px 16px 24px; border-radius: 20px 20px 0 0; background: #161618">
+    <span style="align-self: center; width: 40px; height: 5px; border-radius: 3px; background: #3a3a3e; margin-bottom: 8px"></span>
+    <div style="display: flex; align-items: center; justify-content: space-between; min-height: 44px">
+      <h2 style="margin: 0; font-size: 18px; font-weight: 600">Sunday · session 2</h2>
+    </div>
+    <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; min-height: 52px; border-bottom: 1px solid rgba(244,244,245,0.08)">
+      <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 12px; color: #8d8d93">Program</span><span style="font-size: 16px; font-weight: 500">Brick run · 20 min</span></span>
+      <button style="height: 44px; padding: 0 12px; border: none; background: transparent; color: {{accent}}; font: 500 15px 'Work Sans', sans-serif">Change</button>
+    </div>
+    <sc-for list="{{switches}}" as="w" hint-placeholder-count="3">
+      <label style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; min-height: 52px; border-bottom: 1px solid rgba(244,244,245,0.08)">
+        <span style="display: flex; flex-direction: column; gap: 2px"><span style="font-size: 15px">{{w.title}}</span><span style="font-size: 13px; color: #8d8d93">{{w.sub}}</span></span>
+        <button role="switch" aria-checked="{{w.on}}" aria-label="{{w.title}}" style="width: 51px; height: 31px; padding: 0; border: none; border-radius: 16px; background: {{w.track}}; position: relative; flex-shrink: 0"><span style="position: absolute; top: 2px; left: {{w.knob}}; width: 27px; height: 27px; border-radius: 14px; background: #f4f4f5"></span></button>
+      </label>
+    </sc-for>
+    <button style="display: flex; align-items: center; justify-content: space-between; min-height: 52px; padding: 0; border: none; border-bottom: 1px solid rgba(244,244,245,0.08); background: transparent; color: #f4f4f5; font: 400 15px 'Work Sans', sans-serif">
+      <span>Label and note</span>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8d8d93" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+    </button>
+    <button style="align-self: flex-start; min-height: 44px; padding: 0; border: none; background: transparent; color: #ff6b5a; font: 500 15px 'Work Sans', sans-serif">Remove session</button>
+    <button style="margin-top: 8px; height: 52px; border-radius: 16px; border: none; background: {{accent}}; color: #0b0b0c; font: 600 16px 'Work Sans', sans-serif">Done</button>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#6b95ff';
+    const s = (name) => ({ name, bg: '#222225', fg: '#f4f4f5', border: '1px solid transparent' });
+    const key = (name) => ({ name, bg: '#222225', fg: '#f4f4f5', border: '1px solid ' + accent });
+    const rest = { name: 'Rest', bg: 'transparent', fg: '#8d8d93', border: '1px solid rgba(244,244,245,0.16)' };
+    const d = (day, sessions, full) => ({ day, sessions, canAdd: !full, full: !!full });
+    const sw = (title, sub, on) => ({ title, sub, on: on ? 'true' : 'false', track: on ? accent : '#3a3a3e', knob: on ? '22px' : '2px' });
+    return {
+      accent,
+      days: [
+        d('Mon', [s('Strength A')]),
+        d('Tue', [s('Swim CSS'), s('Strength B'), s('Easy spin')], true),
+        d('Wed', [key('Bike intervals')]),
+        d('Thu', [s('Run tempo')]),
+        d('Fri', [rest]),
+        d('Sat', [s('Swim open water')]),
+        d('Sun', [key('Long ride'), s('Run off bike')])
+      ],
+      switches: [
+        sw('Key session', 'A hard day. A missed one gets a new day.', false),
+        sw('Link to the session before (brick)', 'Run right after Long ride', true),
+        sw('Complete automatically', 'For days you track on Garmin', false)
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -42,7 +42,7 @@ export function selectToday(core: HomeCore): TodayData {
       ? {
           name: info.cycle.name,
           currentWeek: info.currentWeek,
-          durationWeeks: info.cycle.durationWeeks,
+          durationWeeks: core.totalWeeks,
           progressPct: core.progressPct,
           endFormatted: core.endFormatted ?? "",
         }

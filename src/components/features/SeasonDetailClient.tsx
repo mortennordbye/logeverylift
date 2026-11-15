@@ -1,10 +1,13 @@
 "use client";
 
+import { BackLink, useLeaveDeleted } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
+import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
+import { ButtonReason, Chip, DESTRUCTIVE_TEXT, ErrorLine, INNER_FIELD, LABEL, PRIMARY_BUTTON, RACE_KIND_LABELS, RaceKindChips, RacePriorityRow, SectionLabel, Segmented, SelectField, TriDistanceOptions } from "@/components/features/season-ui";
 import {
-  addPhaseAction,
   addRaceAction,
   clearReplanAction,
+  deleteSeasonAction,
   fitTaperAction,
   movePhaseAction,
   removePhaseAction,
@@ -13,27 +16,62 @@ import {
   setPhaseAction,
   updateRaceAction,
 } from "@/lib/actions/seasons";
+import { TakeStartSheet } from "@/components/features/TakeStartSheet";
+import type { ScheduledDraft } from "@/lib/utils/cycle-start";
+import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
+import { keepDates } from "@/lib/utils/keep-dates";
+import { badgeAccent, nextPhaseBadge, phaseBarTone } from "@/lib/utils/plan-list";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { PHASE_TYPE_LABELS, dayLabel, lengthLabel, raceKindLabel, type TaperFit } from "@/lib/utils/seasons";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
+import {
+  PHASE_TYPE_LABELS,
+  addDaysStr,
+  curlyQuotes,
+  dayLabel,
+  daysBetweenStr,
+  lengthField,
+  lengthReason,
+  rangeLabel,
+  replanTitle,
+  seasonEndAfterRace,
+  runLength,
+  seasonPaused,
+  shortDay,
+  switchLengthUnit,
+  type LengthUnit,
+  type RaceDiscipline,
+  type RacePriority,
+  type TaperFit,
+  type TriDistance,
+} from "@/lib/utils/seasons";
 import type { PhaseType } from "@/lib/utils/periodization";
 import type { ActionResult } from "@/types/workout";
-import { ChevronDown, ChevronUp, PlusIcon } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type Announcements,
+  type DragEndEvent,
+  type ScreenReaderInstructions,
+  type UniqueIdentifier,
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-
-type Discipline = "triathlon" | "run" | "ride" | "swim" | "other";
-type TriDistance = "full" | "half" | "olympic" | "sprint";
-type Priority = "A" | "B" | "C";
+import { useRef, useState } from "react";
 
 export type SeasonRaceView = {
   id: number;
   name: string;
   raceDate: string;
-  discipline: Discipline;
+  discipline: RaceDiscipline;
   distance: TriDistance | null;
   distanceMeters: number | null;
-  priority: Priority;
+  priority: RacePriority;
 };
 
 export type SeasonPhaseView = {
@@ -44,53 +82,147 @@ export type SeasonPhaseView = {
   durationDays: number | null;
   start: string;
   end: string;
+  lengthDays: number;
   state: "done" | "active" | "planned";
 };
 
 type Props = {
-  seasonId: number;
+  season: { id: number; name: string; goal: string | null; startDate: string; endDate: string; nextGoal: string | null };
+  /** The user's today, YYYY-MM-DD, from the server. */
+  today: string;
   enduranceEnabled: boolean;
   replan: { reason: string | null } | null;
   races: SeasonRaceView[];
+  /** The A race the season plans for (seasonARace), if any. */
+  aRaceId: number | null;
   phases: SeasonPhaseView[];
   taperFit: TaperFit;
   next: { cycleId: number; name: string; plannedStart: string; scheduled: boolean } | null;
   gapBefore: number;
   overrunAfter: number;
-  candidates: { id: number; name: string; status: string }[];
+  /** The running cycle and the scheduled draft: what Resume ends and drops. */
+  running: RunningBlock | null;
+  scheduled: ScheduledDraft | null;
 };
 
-const LABEL = "text-sm font-medium text-muted-foreground";
-const INPUT = "rounded-xl bg-muted px-4 py-3 text-base outline-none focus:ring-2 ring-primary w-full";
-const SECTION = "text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 mb-2";
 const PHASE_TYPES = Object.keys(PHASE_TYPE_LABELS) as PhaseType[];
+const TRI_WORD: Record<TriDistance, string> = { full: "Full", half: "Half", olympic: "Olympic", sprint: "Sprint" };
 
-type RaceDraft = { id?: number; name: string; raceDate: string; discipline: Discipline; distance: TriDistance | null; km: string; priority: Priority };
-type PhaseDraft =
-  | { mode: "add"; source: "new" | "existing"; cycleId: number | null; name: string; phaseType: PhaseType | null; unit: "weeks" | "days"; length: string }
-  | { mode: "edit"; cycleId: number; name: string; phaseType: PhaseType | null; unit: "weeks" | "days"; length: string };
+type RaceDraft = { id?: number; name: string; raceDate: string; discipline: RaceDiscipline; distance: TriDistance | null; km: string; priority: RacePriority };
+type PhaseDraft = { phase: SeasonPhaseView; phaseType: PhaseType | null; unit: LengthUnit; length: string; unitNote: string | null };
 
-/** The interactive half of a season's page: the re-plan banner, races and phases. */
+/** "Triathlon · Half · 29 Aug 2027" or "Run · 10 km · 3 May 2027". */
+function raceSub(r: SeasonRaceView): string {
+  const kind = r.discipline === "triathlon" ? (r.distance ? `Triathlon · ${TRI_WORD[r.distance]}` : "Triathlon") : r.distanceMeters ? `${RACE_KIND_LABELS[r.discipline]} · ${Math.round(r.distanceMeters / 100) / 10} km` : RACE_KIND_LABELS[r.discipline];
+  return `${kind} · ${dayLabel(r.raceDate)}`;
+}
+
+/** The new order and the 1-based position for a drop, or null when nothing moved. */
+export function phaseDrop(ids: number[], activeId: number, overId: number): { order: number[]; position: number } | null {
+  const from = ids.indexOf(activeId);
+  const to = ids.indexOf(overId);
+  if (from < 0 || to < 0 || from === to) return null;
+  return { order: arrayMove(ids, from, to), position: to + 1 };
+}
+
+const DRAG_INSTRUCTIONS: ScreenReaderInstructions = {
+  draggable: "To move a phase, press space or enter. Use the up and down arrow keys to move it, space or enter to drop it, or escape to cancel.",
+};
+
+/** What a screen reader hears during a drag: the phase names, not dnd-kit's item ids. */
+export function phaseAnnouncements(nameOf: (id: UniqueIdentifier) => string): Announcements {
+  return {
+    onDragStart: ({ active }) => `Picked up ${nameOf(active.id)}.`,
+    onDragOver: ({ active, over }) => (over ? `${nameOf(active.id)} is over ${nameOf(over.id)}.` : `${nameOf(active.id)} is over no phase.`),
+    onDragEnd: ({ active, over }) =>
+      over && over.id !== active.id ? `${nameOf(active.id)} dropped in the place of ${nameOf(over.id)}.` : `${nameOf(active.id)} was not moved.`,
+    onDragCancel: ({ active }) => `${nameOf(active.id)} was not moved.`,
+  };
+}
+
+/**
+ * A season (J4_SeasonDetail): the re-plan banner, the A race with its
+ * countdown and the phase bar, the phases (drag to reorder, tap to change
+ * type or length), and the races. Endurance-only parts are not rendered when
+ * the switch is off, unless the season already has races.
+ */
 export function SeasonDetailClient(p: Props) {
   const router = useRouter();
-  const [busy, setBusy] = useState(false);
+  const leaveDeleted = useLeaveDeleted();
+  // One write at a time; a delete stays busy until the next page is on screen (useSubmitLock).
+  const { busy, lock, unlock } = useSubmitLock();
   const [error, setError] = useState<string | null>(null);
+  // The input a refused write named (fieldErrors), so its error shows under that field.
+  const [errorField, setErrorField] = useState<string | null>(null);
   const [race, setRace] = useState<RaceDraft | null>(null);
   const [phase, setPhase] = useState<PhaseDraft | null>(null);
+  const [menu, setMenu] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmRemoveRace, setConfirmRemoveRace] = useState(false);
+  const [confirmResume, setConfirmResume] = useState(false);
+  // An error belongs to the sheet or the page action that caused it: opening
+  // or closing a sheet starts afresh, so an old error never shows elsewhere.
+  const sheet =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      setError(null);
+      setErrorField(null);
+      set(v);
+    };
+  const toRace = sheet(setRace);
+  const toPhase = sheet(setPhase);
+  const toMenu = sheet(setMenu);
+  const toDelete = sheet(setConfirmDelete);
+  const toRemoveRace = sheet(setConfirmRemoveRace);
+  const toResume = sheet(setConfirmResume);
   const showRaces = p.enduranceEnabled || p.races.length > 0;
+  const aRace = showRaces ? (p.races.find((r) => r.id === p.aRaceId) ?? null) : null;
 
-  async function run<T>(promise: Promise<ActionResult<T>>, after?: () => void) {
-    setBusy(true);
+  // The order on screen: follows the server, and moves at once on a drop.
+  const [order, setOrder] = useState(() => p.phases.map((ph) => ph.id));
+  const incoming = p.phases.map((ph) => ph.id).join(",");
+  const lastIncoming = useRef(incoming);
+  /* eslint-disable react-hooks/refs -- reset local state when the server's order changes (React's "storing information from previous renders") */
+  if (lastIncoming.current !== incoming) {
+    lastIncoming.current = incoming;
+    setOrder(p.phases.map((ph) => ph.id));
+  }
+  /* eslint-enable react-hooks/refs */
+  const byId = new Map(p.phases.map((ph) => [ph.id, ph]));
+  const phases = order.map((id) => byId.get(id)).filter((ph): ph is SeasonPhaseView => ph != null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  async function run<T>(write: () => Promise<ActionResult<T>>, after?: () => void) {
+    // A second tap before the button re-renders off does nothing.
+    if (!lock()) return false;
     setError(null);
-    const result = await callAction(promise);
-    setBusy(false);
+    setErrorField(null);
+    const result = await callAction(write());
+    unlock();
     if (!result.success) {
       setError(result.error);
+      setErrorField("fieldErrors" in result && result.fieldErrors?.raceDate ? "raceDate" : null);
+      // The season may be gone (deleted in another tab): a reload shows its deleted page, or what changed.
+      router.refresh();
       return false;
     }
     after?.();
     router.refresh();
     return true;
+  }
+
+  async function handleDragEnd(event: DragEndEvent) {
+    if (!event.over) return;
+    const drop = phaseDrop(order, Number(event.active.id), Number(event.over.id));
+    if (!drop) return;
+    const before = order;
+    setOrder(drop.order);
+    const ok = await run(() => movePhaseAction({ seasonId: p.season.id, cycleId: Number(event.active.id), position: drop.position }));
+    if (!ok) setOrder(before);
   }
 
   function saveRace() {
@@ -103,321 +235,559 @@ export function SeasonDetailClient(p: Props) {
       distanceMeters: race.discipline === "triathlon" || !race.km ? null : Math.round(Number(race.km) * 1000),
       priority: race.priority,
     };
-    const action = race.id ? updateRaceAction({ seasonId: p.seasonId, raceId: race.id, ...fields }) : addRaceAction({ seasonId: p.seasonId, ...fields });
+    const action = () => (race.id ? updateRaceAction({ seasonId: p.season.id, raceId: race.id, ...fields }) : addRaceAction({ seasonId: p.season.id, ...fields }));
     void run(action, () => setRace(null));
   }
 
   function savePhase() {
     if (!phase) return;
     const n = Number(phase.length);
-    const length = phase.length && n > 0 ? (phase.unit === "days" ? { durationDays: n } : { durationWeeks: n }) : {};
-    const phaseType = p.enduranceEnabled ? phase.phaseType : undefined;
-    if (phase.mode === "edit") {
-      void run(setPhaseAction({ seasonId: p.seasonId, cycleId: phase.cycleId, phaseType, ...length }), () => setPhase(null));
-    } else if (phase.source === "existing") {
-      if (phase.cycleId == null) return;
-      void run(addPhaseAction({ seasonId: p.seasonId, cycleId: phase.cycleId, ...(phaseType ? { phaseType } : {}), ...length }), () => setPhase(null));
-    } else {
-      void run(addPhaseAction({ seasonId: p.seasonId, name: phase.name.trim(), ...(phaseType ? { phaseType } : {}), ...length }), () => setPhase(null));
-    }
+    if (!phase.length || n <= 0) return;
+    const length = phase.unit === "days" ? { durationDays: n } : { durationWeeks: n, durationDays: null };
+    const phaseType = p.enduranceEnabled ? { phaseType: phase.phaseType } : {};
+    void run(() => setPhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id, ...phaseType, ...length }), () => setPhase(null));
   }
 
+  async function fitTaper() {
+    const ok = await run(() => fitTaperAction({ seasonId: p.season.id }));
+    // Fitting the taper is the re-plan the flag asked for.
+    if (ok && p.replan) await run(() => clearReplanAction({ seasonId: p.season.id }));
+  }
+
+  async function deleteSeason() {
+    if (!lock()) return;
+    setError(null);
+    const result = await callAction(deleteSeasonAction({ seasonId: p.season.id }));
+    if (!result.success) {
+      unlock();
+      return setError(result.error);
+    }
+    leaveDeleted("/cycles", [`/seasons/${p.season.id}`]);
+  }
+
+  const paused = seasonPaused(p.next, phases);
   const fit = p.taperFit;
-  const taperLine =
-    fit.status === "fits"
-      ? "The taper ends on race day."
-      : fit.status === "early"
-        ? `The taper ends ${fit.days} day${fit.days === 1 ? "" : "s"} before the A race.`
-        : fit.status === "late"
-          ? `The taper ends ${fit.days} day${fit.days === 1 ? "" : "s"} after the A race.`
-          : null;
+  // A paused chain's dates assume a Resume today, so they raise no taper warning (J8-12).
+  const misfit = !paused && (fit.status === "early" || fit.status === "late");
+  const fitLine = misfit ? `Taper ends ${fit.days} day${fit.days === 1 ? "" : "s"} ${fit.status === "early" ? "before" : "after"} the race` : null;
+  const showBanner = p.replan != null || (misfit && showRaces);
+  // The title says what changed, from the stored reason lines (round 11 I2).
+  const bannerTitle = p.replan ? replanTitle(p.replan.reason, misfit) : "The taper does not end on race day.";
+
+  const countdownTo = aRace?.raceDate ?? p.season.endDate;
+  const daysLeft = daysBetweenStr(p.today, countdownTo);
+
+  // Resume starts the next phase today when its day has come, else schedules
+  // it: either way the running cycle ends then and another start is dropped.
+  const resumeDay = p.next ? (p.next.plannedStart <= p.today ? p.today : p.next.plannedStart) : p.today;
+  const resumeLines = p.next ? takeStartLines({ seasonId: p.season.id, day: resumeDay, running: p.running, scheduled: p.scheduled }) : [];
+  const resume = () => run(() => resumeSeasonAction({ seasonId: p.season.id }), () => setConfirmResume(false));
+
+  // The same badge as the Plan list (nextPhaseBadge): one answer to paused or next.
+  function badge(ph: SeasonPhaseView): string {
+    if (ph.state === "active") return "Now";
+    if (p.next?.cycleId !== ph.id) return "";
+    return nextPhaseBadge(p.next, phases, p.today);
+  }
+  const anyActive = phases.some((ph) => ph.state === "active");
 
   // An open sheet covers the page, so its error shows in the sheet.
-  const errorLine = error && (
-    <p role="alert" className="text-sm text-destructive">
-      {error}
-    </p>
-  );
+  // Why Save race or Save phase is off.
+  const raceReason = !race ? null : !race.name.trim() ? "Give the race a name." : !race.raceDate ? "Pick the race day." : null;
+  const phaseReason = phase ? lengthReason(phase.length, phase.unit) : null;
+  const dateError = error != null && errorField === "raceDate";
+  const raceEndMoves = race ? seasonEndAfterRace(p.season.endDate, p.races, race) : null;
+  // The sheet's dates follow the length as it is typed; an unchanged length keeps the phase's own end (a cut one too).
+  const sheetEnd = (() => {
+    if (!phase || lengthReason(phase.length, phase.unit)) return phase?.phase.end ?? "";
+    const days = Number(phase.length) * (phase.unit === "weeks" ? 7 : 1);
+    const planned = phase.phase.durationDays ?? phase.phase.durationWeeks * 7;
+    return days === planned ? phase.phase.end : addDaysStr(phase.phase.start, days - 1);
+  })();
+  const errorLine = <ErrorLine error={error} />;
 
   return (
     <>
-      {race == null && phase == null && errorLine}
+      <header className="flex items-center justify-between px-4 pt-4">
+        <BackLink fallback={{ href: "/cycles", label: "Plan" }} />
+        <button type="button" aria-label="More actions" onClick={() => toMenu(true)} className="flex h-11 w-11 items-center justify-center rounded-full bg-widget active:opacity-70">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <circle cx="5" cy="12" r="1.8" />
+            <circle cx="12" cy="12" r="1.8" />
+            <circle cx="19" cy="12" r="1.8" />
+          </svg>
+        </button>
+      </header>
 
-      {p.replan && (
-        <div data-testid="replan-banner" className="rounded-2xl bg-amber-500/10 p-4 flex flex-col gap-2">
-          <p className="text-sm font-semibold">Race changed, plan not updated</p>
-          {p.replan.reason && <p className="text-sm">{p.replan.reason}.</p>}
-          <p className="text-sm text-muted-foreground">The plan was not changed. Ask your assistant to re-plan, or change the phases yourself.</p>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => run(clearReplanAction({ seasonId: p.seasonId }))}
-            className="self-start rounded-xl bg-card px-4 min-h-[44px] text-sm font-medium text-primary active:opacity-70 disabled:opacity-50"
-          >
-            Mark as re-planned
-          </button>
+      <div className="flex flex-col gap-4 px-4 pt-1 pb-nav-safe">
+        <div className="flex flex-col gap-1">
+          <h1 className="home-display text-[34px] leading-9 uppercase break-words">{p.season.name}</h1>
+          <span className="text-[13px] text-muted-foreground">
+            {keepDates(`${dayLabel(p.season.startDate)} to ${dayLabel(p.season.endDate)}`)}
+          </span>
+          {/* With no A race the hero card carries the goal. */}
+          {p.season.goal && aRace && <span className="text-sm text-foreground/75">{p.season.goal}</span>}
+          {/* The goal is the user's own words, set apart from the label (round 8). */}
+          {p.season.nextGoal && (
+            <span data-testid="next-goal" className="text-[13px] text-muted-foreground">
+              Next goal{" "}· {p.season.nextGoal}
+            </span>
+          )}
         </div>
-      )}
 
-      {showRaces && (
-        <section>
-          <p className={SECTION}>Races</p>
-          <div className="flex flex-col divide-y divide-border rounded-2xl bg-card overflow-hidden">
-            {p.races.map((r) => (
-              <div key={r.id} className="flex items-center">
-              <button
-                type="button"
-                disabled={!p.enduranceEnabled}
-                onClick={() =>
-                  setRace({ id: r.id, name: r.name, raceDate: r.raceDate, discipline: r.discipline, distance: r.distance, km: r.distanceMeters ? String(r.distanceMeters / 1000) : "", priority: r.priority })
-                }
-                className="flex flex-1 min-w-0 items-center justify-between gap-3 px-4 py-3 min-h-[44px] text-left active:bg-muted/50"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium truncate">{r.name}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {dayLabel(r.raceDate)} · {raceKindLabel(r)}
-                  </p>
-                </div>
-                <span className="text-xs font-semibold rounded-full bg-muted px-2 py-0.5 shrink-0">{r.priority}</span>
-              </button>
-              {/* The race-day plan (docs/plans/nutrition-and-race-day.md, 6): half and full for now. */}
-              {p.enduranceEnabled && r.discipline === "triathlon" && (r.distance === "half" || r.distance === "full") && (
-                <Link href={`/races/${r.id}/plan`} className="flex items-center px-4 min-h-[44px] text-sm font-medium text-primary active:opacity-60 shrink-0">
-                  Race plan
-                </Link>
+        {race == null && phase == null && !confirmDelete && !confirmResume && errorLine}
+
+        {showBanner && (
+          <section data-testid="replan-banner" className="flex flex-col gap-2.5 rounded-2xl border border-[color-mix(in_oklab,var(--home-fg)_16%,transparent)] bg-widget-2 px-4 py-3.5">
+            <span className="text-[15px] font-semibold">{bannerTitle}</span>
+            {p.replan?.reason && <span className="text-[13px] text-muted-foreground">{keepDates(`${curlyQuotes(p.replan.reason)}.`)}</span>}
+            <div className="flex items-center gap-2">
+              {misfit && (
+                <button type="button" disabled={busy} onClick={fitTaper} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50">
+                  Fit the taper
+                </button>
               )}
-              </div>
-            ))}
-            {p.enduranceEnabled && (
-              <button
-                type="button"
-                onClick={() => setRace({ name: "", raceDate: "", discipline: "triathlon", distance: "half", km: "", priority: "A" })}
-                className="flex items-center gap-2 px-4 min-h-[44px] text-primary text-sm font-medium active:bg-muted/50"
-              >
-                <PlusIcon className="w-4 h-4" /> Add race
-              </button>
-            )}
-          </div>
-          {taperLine && (
-            <div className="flex items-center justify-between gap-3 px-2 pt-2">
-              <p className="text-sm text-muted-foreground" data-testid="taper-fit">
-                {taperLine}
-              </p>
-              {(fit.status === "early" || fit.status === "late") && (
-                <button type="button" disabled={busy} onClick={() => run(fitTaperAction({ seasonId: p.seasonId }))} className="text-primary text-sm font-medium min-h-[44px] shrink-0 active:opacity-70">
-                  Fit taper
+              {p.replan && (
+                <button type="button" disabled={busy} onClick={() => run(() => clearReplanAction({ seasonId: p.season.id }))} className="min-h-11 px-3 text-sm font-medium active:opacity-70 disabled:opacity-50">
+                  Keep as it is
                 </button>
               )}
             </div>
-          )}
-        </section>
-      )}
+          </section>
+        )}
 
-      <section>
-        <p className={SECTION}>Phases</p>
-        <div className="flex flex-col divide-y divide-border rounded-2xl bg-card overflow-hidden" data-testid="season-phases">
-          {p.phases.map((ph, i) => (
-            <div key={ph.id} className="flex items-center gap-2 px-4 py-2 min-h-[44px]">
-              <div className="flex-1 min-w-0">
-                <Link href={`/cycles/${ph.id}`} className="font-medium truncate block active:opacity-70">
-                  {ph.name}
+        <section data-testid="season-hero" className="flex flex-col gap-3.5 rounded-[20px] bg-widget px-[18px] py-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className={LABEL}>{keepDates(aRace ? `${aRace.priority} race · ${dayLabel(aRace.raceDate)}` : `${p.season.goal ? "Goal by" : "Ends"} ${dayLabel(p.season.endDate)}`)}</span>
+              <span className="text-[17px] font-semibold break-words">{aRace ? aRace.name : (p.season.goal ?? p.season.name)}</span>
+              {/* The race-day plan (docs/plans/nutrition-and-race-day.md, 6): half and full for now. */}
+              {aRace && p.enduranceEnabled && aRace.discipline === "triathlon" && (aRace.distance === "half" || aRace.distance === "full") && (
+                <Link href={`/races/${aRace.id}/plan`} className="flex min-h-11 items-center text-sm font-medium text-primary active:opacity-70">
+                  Race plan ›
                 </Link>
-                <p className="text-xs text-muted-foreground">
-                  {p.enduranceEnabled && ph.phaseType ? `${PHASE_TYPE_LABELS[ph.phaseType]} · ` : ""}
-                  {dayLabel(ph.start)} to {dayLabel(ph.end)} · {lengthLabel(ph)}
-                  {ph.state === "active" ? " · now" : ph.state === "done" ? " · done" : ""}
-                </p>
-              </div>
-              <button type="button" aria-label={`Move ${ph.name} up`} disabled={busy || i === 0} onClick={() => run(movePhaseAction({ seasonId: p.seasonId, cycleId: ph.id, position: i }))} className="w-11 h-11 flex items-center justify-center text-muted-foreground disabled:opacity-30 active:opacity-60">
-                <ChevronUp className="w-5 h-5" />
-              </button>
-              <button type="button" aria-label={`Move ${ph.name} down`} disabled={busy || i === p.phases.length - 1} onClick={() => run(movePhaseAction({ seasonId: p.seasonId, cycleId: ph.id, position: i + 2 }))} className="w-11 h-11 flex items-center justify-center text-muted-foreground disabled:opacity-30 active:opacity-60">
-                <ChevronDown className="w-5 h-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  setPhase({ mode: "edit", cycleId: ph.id, name: ph.name, phaseType: ph.phaseType, unit: ph.durationDays != null ? "days" : "weeks", length: String(ph.durationDays ?? ph.durationWeeks) })
-                }
-                className="text-primary text-sm font-medium min-h-[44px] px-1 active:opacity-70"
-              >
-                Edit
-              </button>
-            </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => setPhase({ mode: "add", source: "new", cycleId: null, name: "", phaseType: null, unit: "weeks", length: "4" })}
-            className="flex items-center gap-2 px-4 min-h-[44px] text-primary text-sm font-medium active:bg-muted/50"
-          >
-            <PlusIcon className="w-4 h-4" /> Add phase
-          </button>
-        </div>
-        {p.next && !p.next.scheduled && (
-          <div className="flex items-center justify-between gap-3 px-2 pt-2">
-            <p className="text-sm text-muted-foreground">
-              {p.phases.some((ph) => ph.state !== "planned") ? "Paused: the next phase is not scheduled." : `“${p.next.name}” is not started.`}
-            </p>
-            <button type="button" disabled={busy} onClick={() => run(resumeSeasonAction({ seasonId: p.seasonId }))} className="text-primary text-sm font-medium min-h-[44px] shrink-0 active:opacity-70">
-              {p.phases.some((ph) => ph.state !== "planned") ? "Resume" : "Start"}
-            </button>
-          </div>
-        )}
-        {p.next?.scheduled && <p className="text-sm text-muted-foreground px-2 pt-2">“{p.next.name}” starts {dayLabel(p.next.plannedStart)}.</p>}
-        {p.gapBefore > 0 && <p className="text-sm text-muted-foreground px-2 pt-1">The first phase starts {p.gapBefore} days after the season starts.</p>}
-        {p.overrunAfter > 0 && <p className="text-sm text-muted-foreground px-2 pt-1">The last phase runs {p.overrunAfter} days past the season end.</p>}
-      </section>
-
-      <BottomSheet open={race != null} onClose={() => setRace(null)}>
-        {race && (
-          <div className="w-full px-4 pb-8 flex flex-col gap-4">
-            <h2 className="text-lg font-semibold">{race.id ? "Edit race" : "New race"}</h2>
-            <label className="flex flex-col gap-1">
-              <span className={LABEL}>Name</span>
-              <input value={race.name} maxLength={100} onChange={(e) => setRace({ ...race, name: e.target.value })} className={INPUT} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className={LABEL}>Date</span>
-              <input type="date" value={race.raceDate} onChange={(e) => setRace({ ...race, raceDate: e.target.value })} className={INPUT} />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className={LABEL}>Kind</span>
-              <select value={race.discipline} onChange={(e) => setRace({ ...race, discipline: e.target.value as Discipline })} className={INPUT}>
-                <option value="triathlon">Triathlon</option>
-                <option value="run">Run</option>
-                <option value="ride">Ride</option>
-                <option value="swim">Swim</option>
-                <option value="other">Other</option>
-              </select>
-            </label>
-            {race.discipline === "triathlon" ? (
-              <label className="flex flex-col gap-1">
-                <span className={LABEL}>Distance</span>
-                <select value={race.distance ?? ""} onChange={(e) => setRace({ ...race, distance: (e.target.value || null) as TriDistance | null })} className={INPUT}>
-                  <option value="full">Full</option>
-                  <option value="half">Half</option>
-                  <option value="olympic">Olympic</option>
-                  <option value="sprint">Sprint</option>
-                  <option value="">Not set</option>
-                </select>
-              </label>
-            ) : (
-              <label className="flex flex-col gap-1">
-                <span className={LABEL}>Distance, km (optional)</span>
-                <input inputMode="decimal" value={race.km} onChange={(e) => setRace({ ...race, km: e.target.value })} className={INPUT} />
-              </label>
-            )}
-            <div className="flex flex-col gap-1">
-              <span className={LABEL}>Priority</span>
-              <div className="flex gap-2" role="group" aria-label="Priority">
-                {(["A", "B", "C"] as const).map((pr) => (
-                  <button
-                    key={pr}
-                    type="button"
-                    aria-pressed={race.priority === pr}
-                    onClick={() => setRace({ ...race, priority: pr })}
-                    className={`flex-1 min-h-[44px] rounded-xl border-2 text-sm font-semibold ${race.priority === pr ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
-                  >
-                    {pr}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <button type="button" disabled={busy || !race.name.trim() || !race.raceDate} onClick={saveRace} className="rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-95 transition-transform">
-              Save race
-            </button>
-            {errorLine}
-            {race.id && (
-              <button type="button" disabled={busy} onClick={() => run(removeRaceAction({ seasonId: p.seasonId, raceId: race.id! }), () => setRace(null))} className="text-destructive text-sm font-medium min-h-[44px] active:opacity-70">
-                Remove race
-              </button>
-            )}
-          </div>
-        )}
-      </BottomSheet>
-
-      <BottomSheet open={phase != null} onClose={() => setPhase(null)}>
-        {phase && (
-          <div className="w-full px-4 pb-8 flex flex-col gap-4">
-            <h2 className="text-lg font-semibold">{phase.mode === "edit" ? `Edit ${phase.name}` : "Add phase"}</h2>
-            {phase.mode === "add" && (
-              <div className="flex gap-2" role="group" aria-label="Phase source">
-                {(["new", "existing"] as const).map((src) => (
-                  <button
-                    key={src}
-                    type="button"
-                    aria-pressed={phase.source === src}
-                    onClick={() => setPhase({ ...phase, source: src })}
-                    className={`flex-1 min-h-[44px] rounded-xl border-2 text-sm font-medium ${phase.source === src ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}
-                  >
-                    {src === "new" ? "New cycle" : "Existing cycle"}
-                  </button>
-                ))}
-              </div>
-            )}
-            {phase.mode === "add" && phase.source === "new" && (
-              <label className="flex flex-col gap-1">
-                <span className={LABEL}>Name</span>
-                <input value={phase.name} maxLength={100} onChange={(e) => setPhase({ ...phase, name: e.target.value })} placeholder="e.g. Base" className={INPUT} />
-              </label>
-            )}
-            {phase.mode === "add" && phase.source === "existing" && (
-              <label className="flex flex-col gap-1">
-                <span className={LABEL}>Cycle</span>
-                <select value={phase.cycleId ?? ""} onChange={(e) => setPhase({ ...phase, cycleId: e.target.value ? Number(e.target.value) : null })} className={INPUT}>
-                  <option value="">Pick a cycle</option>
-                  {p.candidates.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {p.enduranceEnabled && (
-              <label className="flex flex-col gap-1">
-                <span className={LABEL}>Phase type</span>
-                <select value={phase.phaseType ?? ""} onChange={(e) => setPhase({ ...phase, phaseType: (e.target.value || null) as PhaseType | null })} className={INPUT}>
-                  <option value="">None (the cycle&apos;s own curve)</option>
-                  {PHASE_TYPES.map((t) => (
-                    <option key={t} value={t}>
-                      {PHASE_TYPE_LABELS[t]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <div className="flex flex-col gap-1">
-              <span className={LABEL}>Length</span>
-              <div className="flex gap-2">
-                <input aria-label="Length" inputMode="numeric" value={phase.length} onChange={(e) => setPhase({ ...phase, length: e.target.value.replace(/\D/g, "") })} className={`${INPUT} flex-1`} />
-                <select aria-label="Length unit" value={phase.unit} onChange={(e) => setPhase({ ...phase, unit: e.target.value as "weeks" | "days" })} className={`${INPUT} w-32`}>
-                  <option value="weeks">weeks</option>
-                  <option value="days">days</option>
-                </select>
-              </div>
-              {phase.mode === "add" && phase.phaseType === "taper" && (
-                <p className="text-xs text-muted-foreground">Leave it empty to use the A race&apos;s taper length.</p>
               )}
             </div>
-            <button
-              type="button"
-              disabled={busy || (phase.mode === "add" && (phase.source === "new" ? !phase.name.trim() : phase.cycleId == null))}
-              onClick={savePhase}
-              className="rounded-xl bg-primary py-4 text-base font-semibold text-primary-foreground disabled:opacity-50 active:scale-95 transition-transform"
-            >
-              {phase.mode === "edit" ? "Save phase" : "Add phase"}
-            </button>
-            {errorLine}
-            {phase.mode === "edit" && (
-              <button type="button" disabled={busy} onClick={() => run(removePhaseAction({ seasonId: p.seasonId, cycleId: phase.cycleId }), () => setPhase(null))} className="text-destructive text-sm font-medium min-h-[44px] active:opacity-70">
-                Remove from season
-              </button>
+            {daysLeft >= 0 && (
+              <div className="flex shrink-0 flex-col items-end" aria-label={`${daysLeft} days to go`}>
+                <span className="home-display text-[44px] leading-10">{daysLeft}</span>
+                <span className="text-xs text-muted-foreground">{daysLeft === 1 ? "day" : "days"}</span>
+              </div>
             )}
           </div>
+          {phases.length > 0 && (
+            <div className="flex h-2.5 gap-[3px]" aria-hidden="true" data-testid="phase-bar">
+              {phases.map((ph) => {
+                // A phase that has not started is never filled (phaseBarTone), as on the Plan list.
+                const tone = phaseBarTone(ph.state, !anyActive && p.next?.cycleId === ph.id);
+                return (
+                  <div
+                    key={ph.id}
+                    data-tone={tone}
+                    style={{ flex: `${ph.lengthDays} 1 0` }}
+                    className={`min-w-2 rounded ${tone === "grey" || tone === "next" ? "bg-[#707076]" : "bg-primary"} ${tone === "current" || tone === "next" ? "outline-2 outline-offset-1 outline-primary" : ""}`}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </section>
+
+        <section className="flex flex-col gap-2">
+          <SectionLabel>Phases</SectionLabel>
+          {phases.length > 0 && (
+            <DndContext
+              id="season-phases"
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+              accessibility={{ announcements: phaseAnnouncements((id) => byId.get(Number(id))?.name ?? "phase"), screenReaderInstructions: DRAG_INSTRUCTIONS }}
+            >
+              <SortableContext items={order} strategy={verticalListSortingStrategy}>
+                <ul data-testid="season-phases" className="flex flex-col overflow-hidden rounded-[20px] bg-widget">
+                  {phases.map((ph) => (
+                    <PhaseRow
+                      key={ph.id}
+                      phase={ph}
+                      sub={`${p.enduranceEnabled && ph.phaseType ? `${PHASE_TYPE_LABELS[ph.phaseType]} · ` : ""}${runLength(ph)} · ${rangeLabel(ph.start, ph.end)}`}
+                      warn={misfit && "taperId" in fit && fit.taperId === ph.id && showRaces ? fitLine : null}
+                      badge={badge(ph)}
+                      onOpen={() => toPhase({ phase: ph, phaseType: ph.phaseType, ...lengthField(ph), unitNote: null })}
+                    />
+                  ))}
+                </ul>
+              </SortableContext>
+            </DndContext>
+          )}
+          <Link href={`/seasons/${p.season.id}/phases/new`} className="flex min-h-11 items-center self-start px-1 text-[15px] font-medium text-primary active:opacity-70">
+            + Add phase
+          </Link>
+          {/* Paused, the later phases keep their dates from a resume, with a gap before them (round 9 F8). */}
+          <span className="mx-1 text-[13px] text-muted-foreground">{paused ? "The later phases start when you resume." : "Each phase starts the day after the one before."}</span>
+          {p.next && !p.next.scheduled && (
+            <div className="mx-1 flex items-center justify-between gap-3">
+              <p className="text-[13px] text-muted-foreground">
+                {paused ? "Paused. The next phase is not scheduled." : `“${p.next.name}” is not started.`}
+              </p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => (resumeLines.length > 0 ? toResume(true) : resume())}
+                className="min-h-11 min-w-11 shrink-0 px-2 text-sm font-medium text-primary active:opacity-70"
+              >
+                {paused ? "Resume" : "Start"}
+              </button>
+            </div>
+          )}
+          {p.gapBefore > 0 && <p className="mx-1 text-[13px] text-muted-foreground">The first phase starts {p.gapBefore} days after the season starts.</p>}
+          {p.overrunAfter > 0 && <p className="mx-1 text-[13px] text-muted-foreground">The last phase runs {p.overrunAfter} days past the season end.</p>}
+        </section>
+
+        {showRaces && (
+          <section className="flex flex-col gap-2">
+            <SectionLabel>Races</SectionLabel>
+            {p.races.length > 0 && (
+              <ul className="flex flex-col overflow-hidden rounded-[20px] bg-widget">
+                {p.races.map((r) => (
+                  <li key={r.id} className="border-b border-hairline last:border-0">
+                    <button
+                      type="button"
+                      disabled={!p.enduranceEnabled}
+                      onClick={() =>
+                        toRace({ id: r.id, name: r.name, raceDate: r.raceDate, discipline: r.discipline, distance: r.distance, km: r.distanceMeters ? String(r.distanceMeters / 1000) : "", priority: r.priority })
+                      }
+                      className="flex min-h-11 w-full items-center gap-3 px-4 py-3 text-left active:opacity-80"
+                    >
+                      <span aria-label={`${r.priority} race`} className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[13px] font-bold ${r.priority === "A" ? "bg-primary text-primary-foreground" : "bg-widget-2"}`}>
+                        {r.priority}
+                      </span>
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <span data-testid="race-name" className="line-clamp-2 break-words text-[15px] font-medium">{r.name}</span>
+                        <span className="text-[13px] text-muted-foreground">{keepDates(raceSub(r))}</span>
+                      </span>
+                      <Chevron />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {p.enduranceEnabled && (
+              <button
+                type="button"
+                onClick={() => toRace({ name: "", raceDate: "", discipline: "triathlon", distance: "half", km: "", priority: "A" })}
+                className="flex min-h-11 items-center self-start px-1 text-[15px] font-medium text-primary active:opacity-70"
+              >
+                + Add race
+              </button>
+            )}
+          </section>
+        )}
+      </div>
+
+      <BottomSheet open={menu} onClose={() => toMenu(false)}>
+        <PlanSheetPanel label="Season actions" title={p.season.name}>
+          <div className="flex flex-col overflow-hidden rounded-2xl bg-widget-2">
+            <Link href={`/seasons/${p.season.id}/edit`} className={MENU_ROW}>
+              Edit details
+            </Link>
+            <Link href={`/seasons/${p.season.id}/history`} className={MENU_ROW}>
+              Change history
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setMenu(false);
+                toDelete(true);
+              }}
+              className={`${MENU_ROW} ${DESTRUCTIVE_TEXT}`}
+            >
+              Delete season
+            </button>
+          </div>
+        </PlanSheetPanel>
+      </BottomSheet>
+
+      <BottomSheet open={confirmDelete} onClose={() => toDelete(false)}>
+        <PlanSheetPanel
+          label="Delete this season?"
+          title="Delete this season?"
+          sub={<p className="text-sm text-muted-foreground">{keepDates("Its cycles stay. You can restore it from Recently deleted for 90 days.")}</p>}
+        >
+          {errorLine}
+          <button type="button" disabled={busy} onClick={deleteSeason} className={DESTRUCTIVE_BUTTON}>
+            Delete season
+          </button>
+          <button type="button" onClick={() => toDelete(false)} className={SHEET_CANCEL}>
+            Cancel
+          </button>
+        </PlanSheetPanel>
+      </BottomSheet>
+
+      <BottomSheet open={race != null && confirmRemoveRace} onClose={() => toRemoveRace(false)}>
+        {race?.id && (
+          <PlanSheetPanel
+            label="Remove this race?"
+            title="Remove this race?"
+            sub={<p className="text-sm text-muted-foreground">{race.name} leaves the season. Restore it from Change history.</p>}
+          >
+            {errorLine}
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() =>
+                run(() => removeRaceAction({ seasonId: p.season.id, raceId: race.id! }), () => {
+                  setConfirmRemoveRace(false);
+                  setRace(null);
+                })
+              }
+              className={DESTRUCTIVE_BUTTON}
+            >
+              Remove race
+            </button>
+            <button type="button" onClick={() => toRemoveRace(false)} className={SHEET_CANCEL}>
+              Cancel
+            </button>
+          </PlanSheetPanel>
         )}
       </BottomSheet>
+
+      <BottomSheet open={race != null && !confirmRemoveRace} onClose={() => toRace(null)}>
+        {race && (
+          <PlanSheetPanel
+            label={race.id ? "Edit race" : "New race"}
+            title={race.id ? "Edit race" : "New race"}
+            footer={
+              <>
+                <div>
+                  <button type="button" disabled={busy || raceReason != null} aria-describedby={raceReason ? "race-reason" : undefined} onClick={saveRace} className={PRIMARY_BUTTON}>
+                    Save race
+                  </button>
+                  <ButtonReason id="race-reason" reason={raceReason} />
+                </div>
+                {!dateError && errorLine}
+                {race.id && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => toRemoveRace(true)}
+                    className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}
+                  >
+                    Remove race
+                  </button>
+                )}
+              </>
+            }
+          >
+            <label className="flex flex-col gap-1.5">
+              <span className={LABEL}>Name</span>
+              <input value={race.name} maxLength={100} onChange={(e) => setRace({ ...race, name: e.target.value })} className={INNER_FIELD} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={LABEL}>Date</span>
+              <input
+                type="date"
+                value={race.raceDate}
+                aria-invalid={dateError ? true : undefined}
+                aria-describedby={dateError ? "race-date-error" : undefined}
+                onChange={(e) => {
+                  if (dateError) toRace({ ...race, raceDate: e.target.value });
+                  else setRace({ ...race, raceDate: e.target.value });
+                }}
+                className={INNER_FIELD}
+              />
+            </label>
+            {dateError && (
+              <p id="race-date-error" role="alert" className="-mt-1 text-sm text-[#ff6b5a]">
+                {error}
+              </p>
+            )}
+            {race.discipline === "triathlon" ? (
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Distance</span>
+                <SelectField value={race.distance ?? ""} onChange={(v) => setRace({ ...race, distance: (v || null) as TriDistance | null })}>
+                  <TriDistanceOptions />
+                  <option value="">Not set</option>
+                </SelectField>
+              </label>
+            ) : (
+              <label className="flex flex-col gap-1.5">
+                <span className={LABEL}>Distance, km (optional)</span>
+                <input inputMode="decimal" value={race.km} onChange={(e) => setRace({ ...race, km: e.target.value })} className={INNER_FIELD} />
+              </label>
+            )}
+            <RaceKindChips value={race.discipline} onChange={(d) => setRace({ ...race, discipline: d })} />
+            <RacePriorityRow value={race.priority} onChange={(v) => setRace({ ...race, priority: v })} />
+            {/* A season has one A race: saving this one as A makes the old one a B race (keepOneARace). */}
+            {race.priority === "A" &&
+              p.races
+                .filter((r) => r.priority === "A" && r.id !== race.id)
+                .map((r) => (
+                  <span key={r.id} className="text-[13px] text-muted-foreground">
+                    {keepDates(`“${r.name}” on ${dayLabel(r.raceDate)} becomes a B race.`)}
+                  </span>
+                ))}
+            {/* An A race past the season end takes the end with it (placeRaceDate): say so before save (round 11 I2). */}
+            {raceEndMoves && <span className="text-[13px] text-muted-foreground">{keepDates(`The season end moves to ${dayLabel(raceEndMoves)}.`)}</span>}
+          </PlanSheetPanel>
+        )}
+      </BottomSheet>
+
+      <BottomSheet open={phase != null} onClose={() => toPhase(null)}>
+        {phase && (
+          <PlanSheetPanel
+            label={phase.phase.name}
+            title={phase.phase.name}
+            sub={<span className="text-[13px] text-muted-foreground">{keepDates(rangeLabel(phase.phase.start, sheetEnd))}</span>}
+            footer={
+              <>
+                <div>
+                  <button type="button" disabled={busy || phaseReason != null} aria-describedby={phaseReason ? "phase-reason" : undefined} onClick={savePhase} className={PRIMARY_BUTTON}>
+                    Save phase
+                  </button>
+                  <ButtonReason id="phase-reason" reason={phaseReason} />
+                </div>
+                {errorLine}
+                <button type="button" disabled={busy} onClick={() => run(() => removePhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id }), () => setPhase(null))} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>
+                  Remove from season
+                </button>
+              </>
+            }
+          >
+            <div className="flex gap-4">
+              <Link href={`/cycles/${phase.phase.id}`} className="flex min-h-11 items-center text-sm font-medium text-primary active:opacity-70">
+                Open cycle
+              </Link>
+              <Link href={`/cycles/${phase.phase.id}/template`} className="flex min-h-11 items-center text-sm font-medium text-primary active:opacity-70">
+                Edit the week
+              </Link>
+            </div>
+            {p.enduranceEnabled && (
+              <div className="flex flex-col gap-2">
+                <span className={LABEL}>Phase type</span>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Phase type">
+                  {PHASE_TYPES.map((t) => (
+                    <Chip key={t} pressed={phase.phaseType === t} onClick={() => setPhase({ ...phase, phaseType: phase.phaseType === t ? null : t })}>
+                      {PHASE_TYPE_LABELS[t]}
+                    </Chip>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-col gap-2">
+              <span className={LABEL}>Length</span>
+              <div className="flex gap-2">
+                <input
+                  aria-label="Length"
+                  inputMode="numeric"
+                  value={phase.length}
+                  onChange={(e) => setPhase({ ...phase, length: e.target.value.replace(/\D/g, ""), unitNote: null })}
+                  className={`${INNER_FIELD.replace("w-full", "w-[88px] shrink-0")} font-semibold`}
+                />
+                <Segmented
+                  label="Length unit"
+                  value={phase.unit}
+                  onChange={(unit) => {
+                    const next = switchLengthUnit(phase.length, phase.unit, unit);
+                    setPhase({ ...phase, length: next.length, unit: next.unit, unitNote: next.note });
+                  }}
+                  track="bg-widget-2"
+                  className="flex-1"
+                  options={[
+                    { value: "weeks", label: "Weeks" },
+                    { value: "days", label: "Days" },
+                  ]}
+                />
+              </div>
+              {/* The note can land under the pinned Save bar: scroll it into view when it appears (round 10). */}
+              {phase.unitNote && (
+                <span ref={(el) => el?.scrollIntoView({ block: "nearest" })} className="text-[13px] text-muted-foreground">
+                  {phase.unitNote}
+                </span>
+              )}
+            </div>
+          </PlanSheetPanel>
+        )}
+      </BottomSheet>
+
+      {p.next && (
+        <TakeStartSheet
+          open={confirmResume}
+          title={paused ? "Resume this season?" : "Start this season?"}
+          lines={[`${p.next.name} starts ${resumeDay === p.today ? "today" : shortDay(resumeDay)}.`, ...resumeLines]}
+          action={paused ? "Resume season" : "Start season"}
+          busy={busy}
+          error={error}
+          onConfirm={resume}
+          onClose={() => toResume(false)}
+        />
+      )}
     </>
+  );
+}
+
+const MENU_ROW = "flex min-h-[52px] w-full items-center border-b border-hairline px-3.5 text-left text-[15px] font-medium last:border-b-0 active:bg-foreground/5";
+const DESTRUCTIVE_BUTTON = "min-h-[52px] w-full rounded-2xl bg-[#c23a2e] text-base font-semibold text-white active:opacity-80 disabled:opacity-50";
+
+function Chevron() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true" className="shrink-0 text-muted-foreground">
+      <path d="M9 6l6 6-6 6" />
+    </svg>
+  );
+}
+
+/** One phase: a drag handle, then the row that opens the phase sheet. */
+function PhaseRow({ phase, sub, warn, badge, onOpen }: { phase: SeasonPhaseView; sub: string; warn: string | null; badge: string; onOpen: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: phase.id });
+  return (
+    <li
+      ref={setNodeRef}
+      data-testid="phase-row"
+      data-phase-id={phase.id}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }}
+      className="flex items-center border-b border-hairline bg-widget last:border-0"
+    >
+      <button
+        type="button"
+        aria-label={`Reorder ${phase.name}`}
+        {...attributes}
+        {...listeners}
+        className="flex h-14 w-11 shrink-0 touch-none items-center justify-center text-muted-foreground cursor-grab active:cursor-grabbing"
+      >
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+          <circle cx="9" cy="6" r="1.6" />
+          <circle cx="15" cy="6" r="1.6" />
+          <circle cx="9" cy="12" r="1.6" />
+          <circle cx="15" cy="12" r="1.6" />
+          <circle cx="9" cy="18" r="1.6" />
+          <circle cx="15" cy="18" r="1.6" />
+        </svg>
+      </button>
+      {/* The badge goes under the name at every width, so the name and its dates keep the row's width (round 8, round 10). */}
+      <button
+        type="button"
+        onClick={onOpen}
+        className="grid min-h-11 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 py-2.5 pr-3 text-left active:opacity-80"
+      >
+        <span className="col-start-1 row-start-1 flex min-w-0 flex-col gap-0.5">
+          <span data-testid="phase-name" className={`break-words text-[15px] font-medium ${phase.state === "done" ? "text-muted-foreground" : ""}`}>
+            {phase.name}
+          </span>
+          <span data-testid="phase-sub" className="text-[13px] text-muted-foreground">{keepDates(sub)}</span>
+          {warn && <span className="mt-1 text-[13px]">{keepDates(warn)}</span>}
+        </span>
+        {badge && (
+          <span
+            data-testid="phase-badge"
+            className={`col-start-1 row-start-2 justify-self-start text-xs font-semibold ${badgeAccent(badge) ? "text-primary" : "text-muted-foreground"}`}
+          >
+            {keepDates(badge)}
+          </span>
+        )}
+        <span className="col-start-2 row-span-2 row-start-1">
+          <Chevron />
+        </span>
+      </button>
+    </li>
   );
 }

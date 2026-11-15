@@ -1,5 +1,5 @@
 import { shortDay } from "@/lib/utils/seasons";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 /**
  * A day label that the server and the browser render the same (PR #231 CI):
@@ -9,12 +9,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
  */
 
 afterEach(() => vi.restoreAllMocks());
+// A day outside the current year carries its year (round 11 I2).
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 describe("shortDay", () => {
   it("writes the weekday, day and month by the calendar", () => {
     expect(shortDay("2026-11-04")).toBe("Wed 4 Nov");
     expect(shortDay("2026-11-08")).toBe("Sun 8 Nov");
-    expect(shortDay("2027-01-01")).toBe("Fri 1 Jan");
+    expect(shortDay("2027-01-01")).toBe("Fri 1 Jan 2027");
   });
 
   it("gives the same text whatever the engine's date formatting says", () => {

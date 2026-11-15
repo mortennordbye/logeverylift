@@ -20,13 +20,14 @@ import { insertAutoSessions } from "@/lib/auto-sessions";
 import { declineDay, removeSlotInTx, rotationOverrides, skipAutoDay, upsertSlotInTx, weekdayToday } from "@/lib/planned-sessions";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
-import { OpenWorkoutError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
+import { OpenWorkoutError, PlanConflictError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, scheduleCycle, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
   createTrainingCycleSchema,
   importCycleSchema,
   reorderCycleSlotsSchema,
+  startTrainingCycleSchema,
   updateTrainingCycleSchema,
   upsertCycleSlotSchema,
 } from "@/lib/validators/training-cycles";
@@ -48,6 +49,7 @@ import {
   resolveRotation,
   toDateStr,
 } from "@/lib/utils/cycle-position";
+import { MAX_SCHEDULE_DAYS, startDayProblem } from "@/lib/utils/cycle-start";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
 import { revalidatePath } from "next/cache";
@@ -576,10 +578,15 @@ const removeCycleSlotSchema = z.object({ slotId: z.number().int().positive(), cy
  * Run a write to one cycle inside the revision layer (docs/plans/revisions.md,
  * 2.2). Null when it is not the caller's live cycle.
  */
-async function writeCycle<T>(userId: string, cycleId: number, fn: (tx: Tx) => Promise<T>): Promise<{ result: T } | null> {
+async function writeCycle<T>(
+  userId: string,
+  cycleId: number,
+  fn: (tx: Tx) => Promise<T>,
+  expectedVersion?: number,
+): Promise<{ result: T } | null> {
   try {
     const { result } = await planWrite({ userId, writer: "user" }, async (w) => {
-      await w.touch({ type: "cycle", id: cycleId });
+      await w.touch({ type: "cycle", id: cycleId }, { expectedVersion });
       return fn(w.tx);
     });
     return { result };
@@ -622,6 +629,8 @@ export async function createTrainingCycle(
   }
 }
 
+const STALE_EDIT = "This cycle changed in another tab. Reload to see it.";
+
 export async function updateTrainingCycle(
   data: unknown,
 ): Promise<ActionResult<TrainingCycle>> {
@@ -632,7 +641,7 @@ export async function updateTrainingCycle(
       return { success: false, error: "Invalid input" };
     }
 
-    const { id, ...rest } = validation.data;
+    const { id, expectedVersion, ...rest } = validation.data;
 
     // Verify ownership
     const existing = await db.query.trainingCycles.findFirst({
@@ -688,7 +697,7 @@ export async function updateTrainingCycle(
         .where(eq(trainingCycles.id, id))
         .returning();
       return row;
-    });
+    }, expectedVersion);
     if (!done) return { success: false, error: "Cycle not found" };
     const cycle = done.result;
 
@@ -696,6 +705,8 @@ export async function updateTrainingCycle(
     revalidatePath(`/cycles/${id}`);
     return { success: true, data: cycle };
   } catch (err) {
+    // Edit details sends the version it read: another tab saved since (T9).
+    if (err instanceof PlanConflictError) return { success: false, error: STALE_EDIT };
     console.error("[updateTrainingCycle] failed", err);
     return { success: false, error: "Failed to update the cycle" };
   }
@@ -755,16 +766,39 @@ export async function deleteManyTrainingCycles(
   }
 }
 
+/**
+ * Start a draft cycle today, or schedule it to start on a later day: it stays
+ * a draft until that day, and only one cycle is scheduled at a time, so a
+ * later day clears any other scheduled start (scheduleCycle, as the
+ * assistant's manage_training_cycle start).
+ */
 export async function startTrainingCycle(
   cycleId: number,
+  startDate?: string,
 ): Promise<ActionResult<TrainingCycle>> {
   const auth = await requireSession();
   const userId = auth.user.id;
-  if (!cycleIdSchema.safeParse(cycleId).success) return { success: false, error: "Invalid input" };
+  const parsed = startTrainingCycleSchema.safeParse({ cycleId, startDate });
+  if (!parsed.success) return { success: false, error: "Invalid input" };
 
   try {
-    // Only one active cycle at a time — any other active cycle completes.
-    const cycle = await activateCycle({ userId, writer: "user" }, cycleId);
+    const todayStr = toDateStr(await userToday(userId));
+    const start = parsed.data.startDate ?? todayStr;
+    const problem = startDayProblem(start, todayStr);
+    if (problem === "past") return { success: false, error: "The start day is in the past" };
+    if (problem === "too_far") return { success: false, error: `The start day is more than ${MAX_SCHEDULE_DAYS} days ahead` };
+
+    let cycle: TrainingCycle;
+    if (start > todayStr) {
+      await scheduleCycle({ userId, writer: "user" }, cycleId, start);
+      [cycle] = await db
+        .select()
+        .from(trainingCycles)
+        .where(and(eq(trainingCycles.id, cycleId), eq(trainingCycles.userId, userId), liveCycles));
+    } else {
+      // Only one active cycle at a time — any other active cycle completes.
+      cycle = await activateCycle({ userId, writer: "user" }, cycleId);
+    }
 
     revalidatePath("/cycles");
     revalidatePath(`/cycles/${cycleId}`);
@@ -827,6 +861,10 @@ export async function upsertCycleSlot(
     }
 
     if (dayOfWeek === undefined && orderIndex === undefined) return { success: false, error: "Invalid input" };
+    // A key session and a brick are part of the endurance add-on (src/lib/endurance.ts).
+    if ((rest.priority !== undefined || rest.brickWithNext !== undefined) && !(await enduranceEnabledFor(auth.user.id))) {
+      return { success: false, error: "Endurance features are not on for this account" };
+    }
     // A day can hold up to three sessions (docs/plans/sessions.md, 3.1).
     const done = await writeCycle(auth.user.id, trainingCycleId, (tx) =>
       upsertSlotInTx(tx, trainingCycleId, { dayOfWeek: dayOfWeek ?? null, orderIndex: orderIndex ?? null, daySlot }, rest),
@@ -872,16 +910,21 @@ export async function reorderCycleSlots(
   if (!validation.success) return { success: false, error: "Invalid input" };
   try {
     const done = await writeCycle(auth.user.id, cycleId, async (tx) => {
-      for (const [index, id] of validation.data.orderedIds.entries()) {
-        await tx
-          .update(trainingCycleSlots)
-          .set({ orderIndex: index + 1 })
-          .where(
-            and(
-              eq(trainingCycleSlots.id, id),
-              eq(trainingCycleSlots.trainingCycleId, validation.data.cycleId),
-            ),
-          );
+      // uniq_cycle_order is checked row by row, so a slot cannot take a place
+      // another slot still holds. Park every slot on a negative place first,
+      // then write the final places.
+      for (const sign of [-1, 1]) {
+        for (const [index, id] of validation.data.orderedIds.entries()) {
+          await tx
+            .update(trainingCycleSlots)
+            .set({ orderIndex: sign * (index + 1) })
+            .where(
+              and(
+                eq(trainingCycleSlots.id, id),
+                eq(trainingCycleSlots.trainingCycleId, validation.data.cycleId),
+              ),
+            );
+        }
       }
     });
     if (!done) return { success: false, error: "Cycle not found" };

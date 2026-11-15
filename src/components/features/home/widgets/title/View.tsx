@@ -16,7 +16,7 @@ export function selectTitle(core: HomeCore): TitleData {
   const d = core.today;
   return {
     date: `${WEEKDAYS[d.getDay()]}, ${d.getDate()} ${MONTHS[d.getMonth()]}`,
-    cycleWeek: core.info ? `Week ${core.info.currentWeek} of ${core.info.cycle.durationWeeks}` : null,
+    cycleWeek: core.info ? `Week ${core.info.currentWeek} of ${core.totalWeeks}` : null,
   };
 }
 

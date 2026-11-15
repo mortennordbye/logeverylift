@@ -188,6 +188,21 @@ Automated tests do not replace a look at the real thing on a phone-sized screen.
 - **Real device:** gestures (the iOS edge swipe), haptics, notifications and
   backgrounding can only be checked on an iPhone.
 
+## Journey review
+
+Required for major work, redesigns and anything that touches a critical flow.
+Tests show the logic is right; a journey review shows what the user sees. Every
+step of every journey of the feature is captured in the real app with demo
+accounts at 390 and 320 px (`pnpm journeys <set>`), each screenshot is reviewed
+and marked, bugs are fixed with a failing test first, and the journeys are
+captured again with the same step ids. A fresh reviewer that has not seen
+earlier reports does the last pass. The owner tests only when a pass finds
+nothing new.
+
+The loop and the rules: the `journey-review` skill
+(`.claude/skills/journey-review/SKILL.md`). The tooling and how to add journeys
+for a feature: `scripts/journeys/README.md`.
+
 ## Test databases and safety
 
 Everything that writes or wipes data on the tests' behalf goes through

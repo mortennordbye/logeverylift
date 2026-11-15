@@ -1,52 +1,97 @@
-import type { SeasonSummary } from "@/lib/seasons";
-import { dayLabel, inDaysLabel } from "@/lib/utils/seasons";
-import { ChevronRight, PlusIcon } from "lucide-react";
+import { keepDates } from "@/lib/utils/keep-dates";
+import type { SeasonCardView } from "@/lib/utils/plan-list";
 import Link from "next/link";
 
-/**
- * The Seasons section at the top of /cycles (docs/plans/seasons.md, 2.10).
- * For every user (D22); the A race shows only with the endurance switch (D18)
- * or when the season already has one.
- */
-export function SeasonsSection({ seasons, today, enduranceEnabled }: { seasons: SeasonSummary[]; today: string; enduranceEnabled: boolean }) {
+/** The flag of a season or a race (stroke icon, as the mockups draw it). */
+export function FlagIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
-    <section data-testid="seasons-section">
-      <div className="flex items-center justify-between px-2 mb-2">
-        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Seasons</p>
-        <Link href="/seasons/new" className="flex items-center gap-1 text-primary text-sm font-medium min-h-[44px] active:opacity-70">
-          <PlusIcon className="w-4 h-4" />
-          New season
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" className={className} aria-hidden>
+      <path d="M5 21V4M5 4h12l-2 4 2 4H5" />
+    </svg>
+  );
+}
+
+function PhaseBar({ season }: { season: SeasonCardView }) {
+  if (season.bar.length === 0) return null;
+  return (
+    <div className="flex h-2 gap-[3px]" role="img" aria-label={season.barLabel}>
+      {season.bar.map((b) => (
+        <div
+          key={b.id}
+          className={`min-w-2 rounded ${b.tone === "grey" || b.tone === "next" ? "bg-[#707076]" : "bg-brand"} ${b.tone === "current" || b.tone === "next" ? "ring-2 ring-brand ring-offset-2 ring-offset-widget" : ""}`}
+          style={{ flex: `${b.flex} 1 0` }}
+        />
+      ))}
+    </div>
+  );
+}
+
+const row = "flex items-center gap-3 min-h-[44px] border-t border-hairline px-[18px] py-2.5 active:bg-widget-2";
+
+/**
+ * One season on the Plan list (J4_PlanSeason, J6_PlanGoalSeason): the race
+ * countdown or the goal date, the phase bar, the phases inline and the A race.
+ */
+export function SeasonCard({ season }: { season: SeasonCardView }) {
+  const { race } = season;
+  return (
+    <section className="flex shrink-0 flex-col overflow-hidden rounded-[20px] bg-widget" data-testid="season-card" aria-label={season.name}>
+      <Link href={`/seasons/${season.id}`} className="flex flex-col gap-3 px-[18px] pt-4 pb-3 active:opacity-70">
+        {race ? (
+          <div className="flex items-baseline justify-between gap-2">
+            <span data-testid="season-name" className="min-w-0 line-clamp-2 break-words text-base font-semibold">{season.name}</span>
+            {race.daysLeft != null && (
+              <span className="shrink-0 text-[13px] text-muted-foreground">
+                Race in <span className="home-display text-xl text-foreground">{race.daysLeft}</span> {race.daysLeft === 1 ? "day" : "days"}
+              </span>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-start justify-between gap-3">
+            <span className="flex min-w-0 flex-col gap-1">
+              <span className="text-xs font-semibold uppercase tracking-[1px] text-muted-foreground">{keepDates(`Season · ${season.goalBy}`)}</span>
+              <span data-testid="season-name" className="text-lg font-semibold break-words">{season.name}</span>
+            </span>
+            <span className="flex shrink-0 flex-col items-end">
+              <span className="home-display text-[40px] leading-[38px]">{season.daysLeft}</span>
+              <span className="text-xs text-muted-foreground">{season.daysLeft === 1 ? "day left" : "days left"}</span>
+            </span>
+          </div>
+        )}
+        {season.replan && <span className="text-[13px] font-medium text-foreground">Re-plan needed</span>}
+        <PhaseBar season={season} />
+      </Link>
+      {season.phases.map((p) => (
+        <Link key={p.id} href={`/cycles/${p.id}`} className={row}>
+          <span className={`h-2 w-2 shrink-0 rounded-full ${p.mark === "accent" ? "bg-brand" : "bg-[#707076]"}`} aria-hidden />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span data-testid="phase-name" className="line-clamp-2 break-words text-[15px] font-medium">{p.name}</span>
+            <span className="text-[13px] text-muted-foreground">{keepDates(p.sub)}</span>
+          </span>
+          {p.badge && <span className={`shrink-0 text-xs font-semibold ${p.badgeAccent ? "text-brand" : "text-muted-foreground"}`}>{keepDates(p.badge)}</span>}
         </Link>
-      </div>
-      {seasons.length === 0 ? (
-        <p className="text-sm text-muted-foreground px-2">A season is a long goal above your cycles, such as a race or “Bench 120 kg by summer”.</p>
-      ) : (
-        <div className="flex flex-col divide-y divide-border rounded-2xl bg-card overflow-hidden">
-          {seasons.map((s) => (
-            <Link key={s.id} href={`/seasons/${s.id}`} className="flex items-center justify-between gap-3 px-4 py-3 min-h-[44px] active:bg-muted/50">
-              <div className="min-w-0">
-                <p className="font-medium truncate">{s.name}</p>
-                <p className="text-xs text-muted-foreground">
-                  {dayLabel(s.startDate)} to {dayLabel(s.endDate)}
-                  {s.currentPhase ? ` · ${s.currentPhase}` : ""}
-                </p>
-                {(enduranceEnabled || s.aRace) && s.aRace && (
-                  <p className="text-xs text-muted-foreground">
-                    {s.aRace.name}
-                    {s.aRace.raceDate >= today ? `, ${inDaysLabel(today, s.aRace.raceDate)}` : ""}
-                  </p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 shrink-0">
-                {s.replanFlaggedAt && (
-                  <span className="text-xs font-medium rounded-full bg-amber-500/15 text-amber-600 dark:text-amber-400 px-2 py-0.5">Re-plan needed</span>
-                )}
-                <ChevronRight className="w-4 h-4 text-muted-foreground" />
-              </div>
-            </Link>
-          ))}
-        </div>
+      ))}
+      {race && (
+        <Link href={`/seasons/${season.id}`} className={row}>
+          <FlagIcon className="-ml-1 h-4 w-4 shrink-0" />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span data-testid="race-name" className="line-clamp-2 break-words text-[15px] font-semibold">{race.name}</span>
+            <span className="text-[13px] text-muted-foreground">{keepDates(`A race · ${race.when}`)}</span>
+          </span>
+        </Link>
       )}
     </section>
+  );
+}
+
+/** The season cards of the Plan list, for every user (D22); absent when there is no season. */
+export function SeasonsSection({ seasons }: { seasons: SeasonCardView[] }) {
+  if (seasons.length === 0) return null;
+  return (
+    <>
+      {seasons.map((s) => (
+        <SeasonCard key={s.id} season={s} />
+      ))}
+    </>
   );
 }

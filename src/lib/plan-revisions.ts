@@ -44,6 +44,7 @@ import {
   canonical,
   changeSetFor,
   diffSnapshots,
+  sessionChangeLine,
   isMemorySnapshot,
   isCycleSnapshot,
   isProgramSnapshot,
@@ -75,7 +76,7 @@ import {
   type SeasonSnapshot,
 } from "@/lib/utils/plan-revisions";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { nextPhase, replanReason, seasonTimeline, type PhaseLike, type RaceLike } from "@/lib/utils/seasons";
+import { nextPhase, replanFlag, replanFlagOf, seasonTimeline, type PhaseLike, type RaceLike } from "@/lib/utils/seasons";
 import { judgingRuleChanged } from "@/lib/utils/progression";
 import { THRESHOLDS_PER_KIND_MAX } from "@/lib/utils/thresholds";
 import { limitOverrideLine } from "@/lib/utils/training-limits";
@@ -135,8 +136,18 @@ export class PlanNotFoundError extends Error {
   }
 }
 
-/** A write the object's current state does not allow; the message says why. */
-export class PlanStateError extends Error {}
+/**
+ * A write the object's current state does not allow; the message says why.
+ * `field` names the input it is about, so a form can show it under that field.
+ */
+export class PlanStateError extends Error {
+  constructor(
+    message: string,
+    readonly field?: string,
+  ) {
+    super(message);
+  }
+}
 
 /** A plan change that would disturb a workout in progress. */
 export class OpenWorkoutError extends Error {
@@ -421,6 +432,11 @@ export class PlanWriteSession {
   /** Record a new object, written in this transaction. */
   create(target: PlanTarget) {
     this.created.push(target);
+  }
+
+  /** Whether this write made the object: it has no earlier state to lock or record. */
+  wasCreated(target: PlanTarget): boolean {
+    return this.created.some((t) => key(t) === key(target));
   }
 
   /**
@@ -839,11 +855,16 @@ export async function seasonPhases(ex: Executor, seasonId: number): Promise<(Pha
  * decision 1). With a phase of the season active, the next one is scheduled
  * for the day after it ends; with none started and the season still ahead,
  * the first is scheduled for the season start. Leaves the chain paused (does
- * nothing) when a cycle outside the season is active or scheduled: the user
- * chose that block, and "Resume" on the season picks the chain up again.
+ * nothing) when a cycle outside the season is scheduled, or is active while
+ * this season holds no scheduled start: the user chose that block, and
+ * "Resume" on the season picks the chain up again.
+ *
+ * `claim`: the season's first phase was just made, so the user means to run
+ * this season from its start. Its first phase takes the one scheduled start
+ * even while another block runs or is scheduled; that other chain pauses.
  * Writer: the caller's; the chained start itself runs as `sync`.
  */
-export async function chainSeason(w: PlanWriteSession, seasonId: number) {
+export async function chainSeason(w: PlanWriteSession, seasonId: number, opts: { claim?: boolean } = {}) {
   const { userToday } = await import("@/lib/user-settings");
   const { toDateStr } = await import("@/lib/utils/cycle-position");
   const { addDaysStr } = await import("@/lib/utils/seasons");
@@ -857,8 +878,12 @@ export async function chainSeason(w: PlanWriteSession, seasonId: number) {
   const timeline = seasonTimeline(season.startDate, phases);
   const next = nextPhase(timeline);
   if (!next) return;
+  const active = timeline.find((p) => p.state === "active");
+  const anyStarted = timeline.some((p) => p.state !== "planned");
+  const day = active ? addDaysStr(active.end, 1) : !anyStarted && season.startDate > today ? season.startDate : null;
+  if (!day) return;
   const outside = await w.tx
-    .select({ id: trainingCycles.id })
+    .select({ id: trainingCycles.id, status: trainingCycles.status, scheduledStartDate: trainingCycles.scheduledStartDate })
     .from(trainingCycles)
     .where(
       and(
@@ -867,13 +892,17 @@ export async function chainSeason(w: PlanWriteSession, seasonId: number) {
         or(eq(trainingCycles.status, "active"), isNotNull(trainingCycles.scheduledStartDate)),
         or(isNull(trainingCycles.seasonId), ne(trainingCycles.seasonId, seasonId)),
       ),
-    )
-    .limit(1);
-  if (outside.length) return;
-  const active = timeline.find((p) => p.state === "active");
-  const anyStarted = timeline.some((p) => p.state !== "planned");
-  const day = active ? addDaysStr(active.end, 1) : !anyStarted && season.startDate > today ? season.startDate : null;
-  if (!day) return;
+    );
+  const outsideScheduled = outside.filter((c) => c.scheduledStartDate != null);
+  if (opts.claim && !active) {
+    for (const c of outsideScheduled) {
+      await w.touch({ type: "cycle", id: c.id });
+      await w.tx.update(trainingCycles).set({ scheduledStartDate: null }).where(eq(trainingCycles.id, c.id));
+    }
+  } else {
+    const holdsStart = phases.some((p) => p.scheduledStartDate != null);
+    if (outsideScheduled.length || (outside.some((c) => c.status === "active") && !holdsStart)) return;
+  }
   const others = phases.filter((p) => p.id !== next.id && p.scheduledStartDate != null);
   for (const p of others) {
     await w.touch({ type: "cycle", id: p.id });
@@ -964,7 +993,7 @@ export async function claimSeasonPhases(w: PlanWriteSession, seasonId: number) {
   const { toDateStr } = await import("@/lib/utils/cycle-position");
   const { seasonARace } = await import("@/lib/utils/seasons");
   const today = toDateStr(await userToday(w.ctx.userId));
-  const reasons: string[] = [];
+  const reasons: { raceId: number; text: string }[] = [];
   const claimed = await seasonPhases(w.tx, seasonId);
   await lockCycleRows(w.tx, claimed.map((p) => p.id));
   for (const p of claimed) {
@@ -981,32 +1010,31 @@ export async function claimSeasonPhases(w: PlanWriteSession, seasonId: number) {
       const a = seasonARace(races, today);
       const sameDistance = (a?.discipline === "triathlon" ? a.distance : null) === own.raceDistance || own.raceDistance == null;
       if (!a) {
-        await w.tx.insert(seasonRaces).values({
-          seasonId,
-          userId: w.ctx.userId,
-          name: "Race",
-          raceDate: own.raceDate,
-          discipline: "triathlon",
-          distance: own.raceDistance,
-          priority: "A",
-        });
-        reasons.push(`A race on ${own.raceDate} added from "${p.name}"`);
+        const [added] = await w.tx
+          .insert(seasonRaces)
+          .values({
+            seasonId,
+            userId: w.ctx.userId,
+            name: "Race",
+            raceDate: own.raceDate,
+            discipline: "triathlon",
+            distance: own.raceDistance,
+            priority: "A",
+          })
+          .returning({ id: seasonRaces.id });
+        reasons.push({ raceId: added.id, text: `A race on ${own.raceDate} added from "${p.name}"` });
       } else if (a.raceDate !== own.raceDate || !sameDistance) {
         await w.tx
           .update(seasonRaces)
           .set({ raceDate: own.raceDate, ...(own.raceDistance ? { discipline: "triathlon" as const, distance: own.raceDistance, distanceMeters: null } : {}) })
           .where(eq(seasonRaces.id, a.id));
-        reasons.push(`A race "${a.name}" moved from ${a.raceDate} to ${own.raceDate} on "${p.name}" while the season was deleted`);
+        reasons.push({ raceId: a.id, text: `The A race "${a.name}" moved from ${a.raceDate} to ${own.raceDate} on "${p.name}" while the season was deleted` });
       }
     }
     await w.tx.update(trainingCycles).set({ raceDate: null, raceDistance: null }).where(eq(trainingCycles.id, p.id));
   }
-  if (reasons.length) {
-    await w.tx
-      .update(seasons)
-      .set({ replanFlaggedAt: new Date(), replanReason: reasons.join("; ") })
-      .where(eq(seasons.id, seasonId));
-  }
+  const flag = replanFlagOf(reasons);
+  if (flag) await w.tx.update(seasons).set({ replanFlaggedAt: new Date(), ...flag }).where(eq(seasons.id, seasonId));
 }
 
 /**
@@ -1640,11 +1668,15 @@ async function restoreSeasonTo(
   // The flag: a race change in the restore sets it; otherwise a revision that
   // was flagged brings its flag back (undoing "Mark as re-planned"), and one
   // that was not leaves the current flag as it is.
-  const reason = replanReason(current, target as unknown as RaceLike[]);
-  const flag = reason
-    ? { replanFlaggedAt: new Date(), replanReason: reason }
+  const changed = replanFlag(current, target as unknown as RaceLike[]);
+  const flag = changed
+    ? { replanFlaggedAt: new Date(), ...changed }
     : targetSnap.season.replanFlaggedAt && !row.replanFlaggedAt
-      ? { replanFlaggedAt: new Date(String(targetSnap.season.replanFlaggedAt)), replanReason: (targetSnap.season.replanReason as string | null) ?? null }
+      ? {
+          replanFlaggedAt: new Date(String(targetSnap.season.replanFlaggedAt)),
+          replanReason: (targetSnap.season.replanReason as string | null) ?? null,
+          replanRaceIds: (targetSnap.season.replanRaceIds as number[] | null | undefined) ?? null,
+        }
       : {};
   await tx
     .update(seasons)
@@ -2011,11 +2043,17 @@ export async function listCycleSessionRevisions(userId: string, cycleId: number)
     );
   const out: RevisionEntry[] = [];
   for (const { id } of ids) {
+    const snaps = await db
+      .select({ id: planRevisions.id, snapshot: planRevisions.snapshot })
+      .from(planRevisions)
+      .where(and(eq(planRevisions.userId, userId), eq(planRevisions.objectType, "planned_session"), eq(planRevisions.objectId, id)))
+      .orderBy(planRevisions.id);
     for (const r of await listRevisions(userId, { type: "planned_session", id })) {
       if (r.action === "baseline") continue;
-      const [rev] = await db.select({ snapshot: planRevisions.snapshot }).from(planRevisions).where(eq(planRevisions.id, r.id));
-      const name = snapshotName(rev.snapshot as PlanSnapshot);
-      out.push({ ...r, changes: r.changes.map((c) => (c.startsWith("Added") || c.startsWith("Skipped ") ? c : `${name}: ${c}`)) });
+      // The session goes by what it was before the change: a new label is not its name yet.
+      const at = snaps.findIndex((s) => s.id === r.id);
+      const name = snapshotName((snaps[at - 1] ?? snaps[at]).snapshot as PlanSnapshot);
+      out.push({ ...r, changes: r.changes.map((c) => sessionChangeLine(name, c)) });
     }
   }
   return out.sort((a, b) => b.id - a.id);
@@ -2028,8 +2066,8 @@ function conflictLines(rejected: unknown): string[] {
   if (!r?.sets?.length) return ["A change was not applied"];
   return r.sets.map((s) =>
     s.setDeleted
-      ? "Not applied: the set was removed from the plan"
-      : `Not applied: ${Object.entries(s.fields).map(([f, v]) => `${f} ${v ?? "none"}`).join(", ")}`,
+      ? "Not applied. The set was removed from the plan"
+      : `Not applied (${Object.entries(s.fields).map(([f, v]) => `${f} ${v ?? "none"}`).join(", ")})`,
   );
 }
 
@@ -2129,22 +2167,27 @@ export async function listDeleted(userId: string, type: PlanObjectType) {
     .orderBy(desc(table.deletedAt));
   const out: { id: number; name: string; deletedAt: Date; revisionId: number | null }[] = [];
   for (const r of rows) {
-    const [rev] = await db
-      .select({ id: planRevisions.id })
-      .from(planRevisions)
-      .where(
-        and(
-          eq(planRevisions.userId, userId),
-          eq(planRevisions.objectType, type),
-          eq(planRevisions.objectId, r.id),
-          eq(planRevisions.action, "delete"),
-        ),
-      )
-      .orderBy(desc(planRevisions.id))
-      .limit(1);
-    out.push({ id: r.id, name: r.name, deletedAt: r.deletedAt!, revisionId: rev?.id ?? null });
+    out.push({ id: r.id, name: r.name, deletedAt: r.deletedAt!, revisionId: await deleteRevisionId(userId, type, r.id) });
   }
   return out;
+}
+
+/** The revision a Restore of this deleted object brings back: its newest delete. */
+export async function deleteRevisionId(userId: string, type: PlanObjectType, objectId: number): Promise<number | null> {
+  const [rev] = await db
+    .select({ id: planRevisions.id })
+    .from(planRevisions)
+    .where(
+      and(
+        eq(planRevisions.userId, userId),
+        eq(planRevisions.objectType, type),
+        eq(planRevisions.objectId, objectId),
+        eq(planRevisions.action, "delete"),
+      ),
+    )
+    .orderBy(desc(planRevisions.id))
+    .limit(1);
+  return rev?.id ?? null;
 }
 
 // ── Retention (section 9) ────────────────────────────────────────────────────
@@ -2252,4 +2295,31 @@ export async function purgePlanRevisions(now = new Date()) {
     await db.delete(planRevisions).where(and(eq(planRevisions.objectType, "season"), inArray(planRevisions.objectId, ids)));
     await db.delete(seasons).where(inArray(seasons.id, ids));
   }
+}
+
+/**
+ * When a cycle last became completed: the time of its first revision with
+ * status completed after one without it. No column holds the end of a block,
+ * and a block ended early (another start took over) has no other trace.
+ */
+export async function cycleCompletedAt(userId: string, cycleId: number): Promise<Date | null> {
+  return (await cyclesCompletedAt(userId, [cycleId])).get(cycleId) ?? null;
+}
+
+/** cycleCompletedAt for several cycles in one read; a cycle with no such revision is left out. */
+export async function cyclesCompletedAt(userId: string, cycleIds: number[]): Promise<Map<number, Date>> {
+  const out = new Map<number, Date>();
+  if (cycleIds.length === 0) return out;
+  const rows = await db
+    .select({ id: planRevisions.objectId, status: sql<string | null>`${planRevisions.snapshot}->'cycle'->>'status'`, at: planRevisions.createdAt })
+    .from(planRevisions)
+    .where(and(eq(planRevisions.userId, userId), eq(planRevisions.objectType, "cycle"), inArray(planRevisions.objectId, cycleIds)))
+    .orderBy(desc(planRevisions.id));
+  const stopped = new Set<number>();
+  for (const r of rows) {
+    if (stopped.has(r.id)) continue;
+    if (r.status !== "completed") stopped.add(r.id);
+    else out.set(r.id, r.at);
+  }
+  return out;
 }

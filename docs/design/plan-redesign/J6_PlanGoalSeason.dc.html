@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Plan with a goal season</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 980px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; position: relative">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 24px 16px 8px">
+    <h1 style="margin: 0; font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 40px; letter-spacing: 0.5px; text-transform: uppercase">Plan</h1>
+    <div style="display: flex; align-items: center; gap: 8px">
+      <button style="height: 44px; padding: 0 8px; border: none; background: transparent; color: {{accent}}; font: 500 16px 'Work Sans', sans-serif">Select</button>
+      <button aria-label="New cycle or season" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: {{accent}}; color: #0b0b0c; display: flex; align-items: center; justify-content: center">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
+      </button>
+    </div>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 16px; padding: 8px 16px 0">
+
+    <!-- compact hero -->
+    <a href="#" style="display: flex; flex-direction: column; gap: 10px; padding: 16px 18px; border-radius: 20px; background: #161618; color: #f4f4f5">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; gap: 8px">
+        <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: {{accent}}">Week 3 of 6 · Rotation</span>
+        <span style="font-size: 13px; color: #8d8d93">Ends 20 Dec</span>
+      </div>
+      <span style="font-size: 18px; font-weight: 600">Upper / Lower hypertrophy</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 6px">
+        <sc-for list="{{rotation}}" as="r" hint-placeholder-count="5">
+          <span style="display: flex; flex-direction: column; justify-content: center; min-height: 44px; box-sizing: border-box; padding: 4px 12px; border-radius: 12px; background: {{r.bg}}; border: {{r.border}}">
+            <span style="font-size: 11px; font-weight: 600; color: {{r.tagColor}}">{{r.tag}}</span>
+            <span style="font-size: 14px; font-weight: 600; color: {{r.fg}}">{{r.name}}</span>
+          </span>
+        </sc-for>
+      </div>
+    </a>
+
+    <!-- goal season -->
+    <section style="display: flex; flex-direction: column; gap: 14px; padding: 18px; border-radius: 20px; background: #161618">
+      <a href="#" style="display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; color: #f4f4f5">
+        <span style="display: flex; flex-direction: column; gap: 4px; min-width: 0">
+          <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Season · Goal by 7 Feb</span>
+          <span style="font-size: 18px; font-weight: 600">Bench 120 kg by February</span>
+        </span>
+        <span style="display: flex; flex-direction: column; align-items: flex-end">
+          <span style="font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 40px; line-height: 38px; color: #f4f4f5">12</span>
+          <span style="font-size: 12px; color: #8d8d93">weeks left</span>
+        </span>
+      </a>
+      <div style="display: flex; gap: 3px; height: 10px" role="img" aria-label="Phase bar: Upper / Lower hypertrophy now, then Strength peak, then Peak and test">
+        <div style="flex: 6 1 0; border-radius: 4px; background: {{accent}}; box-shadow: 0 0 0 2px #161618, 0 0 0 4px {{accent}}"></div>
+        <div style="flex: 4 1 0; border-radius: 4px; background: #707076"></div>
+        <div style="flex: 3 1 0; border-radius: 4px; background: #707076"></div>
+      </div>
+      <div style="display: flex; flex-direction: column">
+        <sc-for list="{{phases}}" as="p" hint-placeholder-count="3">
+          <a href="#" style="display: flex; align-items: center; gap: 12px; min-height: 52px; border-top: 1px solid rgba(244,244,245,0.08); color: #f4f4f5">
+            <span style="width: 10px; height: 10px; border-radius: 5px; flex-shrink: 0; background: {{p.dot}}"></span>
+            <span style="display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0">
+              <span style="font-size: 15px; font-weight: 500">{{p.name}}</span>
+              <span style="font-size: 13px; color: #8d8d93">{{p.sub}}</span>
+            </span>
+            <span style="font-size: 12px; font-weight: 600; color: {{p.badgeColor}}">{{p.badge}}</span>
+          </a>
+        </sc-for>
+      </div>
+    </section>
+
+    <section style="display: flex; flex-direction: column; gap: 8px">
+      <h2 style="margin: 0 4px; font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Past cycles</h2>
+      <div style="display: flex; flex-direction: column; border-radius: 20px; background: #161618; overflow: hidden">
+        <a href="#" style="display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; border-bottom: 1px solid rgba(244,244,245,0.08); color: #f4f4f5">
+          <span style="font-size: 15px; font-weight: 500">Strength 5×5</span>
+          <span style="font-size: 13px; color: #8d8d93">8 weeks · ended 8 Nov</span>
+        </a>
+        <a href="#" style="display: flex; flex-direction: column; gap: 2px; padding: 14px 16px; color: #f4f4f5">
+          <span style="font-size: 15px; font-weight: 500">Intro</span>
+          <span style="font-size: 13px; color: #8d8d93">4 weeks · ended 13 Sep</span>
+        </a>
+      </div>
+    </section>
+  </div>
+
+  <nav style="position: absolute; left: 0; right: 0; bottom: 0; height: 84px; background: #111113; border-top: 1px solid rgba(244,244,245,0.08); display: flex; justify-content: space-around; padding-top: 10px; box-sizing: border-box; font-size: 11px">
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"></path></svg>Workout</a>
+    <a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: {{accent}}; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>Plan</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><path d="M14 5h6M14 9h6M4 15h16M4 19h16"></path></svg>Programs</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>More</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#6b95ff';
+    const plain = { tag: '', bg: '#222225', border: '1px solid transparent', fg: '#f4f4f5', tagColor: '#8d8d93' };
+    return {
+      accent,
+      rotation: [
+        { tag: 'Done', name: 'Upper A', bg: 'transparent', border: '1px solid rgba(244,244,245,0.12)', fg: '#8d8d93', tagColor: '#8d8d93' },
+        { tag: 'Next', name: 'Lower A', bg: 'rgba(107,149,255,0.18)', border: '1px solid ' + accent, fg: '#f4f4f5', tagColor: accent },
+        { name: 'Rest', ...plain, fg: '#8d8d93' },
+        { name: 'Upper B', ...plain },
+        { name: 'Lower B', ...plain }
+      ],
+      phases: [
+        { name: 'Upper / Lower hypertrophy', sub: 'Build · 6 wk · 9 Nov – 20 Dec', dot: accent, badge: 'Now', badgeColor: accent },
+        { name: 'Strength peak', sub: 'Peak · 4 wk · 21 Dec – 17 Jan', dot: '#707076', badge: 'Starts 21 Dec', badgeColor: '#8d8d93' },
+        { name: 'Peak and test', sub: 'Peak · 3 wk · 18 Jan – 7 Feb', dot: '#707076', badge: '', badgeColor: '#8d8d93' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

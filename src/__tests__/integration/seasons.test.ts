@@ -26,7 +26,7 @@ import { restorePlanRevision } from "@/lib/actions/plan-revisions";
 import { getActiveCycle } from "@/lib/garmin/queries";
 import { syncPeriodizedTargets } from "@/lib/periodization-sync";
 import { purgePlanRevisions } from "@/lib/plan-revisions";
-import { activeCycleRace, getSeasonDetail, listSeasons } from "@/lib/seasons";
+import { activeCycleRace, getSeasonDetail, listSeasons, seasonlessCycles } from "@/lib/seasons";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
 import { scaledDuration } from "@/lib/utils/periodization";
 import { and, asc, eq } from "drizzle-orm";
@@ -144,7 +144,7 @@ describe("races and the re-plan flag (D17)", () => {
     expect(moved.success).toBe(true);
     const row = await seasonRow(id);
     expect(row.replanFlaggedAt).not.toBeNull();
-    expect(row.replanReason).toBe('A race "Haugesund" moved from 2027-08-22 to 2027-08-29');
+    expect(row.replanReason).toBe('The A race "Haugesund" moved from 22 Aug 2027 to 29 Aug 2027');
 
     // The phases were not touched by the flag.
     expect((await getSeasonDetail(me, id))!.replan).toMatchObject({ flagged: true });
@@ -153,6 +153,53 @@ describe("races and the re-plan flag (D17)", () => {
     // A triathlon race keeps no metres; another race keeps no triathlon distance.
     await addRaceAction({ seasonId: id, name: "10k", raceDate: "2027-05-01", discipline: "run", distance: "full", distanceMeters: 10000, priority: "C" });
     expect((await racesOf(id)).at(-1)).toMatchObject({ distance: null, distanceMeters: 10000 });
+  });
+
+  it("moves the season end with the A race and writes dates in words in the reason", async () => {
+    const id = await newSeason(me, day(0), day(120));
+    await addRaceAction({ seasonId: id, ...race, raceDate: day(120) });
+    const [a] = await racesOf(id);
+    expect((await updateRaceAction({ seasonId: id, raceId: a.id, raceDate: day(134) })).success).toBe(true);
+    expect((await seasonRow(id)).endDate).toBe(day(134));
+    const words = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).replace("Sept", "Sep");
+    expect((await seasonRow(id)).replanReason).toBe(`The A race "Haugesund 70.3" moved from ${words(day(120))} to ${words(day(134))}`);
+    // Earlier again: the end follows it back.
+    await updateRaceAction({ seasonId: id, raceId: a.id, raceDate: day(127) });
+    expect((await seasonRow(id)).endDate).toBe(day(127));
+  });
+
+  it("refuses a race date in the past or outside the season, and saves nothing", async () => {
+    const id = await newSeason(me, day(10), day(120));
+    // The refusal names the field, so the race sheet shows it under Date (round 8).
+    expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(-1) })).toEqual({
+      success: false,
+      error: "Pick a race date from today on.",
+      fieldErrors: { raceDate: ["Pick a race date from today on."] },
+    });
+    expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(5), priority: "B" })).toMatchObject({
+      success: false,
+      error: expect.stringContaining("on or after the season start"),
+      fieldErrors: { raceDate: [expect.stringContaining("on or after the season start")] },
+    });
+    expect(await addRaceAction({ seasonId: id, ...race, raceDate: day(130), priority: "B" })).toMatchObject({
+      success: false,
+      error: expect.stringContaining("on or before the season end"),
+      fieldErrors: { raceDate: [expect.stringContaining("on or before the season end")] },
+    });
+    expect(await racesOf(id)).toEqual([]);
+    expect((await seasonRow(id)).endDate).toBe(day(120));
+  });
+
+  it("removing the race a flag was about clears the flag", async () => {
+    const id = await newSeason(me, day(0), day(120));
+    await addRaceAction({ seasonId: id, ...race, raceDate: day(120) });
+    await addRaceAction({ seasonId: id, ...race, name: "Tune-up", raceDate: day(60), priority: "B" });
+    await clearReplanAction({ seasonId: id });
+    const tune = (await racesOf(id)).find((r) => r.name === "Tune-up")!;
+    await updateRaceAction({ seasonId: id, raceId: tune.id, raceDate: day(70) });
+    expect((await seasonRow(id)).replanReason).toContain('The B race "Tune-up" moved');
+    await removeRaceAction({ seasonId: id, raceId: tune.id });
+    expect(await seasonRow(id)).toMatchObject({ replanFlaggedAt: null, replanReason: null });
   });
 
   it("refuses races with the endurance switch off, and a race on a phase cycle", async () => {
@@ -219,6 +266,20 @@ describe("phases", () => {
     expect(await addPhaseAction({ seasonId: b, cycleId: c })).toMatchObject({ success: false, error: expect.stringContaining("another season") });
   });
 
+  it("refuses a completed cycle as a phase, and leaves it out of the cycles Add phase offers", async () => {
+    const id = await newSeason(me, day(2));
+    const done = await cycle(me, { name: "Strength 5x5", status: "completed", startDate: day(-80) });
+    const draft = await cycle(me, { name: "Draft" });
+    expect(await addPhaseAction({ seasonId: id, cycleId: done })).toEqual({
+      success: false,
+      error: "A finished cycle cannot be a phase. Pick a draft or the running cycle, or make a new phase.",
+    });
+    expect(await cycleRow(done)).toMatchObject({ seasonId: null, status: "completed", startDate: day(-80) });
+    asUser(me);
+    expect(await createSeasonAction({ name: "With done", startDate: day(2), endDate: day(90), cycleIds: [done] })).toMatchObject({ success: false });
+    expect((await seasonlessCycles(me)).map((c) => c.id)).toEqual([draft]);
+  });
+
   it("fit taper sets the phase before the taper so the taper ends on race day", async () => {
     const id = await newSeason(me, day(1));
     const raceDay = day(1 + 60 + 10 - 1 + 4);
@@ -262,6 +323,41 @@ describe("the chained start (owner decision 1)", () => {
     const id = await newSeason(me, day(14));
     const p = await addPhaseAction({ seasonId: id, name: "General", durationWeeks: 6 });
     expect((await cycleRow(p.success ? p.data.cycleId : 0)).scheduledStartDate).toBe(day(14));
+  });
+
+  it("a new season's first phase is scheduled for the season start while another block runs, once the user confirmed it", async () => {
+    // Another season is running: its phase 1 is active and its phase 2 is scheduled.
+    const old = await newSeason(me, day(0));
+    const o1 = await addPhaseAction({ seasonId: old, name: "Hypertrophy", durationWeeks: 6 });
+    const o2 = await addPhaseAction({ seasonId: old, name: "Strength", durationWeeks: 4 });
+    const running = o1.success ? o1.data.cycleId : 0;
+    const waiting = o2.success ? o2.data.cycleId : 0;
+    await startTrainingCycle(running);
+    expect((await cycleRow(waiting)).scheduledStartDate).toBe(day(42));
+
+    // A new season that starts in two days, made with its phases (takeStart: the user confirmed).
+    const id = await newSeason(me, day(2));
+    const p1 = await addPhaseAction({ seasonId: id, name: "Phase 1", durationWeeks: 2, takeStart: true });
+    const p2 = await addPhaseAction({ seasonId: id, name: "Phase 2", durationWeeks: 2 });
+    const one = p1.success ? p1.data.cycleId : 0;
+    const two = p2.success ? p2.data.cycleId : 0;
+    expect((await cycleRow(one)).scheduledStartDate).toBe(day(2));
+    expect((await getSeasonDetail(me, id))!.next).toMatchObject({ cycleId: one, scheduled: true });
+    // One cycle is scheduled at a time: the other season's chain pauses.
+    expect((await cycleRow(waiting)).scheduledStartDate).toBeNull();
+    expect((await getSeasonDetail(me, old))!.next).toMatchObject({ cycleId: waiting, scheduled: false });
+
+    // The new season keeps its chain: a reorder schedules the new first phase.
+    await movePhaseAction({ seasonId: id, cycleId: two, position: 1 });
+    expect((await cycleRow(two)).scheduledStartDate).toBe(day(2));
+    expect((await cycleRow(one)).scheduledStartDate).toBeNull();
+
+    // Made in one go from cycles the user has, the first is scheduled too.
+    const draft = await cycle(me, { name: "Draft block" });
+    asUser(me);
+    const made = await createSeasonAction({ name: "Later", startDate: day(5), endDate: day(90), cycleIds: [draft], takeStart: true });
+    expect(made.success).toBe(true);
+    expect((await cycleRow(draft)).scheduledStartDate).toBe(day(5));
   });
 
   it("a cycle started outside the season pauses the chain; resume picks it up", async () => {
@@ -413,5 +509,42 @@ describe("retention", () => {
     expect(await seasonRow(id)).toBeUndefined();
     expect(await revisionsOf("season", id)).toEqual([]);
     expect(await cycleRow(c)).toMatchObject({ seasonId: null, deletedAt: null });
+  });
+});
+
+describe("a season has one A race (round 8)", () => {
+  it("a new A race makes the old A race a B race", async () => {
+    const id = await newSeason(me);
+    const first = await addRaceAction({ seasonId: id, ...race, name: "R good", raceDate: day(100) });
+    const second = await addRaceAction({ seasonId: id, ...race, name: "Oslo", raceDate: day(50) });
+    if (!first.success || !second.success) throw new Error("race");
+    expect((await racesOf(id)).map((r) => [r.name, r.priority])).toEqual([
+      ["R good", "B"],
+      ["Oslo", "A"],
+    ]);
+    expect((await getSeasonDetail(me, id))!.aRace?.name).toBe("Oslo");
+  });
+
+  it("a race changed to A makes the old A race a B race", async () => {
+    const id = await newSeason(me);
+    await addRaceAction({ seasonId: id, ...race, name: "R good", raceDate: day(100) });
+    await addRaceAction({ seasonId: id, ...race, name: "Oslo", raceDate: day(50), priority: "B" });
+    const oslo = (await racesOf(id)).find((r) => r.name === "Oslo")!;
+    expect((await updateRaceAction({ seasonId: id, raceId: oslo.id, priority: "A" })).success).toBe(true);
+    expect((await racesOf(id)).map((r) => [r.name, r.priority])).toEqual([
+      ["R good", "B"],
+      ["Oslo", "A"],
+    ]);
+  });
+
+  it("a cycle that brings its own race as a phase makes the old A race a B race", async () => {
+    const id = await newSeason(me);
+    await addRaceAction({ seasonId: id, ...race, name: "R good", raceDate: day(100) });
+    const c = await cycle(me, { raceDate: day(150), raceDistance: "full" });
+    expect((await addPhaseAction({ seasonId: id, cycleId: c })).success).toBe(true);
+    expect((await racesOf(id)).map((r) => [r.name, r.raceDate, r.priority])).toEqual([
+      ["R good", day(100), "B"],
+      ["Race", day(150), "A"],
+    ]);
   });
 });

@@ -1,45 +1,19 @@
 import { describe, expect, it } from "vitest";
-import PLAN_BEFORE_C3 from "./fixtures/triathlon-plan-16w-main.json";
 import {
   buildTriathlonPlan,
   planDefaultsFromProfile,
   planExerciseNames,
-  snapWeeks,
 } from "@/lib/utils/triathlon-plan";
-
-describe("snapWeeks", () => {
-  it("snaps to the nearest cycle-supported value", () => {
-    expect(snapWeeks(12)).toBe(12);
-    expect(snapWeeks(13)).toBe(12);
-    expect(snapWeeks(11)).toBe(10); // exact tie (10 vs 12) resolves to the lower
-    expect(snapWeeks(5)).toBe(4);
-    expect(snapWeeks(1)).toBe(4);
-  });
-
-  it("supports long Ironman builds up to 12 months", () => {
-    expect(snapWeeks(52)).toBe(52); // 12 months
-    expect(snapWeeks(36)).toBe(36); // 9 months
-    expect(snapWeeks(24)).toBe(24); // 6 months
-    expect(snapWeeks(50)).toBe(52);
-    expect(snapWeeks(100)).toBe(52); // clamps to the longest supported block
-  });
-});
 
 describe("buildTriathlonPlan", () => {
   it("produces 7 day-of-week slots", () => {
-    const plan = buildTriathlonPlan({ weeks: 12 });
+    const plan = buildTriathlonPlan({ weeks: 12, phaseType: "build" });
     expect(plan.days.map((d) => d.dayOfWeek)).toEqual([1, 2, 3, 4, 5, 6, 7]);
     expect(plan.durationWeeks).toBe(12);
   });
 
-  it("snaps weeks into the cycle name", () => {
-    const plan = buildTriathlonPlan({ weeks: 9 });
-    expect(plan.durationWeeks).toBe(8);
-    expect(plan.cycleName).toContain("8 wk");
-  });
-
   it("peak-anchors endurance sets and scales week 1 below peak for a build", () => {
-    const plan = buildTriathlonPlan({ weeks: 12, goal: "build" });
+    const plan = buildTriathlonPlan({ weeks: 12, phaseType: "build" });
     const enduranceSets = plan.days
       .flatMap((d) => d.exercises)
       .filter((e) => e.sets.some((s) => s.peakDistanceMeters))
@@ -53,28 +27,19 @@ describe("buildTriathlonPlan", () => {
     }
   });
 
-  it("maintain anchors week 1 at the peak (flat)", () => {
-    const plan = buildTriathlonPlan({ weeks: 12, goal: "maintain" });
-    expect(plan.goal).toBe("maintain");
-    const swim = plan.days
-      .flatMap((d) => d.exercises)
-      .find((e) => e.name === "Swim")!;
-    expect(swim.sets[0].distanceMeters).toBe(swim.sets[0].peakDistanceMeters);
-  });
-
   it("includes two flat strength days (Workout A & B)", () => {
-    const plan = buildTriathlonPlan({ weeks: 12 });
+    const plan = buildTriathlonPlan({ weeks: 12, phaseType: "build" });
     const strengthDays = plan.days.filter((d) =>
       d.exercises.some((e) => e.exerciseType != null),
     );
     expect(strengthDays.map((d) => d.label)).toEqual([
-      "Workout A — Squat & Horizontal",
-      "Workout B — Hinge & Vertical",
+      "Workout A · Squat & horizontal",
+      "Workout B · Hinge & vertical",
     ]);
   });
 
   it("makes Sunday the long bike + brick (bike then run in one session)", () => {
-    const plan = buildTriathlonPlan({ weeks: 12 });
+    const plan = buildTriathlonPlan({ weeks: 12, phaseType: "build" });
     const sun = plan.days.find((d) => d.dayOfWeek === 7)!;
     expect(sun.label).toBe("Long Bike + Brick Run");
     expect(sun.exercises.map((e) => e.name)).toEqual(["Bike", "Run"]);
@@ -85,7 +50,7 @@ describe("buildTriathlonPlan", () => {
 
   it("turns a chosen rest day into an empty rest slot", () => {
     // Resting Friday (recovery swim) is the lightest session — it just drops.
-    const plan = buildTriathlonPlan({ weeks: 12, restDays: [5] });
+    const plan = buildTriathlonPlan({ weeks: 12, restDays: [5], phaseType: "build" });
     const rest = plan.days.find((d) => d.dayOfWeek === 5)!;
     expect(rest.exercises).toEqual([]);
     expect(rest.label).toBe("Rest");
@@ -95,7 +60,7 @@ describe("buildTriathlonPlan", () => {
     // Fri + Sat rest: the two lightest sessions (recovery swim, run intervals)
     // drop, the long run slides off Saturday onto a freed training day, and the
     // long bike+brick keeps Sunday.
-    const plan = buildTriathlonPlan({ weeks: 12, restDays: [5, 6] });
+    const plan = buildTriathlonPlan({ weeks: 12, restDays: [5, 6], phaseType: "build" });
     const byDay = (n: number) => plan.days.find((d) => d.dayOfWeek === n)!;
 
     expect(byDay(5).label).toBe("Rest");
@@ -106,8 +71,8 @@ describe("buildTriathlonPlan", () => {
     // Sunday keeps the long bike+brick; strength days untouched.
     expect(byDay(7).label).toBe("Long Bike + Brick Run");
     expect(byDay(7).exercises.map((e) => e.name)).toEqual(["Bike", "Run"]);
-    expect(byDay(1).label).toBe("Workout A — Squat & Horizontal");
-    expect(byDay(4).label).toBe("Workout B — Hinge & Vertical");
+    expect(byDay(1).label).toBe("Workout A · Squat & horizontal");
+    expect(byDay(4).label).toBe("Workout B · Hinge & vertical");
 
     // The long run survives — relocated onto Tuesday (the freed interval slot).
     const longRun = plan.days.find((d) => d.label === "Long Run")!;
@@ -120,7 +85,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("references swim, bike, and run exercises", () => {
-    const names = planExerciseNames(buildTriathlonPlan({ weeks: 12 }));
+    const names = planExerciseNames(buildTriathlonPlan({ weeks: 12, phaseType: "build" }));
     expect(names).toContain("Swim");
     expect(names).toContain("Bike");
     expect(names).toContain("Run");
@@ -129,12 +94,12 @@ describe("buildTriathlonPlan", () => {
   // peakDistanceMeters is the authored race-prep peak (the curve scales
   // distanceMeters below it); it reflects the level table directly.
   const longRunPeak = (level: "novice" | "intermediate" | "advanced") => {
-    const plan = buildTriathlonPlan({ weeks: 24, level });
+    const plan = buildTriathlonPlan({ weeks: 24, level, phaseType: "build" });
     const sat = plan.days.find((d) => d.dayOfWeek === 6)!; // Long Run
     return sat.exercises[0].sets[0].peakDistanceMeters!;
   };
   const longBikePeak = (level: "novice" | "intermediate" | "advanced") => {
-    const plan = buildTriathlonPlan({ weeks: 24, level });
+    const plan = buildTriathlonPlan({ weeks: 24, level, phaseType: "build" });
     const sun = plan.days.find((d) => d.dayOfWeek === 7)!; // Long Bike + Brick
     return sun.exercises.find((e) => e.name === "Bike")!.sets[0].peakDistanceMeters!;
   };
@@ -153,7 +118,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("prescribes a polarized 80/20 split — one structured Z4 interval session, the rest easy Z2", () => {
-    const plan = buildTriathlonPlan({ weeks: 24 });
+    const plan = buildTriathlonPlan({ weeks: 24, phaseType: "build" });
     const enduranceExercises = plan.days
       .flatMap((d) => d.exercises)
       .filter((e) => e.sets.some((s) => s.peakDistanceMeters != null));
@@ -188,8 +153,8 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("tags only the interval run's hard reps as phase-varying 'work' sets", () => {
-    const plan = buildTriathlonPlan({ weeks: 24 });
-    const quality = plan.days.find((d) => d.label === "Run — Threshold Intervals")!;
+    const plan = buildTriathlonPlan({ weeks: 24, phaseType: "build" });
+    const quality = plan.days.find((d) => d.label === "Run · Threshold intervals")!;
     const sets = quality.exercises[0].sets;
     // Warmup (first) and cooldown (last) are not work; the middle reps are.
     expect(sets[0].sessionRole).toBeUndefined();
@@ -206,7 +171,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("prescribes the Workout A and Workout B exercises", () => {
-    const names = planExerciseNames(buildTriathlonPlan({ weeks: 24, goal: "build" }));
+    const names = planExerciseNames(buildTriathlonPlan({ weeks: 24, phaseType: "build" }));
     for (const n of [
       // Workout A — Squat & Horizontal
       "Front Squat", "Dumbbell Bench Press", "Pendlay Row", "Bulgarian Split Squat",
@@ -220,7 +185,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("classifies each strength lift (compound / isolation / isometric)", () => {
-    const plan = buildTriathlonPlan({ weeks: 24 });
+    const plan = buildTriathlonPlan({ weeks: 24, phaseType: "build" });
     const byName = new Map(
       plan.days.flatMap((d) => d.exercises).map((e) => [e.name, e.exerciseType]),
     );
@@ -233,7 +198,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("runs flat straight sets with no RIR cap", () => {
-    const plan = buildTriathlonPlan({ weeks: 12 });
+    const plan = buildTriathlonPlan({ weeks: 12, phaseType: "build" });
     const strength = plan.days
       .flatMap((d) => d.exercises)
       .filter((e) => e.exerciseType != null);
@@ -249,7 +214,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("runs every rep-based strength lift as Load, confirmed", () => {
-    const plan = buildTriathlonPlan({ weeks: 24, goal: "build" });
+    const plan = buildTriathlonPlan({ weeks: 24, phaseType: "build" });
     const strength = plan.days
       .flatMap((d) => d.exercises)
       .filter((e) => e.exerciseType != null && e.sets.every((s) => s.durationSeconds == null));
@@ -264,7 +229,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("starts each compound with a warmup set, then flat working sets", () => {
-    const plan = buildTriathlonPlan({ weeks: 12 });
+    const plan = buildTriathlonPlan({ weeks: 12, phaseType: "build" });
     const frontSquat = plan.days.flatMap((d) => d.exercises).find((e) => e.name === "Front Squat")!;
     expect(frontSquat.sets[0].setType).toBe("warmup");
     const working = frontSquat.sets.filter((s) => s.setType !== "warmup");
@@ -273,7 +238,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("holds Pallof Hold for time, with a start delay, and progresses the hold", () => {
-    const plan = buildTriathlonPlan({ weeks: 12 });
+    const plan = buildTriathlonPlan({ weeks: 12, phaseType: "build" });
     const exercises = plan.days.flatMap((d) => d.exercises);
     // The timed variant replaces the rep-based one; Pallof Press stays rep-based
     // for programs that press it.
@@ -289,7 +254,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("keeps both swims after dropping to two strength days", () => {
-    const plan = buildTriathlonPlan({ weeks: 24, goal: "build" });
+    const plan = buildTriathlonPlan({ weeks: 24, phaseType: "build" });
     const swims = plan.days
       .flatMap((d) => d.exercises)
       .filter((e) => e.name === "Swim");
@@ -299,7 +264,7 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("runs strength flat — no phase-periodization sessionRole on strength sets", () => {
-    const plan = buildTriathlonPlan({ weeks: 24, goal: "build" });
+    const plan = buildTriathlonPlan({ weeks: 24, phaseType: "build" });
     const strengthSets = plan.days
       .flatMap((d) => d.exercises)
       .filter((e) => e.exerciseType != null)
@@ -308,9 +273,9 @@ describe("buildTriathlonPlan", () => {
     expect(strengthSets.every((s) => s.sessionRole == null)).toBe(true);
   });
 
-  it("keeps strength reps static regardless of goal (flat maintenance block)", () => {
-    for (const goal of ["build", "maintain"] as const) {
-      const plan = buildTriathlonPlan({ weeks: 24, goal });
+  it("keeps strength reps static whatever the phase (flat maintenance block)", () => {
+    for (const phaseType of ["base", "taper"] as const) {
+      const plan = buildTriathlonPlan({ weeks: 24, phaseType });
       const rdl = plan.days.flatMap((d) => d.exercises).find((e) => e.name === "Romanian Deadlift")!;
       const working = rdl.sets.filter((s) => s.setType !== "warmup");
       expect(working).toHaveLength(3);
@@ -319,8 +284,8 @@ describe("buildTriathlonPlan", () => {
   });
 
   it("defaults to the intermediate level and records it on the blueprint", () => {
-    expect(buildTriathlonPlan({ weeks: 24 }).level).toBe("intermediate");
-    expect(buildTriathlonPlan({ weeks: 24, level: "advanced" }).level).toBe("advanced");
+    expect(buildTriathlonPlan({ weeks: 24, phaseType: "build" }).level).toBe("intermediate");
+    expect(buildTriathlonPlan({ weeks: 24, level: "advanced", phaseType: "build" }).level).toBe("advanced");
   });
 });
 
@@ -328,15 +293,8 @@ describe("buildTriathlonPlan by strength goal (docs/plans/athlete-profile.md, 2.
   const strengthDays = (plan: ReturnType<typeof buildTriathlonPlan>) =>
     plan.days.filter((d) => d.exercises.some((e) => e.name === "Front Squat" || e.name === "Romanian Deadlift"));
 
-  it("keep muscle and no goal give the plan main built before strength goals", () => {
-    // Pinned: the output of buildTriathlonPlan({ weeks: 16 }) on main before C3 (2bdac35).
-    expect(buildTriathlonPlan({ weeks: 16, strengthGoal: "keep_muscle" })).toEqual(PLAN_BEFORE_C3);
-    expect(buildTriathlonPlan({ weeks: 16, strengthGoal: null })).toEqual(PLAN_BEFORE_C3);
-    expect(buildTriathlonPlan({ weeks: 16 })).toEqual(PLAN_BEFORE_C3);
-  });
-
   it("stronger: heavy 4 x 5 main leg lifts with plyometrics first, two days", () => {
-    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "stronger" });
+    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "stronger", phaseType: "build" });
     const days = strengthDays(plan);
     expect(days.map((d) => d.dayOfWeek)).toEqual([1, 4]);
     expect(days[0].exercises[0]).toMatchObject({ name: "Box Jump", exerciseType: "plyometric" });
@@ -350,7 +308,7 @@ describe("buildTriathlonPlan by strength goal (docs/plans/athlete-profile.md, 2.
   });
 
   it("minimal: one full-body session on Monday, Thursday free, swims kept", () => {
-    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "minimal" });
+    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "minimal", phaseType: "build" });
     expect(strengthDays(plan).map((d) => d.dayOfWeek)).toEqual([1]);
     const thu = plan.days.find((d) => d.dayOfWeek === 4)!;
     expect(thu).toMatchObject({ label: "Rest", exercises: [], autoComplete: false });
@@ -358,7 +316,7 @@ describe("buildTriathlonPlan by strength goal (docs/plans/athlete-profile.md, 2.
   });
 
   it("minimal with a rest day drops the empty Thursday first, so no session is lost", () => {
-    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "minimal", restDays: [5] });
+    const plan = buildTriathlonPlan({ weeks: 16, strengthGoal: "minimal", restDays: [5], phaseType: "build" });
     const sessions = plan.days.filter((d) => d.exercises.length > 0).map((d) => d.label);
     expect(sessions).toHaveLength(6);
     expect(sessions).toContain("Recovery Swim");
@@ -376,5 +334,37 @@ describe("planDefaultsFromProfile", () => {
 
   it("no availability keeps the old default", () => {
     expect(planDefaultsFromProfile({ availableDays: null, enduranceLevel: "advanced" })).toEqual({ restDays: [5, 6], level: "advanced", note: null });
+  });
+});
+
+describe("buildTriathlonPlan for a season phase", () => {
+  const longRun = (plan: ReturnType<typeof buildTriathlonPlan>) =>
+    plan.days.find((d) => d.label === "Long Run")!.exercises[0].sets[0];
+
+  it("keeps the phase length as it is and starts week 1 on the phase's curve", () => {
+    const taper = buildTriathlonPlan({ weeks: 2, phaseType: "taper" });
+    const general = buildTriathlonPlan({ weeks: 7, phaseType: "general" });
+    expect(taper.durationWeeks).toBe(2);
+    expect(general.durationWeeks).toBe(7);
+    // Same peak; the taper starts at 0.60 of it and a general phase at 0.80.
+    expect(longRun(taper).peakDistanceMeters).toBe(26000);
+    expect(longRun(taper).distanceMeters).toBe(15600);
+    expect(longRun(general).distanceMeters).toBe(20800);
+  });
+
+});
+
+describe("names a new plan writes", () => {
+  it("no session name has an em dash or a colon", () => {
+    for (const strengthGoal of ["keep_muscle", "stronger", "minimal", null] as const) {
+      for (const level of ["novice", "intermediate", "advanced"] as const) {
+        const plan = buildTriathlonPlan({ weeks: 16, strengthGoal, level, phaseType: "build" });
+        for (const name of plan.days.map((d) => d.label)) expect(name).not.toMatch(/[—:]/);
+      }
+    }
+  });
+
+  it("names the run day with a middle dot", () => {
+    expect(buildTriathlonPlan({ weeks: 16, phaseType: "build" }).days.map((d) => d.label)).toContain("Run · Threshold intervals");
   });
 });

@@ -73,6 +73,18 @@ describe("DidYouDoItCard", () => {
     expect(rows()).toHaveLength(0);
   });
 
+  it("a dimmed Save says the time is missing (J5-10)", () => {
+    const reasonOf = (b: HTMLElement) => document.getElementById(b.getAttribute("aria-describedby") ?? "")?.textContent ?? null;
+    render(<DidYouDoItCard unconfirmed={[run]} missedKey={[]} today="2026-11-13" />);
+    fireEvent.click(screen.getByRole("button", { name: "Yes, I did Easy run" }));
+    const save = within(screen.getByTestId("confirm-done-sheet")).getByRole("button", { name: "Save" });
+    expect(reasonOf(save)).toBe("Type a time.");
+    fireEvent.change(within(screen.getByTestId("confirm-done-sheet")).getByLabelText("Time"), { target: { value: "abc" } });
+    expect(reasonOf(save)).toBe("Fix the time.");
+    fireEvent.change(within(screen.getByTestId("confirm-done-sheet")).getByLabelText("Time"), { target: { value: "45" } });
+    expect(save.getAttribute("aria-describedby")).toBeNull();
+  });
+
   it("I was sick opens the sick-period sheet with the session's day as the first day", async () => {
     render(<DidYouDoItCard unconfirmed={[run]} missedKey={[]} today="2026-11-13" />);
     fireEvent.click(screen.getByRole("button", { name: "Yes, I did Easy run" }));
@@ -135,7 +147,7 @@ describe("DidYouDoItCard", () => {
     await act(async () => {
       fireEvent.click(within(first).getByRole("button", { name: "Move to Sat 14 Nov" }));
     });
-    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 11, date: "2026-11-14" });
+    expect(updatePlannedSession).toHaveBeenCalledWith({ op: "move", id: 11, date: "2026-11-14", suggested: true });
     expect(refresh).toHaveBeenCalled();
   });
 
@@ -149,6 +161,10 @@ describe("parseDuration", () => {
   it("reads minutes or h:mm, and refuses the rest", () => {
     expect(parseDuration("45")).toBe(2700);
     expect(parseDuration(" 1:30 ")).toBe(5400);
+    // The number keypad has a decimal key but no colon (round 8 B16).
+    expect(parseDuration("1.30")).toBe(5400);
+    expect(parseDuration("1,05")).toBe(3900);
+    expect(parseDuration("1.5")).toBeNull();
     expect(parseDuration("0")).toBeNull();
     expect(parseDuration("1:75")).toBeNull();
     expect(parseDuration("45 min")).toBeNull();

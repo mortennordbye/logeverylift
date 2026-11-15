@@ -3,11 +3,14 @@
 import { useWorkoutSession } from "@/contexts/workout-session-context";
 import { getFriendsBadgeCount } from "@/lib/actions/friends";
 import { isAiGenerating, subscribeAiGenerating } from "@/lib/utils/ai-generating";
-import { Dumbbell, MoreHorizontal, RefreshCw, LayoutList } from "lucide-react";
+import { Activity, Dumbbell, MoreHorizontal, LayoutList } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { LEGAL_PATHS } from "@/lib/constants/legal";
+
+/** The Plan form routes: each pins its primary button where the tab bar sits. */
+const PLAN_FORM = /^\/(cycles\/new|cycles\/\d+\/edit|seasons\/new|seasons\/\d+\/edit|seasons\/\d+\/phases\/new|seasons\/\d+\/phases\/\d+\/week)$/;
 
 const staticNavItems = [
   {
@@ -16,9 +19,9 @@ const staticNavItems = [
     icon: Dumbbell,
   },
   {
-    label: "Cycles",
+    label: "Plan",
     href: "/cycles",
-    icon: RefreshCw,
+    icon: Activity,
   },
   {
     label: "Programs",
@@ -66,7 +69,9 @@ export function BottomNav() {
   // between More, Friends and the rest, where the count changes. On Friends
   // itself it is all on screen, so the dot is off and nothing is fetched: the
   // page marks it seen in its streamed part, which can land after this effect.
-  const hideNav = pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
+  // Plan form screens with a pinned bottom bar (cycle setup, Edit details, the
+  // season forms and Add phase) show no tab bar.
+  const hideNav = PLAN_FORM.test(pathname) || pathname === "/login" || pathname === "/signup" || pathname === "/welcome" || LEGAL_PATHS.includes(pathname);
   const badgeScope = pathname === "/more" ? "more" : pathname.startsWith("/more/friends") ? "friends" : "other";
   useEffect(() => {
     if (hideNav || badgeScope === "friends") return;
@@ -102,6 +107,8 @@ export function BottomNav() {
         pathname.startsWith("/exercises")
       );
     }
+    // Seasons live in the Plan tab.
+    if (label === "Plan") return pathname.startsWith(href) || pathname.startsWith("/seasons");
     return pathname.startsWith(href);
   };
 
@@ -126,13 +133,14 @@ export function BottomNav() {
               href={href}
               prefetch={true}
               suppressHydrationWarning
+              aria-current={active ? "page" : undefined}
               className={`
                 flex flex-col items-center justify-center gap-1 flex-1 h-full
                 transition-colors
                 ${
                   active
                     ? "text-primary"
-                    : "text-muted-foreground hover:text-foreground"
+                    : "text-muted-foreground active:text-foreground"
                 }
               `}
             >

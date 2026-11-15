@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cycle detail, weekdays</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; position: relative">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 16px 8px 0">
+    <a href="#" style="display: flex; align-items: center; gap: 2px; min-height: 44px; padding: 0 8px; color: {{accent}}; font-size: 16px">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>Plan</a>
+    <button aria-label="More actions" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #161618; color: #f4f4f5; display: flex; align-items: center; justify-content: center">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
+    </button>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 16px 0">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h1 style="margin: 0; font-family: 'Big Shoulders Display', sans-serif; font-weight: 800; font-size: 34px; line-height: 36px; text-transform: uppercase">Aerobic base + strength</h1>
+      <span style="font-size: 14px; color: #8d8d93">Same days each week · 8 weeks</span>
+      <a href="#" style="align-self: flex-start; display: flex; align-items: center; min-height: 44px; padding: 0 14px; margin-top: 4px; border-radius: 22px; background: #161618; color: #f4f4f5; font-size: 14px">Phase 1 of 5 · Jevnaker Half 2027&#160;<span aria-hidden="true" style="color: #8d8d93">›</span></a>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: 20px; background: #161618">
+      <div style="display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: {{accent}}">Scheduled</span>
+        <span style="font-size: 16px; font-weight: 600">Starts Mon 16 Nov</span>
+      </div>
+      <button style="min-height: 44px; padding: 0 14px; border-radius: 22px; border: 1px solid rgba(244,244,245,0.2); background: transparent; color: #f4f4f5; font: 500 14px 'Work Sans', sans-serif">Start today instead</button>
+    </div>
+
+    <div style="display: flex; align-items: center; justify-content: space-between">
+      <button aria-label="Previous week" disabled style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #161618; color: #8d8d93; display: flex; align-items: center; justify-content: center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M15 18l-6-6 6-6"></path></svg>
+      </button>
+      <div style="display: flex; flex-direction: column; align-items: center">
+        <span style="font-size: 15px; font-weight: 600">Week 1 of 8</span>
+        <span style="font-size: 13px; color: #8d8d93">16–22 Nov</span>
+      </div>
+      <button aria-label="Next week" style="width: 44px; height: 44px; border-radius: 22px; border: none; background: #161618; color: #f4f4f5; display: flex; align-items: center; justify-content: center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M9 18l6-6-6-6"></path></svg>
+      </button>
+    </div>
+
+    <div style="display: flex; flex-direction: column; border-radius: 20px; background: #161618; overflow: hidden">
+      <sc-for list="{{days}}" as="d" hint-placeholder-count="8">
+        <a href="#" style="display: flex; align-items: center; gap: 12px; padding: 8px 14px 8px {{d.indent}}; min-height: 48px; box-sizing: border-box; border-bottom: 1px solid rgba(244,244,245,0.08); color: #f4f4f5">
+          <div style="width: 44px; flex-shrink: 0; display: flex; flex-direction: column">
+            <span style="font-size: 13px; font-weight: 600; color: {{d.dayColor}}">{{d.day}}</span>
+            <span style="font-size: 12px; color: #8d8d93">{{d.date}}</span>
+          </div>
+          <sc-if value="{{d.linked}}" hint-placeholder-val="{{ false }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8d8d93" stroke-width="2" stroke-linecap="round" role="img" aria-label="Brick: linked to the ride"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"></path><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"></path></svg>
+          </sc-if>
+          <div style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+            <span style="font-size: 15px; font-weight: 500; color: {{d.nameColor}}">{{d.name}}</span>
+            <span style="font-size: 13px; color: #8d8d93">{{d.sub}}</span>
+          </div>
+          <sc-if value="{{d.key}}" hint-placeholder-val="{{ false }}">
+            <span style="padding: 3px 10px; border-radius: 12px; border: 1px solid {{accent}}; color: {{accent}}; font-size: 12px; font-weight: 600">Key</span>
+          </sc-if>
+          <sc-if value="{{d.tappable}}" hint-placeholder-val="{{ true }}">
+            <span aria-hidden="true" style="color: #8d8d93; font-size: 18px">›</span>
+          </sc-if>
+        </a>
+      </sc-for>
+      <a href="#" style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; min-height: 60px; box-sizing: border-box; color: #f4f4f5">
+        <div style="display: flex; flex-direction: column; gap: 2px">
+          <span style="font-size: 15px; font-weight: 500">Edit weekly template</span>
+          <span style="font-size: 13px; color: #8d8d93">Changes apply from this week on to days you have not changed.</span>
+        </div>
+        <span aria-hidden="true" style="color: #8d8d93; font-size: 18px">›</span>
+      </a>
+    </div>
+  </div>
+
+  <nav style="position: absolute; left: 0; right: 0; bottom: 0; height: 84px; background: #111113; border-top: 1px solid rgba(244,244,245,0.08); display: flex; justify-content: space-around; padding-top: 10px; box-sizing: border-box; font-size: 11px">
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 7v10M18 7v10M3 10v4M21 10v4M6 12h12"></path></svg>Workout</a>
+    <a href="#" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: {{accent}}; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"></path></svg>Plan</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1"></rect><path d="M14 5h6M14 9h6M4 15h16M4 19h16"></path></svg>Programs</a>
+    <a href="#" style="display: flex; flex-direction: column; align-items: center; gap: 4px; color: #8d8d93; min-width: 64px">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>More</a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const accent = this.props.accent ?? '#6b95ff';
+    const s = (o) => ({ indent: '14px', dayColor: '#f4f4f5', nameColor: '#f4f4f5', linked: false, key: false, tappable: true, ...o });
+    return {
+      accent,
+      days: [
+        s({ day: 'Mon', date: '16 Nov', name: 'Strength A', sub: 'Squat, bench, row' }),
+        s({ day: 'Tue', date: '17 Nov', name: 'Bike tempo', sub: '60 min' }),
+        s({ day: 'Wed', date: '18 Nov', name: 'Run aerobic', sub: '65 min' }),
+        s({ day: 'Thu', date: '19 Nov', name: 'Strength B', sub: 'RDL, pull-up, press' }),
+        s({ day: 'Fri', date: '20 Nov', name: 'Rest', sub: '', nameColor: '#8d8d93', dayColor: '#8d8d93', tappable: false }),
+        s({ day: 'Sat', date: '21 Nov', name: 'Rest', sub: '', nameColor: '#8d8d93', dayColor: '#8d8d93', tappable: false }),
+        s({ day: 'Sun', date: '22 Nov', name: 'Long ride', sub: '2 h 15', key: true }),
+        s({ day: '', date: '', name: 'Run off bike', sub: '20 min · after the ride', linked: true, indent: '40px' })
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

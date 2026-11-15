@@ -6,7 +6,7 @@
  */
 
 import type { PhaseType } from "@/lib/utils/periodization";
-import { dateLabel } from "@/lib/utils/date-label";
+import { dateLabel, thisYear, yearSuffix } from "@/lib/utils/date-label";
 
 export type RaceDiscipline = "triathlon" | "run" | "ride" | "swim" | "other";
 export type TriDistance = "full" | "half" | "olympic" | "sprint";
@@ -32,6 +32,8 @@ export type PhaseLike = {
   status: "draft" | "active" | "completed";
   startDate: string | null;
   scheduledStartDate: string | null;
+  /** The real last day of a completed phase that ended before its planned end (earlyLastDay); null or absent otherwise. */
+  lastDay?: string | null;
 };
 
 export type TimelinePhase = PhaseLike & {
@@ -53,12 +55,6 @@ export function addDaysStr(day: string, days: number): string {
 /** Whole days from `a` to `b`. */
 export function daysBetweenStr(a: string, b: string): number {
   return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / DAY_MS);
-}
-
-/** How far off a day on or after `today` is, for a line of text: "today", "tomorrow" or "in N days". */
-export function inDaysLabel(today: string, day: string): string {
-  const n = daysBetweenStr(today, day);
-  return n === 0 ? "today" : n === 1 ? "tomorrow" : `in ${n} days`;
 }
 
 const lengthOf = (p: { durationWeeks: number; durationDays: number | null }) => p.durationDays ?? p.durationWeeks * 7;
@@ -97,19 +93,51 @@ export function seasonARace<R extends Pick<RaceLike, "raceDate" | "priority">>(r
 // ── Timeline (2.4) ───────────────────────────────────────────────────────────
 
 /**
+ * The last day of a running block that starts on `start` and is planned to
+ * end on `end`: the day before `otherStart` when another block is scheduled
+ * to start inside it, since that start completes this one.
+ */
+export function cutByStart(start: string, end: string, otherStart: string | null): string {
+  return otherStart && otherStart > start && otherStart <= end ? addDaysStr(otherStart, -1) : end;
+}
+
+/** How many days a running block of `lengthDays` from `start` runs, cut as cutByStart cuts it. */
+export function runLengthDays(start: string, lengthDays: number, otherStart: string | null): number {
+  return daysBetweenStr(start, cutByStart(start, addDaysStr(start, lengthDays - 1), otherStart)) + 1;
+}
+
+/**
+ * The last day a completed block ran when it ended before its planned last
+ * day: the day before the day it completed (another start took over that
+ * day), never before its start. Null when it ran its whole length.
+ */
+export function earlyLastDay(startDate: string | null, plannedLast: string | null, completedOn: string | null): string | null {
+  if (!completedOn || !plannedLast || completedOn > plannedLast) return null;
+  const before = addDaysStr(completedOn, -1);
+  return startDate && before < startDate ? startDate : before;
+}
+
+/**
  * Each phase's dates, forward from the season start: a started phase keeps
  * its real start, a scheduled one its scheduled day, and any other phase
  * starts the day after the one before it ends. Nothing stores these dates.
+ *
+ * `otherStart` is the day the user's scheduled draft starts, if one is: that
+ * start completes the running cycle (startDueScheduledCycle), so a running
+ * phase ends the day before it.
  */
-export function seasonTimeline(seasonStart: string, phases: PhaseLike[]): TimelinePhase[] {
+export function seasonTimeline(seasonStart: string, phases: PhaseLike[], otherStart: string | null = null): TimelinePhase[] {
   const ordered = [...phases].sort((a, b) => (a.phaseOrder ?? 0) - (b.phaseOrder ?? 0) || a.id - b.id);
   let cursor = seasonStart;
   return ordered.map((p) => {
     const started = p.status !== "draft" && p.startDate;
     const start = started ? p.startDate! : (p.scheduledStartDate ?? cursor);
-    const lengthDays = lengthOf(p);
-    const end = addDaysStr(start, lengthDays - 1);
-    cursor = addDaysStr(end, 1);
+    const planned = addDaysStr(start, lengthOf(p) - 1);
+    const end = p.status === "active" ? cutByStart(start, planned, otherStart) : p.status === "completed" && p.lastDay && p.lastDay >= start && p.lastDay < planned ? p.lastDay : planned;
+    const lengthDays = daysBetweenStr(start, end) + 1;
+    // A phase that ended early keeps the chain on its planned dates: Resume
+    // dates the next phase from the planned end (resumeSeason).
+    cursor = addDaysStr(p.status === "completed" ? planned : end, 1);
     return { ...p, start, end, lengthDays, state: p.status === "completed" ? "done" : p.status === "active" ? "active" : "planned" };
   });
 }
@@ -148,12 +176,12 @@ export function fitTaperChange(
   const i = timeline.findIndex((p) => p.id === fit.taperId);
   const before = timeline[i - 1];
   if (!before) return "The taper is the first phase, so there is no phase before it to lengthen or shorten.";
-  if (before.state === "done") return `"${before.name}" has ended, so its length cannot change.`;
+  if (before.state === "done") return `“${before.name}” has ended, so its length cannot change.`;
   const shift = fit.status === "early" ? fit.days : -fit.days;
   const durationDays = before.lengthDays + shift;
-  if (durationDays < 1) return `"${before.name}" would have no days left.`;
+  if (durationDays < 1) return `“${before.name}” would have no days left.`;
   if (before.state === "active" && addDaysStr(before.start, durationDays - 1) < today) {
-    return `"${before.name}" would end before today.`;
+    return `“${before.name}” would end before today.`;
   }
   return { cycleId: before.id, durationDays };
 }
@@ -162,6 +190,44 @@ export function fitTaperChange(
 export function nextPhase(timeline: TimelinePhase[]): TimelinePhase | null {
   const lastStarted = timeline.findLastIndex((p) => p.state !== "planned");
   return timeline.slice(lastStarted + 1).find((p) => p.state === "planned") ?? null;
+}
+
+/**
+ * The season's chain is paused: a phase has started and the next one is not
+ * scheduled, because another block took the one scheduled start
+ * (scheduleCycle). Resume picks the chain up again. A season where no phase
+ * has started is not started, never paused, even when its first phase lost a
+ * later start (round 8): Start schedules it again.
+ */
+export function seasonPaused(next: { scheduled: boolean } | null, phases: { state: TimelinePhase["state"] }[]): boolean {
+  if (!next || next.scheduled) return false;
+  return phases.some((p) => p.state !== "planned");
+}
+
+/**
+ * The timeline the screens show (J4-18). While the chain is paused, the other
+ * block's start does not date the season's next phase: that phase starts on
+ * the day Resume gives it (resumeSeason), today when its planned day on the
+ * chain without the other start has come, else that day. Later phases follow
+ * it, so the taper fit is never read from the other block's start.
+ *
+ * A next phase that is not scheduled never shows a day in the past either: it
+ * can start today at the earliest. That is a season not started yet whose
+ * start day has passed, or one whose started phases were deleted (fix round 8).
+ */
+export function shownTimeline(seasonStart: string, phases: PhaseLike[], otherStart: string | null, today: string): TimelinePhase[] {
+  const timeline = seasonTimeline(seasonStart, phases, otherStart);
+  const next = nextPhase(timeline);
+  if (!next || next.scheduledStartDate != null) return timeline;
+  const paused = seasonPaused({ scheduled: false }, timeline);
+  if (!paused && next.start >= today) return timeline;
+  const planned = nextPhase(seasonTimeline(seasonStart, phases))!.start;
+  const resumeDay = planned <= today ? today : planned;
+  return seasonTimeline(
+    seasonStart,
+    phases.map((p) => (p.id === next.id ? { ...p, scheduledStartDate: resumeDay } : p)),
+    otherStart,
+  ).map((p) => (p.id === next.id ? { ...p, scheduledStartDate: null } : p));
 }
 
 /** How many planned phases before this one a start today skips: 0 for the next phase, or a phase that is not planned. */
@@ -173,44 +239,138 @@ export function phasesSkippedBy(timeline: TimelinePhase[], cycleId: number): num
 
 // ── The re-plan flag (2.6, D17) ──────────────────────────────────────────────
 
-const raceLabel = (r: Pick<RaceLike, "name" | "priority">) => `${r.priority} race "${r.name}"`;
+/**
+ * A stored re-plan reason as the UI shows it: each "name" in curly quotes,
+ * as every other name in the Plan UI. Stored reasons (replanReason) keep
+ * straight quotes, so rows already saved show the same.
+ */
+export function curlyQuotes(text: string): string {
+  return text.replace(/"([^"]*)"/g, "“$1”");
+}
+
+// "the A race", so the priority does not read as the article "a" (J4-11).
+const raceLabel = (r: Pick<RaceLike, "name" | "priority">) => `the ${r.priority} race "${r.name}"`;
+
+/** The re-plan columns of a season: the reason, and the race each of its lines is about. */
+export type ReplanFlag = { replanReason: string; replanRaceIds: number[] };
+
+/** The stored form of reason lines, each about one race: joined, the first letter capitalised. */
+export function replanFlagOf(lines: { raceId: number; text: string }[]): ReplanFlag | null {
+  if (!lines.length) return null;
+  const text = lines.map((l) => l.text).join("; ");
+  return { replanReason: text[0].toUpperCase() + text.slice(1), replanRaceIds: lines.map((l) => l.raceId) };
+}
 
 /**
  * Why a change to a season's races needs a re-plan, or null. Flags a date
  * change of any race, an A race added or removed, and a priority change to or
  * from A. A name or distance change does not flag.
  */
-export function replanReason(before: RaceLike[], after: RaceLike[]): string | null {
-  const out: string[] = [];
+export function replanFlag(before: RaceLike[], after: RaceLike[]): ReplanFlag | null {
+  const out: { raceId: number; text: string }[] = [];
   const prev = new Map(before.map((r) => [r.id, r]));
   const next = new Map(after.map((r) => [r.id, r]));
   for (const r of after) {
     const was = prev.get(r.id);
     if (!was) {
-      if (r.priority === "A") out.push(`${raceLabel(r)} added on ${r.raceDate}`);
+      if (r.priority === "A") out.push({ raceId: r.id, text: `${raceLabel(r)} added on ${dayLabel(r.raceDate)}` });
       continue;
     }
-    if (was.raceDate !== r.raceDate) out.push(`${raceLabel(r)} moved from ${was.raceDate} to ${r.raceDate}`);
+    if (was.raceDate !== r.raceDate) out.push({ raceId: r.id, text: `${raceLabel(r)} moved from ${dayLabel(was.raceDate)} to ${dayLabel(r.raceDate)}` });
     if (was.priority !== r.priority && (was.priority === "A" || r.priority === "A")) {
-      out.push(`"${r.name}" changed from ${was.priority} priority to ${r.priority} priority`);
+      // The date tells two races with the same name apart (round 11 I2).
+      out.push({ raceId: r.id, text: `"${r.name}" on ${dayLabel(r.raceDate)} changed from ${was.priority} priority to ${r.priority} priority` });
     }
   }
-  for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push(`${raceLabel(r)} on ${r.raceDate} removed`);
-  return out.length ? out.join("; ") : null;
+  for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push({ raceId: r.id, text: `${raceLabel(r)} on ${dayLabel(r.raceDate)} removed` });
+  return replanFlagOf(out);
 }
 
-/** Race kinds in words, for lists and the assistant. */
-export function raceKindLabel(r: Pick<RaceLike, "discipline" | "distance" | "distanceMeters">): string {
-  if (r.discipline === "triathlon") {
-    const d = { full: "Full distance", half: "Half distance", olympic: "Olympic", sprint: "Sprint" } as const;
-    return r.distance ? `${d[r.distance]} triathlon` : "Triathlon";
-  }
-  const name = { run: "Run", ride: "Ride", swim: "Swim", other: "Event" }[r.discipline];
-  return r.distanceMeters ? `${name} ${Math.round(r.distanceMeters / 100) / 10} km` : name;
+export const replanReason = (before: RaceLike[], after: RaceLike[]): string | null => replanFlag(before, after)?.replanReason ?? null;
+
+/** The kind of one stored reason line (replanFlag), read with the race names taken out. */
+function reasonKind(line: string): "moved" | "added" | "removed" | "priority" | null {
+  const words = line.replace(/"[^"]*"/g, '""');
+  if (/ moved from .+ to /.test(words)) return "moved";
+  if (/ added on /.test(words)) return "added";
+  if (/ removed$/.test(words)) return "removed";
+  if (/ changed from [ABC] priority to [ABC] priority$/.test(words)) return "priority";
+  return null;
+}
+
+/**
+ * The re-plan banner title, from the stored reason lines: "Race date changed"
+ * only when a date moved. A new A race makes the old one a B race, so that
+ * pair reads as an A race added (round 11 I2). `misfit`: the taper no longer
+ * ends on race day.
+ */
+export function replanTitle(reason: string | null, misfit: boolean): string {
+  const kinds = new Set(reason ? reason.split("; ").map(reasonKind) : [null]);
+  const only = (...allowed: (string | null)[]) => [...kinds].every((k) => allowed.includes(k));
+  const what = only("moved")
+    ? "Race date changed."
+    : kinds.has("added") && only("added", "priority")
+      ? "An A race was added."
+      : kinds.has("removed") && only("removed", "priority")
+        ? "An A race was removed."
+        : only("priority")
+          ? "Race priority changed."
+          : "Your races changed.";
+  return `${what} ${misfit ? "The taper no longer ends on race day." : "The phases stay as they are."}`;
+}
+
+/**
+ * The day the season end moves to when this race is saved, or null when it
+ * stays: the rule placeRaceDate in src/lib/seasons.ts applies. An A race past
+ * the season end, or the A race the season ended on moved, takes the end to
+ * the last race day.
+ */
+export function seasonEndAfterRace(
+  seasonEnd: string,
+  races: { id: number; raceDate: string; priority: RacePriority }[],
+  draft: { id?: number; raceDate: string; priority: RacePriority },
+): string | null {
+  const was = races.find((r) => r.id === draft.id);
+  if (!draft.raceDate || (was && was.raceDate === draft.raceDate)) return null;
+  const follows = draft.priority === "A" && (draft.raceDate > seasonEnd || (was?.priority === "A" && was.raceDate === seasonEnd));
+  if (!follows) return null;
+  const end = [draft.raceDate, ...races.filter((r) => r.id !== draft.id).map((r) => r.raceDate)].sort().at(-1)!;
+  return end !== seasonEnd ? end : null;
+}
+
+/**
+ * The flag once a race is removed: its own lines go, by race id. A reason
+ * stored before the ids were kept is matched by the race name. Null when no
+ * line is left.
+ */
+export function replanWithoutRace(
+  flag: { replanReason: string; replanRaceIds: number[] | null },
+  race: { id: number; name: string },
+): { replanReason: string; replanRaceIds: number[] | null } | null {
+  const lines = flag.replanReason.split("; ");
+  const ids = flag.replanRaceIds?.length === lines.length ? flag.replanRaceIds : null;
+  const keep = lines.map((text, i) => (ids ? ids[i] !== race.id : !text.includes(`"${race.name}"`)));
+  const left = lines.filter((_, i) => keep[i]);
+  if (!left.length) return null;
+  const text = left.join("; ");
+  return { replanReason: text[0].toUpperCase() + text.slice(1), replanRaceIds: ids?.filter((_, i) => keep[i]) ?? null };
+}
+
+/**
+ * A line for Add a phase when the new phase falls outside the plan: it starts
+ * after the A race, or it runs past the season end. Null when it fits.
+ * `lengthDays` is null for a cycle that keeps its own length.
+ */
+export function addPhaseWarning(p: { startsOn: string; lengthDays: number | null; raceDate: string | null; seasonEnd: string }): string | null {
+  if (p.raceDate && p.startsOn > p.raceDate) return `This phase starts after race day on ${dayLabel(p.raceDate)}.`;
+  if (p.startsOn > p.seasonEnd) return `This phase starts after the season ends on ${dayLabel(p.seasonEnd)}.`;
+  if (p.lengthDays == null) return null;
+  const over = daysBetweenStr(p.seasonEnd, addDaysStr(p.startsOn, p.lengthDays - 1));
+  return over > 0 ? `This phase runs ${over} day${over === 1 ? "" : "s"} past the season end on ${dayLabel(p.seasonEnd)}.` : null;
 }
 
 export const PHASE_TYPE_LABELS: Record<PhaseType, string> = {
-  general: "General prep",
+  general: "General",
   base: "Base",
   build: "Build",
   peak: "Peak",
@@ -234,15 +394,93 @@ export function dayLabel(day: string): string {
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** `YYYY-MM-DD` as "Thu 14 Nov 2026": always with the year. */
+export function longDay(day: string): string {
+  return dateLabel(day, "EEE d MMM yyyy");
+}
+
 /**
- * `YYYY-MM-DD` as "Thu 14 Nov", by the calendar (no time zone). Written by
+ * `YYYY-MM-DD` as "Thu 14 Nov", or "Fri 1 Jan 2027" outside this year, by the calendar (no time zone). Written by
  * hand, not with Intl: engines format these options differently (Linux WebKit
  * gives "Thu, 14 Nov"), and client components render it on the server and in
  * the browser, which must agree for hydration.
  */
 export function shortDay(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
-  return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}`;
+  return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}${yearSuffix(day)}`;
+}
+
+/**
+ * A short phase length for a list row: "8 wk" or "10 days"
+ * (docs/design/plan-redesign/spec.md). Days that make whole weeks read as
+ * weeks: a fitted 105 days is "15 wk".
+ */
+export function lengthShort(p: { durationWeeks: number; durationDays: number | null }): string {
+  const d = p.durationDays;
+  // Over two weeks, days that are not whole weeks read as weeks and days: "16 wk 4 days", not "116 days" (round 8).
+  if (d != null && d > 14 && d % 7 !== 0) return `${Math.floor(d / 7)} wk ${d % 7} day${d % 7 === 1 ? "" : "s"}`;
+  if (d != null && d % 7 !== 0) return `${d} day${d === 1 ? "" : "s"}`;
+  return `${p.durationDays != null ? p.durationDays / 7 : p.durationWeeks} wk`;
+}
+
+/** A length in days as a phase length: whole weeks as weeks, else days. */
+export function lengthFromDays(days: number): { durationWeeks: number; durationDays: number | null } {
+  return days % 7 === 0 ? { durationWeeks: days / 7, durationDays: null } : { durationWeeks: Math.ceil(days / 7), durationDays: days };
+}
+
+/**
+ * The length a phase runs, by its dates: "1 wk" for a 7 week phase that a
+ * scheduled start cuts after one week (cutByStart). The planned length shows
+ * only where the user edits it.
+ */
+export function runLength(p: { lengthDays: number }): string {
+  return lengthShort(lengthFromDays(p.lengthDays));
+}
+
+export type LengthUnit = "weeks" | "days";
+
+/**
+ * A phase length field moved to another unit: 15 weeks is 105 days, and whole
+ * weeks of days become weeks. Days that are not whole weeks round to the
+ * nearest week (at least 1), with a note that says so: the field always
+ * shows the unit it saves in (round 8).
+ */
+export function switchLengthUnit(length: string, from: LengthUnit, to: LengthUnit): { length: string; unit: LengthUnit; note: string | null } {
+  const n = Number(length);
+  if (from === to || !length || !Number.isInteger(n) || n <= 0) return { length, unit: to, note: null };
+  if (to === "days") return { length: String(n * 7), unit: "days", note: null };
+  if (n % 7 === 0) return { length: String(n / 7), unit: "weeks", note: null };
+  const weeks = Math.max(1, Math.round(n / 7));
+  return { length: String(weeks), unit: "weeks", note: `${n} days is not a whole number of weeks, so it is now ${weeks} week${weeks === 1 ? "" : "s"}.` };
+}
+
+/** Why a phase length cannot be saved, or null: the range the server takes (setPhaseSchema). */
+export function lengthReason(length: string, unit: LengthUnit): string | null {
+  const n = Number(length);
+  if (!length || n <= 0) return "Type a length.";
+  if (!Number.isInteger(n) || n > (unit === "days" ? 364 : 52)) return unit === "days" ? "Pick 1 to 364 days." : "Pick 1 to 52 weeks.";
+  return null;
+}
+
+/** How the phase sheet opens a length: in weeks when the days make whole weeks. */
+export function lengthField(p: { durationWeeks: number; durationDays: number | null }): { length: string; unit: LengthUnit } {
+  if (p.durationDays != null && p.durationDays % 7 !== 0) return { length: String(p.durationDays), unit: "days" };
+  return { length: String(p.durationDays != null ? p.durationDays / 7 : p.durationWeeks), unit: "weeks" };
+}
+
+/**
+ * Two days as a range: "16 Nov – 10 Dec", "17 – 26 Aug" in one month, or
+ * "28 May" for one day. Ends in two years show both years ("6 Sep 2026 – 3 Sep
+ * 2027"); ends both in another year show it once at the end ("3 – 10 May 2027").
+ */
+export function rangeLabel(start: string, end: string): string {
+  const dm = (d: string) => dateLabel(d, "d MMM");
+  const [ys, ye] = [Number(start.slice(0, 4)), Number(end.slice(0, 4))];
+  if (ys !== ye) return `${dm(start)} ${ys} – ${dm(end)} ${ye}`;
+  const year = ys === thisYear() ? "" : ` ${ye}`;
+  if (start === end) return `${dm(end)}${year}`;
+  if (start.slice(0, 7) === end.slice(0, 7)) return `${Number(start.slice(8))} – ${dm(end)}${year}`;
+  return `${dm(start)} – ${dm(end)}${year}`;
 }
 
 /** A phase length in words: "10 days" or "6 weeks". */

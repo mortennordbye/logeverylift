@@ -14,7 +14,7 @@ const session = (over: Record<string, unknown> = {}): PlanSnapshot => ({
 describe("revision text", () => {
   it("names and diffs a library workout", () => {
     expect(snapshotName(workout())).toBe("Workout: Tempo");
-    expect(diffSnapshots(null, workout())).toEqual(['Added workout "Tempo"']);
+    expect(diffSnapshots(null, workout())).toEqual(['Added workout “Tempo”']);
     expect(diffSnapshots(workout(), workout({ name: "Threshold", workout: { steps: [2] }, priority: "key" }))).toEqual([
       "Name Tempo → Threshold",
       "Steps changed",
@@ -34,12 +34,12 @@ describe("revision text", () => {
 
   it("describes workouts, priority, bricks, picks and misses on a dated session", () => {
     expect(diffSnapshots(session(), session({ workout: { name: "Long run" }, priority: "key", brickParentId: 9 }))).toEqual([
-      "Workout set: Long run",
-      "Priority default → key",
+      "Workout set to Long run",
+      "Priority changed from default to key",
       "Linked as a brick",
     ]);
-    expect(diffSnapshots(session({ workout: { name: "A" } }), session({ workout: { name: "B" } }))).toEqual(["Workout changed: A → B"]);
-    expect(diffSnapshots(session(), session({ status: "missed", missedReason: "Work" }))).toEqual(["Confirmed missed: Work"]);
+    expect(diffSnapshots(session({ workout: { name: "A" } }), session({ workout: { name: "B" } }))).toEqual(["Workout changed from A to B"]);
+    expect(diffSnapshots(session(), session({ status: "missed", missedReason: "Work" }))).toEqual(["Confirmed missed (Work)"]);
     expect(diffSnapshots(session(), session({ garminActivityId: 4 }))).toEqual(["Garmin activity picked"]);
   });
 });

@@ -36,8 +36,9 @@ import { userToday } from "@/lib/user-settings";
 import { countTouchedFuture, removeSlotInTx, upsertSlotInTx } from "@/lib/planned-sessions";
 import { raceForCycle } from "@/lib/seasons";
 import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
-import { addDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
-import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
+import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
+import { MAX_SCHEDULE_DAYS, startDayProblem } from "@/lib/utils/cycle-start";
+import { MAX_CYCLE_WEEKS, MIN_CYCLE_WEEKS } from "@/lib/validators/training-cycles";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { z } from "zod";
@@ -45,14 +46,11 @@ import { z } from "zod";
 const durationWeeks = z
   .number()
   .int()
-  .refine((v) => CYCLE_DURATION_WEEKS.includes(v), {
-    message: `Duration must be one of ${CYCLE_DURATION_WEEKS.join(", ")} weeks`,
-  });
+  .min(MIN_CYCLE_WEEKS, `A cycle is ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks`)
+  .max(MAX_CYCLE_WEEKS, `A cycle is ${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS} weeks`);
 const endActionEnum = z.enum(["deload", "new_cycle", "rest", "none"]);
 const dateArg = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD");
 
-/** How far ahead a block can be scheduled to start. */
-export const MAX_SCHEDULE_DAYS = 120;
 /** The range of an assistant's one-week volume change (set_volume). */
 export const SET_VOLUME_MIN = 50;
 export const SET_VOLUME_MAX = 110;
@@ -138,11 +136,11 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
     {
       description: [
         "Create, update, delete, start or schedule a training cycle, or change this week's volume.",
-        `operation='create': requires name and durationWeeks (${CYCLE_DURATION_WEEKS.join("/")}); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage, and the endurance fields below.`,
+        `operation='create': requires name and durationWeeks (${MIN_CYCLE_WEEKS} to ${MAX_CYCLE_WEEKS}); optional scheduleType ('day_of_week'|'rotation'), endAction, endMessage, and the endurance fields below.`,
         "operation='update': requires cycleId; any of name, durationWeeks, endAction, endMessage, status ('draft'|'active'|'completed'), the endurance fields, and scheduledStartDate: null (cancels a scheduled start) are applied.",
         "Endurance fields (need the user's endurance features on): raceDate (YYYY-MM-DD) and raceDistance ('full' Ironman or 'half' 70.3), null to clear, only on a cycle in no season (a phase of a season reads the season's races: use manage_race); goal ('build' ramps endurance volume to a peak then tapers, 'maintain' holds it flat); athleteLevel ('novice' recovers every 3rd week, 'intermediate'/'advanced' every 4th). A new goal or level re-derives this week's targets.",
         "operation='delete': requires cycleId. The cycle and the programs it generated can be restored in the app for 90 days, and with restore_revision.",
-        `operation='start': requires cycleId. Without startDate, or with today, it becomes active now (completing any other active cycle). With a later startDate (up to ${MAX_SCHEDULE_DAYS} days ahead) it stays a draft scheduled to start that day; on that day it becomes active and the old block completes. Only one cycle is scheduled at a time.`,
+        `operation='start': requires cycleId. Without startDate, or with today, it becomes active now (completing any other active cycle). With a later startDate (up to ${MAX_SCHEDULE_DAYS} days ahead) it stays a draft scheduled to start that day; on that day it becomes active and the old block completes. Only one cycle is scheduled at a time: scheduling drops any other scheduled start, such as a season's next phase, and that season pauses until manage_season resume. Ask the user before a start ends their running cycle or drops another scheduled start.`,
         `operation='set_volume': requires cycleId (the active cycle) and pct (${SET_VOLUME_MIN}-${SET_VOLUME_MAX}): this week's endurance volume as a percent of the block's curve, the same factor the weekly sync sets from adherence and readiness (adaptationPct). It rewrites this week's distances and durations at once and lasts one week: next week's sync computes its own percent. For a lasting change, edit the peaks with edit_program_exercise.`,
         `Every operation requires reason; all but create also require expectedVersion (the cycle's version). The result has the new version. ${REVISION_RULES}`,
         `On start, set_volume, and an update to durationWeeks, goal or athleteLevel of the active or a scheduled cycle: ${LIMITS_TEXT}`,
@@ -368,10 +366,9 @@ export function registerCycleTools(server: McpServer, userId: string, clientId?:
 
         // start: now, or scheduled for a later day.
         const start = args.startDate ?? today;
-        if (start < today) return fail("startDate is in the past");
-        if (start > toDateStr(addDays(parseDateStr(today), MAX_SCHEDULE_DAYS))) {
-          return fail(`startDate is more than ${MAX_SCHEDULE_DAYS} days ahead`);
-        }
+        const problem = startDayProblem(start, today);
+        if (problem === "past") return fail("startDate is in the past");
+        if (problem === "too_far") return fail(`startDate is more than ${MAX_SCHEDULE_DAYS} days ahead`);
         // The block's first week, as it will run: before, nothing of it is planned.
         const lc = await limitContext(userId);
         const scoped = await cycleScope(cycleId, 1);

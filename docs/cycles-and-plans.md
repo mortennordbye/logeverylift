@@ -22,25 +22,26 @@ The home screen (`src/app/page.tsx`) surfaces scheduled workouts you skipped. Al
 
 ## The triathlon plan generator
 
-Two files:
-- **Blueprint** (pure): `src/lib/utils/triathlon-plan.ts` → `buildTriathlonPlan({ weeks, restDays, goal, level })` returns a `PlanBlueprint` (days → exercises → sets). Unit-tested in `src/__tests__/triathlon-plan.test.ts`.
-- **Persistence** (DB): `src/lib/actions/triathlon-plan.ts` → `generateTriathlonPlan` ensures the referenced exercises exist (`ENSURED_EXERCISES`), resolves names→ids, then inserts cycle + slots + programs + program_exercises + program_sets. UI: `src/components/features/TriathlonPlanForm.tsx` (`/cycles/triathlon`).
+It makes a season, not a cycle: "Make a triathlon plan" in New season (`/seasons/new`; `/cycles/triathlon` redirects there).
+- **Phase sizing** (pure): `src/lib/utils/triathlon-phases.ts` → `triathlonPhases(startDate, race)` sizes the phases (general, base, build, peak, taper) from the start date to the A race, the taper the race's default length and ending on race day. Unit-tested in `src/__tests__/triathlon-phases.test.ts`.
+- **Blueprint** (pure): `src/lib/utils/triathlon-plan.ts` → `buildTriathlonPlan({ weeks, restDays, level, strengthGoal, phaseType })` returns a `PlanBlueprint` (days → exercises → sets) for one season phase: week 1 follows that phase's curve, and `weeks` is used as it is. Unit-tested in `src/__tests__/triathlon-plan.test.ts`.
+- **Persistence** (DB): `src/lib/triathlon-plan.ts` → `createTriathlonPlan` (called by the `generateTriathlonPlan` action in `src/lib/actions/triathlon-plan.ts` and by `scripts/seed-plan-demo.ts`) ensures the referenced exercises exist (`ENSURED_EXERCISES`), resolves names→ids, then in one plan write inserts the season, its A race, and per phase a cycle with its own slots + programs + program_exercises + program_sets. Level and rest days come from the athlete profile. UI: `src/components/features/SeasonForm.tsx`.
 
 ### Current week layout (2 strength + endurance)
 
 | Day | Session |
 |---|---|
-| 1 Mon | **Workout A** — Squat & Horizontal (Front Squat, DB Bench, Pendlay Row, Bulgarian Split Squat, Seated Calf Raise, Pallof Hold) |
-| 2 Tue | Run — Threshold Intervals |
-| 3 Wed | Bike — Endurance + Swim |
-| 4 Thu | **Workout B** — Hinge & Vertical (RDL, Pull-up, DB Shoulder Press, Seated Leg Curl, Face Pull, Cable Crunch) |
+| 1 Mon | **Workout A** · Squat & horizontal (Front Squat, DB Bench, Pendlay Row, Bulgarian Split Squat, Seated Calf Raise, Pallof Hold) |
+| 2 Tue | Run · Threshold intervals |
+| 3 Wed | Bike · Endurance + swim |
+| 4 Thu | **Workout B** · Hinge & vertical (RDL, Pull-up, DB Shoulder Press, Seated Leg Curl, Face Pull, Cable Crunch) |
 | 5 Fri | Recovery Swim |
 | 6 Sat | Long Run |
 | 7 Sun | Long Bike + Brick Run |
 
 Strength is a **flat hypertrophy/maintenance block**: same target reps across working sets, no phase re-prescription (strength sets carry no `sessionRole` at all), `weightKg: 0` (athlete loads to the target reps). Every rep-based lift runs **Load, confirmed**: the `load` advance with a positive kg increment, the default two-session gate and no `targetRir` cap, so it adds weight after two sessions in a row at the same weight and reps. Per-exercise type is set by the generator. **Pallof Hold** is the one timed hold: 2 × 30 s with a 5 s `startDelaySeconds`, on the `duration` advance, so the hold gets longer on the same gate. It is a separate exercise from Pallof Press because `isTimed` lives on the shared row and other programs press Pallof Press for reps. Migration `0053` adds it to existing databases.
 
-**Rest days:** `restDays` is an array of 1–2 days (1=Mon…7=Sun); `TriathlonPlanForm` defaults to `[5, 6]` (Fri + Sat). Rest days do **not** simply blank whatever session sits there. Each session has an importance rank (most→least: long bike+brick on Sun, long run on Sat, the two strength days, bike+swim, run intervals, recovery swim); with N rest days the N least-important sessions drop, and any surviving session whose natural weekday became a rest day slides onto a freed training day. So the default Fri+Sat rest drops the recovery swim + run intervals, relocates the Saturday long run onto the freed Tuesday slot, and keeps the long bike+brick on Sunday. Because key sessions relocate rather than vanish, no rest-day choice can silently wipe a strength or long session — but if you change the day layout or the `importance` map in `buildTriathlonPlan`, re-check which sessions drop first.
+**Rest days:** `restDays` is an array of 1–2 days (1=Mon…7=Sun); `planDefaultsFromProfile` gives the days the athlete cannot train, else `[5, 6]` (Fri + Sat). Rest days do **not** simply blank whatever session sits there. Each session has an importance rank (most→least: long bike+brick on Sun, long run on Sat, the two strength days, bike+swim, run intervals, recovery swim); with N rest days the N least-important sessions drop, and any surviving session whose natural weekday became a rest day slides onto a freed training day. So the default Fri+Sat rest drops the recovery swim + run intervals, relocates the Saturday long run onto the freed Tuesday slot, and keeps the long bike+brick on Sunday. Because key sessions relocate rather than vanish, no rest-day choice can silently wipe a strength or long session — but if you change the day layout or the `importance` map in `buildTriathlonPlan`, re-check which sessions drop first.
 
 ### Endurance prescription
 

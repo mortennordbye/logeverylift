@@ -61,7 +61,7 @@ screen and can make a season such as "Bench 120 kg by summer".
   switch off (`src/lib/actions/training-cycles.ts:698`). MCP gates the same fields
   (`src/lib/mcp/tools/cycles.ts:162-170`, message at `src/lib/mcp/tools/cycles.ts:55`).
 - The triathlon generator writes a cycle with goal and level but no race
-  (`src/lib/actions/triathlon-plan.ts:108-115`).
+  (`src/lib/triathlon-plan.ts:135-148`).
 
 ### 1.2 Phases today
 
@@ -150,7 +150,7 @@ New table `seasons` (*new*):
 | `end_date` | date, not null, >= start | Last day |
 | `next_goal` | text, null, max 500 | What comes after ("Full distance in 2028") |
 | `replan_flagged_at` | timestamp, null | Set when a race change needs a re-plan (2.6). Null = no flag |
-| `replan_reason` | text, null | Plain text for the user and the AI: "A race Ironman 70.3 moved from 2027-08-22 to 2027-08-29" |
+| `replan_reason` | text, null | Plain text for the user and the AI: "A race Ironman 70.3 moved from 22 Aug 2027 to 29 Aug 2027" |
 | `version` | integer, default 1 | T9 |
 | `deleted_at` | timestamp, null | T6 |
 | `created_at`, `updated_at` | timestamp | |
@@ -243,6 +243,9 @@ the next race, the re-plan trigger, the phase curves and the diff text.
   day after the one before ends, or on its real start date once it has started. It returns, per
   phase, start, end, status (done, active, planned), and the gaps or overlaps with the season
   dates. This is the only place phase dates come from; nothing stores them.
+- **A completed cycle is not a phase.** Its real start would win in the timeline, so it would
+  keep its old dates out of the chain. `add_phase` refuses it, and Add phase and New season
+  offer only drafts and the running cycle (fix round 2, item 7).
 - **Chained start (owner question 1).** When a phase becomes active, the layer schedules the
   next phase in the season to start on the day after this one ends, with the existing
   `scheduled_start_date` and writer `sync`. On that day `startDueScheduledCycle` starts it and
@@ -275,7 +278,7 @@ would make a false recovery week. Evidence: the 3-week block pattern and the tap
 the research (Coach convention; the taper is Study). The 0.80 start and the 0.50 transition are
 Inference. Each number is a named constant with that label.
 
-`general` and `transition` are new values of the phase name the app shows ("General prep",
+`general` and `transition` are new values of the phase name the app shows ("General",
 "Transition"). Garmin race status and the periodization summary show the phase type when the
 cycle has one.
 
@@ -624,6 +627,11 @@ second points the interview at it.
   user changes it, so a length in days stays.
 - **A length in weeks replaces a length in days.** A weeks write (cycle form, MCP update)
   clears `duration_days`.
+- **A paused chain is dated from Resume** (fix round 7, J4-18). While another block holds the
+  scheduled start, the season's next phase is shown from the day Resume would give it (today
+  when its planned day has come, else that day), not from the other block's start, and later
+  phases follow it (`shownTimeline` in `src/lib/utils/seasons.ts`). The season page shows no
+  taper warning while the chain is paused, since those dates assume a Resume.
 - **A restore restores the season link too.** A revision made after this package but before the
   cycle joined a season takes the cycle out of the season again (a restore is of the whole
   object). Only a revision from before this package, which has no season key, keeps the season

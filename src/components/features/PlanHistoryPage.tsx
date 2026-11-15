@@ -1,3 +1,4 @@
+import { HOME_UI } from "@/components/features/home/fonts";
 import { PlanHistoryClient } from "@/components/features/PlanHistoryClient";
 import { limitOverrideLine } from "@/lib/utils/training-limits";
 import { getPlanHistory } from "@/lib/actions/plan-revisions";
@@ -18,13 +19,15 @@ export async function PlanHistoryPage({ type, id }: { type: "program" | "cycle" 
   const list = type === "program" ? "/programs" : "/cycles";
   const back = deleted ? list : type === "season" ? `/seasons/${id}` : `${list}/${id}`;
 
+  // Cycle and season history are Plan pages: the Plan look and its display title.
+  const plan = type !== "program";
   return (
-    <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
-      <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <BackLink fallback={{ href: back, label: deleted ? (type === "program" ? "Programs" : "Cycles") : name }} />
+    <div className={`h-[100dvh] pb-nav-safe flex flex-col overflow-hidden ${plan ? `${HOME_UI} bg-home` : "bg-background"}`}>
+      <div className={`flex items-center px-4 pb-2 shrink-0 ${plan ? "pt-4" : "pt-6"}`}>
+        <BackLink fallback={{ href: back, label: deleted ? (type === "program" ? "Programs" : "Plan") : name }} />
       </div>
       <div className="px-4 pt-2 pb-4 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">History</h1>
+        <h1 className={plan ? "home-display text-[34px] leading-9 uppercase" : "text-3xl font-bold tracking-tight"}>Change history</h1>
         {deleted && (
           <p className="text-sm text-muted-foreground mt-1">
             “{name}” is deleted. Restore a version to bring it back.

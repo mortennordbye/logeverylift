@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Rotation order</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&amp;family=Work+Sans:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0b0b0c}
+a{color:#6b95ff;text-decoration:none}a:hover{color:#8fb0ff}
+</style>
+</helmet>
+<div style="width: 390px; height: 1000px; box-sizing: border-box; background: #0b0b0c; color: #f4f4f5; font-family: 'Work Sans', system-ui, sans-serif; display: flex; flex-direction: column; position: relative">
+
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: 16px 8px 0">
+    <a href="#" style="display: flex; align-items: center; min-height: 44px; padding: 0 8px; font-size: 16px; color: {{accent}}">‹ Back</a>
+    <span style="font-size: 16px; font-weight: 600">New cycle</span>
+    <span style="width: 70px"></span>
+  </header>
+
+  <div style="display: flex; flex-direction: column; gap: 18px; padding: 12px 16px 0">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span style="font-size: 12px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; color: #8d8d93">Step 2 of 2</span>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; height: 4px">
+        <div style="border-radius: 2px; background: {{accent}}"></div>
+        <div style="border-radius: 2px; background: {{accent}}"></div>
+      </div>
+    </div>
+
+    <h2 style="margin: 0; font-size: 22px; font-weight: 600">Rotation order</h2>
+
+    <ol style="margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; border-radius: 16px; background: #161618; overflow: hidden">
+      <sc-for list="{{rows}}" as="r" hint-placeholder-count="5">
+        <li style="display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 0; min-height: 56px; box-sizing: border-box; border-bottom: 1px solid rgba(244,244,245,0.08)">
+          <button aria-label="Reorder {{r.name}}" style="width: 44px; height: 44px; border: none; background: transparent; color: #8d8d93; display: flex; align-items: center; justify-content: center">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="9" cy="6" r="1.6"></circle><circle cx="15" cy="6" r="1.6"></circle><circle cx="9" cy="12" r="1.6"></circle><circle cx="15" cy="12" r="1.6"></circle><circle cx="9" cy="18" r="1.6"></circle><circle cx="15" cy="18" r="1.6"></circle></svg>
+          </button>
+          <span style="width: 24px; font-size: 14px; color: #8d8d93">{{r.pos}}</span>
+          <span style="flex: 1; font-size: 16px; font-weight: 500; color: {{r.fg}}">{{r.name}}</span>
+          <button aria-label="Options for {{r.name}}" style="width: 44px; height: 44px; border: none; background: transparent; color: #c4c4c9; display: flex; align-items: center; justify-content: center">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"></circle><circle cx="12" cy="12" r="1.8"></circle><circle cx="19" cy="12" r="1.8"></circle></svg>
+          </button>
+        </li>
+      </sc-for>
+    </ol>
+
+    <div style="display: flex; gap: 8px">
+      <button style="flex: 1; height: 44px; border-radius: 12px; border: 1px solid rgba(244,244,245,0.12); background: transparent; color: #f4f4f5; font: 500 15px 'Work Sans', sans-serif">+ Add session</button>
+      <button style="flex: 1; height: 44px; border-radius: 12px; border: 1px solid rgba(244,244,245,0.12); background: transparent; color: #f4f4f5; font: 500 15px 'Work Sans', sans-serif">+ Add rest day</button>
+    </div>
+
+    <p style="margin: 0; font-size: 14px; line-height: 20px; color: #8d8d93">Repeats every 5 days. A missed session waits for you. It does not skip.</p>
+  </div>
+
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; padding: 16px 16px 28px; background: #111113; border-top: 1px solid rgba(244,244,245,0.08)">
+    <button style="width: 100%; height: 52px; border: none; border-radius: 16px; background: {{accent}}; color: #0b0b0c; font: 600 16px 'Work Sans', sans-serif">Create cycle</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#6b95ff","options":["#6b95ff","#5fbf8f","#ff8a3d","#f4f4f5"]},"$preview":{"width":390,"height":1000}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const w = '#f4f4f5', m = '#8d8d93';
+    return {
+      accent: this.props.accent ?? '#6b95ff',
+      rows: [
+        { pos: '1', name: 'Upper A', fg: w },
+        { pos: '2', name: 'Lower A', fg: w },
+        { pos: '3', name: 'Rest', fg: m },
+        { pos: '4', name: 'Upper B', fg: w },
+        { pos: '5', name: 'Lower B', fg: w }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

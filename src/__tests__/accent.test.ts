@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { customAccentTokens, prePaintThemeScript } from "@/lib/utils/accent";
+import { ACCENT_PRIMARY, ON_PRIMARY, customAccentTokens, prePaintThemeScript } from "@/lib/utils/accent";
 import { afterEach, describe, expect, it } from "vitest";
 
 /**
@@ -64,6 +64,21 @@ describe("prePaintThemeScript", () => {
     run();
     expect(html.dataset.accent).toBe("green");
     expect(html.classList.contains("dark")).toBe(false);
+  });
+
+  it("sets --primary as the theme provider does, so the active tab has the accent before hydration", () => {
+    run();
+    expect(html.style.getPropertyValue("--primary")).toBe(ACCENT_PRIMARY.blue.dark);
+    expect(html.style.getPropertyValue("--primary-foreground")).toBe(ON_PRIMARY.dark);
+    localStorage.setItem("theme", "light");
+    localStorage.setItem("accentColor", "orange");
+    run();
+    expect(html.style.getPropertyValue("--primary")).toBe(ACCENT_PRIMARY.orange.light);
+    expect(html.style.getPropertyValue("--primary-foreground")).toBe(ON_PRIMARY.light);
+    localStorage.setItem("accentColor", "custom");
+    localStorage.setItem("customAccentHex", "#1a1a40");
+    run();
+    expect(html.style.getPropertyValue("--primary")).toBe("#1a1a40");
   });
 
   it("dark by default, blue by default, and an unknown accent is blue", () => {

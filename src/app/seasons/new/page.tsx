@@ -1,25 +1,50 @@
-import { SeasonForm } from "@/components/features/SeasonForm";
-import { getUserSettings } from "@/lib/user-settings";
-import { localDateStr } from "@/lib/utils/user-date";
+import { HOME_UI } from "@/components/features/home/fonts";
+import { SeasonForm, type PhaseSource } from "@/components/features/SeasonForm";
+import { getAthleteProfile } from "@/lib/athlete-profile";
+import { enduranceEnabledFor } from "@/lib/endurance";
+import { startBlocks } from "@/lib/cycle-start";
+import { seasonlessCycles } from "@/lib/seasons";
+import { userToday } from "@/lib/user-settings";
+import { toDateStr } from "@/lib/utils/cycle-position";
+import { addDaysStr } from "@/lib/utils/seasons";
 import { requireSession } from "@/lib/utils/session";
 
-import { BackLink } from "@/components/ui/BackLink";
-
-/** New season (docs/plans/seasons.md, 2.10). For every user (D22). */
-export default async function NewSeasonPage() {
+/**
+ * New season (J4_SeasonSetup; docs/plans/plan-tab-redesign.md, P4). For every
+ * user (D22); the race and the triathlon plan only with the endurance switch.
+ * `?plan=triathlon` (from /cycles/triathlon) picks the triathlon plan.
+ */
+export default async function NewSeasonPage({ searchParams }: { searchParams: Promise<{ plan?: string }> }) {
   const auth = await requireSession();
-  const { timeZone } = await getUserSettings(auth.user.id);
+  const userId = auth.user.id;
+  const [today, enduranceEnabled, candidates, { plan }, { running, scheduled }] = await Promise.all([
+    userToday(userId),
+    enduranceEnabledFor(userId),
+    seasonlessCycles(userId),
+    searchParams,
+    startBlocks(userId),
+  ]);
+  const todayStr = toDateStr(today);
+  const profile = enduranceEnabled ? await getAthleteProfile(userId) : null;
+  // The next Monday, or today on a Monday.
+  const weekday = new Date(`${todayStr}T00:00:00Z`).getUTCDay();
+  const defaultStart = addDaysStr(todayStr, (8 - weekday) % 7);
+  // startsWith, not ===: Playwright's WebKit can get the page redirect's
+  // Location twice and joins them ("triathlon, /seasons/new?plan=triathlon").
+  const initialSource: PhaseSource = enduranceEnabled && plan?.startsWith("triathlon") ? "triathlon" : "later";
+
   return (
-    <div className="h-[100dvh] bg-background flex flex-col overflow-y-auto">
-      <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <BackLink fallback={{ href: "/cycles", label: "Cycles" }} />
-      </div>
-      <div className="px-4 pt-2 pb-4 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">New season</h1>
-      </div>
-      <div className="px-4 pb-nav-safe shrink-0" style={{ minHeight: "calc(100dvh + var(--kb-height, 0px))" }}>
-        <SeasonForm defaultStart={localDateStr(new Date(), timeZone)} />
-      </div>
+    <div className={`${HOME_UI} h-[100dvh] overflow-y-auto bg-home`}>
+      <SeasonForm
+        defaultStart={defaultStart}
+        today={todayStr}
+        running={running}
+        scheduled={scheduled}
+        enduranceEnabled={enduranceEnabled}
+        interviewDone={!!profile?.interviewCompletedAt}
+        candidates={candidates}
+        initialSource={initialSource}
+      />
     </div>
   );
 }

@@ -3,12 +3,13 @@ import {
   dismissedMakeups,
   planRevisions,
   plannedSessions,
+  programs,
   trainingCycleSlots,
   trainingCycles,
   workoutSessions,
 } from "@/db/schema";
 import { getPlannedSessions, updatePlannedSession } from "@/lib/actions/planned-sessions";
-import { restorePlanRevision } from "@/lib/actions/plan-revisions";
+import { getPlanHistory, restorePlanRevision } from "@/lib/actions/plan-revisions";
 import {
   getActiveCycleForUser,
   removeCycleSlot,
@@ -262,6 +263,96 @@ describe("changing one session", () => {
     expect((await restorePlanRevision({ revisionId: revs[2].id })).success).toBe(true);
     const [restored] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, r.id));
     expect(restored).toMatchObject({ date: "2026-11-11", status: "skipped", skipReason: "Travel" });
+  });
+
+  it("clearing a day's label gives it back the template's label", async () => {
+    const id = await cycle();
+    await db.update(trainingCycleSlots).set({ label: "Long Run" }).where(and(eq(trainingCycleSlots.trainingCycleId, id), eq(trainingCycleSlots.dayOfWeek, 1)));
+    await active();
+    const mon = (await rows(id)).find((x) => x.date === "2026-11-09")!;
+    expect(mon.label).toBe("Long Run");
+    expect((await updatePlannedSession({ op: "change", id: mon.id, label: "Hill repeats" })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "change", id: mon.id, label: "   " })).success).toBe(true);
+    expect((await rows(id)).find((x) => x.id === mon.id)!.label).toBe("Long Run");
+    expect((await updatePlannedSession({ op: "change", id: mon.id, label: null })).success).toBe(true);
+    expect((await rows(id)).find((x) => x.id === mon.id)!.label).toBe("Long Run");
+  });
+
+  it("a label and note change that changes nothing leaves the session untouched", async () => {
+    const id = await cycle();
+    await db.update(trainingCycleSlots).set({ label: "Long Run" }).where(and(eq(trainingCycleSlots.trainingCycleId, id), eq(trainingCycleSlots.dayOfWeek, 1)));
+    await active();
+    const mon = (await rows(id)).find((x) => x.date === "2026-11-09")!;
+    expect(mon).toMatchObject({ label: "Long Run", notes: null, touchedAt: null });
+    // The same label and note, a label of only spaces, and an empty label all keep the template's day.
+    for (const change of [{ label: "Long Run", notes: null }, { label: "   ", notes: null }, { label: null }]) {
+      const r = await updatePlannedSession({ op: "change", id: mon.id, ...change });
+      expect(r.success).toBe(true);
+    }
+    const after = (await rows(id)).find((x) => x.id === mon.id)!;
+    expect(after).toMatchObject({ label: "Long Run", notes: null, touchedAt: null, version: mon.version });
+    // So a template edit still reaches it.
+    expect((await upsertCycleSlot({ trainingCycleId: id, dayOfWeek: 1, programId: strength })).success).toBe(true);
+    expect((await rows(id)).find((x) => x.id === mon.id)!.programId).toBe(strength);
+  });
+
+  it("the cycle's history names the session and the day on every session change (J8-04)", async () => {
+    const id = await cycle();
+    await active();
+    const [{ name }] = await db.select({ name: programs.name }).from(programs).where(eq(programs.id, lift));
+    const mon = (await rows(id)).find((x) => x.date === "2026-11-09")!;
+    const nextMon = (await rows(id)).find((x) => x.date === "2026-11-16")!;
+    expect((await updatePlannedSession({ op: "skip", id: mon.id, reason: "Work trip" })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "unskip", id: mon.id })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "skip", id: nextMon.id })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "move", id: mon.id, date: "2026-11-11" })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "change", id: mon.id, label: "Heavy" })).success).toBe(true);
+    const history = await getPlanHistory({ type: "cycle", id });
+    if (!history.success) throw new Error(history.error);
+    const lines = history.data.revisions.flatMap((r) => r.changes).reverse();
+    expect(lines).toEqual([
+      // The cycle's own first entry.
+      "How it looked before history started",
+      `Skipped ${name} on Mon 9 Nov (Work trip)`,
+      `${name} on Mon 9 Nov, planned again`,
+      `Skipped ${name} on Mon 16 Nov`,
+      `Moved ${name} from Mon 9 Nov to Wed 11 Nov`,
+      `${name} on Wed 11 Nov, label set to Heavy`,
+    ]);
+  });
+
+  it("a missed session moved to a coming day is one line on the history (J8-04)", async () => {
+    me = (await createUser({ timeZone: "UTC", enduranceEnabled: true })).id;
+    asUser(me);
+    const ex = await createExercise();
+    lift = (await createProgram(me, [{ exerciseId: ex.id, sets: [{}] }])).program.id;
+    run = lift;
+    const id = await cycle();
+    await active();
+    const mon = (await rows(id)).find((x) => x.date === "2026-11-02")!;
+    await db.update(plannedSessions).set({ label: "Long ride" }).where(eq(plannedSessions.id, mon.id));
+    expect((await updatePlannedSession({ op: "miss", id: mon.id })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "move", id: mon.id, date: "2026-11-07" })).success).toBe(true);
+    const history = await getPlanHistory({ type: "cycle", id });
+    if (!history.success) throw new Error(history.error);
+    expect(history.data.revisions[0].changes).toEqual(["Moved Long ride from Mon 2 Nov to Sat 7 Nov"]);
+  });
+
+  it("a program swap drops the label the template gave, and keeps one the user set", async () => {
+    const id = await cycle();
+    await db.update(trainingCycleSlots).set({ label: "Workout B / Run" }).where(eq(trainingCycleSlots.trainingCycleId, id));
+    await active();
+    const [mon, nextMon] = (await rows(id)).filter((x) => x.date === "2026-11-09" || x.date === "2026-11-16");
+    expect(mon.label).toBe("Workout B / Run");
+
+    expect((await updatePlannedSession({ op: "change", id: mon.id, programId: strength })).success).toBe(true);
+    const [swapped] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, mon.id));
+    expect(swapped).toMatchObject({ programId: strength, label: null });
+
+    expect((await updatePlannedSession({ op: "change", id: nextMon.id, label: "Heavy day" })).success).toBe(true);
+    expect((await updatePlannedSession({ op: "change", id: nextMon.id, programId: strength })).success).toBe(true);
+    const [kept] = await db.select().from(plannedSessions).where(eq(plannedSessions.id, nextMon.id));
+    expect(kept).toMatchObject({ programId: strength, label: "Heavy day" });
   });
 
   it("a skipped missed session leaves the missed list", async () => {

@@ -144,7 +144,7 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
     {
       description: [
         "One season: its fields and version, its races, and its phases in order with the dates the app computes (each phase is a training cycle; cycleVersion is that cycle's version).",
-        "taperFit says whether the taper phase ends on the A race day ('fits', or 'early'/'late' by days). chainPaused means the next phase is not scheduled because a cycle outside the season ran; operation 'resume' picks it up.",
+        "taperFit says whether the taper phase ends on the A race day ('fits', or 'early'/'late' by days). chainPaused means the next phase is not scheduled because a cycle outside the season ran; operation 'resume' picks it up. While it is paused, the later phases are dated from the day resume would start the next one, so taperFit is what a resume today gives.",
         "replan: { flagged, since, reason } is set when a race date or an A race changed (D17). The app never reshapes the phases itself: re-plan them, then clear the flag with manage_season clear_replan.",
       ].join(" "),
       inputSchema: { seasonId: z.number().int().positive() },
@@ -168,7 +168,8 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
       description: [
         "Create, change or delete a season, clear its re-plan flag, or change its phases.",
         "operation='create': name, startDate, endDate; optional goal and nextGoal. operation='update': any of those. operation='delete': the season is soft deleted (the user can restore it for 90 days); its cycles stay and act as cycles with no season. operation='clear_replan': after you re-planned for a race change.",
-        `Phases are training cycles in order. operation='add_phase': cycleId (an existing cycle in no season; cycleVersion required) or name (a new empty draft cycle; fill it with edit_cycle_slot), optional position (1-based, default last), phaseType (${PHASE_TYPES.join(", ")}; endurance features only) and a length: durationWeeks (1-${PHASE_MAX_WEEKS}) or durationDays (1-${PHASE_MAX_DAYS}). A cycle's own race moves to the season. ${TAPER_TEXT} At most ${SEASON_MAX_PHASES} phases.`,
+        `Phases are training cycles in order. operation='add_phase': cycleId (an existing cycle in no season; cycleVersion required. A completed cycle cannot be added as a phase; a draft or the running cycle can.) or name (a new empty draft cycle; fill it with edit_cycle_slot), optional position (1-based, default last), phaseType (${PHASE_TYPES.join(", ")}; endurance features only) and a length: durationWeeks (1-${PHASE_MAX_WEEKS}) or durationDays (1-${PHASE_MAX_DAYS}). A cycle's own race moves to the season. ${TAPER_TEXT} At most ${SEASON_MAX_PHASES} phases.`,
+        "takeStart (add_phase, default false): only one cycle is scheduled at a time. A season's first phase is scheduled for the season start only when no other block holds the start; else the season waits (chainPaused) and the user's running cycle and other scheduled start stay as they are. takeStart=true makes the first phase take the start anyway: the running cycle ends on the season's start day (the phase starts that day), and any other scheduled start, such as another season's next phase, is dropped now, so that season pauses. Ask the user before you send takeStart=true; never send it on your own.",
         "operation='remove_phase' (cycleId): the cycle leaves the season and runs its whole block curve again. operation='move_phase': cycleId and position. operation='set_phase': cycleId and any of phaseType (null clears), durationWeeks, durationDays.",
         "operation='fit_taper': lengthens or shortens the phase before the taper so the taper ends on the A race day. operation='resume': starts or schedules the next phase after the chain was paused; the training limits check the next phase's first week.",
         LIMITS_TEXT,
@@ -190,6 +191,10 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
         phaseType: z.enum(PHASE_TYPES).nullable().optional(),
         durationWeeks: z.number().int().min(1).max(PHASE_MAX_WEEKS).optional(),
         durationDays: z.number().int().min(1).max(PHASE_MAX_DAYS).optional(),
+        takeStart: z
+          .boolean()
+          .optional()
+          .describe("add_phase: true lets the season's first phase take the one scheduled start (ends the running cycle on that day, drops another season's scheduled start). Ask the user first. Default false."),
         reason: reasonArg,
         expectedVersion: expectedVersionArg.optional(),
         ...overrideArgs,
@@ -247,6 +252,8 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
                 phaseType: args.phaseType,
                 durationWeeks: args.durationWeeks,
                 durationDays: args.durationDays,
+                // The app asks before a first phase takes the start; here the assistant must have asked.
+                takeStart: args.takeStart === true,
               },
               ev,
             );
@@ -302,7 +309,7 @@ export function registerSeasonTools(server: McpServer, userId: string, clientId?
         "Add, change or remove a race on a season (endurance features only).",
         `operation='add': name, date, discipline (${RACE_DISCIPLINES.join(", ")}), priority (${RACE_PRIORITIES.join(", ")}); for a triathlon a distance (${TRI_DISTANCES.join(", ")}); for any other discipline distanceMeters. At most ${SEASON_MAX_RACES} races.`,
         "operation='update': raceId and any of those. operation='remove': raceId.",
-        "The A race decides where the taper goes. A date change of any race, an A race added or removed, or a priority change to or from A flags the season for a re-plan; the result says so. Nothing else changes by itself.",
+        "The A race decides where the taper goes. A season has one A race: a race added or changed to A makes the old A race a B race. A date change of any race, an A race added or removed, or a priority change to or from A flags the season for a re-plan; the result says so. Nothing else changes by itself.",
         `Every operation requires reason and expectedVersion (the season's version). ${REVISION_RULES}`,
       ].join(" "),
       annotations: { destructiveHint: true, openWorldHint: false },

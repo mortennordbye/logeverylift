@@ -4,8 +4,8 @@
  * Produces one weekly template (7 day-of-week slots) mixing swim / bike / run
  * with two maintenance strength days. The distances picked are the *peak*
  * (race-prep) week; each endurance set stores that peak so the active cycle's
- * periodization (see periodization.ts) can scale the week-to-week volume —
- * Base → Build → Peak → Taper for "build", flat for "maintain". Endurance uses
+ * periodization (see periodization.ts) can scale the week-to-week volume along
+ * the curve of the season phase the cycle is. Endurance uses
  * `manual` progression because the periodization curve, not reactive
  * +increment suggestions, drives the load.
  *
@@ -38,13 +38,11 @@
 import type { StrengthGoal } from "@/db/schema/athlete-profile";
 import type { ExerciseType } from "@/lib/utils/exercise-type";
 import {
-  deloadCadenceForLevel,
-  periodizedLoad,
+  cycleLoad,
   scaledDistance,
   type AthleteLevel,
-  type TrainingGoal,
+  type PhaseType,
 } from "@/lib/utils/periodization";
-import { CYCLE_DURATION_WEEKS } from "@/lib/validators/training-cycles";
 
 /**
  * What the plan asks each exercise to progress — the advance axis, restricted
@@ -109,15 +107,13 @@ export type PlanDay = {
 const ENDURANCE_EXERCISES = new Set(["Swim", "Bike", "Run"]);
 
 export type PlanBlueprint = {
-  cycleName: string;
   durationWeeks: number;
-  goal: TrainingGoal;
   level: AthleteLevel;
   days: PlanDay[];
 };
 
 export type BuildTriathlonPlanParams = {
-  /** Desired length; snapped to the nearest cycle-supported value. */
+  /** The phase length in weeks, used as it is. */
   weeks: number;
   /**
    * Rest days, 1 = Monday … 7 = Sunday (max 2). Rest days don't simply blank
@@ -125,12 +121,12 @@ export type BuildTriathlonPlanParams = {
    * sessions slide onto the remaining training days. See the rest logic below.
    */
   restDays?: number[];
-  /** "build" ramps to a race peak then tapers; "maintain" holds flat. Default "build". */
-  goal?: TrainingGoal;
   /** Experience tier — scales peak volumes and deload cadence. Default "intermediate". */
   level?: AthleteLevel;
   /** The strength goal from the athlete profile; none keeps the A/B template. */
   strengthGoal?: StrengthGoal | null;
+  /** The season phase this plan is for: week 1 follows its curve. */
+  phaseType: PhaseType;
 };
 
 /** Peak (race-prep) per-session distances in meters for each endurance slot. */
@@ -159,19 +155,6 @@ const PEAK_VOLUMES: Record<AthleteLevel, PeakVolumes> = {
   advanced:     { swimLong: 4200, swimShort: 2500, bikeMid: 60000, bikeLong: 160000, runTempo: 10000, runBrick: 5000, runLong: 30000 },
 };
 
-const LEVEL_LABELS: Record<AthleteLevel, string> = {
-  novice: "Novice",
-  intermediate: "Intermediate",
-  advanced: "Advanced",
-};
-
-/** Snap an arbitrary week count to the nearest cycle-supported value. */
-export function snapWeeks(weeks: number): number {
-  return CYCLE_DURATION_WEEKS.reduce((best, v) =>
-    Math.abs(v - weeks) < Math.abs(best - weeks) ? v : best,
-  );
-}
-
 /**
  * Build a balanced Triathlon week. The `peakMeters` is the race-prep volume; the
  * stored `distanceMeters` is the week-1 prescription (scaled by the periodization
@@ -182,12 +165,12 @@ export function snapWeeks(weeks: number): number {
 export function buildTriathlonPlan({
   weeks,
   restDays,
-  goal = "build",
   level = "intermediate",
   strengthGoal = null,
+  phaseType,
 }: BuildTriathlonPlanParams): PlanBlueprint {
-  const durationWeeks = snapWeeks(weeks);
-  const week1Load = periodizedLoad(1, durationWeeks, goal, deloadCadenceForLevel(level));
+  // A phase follows its own curve; the goal is not read.
+  const week1Load = cycleLoad({ goal: "build", athleteLevel: level, phaseType }, 1, weeks);
   const week1Multiplier = week1Load.multiplier;
   const v = PEAK_VOLUMES[level];
 
@@ -290,15 +273,15 @@ export function buildTriathlonPlan({
 
   const strengthDays: { mon: { label: string; exercises: PlanExercise[] }; thu: { label: string; exercises: PlanExercise[] } } =
     strengthGoal === "minimal"
-      ? { mon: { label: "Strength — Full Body", exercises: fullBody }, thu: { label: "Rest", exercises: [] } }
+      ? { mon: { label: "Strength · Full body", exercises: fullBody }, thu: { label: "Rest", exercises: [] } }
       : strengthGoal === "stronger"
         ? {
-            mon: { label: "Workout A — Heavy Squat & Jumps", exercises: strongerA },
-            thu: { label: "Workout B — Heavy Hinge & Hops", exercises: strongerB },
+            mon: { label: "Workout A · Heavy squat & jumps", exercises: strongerA },
+            thu: { label: "Workout B · Heavy hinge & hops", exercises: strongerB },
           }
         : {
-            mon: { label: "Workout A — Squat & Horizontal", exercises: workoutA },
-            thu: { label: "Workout B — Hinge & Vertical", exercises: workoutB },
+            mon: { label: "Workout A · Squat & horizontal", exercises: workoutA },
+            thu: { label: "Workout B · Hinge & vertical", exercises: workoutB },
           };
 
   // Each session is built from structured segments — not one distance blob — so it
@@ -365,14 +348,14 @@ export function buildTriathlonPlan({
     },
     {
       dayOfWeek: 2,
-      label: "Run — Threshold Intervals",
+      label: "Run · Threshold intervals",
       exercises: [intervalRun("Run", v.runTempo, 4)],
     },
     {
       dayOfWeek: 3,
       // The endurance swim freed from the old 3-strength-day week rides alongside
       // the mid bike here, keeping total swim volume unchanged.
-      label: "Bike — Endurance + Swim",
+      label: "Bike · Endurance + swim",
       exercises: [steady("Bike", v.bikeMid), swimEndurance("Swim", v.swimLong, 5)],
     },
     {
@@ -438,11 +421,8 @@ export function buildTriathlonPlan({
     }
   }
 
-  const goalLabel = goal === "maintain" ? "Maintain" : "Build";
   return {
-    cycleName: `Triathlon ${goalLabel} · ${LEVEL_LABELS[level]} — ${durationWeeks} wk`,
-    durationWeeks,
-    goal,
+    durationWeeks: weeks,
     level,
     days: days.map((d) => ({
       ...d,

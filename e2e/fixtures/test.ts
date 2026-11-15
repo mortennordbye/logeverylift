@@ -62,6 +62,31 @@ export const test = base.extend<{ resetData: void; failOnPageError: void }, { re
         },
       });
     });
+    // The browser takes `navigator.onLine` from the host's network, but the
+    // server it talks to is on loopback. When the host's Wi-Fi drops for a
+    // moment, the app decides it is offline and queues its writes (the finish
+    // page, the set writers), although the server would answer. A spec then
+    // reads the database before the queue replays: cycle-day.spec.ts once saw
+    // a finished workout still open. So the browser is online unless a spec
+    // says otherwise with `context.setOffline`. The flag is set before the
+    // real call, so the `online` and `offline` events it fires see it.
+    await context.addInitScript(() => {
+      Object.defineProperty(Navigator.prototype, "onLine", {
+        configurable: true,
+        get: () => (window as unknown as { __e2eOffline?: boolean }).__e2eOffline !== true,
+      });
+    });
+    const setOffline = context.setOffline.bind(context);
+    context.setOffline = async (offline: boolean) => {
+      await Promise.all(
+        context.pages().map((p) =>
+          p.evaluate((v) => {
+            (window as unknown as { __e2eOffline?: boolean }).__e2eOffline = v;
+          }, offline),
+        ),
+      );
+      await setOffline(offline);
+    };
     await provide(context);
   },
   resetData: [

@@ -1,34 +1,61 @@
 /**
- * Cycle Detail Page
+ * Cycle Detail Page (docs/plans/plan-tab-redesign.md, P2)
  *
- * Shows the cycle's schedule builder, status, and actions.
+ * A weekday cycle shows its dated sessions a week at a time; a rotation shows
+ * its order and the next session; a completed cycle shows what comes next.
+ * The template is edited on /cycles/[id]/template.
  */
 
-import { CycleCompletionBanner } from "@/components/features/CycleCompletionBanner";
-import { DeleteCycleButton, RestartCycleButton, StartCycleButton } from "@/components/features/CycleDetailClient";
-import { CycleScheduleBuilder } from "@/components/features/CycleScheduleBuilder";
-import { getActiveCycleForUser, getCyclePeriodization, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
+import { answerSession } from "@/components/features/answer-session";
+import { CycleCompletionBanner, type NextCycle } from "@/components/features/CycleCompletionBanner";
+import { CycleMenu, StartCycleButton } from "@/components/features/CycleDetailClient";
+import { CycleWeek, RotationOrder, TemplateWeek } from "@/components/features/CycleSessionsClient";
+import { HOME_UI } from "@/components/features/home/fonts";
+import { PlanItemDeleted } from "@/components/features/PlanItemDeleted";
+import { BackLink } from "@/components/ui/BackLink";
+import { getProgramsWithExercises } from "@/lib/actions/programs";
 import { getPrograms } from "@/lib/actions/programs";
-import { formatPeriodizationSummary } from "@/lib/utils/periodization";
-import { requireSession } from "@/lib/utils/session";
+import { getActiveCycleForUser, getCyclePeriodization, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
+import { cycleStartContext, cycleStartedAfter } from "@/lib/cycle-start";
+import { enduranceEnabledFor } from "@/lib/endurance";
+import { ownDeletedCycle } from "@/lib/plan-deleted";
+import { listPlanned } from "@/lib/planned-sessions";
 import { seasonOfCycle } from "@/lib/seasons";
+import { moveSuggestion } from "@/lib/session-answers";
+import { sessionCompliance } from "@/lib/session-compliance";
 import { syncLimitWarnings } from "@/lib/training-limits";
-import { dayLabel } from "@/lib/utils/seasons";
-
+import { getUserSettings, userToday } from "@/lib/user-settings";
+import { cycleCompletedAt } from "@/lib/plan-revisions";
+import { localDateStr } from "@/lib/utils/user-date";
+import { dayMonth } from "@/lib/home/labels";
+import { type DetailSession, blockWeeks, cycleSubLine, dayLabels, dayNotes, endedLine, rotationRows, weekIndexOf } from "@/lib/utils/cycle-detail";
+import { cycleLengthDays, cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
+import { formatPeriodizationSummary } from "@/lib/utils/periodization";
+import { addDaysStr } from "@/lib/utils/planned-sessions";
+import { mondayOf } from "@/lib/utils/session-compliance";
+import { PHASE_TYPE_LABELS, lengthFromDays, lengthLabel, runLengthDays, shortDay } from "@/lib/utils/seasons";
+import { requireSession } from "@/lib/utils/session";
+import { listWorkouts } from "@/lib/workouts";
+import type { ProgramWithExercises } from "@/types/workout";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BackLink } from "@/components/ui/BackLink";
 
-export default async function CycleDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+/** The first three exercise names of a program, for a session row. */
+function exerciseNames(program: ProgramWithExercises | undefined): string | null {
+  if (!program || program.programExercises.length === 0) return null;
+  return program.programExercises
+    .slice(0, 3)
+    .map((pe) => pe.exercise.name)
+    .join(", ");
+}
+
+export default async function CycleDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const cycleId = Number(id);
   if (isNaN(cycleId)) notFound();
 
   const auth = await requireSession();
+  const userId = auth.user.id;
   // Like home: a block whose day has come starts, and one that is over completes, before the cycle is read.
   await getActiveCycleForUser();
   const [cycleResult, programsResult, periodizationResult] = await Promise.all([
@@ -36,84 +63,151 @@ export default async function CycleDetailPage({
     getPrograms(),
     getCyclePeriodization(cycleId),
   ]);
-
+  // Delete in the menu renders this page again in its response.
+  const deleted = cycleResult.success ? null : await ownDeletedCycle(userId, cycleId);
+  if (deleted) return <PlanItemDeleted item={deleted} />;
   if (!cycleResult.success) notFound();
 
   const cycle = cycleResult.data;
-  // A phase of a season shows where it sits and the season's races (D8).
-  const season = await seasonOfCycle(auth.user.id, cycle);
-  // T4: limits this week's sync broke (only an endurance user's sync stores any).
-  const limitWarnings = cycle.status === "active" ? await syncLimitWarnings(auth.user.id, cycle.id, cycle.lastSyncedWeek) : [];
-  const programs = programsResult.success ? programsResult.data : [];
+  const programs = (programsResult.success ? programsResult.data : []).map((p) => ({ id: p.id, name: p.name }));
   const periodization = periodizationResult.success ? periodizationResult.data : null;
+  const lengthDays = cycleLengthDays(cycle);
+  const weekday = cycle.scheduleType === "day_of_week";
+  // The block's first day: a running block's start, or the day a scheduled draft starts.
+  const blockStart = cycle.status === "active" ? cycle.startDate : cycle.status === "draft" ? cycle.scheduledStartDate : null;
+  const lastDay = blockStart ? addDaysStr(blockStart, lengthDays - 1) : null;
 
-  const { headline: periodizationHeadline, note: periodizationNote } = periodization
-    ? formatPeriodizationSummary(periodization)
-    : { headline: "", note: "" };
+  const todayRead = userToday(userId).then(toDateStr);
+  const [season, limitWarnings, today, endurance, { running, scheduled }, planned] = await Promise.all([
+    // A phase of a season shows where it sits (D8).
+    seasonOfCycle(userId, cycle),
+    // T4: limits this week's sync broke (only an endurance user's sync stores any).
+    cycle.status === "active" ? syncLimitWarnings(userId, cycle.id, cycle.lastSyncedWeek) : [],
+    todayRead,
+    enduranceEnabledFor(userId),
+    // A start names what it ends or drops: the running cycle and the draft scheduled next.
+    todayRead.then((day) => cycleStartContext(userId, day)),
+    blockStart && lastDay && cycle.status !== "completed" ? listPlanned(userId, blockStart, lastDay, cycle.id) : [],
+  ]);
+  const otherRunning = running && running.id !== cycle.id ? running : null;
+  const otherScheduled = scheduled && scheduled.id !== cycle.id ? scheduled : null;
 
-  const scheduleLabel =
-    cycle.scheduleType === "day_of_week" ? "Day of week" : "Rotation";
+  // A running block shows the length it runs: a draft scheduled inside it ends it the day before.
+  const runDays = cycle.status === "active" && cycle.startDate ? runLengthDays(cycle.startDate, lengthDays, otherScheduled?.day ?? null) : lengthDays;
+  // A cut block shows "Week N" without "of M", as the Plan hero (round 10):
+  // the length and the Ends day give where it stops.
+  const cut = runDays < lengthDays;
+  const totalWeeks = cycle.durationWeeks;
+  const barWeeks = cut ? Math.ceil(runDays / 7) : totalWeeks;
+  const runLastDay = blockStart ? addDaysStr(blockStart, runDays - 1) : null;
+  const currentWeek = cycle.status === "active" && cycle.startDate ? cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, parseDateStr(today), cycle.durationDays).currentWeek : null;
+
+  const dated = planned.filter((p) => p.rotationPosition == null && p.id != null);
+  const walk = planned.filter((p) => p.rotationPosition != null);
+
+  const programIds = new Set<number>();
+  for (const s of cycle.slots) if (s.programId) programIds.add(s.programId);
+  for (const p of planned) if (p.programId) programIds.add(p.programId);
+
+  // Endurance users see key sessions, bricks and "Did you do it?"; lifters get none of them (D18).
+  const showEndurance = endurance && weekday && blockStart != null && lastDay != null && cycle.status !== "completed";
+  const [programsMap, [compliance, library], completedAt] = await Promise.all([
+    getProgramsWithExercises([...programIds]),
+    showEndurance ? Promise.all([sessionCompliance(userId, blockStart, lastDay, { cycleId: cycle.id }), listWorkouts(userId)]) : [[], []],
+    // A block another start ended early says the day it ended (J8-09).
+    cycle.status === "completed" ? cycleCompletedAt(userId, cycle.id) : null,
+  ]);
+  const complianceById = new Map(compliance.map((c) => [c.id, c]));
+  // A missed key session of this week gets the day home suggests for it (D19).
+  const moveTo = new Map(
+    await Promise.all(
+      compliance.filter((c) => c.priority === "key" && c.status === "missed" && c.date >= mondayOf(today)).map(async (c) => [c.id, await moveSuggestion(userId, c)] as const),
+    ),
+  );
+  const sessions: DetailSession[] = dated.map((p) => {
+    const c = complianceById.get(p.id!);
+    return {
+      id: p.id!,
+      date: p.date,
+      position: p.position,
+      name: p.label ?? c?.workout?.name ?? p.programName ?? "Session",
+      label: p.label,
+      notes: p.notes,
+      summary: c?.workoutSummary ?? null,
+      exercises: p.programId != null ? exerciseNames(programsMap[p.programId]) : null,
+      programId: p.programId,
+      status: p.status,
+      skipReason: p.skipReason,
+      touched: p.touched,
+      templateDate: p.templateDate,
+      key: c?.priority === "key",
+      brick: c?.brickParentId != null,
+      answer: c?.state === "unconfirmed" ? answerSession(c) : null,
+      moveTo: moveTo.get(p.id!) ?? null,
+    };
+  });
+
+  // A completed cycle names what followed it: the cycle that started after
+  // it, else the cycle scheduled next. A completed phase names its season's
+  // next phase, even when the chain is paused and another cycle holds the
+  // scheduled start (J8-09).
+  let next: NextCycle | null = null;
+  const following = season?.following ?? null;
+  const startedAfter = cycle.status === "completed" && !following ? await cycleStartedAfter(userId, cycle) : null;
+  if (cycle.status === "completed" && following) {
+    next = {
+      id: following.id,
+      name: following.name,
+      startsLabel: following.day ? shortDay(following.day) : null,
+      startsTomorrow: following.day != null && following.day <= addDaysStr(today, 1),
+    };
+  } else if (startedAfter) {
+    next = { id: startedAfter.id, name: startedAfter.name, startsLabel: shortDay(startedAfter.startDate), startsTomorrow: false, started: true };
+  } else if (cycle.status === "completed" && otherScheduled) {
+    next = { id: otherScheduled.id, name: otherScheduled.name, startsLabel: shortDay(otherScheduled.day), startsTomorrow: otherScheduled.day <= addDaysStr(today, 1) };
+  }
+  const plannedLast = cycle.startDate ? addDaysStr(cycle.startDate, lengthDays - 1) : null;
+  const completedOn = completedAt ? localDateStr(completedAt, (await getUserSettings(userId)).timeZone) : null;
+  const endedLabel = endedLine(cycle.startDate, plannedLast, today, completedOn);
+
+  const { headline: periodizationHeadline, note: periodizationNote } = periodization ? formatPeriodizationSummary(periodization, { cut }) : { headline: "", note: "" };
+  const subLine = cycleSubLine(cycle.scheduleType, cut ? lengthLabel(lengthFromDays(runDays)) : lengthLabel(cycle), currentWeek, cut ? null : totalWeeks);
+  const phaseLine = season ? `Phase ${season.position}${cycle.phaseType ? ` · ${PHASE_TYPE_LABELS[cycle.phaseType]}` : ""}` : null;
+  const templateHref = `/cycles/${cycle.id}/template`;
+  // Days the template names with no session, such as "Mobility" (only a weekday cycle has days).
+  const labels = weekday ? dayLabels(cycle.slots) : {};
+  const notes = weekday ? dayNotes(cycle.slots) : {};
+  const slotPrograms = [...new Map(cycle.slots.filter((s) => s.program).map((s) => [s.program!.id, s.program!.name])).entries()];
 
   return (
-    <div className="h-[100dvh] bg-background flex flex-col overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
-        <BackLink fallback={{ href: "/cycles", label: "Cycles" }} />
-        <div className="flex items-center gap-4">
-          <Link
-            href={`/cycles/${cycle.id}/history`}
-            className="text-primary text-sm font-medium min-h-[44px] flex items-center active:opacity-70"
-          >
-            History
-          </Link>
-          <Link
-            href={`/cycles/${cycle.id}/edit`}
-            className="text-primary text-sm font-medium min-h-[44px] flex items-center active:opacity-70"
-          >
-            Edit
-          </Link>
-        </div>
-      </div>
-      <div className="px-4 pt-2 pb-4 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight truncate">{cycle.name}</h1>
-      </div>
+    <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
+      <header className="flex items-center justify-between px-4 pt-4 shrink-0">
+        <BackLink fallback={{ href: "/cycles", label: "Plan" }} />
+        <CycleMenu cycle={cycle} running={otherRunning} />
+      </header>
 
-      <div className="flex flex-col gap-6 px-4 pb-nav-safe">
-        {/* Meta */}
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-sm text-muted-foreground">
-            {cycle.durationDays != null ? `${cycle.durationDays} days` : `${cycle.durationWeeks} weeks`} · {scheduleLabel}
-          </span>
-          <span
-            className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${
-              cycle.status === "active"
-                ? "bg-green-500/15 text-green-600"
-                : cycle.status === "completed"
-                  ? "bg-muted text-muted-foreground"
-                  : "bg-amber-500/15 text-amber-600"
-            }`}
-          >
-            {cycle.status}
-          </span>
+      <div className="flex flex-col gap-4 px-4 pt-2 pb-nav-safe">
+        <div className="flex flex-col gap-1.5">
+          <h1 className="home-display text-[34px] leading-9 uppercase break-words">{cycle.name}</h1>
+          <span className="text-sm text-muted-foreground">{subLine}</span>
+          {season && (
+            <Link
+              href={`/seasons/${season.id}`}
+              data-testid="cycle-season"
+              className="self-start flex items-center min-h-11 px-3.5 mt-1 rounded-full bg-widget text-sm active:opacity-70"
+            >
+              Phase {season.position} of {season.phaseCount} · {season.name}&nbsp;
+              <span aria-hidden className="text-muted-foreground">
+                ›
+              </span>
+            </Link>
+          )}
+          {season?.replan.flagged && <p className="text-[13px] text-muted-foreground">The season&apos;s races changed. Its phases are not planned again yet.</p>}
         </div>
-
-        {season && (
-          <Link href={`/seasons/${season.id}`} data-testid="cycle-season" className="rounded-2xl bg-card px-4 py-3 min-h-[44px] active:bg-muted/50">
-            <p className="text-sm font-medium">
-              Phase {season.position} of {season.phaseCount} in {season.name}
-            </p>
-            {season.races.map((r) => (
-              <p key={r.id} className="text-xs text-muted-foreground">
-                {r.priority} race: {r.name}, {dayLabel(r.raceDate)}
-              </p>
-            ))}
-            {season.replan.flagged && <p className="text-xs font-medium text-amber-600 dark:text-amber-400">Race changed, plan not updated</p>}
-          </Link>
-        )}
 
         {limitWarnings.length > 0 && (
-          <div className="rounded-2xl bg-amber-500/10 border border-amber-500/30 px-4 py-3" data-testid="sync-limit-warning">
-            <p className="text-xs font-semibold uppercase tracking-wider text-amber-700 dark:text-amber-300 mb-1">This week breaks a training limit</p>
+          <div className="rounded-[20px] bg-widget px-4 py-3" data-testid="sync-limit-warning">
+            <p className="text-xs font-semibold tracking-[1px] uppercase text-muted-foreground mb-1">This week breaks a training limit</p>
             {limitWarnings.map((w) => (
               <p key={w.rule} className="text-sm">
                 {w.message}
@@ -122,42 +216,108 @@ export default async function CycleDetailPage({
           </div>
         )}
 
-        {/* Periodization summary (triathlon cycles) */}
-        {periodization && (
-          <div className="rounded-2xl bg-primary/10 px-4 py-3.5">
+        {periodization && cycle.status !== "completed" && (
+          <div className="rounded-[20px] bg-widget px-4 py-3.5">
             <div className="flex items-center justify-between">
-              <p className="text-sm font-semibold text-primary">{periodizationHeadline}</p>
-              <span className="text-xs font-semibold text-primary">
-                {Math.round(periodization.multiplier * 100)}%
-              </span>
+              <p className="text-sm font-semibold">{periodizationHeadline}</p>
+              <span className="text-xs font-semibold text-brand">{Math.round(periodization.multiplier * 100)}%</span>
             </div>
-            <p className="text-xs text-muted-foreground mt-0.5">{periodizationNote}</p>
+            <p className="text-[13px] text-muted-foreground mt-0.5">{periodizationNote}</p>
           </div>
         )}
 
-        {/* Completion banner */}
         {cycle.status === "completed" && (
-          <CycleCompletionBanner cycle={cycle} />
+          <>
+            <CycleCompletionBanner cycle={cycle} lengthLabel={lengthLabel(cycle)} endedLabel={endedLabel} next={next} running={otherRunning} />
+            {slotPrograms.length > 0 && (
+              <section className="flex flex-col gap-2">
+                <h2 className="mx-1 text-xs font-semibold tracking-[1px] uppercase text-muted-foreground">Programs in this cycle</h2>
+                <div className="flex flex-col rounded-[20px] bg-widget overflow-hidden">
+                  {slotPrograms.map(([pid, name]) => (
+                    <Link key={pid} href={`/programs/${pid}/history`} className="flex items-center justify-between gap-3 px-4 min-h-[52px] border-b border-hairline last:border-b-0 text-[15px] active:bg-foreground/5">
+                      <span className="truncate">{name}</span>
+                      <span className="shrink-0 text-sm text-brand">See history ›</span>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            )}
+          </>
         )}
 
-        {/* Start cycle CTA (draft only) */}
-        {cycle.status === "draft" && <StartCycleButton cycle={cycle} skippedPhases={season?.skippedPhases ?? 0} />}
+        {cycle.status === "draft" && (
+          <StartCycleButton
+            cycle={cycle}
+            skippedPhases={season?.skippedPhases ?? 0}
+            scheduledFor={cycle.scheduledStartDate}
+            running={otherRunning}
+            otherScheduled={otherScheduled}
+          />
+        )}
 
-        {/* Schedule section header */}
-        <div>
-          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
-            {cycle.scheduleType === "day_of_week"
-              ? "Weekly Schedule"
-              : "Rotation Order"}
-          </p>
-          <CycleScheduleBuilder cycle={cycle} programs={programs} />
-        </div>
+        {!weekday && cycle.status === "active" && currentWeek != null && (
+          <div className="flex flex-col gap-2 rounded-[20px] bg-widget p-4" data-testid="cycle-progress">
+            <div className="grid gap-1 h-2.5" style={{ gridTemplateColumns: `repeat(${barWeeks}, minmax(0, 1fr))` }} aria-label={cut ? `Week ${currentWeek}` : `Week ${currentWeek} of ${totalWeeks}`} role="img">
+              {Array.from({ length: barWeeks }, (_, i) => (
+                <div
+                  key={i}
+                  className={`rounded ${i + 1 <= currentWeek ? "bg-brand" : "bg-[#707076]"} ${i + 1 === currentWeek ? "ring-2 ring-brand ring-offset-2 ring-offset-widget" : ""}`}
+                />
+              ))}
+            </div>
+            <div className="flex justify-between text-[13px] text-muted-foreground">
+              <span>Started {dayMonth(cycle.startDate!)}</span>
+              <span>Ends {dayMonth(runLastDay!)}</span>
+            </div>
+          </div>
+        )}
 
-        {/* Destructive zone */}
-        <div className="flex flex-col items-center pt-4 gap-1">
-          <RestartCycleButton cycle={cycle} />
-          <DeleteCycleButton cycleId={cycle.id} />
-        </div>
+        {weekday && cycle.status !== "completed" && blockStart && lastDay && (
+          <CycleWeek
+            weeks={blockWeeks(blockStart, runDays)}
+            initialWeek={weekIndexOf(blockWeeks(blockStart, runDays), today)}
+            cut={cut}
+            sessions={sessions}
+            today={today}
+            phaseLine={phaseLine}
+            programs={programs}
+            library={showEndurance ? library.map((w) => ({ id: w.id, name: w.name, sport: w.sport, summary: w.summary })) : undefined}
+            programsMap={programsMap}
+            templateHref={templateHref}
+            dayLabels={labels}
+            dayNotes={notes}
+          />
+        )}
+
+        {weekday && cycle.status === "draft" && !blockStart && (
+          <TemplateWeek
+            templateHref={templateHref}
+            days={[1, 2, 3, 4, 5, 6, 7].map((dow) => ({
+              dow,
+              sessions: cycle.slots
+                .filter((s) => s.dayOfWeek === dow && s.programId != null)
+                .sort((a, b) => (a.daySlot ?? 1) - (b.daySlot ?? 1))
+                .map((s) => ({ name: s.label ?? s.program?.name ?? "Session", sub: exerciseNames(programsMap[s.programId!]) ?? "" })),
+              label: labels[dow] ?? null,
+            }))}
+          />
+        )}
+
+        {!weekday && cycle.status !== "completed" && (
+          <RotationOrder
+            cycleId={cycle.id}
+            rows={rotationRows(
+              cycle.slots.map((s) => ({ id: s.id, orderIndex: s.orderIndex ?? null, programId: s.programId ?? null, label: s.label ?? null, programName: s.program?.name ?? null })),
+              walk,
+              today,
+            )}
+            today={today}
+            programs={programs}
+            programsMap={programsMap}
+            editHref={templateHref}
+            active={cycle.status === "active"}
+          />
+        )}
       </div>
     </div>
   );

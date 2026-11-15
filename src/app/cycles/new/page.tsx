@@ -1,30 +1,103 @@
 /**
  * New Cycle Page
  *
- * Form to create a new training cycle (name, duration, schedule type, end action).
+ * Two steps (docs/plans/plan-tab-redesign.md, P3): step 1 the basics (name,
+ * schedule type, length, start, end), which makes a draft; step 2 the
+ * sessions, built on that draft (`?cycle=<id>`), whose last button starts it
+ * or schedules it for the chosen day (`start`). `step=1` with a cycle goes
+ * back to step 1 to change the draft.
  */
 
-import { CreateCycleForm } from "@/components/features/CreateCycleForm";
+import { db } from "@/db";
+import { programExercises } from "@/db/schema";
+import { CreateCycleForm, CycleSetupSessions } from "@/components/features/CreateCycleForm";
+import { HOME_UI } from "@/components/features/home/fonts";
+import { PlanItemDeleted } from "@/components/features/PlanItemDeleted";
+import { getActiveCycleForUser, getTrainingCycleWithSlots } from "@/lib/actions/training-cycles";
+import { cycleStartContext } from "@/lib/cycle-start";
+import { getPrograms } from "@/lib/actions/programs";
+import { enduranceEnabledFor } from "@/lib/endurance";
+import { ownDeletedCycle } from "@/lib/plan-deleted";
+import { userToday } from "@/lib/user-settings";
+import { toDateStr } from "@/lib/utils/cycle-position";
+import { nextMonday, type StartDays } from "@/lib/utils/cycle-setup";
+import { latestStartDay } from "@/lib/utils/cycle-start";
+import { requireSession } from "@/lib/utils/session";
+import { and, count, inArray, isNull } from "drizzle-orm";
+import { notFound, redirect } from "next/navigation";
 
-import { BackLink } from "@/components/ui/BackLink";
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
 
-export default function NewCyclePage() {
+export default async function NewCyclePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cycle?: string; start?: string; step?: string }>;
+}) {
+  const auth = await requireSession();
+  const params = await searchParams;
+  // Like home: a block whose day has come starts, and one that is over completes, first.
+  const active = await getActiveCycleForUser();
+  const todayDate = await userToday(auth.user.id);
+  const today = toDateStr(todayDate);
+  const days: StartDays = {
+    today,
+    nextMonday: nextMonday(today),
+    afterCurrent: active.success && active.data ? active.data.endDate : null,
+    latest: latestStartDay(today),
+  };
+  const start = params.start && DAY.test(params.start) ? params.start : today;
+  // Only one cycle runs and one is scheduled at a time (activateInSession,
+  // scheduleCycle): step 1 says what the start ends and drops.
+  const startContext = () => cycleStartContext(auth.user.id, today);
+
+  if (!params.cycle) {
+    return (
+      <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
+        <CreateCycleForm days={days} {...await startContext()} />
+      </div>
+    );
+  }
+
+  const cycleId = Number(params.cycle);
+  if (!Number.isInteger(cycleId) || cycleId <= 0) notFound();
+  const cycleResult = await getTrainingCycleWithSlots(cycleId);
+  // Discard deletes the draft and renders this page again in its response.
+  const deleted = cycleResult.success ? null : await ownDeletedCycle(auth.user.id, cycleId);
+  if (deleted) return <PlanItemDeleted item={deleted} />;
+  if (!cycleResult.success) notFound();
+  const cycle = cycleResult.data;
+  // The setup is for a draft; a started or scheduled cycle lives on its own page.
+  if (cycle.status !== "draft" || cycle.scheduledStartDate) redirect(`/cycles/${cycle.id}`);
+
+  if (params.step === "1") {
+    return (
+      <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
+        <CreateCycleForm days={days} draft={cycle} start={start} {...await startContext()} />
+      </div>
+    );
+  }
+
+  const [programsResult, endurance] = await Promise.all([getPrograms(), enduranceEnabledFor(auth.user.id)]);
+  const programs = programsResult.success ? programsResult.data : [];
+  // "6 exercises" under each program in the picker.
+  const counts = programs.length
+    ? await db
+        .select({ programId: programExercises.programId, n: count() })
+        .from(programExercises)
+        .where(and(inArray(programExercises.programId, programs.map((p) => p.id)), isNull(programExercises.deletedAt)))
+        .groupBy(programExercises.programId)
+    : [];
+  const countOf = new Map(counts.map((c) => [c.programId, c.n]));
+
   return (
-    <div className="h-[100dvh] bg-background flex flex-col overflow-y-auto">
-      {/* Header */}
-      <div className="flex items-center px-4 pt-6 pb-2 shrink-0">
-        <BackLink fallback={{ href: "/cycles", label: "Cycles" }} />
-      </div>
-      <div className="px-4 pt-2 pb-4 shrink-0">
-        <h1 className="text-3xl font-bold tracking-tight">New Cycle</h1>
-      </div>
-
-      {/* shrink-0: in this flex column an explicit minHeight lets the box shrink to
-          exactly that height, swallowing pb-nav-safe and leaving the Create Cycle
-          button under the fixed bottom nav. */}
-      <div className="px-4 pb-nav-safe shrink-0" style={{ minHeight: "calc(100dvh + var(--kb-height, 0px))" }}>
-        <CreateCycleForm />
-      </div>
+    <div className={`${HOME_UI} h-[100dvh] bg-home flex flex-col overflow-y-auto`}>
+      <CycleSetupSessions
+        cycle={cycle}
+        programs={programs.map((p) => ({ ...p, exerciseCount: countOf.get(p.id) ?? 0 }))}
+        start={start}
+        endurance={endurance}
+        {...await startContext()}
+      />
     </div>
   );
 }

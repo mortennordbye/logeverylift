@@ -107,8 +107,8 @@ For a lifter with the endurance switch off, the only change is a "Thresholds" en
   `src/lib/utils/triathlon-plan.ts:238`). The research says light high-rep work does not improve
   economy, and heavy work (at least 80% 1RM, 3-6 reps) plus plyometrics does
   (`docs/research/endurance-training-reference.md:208`).
-- The action checks the endurance switch (`src/lib/actions/triathlon-plan.ts:74`) and takes
-  weeks, rest days, goal and level (`src/lib/actions/triathlon-plan.ts:28`). Its only caller is
+- The plan library checks the endurance switch (`src/lib/triathlon-plan.ts:82`); the action takes
+  weeks, rest days, goal and level (`src/lib/actions/triathlon-plan.ts:13`). Its only caller is
   the "Triathlon plan" page, linked from the cycles list
   (`src/components/features/CyclesListClient.tsx:409`).
 - The seed has plyometric exercises: "Jump Squat", "Box Jump" and "Pogo Hops"
