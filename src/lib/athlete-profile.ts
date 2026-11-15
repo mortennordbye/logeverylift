@@ -33,7 +33,6 @@ import {
   type ThresholdProtocol,
   type ThresholdSource,
 } from "@/db/schema";
-import { changeCoachMemory } from "@/lib/coach-memory";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { FieldLockedError, notLocked, withSource } from "@/lib/field-sources";
 import { garminAllowedFor } from "@/lib/garmin/access";
@@ -64,7 +63,6 @@ export const INJURY_TEXT_MAX = 500;
 export const INJURY_AVOID_MAX = 300;
 export const THRESHOLD_NOTES_MAX = 500;
 /** The reason on a coach memory entry the interview moved to the profile. */
-export const MOVED_REASON = "Moved to the athlete profile by the intake interview";
 
 
 async function requireEndurance(userId: string) {
@@ -560,23 +558,6 @@ export async function restoreDeletedAthleteRow(ctx: PlanWriteContext, type: "thr
     .limit(1);
   if (!rev) return null;
   return restoreRevision(ctx, rev.id);
-}
-
-/**
- * The interview's "Moved": the user restated a coach memory entry in the
- * profile, so the entry goes out of use. Only limit and observation entries.
- */
-export async function moveMemoryEntry(ctx: PlanWriteContext, id: number, expectedVersion?: number) {
-  await requireEndurance(ctx.userId);
-  const [entry] = await db
-    .select({ kind: coachMemory.kind, active: coachMemory.active })
-    .from(coachMemory)
-    .where(and(eq(coachMemory.id, id), eq(coachMemory.userId, ctx.userId), isNull(coachMemory.deletedAt)));
-  if (!entry) throw new PlanNotFoundError({ type: "memory", id });
-  if (entry.kind !== "limit" && entry.kind !== "observation") {
-    throw new PlanStateError("Only limit and observation entries move to the athlete profile");
-  }
-  return changeCoachMemory({ ...ctx, reason: ctx.reason ?? MOVED_REASON }, id, { active: false }, expectedVersion);
 }
 
 export { PlanConflictError, PlanNotFoundError, PlanStateError };

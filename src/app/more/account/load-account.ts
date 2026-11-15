@@ -88,7 +88,6 @@ export async function loadAccountData() {
         longDay: athlete.longDay,
         strengthGoal: athlete.strengthGoal,
       },
-      interviewDoneOn: athlete?.interviewCompletedAt ? toDateStr(athlete.interviewCompletedAt) : null,
       injuries: injuries.map((i) => ({
         id: i.id,
         area: i.area,

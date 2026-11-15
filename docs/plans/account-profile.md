@@ -146,3 +146,14 @@ This replaces decision 2.1 ("one page, no sub-pages"). The design is
    route). No new editors.
 4. **Links:** `#body-profile` and `#training-numbers` anchors become the matching sub-page routes;
    every link that pointed at an Account section points at its sub-page.
+
+## 9. Tuning by the owner
+
+1. The group buttons on the top Account page show no summary line.
+2. The primary gym is picked from the gym map only (`/more/gyms`), not from Account.
+3. Every Account editor uses one chip style and one Save button (`AthleteProfileParts.tsx`).
+4. The in-app intake interview is dropped: every answer it collected is a field on Account. The
+   "Make a triathlon plan" option in the season form needs the endurance level and training days,
+   which are what the plan reads, and links to Goals and training when one is missing. The
+   assistant's `intake_interview` prompt stays. The `interview_completed_at` column is no longer
+   read; a later migration removes it.

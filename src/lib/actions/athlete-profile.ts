@@ -1,8 +1,8 @@
 "use server";
 
 /**
- * The athlete profile, thresholds, injuries and the intake interview in the
- * app (docs/plans/athlete-profile.md, 2.6 and 2.9). Writes go through the
+ * The athlete profile, thresholds and injuries in the app
+ * (docs/plans/athlete-profile.md, 2.9). Writes go through the
  * revision layer as the user. Thresholds are for every user; the rest needs
  * the endurance switch, which src/lib/athlete-profile.ts checks.
  */
@@ -15,20 +15,12 @@ import {
   addThreshold,
   changeInjury,
   changeThreshold,
-  getAthleteProfile,
   garminSuggestions,
-  interviewRace,
-  listDeletedInjuries,
   listDeletedThresholds,
-  listInjuries,
   listThresholds,
-  memoryToOffer,
-  missingSteps,
-  moveMemoryEntry,
   restoreDeletedAthleteRow,
   saveAthleteProfile,
 } from "@/lib/athlete-profile";
-import { enduranceEnabledFor } from "@/lib/endurance";
 import type { PlanWriteContext } from "@/lib/plan-revisions";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
@@ -80,41 +72,6 @@ export async function getThresholdsData() {
   }
 }
 
-export async function getAthleteData() {
-  const auth = await requireSession();
-  const userId = auth.user.id;
-  try {
-    if (!(await enduranceEnabledFor(userId))) return { success: true as const, data: null };
-    const [profile, injuries, deletedInjuries, race, memory, thresholds, settings, today] = await Promise.all([
-      getAthleteProfile(userId),
-      listInjuries(userId),
-      listDeletedInjuries(userId),
-      interviewRace(userId),
-      memoryToOffer(userId),
-      listThresholds(userId),
-      getUserSettings(userId),
-      userToday(userId),
-    ]);
-    return {
-      success: true as const,
-      data: {
-        profile,
-        injuries,
-        deletedInjuries,
-        race,
-        memory,
-        thresholds,
-        units: settings.units,
-        today: toDateStr(today),
-        missing: missingSteps(profile, thresholds, race),
-      },
-    };
-  } catch (e) {
-    console.error("[athleteProfile] getAthleteData failed", e);
-    return { success: false as const, error: "Could not load the athlete profile" };
-  }
-}
-
 // ── Profile ──────────────────────────────────────────────────────────────────
 
 const profileSchema = z.object({ ...profileFields, changeSetId: interviewChangeSet }).strict();
@@ -130,23 +87,6 @@ export async function saveProfile(data: unknown): Promise<ActionResult<{ version
     return { success: true, data: { version } };
   } catch (e) {
     return known(e, "saveProfile");
-  }
-}
-
-const finishSchema = z.object({ changeSetId: interviewChangeSet });
-
-/** The interview's last step. */
-export async function finishInterview(data: unknown): Promise<ActionResult<undefined>> {
-  const auth = await requireSession();
-  const parsed = finishSchema.safeParse(data);
-  if (!parsed.success) return invalid(parsed.error);
-  try {
-    await saveAthleteProfile(ctxFor(auth.user.id, parsed.data.changeSetId), { completeInterview: true });
-    refresh();
-    revalidatePath("/cycles/triathlon");
-    return { success: true, data: undefined };
-  } catch (e) {
-    return known(e, "finishInterview");
   }
 }
 
@@ -287,24 +227,5 @@ export async function restoreInjuryEntry(data: unknown): Promise<ActionResult<un
     return { success: true, data: undefined };
   } catch (e) {
     return known(e, "restoreInjuryEntry");
-  }
-}
-
-// ── The memory step ──────────────────────────────────────────────────────────
-
-const moveSchema = z.object({ id, changeSetId: interviewChangeSet });
-
-/** "Moved": the user restated a coach memory entry in the profile; it goes out of use. */
-export async function moveMemoryToProfile(data: unknown): Promise<ActionResult<undefined>> {
-  const auth = await requireSession();
-  const parsed = moveSchema.safeParse(data);
-  if (!parsed.success) return invalid(parsed.error);
-  try {
-    await moveMemoryEntry(ctxFor(auth.user.id, parsed.data.changeSetId), parsed.data.id);
-    refresh();
-    revalidatePath("/more/coach-memory");
-    return { success: true, data: undefined };
-  } catch (e) {
-    return known(e, "moveMemoryToProfile");
   }
 }

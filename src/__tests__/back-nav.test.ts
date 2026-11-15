@@ -115,7 +115,6 @@ describe("resolveBack", () => {
     "/programs/5/workout/add-exercise",
     "/programs/5/workout/exercises/9/sets/new",
     "/programs/5/exercises/9/sets/44",
-    "/more/athlete/interview",
     "/planned/7/play",
     "/cycles/triathlon",
   ])("does not go back into the form %s", (prev) => {

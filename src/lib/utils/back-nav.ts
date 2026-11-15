@@ -81,7 +81,7 @@ const LABELS: [string, string][] = [
 const NEVER = ["/login", "/signup", "/welcome", "/consent", "/oauth"];
 
 /** Last segments of form and player screens: done once, not gone back into. */
-const FORM_ENDINGS = new Set(["new", "edit", "finish", "add-exercise", "interview", "play"]);
+const FORM_ENDINGS = new Set(["new", "edit", "finish", "add-exercise", "play"]);
 
 function pathOf(url: string): string {
   const path = url.split(/[?#]/)[0];

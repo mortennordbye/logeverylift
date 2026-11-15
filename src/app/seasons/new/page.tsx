@@ -41,7 +41,7 @@ export default async function NewSeasonPage({ searchParams }: { searchParams: Pr
         running={running}
         scheduled={scheduled}
         enduranceEnabled={enduranceEnabled}
-        interviewDone={!!profile?.interviewCompletedAt}
+        profileReady={!!profile?.enduranceLevel && !!profile.availableDays?.length}
         candidates={candidates}
         initialSource={initialSource}
       />

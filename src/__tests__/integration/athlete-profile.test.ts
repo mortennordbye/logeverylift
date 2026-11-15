@@ -1,23 +1,19 @@
 import { db } from "@/db";
-import { athleteInjuries, athleteProfiles, athleteThresholds, coachMemory, planRevisions, programs, trainingCycles, users } from "@/db/schema";
+import { athleteInjuries, athleteProfiles, athleteThresholds, planRevisions, programs, trainingCycles, users } from "@/db/schema";
 import { collectUserData } from "@/lib/account-data";
 import {
   addInjuryEntry,
   addThresholdValue,
   deleteInjuryEntry,
   deleteThresholdValue,
-  finishInterview,
-  getAthleteData,
   getThresholdsData,
-  moveMemoryToProfile,
   restoreInjuryEntry,
   restoreThresholdValue,
   saveProfile,
   updateInjuryEntry,
   updateThresholdValue,
 } from "@/lib/actions/athlete-profile";
-import { addThreshold, changeThreshold, garminSuggestions, interviewRace } from "@/lib/athlete-profile";
-import { addCoachMemory } from "@/lib/coach-memory";
+import { addThreshold, changeThreshold, garminSuggestions, getAthleteProfile, interviewRace, listInjuries } from "@/lib/athlete-profile";
 import { restorePlanRevision, undoPlanChangeSet } from "@/lib/actions/plan-revisions";
 import { THRESHOLDS_PER_KIND_MAX, deleteCycles, deletePrograms, listRevisions, purgePlanRevisions, restoreChangeSet, restoreRevision } from "@/lib/plan-revisions";
 import { and, asc, eq } from "drizzle-orm";
@@ -131,7 +127,6 @@ describe("profile and injuries", () => {
     expect(!p.success && p.error).toContain("Endurance features are not on");
     const i = await addInjuryEntry({ area: "knee", description: "Sore", status: "active" });
     expect(i.success).toBe(false);
-    expect(await getAthleteData()).toEqual({ success: true, data: null });
     expect(await db.select().from(athleteProfiles)).toHaveLength(0);
     expect(await db.select().from(athleteInjuries)).toHaveLength(0);
   });
@@ -160,71 +155,20 @@ describe("profile and injuries", () => {
     expect((await restoreInjuryEntry({ id: r.data.id })).success).toBe(true);
     const revs = await revisionsOf("injury", r.data.id);
     expect(revs.map((x) => x.action)).toEqual(["create", "update", "delete", "restore"]);
-    const data = await getAthleteData();
-    expect(data.success && data.data?.injuries.map((i) => i.status)).toEqual(["past"]);
+    expect((await listInjuries(me)).map((i) => i.status)).toEqual(["past"]);
   });
 });
 
-describe("the interview", () => {
-  it("saves each step alone, shares one change set, and the whole run can be undone", async () => {
-    asUser(me);
-    await saveProfile({ strengthGoal: "minimal" });
-    const changeSetId = `interview:${randomUUID()}`;
-    const mem = await addCoachMemory({ userId: me, writer: "assistant", reason: "x" }, { kind: "observation", text: "Left knee sore after 90 min runs" });
-    await addCoachMemory({ userId: me, writer: "user" }, { kind: "preference", text: "Long rides on Saturday" });
-
-    const before = await getAthleteData();
-    expect(before.success && before.data?.memory.map((m) => m.id)).toEqual([mem.id]);
-    expect(before.success && before.data?.missing).toEqual(["race", "experience", "availability", "thresholds"]);
-
-    expect((await saveProfile({ enduranceLevel: "intermediate", changeSetId })).success).toBe(true);
-    expect((await saveProfile({ availableDays: [1, 2, 4, 6, 7], hoursPerWeek: 9, changeSetId })).success).toBe(true);
-    expect((await saveProfile({ strengthGoal: "stronger", changeSetId })).success).toBe(true);
-    const t = await addThresholdValue({ kind: "max_hr", value: 188, source: "manual", changeSetId });
-    const i = await addInjuryEntry({ area: "knee", side: "left", description: "Sore after 90 min runs", status: "managed", changeSetId });
-    expect((await moveMemoryToProfile({ id: mem.id, changeSetId })).success).toBe(true);
-    expect((await finishInterview({ changeSetId })).success).toBe(true);
-
-    const [m] = await db.select().from(coachMemory).where(eq(coachMemory.id, mem.id));
-    expect(m.active).toBe(false);
-    const [memRev] = await db
-      .select()
-      .from(planRevisions)
-      .where(and(eq(planRevisions.objectType, "memory"), eq(planRevisions.objectId, mem.id), eq(planRevisions.action, "update")));
-    expect(memRev).toMatchObject({ writer: "user", reason: "Moved to the athlete profile by the intake interview", changeSetId });
-    const [p] = await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, me));
-    expect(p.interviewCompletedAt).not.toBeNull();
-    const inSet = await db.select().from(planRevisions).where(eq(planRevisions.changeSetId, changeSetId));
-    expect(new Set(inSet.map((r) => r.objectType))).toEqual(new Set(["athlete", "threshold", "injury", "memory"]));
-
-    // Undo the whole interview: the profile goes back, the new rows go, the memory entry is in use again.
-    await restoreChangeSet({ userId: me, writer: "user" }, changeSetId);
-    const [after] = await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, me));
-    expect(after).toMatchObject({ strengthGoal: "minimal", enduranceLevel: null, interviewCompletedAt: null });
-    if (t.success) expect((await db.select().from(athleteThresholds).where(eq(athleteThresholds.id, t.data.id)))[0].deletedAt).not.toBeNull();
-    if (i.success) expect((await db.select().from(athleteInjuries).where(eq(athleteInjuries.id, i.data.id)))[0].deletedAt).not.toBeNull();
-    expect((await db.select().from(coachMemory).where(eq(coachMemory.id, mem.id)))[0].active).toBe(true);
-  });
-
+describe("profile change sets and the assistant's interview", () => {
   it("an undo of the profile's creation clears it, and the next write starts again", async () => {
     asUser(me);
     const changeSetId = `interview:${randomUUID()}`;
     await saveProfile({ strengthGoal: "stronger", changeSetId });
     await restoreChangeSet({ userId: me, writer: "user" }, changeSetId);
-    const data = await getAthleteData();
-    expect(data.success && data.data?.profile).toBeNull();
+    expect(await getAthleteProfile(me)).toBeNull();
     expect((await saveProfile({ hoursPerWeek: 6 })).success).toBe(true);
     const [row] = await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, me));
     expect(row).toMatchObject({ hoursPerWeek: 6, strengthGoal: null, deletedAt: null });
-  });
-
-  it("moves only limit and observation entries, and only the user's own", async () => {
-    asUser(me);
-    const pref = await addCoachMemory({ userId: me, writer: "user" }, { kind: "preference", text: "Mornings" });
-    expect((await moveMemoryToProfile({ id: pref.id })).success).toBe(false);
-    const theirs = await addCoachMemory({ userId: lifter, writer: "user" }, { kind: "limit", text: "Travel" });
-    expect((await moveMemoryToProfile({ id: theirs.id })).success).toBe(false);
-    expect((await db.select().from(coachMemory).where(eq(coachMemory.id, theirs.id)))[0].active).toBe(true);
   });
 
   it("reads the race from the active cycle (C1 wires this to the season later)", async () => {
@@ -246,8 +190,7 @@ describe("review fixes", () => {
     const second = `interview:${randomUUID()}`;
     expect((await saveProfile({ hoursPerWeek: 6, changeSetId: second })).success).toBe(true);
     await restoreChangeSet({ userId: me, writer: "user" }, second);
-    const data = await getAthleteData();
-    expect(data.success && data.data?.profile).toBeNull();
+    expect(await getAthleteProfile(me)).toBeNull();
     const [row] = await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, me));
     expect(row.deletedAt).not.toBeNull();
   });

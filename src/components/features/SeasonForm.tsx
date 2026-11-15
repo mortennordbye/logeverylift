@@ -43,8 +43,8 @@ type Props =
       /** The suggested first day: the next Monday, or today on a Monday. */
       defaultStart: string;
       enduranceEnabled: boolean;
-      /** The intake interview is done: a triathlon plan starts with it (D10). */
-      interviewDone: boolean;
+      /** Endurance level and training days are set: the triathlon plan reads both. */
+      profileReady: boolean;
       /** Cycles in no season, newest first. */
       candidates: Candidate[];
       initialSource?: PhaseSource;
@@ -105,14 +105,14 @@ export function SeasonForm(props: Props) {
   // The triathlon plan: a triathlon A race with a distance and a date.
   const triReady = discipline === "triathlon" && priority === "A" && raceComplete;
   const triPhases = triReady && startDate ? triathlonPhases(startDate, { raceDate, discipline, distance, distanceMeters: null }) : null;
-  const triSub = !create?.interviewDone
+  const triSub = !create?.profileReady
     ? null
     : !triReady
       ? "Add a triathlon A race above first."
       : typeof triPhases === "string"
         ? triPhases
         : "Phases from the start date to race day, made for you.";
-  const triBlocked = !create?.interviewDone || !triReady || typeof triPhases === "string";
+  const triBlocked = !create?.profileReady || !triReady || typeof triPhases === "string";
 
   // The race day the server would refuse (placeRaceDate), named before the end it moves.
   const raceDayProblem =
@@ -146,8 +146,8 @@ export function SeasonForm(props: Props) {
             : raceDayProblem
               ? raceDayProblem
               : source === "triathlon"
-              ? !create?.interviewDone
-                ? "Answer the athlete questions first."
+              ? !create?.profileReady
+                ? "Set your endurance level and training days first."
                 : typeof triPhases === "string"
                   ? triPhases
                   : "Add a triathlon A race first."
@@ -360,7 +360,7 @@ export function SeasonForm(props: Props) {
               </ul>
             )}
             {create.enduranceEnabled &&
-              (create.interviewDone ? (
+              (create.profileReady ? (
                 <RadioCard
                   name="phase-source"
                   checked={source === "triathlon"}
@@ -381,9 +381,9 @@ export function SeasonForm(props: Props) {
                   )}
                 </RadioCard>
               ) : (
-                <Link href="/more/athlete/interview?next=/seasons/new" className="flex min-h-11 flex-col gap-0.5 rounded-2xl bg-widget px-4 py-3.5 active:opacity-80">
+                <Link href="/more/account/goals-and-training" className="flex min-h-11 flex-col gap-0.5 rounded-2xl bg-widget px-4 py-3.5 active:opacity-80">
                   <span className="text-[15px] font-semibold">Make a triathlon plan</span>
-                  <span className="text-[13px] text-muted-foreground">Answer the athlete questions first. Then the plan fits your days and level.</span>
+                  <span className="text-[13px] text-muted-foreground">Set your endurance level and training days in Account first. Then the plan fits them.</span>
                 </Link>
               ))}
           </fieldset>

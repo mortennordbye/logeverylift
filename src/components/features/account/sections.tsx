@@ -52,7 +52,6 @@ import { setAiConsent } from "@/lib/actions/legal";
 import { setGarminSync, takeGarminField } from "@/lib/actions/garmin";
 import { sourceLine, type FieldSource, type SyncedField } from "@/lib/utils/field-sources";
 import type { Goal } from "@/lib/utils/goals";
-import { shortDay } from "@/lib/utils/seasons";
 import { STRENGTH_GOAL_LABEL } from "@/lib/utils/strength-goal";
 import { THRESHOLD_LABEL, currentThresholds, formatThreshold, thresholdWarnings } from "@/lib/utils/thresholds";
 import type { Units } from "@/lib/utils/units";
@@ -81,7 +80,6 @@ export type AccountData = {
   sync: Partial<Record<SyncedField, { note: string | null; says: string | null }>>;
   endurance: boolean;
   athlete: ProfileView | null;
-  interviewDoneOn: string | null;
   injuries: InjuryView[];
   deletedInjuries: DeletedInjuryView[];
   illness: (IllnessDraft & { id: number })[];
@@ -225,13 +223,6 @@ export const SECTIONS: Section[] = [
         note: (d) => fieldNote(d, "availability"),
         show: endurance,
         editor: (d, done) => <AvailabilityStep initial={d.athlete} onSaved={done} />,
-      },
-      {
-        id: "athlete-questions",
-        label: "Athlete questions",
-        value: (d) => (d.interviewDoneOn ? `Answered ${shortDay(d.interviewDoneOn)}` : "Not answered"),
-        show: endurance,
-        href: "/more/athlete/interview",
       },
     ],
   },
