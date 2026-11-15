@@ -235,6 +235,39 @@ test("at 320 px the race distance select is a 44 px tap target, on New season an
   await page.screenshot({ path: testInfo.outputPath("race-sheet-320.png") });
 });
 
+/** The tops of the race fields in `root`, in the New season card's order: name, date, distance, sport, priority. */
+async function raceFieldTops(root: Locator): Promise<number[]> {
+  const fields = [
+    root.getByRole("textbox", { name: /name/i }).first(),
+    root.getByLabel(/date/i).first(),
+    root.getByLabel(/distance/i).first(),
+    root.getByRole("group", { name: "Sport" }),
+    root.getByRole("group", { name: "Priority" }),
+  ];
+  const tops: number[] = [];
+  for (const f of fields) tops.push((await f.boundingBox())!.y);
+  return tops;
+}
+
+test("at 320 px the race sheet pins Save race and orders its fields as New season does (round 9 F2)", async ({ page }, testInfo) => {
+  const { seasonId } = await plan(testInfo.parallelIndex);
+  await page.goto("/seasons/new");
+  const card = page.getByTestId("race-fields").locator("..");
+  await expect(card).toBeVisible();
+  const onForm = await raceFieldTops(card);
+  expect(onForm).toEqual([...onForm].sort((a, b) => a - b));
+
+  await page.goto(`/seasons/${seasonId}`);
+  await page.getByRole("button", { name: "+ Add race" }).click();
+  const sheet = page.getByRole("region", { name: "New race" });
+  await expect(sheet).toBeVisible();
+  await inView(page, sheet, sheet.getByRole("button", { name: "Save race" }));
+  await expect(sheet.getByTestId("sheet-footer").getByRole("button", { name: "Save race" })).toBeVisible();
+  const inSheet = await raceFieldTops(sheet);
+  expect(inSheet).toEqual([...inSheet].sort((a, b) => a - b));
+  await page.screenshot({ path: testInfo.outputPath("race-sheet-footer-320.png") });
+});
+
 /** `target` is fully on screen and inside `sheet` as it opens, with no scrolling. */
 async function inView(page: Page, sheet: Locator, target: Locator) {
   const view = page.viewportSize()!;
