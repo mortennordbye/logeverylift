@@ -10,6 +10,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
+### Privacy policy note for the Garmin sync
+- **What:** Say in the privacy policy that "Sync from Garmin" writes Garmin values (body weight, max HR, threshold HR, FTP, run pace, availability, time zone and units) into the user's profile and settings. The data inventory already says so.
+- **Why deferred:** Only the owner has Premium today, so no other user's data is processed this way.
+- **Unblocked by:** Opening Premium or Garmin to other users. Do it in the same change, with the `privacy-compliance` skill and a `LEGAL_VERSION` bump.
+- **Touchpoints:** `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`, `docs/privacy/data-inventory.md`, `src/lib/garmin/sync-from-garmin.ts`.
+
 ### Goals and training: full rework of the training model
 - **What:** One model for what a user trains (strength to endurance mix), what they want from it (outcomes), level per sport and available time, with no overlapping questions and one rule for which rows show. Covers every reader: weight increments, the plan builder, the triathlon plan, training limits, the AI assistant and its privacy text, and the Goals and training page on Account.
 - **Why deferred:** A battle test on 2026-11-15 showed the model is entangled: the `endurance` goal also drives 1 kg weight increments (`src/lib/utils/progression.ts`, `adaptiveIncrementKg`, fed by `src/lib/actions/workout-sets.ts` and `src/lib/weight-stack-learning.ts`) and the high-rep plan template (`src/lib/utils/plan-templates.ts`); `strength_goal` is a kind of strength work, not an amount (`src/lib/utils/strength-goal.ts`); rows for endurance fields fail to save while the endurance switch is off. Patching the Account rows one at a time did not get a good result, so the owner chose a full rework as its own change.
