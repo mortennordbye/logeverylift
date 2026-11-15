@@ -102,6 +102,15 @@ function renderWeek(extra: Partial<Parameters<typeof CycleWeek>[0]> = {}) {
 }
 
 describe("weekday week", () => {
+  it("the template link says changes apply from this week once the cycle runs, and to every week before it starts (round 9)", () => {
+    const { unmount } = renderWeek();
+    expect(screen.getByText("Changes apply from this week on to days you have not changed.")).toBeTruthy();
+    unmount();
+    renderWeek({ today: "2026-11-10" });
+    expect(screen.queryByText("Changes apply from this week on to days you have not changed.")).toBeNull();
+    expect(screen.getByText("The cycle has not started, so changes apply to every week.")).toBeTruthy();
+  });
+
   it("shows one week of dated sessions, with rest days, a key session and a brick, and switches weeks", () => {
     renderWeek();
     expect(screen.getByText("Week 1 of 8")).toBeTruthy();

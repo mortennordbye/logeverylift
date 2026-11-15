@@ -214,7 +214,12 @@ export function CycleWeek({
             );
           });
         })}
-        <TemplateLink href={templateHref} title="Edit weekly template" sub="Changes apply from this week on to days you have not changed." />
+        <TemplateLink
+          href={templateHref}
+          title="Edit weekly template"
+          // A template edit rewrites the untouched sessions from this week's Monday on: before the start that is every week.
+          sub={weeks[0].from > today ? "The cycle has not started, so changes apply to every week." : "Changes apply from this week on to days you have not changed."}
+        />
       </div>
 
       <PlannedSessionSheet
