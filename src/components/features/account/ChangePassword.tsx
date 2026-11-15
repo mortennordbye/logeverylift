@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton } from "@/components/features/AthleteProfileParts";
 import { authClient } from "@/lib/auth-client";
 import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
@@ -76,13 +77,11 @@ export function ChangePassword({ onDone }: { onDone: () => void }) {
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <button
-        onClick={handleChangePassword}
+      <SubmitButton
+        label={status === "saving" ? "Updating…" : "Update Password"}
         disabled={status === "saving" || !currentPassword || !newPassword || !confirmPassword}
-        className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-      >
-        {status === "saving" ? "Updating…" : "Update Password"}
-      </button>
+        onClick={handleChangePassword}
+      />
     </div>
   );
 }

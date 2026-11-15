@@ -1,5 +1,6 @@
 "use client";
 
+import { SubmitButton, chip } from "@/components/features/AthleteProfileParts";
 import type { ThresholdKind, ThresholdSource } from "@/db/schema/athlete-profile";
 import { addThresholdValue, deleteThresholdValue, restoreThresholdValue } from "@/lib/actions/athlete-profile";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -51,20 +52,9 @@ function inputHint(input: ProtocolInput, units: Units): string {
 
 /**
  * Enter one threshold: type the value, or do a field test and let the app
- * compute it (docs/plans/athlete-profile.md, 2.3). Used on Account and in the
- * intake interview.
+ * compute it (docs/plans/athlete-profile.md, 2.3). Used on Account.
  */
-export function ThresholdEditor({
-  kind,
-  units,
-  changeSetId,
-  onSaved,
-}: {
-  kind: ThresholdKind;
-  units: Units;
-  changeSetId?: string;
-  onSaved: () => void;
-}) {
+export function ThresholdEditor({ kind, units, onSaved }: { kind: ThresholdKind; units: Units; onSaved: () => void }) {
   const protocols = protocolsFor(kind);
   const [mode, setMode] = useState<"enter" | number>("enter");
   const [text, setText] = useState("");
@@ -96,7 +86,7 @@ export function ThresholdEditor({
   async function save(body: Record<string, unknown>) {
     setSaving(true);
     setError(null);
-    const r = await callAction(addThresholdValue({ kind, ...(date ? { measuredOn: date } : {}), ...(changeSetId ? { changeSetId } : {}), ...body }));
+    const r = await callAction(addThresholdValue({ kind, ...(date ? { measuredOn: date } : {}), ...body }));
     setSaving(false);
     if (!r.success) {
       setError(r.error);
@@ -128,7 +118,7 @@ export function ThresholdEditor({
               role="radio"
               aria-checked={mode === m}
               onClick={() => setMode(m)}
-              className={`flex-1 min-h-[44px] rounded-xl px-2 text-sm font-medium active:opacity-70 ${mode === m ? "bg-primary text-primary-foreground" : "bg-muted"}`}
+              className={`flex-1 px-2 ${chip(mode === m)}`}
             >
               {m === "enter" ? "Enter value" : protocols[m].name}
             </button>
@@ -192,13 +182,7 @@ export function ThresholdEditor({
         <p className="text-sm text-destructive">{preview && "error" in preview ? preview.error : rangeError}</p>
       )}
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <button
-        onClick={submit}
-        disabled={saving || !preview || !("value" in preview) || !!rangeError}
-        className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-      >
-        Save {THRESHOLD_LABEL[kind]}
-      </button>
+      <SubmitButton label={`Save ${THRESHOLD_LABEL[kind]}`} disabled={saving || !preview || !("value" in preview) || !!rangeError} onClick={submit} />
     </div>
   );
 }

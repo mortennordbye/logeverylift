@@ -217,7 +217,7 @@ describe("New season with the endurance switch", () => {
     expect((within(triathlonCard()).getByRole("radio") as HTMLInputElement).disabled).toBe(true);
   });
 
-  it("sends a user without the intake interview to it first", () => {
+  it("sends a user without endurance level and training days to Goals and training first", () => {
     render(<SeasonForm {...create} profileReady={false} />);
     expect(screen.getByRole("link", { name: /Make a triathlon plan/ }).getAttribute("href")).toBe("/more/account/goals-and-training");
   });

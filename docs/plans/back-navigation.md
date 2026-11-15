@@ -36,7 +36,7 @@ history pop) went to Progress, not to home, so Back and the swipe disagreed.
 | `/more/ai-setup` | page | `/more` "More" | More list; home AI check-in notice; onboarding | Yes |
 | `/more/install` | page | `/more` "Back" | Settings; onboarding | Yes |
 | `/settings` | `SettingsClient` | `/more` "More" | More list | no |
-| `/more/account` | page | `/more` "More" | More list; consent form; gym picker; planned session page; interview | Yes |
+| `/more/account` | page | `/more` "More" | More list; consent form; gym picker; planned session page | Yes |
 | `/more/account/gym` | page | `/more/account` "Account" | Account; gym map | Yes |
 | `/more/gyms` | page | `/more` "More" | More list; gym picker | Yes |
 | `/more/assistants` | page | `/more` "More" | More list | no |
@@ -47,9 +47,9 @@ history pop) went to Progress, not to home, so Back and the swipe disagreed.
 | `/privacy`, `/terms` | `LegalPage` | `/` "LogEveryLift" | More; Account; policy notice; login, welcome, consent | Yes |
 | `/planned/[id]` | page | `/week` "Week" | Week; home endurance card; pool view; player | Yes |
 | `/planned/[id]/results` | page | `/planned/[id]` "Session" | planned page; home endurance card; player | Yes |
-| `/cycles/[id]` | page | `/cycles` "Back" | cycle list; season phases; interview; after create | Yes |
+| `/cycles/[id]` | page | `/cycles` "Back" | cycle list; season phases; after create | Yes |
 | `/cycles/[id]/edit` | page | cycle "Back" | cycle page; Garmin race view | Yes |
-| `/cycles/new`, `/cycles/triathlon` | page, `TriathlonPlanForm` | `/cycles` | cycle list; cycle page banner; interview | Yes |
+| `/cycles/new`, `/cycles/triathlon` | page, `TriathlonPlanForm` | `/cycles` | cycle list; cycle page banner | Yes |
 | `/cycles/[id]/history`, `/programs/[id]/history`, `/seasons/[id]/history` | `PlanHistoryPage` | parent, plan name | parent | no |
 | `/seasons/[id]` | page | `/cycles` "Cycles" | seasons section; cycle page; race plan; Branch: Race countdown | Yes |
 | `/seasons/new`, `/seasons/[id]/edit` | pages | `/cycles`, season | seasons section, season page | no |
@@ -63,7 +63,7 @@ Deep entry points: PWA cold start (`/`), the manifest shortcut, the login redire
 load), a reload, a pasted URL. There were no push notifications with URLs and no app links from the
 MCP server.
 
-Not changed: the pool view's text "Back", the interview's Cancel, `/week` arrows.
+Not changed: the pool view's text "Back", `/week` arrows.
 
 ## 3. Decisions
 
@@ -91,7 +91,7 @@ Not changed: the pool view's text "Back", the interview's Cancel, `/week` arrows
   makes an entry with no tag. The tag survives a reload.
 - `resolveBack()` in `src/lib/utils/back-nav.ts` decides: pop to the tagged page, or link to the
   fallback when there is no tag, the tag is a sign-in screen, a form (`/new`, `/edit`, `/finish`,
-  `/add-exercise`, set editors, `/interview`, `/play`, `/cycles/triathlon`) or the current page.
+  `/add-exercise`, set editors, `/play`, `/cycles/triathlon`) or the current page.
   The label is the fallback's own only when the tag is the fallback's exact URL (path and query);
   otherwise `backLabelFor()` names the page from a route table, exact routes before patterns.
 - `BackLink` in `src/components/ui/BackLink.tsx` renders a real link to the fallback (so the server

@@ -639,8 +639,7 @@ a migration; the hub settles the numbers at merge.
   and refuses without one after that.
 - **No component tests.** The screens are covered by `e2e/athlete-interview.spec.ts` and
   `e2e/thresholds.spec.ts`; the logic they use is in the pure modules with unit tests.
-- **Review fixes (2026-11-12).** The interview's next page accepts only a plain in-app path, never
-  one that starts with "//" (`localPath`). Undoing a change set whose object was deleted before
+- **Review fixes (2026-11-12).** Undoing a change set whose object was deleted before
   the set's first change deletes it again instead of bringing back the state before that delete,
   so a second interview undo keeps the profile cleared. Only the test's own inputs are stored in
   `test_data`. Dates must be real days, and a threshold date may not be after today. Threshold

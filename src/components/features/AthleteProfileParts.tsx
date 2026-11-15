@@ -1,10 +1,10 @@
 "use client";
 
 /**
- * The parts of the athlete profile that Account and the intake interview
- * share (docs/plans/athlete-profile.md, 2.6 and 2.9): experience,
- * availability, strength goal, and the injury list with its sheet. Each saves
- * through its own Server Action, so a half-done interview keeps its answers.
+ * The athlete profile editors on Account (docs/plans/account-profile.md):
+ * experience, availability, strength goal, and the injury list with its
+ * sheet, plus the chip and Save button every Account editor shares. Each
+ * saves through its own Server Action.
  */
 
 import { BottomSheet } from "@/components/ui/BottomSheet";
@@ -33,9 +33,9 @@ export const LEVEL_TEXT: Record<EnduranceLevel, { label: string; hint: string }>
   advanced: { label: "Advanced", hint: "Many seasons, racing for time" },
 };
 
-export const AREA_LABEL = (a: InjuryArea) => a.replace("_", " ").replace(/^./, (c) => c.toUpperCase());
+const AREA_LABEL = (a: InjuryArea) => a.replace("_", " ").replace(/^./, (c) => c.toUpperCase());
 
-export const STATUS_TEXT: Record<InjuryStatus, string> = {
+const STATUS_TEXT: Record<InjuryStatus, string> = {
   active: "Hurts now",
   managed: "I live with it",
   past: "Healed",
@@ -61,7 +61,7 @@ export type InjuryView = {
   endedOn: string | null;
 };
 
-type SaveProps = { changeSetId?: string; onSaved: () => void; submitLabel?: string };
+type SaveProps = { onSaved: () => void };
 
 export const chip = (on: boolean) =>
   `min-h-[44px] rounded-xl text-sm font-medium active:opacity-70 ${on ? "bg-primary text-primary-foreground" : "bg-muted"}`;
@@ -78,13 +78,13 @@ export function SubmitButton({ label, disabled, onClick }: { label: string; disa
   );
 }
 
-function useSave(changeSetId: string | undefined, onSaved: () => void) {
+function useSave(onSaved: () => void) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   async function run(change: Record<string, unknown>) {
     setSaving(true);
     setError(null);
-    const r = await callAction(saveProfile({ ...change, ...(changeSetId ? { changeSetId } : {}) }));
+    const r = await callAction(saveProfile(change));
     setSaving(false);
     if (!r.success) {
       setError(r.error);
@@ -95,9 +95,9 @@ function useSave(changeSetId: string | undefined, onSaved: () => void) {
   return { saving, error, run };
 }
 
-export function ExperienceStep({ initial, changeSetId, onSaved, submitLabel = "Save" }: SaveProps & { initial: EnduranceLevel | null }) {
+export function ExperienceStep({ initial, onSaved }: SaveProps & { initial: EnduranceLevel | null }) {
   const [level, setLevel] = useState<EnduranceLevel | null>(initial);
-  const { saving, error, run } = useSave(changeSetId, onSaved);
+  const { saving, error, run } = useSave(onSaved);
   return (
     <div className="space-y-3">
       <div className="space-y-2" role="radiogroup" aria-label="Experience">
@@ -109,17 +109,17 @@ export function ExperienceStep({ initial, changeSetId, onSaved, submitLabel = "S
         ))}
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <SubmitButton label={submitLabel} disabled={saving || !level} onClick={() => (level === initial ? onSaved() : run({ enduranceLevel: level }))} />
+      <SubmitButton label="Save" disabled={saving || !level} onClick={() => (level === initial ? onSaved() : run({ enduranceLevel: level }))} />
     </div>
   );
 }
 
-export function AvailabilityStep({ initial, changeSetId, onSaved, submitLabel = "Save" }: SaveProps & { initial: ProfileView | null }) {
+export function AvailabilityStep({ initial, onSaved }: SaveProps & { initial: ProfileView | null }) {
   const [days, setDays] = useState<number[]>(initial?.availableDays ?? []);
   const [hours, setHours] = useState<number>(initial?.hoursPerWeek ?? 8);
   const [longest, setLongest] = useState<number>(initial?.longestDayMinutes ?? 180);
   const [longDay, setLongDay] = useState<number | null>(initial?.longDay ?? null);
-  const { saving, error, run } = useSave(changeSetId, onSaved);
+  const { saving, error, run } = useSave(onSaved);
   const toggle = (d: number) => setDays((prev) => (prev.includes(d) ? prev.filter((x) => x !== d) : [...prev, d].sort((a, b) => a - b)));
   const step = (value: number, by: number, min: number, max: number) => Math.min(max, Math.max(min, value + by));
   return (
@@ -153,7 +153,7 @@ export function AvailabilityStep({ initial, changeSetId, onSaved, submitLabel = 
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <SubmitButton
-        label={submitLabel}
+        label="Save"
         disabled={saving || days.length === 0}
         onClick={() => run({ availableDays: days, hoursPerWeek: hours, longestDayMinutes: longest, longDay })}
       />
@@ -190,9 +190,9 @@ const PHASE_NAME: Record<string, string> = {
   transition: "Transition",
 };
 
-export function StrengthStep({ initial, changeSetId, onSaved, submitLabel = "Save" }: SaveProps & { initial: StrengthGoal | null }) {
+export function StrengthStep({ initial, onSaved }: SaveProps & { initial: StrengthGoal | null }) {
   const [goal, setGoal] = useState<StrengthGoal | null>(initial);
-  const { saving, error, run } = useSave(changeSetId, onSaved);
+  const { saving, error, run } = useSave(onSaved);
   return (
     <div className="space-y-3">
       <div className="space-y-2" role="radiogroup" aria-label="Strength goal">
@@ -212,18 +212,18 @@ export function StrengthStep({ initial, changeSetId, onSaved, submitLabel = "Sav
       </div>
       <p className="text-xs text-muted-foreground">A default. Your assistant may plan another count if it gives you the reason.</p>
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <SubmitButton label={submitLabel} disabled={saving || !goal} onClick={() => (goal === initial ? onSaved() : run({ strengthGoal: goal }))} />
+      <SubmitButton label="Save" disabled={saving || !goal} onClick={() => (goal === initial ? onSaved() : run({ strengthGoal: goal }))} />
     </div>
   );
 }
 
 type InjuryDraft = Omit<InjuryView, "id"> & { id: number | null };
 
-export const emptyInjury = (description = ""): InjuryDraft => ({
+const emptyInjury = (): InjuryDraft => ({
   id: null,
   area: "knee",
   side: null,
-  description,
+  description: "",
   avoid: null,
   status: "active",
   startedOn: null,
@@ -231,17 +231,7 @@ export const emptyInjury = (description = ""): InjuryDraft => ({
 });
 
 /** Add or edit one injury in a sheet; delete at the bottom with a confirm. */
-export function InjurySheet({
-  draft,
-  onClose,
-  onSaved,
-  changeSetId,
-}: {
-  draft: InjuryDraft | null;
-  onClose: () => void;
-  onSaved: () => void;
-  changeSetId?: string;
-}) {
+function InjurySheet({ draft, onClose, onSaved }: { draft: InjuryDraft | null; onClose: () => void; onSaved: () => void }) {
   const [d, setD] = useState<InjuryDraft | null>(draft);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -259,7 +249,7 @@ export function InjurySheet({
     setSaving(true);
     setError(null);
     const { id, ...fields } = d;
-    const body = { ...fields, avoid: fields.avoid?.trim() ? fields.avoid : null, ...(changeSetId ? { changeSetId } : {}) };
+    const body = { ...fields, avoid: fields.avoid?.trim() ? fields.avoid : null };
     const r = id ? await callAction(updateInjuryEntry({ id, ...body })) : await callAction(addInjuryEntry(body));
     setSaving(false);
     if (!r.success) {
@@ -355,7 +345,7 @@ export function InjurySheet({
 }
 
 /** Active and managed injuries first; past ones folded. Tap one to edit. */
-export function InjuryList({ injuries, onOpen }: { injuries: InjuryView[]; onOpen: (i: InjuryView) => void }) {
+function InjuryList({ injuries, onOpen }: { injuries: InjuryView[]; onOpen: (i: InjuryView) => void }) {
   const now = injuries.filter((i) => i.status !== "past");
   const past = injuries.filter((i) => i.status === "past");
   const row = (i: InjuryView) => (

@@ -13,7 +13,7 @@ import {
   updateInjuryEntry,
   updateThresholdValue,
 } from "@/lib/actions/athlete-profile";
-import { addThreshold, changeThreshold, garminSuggestions, getAthleteProfile, interviewRace, listInjuries } from "@/lib/athlete-profile";
+import { addInjury, addThreshold, changeThreshold, garminSuggestions, getAthleteProfile, interviewRace, listInjuries, saveAthleteProfile } from "@/lib/athlete-profile";
 import { restorePlanRevision, undoPlanChangeSet } from "@/lib/actions/plan-revisions";
 import { THRESHOLDS_PER_KIND_MAX, deleteCycles, deletePrograms, listRevisions, purgePlanRevisions, restoreChangeSet, restoreRevision } from "@/lib/plan-revisions";
 import { and, asc, eq } from "drizzle-orm";
@@ -159,11 +159,11 @@ describe("profile and injuries", () => {
   });
 });
 
-describe("profile change sets and the assistant's interview", () => {
+describe("profile change sets", () => {
   it("an undo of the profile's creation clears it, and the next write starts again", async () => {
     asUser(me);
-    const changeSetId = `interview:${randomUUID()}`;
-    await saveProfile({ strengthGoal: "stronger", changeSetId });
+    const changeSetId = `mcp:${randomUUID()}`;
+    await saveAthleteProfile({ userId: me, writer: "assistant", reason: "x", changeSetId }, { strengthGoal: "stronger" });
     await restoreChangeSet({ userId: me, writer: "user" }, changeSetId);
     expect(await getAthleteProfile(me)).toBeNull();
     expect((await saveProfile({ hoursPerWeek: 6 })).success).toBe(true);
@@ -182,13 +182,13 @@ describe("profile change sets and the assistant's interview", () => {
 });
 
 describe("review fixes", () => {
-  it("a second interview undo keeps the profile cleared", async () => {
+  it("a second undo of a profile's creation keeps it cleared", async () => {
     asUser(me);
-    const first = `interview:${randomUUID()}`;
-    await saveProfile({ strengthGoal: "stronger", changeSetId: first });
+    const first = `mcp:${randomUUID()}`;
+    await saveAthleteProfile({ userId: me, writer: "assistant", reason: "x", changeSetId: first }, { strengthGoal: "stronger" });
     await restoreChangeSet({ userId: me, writer: "user" }, first);
-    const second = `interview:${randomUUID()}`;
-    expect((await saveProfile({ hoursPerWeek: 6, changeSetId: second })).success).toBe(true);
+    const second = `mcp:${randomUUID()}`;
+    await saveAthleteProfile({ userId: me, writer: "assistant", reason: "x", changeSetId: second }, { hoursPerWeek: 6 });
     await restoreChangeSet({ userId: me, writer: "user" }, second);
     expect(await getAthleteProfile(me)).toBeNull();
     const [row] = await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, me));
@@ -224,10 +224,12 @@ describe("review fixes", () => {
 
   it("restore and undo of an injury need the endurance switch, and say why", async () => {
     asUser(me);
-    const changeSetId = `interview:${randomUUID()}`;
-    const i = await addInjuryEntry({ area: "knee", description: "Sore", status: "active", changeSetId });
-    const t = await addThresholdValue({ kind: "max_hr", value: 190, source: "manual", changeSetId });
-    if (!i.success || !t.success) throw new Error("setup");
+    const changeSetId = `mcp:${randomUUID()}`;
+    const ctx = { userId: me, writer: "assistant" as const, reason: "x", changeSetId };
+    const { injury } = await addInjury(ctx, { area: "knee", description: "Sore", status: "active" });
+    const added = await addThreshold(ctx, { kind: "max_hr", value: 190, source: "manual" });
+    const i = { data: { id: injury.id } };
+    const t = { data: { id: added.threshold.id } };
     await updateInjuryEntry({ id: i.data.id, status: "past" });
     await db.update(users).set({ enduranceEnabled: false }).where(eq(users.id, me));
     const [created] = await revisionsOf("injury", i.data.id);

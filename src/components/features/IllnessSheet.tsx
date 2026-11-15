@@ -7,6 +7,7 @@
  * features only (D18).
  */
 
+import { SubmitButton, chip } from "@/components/features/AthleteProfileParts";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { manageIllness } from "@/lib/actions/workouts-compliance";
 import { SEVERITY_TEXT, type IllnessSeverity } from "@/lib/utils/session-compliance";
@@ -28,7 +29,6 @@ const SEVERITY_LABEL: Record<IllnessSeverity, string> = { mild: "Mild", moderate
 
 
 const field = "mt-1 w-full min-h-[44px] rounded-xl bg-muted px-4 text-base";
-const chip = (on: boolean) => `min-h-[44px] rounded-xl px-4 py-2 text-left text-sm font-medium active:opacity-70 ${on ? "bg-primary text-primary-foreground" : "bg-muted"}`;
 
 /** Add or change one sick period; delete at the bottom with a confirm. */
 export function IllnessSheet({
@@ -98,7 +98,7 @@ export function IllnessSheet({
               role="checkbox"
               aria-checked={stillSick}
               onClick={() => setD({ ...d, endedOn: stillSick ? (today < d.startedOn ? d.startedOn : today) : null })}
-              className={`w-full ${chip(stillSick)}`}
+              className={`w-full px-4 py-2 text-left ${chip(stillSick)}`}
             >
               Still sick
             </button>
@@ -125,7 +125,7 @@ export function IllnessSheet({
                 role="radio"
                 aria-checked={d.severity === s}
                 onClick={() => setD({ ...d, severity: d.severity === s ? null : s })}
-                className={`w-full ${chip(d.severity === s)}`}
+                className={`w-full px-4 py-2 text-left ${chip(d.severity === s)}`}
               >
                 <span className="block">{SEVERITY_LABEL[s]}</span>
                 <span className={`block text-xs font-normal ${d.severity === s ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{SEVERITY_TEXT[s]}</span>
@@ -146,14 +146,7 @@ export function IllnessSheet({
               {error}
             </p>
           )}
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving || !d.startedOn}
-            className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-          >
-            Save sick period
-          </button>
+          <SubmitButton label="Save sick period" disabled={saving || !d.startedOn} onClick={save} />
           {d.id &&
             (confirmDelete ? (
               <button
