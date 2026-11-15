@@ -32,6 +32,7 @@ when the brief was written.
 | 11 | [Back navigation](back-navigation.md) (Back goes where you came from) | built on `fix/back-navigation` | no | yes (set pages' Back) |
 | 12 | [Plan tab redesign](plan-tab-redesign.md) (Cycles becomes Plan; four packages) | built on `feat/plan-redesign`, waiting for the owner's local test | no | no |
 | 13 | [Endurance journeys](endurance-journeys.md) (bike, run, swim, brick, rest; AI loop). Inputs: [session clarity](endurance-session-clarity.md), [audit](../../audit/endurance-journeys.md). Bike plan first: [bike sessions](bike-sessions.md), screens in `docs/design/endurance/bike-flow.html`. | planning, no build yet | yes (step model, JSON only) | yes (home today card) |
+| 14 | [One More item for the endurance pages](more-endurance-hub.md) (Thresholds, Athlete profile, Workouts and Nutrition behind one hub row) | plan, open decisions in section 7 | no | no |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.
