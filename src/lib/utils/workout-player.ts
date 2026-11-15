@@ -15,7 +15,7 @@ import { z } from "zod";
 
 // ── Input: a workout, as far as the player needs it ──────────────────────────
 
-export type PlayStepType = "warmup" | "work" | "recovery" | "cooldown" | "rest";
+export type PlayStepType = "warmup" | "work" | "recovery" | "steady" | "cooldown" | "rest";
 export type PlayEnd = { type: "time"; seconds: number } | { type: "distance"; meters: number } | { type: "lap" };
 export type PlayInputStep = { id?: string; type: PlayStepType; end: PlayEnd; sendOffSeconds?: number };
 export type PlayInputRepeat = { id?: string; type: "repeat"; count: number; steps: PlayInputStep[] };

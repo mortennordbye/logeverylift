@@ -21,7 +21,7 @@ import { DEFAULT_UNITS, METERS_PER_MILE, METERS_PER_YARD, type Units } from "@/l
 import { z } from "zod";
 
 export const WORKOUT_SPORTS = ["swim", "bike", "run"] as const;
-export const STEP_TYPES = ["warmup", "work", "recovery", "cooldown", "rest"] as const;
+export const STEP_TYPES = ["warmup", "work", "recovery", "steady", "cooldown", "rest"] as const;
 export const TARGET_METRICS = ["power", "hr", "pace", "cadence"] as const;
 export const TARGET_ANCHORS = ["ftp", "lthr", "max_hr", "threshold_pace", "css", "absolute"] as const;
 export const SWIM_STROKES = ["free", "back", "breast", "fly", "im", "choice", "kick", "pull", "drill"] as const;
@@ -43,6 +43,7 @@ export const WORKOUT_LIMITS = {
   meters: { min: 10, max: 300_000 },
   poolLengthM: { min: 10, max: 100 },
   sendOffSeconds: { min: 20, max: 600 },
+  gradePercent: { min: -20, max: 20 },
 } as const;
 
 /** Allowed target values per metric and anchor: percent of the anchor, or metric absolute units. */
@@ -98,7 +99,10 @@ const stepSchema = z.strictObject({
   type: z.enum(STEP_TYPES),
   end: endSchema,
   target: targetSchema.optional(),
+  /** A second target on another metric: "HR under 140" on a power step. */
+  secondary: targetSchema.optional(),
   cadence: rangeSchema.optional(),
+  gradePercent: z.number().min(WORKOUT_LIMITS.gradePercent.min).max(WORKOUT_LIMITS.gradePercent.max).optional(),
   sendOffSeconds: z.number().int().min(WORKOUT_LIMITS.sendOffSeconds.min).max(WORKOUT_LIMITS.sendOffSeconds.max).optional(),
   stroke: z.enum(SWIM_STROKES).optional(),
   equipment: z.array(z.enum(SWIM_EQUIPMENT)).max(SWIM_EQUIPMENT.length).optional(),
@@ -159,11 +163,12 @@ function targetIssues(t: WorkoutTarget, sport: WorkoutSport): { path: string[]; 
     if (t.offsetLow! > t.offsetHigh!) out.push({ path: ["offsetLow"], message: "must be at most offsetHigh" });
     return out;
   }
-  if (t.low === undefined || t.high === undefined) return [...out, { path: [], message: "give both low and high" }];
+  // One side only is allowed: "HR under 140" has no low.
+  if (t.metric === "pace" && (t.low === undefined || t.high === undefined)) return [...out, { path: [], message: "give both low and high for pace" }];
   for (const f of ["low", "high"] as const) {
-    if (t[f]! < range.min || t[f]! > range.max) out.push({ path: [f], message: `must be ${range.min}-${range.max} ${range.unit}` });
+    if (t[f] !== undefined && (t[f] < range.min || t[f] > range.max)) out.push({ path: [f], message: `must be ${range.min}-${range.max} ${range.unit}` });
   }
-  if (t.low! > t.high!) out.push({ path: ["low"], message: "must be at most high" });
+  if (t.low !== undefined && t.high !== undefined && t.low > t.high) out.push({ path: ["low"], message: "must be at most high" });
   return out;
 }
 
@@ -175,6 +180,13 @@ function isWholeLengths(meters: number, pool: number): boolean {
 function stepIssues(step: WorkoutStep, w: Workout, inRepeat: WorkoutRepeat | null): Issue[] {
   const out: Issue[] = [];
   if (step.target) for (const i of targetIssues(step.target, w.sport)) out.push({ path: ["target", ...i.path], message: i.message });
+  if (step.secondary) {
+    for (const i of targetIssues(step.secondary, w.sport)) out.push({ path: ["secondary", ...i.path], message: i.message });
+    if (!step.target) out.push({ path: ["secondary"], message: "needs a main target" });
+    else if (step.secondary.metric === step.target.metric) out.push({ path: ["secondary", "metric"], message: "must be another metric than the main target" });
+    if (step.secondary.metric === "cadence") out.push({ path: ["secondary", "metric"], message: "use the cadence field for cadence" });
+  }
+  if (step.gradePercent !== undefined && w.sport !== "bike") out.push({ path: ["gradePercent"], message: "gradePercent is only for bike" });
   if (step.cadence) {
     if (w.sport === "swim") out.push({ path: ["cadence"], message: "cadence is only for bike and run" });
     const r = TARGET_RANGE["cadence:absolute"];
@@ -310,8 +322,28 @@ export function anchorKind(t: WorkoutTarget, sport: WorkoutSport): ThresholdKind
   }
 }
 
+/**
+ * HR zones in bpm that override the % LTHR tables: Garmin CYCLING zones from
+ * the last sync, or the user's own. Five bands, zone 1 first; null is an open end.
+ */
+export type ZoneSet = { source: "garmin" | "custom"; hr: { low: number | null; high: number | null }[] };
+
+/** Where an HR zone's numbers come from, as the label shows it: "Garmin Z2", "Your Z2", "Z2 (estimate)". */
+export type ZoneSource = ZoneSet["source"] | "estimate";
+
+/** Every form of one target, so no screen does arithmetic. Null when the form does not apply. */
+export type ResolvedForms = {
+  watts: { low: number | null; high: number | null } | null;
+  pctFtp: { low: number | null; high: number | null } | null;
+  /** Coggan power zone of the range middle, 1-5. */
+  powerZone: number | null;
+  bpm: { low: number | null; high: number | null } | null;
+  hrZone: number | null;
+  hrZoneSource: ZoneSource | null;
+};
+
 /** A resolved target: metric bounds (W, bpm, m/s or rpm; null is open) and text in the user's units. */
-export type ResolvedTarget = { low: number | null; high: number | null; unit: "W" | "bpm" | "m/s" | "rpm"; text: string; missing: ThresholdKind | null };
+export type ResolvedTarget = { low: number | null; high: number | null; unit: "W" | "bpm" | "m/s" | "rpm"; text: string; missing: ThresholdKind | null; forms: ResolvedForms | null };
 
 const UNIT_OF = { power: "W", hr: "bpm", pace: "m/s", cadence: "rpm" } as const;
 
@@ -353,12 +385,13 @@ export function targetLabel(t: WorkoutTarget, sport: WorkoutSport, units: Units 
 }
 
 /** A target in watts, bpm, pace or rpm from the current thresholds. */
-export function resolveTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: ThresholdValues, units: Units = DEFAULT_UNITS): ResolvedTarget {
+export function resolveTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: ThresholdValues, units: Units = DEFAULT_UNITS, zones: ZoneSet | null = null): ResolvedTarget {
+  void zones;
   const unit = UNIT_OF[t.metric];
   const kind = anchorKind(t, sport);
   const anchor = kind ? thresholds[kind] : undefined;
   if (kind && anchor === undefined) {
-    return { low: null, high: null, unit, text: `${targetLabel(t, sport, units)} (no ${kind} set)`, missing: kind };
+    return { low: null, high: null, unit, text: `${targetLabel(t, sport, units)} (no ${kind} set)`, missing: kind, forms: null };
   }
 
   let low: number | null;
@@ -384,19 +417,20 @@ export function resolveTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds:
     const r = (n: number) => Math.round(n);
     text = low === null ? `up to ${r(high!)} ${unit}` : high === null ? `${r(low)} ${unit} or more` : r(low) === r(high) ? `${r(low)} ${unit}` : `${r(low)}-${r(high)} ${unit}`;
   }
-  return { low, high, unit, text, missing: null };
+  return { low, high, unit, text, missing: null, forms: null };
 }
 
-export type ResolvedStep = WorkoutStep & { resolved: ResolvedTarget | null };
+export type ResolvedStep = WorkoutStep & { resolved: ResolvedTarget | null; resolvedSecondary: ResolvedTarget | null };
 export type ResolvedNode = ResolvedStep | (Omit<WorkoutRepeat, "steps"> & { steps: ResolvedStep[] });
 
 /** Each step's target in the user's numbers, and the anchors the workout needs but the user has not set. */
-export function resolveWorkout(w: Workout, thresholds: ThresholdValues, units: Units = DEFAULT_UNITS): { steps: ResolvedNode[]; missingAnchors: ThresholdKind[] } {
+export function resolveWorkout(w: Workout, thresholds: ThresholdValues, units: Units = DEFAULT_UNITS, zones: ZoneSet | null = null): { steps: ResolvedNode[]; missingAnchors: ThresholdKind[] } {
   const missing = new Set<ThresholdKind>();
   const one = (s: WorkoutStep): ResolvedStep => {
-    const resolved = s.target ? resolveTarget(s.target, w.sport, thresholds, units) : null;
-    if (resolved?.missing) missing.add(resolved.missing);
-    return { ...s, resolved };
+    const resolved = s.target ? resolveTarget(s.target, w.sport, thresholds, units, zones) : null;
+    const resolvedSecondary = s.secondary ? resolveTarget(s.secondary, w.sport, thresholds, units, zones) : null;
+    for (const r of [resolved, resolvedSecondary]) if (r?.missing) missing.add(r.missing);
+    return { ...s, resolved, resolvedSecondary };
   };
   const steps = w.steps.map((n) => (n.type === "repeat" ? { ...n, steps: n.steps.map(one) } : one(n)));
   return { steps, missingAnchors: [...missing] };
@@ -411,6 +445,8 @@ export type WorkoutEstimate = {
   durationComplete: boolean;
   /** False when a lap step, or a time step with no known speed, leaves distance out. */
   distanceComplete: boolean;
+  /** Time in work steps with a target in zone 4 or above, or in a repeat's work steps. */
+  hardSeconds: number;
 };
 
 /** Mid speed of a pace target, when it resolves. */
@@ -423,7 +459,7 @@ function targetSpeed(s: WorkoutStep, sport: WorkoutSport, thresholds: ThresholdV
 
 /** Total time and distance, from the steps and, where a pace target resolves, its speed. */
 export function estimateWorkout(w: Workout, thresholds: ThresholdValues = {}): WorkoutEstimate {
-  const est: WorkoutEstimate = { durationSeconds: 0, distanceMeters: 0, durationComplete: true, distanceComplete: true };
+  const est: WorkoutEstimate = { durationSeconds: 0, distanceMeters: 0, durationComplete: true, distanceComplete: true, hardSeconds: 0 };
   const add = (s: WorkoutStep, times: number) => {
     const speed = targetSpeed(s, w.sport, thresholds);
     if (s.end.type === "lap") {
@@ -455,6 +491,7 @@ const STEP_WORD: Record<WorkoutStep["type"], string> = {
   warmup: "warm-up",
   work: "",
   recovery: "easy",
+  steady: "steady",
   cooldown: "cool-down",
   rest: "rest",
 };

@@ -113,8 +113,9 @@ export function sessionLoad(s: SessionLoadInput, anchors: LoadAnchors): SessionL
 // ── Planned load (estimate, endurance-app.md 6.2) ────────────────────────────
 
 /** Default IF when a step has no power or pace target. Inference. */
-export const DEFAULT_IF: Record<"warmup" | "work" | "recovery" | "cooldown" | "rest", number> = {
+export const DEFAULT_IF: Record<"warmup" | "work" | "recovery" | "steady" | "cooldown" | "rest", number> = {
   warmup: 0.65,
+  steady: 0.7,
   cooldown: 0.65,
   recovery: 0.55,
   work: 0.8,

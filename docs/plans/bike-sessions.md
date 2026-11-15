@@ -381,11 +381,13 @@ the same time.
 2. Types, with stub bodies: `ResolvedForms` (W, % FTP, power zone; bpm, HR zone and its label
    "Garmin Z2", "Your Z2" or "estimate"), `ZoneSet` (source and five bpm bands), `WorkoutGroup`
    (warm-up, main set, cool-down), `groupWorkout()`, and `hardSeconds` on `WorkoutEstimate`.
-   `resolveWorkout()` takes `{ units, zones }` as its third argument.
+   `resolveTarget()` and `resolveWorkout()` take `zones` as their last argument, and each
+   resolved step carries `resolvedSecondary`. A new step type `steady` (4.2, the editor's
+   type list).
 3. `src/lib/bike-numbers.ts` (*new*): `getBikeNumbers(userId)` returns `{ ftp: { value, basis,
    source, changedFrom }, watchFtp, zones }`. The stub reads the current FTP threshold only.
-4. `src/lib/garmin/after-sync.ts` (*new*): `afterActivitiesSynced(userId, activityIds)`, called
-   from the worker after activities and FIT files are stored. It calls two empty functions:
+4. `src/lib/garmin/after-sync.ts` (*new*): `afterActivitiesSynced(userId, now)`, called from
+   the worker after each tick, next to the metrics step. It calls two empty functions:
    `updateFtpEstimate` (S1) and `storePairings` (S5), each in its own file.
 5. Mount points on the session page, as empty components: `<FtpLine/>` (S1), `<AfterRide/>`
    (S5). S3 places them; their owners fill them.

@@ -173,7 +173,7 @@ describe("resolveWorkout", () => {
 
 describe("estimateWorkout", () => {
   it("adds time steps and marks a lap step as partial", () => {
-    expect(estimateWorkout(byName("3 × 10 min sweet spot"))).toEqual({ durationSeconds: 3600, distanceMeters: 0, durationComplete: false, distanceComplete: false });
+    expect(estimateWorkout(byName("3 × 10 min sweet spot"))).toEqual({ durationSeconds: 3600, distanceMeters: 0, durationComplete: false, distanceComplete: false, hardSeconds: expect.any(Number) });
   });
 
   it("uses send-offs for time and counts every length", () => {

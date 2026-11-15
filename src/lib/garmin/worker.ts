@@ -5,6 +5,7 @@ import { GarminError } from "./client";
 import { addDays } from "./dates";
 import { deleteGarminData } from "./delete-data";
 import { garminToday } from "./today";
+import { afterActivitiesSynced } from "./after-sync";
 import { metricsDue, runGarminMetricsStep } from "./metrics-job";
 import { syncGarminWeight } from "./weight-sync";
 import {
@@ -174,6 +175,7 @@ export async function runGarminWorkerTick(now = new Date()): Promise<TickResult>
       } catch (e) {
         console.error("[runGarminWorkerTick] metrics failed", { userId }, e instanceof Error ? e.message : "unknown");
       }
+      await afterActivitiesSynced(userId, now);
       try {
         await syncGarminWeight(userId);
       } catch (e) {

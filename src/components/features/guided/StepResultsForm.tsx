@@ -33,7 +33,7 @@ function rowsFrom(session: PlayerSession): PlannedRow[] {
     text: s.text,
     plannedSeconds: s.seconds,
     plannedMeters: s.plannedMeters,
-    target: s.targetText ? { low: s.targetLow, high: s.targetHigh, unit: (s.targetUnit ?? "W") as "W", text: s.targetText, missing: null } : null,
+    target: s.targetText ? { low: s.targetLow, high: s.targetHigh, unit: (s.targetUnit ?? "W") as "W", text: s.targetText, missing: null, forms: null } : null,
   }));
 }
 

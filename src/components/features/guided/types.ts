@@ -2,7 +2,7 @@
 
 import type { PlayStep } from "@/lib/utils/workout-player";
 
-export type StepType = "warmup" | "work" | "recovery" | "cooldown" | "rest";
+export type StepType = "warmup" | "work" | "recovery" | "steady" | "cooldown" | "rest";
 
 export type PlayerStepView = {
   key: string;
@@ -51,6 +51,7 @@ export const STEP_WORD: Record<StepType, string> = {
   warmup: "Warm-up",
   work: "Work",
   recovery: "Easy",
+  steady: "Steady",
   cooldown: "Cool-down",
   rest: "Rest",
 };
@@ -60,6 +61,7 @@ export const STEP_TONE: Record<StepType, string> = {
   warmup: "bg-amber-500/15",
   work: "bg-rose-500/15",
   recovery: "bg-emerald-500/15",
+  steady: "bg-teal-500/15",
   cooldown: "bg-sky-500/15",
   rest: "bg-muted",
 };
