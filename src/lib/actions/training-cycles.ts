@@ -21,7 +21,6 @@ import { declineDay, removeSlotInTx, rotationOverrides, skipAutoDay, upsertSlotI
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { liveCycles, liveProgramExercises, liveProgramSets, livePrograms, liveSlotProgram } from "@/lib/plan-live";
 import { OpenWorkoutError, PlanConflictError, PlanNotFoundError, PlanStateError, activateCycle, deleteCycles, liveSeasonId, planWrite, scheduleCycle, startDueScheduledCycle, type Tx } from "@/lib/plan-revisions";
-import { MAX_SCHEDULE_DAYS } from "@/lib/mcp/tools/cycles";
 import { userToday } from "@/lib/user-settings";
 import { ForbiddenError, assertOwner, requireSession } from "@/lib/utils/session";
 import {
@@ -43,7 +42,6 @@ import type {
   TrainingCycleWithSlots,
 } from "@/types/workout";
 import {
-  addDays,
   autoCompleteDue,
   autoDayKey,
   cycleWeek,
@@ -51,6 +49,7 @@ import {
   resolveRotation,
   toDateStr,
 } from "@/lib/utils/cycle-position";
+import { MAX_SCHEDULE_DAYS, startDayProblem } from "@/lib/utils/cycle-start";
 import { and, asc, eq, gte, inArray } from "drizzle-orm";
 import { SEASON_CYCLE_LENGTH, SEASON_CYCLE_RACE } from "@/lib/utils/seasons";
 import { revalidatePath } from "next/cache";
@@ -783,13 +782,11 @@ export async function startTrainingCycle(
   if (!parsed.success) return { success: false, error: "Invalid input" };
 
   try {
-    const today = await userToday(userId);
-    const todayStr = toDateStr(today);
+    const todayStr = toDateStr(await userToday(userId));
     const start = parsed.data.startDate ?? todayStr;
-    if (start < todayStr) return { success: false, error: "The start day is in the past" };
-    if (start > toDateStr(addDays(today, MAX_SCHEDULE_DAYS))) {
-      return { success: false, error: `The start day is more than ${MAX_SCHEDULE_DAYS} days ahead` };
-    }
+    const problem = startDayProblem(start, todayStr);
+    if (problem === "past") return { success: false, error: "The start day is in the past" };
+    if (problem === "too_far") return { success: false, error: `The start day is more than ${MAX_SCHEDULE_DAYS} days ahead` };
 
     let cycle: TrainingCycle;
     if (start > todayStr) {

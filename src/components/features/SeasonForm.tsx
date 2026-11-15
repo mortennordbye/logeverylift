@@ -121,7 +121,9 @@ export function SeasonForm(props: Props) {
         ? "Pick a race day from today on."
         : startDate !== "" && raceDate < startDate
           ? "Pick a race day on or after the season start."
-          : null;
+          : priority !== "A" && end !== "" && raceDate > end
+            ? "Pick a race day on or before the season end, or move the end."
+            : null;
   const valid =
     name.trim() !== "" &&
     startDate !== "" &&

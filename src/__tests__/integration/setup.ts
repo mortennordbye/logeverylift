@@ -39,7 +39,7 @@ vi.mock("@/lib/utils/session", async (importOriginal) => {
 });
 
 vi.mock("next/cache", () => ({
-  revalidatePath: () => {},
+  revalidatePath: vi.fn(),
   revalidateTag: () => {},
   updateTag: () => {},
   refresh: () => {},
