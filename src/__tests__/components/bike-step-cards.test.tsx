@@ -26,7 +26,7 @@ describe("StepCards", () => {
     expect(within(work).getByText(/^HR \d+-\d+ bpm/)).toBeTruthy();
     expect(within(work).getByText("Talk in short sentences")).toBeTruthy();
     expect(within(work).getByText("min · hard")).toBeTruthy();
-    expect(within(cards[0]).getByText("HR under 140 bpm")).toBeTruthy();
+    expect(cards[0].textContent).toContain("HR under 140 bpm · Garmin Z2");
     expect(within(cards[2]).queryByText(/rpm/)).toBeNull();
   });
 });
