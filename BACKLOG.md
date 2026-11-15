@@ -36,6 +36,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** An owner choice on shared vs per-phase programs; a grep for `String(err)` and `String(e)` in `src/lib/actions/` with the canonical error pattern from `CLAUDE.md`.
 - **Touchpoints:** `src/lib/actions/triathlon-plan.ts`, `src/lib/utils/triathlon-phases.ts`, `src/lib/actions/`.
 
+### Tests that build date labels without a year
+- **What:** Plan date labels now show the year when a date is not in the current year (`dayMonth`, `shortDay`, `rangeLabel`, with `thisYear()` in `src/lib/utils/date-label.ts`). Some tests still build the label they expect from the real clock with no year, for example `shortDay` in `e2e/did-you-do-it.spec.ts` and the date helpers in `e2e/cycle-detail.spec.ts`. When a run's dates cross into the next year (late December), these tests expect "Fri 1 Jan" and the app shows "Fri 1 Jan 2027".
+- **Why deferred:** Found at the end of the Plan redesign fix rounds; the test files the change touched pin the clock, the others do not, and no test fails before late December.
+- **Unblocked by:** Nothing. Make the helpers use the app's own label functions, or pin the browser and server clock in those specs; grep `toLocaleDateString` in `e2e/` and `src/__tests__/`.
+- **Touchpoints:** `e2e/did-you-do-it.spec.ts`, `e2e/cycle-detail.spec.ts`, `src/lib/utils/date-label.ts`.
+
 ### UI text outside the Plan tab that still uses colons
 - **What:** The owner's copy rule (no colons and no em dashes in user-facing text) is met in the Plan tab, but the change history and the assistant changes page still show names and lines with a colon:
   - `snapshotName` names a library workout "Workout: Tempo" (`src/lib/utils/plan-revisions.ts:96`) and an injury "Injury: left knee" (`src/lib/utils/plan-revisions.ts:93`). The names show on `/more/assistants/changes` (`getAssistantChanges` through `listAssistantChangeSets` in `src/lib/plan-revisions.ts`), and the injury name also goes into "Added injury: …" lines in `diffSnapshots`.
