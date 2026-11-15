@@ -110,6 +110,7 @@ describe("plannedLoad", () => {
   it("power zones and absolute watts", () => {
     close(stepIntensity("bike", { metric: "power", anchor: "ftp", zone: 2 }, anchors), 0.65);
     close(stepIntensity("bike", { metric: "power", anchor: "absolute", low: 200, high: 250 }, anchors), 0.9);
+    close(stepIntensity("bike", { metric: "power", anchor: "ftp", high: 61 }, anchors), 0.61);
     expect(stepIntensity("bike", { metric: "power", anchor: "ftp", zone: 9 }, anchors)).toBeNull();
     expect(stepIntensity("bike", { metric: "power", anchor: "absolute", low: 200, high: 250 }, {})).toBeNull();
   });

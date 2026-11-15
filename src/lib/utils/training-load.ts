@@ -139,7 +139,8 @@ export type PlannedStep = { type: keyof typeof DEFAULT_IF; seconds: number | nul
 /** IF of one step from its target, or null when the target gives none (heart rate, cadence, a missing anchor). */
 export function stepIntensity(sport: EnduranceSport, t: PlannedTarget | undefined, anchors: LoadAnchors): number | null {
   if (!t) return null;
-  const mid = t.low !== undefined && t.high !== undefined ? (t.low + t.high) / 2 : null;
+  // A one-sided range ("under 61% FTP") counts at its one side.
+  const mid = t.low !== undefined && t.high !== undefined ? (t.low + t.high) / 2 : (t.low ?? t.high ?? null);
   if (t.metric === "power" && sport === "bike") {
     if (t.anchor === "ftp") {
       if (t.zone !== undefined) {

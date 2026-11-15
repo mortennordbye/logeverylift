@@ -22,7 +22,8 @@ import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
 import { addDaysStr } from "@/lib/utils/seasons";
 import { CONSISTENCY_WEEKS, RETURN_RULE, SEE_DOCTOR_RULE, consistency, mondayOf, returnInfo } from "@/lib/utils/session-compliance";
-import { estimateWorkout, resolveWorkout } from "@/lib/utils/workout-steps";
+import { estimateWorkout, resolveWorkout, type Workout } from "@/lib/utils/workout-steps";
+import { getBikeNumbers } from "@/lib/bike-numbers";
 import { workoutPlannedLoad } from "@/lib/utils/step-results";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -82,17 +83,19 @@ export function registerWorkoutLibraryTools(server: McpServer, userId: string, c
       if ((workoutId == null) === (plannedSessionId == null)) return fail("Send workoutId or plannedSessionId");
       try {
         const [thresholds, { units }] = await Promise.all([thresholdValues(userId), getUserSettings(userId)]);
+        // The zone set holds cycling zones only.
+        const zonesFor = async (w: Workout) => (w.sport === "bike" ? (await getBikeNumbers(userId)).zones : null);
         if (workoutId != null) {
           const w = await getLibraryWorkout(userId, workoutId);
           if (!w) return fail("Workout not found");
-          const r = resolveWorkout(w.workout, thresholds, units);
+          const r = resolveWorkout(w.workout, thresholds, units, await zonesFor(w.workout));
           return ok({ ...w, resolvedSteps: r.steps, missingAnchors: r.missingAnchors, estimate: estimateWorkout(w.workout, thresholds), plannedLoad: plannedLoadOut(w.workout, thresholds) });
         }
         const s = await oneSession(userId, plannedSessionId!);
         if (!s) return fail("Planned session not found");
         if (!s.workout) return fail("That session runs a program, not a workout");
         const workout = storedWorkout(s.workout, s.id)!;
-        const r = resolveWorkout(workout, thresholds, units);
+        const r = resolveWorkout(workout, thresholds, units, await zonesFor(workout));
         return ok({ plannedSessionId: s.id, date: s.date, workout, summary: s.workoutSummary, resolvedSteps: r.steps, missingAnchors: r.missingAnchors, estimate: estimateWorkout(workout, thresholds), plannedLoad: plannedLoadOut(workout, thresholds) });
       } catch (e) {
         return failInternal("get_workout", e);

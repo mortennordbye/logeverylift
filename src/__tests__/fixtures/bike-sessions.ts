@@ -57,7 +57,7 @@ export const LONG_RIDE_WORKOUT = {
   name: "Long ride",
   description: "Steady, no surges. Practise eating: 40-60 g carbs per hour from 60 min.",
   steps: [
-    { type: "warmup", end: { type: "time", seconds: 15 * MIN }, target: { metric: "power", anchor: "ftp", low: 50, high: 67 }, secondary: { metric: "hr", anchor: "absolute", high: 140 } },
+    { type: "warmup", end: { type: "time", seconds: 15 * MIN }, target: { metric: "power", anchor: "ftp", low: 50, high: 66.7 }, secondary: { metric: "hr", anchor: "absolute", high: 140 } },
     { type: "steady", end: { type: "time", seconds: 45 * MIN }, target: { metric: "power", anchor: "ftp", low: 61, high: 72 }, secondary: { metric: "hr", anchor: "lthr", zone: 2 }, note: "No surges" },
     { type: "repeat", count: 3, steps: [{ type: "steady", end: { type: "time", seconds: 20 * MIN }, target: { metric: "power", anchor: "ftp", low: 61, high: 72 }, secondary: { metric: "hr", anchor: "lthr", zone: 2 }, note: EAT }] },
     { type: "steady", end: { type: "time", seconds: 10 * MIN }, target: { metric: "power", anchor: "ftp", low: 61, high: 72 }, secondary: { metric: "hr", anchor: "lthr", zone: 2 }, note: EAT },
