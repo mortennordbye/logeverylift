@@ -128,3 +128,21 @@ Garmin text on Account or Settings.
 11. **Simpler sync:** no generic field wrapper; the page passes the data it already loaded instead
     of the sync view reading it again. The two privacy switches become rows in the sections list.
     `setGarminSync` stops returning the unused weight.
+
+## 8. Grouped buttons instead of one long page (locked by the owner)
+
+This replaces decision 2.1 ("one page, no sub-pages"). The design is
+`docs/design/endurance/account-subpages.html` on `docs/endurance-journeys`.
+
+1. **Top Account page:** a card with the user's name and email, which opens Profile. Under it,
+   for Premium only, the "Sync from Garmin" row with its switch. Then a "You" group with three
+   buttons, each with a one-line summary: Goals and training, Body and health, Training numbers.
+   Then an "Account" group: Privacy and security, Your data. Then a Sign out button.
+2. **Sub-pages:** Profile (name, email, role, joined), Goals and training (the goal chips on the
+   page, strength goal, both levels, availability, athlete questions), Body and health, Training
+   numbers, Privacy and security, Your data. Each has Back to Account.
+3. **Same code shape:** each sub-page renders its section from the existing sections list with the
+   same loop, the same open-row value and the same sheet. A group button is one entry (title,
+   summary, route). No new editors.
+4. **Links:** `#body-profile` and `#training-numbers` anchors become the matching sub-page routes;
+   every link that pointed at an Account section points at its sub-page.
