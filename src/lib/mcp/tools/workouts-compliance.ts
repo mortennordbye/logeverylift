@@ -50,7 +50,7 @@ export function registerWorkoutLibraryTools(server: McpServer, userId: string, c
     "list_workouts",
     {
       description:
-        "The user's workout library: reusable structured endurance workouts. Each: id, name, sport, priority (null = derived), summary (one line in the user's units), estimate (durationSeconds, distanceMeters and whether each is complete), version. Filter by sport or search by name; deleted: true lists the recently deleted ones.",
+        "The user's workout library: reusable structured endurance workouts. Each: id, name, sport, priority (null = derived), summary (one line in the user's units), estimate (durationSeconds, distanceMeters and whether each is complete, hardSeconds), version. Filter by sport or search by name; deleted: true lists the recently deleted ones.",
       inputSchema: {
         sport: z.enum(["swim", "bike", "run"]).optional(),
         q: z.string().max(80).optional(),
@@ -74,7 +74,7 @@ export function registerWorkoutLibraryTools(server: McpServer, userId: string, c
     "get_workout",
     {
       description:
-        "One workout, from the library (workoutId) or a dated session (plannedSessionId): the JSON, the one-line summary, each step's target in the user's own numbers (watts, bpm, pace in their units) from their current thresholds, the estimate, missingAnchors (thresholds the workout needs that the user has not set), and plannedLoad ({value, partial}: an estimate from the targets, 100 = one hour at threshold; partial when a step had no power or pace target, inference).",
+        "One workout, from the library (workoutId) or a dated session (plannedSessionId): the JSON, the one-line summary, each step's target (resolved) and second target (resolvedSecondary) in the user's own numbers (watts, bpm, pace in their units) from their current thresholds, with forms (watts, pctFtp, powerZone, bpm, hrZone and hrZoneSource: garmin, custom or estimate; null where a form does not apply; null low or high is an open end), the estimate (with hardSeconds: time in work steps), missingAnchors (thresholds the workout needs that the user has not set), and plannedLoad ({value, partial}: an estimate from the targets, 100 = one hour at threshold; partial when a step had no power or pace target, inference).",
       inputSchema: { workoutId: z.number().int().positive().optional(), plannedSessionId: z.number().int().positive().optional() },
       annotations: { readOnlyHint: true, openWorldHint: false },
     },

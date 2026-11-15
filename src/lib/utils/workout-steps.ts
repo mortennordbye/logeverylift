@@ -363,6 +363,85 @@ function paceText(speed: number, sport: WorkoutSport, units: Units): string {
   return `${minSec(paceUnitMeters(measure, units) / speed)}${paceUnitLabel(measure, units)}`;
 }
 
+/** "60-72% FTP", "under 140 bpm", "110 W or more". Callers round. */
+function boundsText(low: number | null, high: number | null, suffix: string): string {
+  if (low === null) return `under ${high}${suffix}`;
+  if (high === null) return `${low}${suffix} or more`;
+  if (low === high) return `${low}${suffix}`;
+  return `${low}-${high}${suffix}`;
+}
+
+/** Zone of a value from the zone floors, zone 1 first; a null floor is open. */
+function zoneOf(value: number, bands: { low: number | null }[]): number {
+  let zone = 1;
+  bands.forEach((b, i) => {
+    if (b.low !== null && value >= b.low) zone = i + 1;
+  });
+  return zone;
+}
+
+/** The middle of a range, or its one side. */
+function middle(low: number | null, high: number | null): number | null {
+  return low !== null && high !== null ? (low + high) / 2 : (low ?? high);
+}
+
+const floors = (table: [number | null, number | null][]) => table.map(([low]) => ({ low }));
+
+/** The ZoneSet band of a bike HR zone target; ZoneSet holds cycling zones, so other sports use the % LTHR tables. */
+function zoneSetBand(t: WorkoutTarget, sport: WorkoutSport, zones: ZoneSet | null): { low: number | null; high: number | null } | null {
+  if (!zones || sport !== "bike" || t.metric !== "hr" || t.anchor !== "lthr" || t.zone === undefined) return null;
+  return zones.hr[t.zone - 1] ?? null;
+}
+
+function formsOf(t: WorkoutTarget, sport: WorkoutSport, low: number | null, high: number | null, thresholds: ThresholdValues, zones: ZoneSet | null): ResolvedForms {
+  const forms: ResolvedForms = { watts: null, pctFtp: null, powerZone: null, bpm: null, hrZone: null, hrZoneSource: null };
+  const round = (n: number | null) => (n === null ? null : Math.round(n));
+  if (t.metric === "power") {
+    const ftp = thresholds.ftp;
+    forms.watts = { low: round(low), high: round(high) };
+    if (ftp) {
+      const pct = (w: number | null) => (w === null ? null : (w / ftp) * 100);
+      forms.pctFtp = { low: round(pct(low)), high: round(pct(high)) };
+      const mid = middle(pct(low), pct(high));
+      forms.powerZone = t.anchor === "ftp" && t.zone !== undefined ? t.zone : mid === null ? null : zoneOf(mid, floors(POWER_ZONES));
+    }
+    return forms;
+  }
+  if (t.metric !== "hr") return forms;
+  forms.bpm = { low: round(low), high: round(high) };
+  const mid = middle(low, high);
+  if (zones && sport === "bike") {
+    forms.hrZone = t.anchor === "lthr" && t.zone !== undefined ? t.zone : mid === null ? null : zoneOf(mid, zones.hr);
+    forms.hrZoneSource = forms.hrZone === null ? null : zones.source;
+    return forms;
+  }
+  if (t.anchor === "lthr" && t.zone !== undefined) forms.hrZone = t.zone;
+  else {
+    const lthr = sport === "bike" ? thresholds.lthr_bike : sport === "run" ? thresholds.lthr_run : undefined;
+    if (lthr && mid !== null) forms.hrZone = zoneOf((mid / lthr) * 100, floors(sport === "bike" ? BIKE_HR_ZONES : RUN_HR_ZONES));
+  }
+  forms.hrZoneSource = forms.hrZone === null ? null : "estimate";
+  return forms;
+}
+
+/** "Garmin Z3", "Your Z3" or "Z3 (estimate)"; null when the target has no HR zone. */
+export function hrZoneLabel(forms: ResolvedForms | null): string | null {
+  if (!forms?.hrZone || !forms.hrZoneSource) return null;
+  if (forms.hrZoneSource === "garmin") return `Garmin Z${forms.hrZone}`;
+  if (forms.hrZoneSource === "custom") return `Your Z${forms.hrZone}`;
+  return `Z${forms.hrZone} (estimate)`;
+}
+
+/** "75-80% FTP" or "under 61% FTP"; null when the target is not power or FTP is not set. */
+export function pctFtpText(forms: ResolvedForms | null): string | null {
+  return forms?.pctFtp ? boundsText(forms.pctFtp.low, forms.pctFtp.high, "% FTP") : null;
+}
+
+/** "85-95 rpm". */
+export function cadenceText(c: { low: number; high: number }): string {
+  return boundsText(c.low, c.high, " rpm");
+}
+
 /** What the target says with no threshold: "88-93% FTP", "Z2 HR", "CSS +2 to +5 s/100m". */
 export function targetLabel(t: WorkoutTarget, sport: WorkoutSport, units: Units = DEFAULT_UNITS): string {
   if (t.zone !== undefined) return `Z${t.zone} ${t.metric === "power" ? "power" : "HR"}`;
@@ -370,7 +449,6 @@ export function targetLabel(t: WorkoutTarget, sport: WorkoutSport, units: Units 
     const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
     return `CSS ${sign(t.offsetLow)} to ${sign(t.offsetHigh!)} s/100m`;
   }
-  const range = (a: number, b: number, unit: string) => (a === b ? `${a}${unit}` : `${a}-${b}${unit}`);
   const label: Record<string, string> = {
     "power:ftp": "% FTP",
     "hr:lthr": "% LTHR",
@@ -379,24 +457,29 @@ export function targetLabel(t: WorkoutTarget, sport: WorkoutSport, units: Units 
     "pace:css": "% CSS",
   };
   const key = `${t.metric}:${t.anchor}`;
-  if (label[key]) return range(t.low!, t.high!, label[key]);
+  if (label[key]) return boundsText(t.low ?? null, t.high ?? null, label[key]);
   if (t.metric === "pace") return `${paceText(t.low!, sport, units)} to ${paceText(t.high!, sport, units)}`;
-  return range(t.low!, t.high!, ` ${UNIT_OF[t.metric]}`);
+  const text = boundsText(t.low ?? null, t.high ?? null, ` ${UNIT_OF[t.metric]}`);
+  // One side alone does not say which metric it is: "HR under 140 bpm".
+  return t.metric === "hr" && (t.low === undefined || t.high === undefined) ? `HR ${text}` : text;
 }
 
 /** A target in watts, bpm, pace or rpm from the current thresholds. */
 export function resolveTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: ThresholdValues, units: Units = DEFAULT_UNITS, zones: ZoneSet | null = null): ResolvedTarget {
-  void zones;
   const unit = UNIT_OF[t.metric];
   const kind = anchorKind(t, sport);
   const anchor = kind ? thresholds[kind] : undefined;
-  if (kind && anchor === undefined) {
+  const band = zoneSetBand(t, sport, zones);
+  if (!band && kind && anchor === undefined) {
     return { low: null, high: null, unit, text: `${targetLabel(t, sport, units)} (no ${kind} set)`, missing: kind, forms: null };
   }
 
   let low: number | null;
   let high: number | null;
-  if (t.offsetLow !== undefined) {
+  if (band) {
+    low = band.low;
+    high = band.high;
+  } else if (t.offsetLow !== undefined) {
     // A larger offset is slower: offsetHigh gives the low speed.
     low = cssOffsetSpeed(anchor!, t.offsetHigh!);
     high = cssOffsetSpeed(anchor!, t.offsetLow);
@@ -414,10 +497,9 @@ export function resolveTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds:
     const slow = low !== null ? paceText(low, sport, units) : null;
     text = fast && slow ? `${fast.replace(/\/.*$/, "")}-${slow}` : (fast ?? slow ?? "");
   } else {
-    const r = (n: number) => Math.round(n);
-    text = low === null ? `up to ${r(high!)} ${unit}` : high === null ? `${r(low)} ${unit} or more` : r(low) === r(high) ? `${r(low)} ${unit}` : `${r(low)}-${r(high)} ${unit}`;
+    text = boundsText(low === null ? null : Math.round(low), high === null ? null : Math.round(high), ` ${unit}`);
   }
-  return { low, high, unit, text, missing: null, forms: null };
+  return { low, high, unit, text, missing: null, forms: formsOf(t, sport, low, high, thresholds, zones) };
 }
 
 export type ResolvedStep = WorkoutStep & { resolved: ResolvedTarget | null; resolvedSecondary: ResolvedTarget | null };
@@ -445,7 +527,7 @@ export type WorkoutEstimate = {
   durationComplete: boolean;
   /** False when a lap step, or a time step with no known speed, leaves distance out. */
   distanceComplete: boolean;
-  /** Time in work steps with a target in zone 4 or above, or in a repeat's work steps. */
+  /** Time in work steps. */
   hardSeconds: number;
 };
 
@@ -461,6 +543,7 @@ function targetSpeed(s: WorkoutStep, sport: WorkoutSport, thresholds: ThresholdV
 export function estimateWorkout(w: Workout, thresholds: ThresholdValues = {}): WorkoutEstimate {
   const est: WorkoutEstimate = { durationSeconds: 0, distanceMeters: 0, durationComplete: true, distanceComplete: true, hardSeconds: 0 };
   const add = (s: WorkoutStep, times: number) => {
+    const before = est.durationSeconds;
     const speed = targetSpeed(s, w.sport, thresholds);
     if (s.end.type === "lap") {
       est.durationComplete = false;
@@ -475,12 +558,15 @@ export function estimateWorkout(w: Workout, thresholds: ThresholdValues = {}): W
       else if (speed) est.durationSeconds += (s.end.meters / speed) * times;
       else est.durationComplete = false;
     }
+    // Hard time counts every work step: the plan calls a Z3 tempo block hard, which isHardWorkout does not.
+    if (s.type === "work") est.hardSeconds += est.durationSeconds - before;
   };
   for (const n of w.steps) {
     if (n.type === "repeat") for (const s of n.steps) add(s, n.count);
     else add(n, 1);
   }
   est.durationSeconds = Math.round(est.durationSeconds);
+  est.hardSeconds = Math.round(est.hardSeconds);
   est.distanceMeters = Math.round(est.distanceMeters);
   return est;
 }
@@ -540,15 +626,17 @@ function hardTarget(t: WorkoutTarget, sport: WorkoutSport, thresholds: Threshold
   // The slow end, as for percent targets: a larger offset is slower (review 11).
   if (t.offsetHigh !== undefined) return t.offsetHigh <= HARD_FROM.cssOffset;
   if (t.metric === "cadence") return false;
+  // An "under" target has no floor, so it is never hard.
+  if (t.low === undefined) return false;
   let pct: number | null;
   if (t.anchor === "absolute") {
     const kind: ThresholdKind | null = t.metric === "power" ? "ftp" : t.metric === "hr" ? (sport === "bike" ? "lthr_bike" : sport === "run" ? "lthr_run" : null) : sport === "run" ? "run_threshold_pace" : sport === "swim" ? "swim_css" : null;
     const anchor = kind ? thresholds[kind] : undefined;
-    pct = anchor ? (t.low! / anchor) * 100 : null;
+    pct = anchor ? (t.low / anchor) * 100 : null;
   } else if (t.anchor === "max_hr") {
     return false;
   } else {
-    pct = t.low!;
+    pct = t.low;
   }
   if (pct === null) return false;
   if (t.metric === "power") return pct >= HARD_FROM.power;

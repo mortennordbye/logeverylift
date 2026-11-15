@@ -7,7 +7,17 @@ import type { Workout, WorkoutNode } from "@/lib/utils/workout-steps";
 
 export type WorkoutGroup = { kind: "warmup" | "main" | "cooldown"; nodes: WorkoutNode[] };
 
-/** Contract stub: the whole workout as one main group. S2 builds the real split. */
+/** Leading warm-up steps, then the main set, then trailing cool-down steps. An empty group is left out. */
 export function groupWorkout(w: Workout): WorkoutGroup[] {
-  return [{ kind: "main", nodes: w.steps }];
+  const nodes = w.steps;
+  let start = 0;
+  while (start < nodes.length && nodes[start].type === "warmup") start++;
+  let end = nodes.length;
+  while (end > start && nodes[end - 1].type === "cooldown") end--;
+  const groups: WorkoutGroup[] = [
+    { kind: "warmup", nodes: nodes.slice(0, start) },
+    { kind: "main", nodes: nodes.slice(start, end) },
+    { kind: "cooldown", nodes: nodes.slice(end) },
+  ];
+  return groups.filter((g) => g.nodes.length > 0);
 }

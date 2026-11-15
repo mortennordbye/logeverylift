@@ -18,6 +18,14 @@ export type PlayerStepView = {
   targetLow: number | null;
   targetHigh: number | null;
   targetUnit: string | null;
+  /** The main target as % FTP: "75-80% FTP"; null when it is not power or FTP is not set. */
+  pctFtpText: string | null;
+  /** The second target in the user's numbers: "141-160 bpm", "under 140 bpm". */
+  secondaryText: string | null;
+  /** HR zone of the second target: "Garmin Z3", "Your Z3", "Z3 (estimate)". */
+  secondaryZoneText: string | null;
+  /** "85-95 rpm". */
+  cadenceText: string | null;
   plannedMeters: number | null;
   /** "1000 m" in the user's units, for distance steps. */
   distanceText: string | null;

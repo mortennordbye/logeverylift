@@ -12,12 +12,25 @@ import type { PlayerSession, PlayerStepView } from "@/components/features/guided
 import { oneSession } from "@/lib/session-answers";
 import { storedWorkout, thresholdValues, type SessionCompliance } from "@/lib/session-compliance";
 import { getStepResults, type StepResultsView } from "@/lib/step-results";
+import { getBikeNumbers } from "@/lib/bike-numbers";
 import { getUserSettings } from "@/lib/user-settings";
 import { formatEnduranceDistance } from "@/lib/utils/format";
 import { plannedRows, workoutPlannedLoad, type PlannedRow } from "@/lib/utils/step-results";
 import type { Units } from "@/lib/utils/units";
 import { flattenWorkout, workoutHash } from "@/lib/utils/workout-player";
-import { estimateWorkout, resolveWorkout, type ThresholdValues, type Workout, type WorkoutEstimate, type WorkoutStep } from "@/lib/utils/workout-steps";
+import {
+  cadenceText,
+  estimateWorkout,
+  hrZoneLabel,
+  pctFtpText,
+  resolveTarget,
+  resolveWorkout,
+  type ThresholdValues,
+  type Workout,
+  type WorkoutEstimate,
+  type WorkoutStep,
+  type ZoneSet,
+} from "@/lib/utils/workout-steps";
 
 export type PlannedSessionView = {
   session: SessionCompliance;
@@ -36,22 +49,28 @@ export function distanceLabel(meters: number, sport: Workout["sport"], units: Un
   return formatEnduranceDistance(sport === "swim" ? "m" : "km", Math.round(meters), units);
 }
 
-export function playerSession(id: number, workout: Workout, anchors: ThresholdValues, units: Units): PlayerSession {
+export function playerSession(id: number, workout: Workout, anchors: ThresholdValues, units: Units, zones: ZoneSet | null = null): PlayerSession {
   const flat = flattenWorkout(workout);
   const rows = plannedRows(workout, anchors, units);
   const steps: PlayerStepView[] = flat.map((p, i) => {
     const step = p.step as WorkoutStep;
     const row = rows[i];
+    const main = step.target ? resolveTarget(step.target, workout.sport, anchors, units, zones) : null;
+    const second = step.secondary ? resolveTarget(step.secondary, workout.sport, anchors, units, zones) : null;
     return {
       key: p.key,
       type: step.type,
       round: p.round,
       seconds: p.seconds,
       text: row.text,
-      targetText: row.target?.text ?? null,
-      targetLow: row.target?.low ?? null,
-      targetHigh: row.target?.high ?? null,
-      targetUnit: row.target?.unit ?? null,
+      targetText: main?.text ?? null,
+      targetLow: main?.low ?? null,
+      targetHigh: main?.high ?? null,
+      targetUnit: main?.unit ?? null,
+      pctFtpText: pctFtpText(main?.forms ?? null),
+      secondaryText: second?.text ?? null,
+      secondaryZoneText: hrZoneLabel(second?.forms ?? null),
+      cadenceText: step.cadence ? cadenceText(step.cadence) : null,
       plannedMeters: row.plannedMeters,
       distanceText: step.end.type === "distance" ? distanceLabel(step.end.meters, workout.sport, units) : null,
       note: step.note ?? null,
@@ -68,16 +87,21 @@ export async function plannedSessionView(userId: string, id: number): Promise<Pl
   if (!session?.workout) return null;
   const workout = storedWorkout(session.workout, session.id);
   if (!workout) return null;
-  const [anchors, { units }, results] = await Promise.all([thresholdValues(userId), getUserSettings(userId), getStepResults(userId, { plannedSessionId: id })]);
+  const [anchors, { units }, results, zones] = await Promise.all([
+    thresholdValues(userId),
+    getUserSettings(userId),
+    getStepResults(userId, { plannedSessionId: id }),
+    workout.sport === "bike" ? getBikeNumbers(userId).then((b) => b.zones) : null,
+  ]);
   return {
     session,
     workout,
     units,
     rows: plannedRows(workout, anchors, units),
-    player: playerSession(id, workout, anchors, units),
+    player: playerSession(id, workout, anchors, units, zones),
     estimate: estimateWorkout(workout, anchors),
     plannedLoad: workoutPlannedLoad(workout, anchors),
-    missingAnchors: resolveWorkout(workout, anchors, units).missingAnchors,
+    missingAnchors: resolveWorkout(workout, anchors, units, zones).missingAnchors,
     results,
   };
 }
