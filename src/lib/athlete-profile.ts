@@ -52,7 +52,7 @@ import { userToday } from "@/lib/user-settings";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { cycleLoad, type TrainingPhase } from "@/lib/utils/periodization";
 import { DELETED_PLAN_RETENTION_DAYS } from "@/lib/utils/plan-revisions";
-import { agreesWithTest, currentThresholds, sameThresholdValue, testInputs, thresholdRangeError, valueFromTest } from "@/lib/utils/thresholds";
+import { THRESHOLDS_PER_KIND_MAX, agreesWithTest, currentThresholds, sameThresholdValue, testInputs, thresholdRangeError, valueFromTest } from "@/lib/utils/thresholds";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 export type AthleteProfile = typeof athleteProfiles.$inferSelect;
@@ -267,7 +267,7 @@ export type ProfileChange = {
  * Set any profile fields. Creates the profile on the first write. Throws
  * PlanConflictError on a stale version, PlanStateError with the switch off.
  */
-export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileChange, expectedVersion?: number) {
+export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileChange, expectedVersion?: number, takeGarmin = false) {
   await requireEndurance(ctx.userId);
   const set: Partial<typeof athleteProfiles.$inferInsert> = {};
   for (const k of ["enduranceLevel", "availableDays", "hoursPerWeek", "longestDayMinutes", "longDay", "strengthGoal"] as const) {
@@ -275,8 +275,9 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
   }
   if (set.availableDays) set.availableDays = [...new Set(set.availableDays)].sort((a, b) => a - b);
   if (change.completeInterview) set.interviewCompletedAt = new Date();
-  // Days or the long day set by anyone but the sync lock availability against Garmin; the sync skips it when locked.
-  const sourceBy = ctx.writer === "sync" ? "garmin" : "you";
+  // Days or the long day changed by anyone but the sync lock availability against Garmin; the sync skips it
+  // when locked. takeGarmin ("Use") stores Garmin's days and clears the lock in this same transaction.
+  const sourceBy = ctx.writer === "sync" || takeGarmin ? "garmin" : "you";
   const availabilityOn = change.availableDays !== undefined || change.longDay !== undefined ? toDateStr(await userToday(ctx.userId)) : null;
   const { result, versions } = await planWrite(ctx, async (w) => {
     // One profile per user: two first writes must not both insert.
@@ -324,11 +325,14 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
         .returning();
     }
     // After the touch, so the revision's before-snapshot keeps the earlier source.
-    if (availabilityOn) {
+    const before = existing && !existing.deletedAt ? existing : null;
+    const changed =
+      JSON.stringify(before?.availableDays ?? []) !== JSON.stringify(row.availableDays ?? []) || (before?.longDay ?? null) !== row.longDay;
+    if (availabilityOn && (changed || takeGarmin)) {
       const marked = await w.tx
         .update(users)
         .set({ fieldSources: withSource("availability", { by: sourceBy, on: availabilityOn }) })
-        .where(and(eq(users.id, ctx.userId), sourceBy === "garmin" ? notLocked("availability") : undefined))
+        .where(and(eq(users.id, ctx.userId), sourceBy === "garmin" && !takeGarmin ? notLocked("availability") : undefined))
         .returning({ id: users.id });
       if (marked.length === 0) throw new FieldLockedError("availability");
     }
@@ -422,9 +426,15 @@ export async function syncGarminThreshold(userId: string, kind: ThresholdKind, v
       .orderBy(desc(athleteThresholds.deletedAt))
       .limit(1);
     if (deleted && sameThresholdValue(kind, deleted.value, value)) return;
-    if (current?.measuredOn === today) {
-      await w.touch({ type: "threshold", id: current.id });
-      await w.tx.update(athleteThresholds).set({ value, updatedAt: new Date() }).where(eq(athleteThresholds.id, current.id));
+    // Today's Garmin row takes the new value; a kind at its row limit reuses its oldest Garmin row.
+    const oldestGarmin = live.filter((t) => t.source === "garmin").sort((a, b) => a.measuredOn.localeCompare(b.measuredOn) || a.id - b.id)[0];
+    const reuse = current?.measuredOn === today ? current : live.length >= THRESHOLDS_PER_KIND_MAX ? oldestGarmin : undefined;
+    if (reuse) {
+      await w.touch({ type: "threshold", id: reuse.id });
+      await w.tx
+        .update(athleteThresholds)
+        .set({ value, measuredOn: today, updatedAt: new Date() })
+        .where(and(eq(athleteThresholds.id, reuse.id), eq(athleteThresholds.source, "garmin")));
       return;
     }
     await assertAthleteRoom(w.tx, userId, "threshold", kind);
@@ -439,6 +449,8 @@ export type ThresholdChange = Partial<Omit<ThresholdInput, "kind">>;
 export async function changeThreshold(ctx: PlanWriteContext, id: number, change: ThresholdChange | "delete", expectedVersion?: number) {
   if (change !== "delete" && change.measuredOn) await assertNotFuture(ctx.userId, change.measuredOn);
   const { result, versions } = await planWrite(ctx, async (w) => {
+    // The Garmin sync reads and writes a kind under this lock, so it never writes over this change.
+    await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_threshold:${ctx.userId}`}))`);
     if (change === "delete") {
       await w.touch({ type: "threshold", id }, { action: "delete", expectedVersion });
       await w.tx.update(athleteThresholds).set({ deletedAt: new Date(), updatedAt: new Date() }).where(eq(athleteThresholds.id, id));

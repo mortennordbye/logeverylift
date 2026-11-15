@@ -1809,7 +1809,13 @@ async function restoreInSession(w: PlanWriteSession, rev: typeof planRevisions.$
   const snap = rev.snapshot as PlanSnapshot;
   if (isMemorySnapshot(snap)) return restoreMemoryTo(w, rev.objectId, snap, rev.id);
   if (isAthleteSnapshot(snap)) {
-    if (snap.availabilitySource !== undefined) await setAvailabilitySource(w.tx, w.ctx.userId, snap.availabilitySource);
+    // A snapshot from before sources were kept: days the user had count as set by them.
+    const days = snap.athlete.availableDays as number[] | null;
+    const { userToday } = await import("@/lib/user-settings");
+    const { toDateStr } = await import("@/lib/utils/cycle-position");
+    const source =
+      snap.availabilitySource !== undefined ? snap.availabilitySource : days?.length ? { by: "you" as const, on: toDateStr(await userToday(w.ctx.userId)) } : null;
+    await setAvailabilitySource(w.tx, w.ctx.userId, source);
     return restoreRowTo(w, "athlete", rev.objectId, snap.athlete, rev.id);
   }
   if (isThresholdSnapshot(snap)) return restoreRowTo(w, "threshold", rev.objectId, snap.threshold, rev.id);

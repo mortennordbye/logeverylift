@@ -7,7 +7,7 @@ import { setTimeZone } from "@/lib/actions/user-settings";
 import { addThreshold, changeThreshold, saveAthleteProfile } from "@/lib/athlete-profile";
 import { syncFromGarmin } from "@/lib/garmin/sync-from-garmin";
 import { THRESHOLDS_PER_KIND_MAX } from "@/lib/plan-revisions";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createUser } from "./factories";
 import { asUser } from "./setup";
@@ -132,15 +132,77 @@ describe("syncFromGarmin", () => {
     expect((await thresholds(user.id)).filter((t) => t.kind === "ftp")).toEqual([{ kind: "ftp", value: 270, source: "garmin" }]);
   });
 
-  it("keeps going when one threshold kind fails", async () => {
+  it("a kind at its row limit reuses its oldest Garmin row instead of failing", async () => {
     const user = await garminUser();
-    // FTP is full of older Garmin rows, so a new one is refused.
+    const day = (i: number) => new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10);
     await db.insert(athleteThresholds).values(
-      Array.from({ length: THRESHOLDS_PER_KIND_MAX }, (_, i) => ({ userId: user.id, kind: "ftp" as const, value: 200, measuredOn: new Date(Date.UTC(2025, 0, 1) + i * 86_400_000).toISOString().slice(0, 10), source: "garmin" as const })),
+      Array.from({ length: THRESHOLDS_PER_KIND_MAX }, (_, i) => ({ userId: user.id, kind: "ftp" as const, value: 200, measuredOn: day(i), source: "garmin" as const })),
     );
+    const [oldest] = (await live(user.id)).filter((t) => t.measuredOn === day(0));
     await syncFromGarmin(user.id);
-    const kinds = (await live(user.id)).filter((t) => t.value !== 200).map((t) => t.kind);
-    expect(kinds.sort()).toEqual(["lthr_run", "max_hr"]);
+    const ftp = (await live(user.id)).filter((t) => t.kind === "ftp");
+    expect(ftp).toHaveLength(THRESHOLDS_PER_KIND_MAX);
+    const [reused] = ftp.filter((t) => t.id === oldest.id);
+    expect(reused.value).toBe(262);
+    expect(reused.measuredOn).not.toBe(day(0));
+    expect((await live(user.id)).map((t) => t.kind).filter((k) => k !== "ftp").sort()).toEqual(["lthr_run", "max_hr"]);
+  });
+
+  it("never writes over a value the user changes while the sync runs", async () => {
+    const user = await garminUser();
+    await syncFromGarmin(user.id);
+    const [ftp] = (await live(user.id)).filter((t) => t.kind === "ftp");
+    garmin.ftp = 270;
+    let sync: Promise<void> | null = null;
+    // The user's change holds the row; the sync starts and has to wait for it.
+    await db.transaction(async (tx) => {
+      await tx.update(athleteThresholds).set({ source: "manual", value: 240 }).where(eq(athleteThresholds.id, ftp.id));
+      sync = syncFromGarmin(user.id);
+      await expect
+        .poll(async () => (await db.execute(sql`SELECT count(*)::int AS n FROM pg_locks WHERE NOT granted`)).rows[0].n, { timeout: 10_000 })
+        .toBeGreaterThan(0);
+    });
+    await sync;
+    const [after] = await db.select().from(athleteThresholds).where(eq(athleteThresholds.id, ftp.id));
+    expect([after.source, after.value]).toEqual(["manual", 240]);
+  });
+
+  it("a save that keeps the days and long day does not lock availability", async () => {
+    const user = await garminUser();
+    asUser(user.id, "admin");
+    await db.insert(athleteProfiles).values({ userId: user.id, availableDays: [1, 3, 6], longDay: 6, hoursPerWeek: 8 });
+    expect((await saveProfile({ availableDays: [1, 3, 6], longDay: 6, hoursPerWeek: 10, longestDayMinutes: 180 })).success).toBe(true);
+    expect(sourceBy(await me(user.id)).availability).toBeUndefined();
+    expect((await saveProfile({ availableDays: [2, 4], longDay: 4, hoursPerWeek: 10, longestDayMinutes: 180 })).success).toBe(true);
+    expect(sourceBy(await me(user.id)).availability).toBe("you");
+  });
+
+  it("Use on availability needs endurance, and clears the lock with the write", async () => {
+    const user = await garminUser();
+    asUser(user.id, "admin");
+    expect((await saveProfile({ availableDays: [2, 4], longDay: 4 })).success).toBe(true);
+    await db.update(users).set({ enduranceEnabled: false }).where(eq(users.id, user.id));
+    expect((await takeGarminField({ field: "availability" })).success).toBe(false);
+    expect(sourceBy(await me(user.id)).availability).toBe("you");
+
+    await db.update(users).set({ enduranceEnabled: true }).where(eq(users.id, user.id));
+    expect((await takeGarminField({ field: "availability" })).success).toBe(true);
+    expect(sourceBy(await me(user.id)).availability).toBe("garmin");
+    expect(await athlete(user.id)).toMatchObject({ availableDays: [1, 3, 6], longDay: 6 });
+  });
+
+  it("an undo to a snapshot without a source sets it from the restored days", async () => {
+    const user = await garminUser();
+    await saveAthleteProfile({ userId: user.id, writer: "user" }, { availableDays: [2, 4] });
+    await saveAthleteProfile({ userId: user.id, writer: "assistant", reason: "x", changeSetId: "mcp:old-snapshot" }, { availableDays: [1] });
+    // Snapshots written before sources were kept have no availabilitySource.
+    await db.execute(sql`UPDATE plan_revisions SET snapshot = snapshot - 'availabilitySource' WHERE user_id = ${user.id}`);
+    await db.update(users).set({ fieldSources: { availability: { by: "garmin", on: "2026-11-01" } } }).where(eq(users.id, user.id));
+
+    asUser(user.id, "admin");
+    expect((await undoPlanChangeSet({ changeSetId: "mcp:old-snapshot" })).success).toBe(true);
+    expect(await athlete(user.id)).toMatchObject({ availableDays: [2, 4] });
+    expect(sourceBy(await me(user.id)).availability).toBe("you");
   });
 
   it("a field the user set is locked; Use takes Garmin's value and unlocks it", async () => {
