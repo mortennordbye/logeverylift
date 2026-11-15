@@ -4,7 +4,8 @@
  * each with a home of its own instead of coach memory.
  *
  * - athlete_profiles: one row per user. Availability, endurance experience,
- *   the strength goal and when the intake interview was finished.
+ *   the strength goal, custom bike HR zones and when the intake interview
+ *   was finished.
  * - athlete_thresholds: one row per value, so the rows are the history.
  *   Stored metric: watts, bpm, and m/s for paces (pace ranges invert).
  * - athlete_injuries: injuries and limits, with their history.
@@ -76,6 +77,8 @@ export const athleteProfiles = pgTable(
     longDay: integer("long_day"),
     strengthGoal: text("strength_goal", { enum: STRENGTH_GOALS }),
     interviewCompletedAt: timestamp("interview_completed_at"),
+    // Custom bike HR zones: five { low, high } bands in bpm, zone 1 first. Null follows Garmin.
+    bikeHrZones: jsonb("bike_hr_zones").$type<{ low: number; high: number }[]>(),
     // Never set: the profile is not deleted. Here so the revision layer can treat it like other objects.
     deletedAt: timestamp("deleted_at"),
     version: integer("version").notNull().default(1),

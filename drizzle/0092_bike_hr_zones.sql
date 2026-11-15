@@ -1,0 +1,1 @@
+ALTER TABLE "athlete_profiles" ADD COLUMN "bike_hr_zones" jsonb;

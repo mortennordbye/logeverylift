@@ -337,6 +337,7 @@ const ATHLETE_FIELDS: Record<string, string> = {
   longestDayMinutes: "Longest day",
   longDay: "Long day",
   strengthGoal: "Strength goal",
+  bikeHrZones: "Bike HR zones",
   interviewCompletedAt: "Interview",
 };
 
@@ -348,6 +349,7 @@ function athleteValue(field: string, v: unknown): string {
   if (field === "hoursPerWeek") return `${Number(v)} h`;
   if (field === "strengthGoal") return String(v).replace("_", " ");
   if (field === "interviewCompletedAt") return "finished";
+  if (field === "bikeHrZones" && Array.isArray(v)) return v.map((b: { low: number; high: number }) => `${b.low}-${b.high}`).join(", ");
   return String(v);
 }
 

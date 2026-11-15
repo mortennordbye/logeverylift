@@ -161,7 +161,7 @@ export function GarminTrendsTab({ data }: { data: TrendsData }) {
   const garminVo2 = garminRun.at(-1) ?? garminBike.at(-1);
   const lthrGap = last?.lthrRun && last.watchLthr ? last.lthrRun - last.watchLthr : null;
   const headline = [
-    last?.ftp ? `Bike FTP about ${last.ftp} W.` : "No hard 20 minute ride with power in 90 days, so no FTP estimate.",
+    last?.ftp ? `Bike FTP about ${last.ftp} W.` : "No ride of 20 minutes or more with power in 90 days, so no FTP estimate.",
     last?.cs ? `Run critical speed ${paceTick(paceMin(last.cs))}/km.` : "",
     appVo2 ? `VO2 max ${appVo2.value} (app, runs to ${formatDateShort(appVo2.day)}) against ${garminRun.at(-1)?.value ?? "–"} (Garmin running).` : "",
   ]
@@ -180,7 +180,7 @@ export function GarminTrendsTab({ data }: { data: TrendsData }) {
       <p className="text-lg font-semibold leading-snug">{headline}</p>
 
       <div className="grid grid-cols-2 gap-2">
-        <Stat icon={Zap} label="FTP estimate" value={last?.ftp ? `${last.ftp} W` : "–"} sub={last?.cp ? `CP ${Math.round(last.cp)} W` : "95 % of best 20 min, 90 days"} />
+        <Stat icon={Zap} label="FTP estimate" value={last?.ftp ? `${last.ftp} W` : "–"} sub={last?.cp ? `CP ${Math.round(last.cp)} W` : "best of 95 % of 20 min, 60 min and CP"} />
         <Stat icon={Footprints} label="Critical speed" value={last?.cs ? `${paceTick(paceMin(last.cs))}/km` : "–"} sub="from 3 to 20 min bests" />
         <Stat icon={HeartPulse} label="LTHR, run" value={last?.lthrRun ? `${last.lthrRun} bpm` : "–"} sub={last?.watchLthr ? `watch uses ${Math.round(last.watchLthr)}${lthrGap !== null ? ` (${signed(lthrGap)})` : ""}` : null} />
         <Stat icon={Wind} label="VO2 max, app" value={appVo2 ? String(appVo2.value) : "–"} sub={garminVo2 ? `Garmin ${garminRun.length ? "running" : "cycling"} ${garminVo2.value}` : "from outdoor runs"} />
@@ -193,7 +193,7 @@ export function GarminTrendsTab({ data }: { data: TrendsData }) {
         <Card
           icon={Gauge}
           title="Thresholds over time"
-          note={`Each week from the ${THRESHOLD_DAYS} days before it. FTP is 95 % of the best 20 min power; CP and critical speed fit the 3, 5, 12 and 20 min bests and show only with 3 or more fresh efforts. LTHR is the mean heart rate of the last 20 min of your hardest 30, counted only at 85 % of max HR or more. A gap means no effort hard enough: test again.`}
+          note={`Each week from the ${THRESHOLD_DAYS} days before it. FTP is the highest of 95 % of the best 20 min power, the best 60 min power and CP; CP and critical speed fit the 3, 5, 12 and 20 min bests and show only with 3 or more fresh efforts. LTHR is the mean heart rate of the last 20 min of your hardest 30, counted only at 85 % of max HR or more. A gap means no effort hard enough: test again.`}
         >
           <Legend
             items={[

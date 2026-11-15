@@ -645,6 +645,13 @@
       "when": 1794700238815,
       "tag": "0091_season_replan_race_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 92,
+      "version": "7",
+      "when": 1794747295336,
+      "tag": "0092_bike_hr_zones",
+      "breakpoints": true
     }
   ]
 }
