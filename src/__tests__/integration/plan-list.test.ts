@@ -60,7 +60,7 @@ describe("loadPlanList", () => {
       ["Rest", null],
     ]);
     expect(data.upNext.map((r) => r.name)).toEqual(["Strength peak"]);
-    expect(data.upNext[0].starts).toMatch(/^Starts \d+ \w{3}$/);
+    expect(data.upNext[0].starts).toMatch(/^Starts \d+ \w{3}( \d{4})?$/);
     expect(data.past.map((r) => r.name)).toEqual(["Intro"]);
     expect(data.select.current.map((r) => r.id)).toEqual([rotation.id]);
   });

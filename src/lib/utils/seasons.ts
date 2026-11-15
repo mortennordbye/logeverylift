@@ -6,7 +6,7 @@
  */
 
 import type { PhaseType } from "@/lib/utils/periodization";
-import { dateLabel } from "@/lib/utils/date-label";
+import { dateLabel, thisYear, yearSuffix } from "@/lib/utils/date-label";
 
 export type RaceDiscipline = "triathlon" | "run" | "ride" | "swim" | "other";
 export type TriDistance = "full" | "half" | "olympic" | "sprint";
@@ -343,15 +343,20 @@ export function dayLabel(day: string): string {
 const WEEKDAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** `YYYY-MM-DD` as "Thu 14 Nov 2026": always with the year. */
+export function longDay(day: string): string {
+  return dateLabel(day, "EEE d MMM yyyy");
+}
+
 /**
- * `YYYY-MM-DD` as "Thu 14 Nov", by the calendar (no time zone). Written by
+ * `YYYY-MM-DD` as "Thu 14 Nov", or "Fri 1 Jan 2027" outside this year, by the calendar (no time zone). Written by
  * hand, not with Intl: engines format these options differently (Linux WebKit
  * gives "Thu, 14 Nov"), and client components render it on the server and in
  * the browser, which must agree for hydration.
  */
 export function shortDay(day: string): string {
   const d = new Date(`${day}T00:00:00Z`);
-  return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}`;
+  return `${WEEKDAY_SHORT[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_SHORT[d.getUTCMonth()]}${yearSuffix(day)}`;
 }
 
 /**
@@ -412,13 +417,19 @@ export function lengthField(p: { durationWeeks: number; durationDays: number | n
   return { length: String(p.durationDays != null ? p.durationDays / 7 : p.durationWeeks), unit: "weeks" };
 }
 
-/** Two days as a range: "16 Nov – 10 Jan", "17 – 26 Aug" in one month, or "28 May" for one day. */
+/**
+ * Two days as a range: "16 Nov – 10 Dec", "17 – 26 Aug" in one month, or
+ * "28 May" for one day. Ends in two years show both years ("6 Sep 2026 – 3 Sep
+ * 2027"); ends both in another year show it once at the end ("3 – 10 May 2027").
+ */
 export function rangeLabel(start: string, end: string): string {
-  const a = shortDay(start).slice(4);
-  const b = shortDay(end).slice(4);
-  if (start === end) return b;
-  if (start.slice(0, 7) === end.slice(0, 7)) return `${a.split(" ")[0]} – ${b}`;
-  return `${a} – ${b}`;
+  const dm = (d: string) => dateLabel(d, "d MMM");
+  const [ys, ye] = [Number(start.slice(0, 4)), Number(end.slice(0, 4))];
+  if (ys !== ye) return `${dm(start)} ${ys} – ${dm(end)} ${ye}`;
+  const year = ys === thisYear() ? "" : ` ${ye}`;
+  if (start === end) return `${dm(end)}${year}`;
+  if (start.slice(0, 7) === end.slice(0, 7)) return `${Number(start.slice(8))} – ${dm(end)}${year}`;
+  return `${dm(start)} – ${dm(end)}${year}`;
 }
 
 /** A phase length in words: "10 days" or "6 weeks". */

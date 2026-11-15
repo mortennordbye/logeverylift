@@ -30,7 +30,15 @@ import {
   type PhaseLike,
   type RaceLike,
 } from "@/lib/utils/seasons";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
+// A label shows the year of a date outside the current one (round 11 I2):
+// the clock stays in the year of the dates these tests use.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 /** docs/plans/seasons.md, section 5 (unit rows). */
 
@@ -307,10 +315,10 @@ describe("season history text", () => {
 
 describe("season row words (docs/design/plan-redesign/spec.md)", () => {
   it("shows a range with the month once when both days share it", () => {
-    expect(rangeLabel("2026-11-16", "2027-01-10")).toBe("16 Nov – 10 Jan");
-    expect(rangeLabel("2027-08-17", "2027-08-26")).toBe("17 – 26 Aug");
+    expect(rangeLabel("2026-11-16", "2026-12-10")).toBe("16 Nov – 10 Dec");
+    expect(rangeLabel("2026-11-17", "2026-11-26")).toBe("17 – 26 Nov");
     // A one-day phase is one day, not "28 – 28 May" (round 8).
-    expect(rangeLabel("2027-05-28", "2027-05-28")).toBe("28 May");
+    expect(rangeLabel("2026-11-28", "2026-11-28")).toBe("28 Nov");
   });
 
   it("shows a length as weeks or days", () => {

@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
+
 import { SeasonDetailClient, phaseAnnouncements, phaseDrop, type SeasonPhaseView } from "@/components/features/SeasonDetailClient";
 import type { DragEndEvent } from "@dnd-kit/core";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+// A label shows the year of a date outside the current one (round 11 I2):
+// the clock stays in the year of the dates these tests use.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-11-14T12:00:00Z"));
+});
+afterAll(() => vi.useRealTimers());
 
 /**
  * Season detail (J4_SeasonDetail): the re-plan banner, drag to reorder the
@@ -532,7 +541,7 @@ describe("phase length in weeks or days (fix round 4)", () => {
     fireEvent.click(within(screen.getAllByTestId("phase-row")[0]).getAllByRole("button")[1]);
     const sheet = screen.getByRole("region", { name: "Aerobic base + strength" });
     const text = () => sheet.textContent!.replace(/\u00a0/g, " ");
-    expect(text()).toContain("16 Nov – 10 Jan");
+    expect(text()).toContain("16 Nov 2026 – 10 Jan 2027");
     fireEvent.change(within(sheet).getByLabelText("Length"), { target: { value: "4" } });
     expect(text()).toContain("16 Nov – 13 Dec");
     fireEvent.click(within(sheet).getByRole("button", { name: "Days" }));
@@ -595,5 +604,17 @@ describe("the race sheet's choices (round 8)", () => {
     const pressed = Array.from(sheet.querySelectorAll('button[aria-pressed="true"]'));
     expect(pressed.map((b) => b.textContent)).toEqual(["Triathlon", "A"]);
     expect(pressed[1].className).toBe(pressed[0].className);
+  });
+});
+
+describe("dates across a year (round 11 I2)", () => {
+  it("a 52-week taper shows both years in its row and its sheet, so it does not read backwards", () => {
+    const long = [phase(1, "Long taper", "taper", "2026-09-06", "2027-09-03", 364)];
+    render(<SeasonDetailClient {...base} phases={long} next={null} taperFit={{ status: "fits", taperId: 1 }} />);
+    const row = screen.getByTestId("phase-row");
+    expect(within(row).getByTestId("phase-sub").textContent!.replace(/ /g, " ")).toContain("6 Sep 2026 – 3 Sep 2027");
+    fireEvent.click(within(row).getAllByRole("button")[1]);
+    const sheet = screen.getByRole("region", { name: "Long taper" });
+    expect(sheet.textContent!.replace(/ /g, " ")).toContain("6 Sep 2026 – 3 Sep 2027");
   });
 });
