@@ -205,9 +205,11 @@ async function BikeSession({ userId, id, v }: { userId: string; id: number; v: P
               Start guided
             </Link>
           )}
-          <Link href={`/planned/${id}/results`} className="min-h-12 rounded-2xl border border-border px-4 py-3 text-center text-base font-medium active:opacity-70">
-            {v.results ? "Step results" : done ? "Add step results" : "Log results by hand"}
-          </Link>
+          {session.garminActivityId == null && (
+            <Link href={`/planned/${id}/results`} className="min-h-12 rounded-2xl border border-border px-4 py-3 text-center text-base font-medium active:opacity-70">
+              {v.results ? "Step results" : done ? "Add step results" : "Log results by hand"}
+            </Link>
+          )}
         </div>
       </div>
     </div>

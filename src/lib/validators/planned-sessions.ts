@@ -30,7 +30,7 @@ export const plannedSessionOpSchema = z.discriminatedUnion("op", [
     notes: z.string().max(500).nullable().optional(),
   }),
   // Structured workouts and answers, endurance features only (docs/plans/workouts-and-compliance.md, 7).
-  // The other session operations (bricks, unmiss, update from library) are MCP only until the app has a control for them.
+  // Unmiss, update from library and priority go through sessionMenuOp (src/lib/actions/workout-editor.ts). Bricks are MCP only.
   z.object({ op: z.literal("set_workout"), id, workoutId: id }),
   z.object({ op: z.literal("miss"), id, reason: z.string().trim().max(200).nullable().optional() }),
   // "Not this activity" on the session page (docs/plans/bike-sessions.md, 5.5).
@@ -74,7 +74,7 @@ export const illnessOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("delete"), id }),
 ]);
 
-/** One change to a library workout from the app: the step editor waits for C6. */
+/** One change to a library workout from the app. Step edits go through saveEditedWorkout. */
 export const workoutOpSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("duplicate"), id }),
   z.object({ op: z.literal("rename"), id, name: z.string().trim().min(1).max(80) }),

@@ -51,7 +51,7 @@ export function distanceLabel(meters: number, sport: Workout["sport"], units: Un
 
 export function playerSession(id: number, workout: Workout, anchors: ThresholdValues, units: Units, zones: ZoneSet | null = null): PlayerSession {
   const flat = flattenWorkout(workout);
-  const rows = plannedRows(workout, anchors, units);
+  const rows = plannedRows(workout, anchors, units, zones);
   const steps: PlayerStepView[] = flat.map((p, i) => {
     const step = p.step as WorkoutStep;
     const row = rows[i];
@@ -97,7 +97,7 @@ export async function plannedSessionView(userId: string, id: number): Promise<Pl
     session,
     workout,
     units,
-    rows: plannedRows(workout, anchors, units),
+    rows: plannedRows(workout, anchors, units, zones),
     player: playerSession(id, workout, anchors, units, zones),
     estimate: estimateWorkout(workout, anchors),
     plannedLoad: workoutPlannedLoad(workout, anchors),

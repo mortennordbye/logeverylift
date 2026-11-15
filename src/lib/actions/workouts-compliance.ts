@@ -76,7 +76,7 @@ export async function manageIllness(data: unknown): Promise<ActionResult<{ id: n
   }
 }
 
-/** Duplicate, rename, delete or restore a library workout. The step editor waits for C6. */
+/** Duplicate, rename, delete or restore a library workout. Step edits go through saveEditedWorkout. */
 export async function manageWorkout(data: unknown): Promise<ActionResult<{ id: number }>> {
   const auth = await requireSession();
   const parsed = workoutOpSchema.safeParse(data);

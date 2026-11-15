@@ -452,6 +452,12 @@ export function PlannedSessionSheet({
           }
           title={s.summary ? `${s.name} · ${s.summary}` : s.name}
           sub={
+            s.programId == null && s.summary != null ? (
+              <Link href={`/planned/${s.id}`} className="flex items-center min-h-11 text-sm text-muted-foreground active:opacity-70">
+                {phaseLine ? `${phaseLine} ·\u00a0` : ""}
+                <span className="text-brand">Open session ›</span>
+              </Link>
+            ) :
             (phaseLine || s.programId != null) &&
             (s.programId != null ? (
               <Link href={`/programs/${s.programId}`} className="flex items-center min-h-11 text-sm text-muted-foreground active:opacity-70">

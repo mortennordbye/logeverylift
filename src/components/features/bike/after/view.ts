@@ -1,6 +1,7 @@
 /** Pure parts of the after-ride view (docs/plans/bike-sessions.md, 5.5 and 7.3). */
 
 import type { Workout, WorkoutStep } from "@/lib/utils/workout-steps";
+import { FTP_TEST_STEP_ID } from "@/lib/utils/workout-templates";
 
 /** "65 of 65 min"; null without both times. */
 export function minutesOf(doneSeconds: number | null, plannedSeconds: number | null): string | null {
@@ -20,12 +21,14 @@ export function carbsTarget(seconds: number): { low: number; high: number } {
 const FTP_TEST_SECONDS = 20 * 60;
 
 /**
- * The key of the 20 min all-out step of an FTP test (7.3): a 20 min work
- * step whose note says "all out", or the only 20 min work step of a workout
- * named as an FTP test. Null when the workout is not a test.
+ * The key of the 20 min all-out step of an FTP test (7.3): the template's
+ * step (id FTP_TEST_STEP_ID), a 20 min work or steady step whose note says
+ * "all out", or the only such step of a workout named as an FTP test.
  */
 export function ftpTestStepKey(workout: Workout, keyed: { key: string; step: WorkoutStep }[]): string | null {
-  const twenty = keyed.filter((k) => k.step.type === "work" && k.step.end.type === "time" && k.step.end.seconds === FTP_TEST_SECONDS);
+  const twenty = keyed.filter((k) => (k.step.type === "work" || k.step.type === "steady") && k.step.end.type === "time" && k.step.end.seconds === FTP_TEST_SECONDS);
+  const byId = twenty.find((k) => k.step.id === FTP_TEST_STEP_ID);
+  if (byId) return byId.key;
   const allOut = twenty.find((k) => /all[\s-]?out/i.test(k.step.note ?? ""));
   if (allOut) return allOut.key;
   return /ftp\s*test/i.test(workout.name) && twenty.length === 1 ? twenty[0].key : null;
