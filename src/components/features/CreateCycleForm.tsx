@@ -75,12 +75,13 @@ export function CreateCycleForm({
   const [customWeeks, setCustomWeeks] = useState(String(draft?.durationWeeks ?? 10));
   const weeks = moreLengths ? Number(customWeeks) : durationWeeks;
   const weeksOk = Number.isInteger(weeks) && weeks >= MIN_CYCLE_WEEKS && weeks <= MAX_CYCLE_WEEKS;
-  const [choice, setChoice] = useState<StartChoice>(() => {
+  const [choice, setChoice] = useState<StartChoice | null>(() => {
     // Every start drops a draft scheduled now (only one is scheduled at a
-    // time, scheduleCycle), so with one scheduled no start is chosen until the
-    // user picks one. While a cycle runs, a new one starts after it unless the
-    // user picks Today.
-    const c = start ? choiceFor(start, days) : scheduled && scheduled.id !== draft?.id ? "date" : days.afterCurrent ? "after" : "today";
+    // time, scheduleCycle), so with one scheduled no start is chosen, and no
+    // chip is pressed, until the user picks one (round 10). While a cycle
+    // runs, a new one starts after it unless the user picks Today.
+    if (!start && scheduled && scheduled.id !== draft?.id) return null;
+    const c = start ? choiceFor(start, days) : days.afterCurrent ? "after" : "today";
     return c === "after" && !days.afterCurrent ? "today" : c;
   });
   const [picked, setPicked] = useState(start && choiceFor(start, days) === "date" ? start : "");
@@ -89,7 +90,7 @@ export function CreateCycleForm({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const startDay = startDayFor(choice, days, picked);
+  const startDay = choice ? startDayFor(choice, days, picked) : null;
   const endsLine = startDay ? endsRunningLine(draft?.id ?? 0, runningOn(running, startDay)) : null;
   const dropsLine = startDay ? dropsScheduledLine(draft?.id ?? null, scheduled) : null;
   // Why Build the week is off, first missing thing first.

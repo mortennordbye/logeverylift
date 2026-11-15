@@ -194,7 +194,9 @@ describe("step 1: the basics", () => {
     const line = "Strength peak no longer starts Sun 13 Dec.";
     for (const props of [{ days: { ...days, afterCurrent: "2026-12-12" }, running }, { days }]) {
       const { unmount } = render(<CreateCycleForm {...props} scheduled={scheduled} />);
-      expect(screen.getByRole("button", { name: "Pick a date" }).getAttribute("aria-pressed")).toBe("true");
+      // No chip pressed and no empty date field: nothing looks chosen (round 10).
+      for (const chip of within(screen.getByRole("group", { name: "Start" })).getAllByRole("button")) expect(chip.getAttribute("aria-pressed")).toBe("false");
+      expect(screen.queryByLabelText("Start day")).toBeNull();
       expect(screen.queryByText(line)).toBeNull();
       expect(screen.queryByText(/^This ends/)).toBeNull();
       fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Base" } });
