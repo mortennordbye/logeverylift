@@ -5,8 +5,16 @@
  * Plain server code: callers resolve the user and check the endurance switch.
  */
 
-import { thresholdValues } from "@/lib/session-compliance";
+import { db } from "@/db";
+import { garminActivityMetrics, garminDays } from "@/db/schema";
+import { getAthleteProfile, listThresholds } from "@/lib/athlete-profile";
+import { garminCyclingBands } from "@/lib/garmin/analytics/thresholds";
+import { loadFtpEstimate } from "@/lib/garmin/ftp-estimate";
+import { userToday } from "@/lib/user-settings";
+import { ftpChangedFrom } from "@/lib/utils/bike-numbers";
+import { toDateStr } from "@/lib/utils/cycle-position";
 import type { ZoneSet } from "@/lib/utils/workout-steps";
+import { and, desc, eq, sql } from "drizzle-orm";
 
 export type BikeNumbers = {
   ftp: {
@@ -21,14 +29,60 @@ export type BikeNumbers = {
   watchFtp: number | null;
   /** Custom zones, else Garmin CYCLING zones; null means the % LTHR tables (estimate). */
   zones: ZoneSet | null;
+  /**
+   * The automatic estimate from the last 90 days of rides, also while a manual
+   * or test FTP pins it. Optional so other callers can build BikeNumbers without it.
+   */
+  estimate?: { value: number; basis: string } | null;
+  /** The Garmin CYCLING zones, also while custom zones override them. */
+  garminZones?: ZoneSet | null;
 };
 
-/** Contract stub: the current FTP threshold only. S1 builds the rest. */
 export async function getBikeNumbers(userId: string): Promise<BikeNumbers> {
-  const t = await thresholdValues(userId);
+  const today = toDateStr(await userToday(userId));
+  const [rows, estimate, profile, [watch], [snapshot]] = await Promise.all([
+    listThresholds(userId),
+    loadFtpEstimate(userId, today),
+    getAthleteProfile(userId),
+    db
+      .select({ ftp: sql<number>`(${garminActivityMetrics.metrics}->'thresholds'->>'ftp')::float8` })
+      .from(garminActivityMetrics)
+      .where(
+        and(
+          eq(garminActivityMetrics.userId, userId),
+          eq(garminActivityMetrics.sport, "bike"),
+          sql`${garminActivityMetrics.metrics}->'thresholds'->>'ftp' is not null`,
+        ),
+      )
+      .orderBy(desc(garminActivityMetrics.day), desc(garminActivityMetrics.garminActivityId))
+      .limit(1),
+    db
+      .select({ data: garminDays.data })
+      .from(garminDays)
+      .where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "hr_zones")))
+      .orderBy(desc(garminDays.calendarDate))
+      .limit(1),
+  ]);
+
+  const ftpRows = rows.filter((r) => r.kind === "ftp");
+  const cur = ftpRows[0];
+  const garminBands = garminCyclingBands(snapshot?.data);
+  const garminZones: ZoneSet | null = garminBands ? { source: "garmin", hr: garminBands } : null;
+  const custom = profile?.bikeHrZones;
+
   return {
-    ftp: t.ftp !== undefined ? { value: t.ftp, basis: null, source: "manual", changedFrom: null } : null,
-    watchFtp: null,
-    zones: null,
+    ftp: cur
+      ? {
+          value: cur.value,
+          // An automatic write keeps its basis in notes.
+          basis: cur.source === "garmin" ? cur.notes : null,
+          source: cur.source,
+          changedFrom: ftpChangedFrom(ftpRows, today),
+        }
+      : null,
+    watchFtp: watch?.ftp ?? null,
+    zones: custom?.length === 5 ? { source: "custom", hr: custom } : garminZones,
+    estimate,
+    garminZones,
   };
 }

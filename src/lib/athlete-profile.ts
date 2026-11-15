@@ -261,6 +261,8 @@ export type ProfileChange = {
   longestDayMinutes?: number | null;
   longDay?: number | null;
   strengthGoal?: StrengthGoal | null;
+  /** Five bike HR bands in bpm; null goes back to the Garmin zones. */
+  bikeHrZones?: { low: number; high: number }[] | null;
   completeInterview?: boolean;
 };
 
@@ -271,7 +273,7 @@ export type ProfileChange = {
 export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileChange, expectedVersion?: number) {
   await requireEndurance(ctx.userId);
   const set: Partial<typeof athleteProfiles.$inferInsert> = {};
-  for (const k of ["enduranceLevel", "availableDays", "hoursPerWeek", "longestDayMinutes", "longDay", "strengthGoal"] as const) {
+  for (const k of ["enduranceLevel", "availableDays", "hoursPerWeek", "longestDayMinutes", "longDay", "strengthGoal", "bikeHrZones"] as const) {
     if (change[k] !== undefined) (set as Record<string, unknown>)[k] = change[k];
   }
   if (set.availableDays) set.availableDays = [...new Set(set.availableDays)].sort((a, b) => a - b);
@@ -307,6 +309,7 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
           longestDayMinutes: null,
           longDay: null,
           strengthGoal: null,
+          bikeHrZones: null,
           interviewCompletedAt: null,
           ...set,
           deletedAt: null,

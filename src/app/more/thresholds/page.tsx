@@ -1,12 +1,13 @@
 import { ThresholdsClient } from "@/components/features/ThresholdsClient";
 import { getThresholdsData } from "@/lib/actions/athlete-profile";
+import { getBikeNumbersData } from "@/lib/actions/bike-numbers";
 import { DEFAULT_UNITS } from "@/lib/utils/units";
 
 import { BackLink } from "@/components/ui/BackLink";
 
 /** Thresholds (docs/plans/athlete-profile.md, 2.9): for every user (D15). */
 export default async function ThresholdsPage() {
-  const result = await getThresholdsData();
+  const [result, bike] = await Promise.all([getThresholdsData(), getBikeNumbersData()]);
   const data = result.success ? result.data : null;
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
@@ -30,6 +31,7 @@ export default async function ThresholdsPage() {
         suggestions={(data?.suggestions ?? []).map((s) => ({ kind: s.kind, value: s.value, basis: s.basis }))}
         units={data?.units ?? DEFAULT_UNITS}
         today={data?.today ?? new Date().toISOString().slice(0, 10)}
+        bike={bike.success ? bike.data : null}
       />
     </div>
   );

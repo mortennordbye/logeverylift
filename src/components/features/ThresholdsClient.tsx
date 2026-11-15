@@ -1,9 +1,13 @@
 "use client";
 
 import { ThresholdEditor, type SuggestionView } from "@/components/features/ThresholdEditor";
+import { BikeZonesEditor } from "@/components/features/bike/BikeZonesEditor";
+import { FtpChoice } from "@/components/features/bike/FtpSheet";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { THRESHOLD_KINDS, type ThresholdKind, type ThresholdSource } from "@/db/schema/athlete-profile";
 import { deleteThresholdValue, restoreThresholdValue } from "@/lib/actions/athlete-profile";
+import type { BikeNumbers } from "@/lib/bike-numbers";
+import { watchFtpNote } from "@/lib/utils/bike-numbers";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { THRESHOLD_LABEL, currentThresholds, formatThreshold, isStale, thresholdWarnings, weeksSince } from "@/lib/utils/thresholds";
 import type { Units } from "@/lib/utils/units";
@@ -22,7 +26,9 @@ const SOURCE_TEXT: Record<ThresholdSource, string> = {
 /**
  * The Thresholds screen (docs/plans/athlete-profile.md, 2.9), for every user:
  * one row per kind with the current value, then a sheet to enter a new value
- * or a field test, with the history.
+ * or a field test, with the history. With `bike`, the FTP row is automatic
+ * or set by hand (docs/plans/bike-sessions.md, section 3), and endurance users
+ * also get the bike HR zones.
  */
 export function ThresholdsClient({
   rows,
@@ -30,15 +36,18 @@ export function ThresholdsClient({
   suggestions,
   units,
   today,
+  bike = null,
 }: {
   rows: ThresholdView[];
   deleted: DeletedThresholdView[];
   suggestions: SuggestionView[];
   units: Units;
   today: string;
+  bike?: { numbers: BikeNumbers; endurance: boolean } | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState<ThresholdKind | null>(null);
+  const [zonesOpen, setZonesOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const current = currentThresholds(rows);
 
@@ -73,7 +82,10 @@ export function ThresholdsClient({
       <div className="space-y-2">
         {THRESHOLD_KINDS.map((kind) => {
           const c = current[kind];
-          const s = suggestions.find((x) => x.kind === kind);
+          // With bike numbers, the FTP row shows the automatic estimate instead of a suggestion.
+          const autoFtp = kind === "ftp" && bike !== null;
+          const s = autoFtp ? undefined : suggestions.find((x) => x.kind === kind);
+          const watch = autoFtp ? watchFtpNote(bike.numbers) : null;
           return (
             <button
               key={kind}
@@ -88,17 +100,44 @@ export function ThresholdsClient({
                 <span className="text-sm font-medium">{THRESHOLD_LABEL[kind]}</span>
                 <span className="text-sm">{c ? formatThreshold(kind, c.value, units) : "Not set"}</span>
               </div>
-              {c && (
+              {c && autoFtp && c.source === "garmin" ? (
+                <p className="mt-1 text-xs text-muted-foreground" data-testid="ftp-automatic">
+                  Automatic (from your rides){bike.numbers.ftp?.basis ? ` · ${bike.numbers.ftp.basis}` : ""}
+                </p>
+              ) : c && (
                 <p className="mt-1 text-xs text-muted-foreground">
                   {SOURCE_TEXT[c.source]} · {c.measuredOn}
                   {isStale(c.measuredOn, today) && ` · Last tested ${weeksSince(c.measuredOn, today)} weeks ago. Retest after a recovery week.`}
                 </p>
               )}
               {s && <p className="mt-1 text-xs text-primary">Garmin estimate: {formatThreshold(kind, s.value, units)}</p>}
+              {watch && (
+                <p className="mt-1 text-xs text-amber-600 dark:text-amber-400" data-testid="ftp-watch-note">
+                  {watch}
+                </p>
+              )}
             </button>
           );
         })}
       </div>
+
+      {bike?.endurance && (
+        <button
+          onClick={() => setZonesOpen(true)}
+          className="w-full text-left rounded-xl bg-card px-4 py-3 min-h-[44px] active:opacity-60"
+          data-testid="bike-hr-zones"
+        >
+          <div className="flex items-baseline justify-between gap-3">
+            <span className="text-sm font-medium">Bike HR zones</span>
+            <span className="text-sm">{bike.numbers.zones ? (bike.numbers.zones.source === "custom" ? "Your zones" : "Garmin zones") : "Not set"}</span>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {bike.numbers.zones
+              ? bike.numbers.zones.hr.map((b, i) => `Z${i + 1} ${b.low ?? ""}-${b.high ?? ""}`).join(" · ")
+              : "Bike targets use % of your bike LTHR until Garmin zones sync or you set your own."}
+          </p>
+        </button>
+      )}
 
       {warnings.map((w) => (
         <p key={w} className="text-sm text-amber-600 dark:text-amber-400" data-testid="threshold-warning">
@@ -133,16 +172,26 @@ export function ThresholdsClient({
         {open && (
           <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4 max-h-[85dvh] overflow-y-auto">
             <h2 className="text-lg font-semibold">{THRESHOLD_LABEL[open]}</h2>
-            <ThresholdEditor
-              key={open}
-              kind={open}
-              units={units}
-              suggestion={suggestions.find((s) => s.kind === open) ?? null}
-              onSaved={() => {
-                setOpen(null);
-                router.refresh();
-              }}
-            />
+            {open === "ftp" && bike ? (
+              <FtpChoice
+                numbers={bike.numbers}
+                onSaved={() => {
+                  setOpen(null);
+                  router.refresh();
+                }}
+              />
+            ) : (
+              <ThresholdEditor
+                key={open}
+                kind={open}
+                units={units}
+                suggestion={suggestions.find((s) => s.kind === open) ?? null}
+                onSaved={() => {
+                  setOpen(null);
+                  router.refresh();
+                }}
+              />
+            )}
             {history.length > 0 && (
               <section className="space-y-2">
                 <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">History</h3>
@@ -169,6 +218,23 @@ export function ThresholdsClient({
           </div>
         )}
       </BottomSheet>
+
+      {bike?.endurance && (
+        <BottomSheet open={zonesOpen} onClose={() => setZonesOpen(false)} blur>
+          {zonesOpen && (
+            <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4 max-h-[85dvh] overflow-y-auto">
+              <h2 className="text-lg font-semibold">Bike HR zones</h2>
+              <BikeZonesEditor
+                zones={bike.numbers.zones}
+                onSaved={() => {
+                  setZonesOpen(false);
+                  router.refresh();
+                }}
+              />
+            </div>
+          )}
+        </BottomSheet>
+      )}
     </div>
   );
 }

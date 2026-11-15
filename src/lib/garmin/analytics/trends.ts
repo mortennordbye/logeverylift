@@ -6,9 +6,11 @@
  * - Critical power and W' (and critical speed with D') by least squares.
  * - Thresholds week by week from the 90 days before: FTP, CP, critical
  *   speed, LTHR per sport.
+ * - The FTP estimate with its basis (docs/plans/bike-sessions.md, section 3).
  * - The app's VO2 max: the median of the run estimates of the last 42 days.
  */
 
+import { dateLabel } from "@/lib/utils/date-label";
 import { addDays, mondayOf } from "../dates";
 import type { Decoupling } from "./decoupling";
 import type { DynamicsBin, Efforts } from "./efforts";
@@ -72,8 +74,45 @@ export function criticalFit(points: CurvePoint[]): { cp: number; w: number; r2: 
 
 /** Days the threshold estimates look back (plan 2.8). */
 export const THRESHOLD_DAYS = 90;
-/** FTP = 0.95 x best 20 minute power. */
+/** One FTP candidate: 0.95 x best 20 minute power. */
 export const FTP_FACTOR = 0.95;
+
+export type FtpEstimate = {
+  value: number;
+  /** Which candidate won: 95 % of the best 20 min, the best 60 min, or critical power. */
+  from: "p20" | "p60" | "cp";
+  /** The ride of the best effort; null for critical power, which fits several. */
+  day: string | null;
+};
+
+/**
+ * FTP from a power curve: the highest of 95 % of the best 20 min, the best
+ * 60 min, and critical power. Null with none of them.
+ */
+export function ftpFromCurve(power: CurvePoint[]): FtpEstimate | null {
+  const p20 = power.find((p) => p.x === 1200);
+  const p60 = power.find((p) => p.x === 3600);
+  const cp = criticalFit(power)?.cp;
+  const candidates: FtpEstimate[] = [];
+  if (p20) candidates.push({ value: Math.round(p20.value * FTP_FACTOR), from: "p20", day: p20.day });
+  if (p60) candidates.push({ value: Math.round(p60.value), from: "p60", day: p60.day });
+  if (cp !== undefined) candidates.push({ value: Math.round(cp), from: "cp", day: null });
+  // Ties keep the first: a single ride is easier to read back than a fit.
+  return candidates.reduce<FtpEstimate | null>((best, c) => (!best || c.value > best.value ? c : best), null);
+}
+
+/** The FTP estimate from the rides in the 90 days up to `to` (YYYY-MM-DD). */
+export function ftpEstimate(acts: TrendActivity[], to: string): FtpEstimate | null {
+  const from = addDays(to, -(THRESHOLD_DAYS - 1));
+  return ftpFromCurve(curve(acts.filter((a) => a.sport === "bike"), "power", from, to));
+}
+
+/** "best 60 min on 10 Nov", "95 % of best 20 min on 3 Nov", "critical power, last 90 days". */
+export function ftpBasis(e: FtpEstimate): string {
+  if (e.from === "cp") return `critical power, last ${THRESHOLD_DAYS} days`;
+  const on = e.day ? ` on ${dateLabel(e.day, "d MMM")}` : "";
+  return e.from === "p60" ? `best 60 min${on}` : `95 % of best 20 min${on}`;
+}
 /**
  * A 30 minute effort counts for the LTHR estimate only at 85 % of max HR or
  * more. LTHR usually sits near 90 %; an easier session would pull the estimate
@@ -103,7 +142,6 @@ export function thresholdHistory(acts: TrendActivity[], from: string, to: string
     const run = window.filter((a) => a.sport === "run");
     const power = curve(bike, "power", start, end);
     const speed = curve(run, "speed", start, end);
-    const p20 = power.find((p) => p.x === 1200)?.value ?? null;
     const maxHr30 = (xs: TrendActivity[]) => {
       const v = xs
         .filter((a) => a.efforts.hr30 !== null && a.watchMaxHr && a.efforts.hr30 >= LTHR_MIN_SHARE_OF_MAX * a.watchMaxHr)
@@ -113,7 +151,7 @@ export function thresholdHistory(acts: TrendActivity[], from: string, to: string
     const watch = [...window].reverse().find((a) => a.watchLthr !== null)?.watchLthr ?? null;
     out.push({
       weekStart: w,
-      ftp: p20 !== null ? Math.round(p20 * FTP_FACTOR) : null,
+      ftp: ftpFromCurve(power)?.value ?? null,
       cp: criticalFit(power)?.cp ?? null,
       cs: criticalFit(speed)?.cp ?? null,
       lthrRun: maxHr30(run),

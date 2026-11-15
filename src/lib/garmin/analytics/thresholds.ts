@@ -56,3 +56,24 @@ export function thresholdsFor(input: { timeInZone: unknown; snapshot: unknown; i
   }
   return { maxHr: null, restHr: null, lthr: null, ftp: null, source: "none" };
 }
+
+/** Five HR bands in bpm, zone 1 first, as ZoneSet["hr"] holds them. */
+export type HrBands = { low: number; high: number }[];
+
+/**
+ * Zone floors to bands, as Garmin draws them: a zone ends 1 bpm under the next
+ * floor, and zone 5 ends at max HR.
+ */
+export function bandsFromFloors(floors: number[], maxHr: number): HrBands {
+  return floors.map((low, i) => ({ low, high: i + 1 < floors.length ? floors[i + 1] - 1 : maxHr }));
+}
+
+/** The CYCLING zones of an hr_zones snapshot as bands, or null when the snapshot lacks a floor or max HR. */
+export function garminCyclingBands(snapshot: unknown): HrBands | null {
+  const z = snapshotZones(snapshot, "CYCLING");
+  if (!z) return null;
+  const floors = [1, 2, 3, 4, 5].map((n) => num(z[`zone${n}Floor`]));
+  const max = num(z.maxHeartRateUsed);
+  if (max === null || floors.some((f) => f === null)) return null;
+  return bandsFromFloors(floors as number[], max);
+}

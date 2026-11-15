@@ -71,11 +71,13 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Thresholds:</strong> values you enter or get from a field test, such as your FTP, threshold heart
-          rate, maximum heart rate, threshold run pace and swim pace, each with its date, so you keep a history.
+          rate, maximum heart rate, threshold run pace and swim pace, each with its date, so you keep a history. If
+          Garmin is on for your account, the app also sets your FTP from your rides of the last 90 days after a sync,
+          unless you set it yourself.
         </li>
         <li>
           <strong>Athlete profile, if endurance features are on:</strong> the days and hours you can train, your
-          endurance experience, your strength goal, and injuries or physical limits you enter (where, what happens,
+          endurance experience, your strength goal, your own bike heart rate zones if you set them, and injuries or physical limits you enter (where, what happens,
           what to avoid, and whether it still hurts). Each change is kept as a version you can restore.
         </li>
         <li>
