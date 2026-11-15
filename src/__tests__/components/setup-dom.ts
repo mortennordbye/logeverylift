@@ -6,6 +6,8 @@ import { afterEach } from "vitest";
  *
  * - Testing Library only registers its cleanup itself when Vitest globals are
  *   on; they are off here, so unmount after each test explicitly.
+ * - jsdom has no `ResizeObserver` (a Plan sheet measures its footer with
+ *   one); a stub that never fires stands in.
  * - Node 25+ ships its own `localStorage` global, which is undefined without a
  *   storage file and shadows jsdom's. Point the globals at jsdom's storage.
  */
@@ -16,4 +18,12 @@ if (dom) {
   for (const key of ["localStorage", "sessionStorage"] as const) {
     Object.defineProperty(globalThis, key, { value: dom.window[key], configurable: true, writable: true });
   }
+}
+
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
 }

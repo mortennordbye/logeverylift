@@ -3,6 +3,7 @@
 import { HOME_UI } from "@/components/features/home/fonts";
 import { useSheetClose } from "@/components/ui/BottomSheet";
 import { X } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 /** The one Close button of every Plan sheet: 44 px, round, on the inner surface. */
 export function SheetCloseButton({ onClick, className = "" }: { onClick: () => void; className?: string }) {
@@ -31,7 +32,10 @@ export function SheetCloseButton({ onClick, className = "" }: { onClick: () => v
  * No part of it shrinks: a list that shrank scrolled inside the sheet, cut a
  * row in half and hid the actions under it (320 px). A `footer` (the main
  * actions, or the line that ends the sheet) stays pinned at the bottom of
- * the sheet while the rest scrolls under it, so it is always in view.
+ * the sheet while the rest scrolls under it, so it is always in view. The
+ * scroll area keeps a bottom scroll padding of the footer's height, so a row
+ * scrolled into view (a tap, a keyboard focus) ends above the footer, not
+ * under it (round 9 F1).
  */
 export function PlanSheetPanel({
   label,
@@ -54,12 +58,25 @@ export function PlanSheetPanel({
   testId?: string;
 }) {
   const close = useSheetClose();
+  const footerRef = useRef<HTMLDivElement>(null);
+  const [footerHeight, setFooterHeight] = useState(0);
+  const hasFooter = !!footer;
+  useLayoutEffect(() => {
+    const el = footerRef.current;
+    if (!el) return;
+    const measure = () => setFooterHeight(el.offsetHeight);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasFooter]);
   return (
     <section
       aria-label={label}
       data-testid={testId}
       data-plan-sheet=""
       className={`${HOME_UI} bg-widget rounded-t-[20px] px-4 pt-2 ${footer ? "" : "pb-8"} flex flex-col gap-3.5 max-h-[90dvh] overflow-y-auto overscroll-contain [&>*]:shrink-0`}
+      style={footer ? { scrollPaddingBottom: footerHeight } : undefined}
     >
       <span aria-hidden className="self-center w-10 h-[5px] rounded-full bg-muted-foreground/50" />
       <div className="flex items-start gap-3" data-testid="sheet-header">
@@ -72,7 +89,7 @@ export function PlanSheetPanel({
       </div>
       {children}
       {footer && (
-        <div data-testid="sheet-footer" className="sticky bottom-0 -mx-4 mt-auto flex flex-col gap-2 border-t border-hairline bg-widget px-4 pt-3 pb-[max(2rem,env(safe-area-inset-bottom))]">
+        <div ref={footerRef} data-testid="sheet-footer" className="sticky bottom-0 -mx-4 mt-auto flex flex-col gap-2 border-t border-hairline bg-widget px-4 pt-3 pb-[max(2rem,env(safe-area-inset-bottom))]">
           {footer}
         </div>
       )}
