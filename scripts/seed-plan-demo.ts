@@ -34,6 +34,9 @@ const EDGE = "plan-edge@demo.local";
 const EDGE2 = "plan-edge2@demo.local";
 const EMPTY = "plan-empty@demo.local";
 const LOCAL_HOSTS = new Set(["localhost", "127.0.0.1", "postgres"]);
+// Every demo user lives here. Dates and times are built in this zone, not the
+// zone the script runs in, so a run near midnight matches what the app shows.
+const DEMO_TZ = "Europe/Oslo";
 
 function assertLocal() {
   if (process.env.NODE_ENV === "production") throw new Error("Refusing to run with NODE_ENV=production");
@@ -60,6 +63,7 @@ async function main() {
   const { confirmDone, moveSuggestion } = await import("../src/lib/session-answers");
   const { mondayOf } = await import("../src/lib/utils/session-compliance");
   const { userToday } = await import("../src/lib/user-settings");
+  const { instantInZone } = await import("../src/lib/utils/user-date");
   const { toDateStr } = await import("../src/lib/utils/cycle-position");
   const { addDaysStr } = await import("../src/lib/utils/seasons");
   const { createTriathlonPlan } = await import("../src/lib/triathlon-plan");
@@ -92,7 +96,7 @@ async function main() {
         policySeenVersion: LEGAL_VERSION,
         termsAcceptedAt: new Date(),
         healthConsentAt: new Date(),
-        timeZone: "Europe/Oslo",
+        timeZone: DEMO_TZ,
         enduranceEnabled: endurance,
       })
       .where(eq(s.users.id, id));
@@ -213,7 +217,7 @@ async function main() {
   async function logWorkout(userId: string, programId: number, lifts: Lift[], date: string, plannedSessionId: number | null = null) {
     await writeLoggedSession(userId, {
       date,
-      start: new Date(`${date}T17:00:00`),
+      start: instantInZone(date, 17, 0, DEMO_TZ),
       programId,
       plannedSessionId,
       durationMinutes: 60,
