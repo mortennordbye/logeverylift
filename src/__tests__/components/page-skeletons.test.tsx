@@ -24,6 +24,13 @@ describe("loading skeletons", () => {
     expect(container.querySelector("svg.lucide-chevron-left")).toBeNull();
   });
 
+  it("cycle detail shows the round More actions spot, not Edit, as its page does", async () => {
+    const { default: Loading } = await import("@/app/cycles/[id]/loading");
+    const { container } = render(<Loading />);
+    expect(container.textContent).not.toMatch(/Edit/);
+    expect(container.querySelector('[data-testid="more-spot"]')?.className).toMatch(/\bh-11 w-11 rounded-full\b/);
+  });
+
   it.each([
     ["cycle", () => import("@/app/cycles/[id]/history/loading")],
     ["season", () => import("@/app/seasons/[id]/history/loading")],
