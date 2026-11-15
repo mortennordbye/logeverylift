@@ -12,7 +12,7 @@
  */
 
 import type { AnswerSession } from "@/components/features/answer-session";
-import { type ExerciseLine, ExerciseList, PickList, PlannedSessionSheet, sheetRow } from "@/components/features/PlannedSessionActions";
+import { type ExerciseLine, ExerciseList, KeyMark, PickList, PlannedSessionSheet, sheetRow } from "@/components/features/PlannedSessionActions";
 import { PlanSheetPanel, SectionLabel } from "@/components/features/PlanSheetPanel";
 import { DidYouDoItSheet } from "@/components/features/SessionAnswers";
 import type { LibraryRow } from "@/components/features/WorkoutsLibraryClient";
@@ -191,7 +191,7 @@ export function CycleWeek({
                   {/* Two lines, not one: a cut status line lost the sport at 320 px. */}
                   {sub && <span className="text-[13px] text-muted-foreground line-clamp-2 break-words" data-testid="week-row-sub">{sub}</span>}
                 </span>
-                {s.key && <span className="shrink-0 rounded-full px-2.5 py-0.5 ring-1 ring-inset ring-brand text-brand text-xs font-semibold">Key</span>}
+                {s.key && <KeyMark />}
                 {action && chevron}
               </>
             );
@@ -330,7 +330,7 @@ export function RotationOrder({
                 {r.n}
               </span>
               <span className="flex flex-col gap-0.5 min-w-0">
-                <span className={`text-[15px] font-medium line-clamp-2 break-words ${r.rest ? "text-foreground/80" : ""}`}>{r.name}</span>
+                <span className={`text-[15px] font-medium line-clamp-2 break-words ${r.mark === "skipped" ? "text-muted-foreground line-through" : r.rest ? "text-foreground/80" : ""}`}>{r.name}</span>
                 <span className={`text-[13px] ${next ? "text-brand" : "text-muted-foreground"}`}>{sub}</span>
               </span>
             </>
@@ -426,7 +426,9 @@ export function RotationSessionSheet({
 
   const up = row?.upcoming;
   const isToday = up?.date === today && up.status === "planned";
-  const when = isToday ? "Today" : row?.mark === "next" ? "Next" : row?.mark === "skipped" ? "Skipped" : "Later";
+  // A skipped turn names its reason, as its row and a skipped dated session do.
+  const skipReason = up?.skipReason?.trim();
+  const when = isToday ? "Today" : row?.mark === "next" ? "Next" : row?.mark === "skipped" ? (skipReason ? `Skipped · ${skipReason}` : "Skipped") : "Later";
   // A swapped turn says so, as its row does (J3-10).
   const label = row?.swapped ? `${when} · Swapped` : when;
 
@@ -492,7 +494,7 @@ export function RotationSessionSheet({
                       </span>
                     </button>
                     <button type="button" disabled={pending} onClick={() => run({ op: "skip" })} className={`${sheetRow} border-b-0`}>
-                      Skip this time
+                      Skip this session
                     </button>
                   </>
                 )}

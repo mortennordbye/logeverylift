@@ -127,6 +127,11 @@ export function PlannedSessionActions({
 
 export type ExerciseLine = { name: string; sets: string };
 
+/** The Key mark of a key session (endurance only): on its row and in its sheet. */
+export function KeyMark() {
+  return <span className="shrink-0 rounded-full px-2.5 py-0.5 ring-1 ring-inset ring-brand text-brand text-xs font-semibold">Key</span>;
+}
+
 /** A row of a sheet's action list: 52 px, a hairline under it, a chevron when it opens more. */
 export const sheetRow =
   "flex w-full items-center justify-between min-h-[52px] px-3.5 border-b border-hairline text-left text-[15px] font-medium active:bg-foreground/5 disabled:opacity-50";
@@ -223,6 +228,8 @@ export function PlannedSessionSheet({
   const router = useRouter();
   const [view, setView] = useState<"main" | "swap" | "workout" | "label">("main");
   const [moving, setMoving] = useState(false);
+  // The day picked in the move grid; Move to <day> then moves the session there.
+  const [picked, setPicked] = useState<string | null>(null);
   const [label, setLabel] = useState("");
   const [note, setNote] = useState("");
   const [pending, setPending] = useState(false);
@@ -233,6 +240,7 @@ export function PlannedSessionSheet({
     if (session && session.id !== last?.id) {
       setView("main");
       setMoving(false);
+      setPicked(null);
       setError(null);
     }
   }
@@ -261,8 +269,9 @@ export function PlannedSessionSheet({
   // A missed key session: the day home suggests, or why there is none (D19).
   const moveDay = s?.moveTo?.date ?? null;
   const moveReason = s?.moveTo && s.moveTo.date === null ? s.moveTo.reason : null;
+  // A key session is named only for the day picked (round 9 F6).
   const moveNote = [
-    otherKeys.length ? `${otherKeys.map(weekdayShort).join(", ")} ${otherKeys.length === 1 ? "has a key session" : "have key sessions"}.` : null,
+    picked && otherKeys.includes(picked) ? `${weekdayShort(picked)} has a key session.` : null,
     anyPast ? "You cannot pick a day in the past." : null,
   ]
     .filter(Boolean)
@@ -274,7 +283,12 @@ export function PlannedSessionSheet({
         <PlanSheetPanel
           label={`Session on ${sessionDayLabel(s.date, "")}`}
           testId="session-sheet"
-          kicker={<SectionLabel accent={isToday}>{state ? `${sessionDayLabel(s.date, today)} · ${state}` : sessionDayLabel(s.date, today)}</SectionLabel>}
+          kicker={
+            <span className="flex items-center gap-2">
+              <SectionLabel accent={isToday}>{state ? `${sessionDayLabel(s.date, today)} · ${state}` : sessionDayLabel(s.date, today)}</SectionLabel>
+              {s.key && <KeyMark />}
+            </span>
+          }
           title={s.summary ? `${s.name} · ${s.summary}` : s.name}
           sub={
             (phaseLine || s.programId != null) &&
@@ -301,6 +315,7 @@ export function PlannedSessionSheet({
 
           {view === "main" && (
             <>
+              {s.notes?.trim() && <p className="text-[15px] text-muted-foreground whitespace-pre-line break-words">{s.notes.trim()}</p>}
               {moveDay && (
                 <button
                   type="button"
@@ -324,7 +339,13 @@ export function PlannedSessionSheet({
               <div className="flex flex-col rounded-2xl bg-widget-2 overflow-hidden">
                 {s.status !== "skipped" && (
                   <>
-                    <button type="button" aria-expanded={moving} onClick={() => setMoving(!moving)} className={`${sheetRow} ${moving ? "border-b-0" : ""}`}>
+                    <button
+                      type="button"
+                      aria-expanded={moving}
+                      onClick={() => {
+                        setMoving(!moving);
+                        setPicked(null);
+                      }} className={`${sheetRow} ${moving ? "border-b-0" : ""}`}>
                       Move to another day
                       <span aria-hidden className={`text-muted-foreground transition-transform ${moving ? "rotate-180" : ""}`}>
                         ⌄
@@ -335,6 +356,7 @@ export function PlannedSessionSheet({
                         <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${week.length}, minmax(0, 1fr))` }}>
                           {week.map((d) => {
                             const current = d === s.date;
+                            const chosen = d === picked;
                             const key = otherKeys.includes(d);
                             const closed = d < today || d < firstDay || d > lastDay;
                             return (
@@ -342,22 +364,34 @@ export function PlannedSessionSheet({
                                 key={d}
                                 type="button"
                                 aria-label={`${weekdayShort(d)} ${dayMonth(d)}${current ? ", current day" : key ? ", key session" : ""}`}
-                                aria-pressed={current}
+                                aria-pressed={current || chosen}
                                 disabled={closed || current || pending}
-                                onClick={() => run({ op: "move", id: s.id, date: d })}
+                                onClick={() => setPicked(d)}
                                 className={`h-[52px] min-w-0 rounded-xl flex flex-col items-center justify-center gap-0.5 text-[13px] font-semibold active:opacity-70 ${
-                                  current
-                                    ? `${ACCENT_TINT} text-brand`
-                                    : `bg-widget ${key ? "ring-1 ring-inset ring-brand" : ""} ${closed ? "opacity-40" : ""}`
+                                  chosen
+                                    ? "bg-primary text-primary-foreground"
+                                    : current
+                                      ? `${ACCENT_TINT} text-brand`
+                                      : `bg-widget ${key ? "ring-1 ring-inset ring-brand" : ""} ${closed ? "opacity-40" : ""}`
                                 }`}
                               >
                                 <span>{weekdayShort(d)}</span>
-                                <span className={`text-[11px] font-medium ${current ? "text-brand" : "text-muted-foreground"}`}>{dayMonth(d).split(" ")[0]}</span>
+                                <span className={`text-[11px] font-medium ${chosen ? "text-primary-foreground" : current ? "text-brand" : "text-muted-foreground"}`}>{dayMonth(d).split(" ")[0]}</span>
                               </button>
                             );
                           })}
                         </div>
                         {moveNote && <span className="text-xs text-muted-foreground">{moveNote}</span>}
+                        {picked && (
+                          <button
+                            type="button"
+                            disabled={pending}
+                            onClick={() => run({ op: "move", id: s.id, date: picked })}
+                            className="flex h-11 items-center justify-center rounded-xl bg-primary text-[15px] font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50"
+                          >
+                            Move to {shortDay(picked)}
+                          </button>
+                        )}
                       </div>
                     )}
                     <button type="button" onClick={() => setView("swap")} className={sheetRow}>
@@ -401,7 +435,7 @@ export function PlannedSessionSheet({
                     Plan again
                   </button>
                 ) : (
-                  <button type="button" disabled={pending} onClick={() => run({ op: "skip", id: s.id })} className={`${sheetRow} border-b-0 text-destructive`}>
+                  <button type="button" disabled={pending} onClick={() => run({ op: "skip", id: s.id })} className={`${sheetRow} border-b-0`}>
                     Skip this session
                   </button>
                 )}
