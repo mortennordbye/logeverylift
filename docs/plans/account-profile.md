@@ -180,3 +180,23 @@ This replaces decision 2.1 ("one page, no sub-pages"). The design is
 8. **With "Sync from Garmin" off, every training number shows "Garmin says · Use"** when Garmin's
    estimate differs, so one estimate can be taken without turning the sync on. With the sync on,
    only locked numbers show it (6.4).
+
+## 11. Third review fixes and clean-up (locked by the owner)
+
+1. The e2e specs `seasons` and `plan-repeat-taps` seed endurance level and training days, not the
+   interview date.
+2. A training number with no stored value shows "Garmin says · Use" when Garmin has an estimate
+   (sync off), so 10.8 holds for empty numbers too.
+3. Every Account editor uses the shared `chip` and `SubmitButton`, including change password, sick
+   periods and the threshold editor. No copies.
+4. Remove what the interview removal left unused: the `interviewChangeSet` validator and the
+   `changeSetId` fields and props it fed, the `submitLabel` props, `localPath` and its test, exports
+   used only inside their file, and stale comments, test titles and docs that describe the in-app
+   interview.
+5. The athlete restore takes the `athlete_profile` advisory lock first, so it locks in the same order
+   as a profile save.
+6. The threshold sync reuses the current Garmin row when it is dated today or later.
+7. The gym picker's loading skeleton backs to Gyms.
+8. `saveAthleteProfile` uses the run's date instead of reading it again.
+9. The server refuses a triathlon plan without endurance level and training days.
+10. `addThresholdValue` accepts source `garmin` only for Premium users.
