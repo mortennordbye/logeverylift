@@ -241,8 +241,8 @@ export function phasesSkippedBy(timeline: TimelinePhase[], cycleId: number): num
 
 /**
  * A stored re-plan reason as the UI shows it: each "name" in curly quotes,
- * as every other name in the Plan UI. The stored reason keeps straight quotes
- * (src/lib/seasons.ts matches a race name in it by them).
+ * as every other name in the Plan UI. Stored reasons (replanReason) keep
+ * straight quotes, so rows already saved show the same.
  */
 export function curlyQuotes(text: string): string {
   return text.replace(/"([^"]*)"/g, "“$1”");
