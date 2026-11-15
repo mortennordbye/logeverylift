@@ -159,3 +159,24 @@ This replaces decision 2.1 ("one page, no sub-pages"). The design is
    read; a later migration removes it.
 5. Goals is a row that opens its chips in the sheet, like every other row (this replaces "the goal
    chips on the page" in 8.2). The inline-editor option on rows is gone.
+
+## 10. Second review fixes (locked by the owner)
+
+1. **Assistant writes lock too.** The MCP profile tool that sets time zone or units marks that
+   field "you" in the same statement, as the Settings actions do.
+2. **Availability locks only on a real change.** A save that leaves the days and the long day as
+   they are (for example a change of hours only) does not lock availability and stores no new
+   source.
+3. **A full threshold kind keeps syncing.** When a kind is at its row limit, the sync replaces the
+   oldest `garmin` row of that kind in the same transaction instead of failing.
+4. **"Use" on availability is one transaction:** clearing the lock and writing Garmin's value happen
+   together, and the endurance check comes first.
+5. **Undo to an old snapshot sets the source from the restored row:** "you" when it has days,
+   otherwise no source.
+6. **The sync updates a threshold row in place only while it is still `garmin`** (source in the
+   update's condition; no update when it changed).
+7. **Time zone syncs first,** and the sync reads the Garmin profile and today's date once and passes
+   them to each step.
+8. **With "Sync from Garmin" off, every training number shows "Garmin says · Use"** when Garmin's
+   estimate differs, so one estimate can be taken without turning the sync on. With the sync on,
+   only locked numbers show it (6.4).
