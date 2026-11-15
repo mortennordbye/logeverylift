@@ -124,9 +124,9 @@ describe("BodyOverview", () => {
     render(<BodyOverview data={data({ sex: null })} />);
     const vo2 = screen.getByRole("button", { name: /^VO2 max/ });
     expect(within(vo2).getByRole("img", { name: "51.0, not rated" })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /Want a rating\? Add your gender/ }).getAttribute("href")).toBe("/more/account#body-profile");
+    expect(screen.getByRole("link", { name: /Want a rating\? Add your gender/ }).getAttribute("href")).toBe("/more/account/body-and-health");
     fireEvent.click(vo2);
-    expect(within(screen.getByRole("dialog")).getByRole("link", { name: /Add your gender in Account/ }).getAttribute("href")).toBe("/more/account#body-profile");
+    expect(within(screen.getByRole("dialog")).getByRole("link", { name: /Add your gender in Account/ }).getAttribute("href")).toBe("/more/account/body-and-health");
   });
 });
 

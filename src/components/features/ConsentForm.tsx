@@ -41,7 +41,7 @@ export function ConsentForm() {
       </button>
       <p className="text-center text-sm text-muted-foreground">
         Don&apos;t agree?{" "}
-        <Link href="/more/account" className="text-primary">
+        <Link href="/more/account/your-data" className="text-primary">
           Download your data or delete your account
         </Link>
       </p>

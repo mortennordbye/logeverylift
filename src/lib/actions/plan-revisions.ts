@@ -56,7 +56,7 @@ function revalidateObject(type: PlanObjectType, id: number) {
     return;
   }
   if (type === "athlete" || type === "threshold" || type === "injury") {
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     return;
   }
   if (type === "season") {
@@ -152,7 +152,7 @@ export async function undoPlanChangeSet(data: unknown): Promise<ActionResult<{ o
     revalidatePath("/cycles");
     revalidatePath("/more/assistants/changes");
     revalidatePath("/more/coach-memory");
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     revalidatePath("/");
     return { success: true, data: done };
   } catch (e) {

@@ -111,7 +111,7 @@ export function InterviewClient({
       setError(r.error);
       return;
     }
-    router.push(localPath(next, "/more/account"));
+    router.push(localPath(next, "/more/account/goals-and-training"));
     router.refresh();
   }
 
@@ -125,7 +125,7 @@ export function InterviewClient({
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
       <div className="flex items-center justify-between px-4 pt-6 pb-2 shrink-0">
         {index === 0 ? (
-          <Link href="/more/account" className="min-h-[44px] flex items-center text-sm font-medium text-primary active:opacity-70">
+          <Link href="/more/account/goals-and-training" className="min-h-[44px] flex items-center text-sm font-medium text-primary active:opacity-70">
             Cancel
           </Link>
         ) : (

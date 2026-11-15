@@ -80,7 +80,7 @@ export async function setGarminSync(data: unknown): Promise<ActionResult<undefin
       .returning({ id: garminConnections.id });
     if (!conn) return { success: false, error: "Garmin is not connected" };
     if (parsed.data.enabled) await syncFromGarmin(auth.user.id);
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     revalidatePath("/more/metrics");
     revalidatePath("/settings");
     return { success: true, data: undefined };
@@ -100,7 +100,7 @@ export async function takeGarminField(data: unknown): Promise<ActionResult<undef
   if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
   try {
     if (!(await takeGarminValue(auth.user.id, parsed.data.field))) return { success: false, error: "Garmin has no value for this" };
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     revalidatePath("/settings");
     return { success: true, data: undefined };
   } catch (e) {

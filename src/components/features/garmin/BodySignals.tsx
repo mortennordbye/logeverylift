@@ -319,7 +319,7 @@ const NEEDS_TEXT: Record<RatingGap["needs"], string> = {
 const NEEDS_SHORT: Record<RatingGap["needs"], string> = { sex: "Want a rating? Add your gender", age: "Want a rating? Add your year of birth" };
 
 /** Account's Body & Goals section, where gender and year of birth are set. */
-const PROFILE_HREF = "/more/account#body-profile";
+const PROFILE_HREF = "/more/account/body-and-health";
 
 
 /** The small line under a signal's name. */

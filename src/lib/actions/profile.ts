@@ -54,7 +54,7 @@ export async function updateUserProfile(data: unknown): Promise<ActionResult<voi
       });
     }
 
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     revalidatePath("/more/metrics");
     return { success: true, data: undefined };
   } catch {
@@ -109,7 +109,7 @@ export async function logWeightEntry(data: unknown): Promise<ActionResult<Weight
       .set({ weightKg: parsed.data.weightKg })
       .where(eq(users.id, session.user.id));
     revalidatePath("/more/metrics");
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     return {
       success: true,
       data: { id, weightKg: parsed.data.weightKg, recordedAt: recordedAt.toISOString() },

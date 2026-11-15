@@ -32,6 +32,8 @@ describe("backLabelFor", () => {
     ["/more/garmin/activity/8", "Activity"],
     ["/settings", "Settings"],
     ["/more/account", "Account"],
+    ["/more/account/goals-and-training", "Goals and training"],
+    ["/more/account/your-data", "Your data"],
     ["/more/gyms", "Gym map"],
     ["/more/assistants", "Connected assistants"],
     ["/more/admin", "Admin"],

@@ -57,7 +57,7 @@ export async function setAiConsent(data: unknown): Promise<ActionResult<undefine
       .set({ aiConsentAt: parsed.data.consent ? new Date() : null })
       .where(eq(users.id, auth.user.id));
     revalidatePath("/more/ai-setup");
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     return { success: true, data: undefined };
   } catch (e) {
     console.error("[setAiConsent] failed", e);

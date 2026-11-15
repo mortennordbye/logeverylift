@@ -11,7 +11,7 @@ export default async function InterviewPage({ searchParams }: { searchParams: Pr
   const data = result.data;
   const { next } = await searchParams;
   // Only paths inside the app, never another site.
-  const back = localPath(next, "/more/account");
+  const back = localPath(next, "/more/account/goals-and-training");
   return (
     <InterviewClient
       race={data.race}

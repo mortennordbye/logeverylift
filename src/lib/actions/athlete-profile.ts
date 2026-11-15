@@ -54,7 +54,7 @@ function invalid(error: z.ZodError): ActionResult<never> {
 const ctxFor = (userId: string, changeSetId?: string): PlanWriteContext => ({ userId, writer: "user", changeSetId: changeSetId ?? null });
 
 function refresh() {
-  revalidatePath("/more/account");
+  revalidatePath("/more/account", "layout");
 }
 
 // ── Reads for the pages ──────────────────────────────────────────────────────
