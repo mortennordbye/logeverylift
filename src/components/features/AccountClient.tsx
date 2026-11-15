@@ -2,68 +2,20 @@
 
 import { authClient } from "@/lib/auth-client";
 import { exportMyData } from "@/lib/actions/account";
-import { setAiConsent } from "@/lib/actions/legal";
-import { updateActivityPrivacy } from "@/lib/actions/friends";
-import { setGarminWeightSync } from "@/lib/actions/garmin";
-import { updateUserProfile } from "@/lib/actions/profile";
-import type { Goal } from "@/lib/utils/goals";
-import { InvitedBadge } from "@/components/features/InvitedBadge";
+import { GROUPS, SECTIONS, type AccountData, type Row } from "@/components/features/account/sections";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { clearLocalUserData, unsyncedChangeCount } from "@/lib/utils/local-data";
 import { callAction } from "@/lib/utils/stale-bundle";
-import { CheckCircle2, ChevronRight, Download, KeyRound, LogOut, Trash2 } from "lucide-react";
+import { ChevronRight, Download, LogOut, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-type Gender = "male" | "female" | "other" | "prefer_not_to_say";
-type ExperienceLevel = "beginner" | "intermediate" | "advanced";
-
-interface UserProfile {
-  gender: Gender | null;
-  birthYear: number | null;
-  heightCm: number | null;
-  weightKg: number | null;
-  goals: Goal[];
-  experienceLevel: ExperienceLevel | null;
-}
-
 interface AccountClientProps {
-  name: string;
-  email: string;
-  role: string;
-  invited: boolean;
-  profile: UserProfile;
-  showActivityToFriends: boolean;
-  /** The Garmin weight sync switch; null hides it (Garmin not connected or not enabled). */
-  garminWeightSync: boolean | null;
-  aiConsent: boolean;
-  primaryGymName: string | null;
+  data: AccountData;
+  /** A sub-page id (SUB_PAGES), or null for the top page. */
+  page: string | null;
 }
-
-interface ProfileState extends UserProfile {
-  name: string;
-}
-
-const GOAL_LABELS: Record<Goal, string> = {
-  strength: "Strength",
-  muscle_gain: "Muscle Gain",
-  weight_loss: "Weight Loss",
-  endurance: "Endurance",
-  general_fitness: "General Fitness",
-};
-
-const EXPERIENCE_LABELS: Record<ExperienceLevel, string> = {
-  beginner: "Beginner",
-  intermediate: "Intermediate",
-  advanced: "Advanced",
-};
-
-const GENDER_LABELS: Record<Gender, string> = {
-  male: "Male",
-  female: "Female",
-  other: "Other",
-  prefer_not_to_say: "Prefer not to say",
-};
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
@@ -73,138 +25,98 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function PickerRow<T extends string>({
-  label,
-  value,
-  options,
-  labelMap,
-  onChange,
-}: {
-  label: string;
-  value: T | null;
-  options: T[];
-  labelMap: Record<T, string>;
-  onChange: (v: T | null) => void;
-}) {
+const text = (label: Row["label"], d: AccountData) => (typeof label === "string" ? label : label(d));
+
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+
+function Switch({ on }: { on: boolean }) {
   return (
-    <div className="px-4 py-3.5">
-      <p className="text-xs text-muted-foreground mb-2">{label}</p>
-      <div className="flex flex-wrap gap-2">
-        {options.map((opt) => (
-          <button
-            key={opt}
-            onClick={() => onChange(value === opt ? null : opt)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors active:opacity-70 ${
-              value === opt
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-transparent text-foreground border-border"
-            }`}
-          >
-            {labelMap[opt]}
-          </button>
-        ))}
-      </div>
+    <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-primary" : "bg-muted-foreground/30"}`}>
+      <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${on ? "translate-x-5" : "translate-x-0.5"}`} />
     </div>
   );
 }
 
-function GoalPickerRow({
-  values,
-  onChange,
+/** One row: a link, a switch, a button that opens the sheet, or a plain value; its note sits under it, outside the control. */
+function AccountRow({
+  row,
+  data,
+  on,
+  error,
+  onOpen,
+  onToggle,
 }: {
-  values: Goal[];
-  onChange: (v: Goal[]) => void;
+  row: Row;
+  data: AccountData;
+  on: boolean;
+  error: string | null;
+  onOpen: () => void;
+  onToggle: () => void;
 }) {
-  const options: Goal[] = ["strength", "muscle_gain", "weight_loss", "endurance", "general_fitness"];
-
-  function toggle(opt: Goal) {
-    if (values.includes(opt)) {
-      onChange(values.filter((v) => v !== opt));
-    } else {
-      onChange([...values, opt]);
-    }
+  const body = (
+    <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
+      <span className={`text-sm shrink-0 ${row.toggle ? "font-medium" : "text-muted-foreground"}`}>{text(row.label, data)}</span>
+      {row.value && <span className="min-w-0 text-sm font-medium text-right break-words">{row.value(data)}</span>}
+    </div>
+  );
+  const rowClass = "flex items-center gap-3 w-full px-4 min-h-[52px] py-3 text-left";
+  const testId = `account-${row.id}`;
+  let main = (
+    <div className={rowClass} data-testid={testId}>
+      {body}
+    </div>
+  );
+  if (row.href) {
+    main = (
+      <Link href={row.href} className={`${rowClass} active:opacity-60`} data-testid={testId}>
+        {body}
+        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+      </Link>
+    );
+  } else if (row.toggle) {
+    main = (
+      <button onClick={onToggle} role="switch" aria-checked={on} className={`${rowClass} active:opacity-60`} data-testid={testId}>
+        {body}
+        <Switch on={on} />
+      </button>
+    );
+  } else if (row.editor) {
+    main = (
+      <button onClick={onOpen} className={`${rowClass} active:opacity-60`} data-testid={testId}>
+        {body}
+        <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+      </button>
+    );
   }
-
+  const note = row.note?.(data);
   return (
-    <div className="px-4 py-3.5">
-      <p className="text-xs text-muted-foreground mb-2">Goals</p>
-      <div className="flex flex-wrap gap-2">
-        {options.map((opt) => {
-          const selected = values.includes(opt);
-          return (
-            <button
-              key={opt}
-              onClick={() => toggle(opt)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors active:opacity-70 ${
-                selected
-                  ? "bg-primary text-primary-foreground border-primary"
-                  : "bg-transparent text-foreground border-border"
-              }`}
-            >
-              {GOAL_LABELS[opt]}
-            </button>
-          );
-        })}
-      </div>
-      {values.length === 0 && (
-        <p className="text-xs text-muted-foreground mt-2">Select all that apply</p>
+    <div>
+      {main}
+      {note && (
+        <div className="px-4 pb-3 -mt-2 text-xs text-muted-foreground" data-testid={`${testId}-note`}>
+          {note}
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="px-4 pb-3 -mt-1 text-xs text-destructive">
+          {error}
+        </p>
       )}
     </div>
   );
 }
 
-function NumberRow({
-  label,
-  value,
-  unit,
-  placeholder,
-  onChange,
-}: {
-  label: string;
-  value: number | null;
-  unit: string;
-  placeholder: string;
-  onChange: (v: number | null) => void;
-}) {
-  return (
-    <div className="px-4 py-3.5 flex items-center gap-3">
-      <div className="flex-1 min-w-0">
-        <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          type="number"
-          inputMode="numeric"
-          placeholder={placeholder}
-          value={value ?? ""}
-          onChange={(e) => {
-            const v = e.target.value;
-            onChange(v === "" ? null : Number(v));
-          }}
-          className="w-20 rounded-lg bg-muted px-3 py-2 text-sm text-right outline-none focus:ring-2 ring-primary"
-        />
-        <span className="text-sm text-muted-foreground w-6">{unit}</span>
-      </div>
-    </div>
-  );
-}
-
-export function AccountClient({ name, email, role, invited, profile: initialProfile, showActivityToFriends: initialActivityPrivacy, aiConsent: initialAiConsent, primaryGymName, garminWeightSync: initialWeightSync }: AccountClientProps) {
-  const [weightSync, setWeightSync] = useState(initialWeightSync);
-  const [showPasswordSheet, setShowPasswordSheet] = useState(false);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordStatus, setPasswordStatus] = useState<"idle" | "saving" | "success" | "error">("idle");
-  const [passwordError, setPasswordError] = useState<string | null>(null);
-
-  const [profile, setProfile] = useState<ProfileState>({ ...initialProfile, name });
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileSaved, setProfileSaved] = useState(false);
-  const [profileError, setProfileError] = useState<string | null>(null);
-
-  const [activityPrivacy, setActivityPrivacy] = useState(initialActivityPrivacy);
-  const [aiConsent, setAiConsentState] = useState(initialAiConsent);
+export function AccountClient({ data, page }: AccountClientProps) {
+  const router = useRouter();
+  const [open, setOpen] = useState<string | null>(null);
+  const [flipping, setFlipping] = useState<string | null>(null);
+  const [toggleError, setToggleError] = useState<{ id: string; message: string } | null>(null);
 
   const [signOutWarning, setSignOutWarning] = useState<number | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -268,326 +180,145 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
     window.location.href = "/welcome";
   }
 
-  function closePasswordSheet() {
-    setShowPasswordSheet(false);
-    setPasswordStatus("idle");
-    setPasswordError(null);
-    setCurrentPassword("");
-    setNewPassword("");
-    setConfirmPassword("");
+  const visible = (r: Row) => !r.show || r.show(data);
+  const openRow = SECTIONS.flatMap((s) => s.rows).find((r) => r.id === open && visible(r)) ?? null;
+  const isOn = (r: Row) => r.toggle!.on(data) !== (flipping === r.id);
+
+  function done() {
+    setOpen(null);
+    router.refresh();
   }
 
-  async function handleChangePassword() {
-    if (newPassword !== confirmPassword) {
-      setPasswordError("Passwords don't match.");
-      return;
-    }
-    if (newPassword.length < 8) {
-      setPasswordError("Password must be at least 8 characters.");
-      return;
-    }
-    setPasswordStatus("saving");
-    setPasswordError(null);
-    const result = await authClient.changePassword({
-      currentPassword,
-      newPassword,
-      revokeOtherSessions: false,
-    });
-    if (result.error) {
-      setPasswordStatus("error");
-      setPasswordError(result.error.message ?? "Failed to change password.");
-    } else {
-      setPasswordStatus("success");
-      setTimeout(() => closePasswordSheet(), 1500);
-    }
-  }
-
-  async function handleSaveProfile() {
-    setProfileSaving(true);
-    setProfileError(null);
-    const { name: profileName, goals, ...bodyFields } = profile;
-    const result = await callAction(updateUserProfile({
-      ...bodyFields,
-      name: profileName.trim() || undefined,
-      goals: goals.length > 0 ? goals : null,
-    }));
-    setProfileSaving(false);
-    if (result.success) {
-      setProfileSaved(true);
-      setTimeout(() => setProfileSaved(false), 2000);
-    } else {
-      setProfileError(result.error ?? "Failed to save profile");
-    }
-  }
-
-  async function handleAiConsentToggle() {
-    const next = !aiConsent;
-    setAiConsentState(next);
-    const result = await callAction(setAiConsent({ consent: next }));
-    if (!result.success) setAiConsentState(!next);
-  }
-
-  async function handleWeightSyncToggle() {
-    if (weightSync === null) return;
-    const next = !weightSync;
-    setWeightSync(next);
-    const result = await callAction(setGarminWeightSync({ enabled: next }));
-    if (!result.success) setWeightSync(!next);
-    else if (result.data.weightKg !== null) setProfile((p) => ({ ...p, weightKg: result.data.weightKg }));
-  }
-
-  async function handleActivityPrivacyToggle() {
-    const next = !activityPrivacy;
-    setActivityPrivacy(next);
-    const result = await callAction(updateActivityPrivacy({ showActivityToFriends: next }));
-    if (!result.success) setActivityPrivacy(!next);
+  // The action revalidates the page, so the new value is in `data` once it resolves.
+  async function flip(r: Row) {
+    setFlipping(r.id);
+    setToggleError(null);
+    const result = await callAction(r.toggle!.set(!r.toggle!.on(data)));
+    setFlipping(null);
+    if (!result.success) setToggleError({ id: r.id, message: result.error });
+    router.refresh();
   }
 
   return (
     <>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 flex flex-col gap-6">
 
-        {/* Profile */}
-        <div>
-          <SectionLabel>Profile</SectionLabel>
-          <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
-            <label className="px-4 min-h-[52px] flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground shrink-0">Name</span>
-              <input
-                type="text"
-                value={profile.name}
-                onChange={(e) => setProfile((p) => ({ ...p, name: e.target.value }))}
-                placeholder="Your name"
-                className="flex-1 min-w-0 self-stretch bg-transparent text-sm font-medium text-right outline-none placeholder:text-muted-foreground"
-              />
-            </label>
-            <div className="px-4 min-h-[52px] flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground shrink-0">Email</span>
-              <span className="text-sm font-medium truncate">{email}</span>
+        {page === null && (
+          <Link href="/more/account/profile" className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-60" data-testid="account-me">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              {initials(data.name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold truncate">{data.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{data.email}</p>
             </div>
-            <div className="px-4 min-h-[52px] flex items-center justify-between gap-3">
-              <span className="text-sm text-muted-foreground shrink-0">Role</span>
-              <span className="text-sm font-medium capitalize">{role}</span>
-            </div>
-            {invited && (
-              <div className="px-4 min-h-[52px] flex items-center justify-between gap-3">
-                <span className="text-sm text-muted-foreground shrink-0">Joined</span>
-                <InvitedBadge compact />
-              </div>
-            )}
-          </div>
-        </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+          </Link>
+        )}
 
-        {/* Body & Goals; Garmin's ratings link here (#body-profile) for gender and year of birth. */}
-        <div id="body-profile" className="scroll-mt-20">
-          <SectionLabel>Body &amp; Goals</SectionLabel>
-          <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
-            <GoalPickerRow
-              values={profile.goals}
-              onChange={(v) => setProfile((p) => ({ ...p, goals: v }))}
-            />
-            <PickerRow
-              label="Experience level"
-              value={profile.experienceLevel}
-              options={["beginner", "intermediate", "advanced"]}
-              labelMap={EXPERIENCE_LABELS}
-              onChange={(v) => setProfile((p) => ({ ...p, experienceLevel: v }))}
-            />
-            <PickerRow
-              label="Gender"
-              value={profile.gender}
-              options={["male", "female", "other", "prefer_not_to_say"]}
-              labelMap={GENDER_LABELS}
-              onChange={(v) => setProfile((p) => ({ ...p, gender: v }))}
-            />
-            <NumberRow
-              label="Year of birth"
-              value={profile.birthYear}
-              unit=""
-              placeholder="1990"
-              onChange={(v) => setProfile((p) => ({ ...p, birthYear: v != null ? Math.round(v) : null }))}
-            />
-            <NumberRow
-              label="Height"
-              value={profile.heightCm}
-              unit="cm"
-              placeholder="180"
-              onChange={(v) => setProfile((p) => ({ ...p, heightCm: v != null ? Math.round(v) : null }))}
-            />
-            <NumberRow
-              label="Body weight"
-              value={profile.weightKg}
-              unit="kg"
-              placeholder="80"
-              onChange={(v) => setProfile((p) => ({ ...p, weightKg: v }))}
-            />
-            {weightSync !== null && (
-              <button onClick={handleWeightSyncToggle} role="switch" aria-checked={weightSync} className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60">
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium">Sync weight from Garmin</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Each Garmin weigh-in is added to your weight history, and body weight follows the newest entry.</p>
-                </div>
-                <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${weightSync ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                  <div className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${weightSync ? "translate-x-5" : "translate-x-0.5"}`} />
-                </div>
-              </button>
-            )}
-            <div className="px-4 py-3 flex flex-col gap-2">
-              <button
-                onClick={handleSaveProfile}
-                disabled={profileSaving || profileSaved}
-                className="w-full rounded-xl bg-primary py-3 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-              >
-                {profileSaved ? "Saved" : profileSaving ? "Saving…" : "Save"}
-              </button>
-              {profileError && (
-                <p className="text-xs text-destructive text-center">{profileError}</p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Security */}
-        <div>
-          <SectionLabel>Security</SectionLabel>
-          <div className="rounded-2xl bg-card overflow-hidden">
-            <button
-              onClick={() => setShowPasswordSheet(true)}
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
-            >
-              <KeyRound className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm font-medium">Change Password</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Privacy */}
-        <div>
-          <SectionLabel>Privacy</SectionLabel>
-          <div className="rounded-2xl bg-card overflow-hidden">
-            <button
-              onClick={handleActivityPrivacyToggle}
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
-            >
-              <div className="flex-1 text-left">
-                <p className="text-sm font-medium">Show workout activity to friends</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Friends can see your workouts, sets and streak</p>
-              </div>
-              <div
-                className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-                  activityPrivacy ? "bg-primary" : "bg-muted-foreground/30"
-                }`}
-              >
-                <div
-                  className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
-                    activityPrivacy ? "translate-x-5" : "translate-x-0.5"
-                  }`}
+        {/* The top page shows only the Garmin switch; a sub-page shows its own section. */}
+        {SECTIONS.filter((section) => section.id === (page ?? "garmin")).map((section) => {
+          const rows = section.rows.filter(visible);
+          if (rows.length === 0) return null;
+          return (
+            <div key={section.id} className="shrink-0 rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
+              {rows.map((r) => (
+                <AccountRow
+                  key={r.id}
+                  row={r}
+                  data={data}
+                  on={!!r.toggle && isOn(r)}
+                  error={toggleError?.id === r.id ? toggleError.message : null}
+                  onOpen={() => setOpen(r.id)}
+                  onToggle={() => flip(r)}
                 />
+              ))}
+            </div>
+          );
+        })}
+
+        {page === null &&
+          GROUPS.map((group) => (
+            <div key={group.title}>
+              <SectionLabel>{group.title}</SectionLabel>
+              <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
+                {group.buttons.map((b) => (
+                  <Link key={b.id} href={`/more/account/${b.id}`} className="flex items-center gap-3 px-4 min-h-[52px] py-3 active:opacity-60" data-testid={`account-group-${b.id}`}>
+                    <b.icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <span className="flex-1 text-sm font-medium">{b.title}</span>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </Link>
+                ))}
               </div>
-            </button>
-            <Link
-              href="/more/account/gym"
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 border-t border-border/50"
-            >
-              <div className="flex-1 text-left min-w-0">
-                <p className="text-sm font-medium">Primary gym</p>
-                <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                  {primaryGymName ? `${primaryGymName} · shown on the gym map` : "Not set · you're not on the gym map"}
-                </p>
-              </div>
-              <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-            </Link>
-            {/* Turning AI editing on happens in AI Setup, next to what it sends. */}
-            {initialAiConsent && (
-              <button
-                onClick={handleAiConsentToggle}
-                disabled={!aiConsent}
-                className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 border-t border-border/50"
-              >
-                <div className="flex-1 text-left">
-                  <p className="text-sm font-medium">AI editing</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {aiConsent
-                      ? "AI Setup can send your request to an outside model"
-                      : "Off. AI Setup will ask before the next AI edit"}
-                  </p>
-                </div>
-                <div
-                  className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${
-                    aiConsent ? "bg-primary" : "bg-muted-foreground/30"
-                  }`}
-                >
-                  <div
-                    className={`absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform ${
-                      aiConsent ? "translate-x-5" : "translate-x-0.5"
-                    }`}
-                  />
-                </div>
-              </button>
-            )}
-          </div>
-          <p className="text-xs text-muted-foreground px-1 mt-2">
+            </div>
+          ))}
+
+        {page === "privacy-and-security" && (
+          <p className="text-xs text-muted-foreground px-1 -mt-4">
             <a href="/privacy" className="text-primary">Privacy policy</a> ·{" "}
             <a href="/terms" className="text-primary">Terms of use</a>
           </p>
-        </div>
+        )}
 
-        {/* Your data */}
-        <div>
-          <SectionLabel>Your Data</SectionLabel>
-          <div className="rounded-2xl bg-card overflow-hidden">
-            <button
-              onClick={handleExport}
-              disabled={exporting}
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 disabled:opacity-50"
-            >
-              <Download className="w-5 h-5 text-muted-foreground" />
-              <div className="flex-1 text-left">
-                <p className="text-sm font-medium">{exporting ? "Preparing…" : "Download My Data"}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Everything stored about you, as a JSON file</p>
-              </div>
-            </button>
+        {page === "your-data" && (
+          <div>
+            <div className="rounded-2xl bg-card overflow-hidden">
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 disabled:opacity-50"
+              >
+                <Download className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium">{exporting ? "Preparing…" : "Download My Data"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Everything stored about you, as a JSON file</p>
+                </div>
+              </button>
+              <button
+                onClick={() => setShowDeleteSheet(true)}
+                className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 border-t border-border/50"
+              >
+                <Trash2 className="w-5 h-5 text-destructive" />
+                <span className="text-sm font-medium text-destructive">Delete Account</span>
+              </button>
+            </div>
+            {exportError && <p className="text-xs text-destructive text-center mt-2">{exportError}</p>}
           </div>
-          {exportError && <p className="text-xs text-destructive text-center mt-2">{exportError}</p>}
-        </div>
+        )}
 
-        {/* Sign out */}
-        <div>
-          <SectionLabel>Session</SectionLabel>
-          <div className="rounded-2xl bg-card overflow-hidden">
-            <button
-              onClick={handleSignOut}
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
-            >
-              <LogOut className="w-5 h-5 text-destructive" />
-              <span className="text-sm font-medium text-destructive">
-                {signOutWarning === null ? "Sign Out" : "Sign Out Anyway"}
-              </span>
-            </button>
+        {page === null && (
+          <div>
+            <div className="rounded-2xl bg-card overflow-hidden">
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
+              >
+                <LogOut className="w-5 h-5 text-destructive" />
+                <span className="text-sm font-medium text-destructive">
+                  {signOutWarning === null ? "Sign Out" : "Sign Out Anyway"}
+                </span>
+              </button>
+            </div>
+            {signOutWarning !== null && (
+              <p className="text-xs text-destructive px-1 mt-2">
+                {signOutWarning === 1 ? "1 change hasn't" : `${signOutWarning} changes haven't`} synced yet and will be
+                lost. Go back online first to keep {signOutWarning === 1 ? "it" : "them"}.
+              </p>
+            )}
           </div>
-          {signOutWarning !== null && (
-            <p className="text-xs text-destructive px-1 mt-2">
-              {signOutWarning === 1 ? "1 change hasn't" : `${signOutWarning} changes haven't`} synced yet and will be
-              lost. Go back online first to keep {signOutWarning === 1 ? "it" : "them"}.
-            </p>
-          )}
-        </div>
-
-        {/* Delete account */}
-        <div>
-          <div className="rounded-2xl bg-card overflow-hidden">
-            <button
-              onClick={() => setShowDeleteSheet(true)}
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
-            >
-              <Trash2 className="w-5 h-5 text-destructive" />
-              <span className="text-sm font-medium text-destructive">Delete Account</span>
-            </button>
-          </div>
-        </div>
+        )}
 
         <div aria-hidden="true" className="pb-nav-safe-lg" style={{ height: "var(--kb-height, 0px)" }} />
       </div>
+
+      <BottomSheet open={openRow !== null} onClose={() => setOpen(null)} blur>
+        {openRow?.editor && (
+          <div className="bg-background rounded-t-2xl px-4 pt-5 pb-8 space-y-4 max-h-[85dvh] overflow-y-auto">
+            <h2 className="text-lg font-semibold">{text(openRow.label, data)}</h2>
+            {openRow.editor(data, done)}
+          </div>
+        )}
+      </BottomSheet>
 
       {/* Delete Account Sheet */}
       <BottomSheet open={showDeleteSheet} onClose={closeDeleteSheet} blur>
@@ -641,70 +372,6 @@ export function AccountClient({ name, email, role, invited, profile: initialProf
         </div>
       </BottomSheet>
 
-      {/* Change Password Sheet */}
-      <BottomSheet open={showPasswordSheet} onClose={closePasswordSheet} blur>
-        <div className="bg-background rounded-t-2xl flex flex-col" style={{ maxHeight: "80dvh" }}>
-          <div className="flex items-center justify-between px-4 pt-5 pb-4 shrink-0">
-            <h2 className="text-lg font-semibold">Change Password</h2>
-            <button
-              onClick={closePasswordSheet}
-              className="text-primary text-sm font-medium min-h-[44px] px-1"
-            >
-              Cancel
-            </button>
-          </div>
-
-          <div className="overflow-y-auto flex flex-col gap-4 px-4 pb-10">
-            {passwordStatus === "success" ? (
-              <div className="flex flex-col items-center gap-3 py-6">
-                <CheckCircle2 className="w-12 h-12 text-green-500" />
-                <p className="text-base font-semibold">Password updated</p>
-              </div>
-            ) : (
-              <>
-                <div className="flex flex-col gap-3">
-                  <input
-                    type="password"
-                    autoComplete="current-password"
-                    placeholder="Current password"
-                    value={currentPassword}
-                    onChange={(e) => { setCurrentPassword(e.target.value); setPasswordError(null); }}
-                    className="w-full rounded-xl bg-muted px-4 py-3.5 text-sm outline-none focus:ring-2 ring-primary"
-                  />
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="New password"
-                    value={newPassword}
-                    onChange={(e) => { setNewPassword(e.target.value); setPasswordError(null); }}
-                    className="w-full rounded-xl bg-muted px-4 py-3.5 text-sm outline-none focus:ring-2 ring-primary"
-                  />
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    placeholder="Confirm new password"
-                    value={confirmPassword}
-                    onChange={(e) => { setConfirmPassword(e.target.value); setPasswordError(null); }}
-                    className="w-full rounded-xl bg-muted px-4 py-3.5 text-sm outline-none focus:ring-2 ring-primary"
-                  />
-                </div>
-
-                {passwordError && (
-                  <p className="text-sm text-destructive">{passwordError}</p>
-                )}
-
-                <button
-                  onClick={handleChangePassword}
-                  disabled={passwordStatus === "saving" || !currentPassword || !newPassword || !confirmPassword}
-                  className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-                >
-                  {passwordStatus === "saving" ? "Updating…" : "Update Password"}
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </BottomSheet>
     </>
   );
 }

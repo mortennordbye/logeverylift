@@ -659,7 +659,7 @@ bar, destructive actions at the bottom (`CLAUDE.md`).
 - **Workouts library** at `/more/workouts` (*new*), in More under Training: list by sport with the
   text summary; Duplicate, Rename, Delete, Recently deleted. **No step editor** in this PR: the
   assistant creates and edits workouts until C6 adds one (open question 2, BACKLOG entry).
-- **Athlete profile** (`/more/athlete`): a "Sick periods" section (list, add, end) and the
+- **Athlete profile** (now the Sick periods row on Account, [account-profile.md](account-profile.md)): a "Sick periods" section (list, add, end) and the
   consistency line ("Consistency: 9 of the last 12 weeks at 80% or more").
 
 ## 8. MCP tools and the resource
@@ -913,7 +913,7 @@ Changed: C2's planned-session schema, module, actions and MCP tools;
 `src/lib/utils/training-limits.ts`, `src/lib/mcp/tools/sessions.ts`,
 `src/lib/mcp/tools/athlete-profile.ts`, `src/lib/mcp/resource-docs.ts`,
 `src/lib/mcp/instructions.ts`, `docs/mcp/app-rules.md`, `src/app/api/[transport]/route.ts`,
-`src/app/page.tsx`, the calendar day sheet, `src/app/more/athlete/page.tsx`,
+`src/app/page.tsx`, the calendar day sheet, `src/app/more/account/page.tsx`,
 `src/components/features/MoreClient.tsx`, `src/components/features/ConsentChecks.tsx`,
 `src/app/oauth/consent/page.tsx`, `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`,
 `src/lib/account-data.ts`, `docs/privacy/data-inventory.md`, `docs/specs/cycle-periodization.md`

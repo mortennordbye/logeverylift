@@ -2,15 +2,18 @@
 
 /**
  * Sick periods from the app (docs/plans/workouts-and-compliance.md, 6.7 and
- * 7): the sheet to add or change one, and the "I'm better" control that ends
- * an open one. Endurance features only (D18).
+ * 7): the list on Account with the consistency line, the sheet to add or
+ * change one, and the "I'm better" control that ends an open one. Endurance
+ * features only (D18).
  */
 
+import { SubmitButton, chip } from "@/components/features/EditorControls";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { manageIllness } from "@/lib/actions/workouts-compliance";
 import { SEVERITY_TEXT, type IllnessSeverity } from "@/lib/utils/session-compliance";
-import { addDaysStr } from "@/lib/utils/seasons";
+import { addDaysStr, shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export type IllnessDraft = {
@@ -26,7 +29,6 @@ const SEVERITY_LABEL: Record<IllnessSeverity, string> = { mild: "Mild", moderate
 
 
 const field = "mt-1 w-full min-h-[44px] rounded-xl bg-muted px-4 text-base";
-const chip = (on: boolean) => `min-h-[44px] rounded-xl px-4 py-2 text-left text-sm font-medium active:opacity-70 ${on ? "bg-primary text-primary-foreground" : "bg-muted"}`;
 
 /** Add or change one sick period; delete at the bottom with a confirm. */
 export function IllnessSheet({
@@ -96,7 +98,7 @@ export function IllnessSheet({
               role="checkbox"
               aria-checked={stillSick}
               onClick={() => setD({ ...d, endedOn: stillSick ? (today < d.startedOn ? d.startedOn : today) : null })}
-              className={`w-full ${chip(stillSick)}`}
+              className={`w-full px-4 py-2 text-left ${chip(stillSick)}`}
             >
               Still sick
             </button>
@@ -123,7 +125,7 @@ export function IllnessSheet({
                 role="radio"
                 aria-checked={d.severity === s}
                 onClick={() => setD({ ...d, severity: d.severity === s ? null : s })}
-                className={`w-full ${chip(d.severity === s)}`}
+                className={`w-full px-4 py-2 text-left ${chip(d.severity === s)}`}
               >
                 <span className="block">{SEVERITY_LABEL[s]}</span>
                 <span className={`block text-xs font-normal ${d.severity === s ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{SEVERITY_TEXT[s]}</span>
@@ -144,14 +146,7 @@ export function IllnessSheet({
               {error}
             </p>
           )}
-          <button
-            type="button"
-            onClick={save}
-            disabled={saving || !d.startedOn}
-            className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-          >
-            Save sick period
-          </button>
+          <SubmitButton label="Save sick period" disabled={saving || !d.startedOn} onClick={save} />
           {d.id &&
             (confirmDelete ? (
               <button
@@ -223,5 +218,53 @@ export function EndIllness({ id, startedOn, today, onEnded }: { id: number; star
         </p>
       )}
     </div>
+  );
+}
+
+export type Consistency = { complete: number; counted: number; thisWeek: { counted: number; done: number } };
+
+/** The sick periods with the consistency line at the top. Tap one to change it. */
+export function SickPeriods({ illness, consistency, today }: { illness: (IllnessDraft & { id: number })[]; consistency: Consistency; today: string }) {
+  const router = useRouter();
+  const [sick, setSick] = useState<IllnessDraft | null>(null);
+  const openIllness = illness.find((p) => p.endedOn === null || p.endedOn >= today) ?? null;
+
+  return (
+    <section className="space-y-2" data-testid="sick-periods">
+      <p className="text-sm" data-testid="consistency">
+        {consistency.counted > 0
+          ? `Consistency: ${consistency.complete} of the last ${consistency.counted} weeks at 80% or more.`
+          : "Consistency: no full weeks to count yet."}
+        {consistency.thisWeek.counted > 0 && ` This week: ${consistency.thisWeek.done} of ${consistency.thisWeek.counted} done.`}
+      </p>
+      {illness.length === 0 && <p className="text-sm text-muted-foreground">No sick periods.</p>}
+      {illness.map((p) => (
+        <div key={p.id} className="rounded-xl bg-card px-4 py-3 space-y-2" data-testid="illness-row">
+          <button onClick={() => setSick({ ...p })} className="w-full text-left min-h-[44px] active:opacity-60">
+            <p className="text-sm font-medium">
+              {p.endedOn === null ? `Since ${shortDay(p.startedOn)}, still sick` : p.endedOn === p.startedOn ? shortDay(p.startedOn) : `${shortDay(p.startedOn)} to ${shortDay(p.endedOn)}`}
+              {p.severity && ` · ${p.severity[0].toUpperCase()}${p.severity.slice(1)}`}
+            </p>
+            {p.notes && <p className="text-sm text-muted-foreground">{p.notes}</p>}
+          </button>
+          {p.id === openIllness?.id && <EndIllness id={p.id} startedOn={p.startedOn} today={today} onEnded={() => router.refresh()} />}
+        </div>
+      ))}
+      <button
+        onClick={() => setSick({ startedOn: today, endedOn: null, severity: null, notes: null })}
+        className="w-full min-h-[44px] rounded-xl bg-muted text-sm font-medium active:opacity-70"
+      >
+        Add a sick period
+      </button>
+      <IllnessSheet
+        draft={sick}
+        today={today}
+        onClose={() => setSick(null)}
+        onSaved={() => {
+          setSick(null);
+          router.refresh();
+        }}
+      />
+    </section>
   );
 }

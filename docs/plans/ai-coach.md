@@ -111,8 +111,8 @@ For a lifter nothing changes, except a "Coach memory" entry on the More screen.
 
 ### 1.5 Data for the limits
 
-- Garmin is on only for admins with the key set (`garminAllowedFor`,
-  `src/lib/garmin/access.ts:20-24`). The connection row holds `lastSyncedAt`
+- Garmin is on only for Premium users with the key set (`garminAllowedFor`,
+  `src/lib/garmin/access.ts:18-20`). The connection row holds `lastSyncedAt`
   (`src/db/schema/garmin.ts:42`).
 - Runs: `getVolumeData` reads activities with sport, local day, duration and distance
   (`src/lib/garmin/queries.ts:952-981`). Indoor runs count for time, not for the longest

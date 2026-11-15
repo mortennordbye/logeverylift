@@ -1,8 +1,8 @@
 "use server";
 
 /**
- * The athlete profile, thresholds, injuries and the intake interview in the
- * app (docs/plans/athlete-profile.md, 2.6 and 2.9). Writes go through the
+ * The athlete profile, thresholds and injuries in the app
+ * (docs/plans/athlete-profile.md, 2.9). Writes go through the
  * revision layer as the user. Thresholds are for every user; the rest needs
  * the endurance switch, which src/lib/athlete-profile.ts checks.
  */
@@ -15,25 +15,18 @@ import {
   addThreshold,
   changeInjury,
   changeThreshold,
-  getAthleteProfile,
   garminSuggestions,
-  interviewRace,
-  listDeletedInjuries,
   listDeletedThresholds,
-  listInjuries,
   listThresholds,
-  memoryToOffer,
-  missingSteps,
-  moveMemoryEntry,
   restoreDeletedAthleteRow,
   saveAthleteProfile,
 } from "@/lib/athlete-profile";
-import { enduranceEnabledFor } from "@/lib/endurance";
 import type { PlanWriteContext } from "@/lib/plan-revisions";
 import { getUserSettings, userToday } from "@/lib/user-settings";
 import { toDateStr } from "@/lib/utils/cycle-position";
+import { garminAllowed } from "@/lib/garmin/access";
 import { requireSession } from "@/lib/utils/session";
-import { injuryFields, interviewChangeSet, profileFields, thresholdFields } from "@/lib/validators/athlete-profile";
+import { injuryFields, profileFields, thresholdFields } from "@/lib/validators/athlete-profile";
 import type { ActionResult } from "@/types/workout";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -51,11 +44,10 @@ function invalid(error: z.ZodError): ActionResult<never> {
   return { success: false, error: "Invalid input", fieldErrors: error.flatten().fieldErrors };
 }
 
-const ctxFor = (userId: string, changeSetId?: string): PlanWriteContext => ({ userId, writer: "user", changeSetId: changeSetId ?? null });
+const ctxFor = (userId: string): PlanWriteContext => ({ userId, writer: "user" });
 
 function refresh() {
-  revalidatePath("/more/athlete");
-  revalidatePath("/more/thresholds");
+  revalidatePath("/more/account", "layout");
 }
 
 // ── Reads for the pages ──────────────────────────────────────────────────────
@@ -81,54 +73,17 @@ export async function getThresholdsData() {
   }
 }
 
-export async function getAthleteData() {
-  const auth = await requireSession();
-  const userId = auth.user.id;
-  try {
-    if (!(await enduranceEnabledFor(userId))) return { success: true as const, data: null };
-    const [profile, injuries, deletedInjuries, race, memory, thresholds, settings, today] = await Promise.all([
-      getAthleteProfile(userId),
-      listInjuries(userId),
-      listDeletedInjuries(userId),
-      interviewRace(userId),
-      memoryToOffer(userId),
-      listThresholds(userId),
-      getUserSettings(userId),
-      userToday(userId),
-    ]);
-    const suggestions = await garminSuggestions(userId, thresholds);
-    return {
-      success: true as const,
-      data: {
-        profile,
-        injuries,
-        deletedInjuries,
-        race,
-        memory,
-        thresholds,
-        units: settings.units,
-        suggestions,
-        today: toDateStr(today),
-        missing: missingSteps(profile, thresholds, race),
-      },
-    };
-  } catch (e) {
-    console.error("[athleteProfile] getAthleteData failed", e);
-    return { success: false as const, error: "Could not load the athlete profile" };
-  }
-}
-
 // ── Profile ──────────────────────────────────────────────────────────────────
 
-const profileSchema = z.object({ ...profileFields, changeSetId: interviewChangeSet }).strict();
+const profileSchema = z.object({ ...profileFields }).strict();
 
 export async function saveProfile(data: unknown): Promise<ActionResult<{ version: number }>> {
   const auth = await requireSession();
   const parsed = profileSchema.safeParse(data);
   if (!parsed.success) return invalid(parsed.error);
-  const { changeSetId, ...change } = parsed.data;
+  const change = parsed.data;
   try {
-    const { version } = await saveAthleteProfile(ctxFor(auth.user.id, changeSetId), change);
+    const { version } = await saveAthleteProfile(ctxFor(auth.user.id), change);
     refresh();
     return { success: true, data: { version } };
   } catch (e) {
@@ -136,34 +91,19 @@ export async function saveProfile(data: unknown): Promise<ActionResult<{ version
   }
 }
 
-const finishSchema = z.object({ changeSetId: interviewChangeSet });
-
-/** The interview's last step. */
-export async function finishInterview(data: unknown): Promise<ActionResult<undefined>> {
-  const auth = await requireSession();
-  const parsed = finishSchema.safeParse(data);
-  if (!parsed.success) return invalid(parsed.error);
-  try {
-    await saveAthleteProfile(ctxFor(auth.user.id, parsed.data.changeSetId), { completeInterview: true });
-    refresh();
-    revalidatePath("/cycles/triathlon");
-    return { success: true, data: undefined };
-  } catch (e) {
-    return known(e, "finishInterview");
-  }
-}
-
 // ── Thresholds ───────────────────────────────────────────────────────────────
 
-const addThresholdSchema = z.object({ ...thresholdFields, changeSetId: interviewChangeSet }).strict();
+const addThresholdSchema = z.object({ ...thresholdFields }).strict();
 
 export async function addThresholdValue(data: unknown): Promise<ActionResult<{ id: number; value: number }>> {
   const auth = await requireSession();
   const parsed = addThresholdSchema.safeParse(data);
   if (!parsed.success) return invalid(parsed.error);
-  const { changeSetId, ...input } = parsed.data;
+  const input = parsed.data;
+  // A Garmin value is Premium only; typed and tested values are open to everyone.
+  if (input.source === "garmin" && !garminAllowed(auth.user.role)) return { success: false, error: "Garmin values are for Premium accounts" };
   try {
-    const { threshold } = await addThreshold(ctxFor(auth.user.id, changeSetId), input);
+    const { threshold } = await addThreshold(ctxFor(auth.user.id), input);
     refresh();
     return { success: true, data: { id: threshold.id, value: threshold.value } };
   } catch (e) {
@@ -222,15 +162,15 @@ export async function restoreThresholdValue(data: unknown): Promise<ActionResult
 
 // ── Injuries ─────────────────────────────────────────────────────────────────
 
-const addInjurySchema = z.object({ ...injuryFields, changeSetId: interviewChangeSet }).strict();
+const addInjurySchema = z.object({ ...injuryFields }).strict();
 
 export async function addInjuryEntry(data: unknown): Promise<ActionResult<{ id: number }>> {
   const auth = await requireSession();
   const parsed = addInjurySchema.safeParse(data);
   if (!parsed.success) return invalid(parsed.error);
-  const { changeSetId, ...input } = parsed.data;
+  const input = parsed.data;
   try {
-    const { injury } = await addInjury(ctxFor(auth.user.id, changeSetId), input);
+    const { injury } = await addInjury(ctxFor(auth.user.id), input);
     refresh();
     return { success: true, data: { id: injury.id } };
   } catch (e) {
@@ -248,7 +188,6 @@ const updateInjurySchema = z
     status: injuryFields.status.optional(),
     startedOn: injuryFields.startedOn,
     endedOn: injuryFields.endedOn,
-    changeSetId: interviewChangeSet,
   })
   .strict();
 
@@ -256,9 +195,9 @@ export async function updateInjuryEntry(data: unknown): Promise<ActionResult<und
   const auth = await requireSession();
   const parsed = updateInjurySchema.safeParse(data);
   if (!parsed.success) return invalid(parsed.error);
-  const { id: injuryId, changeSetId, ...change } = parsed.data;
+  const { id: injuryId, ...change } = parsed.data;
   try {
-    await changeInjury(ctxFor(auth.user.id, changeSetId), injuryId, change);
+    await changeInjury(ctxFor(auth.user.id), injuryId, change);
     refresh();
     return { success: true, data: undefined };
   } catch (e) {
@@ -290,24 +229,5 @@ export async function restoreInjuryEntry(data: unknown): Promise<ActionResult<un
     return { success: true, data: undefined };
   } catch (e) {
     return known(e, "restoreInjuryEntry");
-  }
-}
-
-// ── The memory step ──────────────────────────────────────────────────────────
-
-const moveSchema = z.object({ id, changeSetId: interviewChangeSet });
-
-/** "Moved": the user restated a coach memory entry in the profile; it goes out of use. */
-export async function moveMemoryToProfile(data: unknown): Promise<ActionResult<undefined>> {
-  const auth = await requireSession();
-  const parsed = moveSchema.safeParse(data);
-  if (!parsed.success) return invalid(parsed.error);
-  try {
-    await moveMemoryEntry(ctxFor(auth.user.id, parsed.data.changeSetId), parsed.data.id);
-    refresh();
-    revalidatePath("/more/coach-memory");
-    return { success: true, data: undefined };
-  } catch (e) {
-    return known(e, "moveMemoryToProfile");
   }
 }

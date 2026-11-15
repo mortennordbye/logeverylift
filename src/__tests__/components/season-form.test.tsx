@@ -33,7 +33,7 @@ vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), replace: 
 const create = {
   defaultStart: "2026-11-16",
   enduranceEnabled: true,
-  interviewDone: true,
+  profileReady: true,
   candidates: [
     { id: 3, name: "Upper / Lower hypertrophy", status: "active" },
     { id: 2, name: "Strength peak", status: "draft" },
@@ -217,9 +217,9 @@ describe("New season with the endurance switch", () => {
     expect((within(triathlonCard()).getByRole("radio") as HTMLInputElement).disabled).toBe(true);
   });
 
-  it("sends a user without the intake interview to it first", () => {
-    render(<SeasonForm {...create} interviewDone={false} />);
-    expect(screen.getByRole("link", { name: /Make a triathlon plan/ }).getAttribute("href")).toBe("/more/athlete/interview?next=/seasons/new");
+  it("sends a user without endurance level and training days to Goals and training first", () => {
+    render(<SeasonForm {...create} profileReady={false} />);
+    expect(screen.getByRole("link", { name: /Make a triathlon plan/ }).getAttribute("href")).toBe("/more/account/goals-and-training");
   });
 });
 

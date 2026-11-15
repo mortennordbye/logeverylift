@@ -36,6 +36,17 @@ describe("update_profile", () => {
     expect(await weights(other)).toEqual([]);
   });
 
+  it("locks a time zone or units the assistant sets against the Garmin sync, and nothing else", async () => {
+    const call = mcpTools(registerProfileTools, me);
+    await call("update_profile", { heightCm: 180 });
+    expect((await userRow(me)).fieldSources).toEqual({});
+    await call("update_profile", { timeZone: "Europe/Oslo" });
+    expect(Object.keys((await userRow(me)).fieldSources)).toEqual(["timeZone"]);
+    await call("update_profile", { swimUnit: "yd" });
+    const sources = (await userRow(me)).fieldSources;
+    expect([sources.timeZone?.by, sources.units?.by]).toEqual(["you", "you"]);
+  });
+
   it("clears with null, and refuses values out of range or an unknown zone", async () => {
     const call = mcpTools(registerProfileTools, me);
     await call("update_profile", { heightCm: 182 });

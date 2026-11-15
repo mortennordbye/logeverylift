@@ -22,13 +22,13 @@ const HREF: Record<ChangeSetCard["objects"][number]["type"], (id: number) => str
   program: (id) => `/programs/${id}/history`,
   cycle: (id) => `/cycles/${id}/history`,
   memory: () => "/more/coach-memory",
-  athlete: () => "/more/athlete",
-  threshold: () => "/more/thresholds",
-  injury: () => "/more/athlete",
+  athlete: () => "/more/account/goals-and-training",
+  threshold: () => "/more/account/training-numbers",
+  injury: () => "/more/account/body-and-health",
   season: (id) => `/seasons/${id}/history`,
   planned_session: () => "/more/calendar",
   workout: () => "/more/workouts",
-  illness: () => "/more/athlete",
+  illness: () => "/more/account/body-and-health",
   race_plan: () => "/more/nutrition",
 };
 

@@ -52,8 +52,8 @@ test("the gym map lists who trains there, and a member can be added or the gym r
 
     await page.goto("/more/account/gym");
     await page.getByRole("button", { name: "Remove my gym" }).click();
-    await page.waitForURL("**/more/account");
-    await expect(page.getByText("Not set · you're not on the gym map")).toBeVisible();
+    await page.waitForURL("**/more/gyms");
+    await expect(page.getByRole("link", { name: "Add your gym" })).toBeVisible();
     const [after] = await db.select({ gym: users.primaryGymId }).from(users).where(eq(users.id, me.id));
     expect(after.gym).toBeNull();
   } finally {

@@ -1,5 +1,6 @@
 import { db } from "@/db";
 import {
+  athleteProfiles,
   exercisePrs,
   oauthClients,
   oauthConsents,
@@ -338,5 +339,30 @@ describe("0086: planned sessions", () => {
     await createSession(user.id, program.id, { ...auto, date: "2026-11-03", plannedSessionId: planned[0].id });
     await createSession(user.id, program.id, { ...auto, date: "2026-11-03", plannedSessionId: planned[1].id });
     await expect(createSession(user.id, program.id, { ...auto, date: "2026-11-03", plannedSessionId: planned[1].id })).rejects.toThrow();
+  });
+});
+
+describe("0093: values set before the Garmin sync count as set by the user", () => {
+  it("locks availability where it is set, units off the defaults and a set time zone, and leaves the rest", async () => {
+    const days = await createUser();
+    const units = await createUser({ distanceUnit: "mi" });
+    const zone = await createUser({ timeZone: "Europe/Oslo" });
+    const plain = await createUser();
+    const kept = await createUser({ timeZone: "Europe/Oslo", fieldSources: { timeZone: { by: "garmin", on: "2026-11-01" } } });
+    await db.insert(athleteProfiles).values([
+      { userId: days.id, availableDays: [1, 3] },
+      { userId: plain.id, availableDays: [] },
+    ]);
+
+    const file = readFileSync(path.resolve(__dirname, "../../../drizzle/0093_backfill_field_sources.sql"), "utf8");
+    for (const s of file.split("--> statement-breakpoint")) await db.execute(sql.raw(s));
+
+    const rows = await db.select({ id: users.id, s: users.fieldSources }).from(users);
+    const by = new Map(rows.map((r) => [r.id, Object.fromEntries(Object.entries(r.s).map(([k, v]) => [k, v?.by]))]));
+    expect(by.get(days.id)).toEqual({ availability: "you" });
+    expect(by.get(units.id)).toEqual({ units: "you" });
+    expect(by.get(zone.id)).toEqual({ timeZone: "you" });
+    expect(by.get(plain.id)).toEqual({});
+    expect(by.get(kept.id)).toEqual({ timeZone: "garmin" });
   });
 });

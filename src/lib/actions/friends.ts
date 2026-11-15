@@ -594,7 +594,7 @@ export async function updateActivityPrivacy(data: unknown): Promise<ActionResult
       .set({ showActivityToFriends: parsed.data.showActivityToFriends })
       .where(eq(users.id, session.user.id));
 
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     return { success: true, data: undefined };
   } catch {
     return { success: false, error: "Failed to update privacy setting" };

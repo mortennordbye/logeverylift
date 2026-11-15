@@ -393,6 +393,9 @@ Changed:
 
 ### 2.9 UI
 
+Thresholds and the athlete profile are now sections of Account, and the two pages below are
+gone ([account-profile.md](account-profile.md)). The interview keeps its address.
+
 - **Thresholds** at `/more/thresholds` (*new*), for every user, in More under Training. One row
   per kind: the value in the user's units, the date, the source ("Field test", "Entered",
   "Garmin estimate"), and a stale line. Tap a row: a sheet with "Enter value", "Field test" (the
@@ -557,7 +560,7 @@ flow.
 New: `src/db/schema/athlete-profile.ts`, `src/lib/utils/thresholds.ts`,
 `src/lib/utils/strength-goal.ts`, `src/lib/athlete-profile.ts`,
 `src/lib/actions/athlete-profile.ts`, `src/lib/mcp/tools/athlete-profile.ts`,
-`src/app/more/thresholds/`, `src/app/more/athlete/` (with `interview/`), their components, the
+`src/app/more/athlete/interview/`, its components, the
 tests in section 5, one `drizzle/*.sql`.
 Changed: `src/db/schema/plan-revisions.ts`, `src/db/schema/index.ts`, `src/lib/plan-revisions.ts`,
 `src/lib/utils/plan-revisions.ts`, `src/lib/utils/triathlon-plan.ts`,
@@ -636,8 +639,7 @@ a migration; the hub settles the numbers at merge.
   and refuses without one after that.
 - **No component tests.** The screens are covered by `e2e/athlete-interview.spec.ts` and
   `e2e/thresholds.spec.ts`; the logic they use is in the pure modules with unit tests.
-- **Review fixes (2026-11-12).** The interview's next page accepts only a plain in-app path, never
-  one that starts with "//" (`localPath`). Undoing a change set whose object was deleted before
+- **Review fixes (2026-11-12).** Undoing a change set whose object was deleted before
   the set's first change deletes it again instead of bringing back the state before that delete,
   so a second interview undo keeps the profile cleared. Only the test's own inputs are stored in
   `test_data`. Dates must be real days, and a threshold date may not be after today. Threshold

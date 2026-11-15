@@ -4,7 +4,7 @@ import { useToast } from "@/contexts/toast-context";
 import { authClient } from "@/lib/auth-client";
 import { DEMO_USER_EMAIL } from "@/lib/constants/demo";
 import { shareApp } from "@/lib/utils/share";
-import { Activity, BarChart2, Bot, BookMarked, CalendarDays, ChevronRight, ClipboardList, Clock, Droplets, FileText, Gauge, HeartPulse, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
+import { Activity, BarChart2, Bot, BookMarked, CalendarDays, ChevronRight, ClipboardList, Clock, Droplets, FileText, Library, LogOut, MapPin, MessageSquare, Settings, Share2, Shield, Sparkles, UserCircle, Users } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -42,13 +42,6 @@ const groups: { title: string; items: MoreItem[] }[] = [
         href: "/exercises",
         icon: Library,
         description: "Browse and manage exercises",
-      },
-      // For every user (D15; docs/plans/athlete-profile.md, 12).
-      {
-        label: "Thresholds",
-        href: "/more/thresholds",
-        icon: Gauge,
-        description: "FTP, threshold heart rate and paces, with history",
       },
     ],
   },
@@ -132,15 +125,7 @@ const garminItem: MoreItem = {
   description: "HRV, sleep, activities and more",
 };
 
-// Under Training after Thresholds, with the endurance switch on (D18).
-const athleteItem: MoreItem = {
-  label: "Athlete profile",
-  href: "/more/athlete",
-  icon: HeartPulse,
-  description: "Availability, injuries, strength goal and the interview",
-};
-
-// After the athlete profile, with the endurance switch on (docs/plans/workouts-and-compliance.md, 7).
+// At the end of Training, with the endurance switch on (docs/plans/workouts-and-compliance.md, 7).
 const workoutsItem: MoreItem = {
   label: "Workouts",
   href: "/more/workouts",
@@ -246,8 +231,7 @@ export function MoreClient({
             items = [...items.slice(0, at), garminItem, ...items.slice(at)];
           }
           if (showAthlete && group.title === "Training") {
-            const at = items.findIndex((i) => i.label === "Thresholds") + 1;
-            items = [...items.slice(0, at), athleteItem, workoutsItem, nutritionItem, ...items.slice(at)];
+            items = [...items, workoutsItem, nutritionItem];
           }
           return (
             <section key={group.title} className="pt-6">

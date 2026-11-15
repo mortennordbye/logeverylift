@@ -10,6 +10,24 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
+### Privacy policy note for the Garmin sync
+- **What:** Say in the privacy policy that "Sync from Garmin" writes Garmin values (body weight, max HR, threshold HR, FTP, run pace, availability, time zone and units) into the user's profile and settings. The data inventory already says so.
+- **Why deferred:** Only the owner has Premium today, so no other user's data is processed this way.
+- **Unblocked by:** Opening Premium or Garmin to other users. Do it in the same change, with the `privacy-compliance` skill and a `LEGAL_VERSION` bump.
+- **Touchpoints:** `src/app/privacy/page.tsx`, `src/lib/constants/legal.ts`, `docs/privacy/data-inventory.md`, `src/lib/garmin/sync-from-garmin.ts`.
+
+### Goals and training: full rework of the training model
+- **What:** One model for what a user trains (strength to endurance mix), what they want from it (outcomes), level per sport and available time, with no overlapping questions and one rule for which rows show. Covers every reader: weight increments, the plan builder, the triathlon plan, training limits, the AI assistant and its privacy text, and the Goals and training page on Account.
+- **Why deferred:** A battle test on 2026-11-15 showed the model is entangled: the `endurance` goal also drives 1 kg weight increments (`src/lib/utils/progression.ts`, `adaptiveIncrementKg`, fed by `src/lib/actions/workout-sets.ts` and `src/lib/weight-stack-learning.ts`) and the high-rep plan template (`src/lib/utils/plan-templates.ts`); `strength_goal` is a kind of strength work, not an amount (`src/lib/utils/strength-goal.ts`); rows for endurance fields fail to save while the endurance switch is off. Patching the Account rows one at a time did not get a good result, so the owner chose a full rework as its own change.
+- **Unblocked by:** The endurance switch removal. Then: one design document covering the whole model and every reader, an independent battle test of it, owner decisions one at a time (first: what triggers small weight steps, with the set's planned reps as the leading option; then whether the mix means what the user does or what the app plans, whether "endurance only" means zero strength sessions, how existing users convert from prod counts, and whether the assistant and outside model read the mix), one mockup, then build and review.
+- **Touchpoints:** `src/components/features/account/sections.tsx`, `ProfileSteps.tsx`, `src/lib/utils/goals.ts`, `src/lib/utils/progression.ts`, `src/lib/utils/plan-templates.ts`, `src/lib/utils/strength-goal.ts`, `src/lib/utils/triathlon-plan.ts`, `src/lib/utils/training-limits.ts`, `src/lib/mcp/tools/profile.ts`, `src/lib/mcp/tools/athlete-profile.ts`, `src/lib/utils/ai-prompt.ts`, `src/lib/utils/ai-edit.ts`, `src/app/privacy/page.tsx`.
+
+### Drop the unused interview column
+- **What:** Remove `athlete_profiles.interview_completed_at` and the `completeInterview` field of the MCP `manage_athlete_profile` tool. The in-app interview is gone and no page reads the column.
+- **Why deferred:** `feat/account-profile` already adds two migrations; a third for a column nothing reads can wait.
+- **Unblocked by:** Nothing. One migration plus removing the field from `ProfileChange` and the MCP tool's schema.
+- **Touchpoints:** `src/db/schema/athlete-profile.ts`, `src/lib/athlete-profile.ts` (`saveAthleteProfile`), `src/lib/mcp/tools/athlete-profile.ts`, `src/lib/validators/athlete-profile.ts`.
+
 ### Home widgets: catalogue sizes the locked design left out
 - **What:** Sizes from the widget catalogue (`docs/home-widgets-audit.md`, section 4) not built with the redesign: Weekly volume M (top muscles vs target) and L (all muscle bars), Body weight L (90-day line), Training load S (form and band) and per-sport L, Race countdown M (race, date, days, phase).
 - **Why deferred:** The locked design (`docs/design/home-redesign/home-locked.html`) gives these widgets only the sizes that were built, and the redesign built to it.
@@ -77,7 +95,7 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **What:** Three controls from section 7 of `docs/plans/workouts-and-compliance.md` that the app does not show yet: "Update from library" and "Link as brick" in the calendar day sheet; the list of the day's Garmin activities in the "Yes" sheet for admins (6.5); and Recently deleted with Restore for sick periods. The server has all of them (`applySessionOp` ops `update_from_library`, `link_brick`, `unlink_brick`, `pick`; `restoreDeletedAthleteRow` for a sick period), and the assistant can use them over MCP. The app's Server Action and validator accept none of them yet: add each op to `plannedSessionOpSchema` with its control.
 - **Why deferred:** The C4/C5 build kept the app UI to the answers, the sick periods and the library list; these are less used and fit the C6 views.
 - **Unblocked by:** Package C6, or an owner request. Sick periods also need a read of deleted rows (a `deleted` option on `listIllness`).
-- **Touchpoints:** `src/components/features/CycleCalendarClient.tsx`, `src/components/features/SessionAnswers.tsx`, `src/components/features/AthleteProfileClient.tsx`, `src/lib/illness.ts` (`listIllness`), `src/lib/validators/planned-sessions.ts` (`plannedSessionOpSchema`), `src/lib/actions/workouts-compliance.ts`.
+- **Touchpoints:** `src/components/features/CycleCalendarClient.tsx`, `src/components/features/SessionAnswers.tsx`, `src/components/features/IllnessSheet.tsx` (`SickPeriods`), `src/lib/illness.ts` (`listIllness`), `src/lib/validators/planned-sessions.ts` (`plannedSessionOpSchema`), `src/lib/actions/workouts-compliance.ts`.
 
 ### Home week strip for workout sessions
 - **What:** A dated session that runs a structured workout, not a program, does not count on the home screen's week strip. Package C6 added the "Endurance today" card on home and the week view (`/week`), which show them; the strip still reads C2's program-only home read.

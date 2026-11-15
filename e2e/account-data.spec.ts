@@ -39,7 +39,7 @@ test("a new user can download their data and delete their account", async ({ pag
   // A new account opens on the tutorial; dismiss it the way the e2e accounts are.
   await testDb().update(users).set({ tutorialDismissedAt: new Date() }).where(eq(users.email, email));
 
-  await page.goto("/more/account");
+  await page.goto("/more/account/your-data");
 
   const downloading = page.waitForEvent("download");
   await page.getByRole("button", { name: /Download My Data/ }).click();

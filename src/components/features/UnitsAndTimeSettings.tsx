@@ -1,5 +1,7 @@
 "use client";
 
+import { SyncNote } from "@/components/features/account/SyncNote";
+import { takeGarminField } from "@/lib/actions/garmin";
 import { setDisplayUnits, setTimeZone } from "@/lib/actions/user-settings";
 import { callAction } from "@/lib/utils/stale-bundle";
 import type { DistanceUnit, SwimUnit } from "@/lib/utils/units";
@@ -11,6 +13,8 @@ type Props = {
   distanceUnit: DistanceUnit;
   swimUnit: SwimUnit;
   enduranceEnabled: boolean;
+  /** Source lines and Garmin's differing values; empty unless Premium. */
+  sync: { timeZone?: { note: string | null; says: string | null }; units?: { note: string | null; says: string | null } };
 };
 
 const noop = () => () => {};
@@ -67,6 +71,14 @@ export function UnitsAndTimeSettings(props: Props) {
   const [distanceUnit, setDistance] = useState(props.distanceUnit);
   const [swimUnit, setSwim] = useState(props.swimUnit);
   const [zone, setZone] = useState(props.timeZone);
+  // "Use" on a Garmin line changes the stored values under the open screen.
+  const [stored, setStored] = useState(props);
+  if (props.timeZone !== stored.timeZone || props.distanceUnit !== stored.distanceUnit || props.swimUnit !== stored.swimUnit) {
+    setStored(props);
+    setZone(props.timeZone);
+    setDistance(props.distanceUnit);
+    setSwim(props.swimUnit);
+  }
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const deviceZone = useDeviceZone();
@@ -120,6 +132,11 @@ export function UnitsAndTimeSettings(props: Props) {
           ]}
           onChange={(v) => save(v, swimUnit, setSwim, () => setDisplayUnits({ swimUnit: v }))}
         />
+        {props.sync.units && (
+          <div className="mt-2 text-xs text-muted-foreground" data-testid="units-sync">
+            <SyncNote {...props.sync.units} onUse={() => takeGarminField({ field: "units" })} />
+          </div>
+        )}
       </div>
 
       <div>
@@ -155,6 +172,11 @@ export function UnitsAndTimeSettings(props: Props) {
             >
               Use it
             </button>
+          </div>
+        )}
+        {props.sync.timeZone && (
+          <div className="mt-2 text-xs text-muted-foreground" data-testid="time-zone-sync">
+            <SyncNote {...props.sync.timeZone} onUse={() => takeGarminField({ field: "timeZone" })} />
           </div>
         )}
       </div>

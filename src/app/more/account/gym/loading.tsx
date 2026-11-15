@@ -1,5 +1,5 @@
 import { ListPageSkeleton } from "@/components/ui/PageSkeletons";
 
 export default function GymPickerLoading() {
-  return <ListPageSkeleton title="Your gym" rows={3} back={{ href: "/more/account", label: "Account" }} />;
+  return <ListPageSkeleton title="Your gym" rows={3} back={{ href: "/more/gyms", label: "Gyms" }} />;
 }

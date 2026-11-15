@@ -51,11 +51,15 @@ const LABELS: [string, string][] = [
   ["/more/garmin/race", "Race"],
   ["/more/account", "Account"],
   ["/more/account/gym", "Your gym"],
+  ["/more/account/profile", "Profile"],
+  ["/more/account/goals-and-training", "Goals and training"],
+  ["/more/account/body-and-health", "Body and health"],
+  ["/more/account/training-numbers", "Training numbers"],
+  ["/more/account/privacy-and-security", "Privacy and security"],
+  ["/more/account/your-data", "Your data"],
   ["/more/gyms", "Gym map"],
   ["/more/assistants", "Connected assistants"],
-  ["/more/athlete", "Athlete profile"],
   ["/more/admin", "Admin"],
-  ["/more/thresholds", "Thresholds"],
   ["/more/nutrition", "Nutrition"],
   ["/more/workouts", "Workouts"],
   ["/more/feedback", "Feedback"],
@@ -77,7 +81,7 @@ const LABELS: [string, string][] = [
 const NEVER = ["/login", "/signup", "/welcome", "/consent", "/oauth"];
 
 /** Last segments of form and player screens: done once, not gone back into. */
-const FORM_ENDINGS = new Set(["new", "edit", "finish", "add-exercise", "interview", "play"]);
+const FORM_ENDINGS = new Set(["new", "edit", "finish", "add-exercise", "play"]);
 
 function pathOf(url: string): string {
   const path = url.split(/[?#]/)[0];

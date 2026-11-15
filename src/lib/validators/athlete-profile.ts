@@ -59,9 +59,3 @@ export const injuryFields = {
   startedOn: dateStr.nullable().optional(),
   endedOn: dateStr.nullable().optional(),
 };
-
-/** The change set one interview run shares, made by the app when the interview opens. */
-export const interviewChangeSet = z
-  .string()
-  .regex(/^interview:[0-9a-f-]{36}$/)
-  .optional();

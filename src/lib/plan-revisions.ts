@@ -29,6 +29,7 @@ import {
   seasons,
   trainingCycleSlots,
   trainingCycles,
+  users,
   workoutSessions,
   workouts,
   type PlanObjectType,
@@ -62,6 +63,7 @@ import {
   sameValue,
   setChangesSince,
   snapshotName,
+  type AthleteSnapshot,
   type CycleSnapshot,
   type MemorySnapshot,
   type PlanSnapshot,
@@ -76,6 +78,7 @@ import {
   type SeasonSnapshot,
 } from "@/lib/utils/plan-revisions";
 import { enduranceEnabledFor } from "@/lib/endurance";
+import type { FieldSource } from "@/lib/utils/field-sources";
 import { nextPhase, replanFlag, replanFlagOf, seasonTimeline, type PhaseLike, type RaceLike } from "@/lib/utils/seasons";
 import { judgingRuleChanged } from "@/lib/utils/progression";
 import { THRESHOLDS_PER_KIND_MAX } from "@/lib/utils/thresholds";
@@ -254,7 +257,12 @@ export async function snapshotMemory(ex: Executor, memoryId: number): Promise<Me
 async function snapshotRow(ex: Executor, type: Exclude<RowType, "memory">, id: number): Promise<PlanSnapshot> {
   const table = ROW_TABLES[type];
   const [row] = await ex.select().from(table).where(eq(table.id, id));
-  return { v: 1, [type]: stripRow(row, ["version", "updatedAt", "orphanedAt"]) } as PlanSnapshot;
+  const snap = { v: 1, [type]: stripRow(row, ["version", "updatedAt", "orphanedAt"]) } as PlanSnapshot;
+  if (type === "athlete" && row) {
+    const [u] = await ex.select({ s: users.fieldSources }).from(users).where(eq(users.id, row.userId));
+    (snap as AthleteSnapshot).availabilitySource = u?.s.availability ?? null;
+  }
+  return snap;
 }
 
 export async function snapshotSeason(ex: Executor, seasonId: number): Promise<SeasonSnapshot> {
@@ -1784,11 +1792,34 @@ async function lockForRestore(w: PlanWriteSession, revs: (typeof planRevisions.$
   await lockSeasonsThenCycles(w, seasonIds, cycleIds);
 }
 
+/** Put back who set the availability, with the days an undo or restore brings back (docs/plans/account-profile.md, 7.10). */
+async function setAvailabilitySource(tx: Tx, userId: string, source: FieldSource | null) {
+  await tx
+    .update(users)
+    .set({
+      fieldSources: source
+        ? sql`${users.fieldSources} || jsonb_build_object('availability', ${JSON.stringify(source)}::jsonb)`
+        : sql`${users.fieldSources} - 'availability'`,
+    })
+    .where(eq(users.id, userId));
+}
+
 /** Restore one object to a revision (the restore is itself a revision). */
 async function restoreInSession(w: PlanWriteSession, rev: typeof planRevisions.$inferSelect): Promise<string[]> {
   const snap = rev.snapshot as PlanSnapshot;
   if (isMemorySnapshot(snap)) return restoreMemoryTo(w, rev.objectId, snap, rev.id);
-  if (isAthleteSnapshot(snap)) return restoreRowTo(w, "athlete", rev.objectId, snap.athlete, rev.id);
+  if (isAthleteSnapshot(snap)) {
+    // Profile first, then user: the same lock order as saveAthleteProfile.
+    await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_profile:${w.ctx.userId}`}))`);
+    // A snapshot from before sources were kept: days the user had count as set by them.
+    const days = snap.athlete.availableDays as number[] | null;
+    const { userToday } = await import("@/lib/user-settings");
+    const { toDateStr } = await import("@/lib/utils/cycle-position");
+    const source =
+      snap.availabilitySource !== undefined ? snap.availabilitySource : days?.length ? { by: "you" as const, on: toDateStr(await userToday(w.ctx.userId)) } : null;
+    await setAvailabilitySource(w.tx, w.ctx.userId, source);
+    return restoreRowTo(w, "athlete", rev.objectId, snap.athlete, rev.id);
+  }
   if (isThresholdSnapshot(snap)) return restoreRowTo(w, "threshold", rev.objectId, snap.threshold, rev.id);
   if (isInjurySnapshot(snap)) return restoreRowTo(w, "injury", rev.objectId, snap.injury, rev.id);
   if (isWorkoutSnapshot(snap)) return restoreRowTo(w, "workout", rev.objectId, snap.workout, rev.id);
@@ -1940,6 +1971,7 @@ export async function restoreChangeSet(ctx: PlanWriteContext, changeSetId: strin
           await w.touch(target, { action: "delete" });
           const table = ROW_TABLES[target.type];
           await w.tx.update(table).set({ deletedAt: new Date() }).where(eq(table.id, target.id));
+          if (target.type === "athlete") await setAvailabilitySource(w.tx, ctx.userId, null);
         } else if (target.type === "planned_session") {
           if (!(await liveForUndo(w, target))) continue;
           await w.touch(target, { action: "delete" });

@@ -1,6 +1,9 @@
 "use server";
 
 import { db } from "@/db";
+import { withSource } from "@/lib/field-sources";
+import { userToday } from "@/lib/user-settings";
+import { toDateStr } from "@/lib/utils/cycle-position";
 import { users } from "@/db/schema";
 import { requireSession } from "@/lib/utils/session";
 import { setDisplayUnitsSchema, setTimeZoneSchema } from "@/lib/validators/user-settings";
@@ -19,9 +22,11 @@ export async function setTimeZone(data: unknown): Promise<ActionResult<{ changed
     const where = parsed.data.ifUnset
       ? and(eq(users.id, auth.user.id), isNull(users.timeZone))
       : eq(users.id, auth.user.id);
+    // A zone the user picks locks it against the Garmin sync; the one-time fill does not.
+    const lock = parsed.data.ifUnset ? {} : { fieldSources: withSource("timeZone", { by: "you", on: toDateStr(await userToday(auth.user.id)) }) };
     const rows = await db
       .update(users)
-      .set({ timeZone: parsed.data.timeZone })
+      .set({ timeZone: parsed.data.timeZone, ...lock })
       .where(where)
       .returning({ id: users.id });
     // Not for the one-time fill: it runs on whatever page the user opens
@@ -46,7 +51,11 @@ export async function setDisplayUnits(data: unknown): Promise<ActionResult<null>
     const { distanceUnit, swimUnit } = parsed.data;
     await db
       .update(users)
-      .set({ ...(distanceUnit ? { distanceUnit } : {}), ...(swimUnit ? { swimUnit } : {}) })
+      .set({
+        ...(distanceUnit ? { distanceUnit } : {}),
+        ...(swimUnit ? { swimUnit } : {}),
+        fieldSources: withSource("units", { by: "you", on: toDateStr(await userToday(auth.user.id)) }),
+      })
       .where(eq(users.id, auth.user.id));
     revalidatePath("/settings");
     return { success: true, data: null };

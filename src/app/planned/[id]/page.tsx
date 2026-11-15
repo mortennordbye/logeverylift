@@ -51,8 +51,8 @@ export default async function PlannedSessionPage({ params }: { params: Promise<{
         {v.missingAnchors.length > 0 && (
           <p className="mt-2 rounded-xl bg-amber-500/10 px-3 py-2 text-sm">
             Set {v.missingAnchors.map((k) => THRESHOLD_LABEL[k as ThresholdKind] ?? k).join(", ")} to see these targets in your own numbers.{" "}
-            <Link href="/more/thresholds" className="text-primary underline">
-              Thresholds
+            <Link href="/more/account/training-numbers" className="text-primary underline">
+              Training numbers
             </Link>
           </p>
         )}

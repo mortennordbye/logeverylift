@@ -259,7 +259,7 @@ export async function setPrimaryGym(data: unknown): Promise<ActionResult<void>> 
     }
     await db.update(users).set({ primaryGymId: gymId }).where(eq(users.id, auth.user.id));
     revalidatePath("/more/gyms");
-    revalidatePath("/more/account");
+    revalidatePath("/more/account", "layout");
     return { success: true, data: undefined };
   } catch (e) {
     console.error("[setPrimaryGym] failed", e instanceof Error ? e.message : "unknown");

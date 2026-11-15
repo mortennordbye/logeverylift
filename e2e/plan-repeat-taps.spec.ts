@@ -77,7 +77,8 @@ test("New season makes one season when Create season is tapped again and again",
 test("a triathlon plan confirmed again and again makes one season with five phases", async ({ page }, testInfo) => {
   const id = await userId(testInfo.parallelIndex);
   await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.id, id));
-  await testDb().insert(athleteProfiles).values({ userId: id, interviewCompletedAt: new Date() }).onConflictDoUpdate({ target: athleteProfiles.userId, set: { interviewCompletedAt: new Date() } });
+  const ready = { enduranceLevel: "intermediate" as const, availableDays: [1, 2, 3, 4, 7] };
+  await testDb().insert(athleteProfiles).values({ userId: id, ...ready }).onConflictDoUpdate({ target: athleteProfiles.userId, set: ready });
   await page.goto("/seasons/new?plan=triathlon");
   await page.getByRole("button", { name: "Change start" }).click();
   // A start after today takes the seeded running cycle's place: the confirm sheet asks first.
