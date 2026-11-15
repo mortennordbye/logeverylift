@@ -1,5 +1,5 @@
 /**
- * Opt-in (garmin_connections.sync_weight): copy Garmin weigh-ins into the
+ * Opt-in (garmin_connections.sync_from_garmin): copy Garmin weigh-ins into the
  * profile's weight history, and set the profile's body weight to the newest
  * entry from either source. Each weigh-in is copied once (its time goes into
  * weight_copied), so this runs after every import, a copy the user deleted
@@ -10,16 +10,18 @@ import { db } from "@/db";
 import { garminConnections, garminDays } from "@/db/schema";
 import { users } from "@/db/schema/users";
 import { userWeightEntries } from "@/db/schema/weight-history";
+import { toDateStr } from "@/lib/utils/cycle-position";
+import type { FieldSource } from "@/lib/utils/field-sources";
 import { and, desc, eq } from "drizzle-orm";
 import { garminWeighIns } from "./weigh-ins";
 
 /** Copies new weigh-ins when the user opted in. Returns how many were added. */
 export async function syncGarminWeight(userId: string): Promise<number> {
   const [conn] = await db
-    .select({ syncWeight: garminConnections.syncWeight, copied: garminConnections.weightCopied })
+    .select({ on: garminConnections.syncFromGarmin, copied: garminConnections.weightCopied })
     .from(garminConnections)
     .where(eq(garminConnections.userId, userId));
-  if (!conn?.syncWeight) return 0;
+  if (!conn?.on) return 0;
 
   const rows = await db.select({ data: garminDays.data }).from(garminDays).where(and(eq(garminDays.userId, userId), eq(garminDays.kind, "weight_entries")));
   const done = new Set(conn.copied);
@@ -48,4 +50,17 @@ export async function syncGarminWeight(userId: string): Promise<number> {
     .limit(1);
   if (newest) await db.update(users).set({ weightKg: newest.kg }).where(eq(users.id, userId));
   return fresh.length;
+}
+
+/** Who the body weight came from: the newest entry, a Garmin copy or typed. */
+export async function weightSource(userId: string): Promise<FieldSource | null> {
+  const [newest] = await db
+    .select({ at: userWeightEntries.recordedAt })
+    .from(userWeightEntries)
+    .where(eq(userWeightEntries.userId, userId))
+    .orderBy(desc(userWeightEntries.recordedAt))
+    .limit(1);
+  if (!newest) return null;
+  const [conn] = await db.select({ copied: garminConnections.weightCopied }).from(garminConnections).where(eq(garminConnections.userId, userId));
+  return { by: conn?.copied.includes(newest.at.getTime()) ? "garmin" : "you", on: toDateStr(newest.at) };
 }

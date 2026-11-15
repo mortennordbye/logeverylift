@@ -34,6 +34,7 @@ import {
 } from "@/db/schema";
 import { changeCoachMemory } from "@/lib/coach-memory";
 import { enduranceEnabledFor } from "@/lib/endurance";
+import { markField } from "@/lib/field-sources";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import {
   ENDURANCE_OFF,
@@ -324,6 +325,8 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
       .returning();
     return row;
   });
+  // Days or the long day set by anyone but the sync lock availability against Garmin.
+  if (ctx.writer !== "sync" && (change.availableDays !== undefined || change.longDay !== undefined)) await markField(ctx.userId, "availability", "you");
   return { profile: result, version: versions.get(versionKey({ type: "athlete", id: result.id })) ?? result.version };
 }
 

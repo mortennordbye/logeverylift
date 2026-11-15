@@ -56,8 +56,8 @@ export const garminConnections = pgTable("garmin_connections", {
   // built, and its model version. Cleared to null to force a rebuild.
   metricsComputedAt: timestamp("metrics_computed_at"),
   metricsVersion: integer("metrics_version"),
-  // Opt-in: copy Garmin weigh-ins into the profile's weight history (src/lib/garmin/weight-sync.ts).
-  syncWeight: boolean("sync_weight").default(false).notNull(),
+  // Opt-in "Sync from Garmin": weigh-ins, thresholds and profile fields (src/lib/garmin/sync-from-garmin.ts).
+  syncFromGarmin: boolean("sync_from_garmin").default(false).notNull(),
   // Times (ms) of every Garmin weigh-in already copied. Each is copied once, so a
   // copy the user deleted is not added back, while older weigh-ins the history
   // import finds later are still copied.

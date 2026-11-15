@@ -157,6 +157,7 @@ export async function resetE2EUser(email: string): Promise<void> {
         role: "user",
         // Every spec starts from the default home (docs/home-widgets-audit.md, 6.3).
         homeLayout: null,
+        fieldSources: {},
       })
       .where(eq(users.id, userId));
   });

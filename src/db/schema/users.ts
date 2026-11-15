@@ -1,5 +1,6 @@
 import { boolean, integer, jsonb, pgTable, real, text, timestamp, type AnyPgColumn } from "drizzle-orm/pg-core";
 import type { StoredHomeLayout } from "../../lib/home/stored-layout";
+import type { FieldSources } from "../../lib/utils/field-sources";
 import { gyms } from "./gyms";
 
 export const users = pgTable("user", {
@@ -55,6 +56,9 @@ export const users = pgTable("user", {
   // Run pace and speed follow distanceUnit; swim pace follows swimUnit.
   distanceUnit: text("distance_unit").$type<"km" | "mi">().notNull().default("km"),
   swimUnit: text("swim_unit").$type<"m" | "yd">().notNull().default("m"),
+  // Who set each Garmin-synced field and when; "you" locks it against the sync
+  // (src/lib/utils/field-sources.ts).
+  fieldSources: jsonb("field_sources").$type<FieldSources>().notNull().default({}),
   // The user's home screen layout (docs/home-widgets-audit.md). Null means the
   // default for their user type (src/lib/home/layout.ts). Order, size, hidden and
   // per-widget options only; never free text.

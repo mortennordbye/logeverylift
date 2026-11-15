@@ -16,7 +16,8 @@ import { forgetToken, rememberToken, syncGarmin } from "@/lib/garmin/sync";
 import { GARMIN_DAY_KINDS, endpointLabel } from "@/lib/garmin/endpoints";
 import { runGarminMetricsStep } from "@/lib/garmin/metrics-job";
 import { garminWorkerLoop, historyFloor } from "@/lib/garmin/worker";
-import { syncGarminWeight } from "@/lib/garmin/weight-sync";
+import { syncFromGarmin, takeGarminValue } from "@/lib/garmin/sync-from-garmin";
+import { SYNCED_FIELDS } from "@/lib/utils/field-sources";
 import { deleteGarminData } from "@/lib/garmin/delete-data";
 import { encryptSecret } from "@/lib/utils/crypto";
 import { requireSession } from "@/lib/utils/session";
@@ -51,7 +52,7 @@ export async function refreshGarmin(): Promise<ActionResult<{ syncError: string 
       await db.update(garminConnections).set({ pausedUntil: new Date(Date.now() + waitS * 1000) }).where(eq(garminConnections.userId, auth.user.id));
     }
     await runGarminMetricsStep(auth.user.id);
-    await syncGarminWeight(auth.user.id);
+    await syncFromGarmin(auth.user.id);
     revalidatePath("/more/garmin");
     return { success: true, data: { syncError: sync.status === "error" ? sync.error : null } };
   } catch (e) {
@@ -60,32 +61,52 @@ export async function refreshGarmin(): Promise<ActionResult<{ syncError: string 
   }
 }
 
-const weightSyncSchema = z.object({ enabled: z.boolean() });
+const syncSchema = z.object({ enabled: z.boolean() });
 
 /**
- * Turn the Garmin weight sync on or off. Turning it on copies every Garmin
- * weigh-in into the weight history at once; the import keeps it current.
+ * Turn "Sync from Garmin" on or off. Turning it on runs the sync at once
+ * (src/lib/garmin/sync-from-garmin.ts); the import keeps it current.
  */
-export async function setGarminWeightSync(data: unknown): Promise<ActionResult<{ added: number; weightKg: number | null }>> {
+export async function setGarminSync(data: unknown): Promise<ActionResult<{ weightKg: number | null }>> {
   const auth = await requireSession();
   if (!garminAllowed(auth.user.role)) return { success: false, error: DISABLED };
-  const parsed = weightSyncSchema.safeParse(data);
+  const parsed = syncSchema.safeParse(data);
   if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
   try {
     const [conn] = await db
       .update(garminConnections)
-      .set({ syncWeight: parsed.data.enabled })
+      .set({ syncFromGarmin: parsed.data.enabled })
       .where(eq(garminConnections.userId, auth.user.id))
       .returning({ id: garminConnections.id });
     if (!conn) return { success: false, error: "Garmin is not connected" };
-    const added = parsed.data.enabled ? await syncGarminWeight(auth.user.id) : 0;
+    if (parsed.data.enabled) await syncFromGarmin(auth.user.id);
     const [me] = await db.select({ weightKg: users.weightKg }).from(users).where(eq(users.id, auth.user.id));
     revalidatePath("/more/account");
     revalidatePath("/more/metrics");
-    return { success: true, data: { added, weightKg: me?.weightKg ?? null } };
+    revalidatePath("/settings");
+    return { success: true, data: { weightKg: me?.weightKg ?? null } };
   } catch (e) {
-    console.error("[setGarminWeightSync] failed", { userId: auth.user.id }, e instanceof Error ? e.message : "unknown");
-    return { success: false, error: "Failed to change the weight sync" };
+    console.error("[setGarminSync] failed", { userId: auth.user.id }, e instanceof Error ? e.message : "unknown");
+    return { success: false, error: "Failed to change the Garmin sync" };
+  }
+}
+
+const takeSchema = z.object({ field: z.enum(SYNCED_FIELDS) });
+
+/** "Use" on a "Garmin says" line: store Garmin's value and clear the field's lock. */
+export async function takeGarminField(data: unknown): Promise<ActionResult<undefined>> {
+  const auth = await requireSession();
+  if (!garminAllowed(auth.user.role)) return { success: false, error: DISABLED };
+  const parsed = takeSchema.safeParse(data);
+  if (!parsed.success) return { success: false, error: "Invalid input", fieldErrors: parsed.error.flatten().fieldErrors };
+  try {
+    if (!(await takeGarminValue(auth.user.id, parsed.data.field))) return { success: false, error: "Garmin has no value for this" };
+    revalidatePath("/more/account");
+    revalidatePath("/settings");
+    return { success: true, data: undefined };
+  } catch (e) {
+    console.error("[takeGarminField] failed", { userId: auth.user.id, field: parsed.data.field }, e instanceof Error ? e.message : "unknown");
+    return { success: false, error: "Failed to use the Garmin value" };
   }
 }
 

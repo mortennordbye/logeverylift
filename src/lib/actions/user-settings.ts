@@ -1,6 +1,7 @@
 "use server";
 
 import { db } from "@/db";
+import { markField } from "@/lib/field-sources";
 import { users } from "@/db/schema";
 import { requireSession } from "@/lib/utils/session";
 import { setDisplayUnitsSchema, setTimeZoneSchema } from "@/lib/validators/user-settings";
@@ -27,7 +28,10 @@ export async function setTimeZone(data: unknown): Promise<ActionResult<{ changed
     // Not for the one-time fill: it runs on whatever page the user opens
     // first, and revalidating there re-renders that page under the user.
     // The provider already has the zone, and every later request reads it.
-    if (rows.length > 0 && !parsed.data.ifUnset) revalidatePath("/settings");
+    if (rows.length > 0 && !parsed.data.ifUnset) {
+      await markField(auth.user.id, "timeZone", "you");
+      revalidatePath("/settings");
+    }
     return { success: true, data: { changed: rows.length > 0 } };
   } catch (e) {
     console.error("[setTimeZone] failed", e);
@@ -48,6 +52,7 @@ export async function setDisplayUnits(data: unknown): Promise<ActionResult<null>
       .update(users)
       .set({ ...(distanceUnit ? { distanceUnit } : {}), ...(swimUnit ? { swimUnit } : {}) })
       .where(eq(users.id, auth.user.id));
+    await markField(auth.user.id, "units", "you");
     revalidatePath("/settings");
     return { success: true, data: null };
   } catch (e) {

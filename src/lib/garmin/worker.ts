@@ -6,7 +6,7 @@ import { addDays } from "./dates";
 import { deleteGarminData } from "./delete-data";
 import { garminToday } from "./today";
 import { metricsDue, runGarminMetricsStep } from "./metrics-job";
-import { syncGarminWeight } from "./weight-sync";
+import { syncFromGarmin } from "./sync-from-garmin";
 import {
   RunLog,
   fatalTag,
@@ -175,9 +175,9 @@ export async function runGarminWorkerTick(now = new Date()): Promise<TickResult>
         console.error("[runGarminWorkerTick] metrics failed", { userId }, e instanceof Error ? e.message : "unknown");
       }
       try {
-        await syncGarminWeight(userId);
+        await syncFromGarmin(userId);
       } catch (e) {
-        console.error("[runGarminWorkerTick] weight sync failed", { userId }, e instanceof Error ? e.message : "unknown");
+        console.error("[runGarminWorkerTick] sync from Garmin failed", { userId }, e instanceof Error ? e.message : "unknown");
       }
       // The lease ends now; its end time orders the next claim (oldest first).
       await db.update(garminConnections).set({ leaseUntil: new Date() }).where(eq(garminConnections.id, conn.id));
