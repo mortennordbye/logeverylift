@@ -139,11 +139,16 @@ When you finish an item, delete it. When you add an item, write enough that some
 - **Unblocked by:** An owner yes, with the logging e2e specs.
 - **Touchpoints:** `src/components/features/LogRunModal.tsx`.
 
-### Garmin laps as step results
-- **What:** A structured session done outdoors with a watch gets step results only by hand or from the assistant. The Garmin file's laps could fill them.
-- **Why deferred:** Out of scope of the C6/D1 PR (`docs/plans/endurance-app.md`, section 0); laps rarely match steps one to one.
-- **Unblocked by:** An owner request. Map laps to play steps by order and duration, and write them with `saveStepResults` as source `assistant` or a new `garmin`.
-- **Touchpoints:** `src/lib/step-results.ts`, `src/lib/garmin/fit.ts`, `src/lib/utils/step-results.ts`.
+### Bike sessions: what the build left for later
+- **What:** Gaps from the bike build (`docs/plans/bike-sessions.md`, section 10):
+  - `/week` done bike rows do not show the band and "NP 141 W" (5.6). The stored pair has the activity; the row does not read it.
+  - On a bike-only day the Today card shows the ride, and the "Endurance today" widget repeats it as a short row.
+  - A day with only a swim or run workout still reads "Rest Day" on the Today card. The fix covers bike only.
+  - "Download .fit for the watch" (phase 6) is not built.
+  - `get_athlete_profile` over MCP does not return the custom bike HR zones. The resolver uses them.
+- **Why deferred:** Outside the five packages, or found at the merge. None of them shows a wrong number.
+- **Unblocked by:** The owner's local test of the bike build; then one small PR each.
+- **Touchpoints:** `src/app/week/page.tsx`, `src/lib/home/core.ts`, `src/components/features/home/widgets/today/View.tsx`, `src/lib/mcp/tools/athlete-profile.ts`.
 
 ### Pounds for weights
 - **What:** Show and take weights in lb for users who want it: every weight label and input (set logging, set edit, program edit, history, session detail, metrics, records, friends' feeds), progression steps in lb (5 lb, 2.5 lb) instead of converted kg steps, and plates and bars in lb (45 lb bar, 45/35/25/10/5/2.5 lb plates) in the plate calculator and the weight presets. Storage stays kg.
