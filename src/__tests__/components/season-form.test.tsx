@@ -128,6 +128,19 @@ describe("a race day that cannot be (round 8 B17)", () => {
     race("2026-11-15");
     expect(reasonOf(screen.getByRole("button", { name: "Create season" }))).toBe("Pick a race day on or after the season start.");
   });
+
+  it("says a B race after the picked end is the problem; an A race moves the end", () => {
+    render(<SeasonForm {...create} />);
+    race("2026-12-20");
+    fireEvent.click(within(screen.getByRole("group", { name: "Priority" })).getByRole("button", { name: "B" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change end" }));
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-12-01" } });
+    const button = screen.getByRole("button", { name: "Create season" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(reasonOf(button)).toBe("Pick a race day on or before the season end, or move the end.");
+    fireEvent.click(within(screen.getByRole("group", { name: "Priority" })).getByRole("button", { name: "A" }));
+    expect(button.getAttribute("aria-describedby")).toBeNull();
+  });
 });
 
 describe("New season with the endurance switch", () => {

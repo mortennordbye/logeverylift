@@ -251,30 +251,58 @@ export function curlyQuotes(text: string): string {
 // "the A race", so the priority does not read as the article "a" (J4-11).
 const raceLabel = (r: Pick<RaceLike, "name" | "priority">) => `the ${r.priority} race "${r.name}"`;
 
+/** The re-plan columns of a season: the reason, and the race each of its lines is about. */
+export type ReplanFlag = { replanReason: string; replanRaceIds: number[] };
+
+/** The stored form of reason lines, each about one race: joined, the first letter capitalised. */
+export function replanFlagOf(lines: { raceId: number; text: string }[]): ReplanFlag | null {
+  if (!lines.length) return null;
+  const text = lines.map((l) => l.text).join("; ");
+  return { replanReason: text[0].toUpperCase() + text.slice(1), replanRaceIds: lines.map((l) => l.raceId) };
+}
+
 /**
  * Why a change to a season's races needs a re-plan, or null. Flags a date
  * change of any race, an A race added or removed, and a priority change to or
  * from A. A name or distance change does not flag.
  */
-export function replanReason(before: RaceLike[], after: RaceLike[]): string | null {
-  const out: string[] = [];
+export function replanFlag(before: RaceLike[], after: RaceLike[]): ReplanFlag | null {
+  const out: { raceId: number; text: string }[] = [];
   const prev = new Map(before.map((r) => [r.id, r]));
   const next = new Map(after.map((r) => [r.id, r]));
   for (const r of after) {
     const was = prev.get(r.id);
     if (!was) {
-      if (r.priority === "A") out.push(`${raceLabel(r)} added on ${dayLabel(r.raceDate)}`);
+      if (r.priority === "A") out.push({ raceId: r.id, text: `${raceLabel(r)} added on ${dayLabel(r.raceDate)}` });
       continue;
     }
-    if (was.raceDate !== r.raceDate) out.push(`${raceLabel(r)} moved from ${dayLabel(was.raceDate)} to ${dayLabel(r.raceDate)}`);
+    if (was.raceDate !== r.raceDate) out.push({ raceId: r.id, text: `${raceLabel(r)} moved from ${dayLabel(was.raceDate)} to ${dayLabel(r.raceDate)}` });
     if (was.priority !== r.priority && (was.priority === "A" || r.priority === "A")) {
-      out.push(`"${r.name}" changed from ${was.priority} priority to ${r.priority} priority`);
+      out.push({ raceId: r.id, text: `"${r.name}" changed from ${was.priority} priority to ${r.priority} priority` });
     }
   }
-  for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push(`${raceLabel(r)} on ${dayLabel(r.raceDate)} removed`);
-  if (!out.length) return null;
-  const text = out.join("; ");
-  return text[0].toUpperCase() + text.slice(1);
+  for (const r of before) if (!next.has(r.id) && r.priority === "A") out.push({ raceId: r.id, text: `${raceLabel(r)} on ${dayLabel(r.raceDate)} removed` });
+  return replanFlagOf(out);
+}
+
+export const replanReason = (before: RaceLike[], after: RaceLike[]): string | null => replanFlag(before, after)?.replanReason ?? null;
+
+/**
+ * The flag once a race is removed: its own lines go, by race id. A reason
+ * stored before the ids were kept is matched by the race name. Null when no
+ * line is left.
+ */
+export function replanWithoutRace(
+  flag: { replanReason: string; replanRaceIds: number[] | null },
+  race: { id: number; name: string },
+): { replanReason: string; replanRaceIds: number[] | null } | null {
+  const lines = flag.replanReason.split("; ");
+  const ids = flag.replanRaceIds?.length === lines.length ? flag.replanRaceIds : null;
+  const keep = lines.map((text, i) => (ids ? ids[i] !== race.id : !text.includes(`"${race.name}"`)));
+  const left = lines.filter((_, i) => keep[i]);
+  if (!left.length) return null;
+  const text = left.join("; ");
+  return { replanReason: text[0].toUpperCase() + text.slice(1), replanRaceIds: ids?.filter((_, i) => keep[i]) ?? null };
 }
 
 /**

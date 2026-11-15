@@ -20,7 +20,9 @@ import {
   runLengthDays,
   nextPhase,
   phasesSkippedBy,
+  replanFlag,
   replanReason,
+  replanWithoutRace,
   seasonARace,
   seasonTimeline,
   taperDaysFor,
@@ -261,6 +263,18 @@ describe("re-plan trigger (D17)", () => {
     expect(replanReason([], [race(2, { priority: "B" })])).toBeNull();
     expect(replanReason([race(2, { priority: "C" })], [])).toBeNull();
     expect(replanReason([race(1, { priority: "B" })], [race(1, { priority: "C" })])).toBeNull();
+  });
+
+  it("keeps the race of each line, and a removed race takes only its own lines", () => {
+    const flag = replanFlag([race(1)], [race(1, { priority: "B" }), race(2, { name: "R1" })])!;
+    expect(flag.replanRaceIds).toEqual([1, 2]);
+    expect(replanWithoutRace(flag, { id: 1, name: "R1" })).toEqual({ replanReason: 'The A race "R1" added on 22 Aug 2027', replanRaceIds: [2] });
+    expect(replanWithoutRace({ ...flag, replanRaceIds: [2] }, { id: 2, name: "R1" })).toBeNull();
+    // A reason stored before the ids were kept is matched by the race name.
+    expect(replanWithoutRace({ replanReason: 'The A race "R1" moved; the B race "R2" moved', replanRaceIds: null }, { id: 1, name: "R1" })).toEqual({
+      replanReason: 'The B race "R2" moved',
+      replanRaceIds: null,
+    });
   });
 });
 

@@ -1,9 +1,12 @@
 import { db } from "@/db";
-import { programs, seasons, trainingCycleSlots, trainingCycles } from "@/db/schema";
+import { planRevisions, programs, seasons, trainingCycleSlots, trainingCycles } from "@/db/schema";
 import { updateRotationSession } from "@/lib/actions/planned-sessions";
+import { startTrainingCycle } from "@/lib/actions/training-cycles";
+import { dayMonth } from "@/lib/home/labels";
 import { loadPlanList } from "@/lib/plan-list";
 import { addDays, toDateStr } from "@/lib/utils/cycle-position";
-import { eq } from "drizzle-orm";
+import { todayIn } from "@/lib/utils/user-date";
+import { and, eq } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createSession, createUser } from "./factories";
 import { asUser } from "./setup";
@@ -118,6 +121,27 @@ describe("loadPlanList", () => {
       ["Upper B", "Skipped"],
       ["Rest", null],
     ]);
+  });
+
+  it("dates a cycle another start ended early by the day before the day it completed, not today", async () => {
+    const me = (await createUser({ timeZone: "UTC" })).id;
+    asUser(me);
+    const utcDay = (offset: number) => toDateStr(addDays(todayIn("UTC"), offset));
+    const [running] = await db
+      .insert(trainingCycles)
+      .values({ userId: me, name: "Ended early", durationWeeks: 8, status: "active", startDate: utcDay(-20) })
+      .returning();
+    const [next] = await db.insert(trainingCycles).values({ userId: me, name: "Next", durationWeeks: 4 }).returning();
+    expect((await startTrainingCycle(next.id)).success).toBe(true);
+    expect((await db.select().from(trainingCycles).where(eq(trainingCycles.id, running.id)))[0].status).toBe("completed");
+    // It completed a day ago: the row says the day before that, and stays put as days pass.
+    await db
+      .update(planRevisions)
+      .set({ createdAt: new Date(Date.now() - 86_400_000) })
+      .where(and(eq(planRevisions.objectType, "cycle"), eq(planRevisions.objectId, running.id)));
+
+    const data = await loadPlanList(me, false);
+    expect(data.past.map((r) => r.sub)).toEqual([`8 weeks · ended ${dayMonth(utcDay(-2))}`]);
   });
 
   it("lists the running season above one that has not started", async () => {

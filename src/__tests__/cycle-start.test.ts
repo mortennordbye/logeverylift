@@ -1,4 +1,4 @@
-import { dropsScheduledLine, endsRunningLine, runningOn } from "@/lib/utils/cycle-start";
+import { dropsScheduledLine, endsRunningLine, runningOn, startDayProblem } from "@/lib/utils/cycle-start";
 import { describe, expect, it } from "vitest";
 
 const peak = { id: 7, name: "Strength peak", day: "2026-11-23", season: null };
@@ -49,5 +49,14 @@ describe("runningOn", () => {
   it("is null from the first day after the running cycle", () => {
     expect(runningOn(running, "2026-12-12")).toBeNull();
     expect(runningOn(null, "2026-11-14")).toBeNull();
+  });
+});
+
+describe("startDayProblem", () => {
+  it("allows today up to 120 days ahead", () => {
+    expect(startDayProblem("2026-11-14", "2026-11-14")).toBeNull();
+    expect(startDayProblem("2027-03-14", "2026-11-14")).toBeNull();
+    expect(startDayProblem("2026-11-13", "2026-11-14")).toBe("past");
+    expect(startDayProblem("2027-03-15", "2026-11-14")).toBe("too_far");
   });
 });
