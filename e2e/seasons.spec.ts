@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { and, asc, eq } from "drizzle-orm";
-import { athleteProfiles, planRevisions, seasonRaces, seasons, trainingCycles, users } from "../src/db/schema";
+import { athleteProfiles, planRevisions, programs, seasonRaces, seasons, trainingCycles, users } from "../src/db/schema";
 import { dayLabel } from "../src/lib/utils/seasons";
 import { e2eUser } from "./fixtures/env";
 import { testDb } from "./fixtures/reset";
@@ -50,6 +50,8 @@ test("make a season with a race and phases, fit the taper, drag a phase, and ans
   // Races and phase types are endurance features (D18).
   await testDb().update(users).set({ enduranceEnabled: true }).where(eq(users.id, user.id));
   const [existing] = await testDb().insert(trainingCycles).values({ userId: user.id, name: "Build block", durationWeeks: 8 }).returning();
+  // A name no seeded program shares, so the picker has one row for it.
+  await testDb().insert(programs).values({ userId: user.id, name: "Zed taper" });
 
   await page.goto("/cycles");
   await page.getByRole("button", { name: "New cycle or season" }).click();
@@ -99,6 +101,12 @@ test("make a season with a race and phases, fit the taper, drag a phase, and ans
   await expect(page).toHaveURL(/\/seasons\/\d+\/phases\/\d+\/week$/);
   await expect(page.getByText("Step 2 of 2")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Build the week" })).toBeVisible();
+  // An all-rest week is no phase: Add phase stays off until the week has a session, as Create cycle does.
+  await expect(page.getByRole("button", { name: "Add phase" })).toBeDisabled();
+  await expect(page.getByText("Add a session first.")).toBeVisible();
+  await page.getByRole("button", { name: "Add a session on Mon" }).click();
+  await page.getByRole("region", { name: "Pick a program" }).getByRole("button", { name: /^Zed taper / }).click();
+  await settle();
   await page.getByRole("button", { name: "Add phase" }).click();
   await expect(page).toHaveURL(seasonUrl);
   await expect(page.getByTestId("season-phases")).toContainText("10 days");

@@ -81,9 +81,18 @@ describe("Add a phase", () => {
   });
 
   it("step 2 finishes with Add phase, back on the season", () => {
-    render(<AddPhaseFinish seasonId={7} />);
+    render(<AddPhaseFinish seasonId={7} hasSession />);
     fireEvent.click(screen.getByRole("button", { name: "Add phase" }));
     expect(nav.returnTo).toHaveBeenCalledWith("/seasons/7");
+  });
+
+  it("step 2 Add phase stays off with the New cycle reason until the week has a session (round 9)", () => {
+    render(<AddPhaseFinish seasonId={7} hasSession={false} />);
+    const button = screen.getByRole("button", { name: "Add phase" }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(document.getElementById(button.getAttribute("aria-describedby") ?? "")?.textContent).toBe("Add a session first.");
+    fireEvent.click(button);
+    expect(nav.returnTo).not.toHaveBeenCalled();
   });
 });
 

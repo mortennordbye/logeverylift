@@ -353,14 +353,25 @@ export function AddPhaseCancel({ seasonId, cycleId, name }: { seasonId: number; 
   );
 }
 
-/** Step 2's pinned finish (J4_WeekBuilder): the phase is saved, so it only goes back to the season. */
-export function AddPhaseFinish({ seasonId }: { seasonId: number }) {
+/**
+ * Step 2's pinned finish (J4_WeekBuilder): the phase is saved, so it only goes
+ * back to the season. As Create cycle, it stays off until the week has a
+ * session: a rest day alone is no phase.
+ */
+export function AddPhaseFinish({ seasonId, hasSession }: { seasonId: number; hasSession: boolean }) {
   const returnTo = useReturnTo();
   return (
     <PinnedBar>
-      <button type="button" onClick={() => returnTo(`/seasons/${seasonId}`)} className={PRIMARY_BUTTON}>
+      <button
+        type="button"
+        onClick={() => returnTo(`/seasons/${seasonId}`)}
+        disabled={!hasSession}
+        aria-describedby={hasSession ? undefined : "finish-reason"}
+        className={PRIMARY_BUTTON}
+      >
         Add phase
       </button>
+      <ButtonReason id="finish-reason" reason={hasSession ? null : "Add a session first."} />
     </PinnedBar>
   );
 }
