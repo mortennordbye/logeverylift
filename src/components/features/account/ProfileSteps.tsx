@@ -6,7 +6,7 @@
  * updateUserProfile.
  */
 
-import { chip } from "@/components/features/AthleteProfileParts";
+import { chip, SubmitButton } from "@/components/features/AthleteProfileParts";
 import { updateUserProfile } from "@/lib/actions/profile";
 import { GOAL_VALUES, type Goal } from "@/lib/utils/goals";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -65,13 +65,7 @@ function SaveButton({ saving, error, onClick }: { saving: boolean; error: string
   return (
     <>
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <button
-        onClick={onClick}
-        disabled={saving}
-        className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-      >
-        {saving ? "Saving…" : "Save"}
-      </button>
+      <SubmitButton label={saving ? "Saving…" : "Save"} disabled={saving} onClick={onClick} />
     </>
   );
 }

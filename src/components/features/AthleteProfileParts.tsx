@@ -66,7 +66,7 @@ type SaveProps = { changeSetId?: string; onSaved: () => void; submitLabel?: stri
 export const chip = (on: boolean) =>
   `min-h-[44px] rounded-xl text-sm font-medium active:opacity-70 ${on ? "bg-primary text-primary-foreground" : "bg-muted"}`;
 
-function SubmitButton({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
+export function SubmitButton({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
