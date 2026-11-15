@@ -51,20 +51,17 @@ function inputHint(input: ProtocolInput, units: Units): string {
 
 /**
  * Enter one threshold: type the value, or do a field test and let the app
- * compute it (docs/plans/athlete-profile.md, 2.3). Admins with Garmin data see
- * the Garmin estimate with "Use this". Used on Account and in the intake
- * interview.
+ * compute it (docs/plans/athlete-profile.md, 2.3). Used on Account and in the
+ * intake interview.
  */
 export function ThresholdEditor({
   kind,
   units,
-  suggestion,
   changeSetId,
   onSaved,
 }: {
   kind: ThresholdKind;
   units: Units;
-  suggestion?: SuggestionView | null;
   changeSetId?: string;
   onSaved: () => void;
 }) {
@@ -123,23 +120,6 @@ export function ThresholdEditor({
 
   return (
     <div className="space-y-3" data-testid={`threshold-editor-${kind}`}>
-      {suggestion && (
-        <div className="rounded-xl bg-muted px-4 py-3 flex items-center justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-sm">Garmin estimate: {formatThreshold(kind, suggestion.value, units)}</p>
-            <p className="text-xs text-muted-foreground">
-              From {suggestion.basis}.{kind === "run_threshold_pace" ? " A 30-minute test is better." : ""}
-            </p>
-          </div>
-          <button
-            onClick={() => save({ source: "garmin", value: suggestion.value })}
-            disabled={saving}
-            className="shrink-0 min-h-[44px] px-3 text-sm font-medium text-primary active:opacity-60 disabled:opacity-50"
-          >
-            Use this
-          </button>
-        </div>
-      )}
       {protocols.length > 0 && (
         <div className="flex gap-2" role="radiogroup" aria-label="How">
           {(["enter", ...protocols.map((_, i) => i)] as const).map((m) => (

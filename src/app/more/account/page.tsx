@@ -18,7 +18,8 @@ import { DEFAULT_UNITS } from "@/lib/utils/units";
 import { eq } from "drizzle-orm";
 
 import { garminAllowed } from "@/lib/garmin/access";
-import { fieldSyncView } from "@/lib/garmin/sync-from-garmin";
+import { garminProfile } from "@/lib/garmin/sync-from-garmin";
+import { fieldSyncLines } from "@/lib/utils/garmin-profile";
 import { weightSource } from "@/lib/garmin/weight-sync";
 import { BackLink } from "@/components/ui/BackLink";
 
@@ -27,7 +28,7 @@ export default async function AccountPage() {
   const userId = session.user.id;
   // Every Garmin line and switch is for Premium users only; the switch also needs a connection.
   const premium = garminAllowed(session.user.role);
-  const [user, [garmin], endurance, today, numbers, weight, sync] = await Promise.all([
+  const [user, [garmin], endurance, today, numbers, weight, garminData] = await Promise.all([
     db.query.users.findFirst({ where: eq(users.id, userId) }),
     premium
       ? db.select({ syncFromGarmin: garminConnections.syncFromGarmin }).from(garminConnections).where(eq(garminConnections.userId, userId))
@@ -36,7 +37,7 @@ export default async function AccountPage() {
     userToday(userId).then(toDateStr),
     getThresholdsData(),
     premium ? weightSource(userId) : null,
-    premium ? fieldSyncView(userId) : {},
+    premium ? garminProfile(userId) : null,
   ]);
   const monday = mondayOf(today);
   // The athlete rows show only with the endurance switch on (D18).
@@ -53,6 +54,15 @@ export default async function AccountPage() {
     today,
   );
   const numbersData = numbers.success ? numbers.data : null;
+  const units = numbersData?.units ?? DEFAULT_UNITS;
+  const sync = premium
+    ? fieldSyncLines(garminData, {
+        sources: user?.fieldSources ?? {},
+        availability: endurance ? { availableDays: athlete?.availableDays ?? null, longDay: athlete?.longDay ?? null } : null,
+        timeZone: user?.timeZone ?? null,
+        units,
+      })
+    : {};
 
   return (
     <div className="h-[100dvh] pb-nav-safe bg-background flex flex-col overflow-hidden">
@@ -114,12 +124,12 @@ export default async function AccountPage() {
             deletedOn: t.deletedAt!.toISOString().slice(0, 10),
           })),
           suggestions: (numbersData?.suggestions ?? []).map((s) => ({ kind: s.kind, value: s.value, basis: s.basis })),
-          units: numbersData?.units ?? DEFAULT_UNITS,
+          units,
           today,
+          showActivityToFriends: user?.showActivityToFriends ?? true,
+          aiConsent: !!user?.aiConsentAt,
+          primaryGymName: gym?.name ?? null,
         }}
-        showActivityToFriends={user?.showActivityToFriends ?? true}
-        aiConsent={!!user?.aiConsentAt}
-        primaryGymName={gym?.name ?? null}
       />
     </div>
   );

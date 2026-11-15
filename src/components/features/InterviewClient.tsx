@@ -13,7 +13,7 @@ import {
   type InjuryView,
   type ProfileView,
 } from "@/components/features/AthleteProfileParts";
-import { ThresholdEditor, type SuggestionView, type ThresholdView } from "@/components/features/ThresholdEditor";
+import { ThresholdEditor, type ThresholdView } from "@/components/features/ThresholdEditor";
 import { THRESHOLD_KINDS, type ThresholdKind } from "@/db/schema/athlete-profile";
 import { finishInterview, moveMemoryToProfile } from "@/lib/actions/athlete-profile";
 import { localPath } from "@/lib/utils/sign-in-redirect";
@@ -51,7 +51,6 @@ export function InterviewClient({
   race,
   profile,
   thresholds,
-  suggestions,
   injuries,
   memory,
   units,
@@ -60,7 +59,6 @@ export function InterviewClient({
   race: InterviewRaceView;
   profile: ProfileView | null;
   thresholds: ThresholdView[];
-  suggestions: SuggestionView[];
   injuries: InjuryView[];
   memory: MemoryEntryView[];
   units: Units;
@@ -208,7 +206,6 @@ export function InterviewClient({
                     <ThresholdEditor
                       kind={kind}
                       units={units}
-                      suggestion={suggestions.find((s) => s.kind === kind) ?? null}
                       changeSetId={changeSetId}
                       onSaved={() => {
                         setOpenKind(null);

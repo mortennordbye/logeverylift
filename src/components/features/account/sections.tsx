@@ -41,7 +41,10 @@ import {
 } from "@/components/features/account/ProfileSteps";
 import { SyncNote } from "@/components/features/account/SyncNote";
 import type { ThresholdKind } from "@/db/schema/athlete-profile";
+import { ChangePassword } from "@/components/features/account/ChangePassword";
 import { addThresholdValue } from "@/lib/actions/athlete-profile";
+import { updateActivityPrivacy } from "@/lib/actions/friends";
+import { setAiConsent } from "@/lib/actions/legal";
 import { setGarminSync, takeGarminField } from "@/lib/actions/garmin";
 import { sourceLine, type FieldSource, type SyncedField } from "@/lib/utils/field-sources";
 import type { Goal } from "@/lib/utils/goals";
@@ -83,6 +86,9 @@ export type AccountData = {
   suggestions: SuggestionView[];
   units: Units;
   today: string;
+  showActivityToFriends: boolean;
+  aiConsent: boolean;
+  primaryGymName: string | null;
 };
 
 export type Row = {
@@ -123,12 +129,12 @@ function thresholdRow(kind: ThresholdKind): Row {
       const c = current[kind];
       const s = d.suggestions.find((x) => x.kind === kind);
       const warnings = thresholdWarnings({ max_hr: current.max_hr, [kind]: current[kind] });
-      if (!c && !s && warnings.length === 0) return null;
+      if (!c && warnings.length === 0) return null;
       return (
         <>
           <SyncNote
             note={c ? thresholdSourceLine(c, d.today, d.premium) : null}
-            says={s ? formatThreshold(kind, s.value, d.units) : null}
+            says={s && c && c.source !== "garmin" ? formatThreshold(kind, s.value, d.units) : null}
             onUse={() => addThresholdValue({ kind, value: s!.value, source: "garmin" })}
           />
           {warnings.map((w) => (
@@ -141,7 +147,7 @@ function thresholdRow(kind: ThresholdKind): Row {
     },
     editor: (d, done) => (
       <>
-        <ThresholdEditor kind={kind} units={d.units} suggestion={d.suggestions.find((s) => s.kind === kind) ?? null} onSaved={done} />
+        <ThresholdEditor kind={kind} units={d.units} onSaved={done} />
         <ThresholdHistory history={d.thresholds.filter((t) => t.kind === kind)} units={d.units} onDeleted={done} />
       </>
     ),
@@ -280,6 +286,33 @@ export const SECTIONS: Section[] = [
         label: (d) => `Recently deleted (${d.deletedThresholds.length})`,
         show: (d) => d.deletedThresholds.length > 0,
         editor: (d) => <DeletedThresholds deleted={d.deletedThresholds} units={d.units} />,
+      },
+    ],
+  },
+  {
+    id: "security-and-privacy",
+    title: "Security and privacy",
+    rows: [
+      { id: "change-password", label: "Change Password", editor: (_d, done) => <ChangePassword onDone={done} /> },
+      {
+        id: "activity-privacy",
+        label: "Show workout activity to friends",
+        note: () => "Friends can see your workouts, sets and streak",
+        toggle: { on: (d) => d.showActivityToFriends, set: (on) => updateActivityPrivacy({ showActivityToFriends: on }) },
+      },
+      {
+        id: "primary-gym",
+        label: "Primary gym",
+        note: (d) => (d.primaryGymName ? `${d.primaryGymName} · shown on the gym map` : "Not set · you're not on the gym map"),
+        href: "/more/account/gym",
+      },
+      // Turning AI editing on happens in AI Setup, next to what it sends.
+      {
+        id: "ai-editing",
+        label: "AI editing",
+        note: () => "AI Setup can send your request to an outside model",
+        show: (d) => d.aiConsent,
+        toggle: { on: (d) => d.aiConsent, set: (on) => setAiConsent({ consent: on }) },
       },
     ],
   },

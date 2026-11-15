@@ -17,7 +17,6 @@ export default async function InterviewPage({ searchParams }: { searchParams: Pr
       race={data.race}
       profile={data.profile}
       thresholds={data.thresholds.map((t) => ({ id: t.id, kind: t.kind, value: t.value, measuredOn: t.measuredOn, source: t.source }))}
-      suggestions={data.suggestions.map((s) => ({ kind: s.kind, value: s.value, basis: s.basis }))}
       injuries={data.injuries.map((i) => ({
         id: i.id,
         area: i.area,

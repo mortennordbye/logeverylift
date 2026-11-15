@@ -10,7 +10,8 @@ import { garminConnections, users } from "@/db/schema";
 import { requireSession } from "@/lib/utils/session";
 import { eq } from "drizzle-orm";
 import { garminAllowed } from "@/lib/garmin/access";
-import { fieldSyncView } from "@/lib/garmin/sync-from-garmin";
+import { garminProfile } from "@/lib/garmin/sync-from-garmin";
+import { fieldSyncLines } from "@/lib/utils/garmin-profile";
 
 export default async function SettingsPage() {
   const auth = await requireSession();
@@ -21,6 +22,7 @@ export default async function SettingsPage() {
       distanceUnit: users.distanceUnit,
       swimUnit: users.swimUnit,
       enduranceEnabled: users.enduranceEnabled,
+      fieldSources: users.fieldSources,
     })
     .from(users)
     .where(eq(users.id, auth.user.id));
@@ -31,7 +33,14 @@ export default async function SettingsPage() {
         .from(garminConnections)
         .where(eq(garminConnections.userId, auth.user.id))
     : [];
-  const sync = garminOn ? await fieldSyncView(auth.user.id) : {};
+  const sync = garminOn
+    ? fieldSyncLines(await garminProfile(auth.user.id), {
+        sources: pref?.fieldSources ?? {},
+        availability: null,
+        timeZone: pref?.timeZone ?? null,
+        units: { distance: pref?.distanceUnit ?? "km", swim: pref?.swimUnit ?? "m" },
+      })
+    : {};
 
   return (
     <SettingsClient
