@@ -12,10 +12,13 @@ import { users } from "@/db/schema/users";
 import { userWeightEntries } from "@/db/schema/weight-history";
 import { parseStoredLayout } from "@/lib/home/layout";
 import { audit, fail, failInternal, ok } from "@/lib/mcp/result";
+import { userToday } from "@/lib/user-settings";
+import { toDateStr } from "@/lib/utils/cycle-position";
+import type { FieldSources } from "@/lib/utils/field-sources";
 import { GOAL_VALUES, parseUserGoals } from "@/lib/utils/goals";
 import { distanceUnitSchema, swimUnitSchema, timeZoneSchema } from "@/lib/validators/user-settings";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 
 export function registerProfileTools(server: McpServer, userId: string) {
@@ -117,9 +120,17 @@ export function registerProfileTools(server: McpServer, userId: string) {
         const updates = { ...rest, ...goalsValue };
         if (Object.values(updates).every((v) => v === undefined)) return fail("No profile field to update");
 
+        // An assistant's time zone or units lock them against the Garmin sync, as Settings does.
+        const locked: FieldSources = {};
+        if (rest.timeZone !== undefined || rest.distanceUnit !== undefined || rest.swimUnit !== undefined) {
+          const you = { by: "you" as const, on: toDateStr(await userToday(userId)) };
+          if (rest.timeZone !== undefined) locked.timeZone = you;
+          if (rest.distanceUnit !== undefined || rest.swimUnit !== undefined) locked.units = you;
+        }
+        const lock = Object.keys(locked).length ? sql`${users.fieldSources} || ${JSON.stringify(locked)}::jsonb` : undefined;
         await db
           .update(users)
-          .set(updates)
+          .set({ ...updates, ...(lock && { fieldSources: lock }) })
           .where(eq(users.id, userId));
 
         const newWeight = rest.weightKg;
