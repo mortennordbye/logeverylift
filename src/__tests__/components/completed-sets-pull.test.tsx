@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { WorkoutSessionInitializer } from "@/components/features/WorkoutSessionInitializer";
 import { WorkoutSessionProvider, useWorkoutSession } from "@/contexts/workout-session-context";
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /**
@@ -23,10 +23,15 @@ vi.mock("@/lib/actions/workout-sessions", () => ({
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 
-let session: ReturnType<typeof useWorkoutSession>;
 function Probe() {
-  session = useWorkoutSession();
-  return <p data-testid="done">{[...(session?.completedSetIds ?? [])].sort((a, b) => a - b).join(",")}</p>;
+  const session = useWorkoutSession()!;
+  return (
+    <>
+      <p data-testid="done">{[...session.completedSetIds].sort((a, b) => a - b).join(",")}</p>
+      <button onClick={() => session.addCompletedSet(2)}>Log set 2</button>
+      <button onClick={() => session.removeCompletedSet(2)}>Un-log set 2</button>
+    </>
+  );
 }
 
 function deferred() {
@@ -64,14 +69,14 @@ beforeEach(() => {
 describe("the logged-sets pull", () => {
   it("keeps a set logged while it was in flight", async () => {
     const answer = await mountWithPullInFlight([1]);
-    act(() => session!.addCompletedSet(2));
+    fireEvent.click(screen.getByRole("button", { name: "Log set 2" }));
     await answer();
     expect(screen.getByTestId("done").textContent).toBe("1,2");
   });
 
   it("keeps a set un-logged while it was in flight", async () => {
     const answer = await mountWithPullInFlight([1, 2]);
-    act(() => session!.removeCompletedSet(2));
+    fireEvent.click(screen.getByRole("button", { name: "Un-log set 2" }));
     await answer();
     expect(screen.getByTestId("done").textContent).toBe("1");
   });
