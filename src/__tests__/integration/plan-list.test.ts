@@ -141,7 +141,7 @@ describe("loadPlanList", () => {
       .where(and(eq(planRevisions.objectType, "cycle"), eq(planRevisions.objectId, running.id)));
 
     const data = await loadPlanList(me, false);
-    expect(data.past.map((r) => r.sub)).toEqual([`8 weeks · ended ${dayMonth(utcDay(-2))}`]);
+    expect(data.past.map((r) => r.sub)).toEqual([`8 weeks · ended early on ${dayMonth(utcDay(-2))}`]);
   });
 
   it("lists the running season above one that has not started", async () => {
