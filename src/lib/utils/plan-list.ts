@@ -150,15 +150,15 @@ export type HeroView =
 
 /**
  * "Week 3 of 6 · Rotation", or "Starts Mon 16 Nov · Week 1 of 8" for a block
- * that has not started. The weeks are the block's own, also when another
- * block's scheduled start cuts it: the hero's Ends line gives that day
- * (runningEnd), so a cut block never reads "Week 1 of 1" (round 8).
+ * that has not started. When another block's scheduled start cuts it, the
+ * label drops "of M": the Ends line gives the cut day (runningEnd), and the
+ * season card's length agrees with it (round 10).
  */
-export function heroLabel(c: CycleLike, today: string, active: boolean): string {
+export function heroLabel(c: CycleLike, today: string, active: boolean, cut = false): string {
   const start = active ? c.startDate! : c.scheduledStartDate!;
   if (!active) return `Starts ${shortDay(start)} · Week 1 of ${c.durationWeeks}`;
   const week = Math.min(Math.floor(Math.max(daysBetweenStr(start, today), 0) / 7) + 1, c.durationWeeks);
-  return `Week ${week} of ${c.durationWeeks} · ${scheduleWords(c.scheduleType)}`;
+  return `Week ${week}${cut ? "" : ` of ${c.durationWeeks}`} · ${scheduleWords(c.scheduleType)}`;
 }
 
 export type WeekSession = {

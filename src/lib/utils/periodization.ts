@@ -407,13 +407,15 @@ export type PeriodizationSummaryInput = {
 /**
  * Human phrasing for a periodization state — shared by the cycle detail page and
  * the in-workout header so both read identically. Pure (no DB, no JSX).
+ * `cut`: a scheduled start ends the block early, so the headline drops "of M".
  */
 export function formatPeriodizationSummary(
   p: PeriodizationSummaryInput,
+  { cut = false }: { cut?: boolean } = {},
 ): { headline: string; note: string } {
   const pct = Math.round(p.multiplier * 100);
   const deload = p.isDeload && p.goal === "build" ? " · deload" : "";
-  const headline = `${p.phaseLabel}${deload} · Week ${p.currentWeek} of ${p.totalWeeks}`;
+  const headline = `${p.phaseLabel}${deload} · Week ${p.currentWeek}${cut ? "" : ` of ${p.totalWeeks}`}`;
 
   let note: string;
   if (p.goal === "maintain") {

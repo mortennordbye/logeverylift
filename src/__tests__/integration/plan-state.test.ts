@@ -71,8 +71,8 @@ describe("another block's scheduled start ends the running phase (J4-18)", () =>
 
     const list = await loadPlanList(me, false);
     expect(list.hero?.ends).toBe(`Ends ${dayMonth(day(2))}`);
-    // The weeks are the block's own; the Ends line says it is cut (round 8).
-    expect(list.hero?.label).toBe("Week 1 of 4 · Same days each week");
+    // A cut block drops "of M"; the Ends line gives the cut (round 10).
+    expect(list.hero?.label).toBe("Week 1 · Same days each week");
     const card = list.seasons.find((s) => s.id === seasonId)!;
     expect(card.phases[0].sub).toContain(dayMonth(day(2)));
     expect(card.phases[0].badge).toBe("Now");
@@ -143,8 +143,8 @@ function textOf(tree: ReactNode): string {
   return textOf((tree.props as { children?: ReactNode }).children);
 }
 
-describe("a cycle cut by a scheduled start (round 8)", () => {
-  it("the cycle page counts the block's own weeks, as the Plan hero does", async () => {
+describe("a cycle cut by a scheduled start (round 10)", () => {
+  it("the cycle page and the Plan hero give its week without \"of M\", and end on the cut day", async () => {
     const [rotation] = await db
       .insert(trainingCycles)
       .values({ userId: me, name: "Upper lower", durationWeeks: 7, scheduleType: "rotation" })
@@ -153,8 +153,12 @@ describe("a cycle cut by a scheduled start (round 8)", () => {
     expect((await startTrainingCycle(await draft("Oslo base"), day(3))).success).toBe(true);
 
     const text = textOf(await CycleDetailPage({ params: Promise.resolve({ id: String(rotation.id) }) }));
-    expect(text).toContain("Week 1 of 7");
-    expect(text).not.toContain("Week 1 of 1");
-    expect((await loadPlanList(me, false)).hero?.label).toBe("Week 1 of 7 · Rotation");
+    // The season card and the length say it runs 3 days; "of 7" would contradict them.
+    expect(text).toContain("3 days · Rotation · Week 1");
+    expect(text).not.toMatch(/Week 1 of/);
+    expect(text).toMatch(new RegExp(`Ends\\s+${dayMonth(day(2))}`));
+    const hero = (await loadPlanList(me, false)).hero;
+    expect(hero?.label).toBe("Week 1 · Rotation");
+    expect(hero?.ends).toBe(`Ends ${dayMonth(day(2))}`);
   });
 });

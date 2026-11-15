@@ -241,6 +241,15 @@ describe("formatPeriodizationSummary", () => {
     expect(note).toBe("Peak in 19 wks · this week 60% of peak volume.");
   });
 
+  it("drops \"of M\" from the headline of a cut block (round 10)", () => {
+    const load = periodizedLoad(1, 7, "build");
+    const { headline } = formatPeriodizationSummary(
+      { goal: "build", phase: load.phase, phaseLabel: "Base", currentWeek: 1, totalWeeks: 7, multiplier: load.multiplier, isDeload: false, weeksUntilPeak: 4, weeksUntilTaper: 6 },
+      { cut: true },
+    );
+    expect(headline).toBe("Base · Week 1");
+  });
+
   it("flags deload weeks in the headline", () => {
     const { headline } = summary(4, 24, "build");
     expect(headline).toContain("· deload");
