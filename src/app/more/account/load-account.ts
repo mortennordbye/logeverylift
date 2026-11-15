@@ -1,7 +1,6 @@
 import type { AccountData } from "@/components/features/account/sections";
 import { parseUserGoals } from "@/lib/utils/goals";
 import { db } from "@/db";
-import { gyms } from "@/db/schema/gyms";
 import { users } from "@/db/schema/users";
 import { garminConnections } from "@/db/schema";
 import { getThresholdsData } from "@/lib/actions/athlete-profile";
@@ -41,8 +40,7 @@ export async function loadAccountData() {
   ]);
   const monday = mondayOf(today);
   // The athlete rows show only with the endurance switch on (D18).
-  const [gym, athlete, injuries, deletedInjuries, illness, sessions] = await Promise.all([
-    user?.primaryGymId ? db.query.gyms.findFirst({ where: eq(gyms.id, user.primaryGymId), columns: { name: true } }) : undefined,
+  const [athlete, injuries, deletedInjuries, illness, sessions] = await Promise.all([
     endurance ? getAthleteProfile(userId) : null,
     endurance ? listInjuries(userId) : [],
     endurance ? listDeletedInjuries(userId) : [],
@@ -118,7 +116,6 @@ export async function loadAccountData() {
       today,
       showActivityToFriends: user?.showActivityToFriends ?? true,
       aiConsent: !!user?.aiConsentAt,
-      primaryGymName: gym?.name ?? null,
     } satisfies AccountData,
   };
 }

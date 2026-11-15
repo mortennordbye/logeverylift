@@ -93,7 +93,6 @@ export type AccountData = {
   today: string;
   showActivityToFriends: boolean;
   aiConsent: boolean;
-  primaryGymName: string | null;
 };
 
 export type Row = {
@@ -307,12 +306,6 @@ export const SECTIONS: Section[] = [
         label: "Show workout activity to friends",
         note: () => "Friends can see your workouts, sets and streak",
         toggle: { on: (d) => d.showActivityToFriends, set: (on) => updateActivityPrivacy({ showActivityToFriends: on }) },
-      },
-      {
-        id: "primary-gym",
-        label: "Primary gym",
-        note: (d) => (d.primaryGymName ? `${d.primaryGymName} · shown on the gym map` : "Not set · you're not on the gym map"),
-        href: "/more/account/gym",
       },
       // Turning AI editing on happens in AI Setup, next to what it sends.
       {

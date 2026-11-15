@@ -60,7 +60,7 @@ export function GymPickerClient({ current }: { current: CurrentGym }) {
       return;
     }
     setPicked(null);
-    returnTo(gym ? "/more/gyms" : "/more/account/privacy-and-security");
+    returnTo("/more/gyms");
   }
 
   return (
