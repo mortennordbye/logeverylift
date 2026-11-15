@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The parts of the athlete profile that the profile page and the intake
- * interview share (docs/plans/athlete-profile.md, 2.6 and 2.9): experience,
+ * The parts of the athlete profile that Account and the intake interview
+ * share (docs/plans/athlete-profile.md, 2.6 and 2.9): experience,
  * availability, strength goal, and the injury list with its sheet. Each saves
  * through its own Server Action, so a half-done interview keeps its answers.
  */
@@ -19,9 +19,10 @@ import {
   type InjuryStatus,
   type StrengthGoal,
 } from "@/db/schema/athlete-profile";
-import { addInjuryEntry, deleteInjuryEntry, saveProfile, updateInjuryEntry } from "@/lib/actions/athlete-profile";
+import { addInjuryEntry, deleteInjuryEntry, restoreInjuryEntry, saveProfile, updateInjuryEntry } from "@/lib/actions/athlete-profile";
 import { callAction } from "@/lib/utils/stale-bundle";
 import { STRENGTH_GOAL_LABEL, STRENGTH_GOAL_TEXT, strengthTable } from "@/lib/utils/strength-goal";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export const DAY_LABELS = ["", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -378,5 +379,55 @@ export function InjuryList({ injuries, onOpen }: { injuries: InjuryView[]; onOpe
         </details>
       )}
     </div>
+  );
+}
+
+export type DeletedInjuryView = { id: number; text: string; deletedOn: string };
+
+/** Injuries and limits on Account: the list, add, and the recently deleted ones to restore. */
+export function Injuries({ injuries, deleted }: { injuries: InjuryView[]; deleted: DeletedInjuryView[] }) {
+  const router = useRouter();
+  const [injury, setInjury] = useState<InjuryDraft | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function restore(id: number) {
+    setError(null);
+    const r = await callAction(restoreInjuryEntry({ id }));
+    if (!r.success) setError(r.error);
+    router.refresh();
+  }
+
+  return (
+    <section className="space-y-2">
+      <InjuryList injuries={injuries} onOpen={(i) => setInjury({ ...i })} />
+      <button onClick={() => setInjury(emptyInjury())} className="w-full min-h-[44px] rounded-xl bg-muted text-sm font-medium active:opacity-70">
+        Add an injury
+      </button>
+      {deleted.length > 0 && (
+        <details className="space-y-2">
+          <summary className="min-h-[44px] flex items-center text-sm font-medium text-muted-foreground">Recently deleted ({deleted.length})</summary>
+          {deleted.map((d) => (
+            <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl bg-card px-4 py-2">
+              <div className="min-w-0">
+                <p className="text-sm truncate">{d.text}</p>
+                <p className="text-xs text-muted-foreground">Deleted {d.deletedOn}</p>
+              </div>
+              <button onClick={() => restore(d.id)} className="shrink-0 min-h-[44px] px-3 text-sm font-medium text-primary active:opacity-60">
+                Restore
+              </button>
+            </div>
+          ))}
+        </details>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      <InjurySheet
+        draft={injury}
+        onClose={() => setInjury(null)}
+        onSaved={() => {
+          setInjury(null);
+          router.refresh();
+        }}
+      />
+    </section>
   );
 }

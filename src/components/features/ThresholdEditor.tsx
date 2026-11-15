@@ -1,25 +1,36 @@
 "use client";
 
-import type { ThresholdKind } from "@/db/schema/athlete-profile";
-import { addThresholdValue } from "@/lib/actions/athlete-profile";
+import type { ThresholdKind, ThresholdSource } from "@/db/schema/athlete-profile";
+import { addThresholdValue, deleteThresholdValue, restoreThresholdValue } from "@/lib/actions/athlete-profile";
 import { callAction } from "@/lib/utils/stale-bundle";
 import {
   THRESHOLD_LABEL,
   THRESHOLD_MEASURE,
   formatThreshold,
+  isStale,
   paceUnitLabel,
   parseMinSec,
   parseThresholdInput,
   protocolsFor,
   thresholdRangeError,
   valueFromTest,
+  weeksSince,
   type ProtocolInput,
   type ProtocolSpec,
 } from "@/lib/utils/thresholds";
 import { METERS_PER_MILE, type Units } from "@/lib/utils/units";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 export type SuggestionView = { kind: ThresholdKind; value: number; basis: string };
+export type ThresholdView = { id: number; kind: ThresholdKind; value: number; measuredOn: string; source: ThresholdSource };
+export type DeletedThresholdView = ThresholdView & { deletedOn: string };
+
+const SOURCE_TEXT: Record<ThresholdSource, string> = {
+  manual: "Entered",
+  test: "Field test",
+  garmin: "Garmin estimate",
+};
 
 /** A test input in the user's units, as the metric number the test takes. */
 function inputValue(input: ProtocolInput, text: string, units: Units): number | null {
@@ -39,8 +50,8 @@ function inputHint(input: ProtocolInput, units: Units): string {
 /**
  * Enter one threshold: type the value, or do a field test and let the app
  * compute it (docs/plans/athlete-profile.md, 2.3). Admins with Garmin data see
- * the Garmin estimate with "Use this". Used on the Thresholds page and in the
- * intake interview.
+ * the Garmin estimate with "Use this". Used on Account and in the intake
+ * interview.
  */
 export function ThresholdEditor({
   kind,
@@ -206,6 +217,97 @@ export function ThresholdEditor({
       >
         Save {THRESHOLD_LABEL[kind]}
       </button>
+    </div>
+  );
+}
+
+/** Under a threshold row: where the current value came from, its age, and the Garmin estimate. */
+export function ThresholdNote({ current, suggestion, units, today }: { current: ThresholdView | undefined; suggestion: SuggestionView | undefined; units: Units; today: string }) {
+  return (
+    <>
+      {current && (
+        <p className="mt-1 text-xs text-muted-foreground">
+          {SOURCE_TEXT[current.source]} · {current.measuredOn}
+          {isStale(current.measuredOn, today) && ` · Last tested ${weeksSince(current.measuredOn, today)} weeks ago. Retest after a recovery week.`}
+        </p>
+      )}
+      {suggestion && <p className="mt-1 text-xs text-primary">Garmin estimate: {formatThreshold(suggestion.kind, suggestion.value, units)}</p>}
+    </>
+  );
+}
+
+/** The values entered for one kind, each with Delete. */
+export function ThresholdHistory({ history, units, onDeleted }: { history: ThresholdView[]; units: Units; onDeleted: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+
+  async function remove(id: number) {
+    setError(null);
+    const r = await callAction(deleteThresholdValue({ id }));
+    if (!r.success) {
+      setError(r.error);
+      return;
+    }
+    onDeleted();
+  }
+
+  return (
+    <>
+      {history.length > 0 && (
+        <section className="space-y-2">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">History</h3>
+          {history.map((h) => (
+            <div key={h.id} className="flex items-center justify-between gap-3 rounded-xl bg-muted px-4 py-2" data-testid="threshold-history-row">
+              <div>
+                <p className="text-sm">{formatThreshold(h.kind, h.value, units)}</p>
+                <p className="text-xs text-muted-foreground">
+                  {SOURCE_TEXT[h.source]} · {h.measuredOn}
+                </p>
+              </div>
+              <button
+                onClick={() => remove(h.id)}
+                aria-label={`Delete ${formatThreshold(h.kind, h.value, units)} from ${h.measuredOn}`}
+                className="shrink-0 min-h-[44px] px-3 text-sm font-medium text-destructive active:opacity-60"
+              >
+                Delete
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </>
+  );
+}
+
+/** Deleted values of the last 90 days, each with Restore. */
+export function DeletedThresholds({ deleted, units }: { deleted: DeletedThresholdView[]; units: Units }) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+
+  async function restore(id: number) {
+    setError(null);
+    const r = await callAction(restoreThresholdValue({ id }));
+    if (!r.success) setError(r.error);
+    router.refresh();
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-muted-foreground">Deleted values can be restored for 90 days.</p>
+      {deleted.map((d) => (
+        <div key={d.id} className="flex items-center justify-between gap-3 rounded-xl bg-card px-4 py-2" data-testid="threshold-deleted">
+          <div className="min-w-0">
+            <p className="text-sm">
+              {THRESHOLD_LABEL[d.kind]} {formatThreshold(d.kind, d.value, units)}
+            </p>
+            <p className="text-xs text-muted-foreground">Deleted {d.deletedOn}</p>
+          </div>
+          <button onClick={() => restore(d.id)} className="shrink-0 min-h-[44px] px-3 text-sm font-medium text-primary active:opacity-60">
+            Restore
+          </button>
+        </div>
+      ))}
+      {error && <p className="text-sm text-destructive">{error}</p>}
     </div>
   );
 }

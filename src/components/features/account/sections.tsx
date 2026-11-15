@@ -1,0 +1,257 @@
+"use client";
+
+/**
+ * The Account page as data: its sections in order, and each row's label,
+ * value, when it shows, and the editor its sheet opens. To add a field, add
+ * a row here. The page renders this list in one loop and opens one sheet.
+ */
+
+import {
+  AvailabilityStep,
+  DAY_LABELS,
+  ExperienceStep,
+  Injuries,
+  LEVEL_TEXT,
+  StrengthStep,
+  type DeletedInjuryView,
+  type InjuryView,
+  type ProfileView,
+} from "@/components/features/AthleteProfileParts";
+import { SickPeriods, type Consistency, type IllnessDraft } from "@/components/features/IllnessSheet";
+import { InvitedBadge } from "@/components/features/InvitedBadge";
+import {
+  DeletedThresholds,
+  ThresholdEditor,
+  ThresholdHistory,
+  ThresholdNote,
+  type DeletedThresholdView,
+  type SuggestionView,
+  type ThresholdView,
+} from "@/components/features/ThresholdEditor";
+import {
+  EXPERIENCE_LABELS,
+  GENDER_LABELS,
+  GOAL_LABELS,
+  GoalsStep,
+  NameStep,
+  NumberStep,
+  PickerStep,
+  type ExperienceLevel,
+  type Gender,
+} from "@/components/features/account/ProfileSteps";
+import type { ThresholdKind } from "@/db/schema/athlete-profile";
+import { setGarminWeightSync } from "@/lib/actions/garmin";
+import type { Goal } from "@/lib/utils/goals";
+import { shortDay } from "@/lib/utils/seasons";
+import { STRENGTH_GOAL_LABEL } from "@/lib/utils/strength-goal";
+import { THRESHOLD_LABEL, currentThresholds, formatThreshold, thresholdWarnings } from "@/lib/utils/thresholds";
+import type { Units } from "@/lib/utils/units";
+import type { ActionResult } from "@/types/workout";
+import type { ReactNode } from "react";
+
+/** Everything the rows read, loaded in the page's one server read. */
+export type AccountData = {
+  name: string;
+  email: string;
+  role: string;
+  invited: boolean;
+  goals: Goal[];
+  experienceLevel: ExperienceLevel | null;
+  gender: Gender | null;
+  birthYear: number | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  /** null hides the switch: Garmin not connected or not enabled. */
+  garminWeightSync: boolean | null;
+  endurance: boolean;
+  athlete: ProfileView | null;
+  interviewDoneOn: string | null;
+  injuries: InjuryView[];
+  deletedInjuries: DeletedInjuryView[];
+  illness: (IllnessDraft & { id: number })[];
+  consistency: Consistency;
+  thresholds: ThresholdView[];
+  deletedThresholds: DeletedThresholdView[];
+  suggestions: SuggestionView[];
+  units: Units;
+  today: string;
+};
+
+export type Row = {
+  id: string;
+  label: string | ((d: AccountData) => string);
+  value?: (d: AccountData) => ReactNode;
+  /** A second line under the row. */
+  note?: (d: AccountData) => ReactNode;
+  show?: (d: AccountData) => boolean;
+  /** What the row's sheet shows; `done` closes it and reloads the data. */
+  editor?: (d: AccountData, done: () => void) => ReactNode;
+  href?: string;
+  /** A switch in the row instead of a sheet. */
+  toggle?: { on: (d: AccountData) => boolean; set: (on: boolean) => Promise<ActionResult<unknown>> };
+};
+
+export type Section = { id: string; title: string; rows: Row[] };
+
+const notSet = "Not set";
+const endurance = (d: AccountData) => d.endurance;
+
+function thresholdRow(kind: ThresholdKind): Row {
+  return {
+    id: `threshold-${kind}`,
+    label: THRESHOLD_LABEL[kind],
+    value: (d) => {
+      const c = currentThresholds(d.thresholds)[kind];
+      return c ? formatThreshold(kind, c.value, d.units) : notSet;
+    },
+    note: (d) => {
+      const current = currentThresholds(d.thresholds);
+      const warnings = thresholdWarnings({ max_hr: current.max_hr, [kind]: current[kind] });
+      return (
+        <>
+          <ThresholdNote current={current[kind]} suggestion={d.suggestions.find((s) => s.kind === kind)} units={d.units} today={d.today} />
+          {warnings.map((w) => (
+            <p key={w} className="mt-1 text-xs text-amber-600 dark:text-amber-400" data-testid="threshold-warning">
+              {w}
+            </p>
+          ))}
+        </>
+      );
+    },
+    editor: (d, done) => (
+      <>
+        <ThresholdEditor kind={kind} units={d.units} suggestion={d.suggestions.find((s) => s.kind === kind) ?? null} onSaved={done} />
+        <ThresholdHistory history={d.thresholds.filter((t) => t.kind === kind)} units={d.units} onDeleted={done} />
+      </>
+    ),
+  };
+}
+
+export const SECTIONS: Section[] = [
+  {
+    id: "profile",
+    title: "Profile",
+    rows: [
+      { id: "name", label: "Name", value: (d) => d.name, editor: (d, done) => <NameStep initial={d.name} onSaved={done} /> },
+      { id: "email", label: "Email", value: (d) => d.email },
+      { id: "role", label: "Role", value: (d) => <span className="capitalize">{d.role}</span> },
+      { id: "joined", label: "Joined", value: () => <InvitedBadge compact />, show: (d) => d.invited },
+    ],
+  },
+  {
+    id: "goals-and-training",
+    title: "Goals and training",
+    rows: [
+      {
+        id: "goals",
+        label: "Goals",
+        value: (d) => (d.goals.length ? d.goals.map((g) => GOAL_LABELS[g]).join(", ") : notSet),
+        editor: (d, done) => <GoalsStep initial={d.goals} onSaved={done} />,
+      },
+      {
+        id: "strength-goal",
+        label: "Strength goal",
+        value: (d) => (d.athlete?.strengthGoal ? STRENGTH_GOAL_LABEL[d.athlete.strengthGoal] : notSet),
+        show: endurance,
+        editor: (d, done) => <StrengthStep initial={d.athlete?.strengthGoal ?? null} onSaved={done} />,
+      },
+      {
+        id: "experience-strength",
+        label: "Experience, strength",
+        value: (d) => (d.experienceLevel ? EXPERIENCE_LABELS[d.experienceLevel] : notSet),
+        editor: (d, done) => <PickerStep field="experienceLevel" initial={d.experienceLevel} labels={EXPERIENCE_LABELS} onSaved={done} />,
+      },
+      {
+        id: "experience-endurance",
+        label: "Experience, endurance",
+        value: (d) => (d.athlete?.enduranceLevel ? LEVEL_TEXT[d.athlete.enduranceLevel].label : notSet),
+        show: endurance,
+        editor: (d, done) => <ExperienceStep initial={d.athlete?.enduranceLevel ?? null} onSaved={done} />,
+      },
+      {
+        id: "availability",
+        label: "Availability",
+        value: (d) =>
+          d.athlete?.availableDays?.length
+            ? `${d.athlete.availableDays.map((n) => DAY_LABELS[n]).join(" ")} · ${d.athlete.hoursPerWeek ?? "?"} h a week`
+            : notSet,
+        show: endurance,
+        editor: (d, done) => <AvailabilityStep initial={d.athlete} onSaved={done} />,
+      },
+      {
+        id: "athlete-questions",
+        label: "Athlete questions",
+        value: (d) => (d.interviewDoneOn ? `Answered ${shortDay(d.interviewDoneOn)}` : "Not answered"),
+        show: endurance,
+        href: "/more/athlete/interview",
+      },
+    ],
+  },
+  {
+    id: "body-profile",
+    title: "Body and health",
+    rows: [
+      {
+        id: "gender",
+        label: "Gender",
+        value: (d) => (d.gender ? GENDER_LABELS[d.gender] : notSet),
+        editor: (d, done) => <PickerStep field="gender" initial={d.gender} labels={GENDER_LABELS} onSaved={done} />,
+      },
+      {
+        id: "birth-year",
+        label: "Year of birth",
+        value: (d) => d.birthYear ?? notSet,
+        editor: (d, done) => <NumberStep field="birthYear" label="Year of birth" initial={d.birthYear} unit="" placeholder="1990" onSaved={done} />,
+      },
+      {
+        id: "height",
+        label: "Height",
+        value: (d) => (d.heightCm != null ? `${d.heightCm} cm` : notSet),
+        editor: (d, done) => <NumberStep field="heightCm" label="Height" initial={d.heightCm} unit="cm" placeholder="180" onSaved={done} />,
+      },
+      {
+        id: "weight",
+        label: "Body weight",
+        value: (d) => (d.weightKg != null ? `${d.weightKg} kg` : notSet),
+        editor: (d, done) => <NumberStep field="weightKg" label="Body weight" initial={d.weightKg} unit="kg" placeholder="80" onSaved={done} />,
+      },
+      {
+        id: "garmin-weight-sync",
+        label: "Sync weight from Garmin",
+        note: () => "Each Garmin weigh-in is added to your weight history, and body weight follows the newest entry.",
+        show: (d) => d.garminWeightSync !== null,
+        toggle: { on: (d) => d.garminWeightSync === true, set: (on) => setGarminWeightSync({ enabled: on }) },
+      },
+      {
+        id: "injuries",
+        label: "Injuries and limits",
+        value: (d) => {
+          const now = d.injuries.filter((i) => i.status !== "past").length;
+          return now ? `${now} current` : "None";
+        },
+        show: endurance,
+        editor: (d) => <Injuries injuries={d.injuries} deleted={d.deletedInjuries} />,
+      },
+      {
+        id: "sick-periods",
+        label: "Sick periods",
+        value: (d) => (d.illness.some((p) => p.endedOn === null || p.endedOn >= d.today) ? "Sick now" : d.illness.length ? `${d.illness.length}` : "None"),
+        show: endurance,
+        editor: (d) => <SickPeriods illness={d.illness} consistency={d.consistency} today={d.today} />,
+      },
+    ],
+  },
+  {
+    id: "training-numbers",
+    title: "Training numbers",
+    rows: [
+      ...(["max_hr", "ftp", "lthr_bike", "lthr_run", "run_threshold_pace", "swim_css"] as const).map(thresholdRow),
+      {
+        id: "deleted-thresholds",
+        label: (d) => `Recently deleted (${d.deletedThresholds.length})`,
+        show: (d) => d.deletedThresholds.length > 0,
+        editor: (d) => <DeletedThresholds deleted={d.deletedThresholds} units={d.units} />,
+      },
+    ],
+  },
+];
