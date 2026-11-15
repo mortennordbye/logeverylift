@@ -1,6 +1,6 @@
 "use client";
 
-import { SubmitButton, chip } from "@/components/features/AthleteProfileParts";
+import { SubmitButton, chip } from "@/components/features/EditorControls";
 import type { ThresholdKind, ThresholdSource } from "@/db/schema/athlete-profile";
 import { addThresholdValue, deleteThresholdValue, restoreThresholdValue } from "@/lib/actions/athlete-profile";
 import { callAction } from "@/lib/utils/stale-bundle";

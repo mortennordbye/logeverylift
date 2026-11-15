@@ -6,7 +6,7 @@
  * updateUserProfile.
  */
 
-import { chip, SubmitButton } from "@/components/features/AthleteProfileParts";
+import { chip, SubmitButton } from "@/components/features/EditorControls";
 import { updateUserProfile } from "@/lib/actions/profile";
 import { GOAL_VALUES, type Goal } from "@/lib/utils/goals";
 import { callAction } from "@/lib/utils/stale-bundle";

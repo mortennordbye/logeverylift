@@ -7,7 +7,7 @@
  * features only (D18).
  */
 
-import { SubmitButton, chip } from "@/components/features/AthleteProfileParts";
+import { SubmitButton, chip } from "@/components/features/EditorControls";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { manageIllness } from "@/lib/actions/workouts-compliance";
 import { SEVERITY_TEXT, type IllnessSeverity } from "@/lib/utils/session-compliance";

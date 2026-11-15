@@ -3,10 +3,10 @@
 /**
  * The athlete profile editors on Account (docs/plans/account-profile.md):
  * experience, availability, strength goal, and the injury list with its
- * sheet, plus the chip and Save button every Account editor shares. Each
- * saves through its own Server Action.
+ * sheet. Each saves through its own Server Action.
  */
 
+import { SubmitButton, chip } from "@/components/features/EditorControls";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import {
   ENDURANCE_LEVELS,
@@ -62,21 +62,6 @@ export type InjuryView = {
 };
 
 type SaveProps = { onSaved: () => void };
-
-export const chip = (on: boolean) =>
-  `min-h-[44px] rounded-xl text-sm font-medium active:opacity-70 ${on ? "bg-primary text-primary-foreground" : "bg-muted"}`;
-
-export function SubmitButton({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="w-full rounded-xl bg-primary py-4 text-sm font-semibold text-primary-foreground disabled:opacity-50 active:opacity-80"
-    >
-      {label}
-    </button>
-  );
-}
 
 function useSave(onSaved: () => void) {
   const [saving, setSaving] = useState(false);

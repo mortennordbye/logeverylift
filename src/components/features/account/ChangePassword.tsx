@@ -1,6 +1,6 @@
 "use client";
 
-import { SubmitButton } from "@/components/features/AthleteProfileParts";
+import { SubmitButton } from "@/components/features/EditorControls";
 import { authClient } from "@/lib/auth-client";
 import { CheckCircle2 } from "lucide-react";
 import { useState } from "react";
