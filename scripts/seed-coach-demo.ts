@@ -181,8 +181,8 @@ async function main() {
     await db.update(s.aiSetupPlans).set({ checkinStatus: "fits", checkinAnsweredAt: new Date() }).where(eq(s.aiSetupPlans.userId, userId));
     const now = new Date();
     await db.insert(s.oauthClients).values([
-      { id: randomUUID(), clientId: "coach-demo-claude", name: "Claude", createdAt: now, updatedAt: now },
-      { id: randomUUID(), clientId: "coach-demo-long", name: "My very long named personal training assistant", createdAt: now, updatedAt: now },
+      { id: randomUUID(), clientId: "coach-demo-claude", name: "Claude", redirectUris: [], createdAt: now, updatedAt: now },
+      { id: randomUUID(), clientId: "coach-demo-long", name: "My very long named personal training assistant", redirectUris: [], createdAt: now, updatedAt: now },
     ]);
     await db.insert(s.oauthConsents).values([
       { id: randomUUID(), clientId: "coach-demo-long", userId, scopes: ["openid", MCP_READ_SCOPE], createdAt: new Date(now.getTime() - 86_400_000), updatedAt: now },
