@@ -691,7 +691,12 @@ export function SeasonDetailClient(p: Props) {
                   ]}
                 />
               </div>
-              {phase.unitNote && <span className="text-[13px] text-muted-foreground">{phase.unitNote}</span>}
+              {/* The note can land under the pinned Save bar: scroll it into view when it appears (round 10). */}
+              {phase.unitNote && (
+                <span ref={(el) => el?.scrollIntoView({ block: "nearest" })} className="text-[13px] text-muted-foreground">
+                  {phase.unitNote}
+                </span>
+              )}
             </div>
           </PlanSheetPanel>
         )}
@@ -751,11 +756,11 @@ function PhaseRow({ phase, sub, warn, badge, onOpen }: { phase: SeasonPhaseView;
           <circle cx="15" cy="18" r="1.6" />
         </svg>
       </button>
-      {/* Below 360 px the badge goes under the name, so the name keeps the row's width (round 8). */}
+      {/* The badge goes under the name at every width, so the name and its dates keep the row's width (round 8, round 10). */}
       <button
         type="button"
         onClick={onOpen}
-        className="grid min-h-11 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 py-2.5 pr-3 text-left active:opacity-80 min-[360px]:grid-cols-[minmax(0,1fr)_auto_auto]"
+        className="grid min-h-11 min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-0.5 py-2.5 pr-3 text-left active:opacity-80"
       >
         <span className="col-start-1 row-start-1 flex min-w-0 flex-col gap-0.5">
           <span data-testid="phase-name" className={`break-words text-[15px] font-medium ${phase.state === "done" ? "text-muted-foreground" : ""}`}>
@@ -766,12 +771,13 @@ function PhaseRow({ phase, sub, warn, badge, onOpen }: { phase: SeasonPhaseView;
         </span>
         {badge && (
           <span
-            className={`col-start-1 row-start-2 justify-self-start text-xs font-semibold min-[360px]:col-start-2 min-[360px]:row-start-1 min-[360px]:justify-self-auto ${badgeAccent(badge) ? "text-primary" : "text-muted-foreground"}`}
+            data-testid="phase-badge"
+            className={`col-start-1 row-start-2 justify-self-start text-xs font-semibold ${badgeAccent(badge) ? "text-primary" : "text-muted-foreground"}`}
           >
             {keepDates(badge)}
           </span>
         )}
-        <span className="col-start-2 row-span-2 row-start-1 min-[360px]:col-start-3 min-[360px]:row-span-1">
+        <span className="col-start-2 row-span-2 row-start-1">
           <Chevron />
         </span>
       </button>

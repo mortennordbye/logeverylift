@@ -132,7 +132,7 @@ export function EditCycleForm({ cycle, enduranceEnabled, liveSeasonId = null, to
             <div key={m.value} data-testid="schedule-type" className="flex items-center gap-3 rounded-2xl bg-widget px-4 py-3.5">
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="text-[15px] font-semibold">{m.title}</span>
-                <span className="text-[13px] text-muted-foreground">{m.sub}</span>
+                <span className="text-[13px] text-muted-foreground">{m.lockedSub}</span>
               </span>
               <Lock aria-hidden className="h-4 w-4 shrink-0 text-muted-foreground" />
             </div>

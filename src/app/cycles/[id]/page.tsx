@@ -94,9 +94,12 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
 
   // A running block shows the length it runs: a draft scheduled inside it ends it the day before.
   const runDays = cycle.status === "active" && cycle.startDate ? runLengthDays(cycle.startDate, lengthDays, otherScheduled?.day ?? null) : lengthDays;
-  // The block's own weeks, also when a scheduled start cuts it: the Plan hero
-  // and the periodization line count them the same way (round 8).
+  // A cut block shows "Week N" without "of M", as the Plan hero (round 10):
+  // the length and the Ends day give where it stops.
+  const cut = runDays < lengthDays;
   const totalWeeks = cycle.durationWeeks;
+  const barWeeks = cut ? Math.ceil(runDays / 7) : totalWeeks;
+  const runLastDay = blockStart ? addDaysStr(blockStart, runDays - 1) : null;
   const currentWeek = cycle.status === "active" && cycle.startDate ? cycleWeek(parseDateStr(cycle.startDate), cycle.durationWeeks, parseDateStr(today), cycle.durationDays).currentWeek : null;
 
   const dated = planned.filter((p) => p.rotationPosition == null && p.id != null);
@@ -167,8 +170,8 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
   const completedOn = completedAt ? localDateStr(completedAt, (await getUserSettings(userId)).timeZone) : null;
   const endedLabel = endedLine(cycle.startDate, plannedLast, today, completedOn);
 
-  const { headline: periodizationHeadline, note: periodizationNote } = periodization ? formatPeriodizationSummary(periodization) : { headline: "", note: "" };
-  const subLine = cycleSubLine(cycle.scheduleType, runDays === lengthDays ? lengthLabel(cycle) : lengthLabel(lengthFromDays(runDays)), currentWeek, totalWeeks);
+  const { headline: periodizationHeadline, note: periodizationNote } = periodization ? formatPeriodizationSummary(periodization, { cut }) : { headline: "", note: "" };
+  const subLine = cycleSubLine(cycle.scheduleType, cut ? lengthLabel(lengthFromDays(runDays)) : lengthLabel(cycle), currentWeek, cut ? null : totalWeeks);
   const phaseLine = season ? `Phase ${season.position}${cycle.phaseType ? ` · ${PHASE_TYPE_LABELS[cycle.phaseType]}` : ""}` : null;
   const templateHref = `/cycles/${cycle.id}/template`;
   // Days the template names with no session, such as "Mobility" (only a weekday cycle has days).
@@ -254,8 +257,8 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
 
         {!weekday && cycle.status === "active" && currentWeek != null && (
           <div className="flex flex-col gap-2 rounded-[20px] bg-widget p-4" data-testid="cycle-progress">
-            <div className="grid gap-1 h-2.5" style={{ gridTemplateColumns: `repeat(${totalWeeks}, minmax(0, 1fr))` }} aria-label={`Week ${currentWeek} of ${totalWeeks}`} role="img">
-              {Array.from({ length: totalWeeks }, (_, i) => (
+            <div className="grid gap-1 h-2.5" style={{ gridTemplateColumns: `repeat(${barWeeks}, minmax(0, 1fr))` }} aria-label={cut ? `Week ${currentWeek}` : `Week ${currentWeek} of ${totalWeeks}`} role="img">
+              {Array.from({ length: barWeeks }, (_, i) => (
                 <div
                   key={i}
                   className={`rounded ${i + 1 <= currentWeek ? "bg-brand" : "bg-[#707076]"} ${i + 1 === currentWeek ? "ring-2 ring-brand ring-offset-2 ring-offset-widget" : ""}`}
@@ -264,7 +267,7 @@ export default async function CycleDetailPage({ params }: { params: Promise<{ id
             </div>
             <div className="flex justify-between text-[13px] text-muted-foreground">
               <span>Started {dayMonth(cycle.startDate!)}</span>
-              <span>Ends {dayMonth(lastDay!)}</span>
+              <span>Ends {dayMonth(runLastDay!)}</span>
             </div>
           </div>
         )}

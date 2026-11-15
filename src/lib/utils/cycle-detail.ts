@@ -44,10 +44,12 @@ export type DetailSession = {
  * The line under the cycle name: "8 weeks · Rotation · Week 3 of 6". The
  * length comes first, as on the Plan list row ("4 weeks · Same days each
  * week"); a rotation adds its week, a weekday cycle shows it in the switcher.
+ * `totalWeeks` is null when a scheduled start cuts the block: "Week 1" only.
  */
-export function cycleSubLine(scheduleType: "day_of_week" | "rotation", length: string, currentWeek: number | null, totalWeeks: number): string {
+export function cycleSubLine(scheduleType: "day_of_week" | "rotation", length: string, currentWeek: number | null, totalWeeks: number | null): string {
   const rotation = scheduleType === "rotation";
-  return [length, rotation ? "Rotation" : "Same days each week", rotation && currentWeek ? `Week ${currentWeek} of ${totalWeeks}` : null].filter(Boolean).join(" · ");
+  const week = currentWeek ? `Week ${currentWeek}${totalWeeks == null ? "" : ` of ${totalWeeks}`}` : null;
+  return [length, rotation ? "Rotation" : "Same days each week", rotation ? week : null].filter(Boolean).join(" · ");
 }
 
 /** A row opens the session sheet, "Did you do it?", or nothing (done, rest, a past skip). */

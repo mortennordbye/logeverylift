@@ -156,6 +156,20 @@ describe("weekday week", () => {
     expect(within(sheet).getByText("Fri 20 Nov")).toBeTruthy();
   });
 
+  it("a labelled day keeps its label when a session is moved onto it (round 10)", () => {
+    const label = "Mobility, stretching and the long drive home";
+    const moved = session({ id: 7, date: "2026-11-20", name: "Swim CSS", programId: null, touched: true, templateDate: "2026-11-19" });
+    renderWeek({ sessions: [...sessions, moved], dayLabels: { 5: label } });
+    const row = screen.getByRole("button", { name: `Fri 20 Nov: ${label}` });
+    expect(row.textContent).toContain("Fri20 Nov");
+    const swim = screen.getByRole("button", { name: /^Fri 20 Nov: Swim CSS/ });
+    expect(swim.textContent).toContain("Moved from Thu");
+    // The label comes first and holds the day column; the swim follows it.
+    const rows = screen.getAllByTestId("week-row");
+    expect(rows.indexOf(swim)).toBe(rows.indexOf(row) + 1);
+    expect(swim.textContent).not.toContain("20 Nov");
+  });
+
   it("a plain rest day does not open", () => {
     renderWeek();
     expect(screen.queryByRole("button", { name: /^Wed 18 Nov/ })).toBeNull();
@@ -324,6 +338,31 @@ describe("Did you do it? from a past row", () => {
     });
     expect(confirmPlannedDone).toHaveBeenCalledWith({ plannedSessionId: 1, durationSeconds: 3900, distanceMeters: null, rpe: 6, notes: null });
     expect(refresh).toHaveBeenCalled();
+  });
+
+  it("fills in the planned time as a real value, so Save is on (round 10)", async () => {
+    const planned = [session({ id: 1, date: "2026-11-16", name: "Run aerobic", programId: null, status: "missed", answer: { ...answer, plannedSeconds: 65 * 60 } })];
+    renderWeek({ sessions: planned });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    expect((within(sheet).getByLabelText("Time in minutes") as HTMLInputElement).value).toBe("65");
+    expect((within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement).disabled).toBe(false);
+    await act(async () => {
+      fireEvent.click(within(sheet).getByRole("button", { name: "Save" }));
+    });
+    expect(confirmPlannedDone).toHaveBeenCalledWith(expect.objectContaining({ plannedSessionId: 1, durationSeconds: 3900 }));
+  });
+
+  it("leaves Time blank with no number in it when the session has no planned time (round 10)", () => {
+    renderWeek({ sessions: past });
+    fireEvent.click(screen.getByRole("button", { name: /^Mon 16 Nov: Run aerobic/ }));
+    const sheet = screen.getByTestId("did-you-do-it-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
+    const time = within(sheet).getByLabelText("Time in minutes") as HTMLInputElement;
+    expect(time.value).toBe("");
+    expect(time.placeholder).not.toMatch(/\d/);
+    expect(within(sheet).getByText("Type a time.")).toBeTruthy();
   });
 
   it("stores Missed", async () => {
@@ -719,7 +758,8 @@ describe("round 9 F: the session sheets", () => {
     const sheet = screen.getByTestId("did-you-do-it-sheet");
     fireEvent.click(within(sheet).getByRole("button", { name: "Yes, I did it" }));
     const field = within(sheet).getByLabelText("Time in minutes") as HTMLInputElement;
-    expect(field.placeholder).toBe("45");
+    // No grey "45" that reads like a value (round 10).
+    expect(field.placeholder).toBe("");
     expect(within(field.closest("label")!).getByText("min").getAttribute("aria-hidden")).toBe("true");
   });
 });

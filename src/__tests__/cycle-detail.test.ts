@@ -7,6 +7,10 @@ describe("cycleSubLine", () => {
     expect(cycleSubLine("rotation", "6 weeks", 3, 6)).toBe("6 weeks · Rotation · Week 3 of 6");
     expect(cycleSubLine("day_of_week", "10 days", 1, 2)).toBe("10 days · Same days each week");
   });
+
+  it("gives a cut rotation its week without \"of M\" (round 10)", () => {
+    expect(cycleSubLine("rotation", "1 week", 1, null)).toBe("1 week · Rotation · Week 1");
+  });
 });
 
 /** The cycle detail's pure parts (docs/plans/plan-tab-redesign.md, P2). */

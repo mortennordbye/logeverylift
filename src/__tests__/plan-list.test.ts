@@ -92,9 +92,10 @@ describe("plan list words", () => {
     expect(heroLabel(next, TODAY, false)).toBe("Starts Mon 16 Nov · Week 1 of 8");
   });
 
-  it("counts the hero's weeks of the whole block when a scheduled start cuts it; the Ends line gives the cut (round 8)", () => {
+  it("drops the hero's \"of M\" when a scheduled start cuts the block; the Ends line gives the cut (round 10)", () => {
     const running = { id: 1, name: "Base", durationWeeks: 7, durationDays: null, scheduleType: "day_of_week" as const, startDate: "2026-11-09", scheduledStartDate: null };
-    // No "Week 1 of 1" for a 7 week block that a start on Mon 16 Nov cuts.
+    // Neither "Week 1 of 7" (the season card says 1 wk) nor "Week 1 of 1".
+    expect(heroLabel(running, TODAY, true, true)).toBe("Week 1 · Same days each week");
     expect(heroLabel(running, TODAY, true)).toBe("Week 1 of 7 · Same days each week");
     expect(runningEnd("2026-11-09", "2026-12-27", "2026-11-16")).toBe("2026-11-15");
   });

@@ -7,12 +7,13 @@
 import type { SessionCompliance } from "@/lib/session-compliance";
 import type { Sport } from "@/lib/utils/session-compliance";
 
-export type AnswerSession = { id: number; date: string; name: string; summary: string | null; sport: Sport | null };
+/** `plannedSeconds`: the planned time, which Yes fills in (the user usually did the plan). */
+export type AnswerSession = { id: number; date: string; name: string; summary: string | null; sport: Sport | null; plannedSeconds?: number | null };
 
 const SPORT_NAME: Record<Sport, string> = { swim: "Swim", bike: "Ride", run: "Run" };
 
 /** A session as the answers show it: its label or workout name, then its program, then its sport. */
-export function answerSession(s: Pick<SessionCompliance, "id" | "date" | "label" | "programName" | "workout" | "workoutSummary" | "sport">): AnswerSession {
+export function answerSession(s: Pick<SessionCompliance, "id" | "date" | "label" | "programName" | "workout" | "workoutSummary" | "sport" | "planned">): AnswerSession {
   const name = s.label ?? s.workout?.name ?? s.programName ?? (s.sport ? SPORT_NAME[s.sport] : "Session");
-  return { id: s.id, date: s.date, name, summary: s.workoutSummary, sport: s.sport };
+  return { id: s.id, date: s.date, name, summary: s.workoutSummary, sport: s.sport, plannedSeconds: s.planned.durationSeconds ?? null };
 }

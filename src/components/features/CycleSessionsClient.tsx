@@ -44,7 +44,7 @@ import type { ProgramWithExercises } from "@/types/workout";
 import { ChevronLeft, ChevronRight, Link2, MoreHorizontal } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 
 type ProgramOption = { id: number; name: string };
 
@@ -146,13 +146,15 @@ export function CycleWeek({
               )}
             </span>
           );
-          if (list.length === 0) {
-            const label = dayLabelOn(dayLabels, day);
+          const label = dayLabelOn(dayLabels, day);
+          // A label describes the day, so it stays when a session is moved onto it (round 10).
+          let dayRow: ReactNode = null;
+          if (list.length === 0 || label) {
             // A session moved off this day says where it went.
-            const movedTo = inWeek.find((s) => s.templateDate === day && isMoved(s));
+            const movedTo = list.length === 0 ? inWeek.find((s) => s.templateDate === day && isMoved(s)) : undefined;
             const restInner = (
               <>
-                {dayCol(true, true)}
+                {dayCol(true, list.length === 0)}
                 <span className="flex-1 min-w-0 flex flex-col">
                   {/* A label wraps: cut, it could not be read anywhere (J5-11). */}
                   <span className={`text-[15px] font-medium line-clamp-2 break-words ${label ? "text-foreground/80" : "text-muted-foreground"}`}>{label ?? "Rest"}</span>
@@ -162,7 +164,7 @@ export function CycleWeek({
               </>
             );
             const restClass = "flex w-full items-center gap-3 px-3.5 py-2 min-h-12 border-b border-hairline text-left";
-            return label ? (
+            dayRow = label ? (
               <button
                 key={day}
                 type="button"
@@ -179,12 +181,12 @@ export function CycleWeek({
               </div>
             );
           }
-          return list.map((s, i) => {
+          const rows = list.map((s, i) => {
             const action = rowAction(s, today);
             const sub = sessionSub(s);
             const inner = (
               <>
-                {dayCol(i === 0)}
+                {dayCol(i === 0 && dayRow == null)}
                 {s.brick && <Link2 role="img" aria-label="Brick, linked to the ride" className="w-4 h-4 shrink-0 text-muted-foreground" />}
                 <span className="flex-1 min-w-0 flex flex-col">
                   <span data-testid="week-row-name" className={`text-[15px] font-medium line-clamp-2 break-words ${s.status === "skipped" ? "text-muted-foreground line-through" : ""}`}>{s.name}</span>
@@ -213,6 +215,7 @@ export function CycleWeek({
               </div>
             );
           });
+          return dayRow ? [dayRow, ...rows] : rows;
         })}
         <TemplateLink
           href={templateHref}

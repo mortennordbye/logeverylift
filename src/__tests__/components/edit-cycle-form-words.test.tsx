@@ -66,6 +66,9 @@ describe("the Edit details screen", () => {
     expect(locked.className).not.toMatch(/active:/);
     expect(locked.textContent).toContain("Same days each week");
     expect(locked.textContent).not.toContain("Rotation");
+    // A general line about the type, not the create form's example, which reads like this cycle's content (round 10).
+    expect(locked.textContent).not.toContain("Monday upper");
+    expect(locked.textContent).toContain("The week repeats on fixed days.");
     expect(screen.getByText("The schedule type can't be changed after the cycle is made.")).toBeTruthy();
     rerender(<EditCycleForm cycle={{ ...cycle, scheduleType: "rotation" }} enduranceEnabled={false} today="2026-11-14" />);
     expect(screen.getByTestId("schedule-type").textContent).toContain("Rotation");

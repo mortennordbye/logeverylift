@@ -42,9 +42,15 @@ export type EndAction = "none" | "deload" | "new_cycle" | "rest";
 /** The lengths offered as chips; any other length goes in the Custom field. */
 export const MAIN_LENGTHS = [4, 6, 8, 12];
 
-export const SCHEDULE_MODES: { value: ScheduleType; title: string; sub: string }[] = [
-  { value: "day_of_week", title: "Same days each week", sub: "Monday upper, Thursday lower" },
-  { value: "rotation", title: "Rotation", sub: "The next session follows the last one. No fixed days." },
+/** `sub` is the create form's example; `lockedSub` describes the type in general, for an existing cycle (round 10). */
+export const SCHEDULE_MODES: { value: ScheduleType; title: string; sub: string; lockedSub: string }[] = [
+  { value: "day_of_week", title: "Same days each week", sub: "Monday upper, Thursday lower", lockedSub: "The week repeats on fixed days." },
+  {
+    value: "rotation",
+    title: "Rotation",
+    sub: "The next session follows the last one. No fixed days.",
+    lockedSub: "The next session follows the last one. No fixed days.",
+  },
 ];
 
 export const END_ACTIONS: { value: EndAction; label: string }[] = [
