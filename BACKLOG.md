@@ -10,11 +10,11 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
-### Endurance on the side for lifters
-- **What:** On Account, Goals and training: when the main focus is Strength, a row "Endurance on the side" with None, A little (1 to 2 easy sessions a week) and Some (2 to 3 sessions, one longer). The mirror of "Strength on the side", which an endurance focus already has.
-- **Why deferred:** Nothing would read the answer yet: "Build a plan" makes strength programs only, and only the triathlon plan schedules endurance sessions. A stored answer with no reader is a dead field.
-- **Unblocked by:** The plan builder adding easy run or ride sessions for "A little" and "Some". Build the row and that in one change.
-- **Touchpoints:** `src/components/features/account/sections.tsx` (Goals and training rows), `src/components/features/account/ProfileSteps.tsx` (`FocusStep`), `src/lib/utils/plan-templates.ts`, `src/components/features/AiSetupClient.tsx`.
+### Goals and training redesign
+- **What:** Split Goals and training into "what you train" (a strength to endurance mix) and "what you want from it" (outcomes), with one rule for which rows show. A design was battle tested on 2026-11-15 and needs changes before it is built.
+- **Why deferred:** The `endurance` goal also drives 1 kg weight increments (`src/lib/utils/progression.ts`, fed by `src/lib/actions/workout-sets.ts` and `src/lib/weight-stack-learning.ts`) and the high-rep plan template (`src/lib/utils/plan-templates.ts`), so moving it changes weight suggestions. `strength_goal` is a kind of strength work, not an amount, so it cannot be derived from a mix. Rows for endurance fields fail to save while the endurance switch is off.
+- **Unblocked by:** The endurance switch removal, then owner decisions: what triggers 1 kg increments; whether the mix means what the user does or what the app plans; whether "endurance only" means zero strength sessions; how existing users convert (needs prod counts); whether the AI assistant and the outside model read the mix.
+- **Touchpoints:** `src/components/features/account/sections.tsx`, `ProfileSteps.tsx`, `src/lib/utils/goals.ts`, `src/lib/utils/strength-goal.ts`, `src/lib/utils/triathlon-plan.ts`, `src/lib/utils/training-limits.ts`, `src/lib/mcp/tools/profile.ts`, `src/lib/mcp/tools/athlete-profile.ts`, `src/lib/utils/ai-prompt.ts`, `src/lib/utils/ai-edit.ts`.
 
 ### Drop the unused interview column
 - **What:** Remove `athlete_profiles.interview_completed_at` and the `completeInterview` field of the MCP `manage_athlete_profile` tool. The in-app interview is gone and no page reads the column.
