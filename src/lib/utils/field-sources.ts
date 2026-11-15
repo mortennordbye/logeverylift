@@ -17,3 +17,12 @@ export const isLocked = (sources: FieldSources, field: SyncedField) => sources[f
 export function sourceLine(source: FieldSource): string {
   return `${source.by === "garmin" ? "From Garmin" : "Set by you"} · ${shortDay(source.on)}`;
 }
+
+/**
+ * Whether a training number with a differing Garmin estimate shows "Garmin
+ * says · Use": every one while the sync is off, so one estimate can be taken
+ * alone; only a locked one (typed or tested) while the sync is on.
+ */
+export function showGarminSays(syncOn: boolean, current: { source: string } | undefined): boolean {
+  return !syncOn || (current !== undefined && current.source !== "garmin");
+}

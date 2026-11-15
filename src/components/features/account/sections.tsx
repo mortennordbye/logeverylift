@@ -50,7 +50,7 @@ import { addThresholdValue } from "@/lib/actions/athlete-profile";
 import { updateActivityPrivacy } from "@/lib/actions/friends";
 import { setAiConsent } from "@/lib/actions/legal";
 import { setGarminSync, takeGarminField } from "@/lib/actions/garmin";
-import { sourceLine, type FieldSource, type SyncedField } from "@/lib/utils/field-sources";
+import { showGarminSays, sourceLine, type FieldSource, type SyncedField } from "@/lib/utils/field-sources";
 import type { Goal } from "@/lib/utils/goals";
 import { STRENGTH_GOAL_LABEL } from "@/lib/utils/strength-goal";
 import { THRESHOLD_LABEL, currentThresholds, formatThreshold, thresholdWarnings } from "@/lib/utils/thresholds";
@@ -136,7 +136,7 @@ function thresholdRow(kind: ThresholdKind): Row {
         <>
           <SyncNote
             note={c ? thresholdSourceLine(c, d.today, d.premium) : null}
-            says={s && c && c.source !== "garmin" ? formatThreshold(kind, s.value, d.units) : null}
+            says={s && showGarminSays(d.garminSync === true, c) ? formatThreshold(kind, s.value, d.units) : null}
             onUse={() => addThresholdValue({ kind, value: s!.value, source: "garmin" })}
           />
           {warnings.map((w) => (

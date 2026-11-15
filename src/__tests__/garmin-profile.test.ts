@@ -1,4 +1,4 @@
-import { sourceLine } from "@/lib/utils/field-sources";
+import { showGarminSays, sourceLine } from "@/lib/utils/field-sources";
 import { fieldSyncLines, garminAvailability, garminTimeZone, garminUnits } from "@/lib/utils/garmin-profile";
 import { describe, expect, it } from "vitest";
 
@@ -53,5 +53,20 @@ describe("fieldSyncLines", () => {
 
   it("leaves availability out when it is not open to the user", () => {
     expect(fieldSyncLines(profile, { ...stored, availability: null, sources: {} }).availability).toBeUndefined();
+  });
+});
+
+describe("showGarminSays", () => {
+  it("offers every differing estimate while the sync is off", () => {
+    expect(showGarminSays(false, undefined)).toBe(true);
+    expect(showGarminSays(false, { source: "garmin" })).toBe(true);
+    expect(showGarminSays(false, { source: "manual" })).toBe(true);
+  });
+
+  it("offers it only on a typed or tested value while the sync is on", () => {
+    expect(showGarminSays(true, undefined)).toBe(false);
+    expect(showGarminSays(true, { source: "garmin" })).toBe(false);
+    expect(showGarminSays(true, { source: "manual" })).toBe(true);
+    expect(showGarminSays(true, { source: "test" })).toBe(true);
   });
 });
