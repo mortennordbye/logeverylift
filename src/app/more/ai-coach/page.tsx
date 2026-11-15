@@ -7,6 +7,7 @@ import { getAssistantChanges } from "@/lib/actions/plan-revisions";
 import { getActiveCycleForUser } from "@/lib/actions/training-cycles";
 import { accessFromScopes } from "@/lib/mcp/scopes";
 import { getUserSettings } from "@/lib/user-settings";
+import { lastChangeLines } from "@/lib/utils/coach-hub";
 import { shortDateTime } from "@/lib/utils/user-date";
 import { requireSession } from "@/lib/utils/session";
 import { desc, eq } from "drizzle-orm";
@@ -73,7 +74,7 @@ export default async function AiCoachPage() {
             ? {
                 clientName: last.clientName,
                 when: shortDateTime(last.firstAt, timeZone),
-                lines: last.objects.flatMap((o) => o.changes.map((c) => `${o.name} · ${c}`)).slice(0, 2),
+                lines: lastChangeLines(last.objects),
               }
             : null
         }

@@ -53,15 +53,7 @@ export function McpConnectCard({ endpoint }: { endpoint: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        Connect an AI assistant (MCP)
-      </p>
       <div className="bg-card rounded-2xl px-4 py-4 flex flex-col gap-3">
-        <p className="text-sm text-muted-foreground">
-          Connect an MCP client (like Claude Desktop or Claude Code) to manage
-          your programs, training cycles, and profile by chatting with an AI.
-          Point the client at this endpoint:
-        </p>
 
         <CopyRow
           label="MCP endpoint"
@@ -71,7 +63,7 @@ export function McpConnectCard({ endpoint }: { endpoint: string }) {
         />
 
         <p className="text-sm text-muted-foreground">
-          Or add it to the Claude Code CLI:
+          Or add it to Claude Code with this command
         </p>
         <CopyRow
           label="CLI command"
@@ -84,7 +76,7 @@ export function McpConnectCard({ endpoint }: { endpoint: string }) {
           <p className="text-sm text-primary">
             <span className="font-semibold">Sign-in required.</span> The client
             opens a one-time login in your browser and connects to your account
-            over OAuth. It can only read and change your own data — never anyone
+            over OAuth. It can only read and change your own data, never anyone
             else&apos;s.
           </p>
         </div>

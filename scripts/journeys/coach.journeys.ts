@@ -114,7 +114,7 @@ const set: JourneySet = {
         await step("J3 changes", async () => {
           await go("/more/assistants/changes");
           await shot(3, 4, "changes", "Changes by conversation");
-          await page.getByRole("button", { name: "Undo these changes" }).first().click();
+          await page.getByRole("button", { name: "Undo", exact: true }).first().click();
           await shot(3, 5, "undo", "Undo sheet");
           await closeSheet();
         });

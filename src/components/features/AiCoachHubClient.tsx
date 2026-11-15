@@ -146,11 +146,11 @@ export function AiCoachHubClient({ plan, checkin, memoryCount, assistants, lastC
             </Link>
             {lastChange && (
               <Link href="/more/assistants/changes" className="block px-4 pb-4 active:opacity-80" data-testid="coach-last-change">
-                <div className="flex justify-between text-xs text-muted-foreground">
+                <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                   <span>
                     Last change · {lastChange.clientName} · {lastChange.when}
                   </span>
-                  <span className="text-primary font-semibold">See and undo</span>
+                  <ChevronRight className="w-4 h-4 flex-none" aria-label="See and undo" />
                 </div>
                 {lastChange.lines.length > 0 && (
                   <ul className="mt-1 text-sm list-disc pl-4">
