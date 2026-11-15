@@ -1,3 +1,4 @@
+import type { Request } from "@playwright/test";
 import { expect, test } from "./fixtures/test";
 import { openFirstExercise, openWorkout } from "./helpers";
 
@@ -42,4 +43,52 @@ test("logging a set toggles its completion state", async ({ page }) => {
   // Cleanup: tap again to un-log so the test is idempotent.
   await firstSetToggle.click();
   await expect(firstSetToggle).toHaveAttribute("aria-pressed", "false");
+});
+
+/**
+ * The workout layout pulls the logged sets from the server when the session
+ * id is set, when an exercise opens and when the app comes back to the
+ * foreground. Its answer is what was saved when the pull ran, so a set tapped
+ * while the pull was in flight is missing from it. Replacing the toggles with
+ * that answer showed the set as not logged again, although its write went
+ * through. Held here so the tap always lands inside that window; under load it
+ * landed there by chance (e2e/drag-reorder.spec.ts failed on it).
+ */
+test("a set logged while the logged-sets pull is in flight stays logged", async ({ page }) => {
+  await openWorkout(page);
+  const sessionId = await page.evaluate(
+    () => JSON.parse(localStorage.getItem("activeWorkout") ?? "{}").sessionId as number,
+  );
+  // getActiveSessionCompletedProgramSetIds(sessionId) is the only action
+  // whose arguments are the session id alone.
+  const isPull = (r: Request) =>
+    r.method() === "POST" && Boolean(r.headers()["next-action"]) && r.postData() === `[${sessionId}]`;
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let pullHeld!: () => void;
+  const held = new Promise<void>((resolve) => (pullHeld = resolve));
+  await page.route("**/*", async (route) => {
+    if (isPull(route.request())) {
+      pullHeld();
+      await released;
+    }
+    await route.fallback();
+  });
+
+  // Opening the exercise pulls again.
+  await openFirstExercise(page);
+  await held;
+  const toggle = page.getByTestId("set-row").first().getByRole("button", { name: /^(Log|Un-log) set 1$/ });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+  // Server Actions run one at a time, so the set's write goes out only after
+  // the pull has answered and its answer has been applied. Once the write is
+  // back, what the pull did is on screen.
+  const logWrite = page.waitForResponse((res) =>
+    (res.request().postData() ?? "").includes(`"sessionId":${sessionId},"exerciseId"`),
+  );
+  release();
+  await logWrite;
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
 });
