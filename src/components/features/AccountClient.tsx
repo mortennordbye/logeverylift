@@ -2,7 +2,7 @@
 
 import { authClient } from "@/lib/auth-client";
 import { exportMyData } from "@/lib/actions/account";
-import { SECTIONS, type AccountData, type Row } from "@/components/features/account/sections";
+import { GROUPS, SECTIONS, type AccountData, type Row } from "@/components/features/account/sections";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { clearLocalUserData, unsyncedChangeCount } from "@/lib/utils/local-data";
 import { callAction } from "@/lib/utils/stale-bundle";
@@ -13,6 +13,8 @@ import { useState } from "react";
 
 interface AccountClientProps {
   data: AccountData;
+  /** A sub-page id (SUB_PAGES), or null for the top page. */
+  page: string | null;
 }
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -25,6 +27,14 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 const text = (label: Row["label"], d: AccountData) => (typeof label === "string" ? label : label(d));
 
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+
 function Switch({ on }: { on: boolean }) {
   return (
     <div className={`relative w-11 h-6 rounded-full transition-colors shrink-0 ${on ? "bg-primary" : "bg-muted-foreground/30"}`}>
@@ -33,7 +43,7 @@ function Switch({ on }: { on: boolean }) {
   );
 }
 
-/** One row: a link, a switch, a button that opens the sheet, or a plain value; its note sits under it, outside the control. */
+/** One row: an editor on the page, a link, a switch, a button that opens the sheet, or a plain value; its note sits under it, outside the control. */
 function AccountRow({
   row,
   data,
@@ -41,6 +51,7 @@ function AccountRow({
   error,
   onOpen,
   onToggle,
+  onDone,
 }: {
   row: Row;
   data: AccountData;
@@ -48,6 +59,7 @@ function AccountRow({
   error: string | null;
   onOpen: () => void;
   onToggle: () => void;
+  onDone: () => void;
 }) {
   const body = (
     <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
@@ -62,7 +74,14 @@ function AccountRow({
       {body}
     </div>
   );
-  if (row.href) {
+  if (row.inline && row.editor) {
+    main = (
+      <div className="px-4 py-3 space-y-2" data-testid={testId}>
+        <p className="text-sm text-muted-foreground">{text(row.label, data)}</p>
+        {row.editor(data, onDone)}
+      </div>
+    );
+  } else if (row.href) {
     main = (
       <Link href={row.href} className={`${rowClass} active:opacity-60`} data-testid={testId}>
         {body}
@@ -102,7 +121,7 @@ function AccountRow({
   );
 }
 
-export function AccountClient({ data }: AccountClientProps) {
+export function AccountClient({ data, page }: AccountClientProps) {
   const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
   const [flipping, setFlipping] = useState<string | null>(null);
@@ -193,81 +212,112 @@ export function AccountClient({ data }: AccountClientProps) {
     <>
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-2 flex flex-col gap-6">
 
-        {SECTIONS.map((section) => {
+        {page === null && (
+          <Link href="/more/account/profile" className="flex items-center gap-3 rounded-2xl bg-card px-4 py-3.5 active:opacity-60" data-testid="account-me">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">
+              {initials(data.name)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold truncate">{data.name}</p>
+              <p className="text-xs text-muted-foreground truncate">{data.email}</p>
+            </div>
+            <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+          </Link>
+        )}
+
+        {/* The top page shows only the Garmin switch; a sub-page shows its own section. */}
+        {SECTIONS.filter((section) => section.id === (page ?? "garmin")).map((section) => {
           const rows = section.rows.filter(visible);
           if (rows.length === 0) return null;
           return (
-            <div key={section.id} id={section.id} className="scroll-mt-20">
-              <SectionLabel>{section.title}</SectionLabel>
-              <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
-                {rows.map((r) => (
-                  <AccountRow
-                    key={r.id}
-                    row={r}
-                    data={data}
-                    on={!!r.toggle && isOn(r)}
-                    error={toggleError?.id === r.id ? toggleError.message : null}
-                    onOpen={() => setOpen(r.id)}
-                    onToggle={() => flip(r)}
-                  />
-                ))}
-              </div>
+            <div key={section.id} className="shrink-0 rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
+              {rows.map((r) => (
+                <AccountRow
+                  key={r.id}
+                  row={r}
+                  data={data}
+                  on={!!r.toggle && isOn(r)}
+                  error={toggleError?.id === r.id ? toggleError.message : null}
+                  onOpen={() => setOpen(r.id)}
+                  onToggle={() => flip(r)}
+                  onDone={done}
+                />
+              ))}
             </div>
           );
         })}
 
-        <p className="text-xs text-muted-foreground px-1 -mt-4">
-          <a href="/privacy" className="text-primary">Privacy policy</a> ·{" "}
-          <a href="/terms" className="text-primary">Terms of use</a>
-        </p>
-
-        {/* Your data */}
-        <div>
-          <SectionLabel>Your data</SectionLabel>
-          <div className="rounded-2xl bg-card overflow-hidden">
-            <button
-              onClick={handleExport}
-              disabled={exporting}
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 disabled:opacity-50"
-            >
-              <Download className="w-5 h-5 text-muted-foreground" />
-              <div className="flex-1 text-left">
-                <p className="text-sm font-medium">{exporting ? "Preparing…" : "Download My Data"}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">Everything stored about you, as a JSON file</p>
+        {page === null &&
+          GROUPS.map((group) => (
+            <div key={group.title}>
+              <SectionLabel>{group.title}</SectionLabel>
+              <div className="rounded-2xl bg-card overflow-hidden divide-y divide-border/50">
+                {group.buttons.map((b) => (
+                  <Link key={b.id} href={`/more/account/${b.id}`} className="flex items-center gap-3 px-4 min-h-[52px] py-3 active:opacity-60" data-testid={`account-group-${b.id}`}>
+                    <b.icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                    <span className="text-sm font-medium shrink-0">{b.title}</span>
+                    <span className="flex-1 min-w-0 text-sm text-muted-foreground text-right truncate">{b.summary(data)}</span>
+                    <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                  </Link>
+                ))}
               </div>
-            </button>
-            <button
-              onClick={() => setShowDeleteSheet(true)}
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 border-t border-border/50"
-            >
-              <Trash2 className="w-5 h-5 text-destructive" />
-              <span className="text-sm font-medium text-destructive">Delete Account</span>
-            </button>
-          </div>
-          {exportError && <p className="text-xs text-destructive text-center mt-2">{exportError}</p>}
-        </div>
+            </div>
+          ))}
 
-        {/* Sign out */}
-        <div>
-          <SectionLabel>Sign out</SectionLabel>
-          <div className="rounded-2xl bg-card overflow-hidden">
-            <button
-              onClick={handleSignOut}
-              className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
-            >
-              <LogOut className="w-5 h-5 text-destructive" />
-              <span className="text-sm font-medium text-destructive">
-                {signOutWarning === null ? "Sign Out" : "Sign Out Anyway"}
-              </span>
-            </button>
+        {page === "privacy-and-security" && (
+          <p className="text-xs text-muted-foreground px-1 -mt-4">
+            <a href="/privacy" className="text-primary">Privacy policy</a> ·{" "}
+            <a href="/terms" className="text-primary">Terms of use</a>
+          </p>
+        )}
+
+        {page === "your-data" && (
+          <div>
+            <div className="rounded-2xl bg-card overflow-hidden">
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 disabled:opacity-50"
+              >
+                <Download className="w-5 h-5 text-muted-foreground" />
+                <div className="flex-1 text-left">
+                  <p className="text-sm font-medium">{exporting ? "Preparing…" : "Download My Data"}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Everything stored about you, as a JSON file</p>
+                </div>
+              </button>
+              <button
+                onClick={() => setShowDeleteSheet(true)}
+                className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60 border-t border-border/50"
+              >
+                <Trash2 className="w-5 h-5 text-destructive" />
+                <span className="text-sm font-medium text-destructive">Delete Account</span>
+              </button>
+            </div>
+            {exportError && <p className="text-xs text-destructive text-center mt-2">{exportError}</p>}
           </div>
-          {signOutWarning !== null && (
-            <p className="text-xs text-destructive px-1 mt-2">
-              {signOutWarning === 1 ? "1 change hasn't" : `${signOutWarning} changes haven't`} synced yet and will be
-              lost. Go back online first to keep {signOutWarning === 1 ? "it" : "them"}.
-            </p>
-          )}
-        </div>
+        )}
+
+        {page === null && (
+          <div>
+            <div className="rounded-2xl bg-card overflow-hidden">
+              <button
+                onClick={handleSignOut}
+                className="flex items-center gap-3 w-full px-4 py-3.5 active:opacity-60"
+              >
+                <LogOut className="w-5 h-5 text-destructive" />
+                <span className="text-sm font-medium text-destructive">
+                  {signOutWarning === null ? "Sign Out" : "Sign Out Anyway"}
+                </span>
+              </button>
+            </div>
+            {signOutWarning !== null && (
+              <p className="text-xs text-destructive px-1 mt-2">
+                {signOutWarning === 1 ? "1 change hasn't" : `${signOutWarning} changes haven't`} synced yet and will be
+                lost. Go back online first to keep {signOutWarning === 1 ? "it" : "them"}.
+              </p>
+            )}
+          </div>
+        )}
 
         <div aria-hidden="true" className="pb-nav-safe-lg" style={{ height: "var(--kb-height, 0px)" }} />
       </div>

@@ -1,9 +1,11 @@
 "use client";
 
 /**
- * The Account page as data: its sections in order, and each row's label,
- * value, when it shows, and the editor its sheet opens. To add a field, add
- * a row here. The page renders this list in one loop and opens one sheet.
+ * The Account pages as data: the group buttons on the top page, the sections
+ * the sub-pages show, and each row's label, value, when it shows, and the
+ * editor its sheet opens. To add a field, add a row here; to add a sub-page,
+ * add a section and a group button. A sub-page renders its section in one
+ * loop and opens one sheet.
  */
 
 import {
@@ -40,6 +42,7 @@ import {
   type ExperienceLevel,
   type Gender,
 } from "@/components/features/account/ProfileSteps";
+import { SUB_PAGES, type SubPage } from "@/components/features/account/pages";
 import { SyncNote } from "@/components/features/account/SyncNote";
 import type { ThresholdKind } from "@/db/schema/athlete-profile";
 import { ChangePassword } from "@/components/features/account/ChangePassword";
@@ -54,6 +57,7 @@ import { STRENGTH_GOAL_LABEL } from "@/lib/utils/strength-goal";
 import { THRESHOLD_LABEL, currentThresholds, formatThreshold, thresholdWarnings } from "@/lib/utils/thresholds";
 import type { Units } from "@/lib/utils/units";
 import type { ActionResult } from "@/types/workout";
+import { Download, Gauge, HeartPulse, Shield, Target, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
 /** Everything the rows read, loaded in the page's one server read. */
@@ -101,6 +105,8 @@ export type Row = {
   show?: (d: AccountData) => boolean;
   /** What the row's sheet shows; `done` closes it and reloads the data. */
   editor?: (d: AccountData, done: () => void) => ReactNode;
+  /** Show the editor on the page instead of in the sheet. */
+  inline?: boolean;
   href?: string;
   /** A switch in the row instead of a sheet. */
   toggle?: { on: (d: AccountData) => boolean; set: (on: boolean) => Promise<ActionResult<unknown>> };
@@ -158,7 +164,7 @@ function thresholdRow(kind: ThresholdKind): Row {
 export const SECTIONS: Section[] = [
   {
     id: "profile",
-    title: "Profile",
+    title: SUB_PAGES["profile"],
     rows: [
       { id: "name", label: "Name", value: (d) => d.name, editor: (d, done) => <NameStep initial={d.name} onSaved={done} /> },
       { id: "email", label: "Email", value: (d) => d.email },
@@ -181,13 +187,14 @@ export const SECTIONS: Section[] = [
   },
   {
     id: "goals-and-training",
-    title: "Goals and training",
+    title: SUB_PAGES["goals-and-training"],
     rows: [
       {
         id: "goals",
         label: "Goals",
         value: (d) => (d.goals.length ? d.goals.map((g) => GOAL_LABELS[g]).join(", ") : notSet),
         editor: (d, done) => <GoalsStep initial={d.goals} onSaved={done} />,
+        inline: true,
       },
       {
         id: "strength-goal",
@@ -230,8 +237,8 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
-    id: "body-profile",
-    title: "Body and health",
+    id: "body-and-health",
+    title: SUB_PAGES["body-and-health"],
     rows: [
       {
         id: "gender",
@@ -279,7 +286,7 @@ export const SECTIONS: Section[] = [
   },
   {
     id: "training-numbers",
-    title: "Training numbers",
+    title: SUB_PAGES["training-numbers"],
     rows: [
       ...(["max_hr", "ftp", "lthr_bike", "lthr_run", "run_threshold_pace", "swim_css"] as const).map(thresholdRow),
       {
@@ -291,8 +298,8 @@ export const SECTIONS: Section[] = [
     ],
   },
   {
-    id: "security-and-privacy",
-    title: "Security and privacy",
+    id: "privacy-and-security",
+    title: SUB_PAGES["privacy-and-security"],
     rows: [
       { id: "change-password", label: "Change Password", editor: (_d, done) => <ChangePassword onDone={done} /> },
       {
@@ -315,6 +322,63 @@ export const SECTIONS: Section[] = [
         show: (d) => d.aiConsent,
         toggle: { on: (d) => d.aiConsent, set: (on) => setAiConsent({ consent: on }) },
       },
+    ],
+  },
+];
+
+/** A button on the top Account page: it opens /more/account/<id> and shows a one-line summary. */
+export type GroupButton = { id: SubPage; title: string; icon: LucideIcon; summary: (d: AccountData) => string };
+
+const current = (d: AccountData, kind: ThresholdKind) => {
+  const c = currentThresholds(d.thresholds)[kind];
+  return c ? formatThreshold(kind, c.value, d.units) : null;
+};
+
+export const GROUPS: { title: string; buttons: GroupButton[] }[] = [
+  {
+    title: "You",
+    buttons: [
+      {
+        id: "goals-and-training",
+        title: SUB_PAGES["goals-and-training"],
+        icon: Target,
+        summary: (d) =>
+          [d.goals.map((g) => GOAL_LABELS[g]).join(", "), d.endurance && d.athlete?.availableDays?.length ? `${d.athlete.availableDays.length} days` : ""]
+            .filter(Boolean)
+            .join(" · ") || notSet,
+      },
+      {
+        id: "body-and-health",
+        title: SUB_PAGES["body-and-health"],
+        icon: HeartPulse,
+        summary: (d) => {
+          const injury = d.endurance ? d.injuries.find((i) => i.status !== "past") : undefined;
+          const where = injury ? `${injury.side ? `${injury.side} ` : ""}${injury.area.replace("_", " ")}` : "";
+          return [d.weightKg != null ? `${d.weightKg} kg` : "", where].filter(Boolean).join(" · ") || notSet;
+        },
+      },
+      {
+        id: "training-numbers",
+        title: SUB_PAGES["training-numbers"],
+        icon: Gauge,
+        summary: (d) => {
+          const ftp = current(d, "ftp");
+          const maxHr = current(d, "max_hr");
+          return [ftp ? `FTP ${ftp}` : "", maxHr ? `max HR ${maxHr}` : ""].filter(Boolean).join(" · ") || notSet;
+        },
+      },
+    ],
+  },
+  {
+    title: "Account",
+    buttons: [
+      {
+        id: "privacy-and-security",
+        title: SUB_PAGES["privacy-and-security"],
+        icon: Shield,
+        summary: (d) => (d.showActivityToFriends ? "Friends see workouts" : "Workouts hidden from friends"),
+      },
+      { id: "your-data", title: SUB_PAGES["your-data"], icon: Download, summary: () => "Export, delete" },
     ],
   },
 ];
