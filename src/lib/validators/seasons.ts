@@ -28,7 +28,11 @@ const raceFields = z.object({
 export const createSeasonSchema = seasonFieldsSchema
   .extend({
     race: raceFields.optional(),
-    cycleIds: z.array(id).max(30).optional(),
+    cycleIds: z
+      .array(id)
+      .max(30)
+      .refine((ids) => new Set(ids).size === ids.length, "Pick each cycle once.")
+      .optional(),
     /** The user confirmed the first phase takes the scheduled start (addPhase `takeStart`). */
     takeStart: z.boolean().optional(),
   })

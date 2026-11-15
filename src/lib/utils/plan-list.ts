@@ -13,6 +13,7 @@ import {
   addDaysStr,
   cutByStart,
   daysBetweenStr,
+  earlyLastDay,
   nextPhase,
   rangeLabel,
   runLength,
@@ -108,16 +109,20 @@ export function upNextRow(c: CycleLike, today: string): CycleRow {
   };
 }
 
-/** The day a completed block ended: its planned last day, or today when it was ended early. */
-export function pastEnd(c: CycleLike, today: string): string | null {
+/**
+ * The day a completed block ended: its planned last day, or the day before
+ * the day it completed when another start ended it early (earlyLastDay, as
+ * the cycle page). `completedOn` is that day in the user's zone, if known.
+ */
+export function pastEnd(c: CycleLike, completedOn: string | null): string | null {
   if (!c.startDate) return null;
-  const end = blockEnd(c.startDate, c);
-  return end < today ? end : today;
+  const planned = blockEnd(c.startDate, c);
+  return earlyLastDay(c.startDate, planned, completedOn) ?? planned;
 }
 
 /** A "Past cycles" row: "8 weeks · ended 8 Nov". */
-export function pastRow(c: CycleLike, today: string): CycleRow {
-  const end = pastEnd(c, today);
+export function pastRow(c: CycleLike, completedOn: string | null): CycleRow {
+  const end = pastEnd(c, completedOn);
   return { id: c.id, name: c.name, sub: `${plural(c.durationWeeks, "week")}${end ? ` · ended ${dayMonth(end)}` : ""}`, starts: null, startsAccent: false };
 }
 

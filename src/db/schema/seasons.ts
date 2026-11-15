@@ -39,6 +39,9 @@ export const seasons = pgTable(
     // never reshapes the phases itself; the user or the assistant clears it.
     replanFlaggedAt: timestamp("replan_flagged_at"),
     replanReason: text("replan_reason"),
+    // The race each "; "-separated line of the reason is about, in order, so
+    // removing a race drops only its own lines. Null on reasons stored before.
+    replanRaceIds: integer("replan_race_ids").array(),
     // Soft delete and version, as on programs (docs/plans/revisions.md, 2.1).
     deletedAt: timestamp("deleted_at"),
     version: integer("version").notNull().default(1),
