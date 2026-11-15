@@ -34,6 +34,7 @@ when the brief was written.
 | 13 | [Endurance journeys](endurance-journeys.md) (bike, run, swim, brick, rest; AI loop). Inputs: [session clarity](endurance-session-clarity.md), [audit](../../audit/endurance-journeys.md). Bike plan first: [bike sessions](bike-sessions.md), screens in `docs/design/endurance/bike-flow.html`. | planning, no build yet | yes (step model, JSON only) | yes (home today card) |
 | 14 | [One user type, Garmin as an add-on](one-user-garmin-plus.md) (the endurance switch goes; Garmin enriches, never gates) | plan, open decisions in section 7 | yes (drop `endurance_enabled` one release later) | yes (home today card) |
 | 15 | [One More item for the endurance pages](more-endurance-hub.md) (Thresholds, Athlete profile, Workouts and Nutrition behind one hub row) | plan, open decisions in section 7 | no | no |
+| 16 | [One app for a lifter and a triathlete](simple-and-power-users.md) (data, context and "More options" decide what each user sees; no mode switch) | plan, open decisions in section 6 | no | yes (home today card) |
 
 Why this order:
 - 1 is small, has no schema change, and clears two BACKLOG items.

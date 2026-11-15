@@ -99,6 +99,14 @@
     .flow .arrow { transform: rotate(90deg); padding: 6px 0; }
     .flow .plus { padding: 6px 0; }
   }
+  .rules { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  .duo { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start; }
+  .who2 { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 6px; }
+  .journey { display: flex; align-items: stretch; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+  .jstep { flex: 1; min-width: 140px; background: var(--widget); border-radius: 12px; padding: 10px 12px; }
+  .jstep b { display: block; } .jstep span { color: var(--muted); font-size: 12px; }
+  .jarrow { display: flex; align-items: center; color: var(--muted); font-size: 22px; }
+  @media (max-width: 860px) { .rules, .duo { grid-template-columns: 1fr; } .jarrow { display: none; } }
 </style>
 </head>
 <body>
@@ -248,7 +256,67 @@
     <div class="fork"><b>Training limits on AI writes</b><span>Run for every user. A rule without data says "not checked".</span></div>
   </div>
 
-  <h2>5. Order</h2>
+  <h2>5. Same app, a lifter and a triathlete</h2>
+  <p class="sub">No mode switch. Four rules decide what a screen draws, so each user sees what applies to them. Source <code>docs/plans/simple-and-power-users.md</code>.</p>
+  <div class="rules">
+    <div class="fork"><b>1. Data shows it</b><span>A part draws when the user has its data: bands, race countdown, sport totals, load.</span></div>
+    <div class="fork"><b>2. Context shows it</b><span>Brick only between two sport sessions. Triathlon plan only with a triathlon race.</span></div>
+    <div class="fork"><b>3. Set values stay open</b><span>Rare options sit under "More options". It opens by itself when something is set.</span></div>
+    <div class="fork"><b>4. One door per action</b><span>"Add a session" offers a strength program or a swim, bike or run workout.</span></div>
+  </div>
+  <div class="duo">
+    <div>
+      <div class="who2" style="color:var(--all)">Lifter, slot sheet</div>
+      <div class="phone">
+        <div class="ttl" style="font-size:16px">Tue &middot; session 1</div>
+        <div class="row"><div class="lbl">Program<small>Upper A</small></div><span class="chev">&rsaquo;</span></div>
+        <div class="row"><div class="lbl">Label and note</div><span class="chev">&rsaquo;</span></div>
+        <div class="row dim"><div class="lbl">More options<small>closed</small></div><span class="chev">&rsaquo;</span></div>
+      </div>
+      <div class="cap">No key session, no brick: the slot is strength</div>
+    </div>
+    <div>
+      <div class="who2" style="color:var(--endu)">Triathlete, slot sheet</div>
+      <div class="phone">
+        <div class="ttl" style="font-size:16px">Sat &middot; session 2</div>
+        <div class="row"><div class="lbl">Workout<small>Brick run 20 min</small></div><span class="chev">&rsaquo;</span></div>
+        <div class="row"><div class="lbl">Label and note</div><span class="chev">&rsaquo;</span></div>
+        <div class="row hl"><div class="lbl">Key session</div><span class="tag t-new">ON</span></div>
+        <div class="row hl"><div class="lbl">Brick with Long ride</div><span class="tag t-new">ON</span></div>
+        <div class="row"><div class="lbl">More options<small>open: complete automatically is set</small></div><span class="chev">&rsaquo;</span></div>
+      </div>
+      <div class="cap">Sport slot after a sport slot: key and brick show</div>
+    </div>
+    <div>
+      <div class="who2" style="color:var(--all)">Lifter, home</div>
+      <div class="phone">
+        <div class="ttl" style="font-size:16px">Today</div>
+        <div class="row"><div class="lbl">Today<small>Upper A, 6 exercises</small></div></div>
+        <div class="row"><div class="lbl">Week<small>3 of 4 sessions</small></div></div>
+      </div>
+      <div class="cap">No race, no sport session: nothing extra draws</div>
+    </div>
+    <div>
+      <div class="who2" style="color:var(--endu)">Triathlete, home</div>
+      <div class="phone">
+        <div class="ttl" style="font-size:16px">Today</div>
+        <div class="row"><div class="lbl">Today<small>Strength B</small></div></div>
+        <div class="row hl"><div class="lbl">Endurance today<small>Tempo ride 60 min, 3 x 10 min at 88% FTP</small></div></div>
+        <div class="row"><div class="lbl">Race countdown<small>Half distance in 41 days</small></div></div>
+        <div class="row"><div class="lbl">Training load<small>Fitness 54, form -8</small></div></div>
+        <div class="row"><div class="lbl">Week<small>Swim 2, bike 3, run 3, strength 2</small></div></div>
+      </div>
+      <div class="cap">Data draws each card; the endurance goal sets the defaults</div>
+    </div>
+  </div>
+  <div class="journey">
+    <div class="jstep"><b>Lifter</b><span>Strength only</span></div><div class="jarrow">&rarr;</div>
+    <div class="jstep"><b>Adds one run</b><span>"Did you do it?", player, run total, key session</span></div><div class="jarrow">&rarr;</div>
+    <div class="jstep"><b>Adds a race</b><span>Countdown, race plan, phase types</span></div><div class="jarrow">&rarr;</div>
+    <div class="jstep"><b>Hybrid</b><span>Full view, nothing to switch on</span></div>
+  </div>
+
+  <h2>6. Order</h2>
   <div class="steps">
     <div class="step"><b>Remove the switch</b><span>About 45 files. Merge the forks. Keep the column one release.</span></div>
     <div class="step"><b>Convert sport programs</b><span>Swim, bike, run sessions become structured workouts.</span></div>
@@ -257,13 +325,15 @@
     <div class="step"><b>Readiness</b><span>Daily check-in, if decision 1 says so.</span></div>
   </div>
 
-  <h2>6. Open decisions</h2>
+  <h2>7. Open decisions</h2>
   <div class="open">
     <div class="q"><span class="n">1</span><div>Readiness without Garmin<small>A: daily check-in for every user. B: Garmin-only extra. Recommended: B now, A later.</small></div></div>
     <div class="q"><span class="n">2</span><div>Endurance today widget<small>Recommended: on for every user, draws nothing on a day without a session.</small></div></div>
     <div class="q"><span class="n">3</span><div>Weekly sync for lifters<small>Recommended: accept the dated-session method for everyone.</small></div></div>
     <div class="q"><span class="n">4</span><div>Hub row name<small>"Endurance", or "Training setup".</small></div></div>
     <div class="q"><span class="n">5</span><div>Coach memory<small>Recommended: keep it in the AI group.</small></div></div>
+    <div class="q"><span class="n">6</span><div>Window for "sports in play"<small>Recommended: 12 weeks behind and ahead.</small></div></div>
+    <div class="q"><span class="n">7</span><div>Account goals as defaults<small>Recommended: goals set home defaults and picker order, never access.</small></div></div>
   </div>
 </main>
 </body>

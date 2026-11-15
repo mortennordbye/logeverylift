@@ -27,7 +27,8 @@ Garmin runs (`limitContext`, `src/lib/training-limits.ts:289`).
 
 About 45 source files call `enduranceEnabledFor`, and more pass the result down as a prop.
 
-1. **Visibility gates.** Delete each check and keep the endurance branch: pages that redirect
+1. **Visibility gates.** Delete each check. What a lifter then sees is decided by
+   [simple-and-power-users.md](simple-and-power-users.md), in the same PR. The gated places: pages that redirect
    (`/week`, `/planned/[id]` and its `play`, `pool`, `results`, `/races/[id]/plan`,
    `/more/athlete`, `/more/workouts`, `/more/nutrition`), More rows, home widgets
    (`available: (a) => a.endurance`), cycle and season form fields, the exercise discipline field.
