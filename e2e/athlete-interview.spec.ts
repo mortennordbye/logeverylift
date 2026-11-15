@@ -27,9 +27,10 @@ test("run the intake interview", async ({ page }, testInfo) => {
     .returning();
 
   await page.goto("/more");
-  await page.getByRole("link", { name: /Athlete profile/ }).click();
-  await expect(page).toHaveURL(/\/more\/athlete$/);
-  await page.getByRole("link", { name: "Start the interview" }).click();
+  await page.getByRole("link", { name: /Account/ }).click();
+  await expect(page).toHaveURL(/\/more\/account$/);
+  await expect(page.getByTestId("account-athlete-questions")).toContainText("Not answered");
+  await page.getByTestId("account-athlete-questions").click();
   await expect(page.getByTestId("interview-progress")).toHaveText("Step 1 of 8");
 
   // 1. Race: none set yet.
@@ -89,8 +90,8 @@ test("run the intake interview", async ({ page }, testInfo) => {
   await expect(page.getByTestId("interview-progress")).toHaveText("Step 8 of 8");
   await page.getByRole("button", { name: "Finish", exact: true }).click();
   await settle();
-  await expect(page).toHaveURL(/\/more\/athlete$/);
-  await expect(page.getByRole("link", { name: "Run the interview again" })).toBeVisible();
+  await expect(page).toHaveURL(/\/more\/account$/);
+  await expect(page.getByTestId("account-athlete-questions")).toContainText("Answered");
 
   const db = testDb();
   const [profile] = await db.select().from(athleteProfiles).where(eq(athleteProfiles.userId, uid));
