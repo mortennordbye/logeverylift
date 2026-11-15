@@ -289,7 +289,8 @@ export function TemplateWeek({
 }
 
 function rotationSub(row: RotationRow, today: string, exerciseCount: number | undefined): string {
-  if (row.mark === "next") return "Next";
+  // A swapped turn keeps its mark when it is the next one (after a skip, say).
+  if (row.mark === "next") return row.swapped ? "Next · Swapped" : "Next";
   if (row.mark === "skipped") return row.upcoming?.skipReason?.trim() ? `Skipped · ${row.upcoming.skipReason.trim()}` : "Skipped";
   if (row.mark === "swapped") return "Swapped";
   if (row.mark === "done" && row.lastDone) return doneLabel(row.lastDone, today);

@@ -371,6 +371,17 @@ describe("rotation builder", () => {
     expect(screen.getByText("Repeats every 3 days. A missed session waits for you. It does not skip.")).toBeTruthy();
   });
 
+  it("a rest day's options say it is a rest day, with no Change and Remove rest day", () => {
+    render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
+    fireEvent.click(screen.getByRole("button", { name: "Options for Rest" }));
+    const sheet = screen.getByRole("region", { name: "Rest" });
+    expect(within(sheet).queryByText("Program")).toBeNull();
+    expect(within(sheet).getByText("Rest day")).toBeTruthy();
+    expect(within(sheet).queryByRole("button", { name: "Change" })).toBeNull();
+    expect(within(sheet).queryByRole("button", { name: "Remove session" })).toBeNull();
+    expect(within(sheet).getByRole("button", { name: "Remove rest day" })).toBeTruthy();
+  });
+
   it("adds a session from the program picker after the last position", async () => {
     render(<CycleScheduleBuilder cycle={rotation} programs={programs} />);
     fireEvent.click(screen.getByRole("button", { name: "+ Add session" }));

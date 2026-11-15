@@ -10,6 +10,7 @@ import type { ScheduledDraft } from "@/lib/utils/cycle-start";
 import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
 import { useBack, useLeaveDeleted, useReturnTo } from "@/components/ui/BackLink";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import {
@@ -90,7 +91,8 @@ export function SeasonForm(props: Props) {
   const [source, setSource] = useState<PhaseSource>(create?.initialSource ?? "later");
   const [picked, setPicked] = useState<number[]>([]);
 
-  const [loading, setLoading] = useState(false);
+  // Busy from the first tap until the next page is on screen (useSubmitLock).
+  const { busy: loading, lock, unlock } = useSubmitLock();
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -177,19 +179,17 @@ export function SeasonForm(props: Props) {
 
   async function save(takeStart: boolean) {
     const take = takeStart ? { takeStart: true } : {};
-    setLoading(true);
+    if (!lock()) return;
     setError("");
     const fields = { name: name.trim(), goal: goal.trim() || null, startDate };
     if (initial) {
       const result = await callAction(updateSeasonAction({ seasonId: initial.id, ...fields, endDate: end, nextGoal: nextGoal.trim() || null }));
-      setLoading(false);
-      if (!result.success) return setError(result.error);
+      if (!result.success) return fail(result.error);
       return returnTo(`/seasons/${initial.id}`);
     }
     if (source === "triathlon") {
       const result = await callAction(generateTriathlonPlan({ ...fields, race: { name: raceName.trim(), raceDate, distance }, ...take }));
-      setLoading(false);
-      if (!result.success) return setError(result.error);
+      if (!result.success) return fail(result.error);
       return returnTo(`/seasons/${result.data.seasonId}`);
     }
     const race = hasRace
@@ -205,17 +205,19 @@ export function SeasonForm(props: Props) {
     const result = await callAction(
       createSeasonAction({ ...fields, endDate: end, ...(race ? { race } : {}), ...(source === "cycles" ? { cycleIds: picked } : {}), ...take }),
     );
-    setLoading(false);
-    if (!result.success) return setError(result.error);
+    if (!result.success) return fail(result.error);
     returnTo(`/seasons/${result.data.id}`);
   }
 
+  function fail(message: string) {
+    unlock();
+    setError(message);
+  }
+
   async function handleDelete() {
-    if (!initial) return;
-    setLoading(true);
+    if (!initial || !lock()) return;
     const result = await callAction(deleteSeasonAction({ seasonId: initial.id }));
-    setLoading(false);
-    if (!result.success) return setError(result.error);
+    if (!result.success) return fail(result.error);
     leaveDeleted("/cycles", [`/seasons/${initial.id}`]);
   }
 
@@ -366,7 +368,8 @@ export function SeasonForm(props: Props) {
                   onChange={() => setSource("triathlon")}
                   title="Make a triathlon plan"
                   sub={triSub}
-                  disabled={!triReady && source !== "triathlon"}
+                  // Off whenever it cannot make a plan (no race yet, or the dates do not fit), as its line says.
+                  disabled={triBlocked && source !== "triathlon"}
                 >
                   {source === "triathlon" && Array.isArray(triPhases) && (
                     <ol aria-label="Planned phases" className="ml-[34px] flex flex-col gap-1 text-[13px] text-foreground/75">

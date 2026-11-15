@@ -22,6 +22,7 @@ import { takeStartLines, type RunningBlock } from "@/lib/utils/season-start";
 import { keepDates } from "@/lib/utils/keep-dates";
 import { badgeAccent, nextPhaseBadge, phaseBarTone } from "@/lib/utils/plan-list";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
 import {
   PHASE_TYPE_LABELS,
   addDaysStr,
@@ -146,7 +147,8 @@ export function phaseAnnouncements(nameOf: (id: UniqueIdentifier) => string): An
 export function SeasonDetailClient(p: Props) {
   const router = useRouter();
   const leaveDeleted = useLeaveDeleted();
-  const [busy, setBusy] = useState(false);
+  // One write at a time; a delete stays busy until the next page is on screen (useSubmitLock).
+  const { busy, lock, unlock } = useSubmitLock();
   const [error, setError] = useState<string | null>(null);
   // The input a refused write named (fieldErrors), so its error shows under that field.
   const [errorField, setErrorField] = useState<string | null>(null);
@@ -192,12 +194,13 @@ export function SeasonDetailClient(p: Props) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  async function run<T>(promise: Promise<ActionResult<T>>, after?: () => void) {
-    setBusy(true);
+  async function run<T>(write: () => Promise<ActionResult<T>>, after?: () => void) {
+    // A second tap before the button re-renders off does nothing.
+    if (!lock()) return false;
     setError(null);
     setErrorField(null);
-    const result = await callAction(promise);
-    setBusy(false);
+    const result = await callAction(write());
+    unlock();
     if (!result.success) {
       setError(result.error);
       setErrorField("fieldErrors" in result && result.fieldErrors?.raceDate ? "raceDate" : null);
@@ -216,7 +219,7 @@ export function SeasonDetailClient(p: Props) {
     if (!drop) return;
     const before = order;
     setOrder(drop.order);
-    const ok = await run(movePhaseAction({ seasonId: p.season.id, cycleId: Number(event.active.id), position: drop.position }));
+    const ok = await run(() => movePhaseAction({ seasonId: p.season.id, cycleId: Number(event.active.id), position: drop.position }));
     if (!ok) setOrder(before);
   }
 
@@ -230,7 +233,7 @@ export function SeasonDetailClient(p: Props) {
       distanceMeters: race.discipline === "triathlon" || !race.km ? null : Math.round(Number(race.km) * 1000),
       priority: race.priority,
     };
-    const action = race.id ? updateRaceAction({ seasonId: p.season.id, raceId: race.id, ...fields }) : addRaceAction({ seasonId: p.season.id, ...fields });
+    const action = () => (race.id ? updateRaceAction({ seasonId: p.season.id, raceId: race.id, ...fields }) : addRaceAction({ seasonId: p.season.id, ...fields }));
     void run(action, () => setRace(null));
   }
 
@@ -240,21 +243,23 @@ export function SeasonDetailClient(p: Props) {
     if (!phase.length || n <= 0) return;
     const length = phase.unit === "days" ? { durationDays: n } : { durationWeeks: n, durationDays: null };
     const phaseType = p.enduranceEnabled ? { phaseType: phase.phaseType } : {};
-    void run(setPhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id, ...phaseType, ...length }), () => setPhase(null));
+    void run(() => setPhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id, ...phaseType, ...length }), () => setPhase(null));
   }
 
   async function fitTaper() {
-    const ok = await run(fitTaperAction({ seasonId: p.season.id }));
+    const ok = await run(() => fitTaperAction({ seasonId: p.season.id }));
     // Fitting the taper is the re-plan the flag asked for.
-    if (ok && p.replan) await run(clearReplanAction({ seasonId: p.season.id }));
+    if (ok && p.replan) await run(() => clearReplanAction({ seasonId: p.season.id }));
   }
 
   async function deleteSeason() {
-    setBusy(true);
+    if (!lock()) return;
     setError(null);
     const result = await callAction(deleteSeasonAction({ seasonId: p.season.id }));
-    setBusy(false);
-    if (!result.success) return setError(result.error);
+    if (!result.success) {
+      unlock();
+      return setError(result.error);
+    }
     leaveDeleted("/cycles", [`/seasons/${p.season.id}`]);
   }
 
@@ -277,7 +282,7 @@ export function SeasonDetailClient(p: Props) {
   // it: either way the running cycle ends then and another start is dropped.
   const resumeDay = p.next ? (p.next.plannedStart <= p.today ? p.today : p.next.plannedStart) : p.today;
   const resumeLines = p.next ? takeStartLines({ seasonId: p.season.id, day: resumeDay, running: p.running, scheduled: p.scheduled }) : [];
-  const resume = () => run(resumeSeasonAction({ seasonId: p.season.id }), () => setConfirmResume(false));
+  const resume = () => run(() => resumeSeasonAction({ seasonId: p.season.id }), () => setConfirmResume(false));
 
   // The same badge as the Plan list (nextPhaseBadge): one answer to paused or next.
   function badge(ph: SeasonPhaseView): string {
@@ -343,7 +348,7 @@ export function SeasonDetailClient(p: Props) {
                 </button>
               )}
               {p.replan && (
-                <button type="button" disabled={busy} onClick={() => run(clearReplanAction({ seasonId: p.season.id }))} className="min-h-11 px-3 text-sm font-medium active:opacity-70 disabled:opacity-50">
+                <button type="button" disabled={busy} onClick={() => run(() => clearReplanAction({ seasonId: p.season.id }))} className="min-h-11 px-3 text-sm font-medium active:opacity-70 disabled:opacity-50">
                   Keep as it is
                 </button>
               )}
@@ -428,7 +433,7 @@ export function SeasonDetailClient(p: Props) {
                 type="button"
                 disabled={busy}
                 onClick={() => (resumeLines.length > 0 ? toResume(true) : resume())}
-                className="min-h-11 shrink-0 text-sm font-medium text-primary active:opacity-70"
+                className="min-h-11 min-w-11 shrink-0 px-2 text-sm font-medium text-primary active:opacity-70"
               >
                 {paused ? "Resume" : "Start"}
               </button>
@@ -530,7 +535,7 @@ export function SeasonDetailClient(p: Props) {
               type="button"
               disabled={busy}
               onClick={() =>
-                run(removeRaceAction({ seasonId: p.season.id, raceId: race.id! }), () => {
+                run(() => removeRaceAction({ seasonId: p.season.id, raceId: race.id! }), () => {
                   setConfirmRemoveRace(false);
                   setRace(null);
                 })
@@ -640,7 +645,7 @@ export function SeasonDetailClient(p: Props) {
                   <ButtonReason id="phase-reason" reason={phaseReason} />
                 </div>
                 {errorLine}
-                <button type="button" disabled={busy} onClick={() => run(removePhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id }), () => setPhase(null))} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>
+                <button type="button" disabled={busy} onClick={() => run(() => removePhaseAction({ seasonId: p.season.id, cycleId: phase.phase.id }), () => setPhase(null))} className={`min-h-11 text-sm font-medium ${DESTRUCTIVE_TEXT} active:opacity-70`}>
                   Remove from season
                 </button>
               </>

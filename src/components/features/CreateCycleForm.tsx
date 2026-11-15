@@ -20,6 +20,7 @@ import { ButtonReason, Chip, ChipGroup, ErrorLine, FormHeader, LABEL, PinnedBar,
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
 import { BottomSheet } from "@/components/ui/BottomSheet";
 import { useBack, useReturnTo } from "@/components/ui/BackLink";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
 import { createTrainingCycle, deleteTrainingCycle, startTrainingCycle, updateTrainingCycle } from "@/lib/actions/training-cycles";
 import { addDays, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { END_ACTIONS, MAIN_LENGTHS, SCHEDULE_MODES, choiceFor, startDayFor, type EndAction, type ScheduleType, type StartChoice, type StartDays } from "@/lib/utils/cycle-setup";
@@ -87,7 +88,8 @@ export function CreateCycleForm({
   const [picked, setPicked] = useState(start && choiceFor(start, days) === "date" ? start : "");
   const [endAction, setEndAction] = useState<EndAction>((draft?.endAction as EndAction) ?? "none");
   const [endMessage, setEndMessage] = useState(draft?.endMessage ?? "");
-  const [loading, setLoading] = useState(false);
+  // Busy from the first tap until the next page is on screen (useSubmitLock).
+  const { busy: loading, lock, unlock } = useSubmitLock();
   const [error, setError] = useState("");
 
   const startDay = choice ? startDayFor(choice, days, picked) : null;
@@ -99,8 +101,7 @@ export function CreateCycleForm({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!name.trim() || !startDay || !weeksOk) return;
-    setLoading(true);
+    if (!name.trim() || !startDay || !weeksOk || !lock()) return;
     setError("");
 
     const fields = { name: name.trim(), durationWeeks: weeks, endAction };
@@ -111,7 +112,7 @@ export function CreateCycleForm({
     if (result.success) {
       router.replace(setupHref(result.data.id, startDay));
     } else {
-      setLoading(false);
+      unlock();
       setError(result.error);
     }
   }
@@ -274,36 +275,37 @@ export function CycleSetupSessions({
   scheduled?: ScheduledDraft | null;
 }) {
   const returnTo = useReturnTo();
-  const [loading, setLoading] = useState(false);
+  // Busy from the first tap until the next page is on screen (useSubmitLock).
+  const { busy: loading, lock, unlock } = useSubmitLock();
   const [error, setError] = useState("");
   const [confirming, setConfirming] = useState(false);
   const startLines = [endsRunningLine(cycle.id, runningOn(running, start)), dropsScheduledLine(cycle.id, scheduled)].filter((l): l is string => l != null);
   const [discarding, setDiscarding] = useState(false);
-  const [discardBusy, setDiscardBusy] = useState(false);
+  const { busy: discardBusy, lock: lockDiscard, unlock: unlockDiscard } = useSubmitLock();
   const [discardError, setDiscardError] = useState("");
   // A rest day alone is no cycle: at least one session must be in it.
   const hasSession = cycle.slots.some((s) => s.programId != null || s.workoutId != null);
 
   async function discard() {
-    setDiscardBusy(true);
+    if (!lockDiscard()) return;
     setDiscardError("");
     const result = await callAction(deleteTrainingCycle(cycle.id));
     if (result.success) {
       returnTo("/cycles");
     } else {
-      setDiscardBusy(false);
+      unlockDiscard();
       setDiscardError(result.error);
     }
   }
 
   async function create() {
-    setLoading(true);
+    if (!lock()) return;
     setError("");
     const result = await callAction(startTrainingCycle(cycle.id, start));
     if (result.success) {
       returnTo(`/cycles/${cycle.id}`);
     } else {
-      setLoading(false);
+      unlock();
       setError(result.error);
     }
   }

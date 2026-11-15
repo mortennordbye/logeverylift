@@ -106,8 +106,9 @@ describe("plan list words", () => {
     const past = { ...c, name: "Strength 5×5", durationWeeks: 8, startDate: "2026-09-14", scheduledStartDate: null };
     expect(pastRow(past, null).sub).toBe("8 weeks · ended 8 Nov");
     expect(pastRow(past, "2026-11-09").sub).toBe("8 weeks · ended 8 Nov");
-    // Ended early: the day before the day it completed, which stays put as days pass.
-    expect(pastRow({ ...past, startDate: "2026-11-01" }, "2026-11-05").sub).toBe("8 weeks · ended 4 Nov");
+    // Ended early: the day before the day it completed, which stays put as days pass,
+    // in the cycle detail's words (endedLine).
+    expect(pastRow({ ...past, startDate: "2026-11-01" }, "2026-11-05").sub).toBe("8 weeks · ended early on 4 Nov");
   });
 
   it("says a draft with no start date has not started", () => {

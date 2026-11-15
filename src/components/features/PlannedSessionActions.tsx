@@ -260,6 +260,8 @@ export function PlannedSessionSheet({
   }
 
   const s = session;
+  // Save only a real change: the same text, or spaces, would mark the day changed for nothing.
+  const labelChanged = (label.trim() || null) !== (s?.label?.trim() || null) || (note.trim() || null) !== (s?.notes?.trim() || null);
   const isToday = s?.date === today;
   // The header line says the state too: "Tue 17 Nov · Skipped" (J5-08, J5-13).
   const state = s ? sessionState(s) : null;
@@ -470,7 +472,7 @@ export function PlannedSessionSheet({
               className="flex flex-col gap-3"
               onSubmit={(e) => {
                 e.preventDefault();
-                run({ op: "change", id: s.id, label: label.trim() || null, notes: note.trim() || null });
+                if (labelChanged) run({ op: "change", id: s.id, label: label.trim() || null, notes: note.trim() || null });
               }}
             >
               <label className="flex flex-col gap-1.5">
@@ -481,7 +483,7 @@ export function PlannedSessionSheet({
                 <span className={LABEL}>Note</span>
                 <textarea value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} className="rounded-xl bg-widget-2 px-3 py-2.5 text-base text-foreground outline-none focus:ring-2 ring-brand resize-none" />
               </label>
-              <button type="submit" disabled={pending} className={PRIMARY_BUTTON}>
+              <button type="submit" disabled={pending || !labelChanged} className={PRIMARY_BUTTON}>
                 Save
               </button>
               <button type="button" onClick={() => setView("main")} className={SHEET_CANCEL}>

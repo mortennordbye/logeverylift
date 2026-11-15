@@ -268,6 +268,22 @@ describe("weekday week", () => {
     expect(updatePlannedSession).toHaveBeenCalledWith({ op: "change", id: 3, label: "Hills", notes: "Keep it steady" });
   });
 
+  it("keeps Save off while the label and note are unchanged, spaces included", () => {
+    renderWeek();
+    fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));
+    const sheet = screen.getByTestId("session-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Label and note" }));
+    const save = () => within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement;
+    expect(save().disabled).toBe(true);
+    fireEvent.change(within(sheet).getByLabelText("Label"), { target: { value: "   " } });
+    fireEvent.change(within(sheet).getByLabelText("Note"), { target: { value: " " } });
+    expect(save().disabled).toBe(true);
+    fireEvent.click(save());
+    expect(updatePlannedSession).not.toHaveBeenCalled();
+    fireEvent.change(within(sheet).getByLabelText("Label"), { target: { value: "Hills" } });
+    expect(save().disabled).toBe(false);
+  });
+
   it("shows a failed change in the sheet and keeps it open", async () => {
     updatePlannedSession.mockResolvedValue({ success: false, error: "Pick a day in the block." });
     renderWeek();
@@ -510,6 +526,15 @@ describe("rotation order", () => {
       <RotationOrder cycleId={5} rows={rotationRows(slots, swapped, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />,
     );
     expect(screen.getAllByTestId("rotation-row")[0].textContent).toBe("1Full bodySwapped");
+  });
+
+  it("a swapped position that becomes next after a skip keeps its Swapped mark", () => {
+    const changed = walk.map((d) =>
+      d.rotationPosition === 1 ? { ...d, status: "skipped" as const } : d.rotationPosition === 3 ? { ...d, programId: 9, programName: "Full body" } : d,
+    );
+    render(<RotationOrder cycleId={5} rows={rotationRows(slots, changed, TODAY)} today={TODAY} programs={[]} programsMap={programsMap} editHref="/cycles/5/template" active />);
+    const rows = screen.getAllByTestId("rotation-row").map((r) => r.textContent);
+    expect(rows[3]).toBe("4Full bodyNext · Swapped");
   });
 
   it("gives a skipped position its skip reason", () => {

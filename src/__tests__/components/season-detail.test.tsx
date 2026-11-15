@@ -297,6 +297,8 @@ describe("season detail text (fix round 2)", () => {
     expect(screen.queryByText("Paused. The next phase is not scheduled.")).toBeNull();
     expect(screen.getByText("“Aerobic base + strength” is not started.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
+    // The short word is still a 44 px wide target (QA round 11).
+    expect(screen.getByRole("button", { name: "Start" }).className).toMatch(/\bmin-w-11\b/);
   });
 
   it("a season not started still warns that the taper misses race day and offers Fit the taper (round 8)", () => {

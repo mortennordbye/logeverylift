@@ -201,6 +201,13 @@ describe("New season with the endurance switch", () => {
     expect((screen.getByRole("button", { name: "Create season" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
+  it("a race before the start leaves Make a triathlon plan off, as it says", () => {
+    render(<SeasonForm {...create} />);
+    fillRace("2026-11-15");
+    expect(triathlonCard().textContent).toContain("The race is before the start date.");
+    expect((within(triathlonCard()).getByRole("radio") as HTMLInputElement).disabled).toBe(true);
+  });
+
   it("sends a user without the intake interview to it first", () => {
     render(<SeasonForm {...create} interviewDone={false} />);
     expect(screen.getByRole("link", { name: /Make a triathlon plan/ }).getAttribute("href")).toBe("/more/athlete/interview?next=/seasons/new");
@@ -264,13 +271,20 @@ describe("New season while another block holds the start (fix round 4)", () => {
   });
 
   it("asks nothing when the running cycle joins, or the season has no phases yet", async () => {
-    render(<SeasonForm {...busy} enduranceEnabled={false} />);
-    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Spring" } });
-    fireEvent.click(screen.getByRole("button", { name: "Change end" }));
-    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2027-03-01" } });
+    const fill = () => {
+      fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Spring" } });
+      fireEvent.click(screen.getByRole("button", { name: "Change end" }));
+      fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2027-03-01" } });
+    };
+    const first = render(<SeasonForm {...busy} enduranceEnabled={false} />);
+    fill();
     fireEvent.click(screen.getByRole("button", { name: "Create season" }));
     await waitFor(() => expect(mocks.createSeasonAction).toHaveBeenCalledTimes(1));
+    // A saved form stays busy until the page leaves: a fresh form for the second case.
+    first.unmount();
 
+    render(<SeasonForm {...busy} enduranceEnabled={false} />);
+    fill();
     fireEvent.click(screen.getByLabelText(/Use cycles I already have/));
     fireEvent.click(within(screen.getByRole("list", { name: "Your cycles" })).getByLabelText(/Upper \/ Lower/));
     fireEvent.click(screen.getByRole("button", { name: "Create season" }));

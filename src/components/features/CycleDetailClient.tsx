@@ -19,6 +19,7 @@ import { deleteTrainingCycle, restartTrainingCycle, startTrainingCycle } from "@
 import { dropsScheduledLine, endsRunningLine, type RunningCycle, type ScheduledDraft } from "@/lib/utils/cycle-start";
 import { shortDay } from "@/lib/utils/seasons";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
 import type { TrainingCycle } from "@/types/workout";
 import { MoreHorizontal } from "lucide-react";
 import Link from "next/link";
@@ -93,15 +94,15 @@ export function StartCycleButton({
   otherScheduled?: ScheduledDraft | null;
 }) {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const { busy: loading, lock, unlock } = useSubmitLock();
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleStart() {
-    setLoading(true);
+    if (!lock()) return;
     setError(null);
     const result = await callAction(startTrainingCycle(cycle.id));
-    setLoading(false);
+    unlock();
     if (!result.success) {
       setError(result.error);
       return;
@@ -172,7 +173,8 @@ export function CycleMenu({ cycle, running = null }: { cycle: TrainingCycle; run
   const returnTo = useReturnTo();
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState<"restart" | "delete" | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Busy from the first tap until the next page is on screen (useSubmitLock).
+  const { busy: loading, lock, unlock } = useSubmitLock();
   const [error, setError] = useState<string | null>(null);
 
   function ask(which: "restart" | "delete") {
@@ -182,10 +184,10 @@ export function CycleMenu({ cycle, running = null }: { cycle: TrainingCycle; run
   }
 
   async function restart() {
-    setLoading(true);
+    if (!lock()) return;
     setError(null);
     const result = await callAction(restartTrainingCycle(cycle.id));
-    setLoading(false);
+    unlock();
     if (!result.success) {
       setError(result.error);
       return;
@@ -195,11 +197,11 @@ export function CycleMenu({ cycle, running = null }: { cycle: TrainingCycle; run
   }
 
   async function remove() {
-    setLoading(true);
+    if (!lock()) return;
     setError(null);
     const result = await callAction(deleteTrainingCycle(cycle.id));
     if (!result.success) {
-      setLoading(false);
+      unlock();
       setError(result.error);
       return;
     }

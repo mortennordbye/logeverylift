@@ -23,6 +23,7 @@ import {
 } from "@/lib/actions/training-cycles";
 import { dayLabels } from "@/lib/utils/cycle-detail";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
 import type { Program, TrainingCycleWithSlots } from "@/types/workout";
 import {
   DndContext,
@@ -129,15 +130,15 @@ export function ProgramPickerSheet({
   const [naming, setNaming] = useState(false);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Two taps before the button re-renders off make one program (useSubmitLock).
+  const { busy, lock, unlock } = useSubmitLock();
   const q = query.trim().toLowerCase();
   const shown = q ? programs.filter((p) => p.name.toLowerCase().includes(q)) : programs;
 
   async function create() {
-    if (!newName.trim()) return;
-    setBusy(true);
+    if (!newName.trim() || !lock()) return;
     const result = await callAction(createProgram({ name: newName.trim() }));
-    setBusy(false);
+    unlock();
     if (!result.success) {
       setError(result.error);
       return;
@@ -300,6 +301,8 @@ function SlotSheet({
   const [label, setLabel] = useState(slot.label ?? "");
   const [notes, setNotes] = useState(slot.notes ?? "");
   const [labelOpen, setLabelOpen] = useState(false);
+  // A rest day (no session, and no name such as "Mobility" that makes it a day of its own).
+  const rest = isRest(slot) && (slot.label == null || slot.label === "Rest");
 
   function done() {
     const changes: SlotChanges = {};
@@ -315,15 +318,20 @@ function SlotSheet({
   return (
     <PlanSheetPanel label={title} title={title}>
       <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between py-2 min-h-[52px] border-b border-hairline">
-          <span className="flex flex-col gap-0.5 min-w-0">
-            <span className={LABEL}>Program</span>
-            <span className="text-base font-medium truncate">{slot.program?.name ?? (isRest(slot) ? "Rest" : slot.label ?? "Workout")}</span>
-          </span>
-          <button type="button" onClick={onChangeProgram} className="h-11 px-3 text-[15px] font-medium text-brand active:opacity-70">
-            Change
-          </button>
-        </div>
+        {rest ? (
+          // A rest day has no program to change: it says what it is.
+          <div className="flex items-center py-2 min-h-[52px] border-b border-hairline text-base font-medium">Rest day</div>
+        ) : (
+          <div className="flex items-center justify-between py-2 min-h-[52px] border-b border-hairline">
+            <span className="flex flex-col gap-0.5 min-w-0">
+              <span className={LABEL}>Program</span>
+              <span className="text-base font-medium truncate">{slot.program?.name ?? (isRest(slot) ? "Rest" : slot.label ?? "Workout")}</span>
+            </span>
+            <button type="button" onClick={onChangeProgram} className="h-11 px-3 text-[15px] font-medium text-brand active:opacity-70">
+              Change
+            </button>
+          </div>
+        )}
         {showKey && <Switch title="Key session" sub="A hard day. A missed one gets a new day." on={key} onChange={setKey} />}
         {brickWith && (
           <Switch title="Link to the session before (brick)" sub={`Run right after ${brickWith}`} on={brick} onChange={setBrick} />
@@ -359,7 +367,7 @@ function SlotSheet({
         </button>
         {/* The destructive action goes at the bottom. */}
         <button type="button" onClick={onRemove} className="mt-1 min-h-11 text-[15px] font-medium text-[#ff6b5a] active:opacity-70">
-          Remove session
+          {rest ? "Remove rest day" : "Remove session"}
         </button>
       </div>
     </PlanSheetPanel>

@@ -1132,6 +1132,8 @@ async function sessionOpBody(w: PlanWriteSession, ctx: PlanWriteContext, input: 
         ...(input.notes !== undefined && { notes: input.notes }),
         ...(input.position !== undefined && { position: input.position }),
       };
+      // Nothing differs: no change, so the day stays the template's and template edits still reach it.
+      if (Object.entries(set).every(([k, v]) => row[k as keyof typeof row] === v)) return row;
       break;
     }
     case "reset": {
