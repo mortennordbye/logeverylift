@@ -1,6 +1,6 @@
 # One app for a lifter and a triathlete
 
-Status: plan, no build yet. Follows [one user type, Garmin as an add-on](one-user-garmin-plus.md).
+Status: plan, no build yet. Follows [one user type, Premium as an add-on](one-user-premium.md).
 That plan gives every user every feature. This plan decides how much of it each user sees, so a
 lifter does not get a cockpit and a triathlete does not get a toy.
 
@@ -66,11 +66,12 @@ they add a race, the countdown and race plan appear. Each step adds only what th
 
 ## 5. Build
 
-1. A small helper, `sportsInPlay(userId)` (*new*): the sports with a session, workout, threshold
+1. A small helper, sports in play (*new*): the sports with a session, workout, threshold
    or race in the last 12 weeks or ahead. One read per page, cached per request like
    `enduranceEnabledFor` is now. Rules 1 and 2 read it where the page does not already have the
    data.
-2. A `MoreOptions` component (*new*): a collapsed row that opens itself when `hasValue` is true.
+2. A More options component (*new*): a collapsed row that opens itself when any field in it has a
+   value.
    Used in the slot sheet, cycle form, season form and the exercise form.
 3. Home defaults: `defaultLayout` reads the goals instead of the switch for `defaultVisible`
    (`src/lib/home/layout.ts:60`). `available` returns true for every widget except Garmin ones.

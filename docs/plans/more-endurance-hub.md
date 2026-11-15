@@ -1,6 +1,6 @@
 # One More item for the endurance pages
 
-Status: plan, no build yet. Builds on [one user type, Garmin as an add-on](one-user-garmin-plus.md):
+Status: plan, no build yet. Builds on [one user type, Premium as an add-on](one-user-premium.md):
 that plan removes the endurance switch, so every row on the hub shows for every user. The gates
 below describe the code before that plan.
 
@@ -37,7 +37,7 @@ The hub lists the four pages. Every page keeps its URL and its content.
 2. **The hub row shows for every user.** Thresholds is open to every user today, so a hub that
    only endurance users see would hide Thresholds from lifters.
 3. **Each row on the hub keeps its own gate until the switch goes.** After
-   [one-user-garmin-plus.md](one-user-garmin-plus.md), every row shows for every user. The hub reads `enduranceEnabledFor` and shows
+   [one-user-premium.md](one-user-premium.md), every row shows for every user. The hub reads `enduranceEnabledFor` and shows
    Athlete profile, Workouts and Nutrition only when it is on, as `MoreClient` does now. When the
    rework removes a gate, only the hub's row condition changes. The hub works before and after the
    rework.
@@ -78,7 +78,7 @@ The hub lists the four pages. Every page keeps its URL and its content.
 
 ## 6. What on the hub needs Garmin, and what is not endurance-only
 
-No page on the hub needs Garmin. Garmin adds two extras, both admin-only by `garminAllowed`:
+No page on the hub needs Garmin. Garmin adds two extras, both Premium only, by `garminAllowed`:
 threshold suggestions (`src/lib/athlete-profile.ts:220`) and a fuel log linked to a Garmin activity
 (`src/lib/nutrition.ts:100`). Without Garmin, each page works from what the user enters.
 
