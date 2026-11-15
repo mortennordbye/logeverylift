@@ -18,20 +18,25 @@ import { DEFAULT_UNITS } from "@/lib/utils/units";
 import { eq } from "drizzle-orm";
 
 import { garminAllowed } from "@/lib/garmin/access";
+import { fieldSyncView } from "@/lib/garmin/sync-from-garmin";
+import { weightSource } from "@/lib/garmin/weight-sync";
 import { BackLink } from "@/components/ui/BackLink";
 
 export default async function AccountPage() {
   const session = await requireSession();
   const userId = session.user.id;
-  // The Garmin weight sync switch shows only to a user with a Garmin connection.
-  const [user, [garmin], endurance, today, numbers] = await Promise.all([
+  // Every Garmin line and switch is for Premium users only; the switch also needs a connection.
+  const premium = garminAllowed(session.user.role);
+  const [user, [garmin], endurance, today, numbers, weight, sync] = await Promise.all([
     db.query.users.findFirst({ where: eq(users.id, userId) }),
-    garminAllowed(session.user.role)
-      ? db.select({ syncWeight: garminConnections.syncWeight }).from(garminConnections).where(eq(garminConnections.userId, userId))
+    premium
+      ? db.select({ syncFromGarmin: garminConnections.syncFromGarmin }).from(garminConnections).where(eq(garminConnections.userId, userId))
       : Promise.resolve([]),
     enduranceEnabledFor(userId),
     userToday(userId).then(toDateStr),
     getThresholdsData(),
+    premium ? weightSource(userId) : null,
+    premium ? fieldSyncView(userId) : {},
   ]);
   const monday = mondayOf(today);
   // The athlete rows show only with the endurance switch on (D18).
@@ -72,7 +77,10 @@ export default async function AccountPage() {
           birthYear: user?.birthYear ?? null,
           heightCm: user?.heightCm ?? null,
           weightKg: user?.weightKg ?? null,
-          garminWeightSync: garmin ? garmin.syncWeight : null,
+          premium,
+          garminSync: garmin ? garmin.syncFromGarmin : null,
+          weightSource: weight,
+          sync,
           endurance,
           athlete: athlete && {
             enduranceLevel: athlete.enduranceLevel,

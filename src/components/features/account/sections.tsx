@@ -23,7 +23,7 @@ import {
   DeletedThresholds,
   ThresholdEditor,
   ThresholdHistory,
-  ThresholdNote,
+  thresholdSourceLine,
   type DeletedThresholdView,
   type SuggestionView,
   type ThresholdView,
@@ -39,8 +39,11 @@ import {
   type ExperienceLevel,
   type Gender,
 } from "@/components/features/account/ProfileSteps";
+import { SyncNote } from "@/components/features/account/SyncNote";
 import type { ThresholdKind } from "@/db/schema/athlete-profile";
-import { setGarminWeightSync } from "@/lib/actions/garmin";
+import { addThresholdValue } from "@/lib/actions/athlete-profile";
+import { setGarminSync, takeGarminField } from "@/lib/actions/garmin";
+import { sourceLine, type FieldSource, type SyncedField } from "@/lib/utils/field-sources";
 import type { Goal } from "@/lib/utils/goals";
 import { shortDay } from "@/lib/utils/seasons";
 import { STRENGTH_GOAL_LABEL } from "@/lib/utils/strength-goal";
@@ -61,8 +64,13 @@ export type AccountData = {
   birthYear: number | null;
   heightCm: number | null;
   weightKg: number | null;
-  /** null hides the switch: Garmin not connected or not enabled. */
-  garminWeightSync: boolean | null;
+  /** Premium with Garmin enabled: the only users who see Garmin text. */
+  premium: boolean;
+  /** null hides the Garmin section: not Premium, or Garmin not connected. */
+  garminSync: boolean | null;
+  weightSource: FieldSource | null;
+  /** Per synced field, its source line and Garmin's differing value; Premium only. */
+  sync: Partial<Record<SyncedField, { note: string | null; says: string | null }>>;
   endurance: boolean;
   athlete: ProfileView | null;
   interviewDoneOn: string | null;
@@ -94,6 +102,12 @@ export type Row = {
 export type Section = { id: string; title: string; rows: Row[] };
 
 const notSet = "Not set";
+
+function fieldNote(d: AccountData, field: SyncedField) {
+  const v = d.sync[field];
+  if (!v?.note && !v?.says) return null;
+  return <SyncNote note={v.note} says={v.says} onUse={() => takeGarminField({ field })} />;
+}
 const endurance = (d: AccountData) => d.endurance;
 
 function thresholdRow(kind: ThresholdKind): Row {
@@ -106,12 +120,19 @@ function thresholdRow(kind: ThresholdKind): Row {
     },
     note: (d) => {
       const current = currentThresholds(d.thresholds);
+      const c = current[kind];
+      const s = d.suggestions.find((x) => x.kind === kind);
       const warnings = thresholdWarnings({ max_hr: current.max_hr, [kind]: current[kind] });
+      if (!c && !s && warnings.length === 0) return null;
       return (
         <>
-          <ThresholdNote current={current[kind]} suggestion={d.suggestions.find((s) => s.kind === kind)} units={d.units} today={d.today} />
+          <SyncNote
+            note={c ? thresholdSourceLine(c, d.today, d.premium) : null}
+            says={s ? formatThreshold(kind, s.value, d.units) : null}
+            onUse={() => addThresholdValue({ kind, value: s!.value, source: "garmin" })}
+          />
           {warnings.map((w) => (
-            <p key={w} className="mt-1 text-xs text-amber-600 dark:text-amber-400" data-testid="threshold-warning">
+            <p key={w} className="text-amber-600 dark:text-amber-400" data-testid="threshold-warning">
               {w}
             </p>
           ))}
@@ -136,6 +157,19 @@ export const SECTIONS: Section[] = [
       { id: "email", label: "Email", value: (d) => d.email },
       { id: "role", label: "Role", value: (d) => <span className="capitalize">{d.role}</span> },
       { id: "joined", label: "Joined", value: () => <InvitedBadge compact />, show: (d) => d.invited },
+    ],
+  },
+  {
+    id: "garmin",
+    title: "Garmin",
+    rows: [
+      {
+        id: "garmin-sync",
+        label: "Sync from Garmin",
+        note: () => "Keeps body weight, max HR, threshold HR, FTP, run pace, availability, time zone and units up to date.",
+        show: (d) => d.garminSync !== null,
+        toggle: { on: (d) => d.garminSync === true, set: (on) => setGarminSync({ enabled: on }) },
+      },
     ],
   },
   {
@@ -175,6 +209,7 @@ export const SECTIONS: Section[] = [
           d.athlete?.availableDays?.length
             ? `${d.athlete.availableDays.map((n) => DAY_LABELS[n]).join(" ")} · ${d.athlete.hoursPerWeek ?? "?"} h a week`
             : notSet,
+        note: (d) => fieldNote(d, "availability"),
         show: endurance,
         editor: (d, done) => <AvailabilityStep initial={d.athlete} onSaved={done} />,
       },
@@ -213,14 +248,8 @@ export const SECTIONS: Section[] = [
         id: "weight",
         label: "Body weight",
         value: (d) => (d.weightKg != null ? `${d.weightKg} kg` : notSet),
+        note: (d) => (d.premium && d.weightSource ? sourceLine(d.weightSource) : null),
         editor: (d, done) => <NumberStep field="weightKg" label="Body weight" initial={d.weightKg} unit="kg" placeholder="80" onSaved={done} />,
-      },
-      {
-        id: "garmin-weight-sync",
-        label: "Sync weight from Garmin",
-        note: () => "Each Garmin weigh-in is added to your weight history, and body weight follows the newest entry.",
-        show: (d) => d.garminWeightSync !== null,
-        toggle: { on: (d) => d.garminWeightSync === true, set: (on) => setGarminWeightSync({ enabled: on }) },
       },
       {
         id: "injuries",

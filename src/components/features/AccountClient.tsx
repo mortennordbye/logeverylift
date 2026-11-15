@@ -38,46 +38,52 @@ function Switch({ on }: { on: boolean }) {
   );
 }
 
-/** One row: a link, a switch, a button that opens the sheet, or a plain value. */
+/** One row: a link, a switch, a button that opens the sheet, or a plain value; its note sits under it, outside the control. */
 function AccountRow({ row, data, on, onOpen, onToggle }: { row: Row; data: AccountData; on: boolean; onOpen: () => void; onToggle: () => void }) {
-  const label = text(row.label, data);
   const body = (
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center justify-between gap-3">
-        <span className={`text-sm shrink-0 ${row.toggle ? "font-medium" : "text-muted-foreground"}`}>{label}</span>
-        {row.value && <span className="min-w-0 text-sm font-medium text-right break-words">{row.value(data)}</span>}
-      </div>
-      {row.note && <div className="text-xs text-muted-foreground mt-0.5 text-left">{row.note(data)}</div>}
+    <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
+      <span className={`text-sm shrink-0 ${row.toggle ? "font-medium" : "text-muted-foreground"}`}>{text(row.label, data)}</span>
+      {row.value && <span className="min-w-0 text-sm font-medium text-right break-words">{row.value(data)}</span>}
     </div>
   );
   const rowClass = "flex items-center gap-3 w-full px-4 min-h-[52px] py-3 text-left";
+  const testId = `account-${row.id}`;
+  let main = (
+    <div className={rowClass} data-testid={testId}>
+      {body}
+    </div>
+  );
   if (row.href) {
-    return (
-      <Link href={row.href} className={`${rowClass} active:opacity-60`} data-testid={`account-${row.id}`}>
+    main = (
+      <Link href={row.href} className={`${rowClass} active:opacity-60`} data-testid={testId}>
         {body}
         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
       </Link>
     );
-  }
-  if (row.toggle) {
-    return (
-      <button onClick={onToggle} role="switch" aria-checked={on} className={`${rowClass} active:opacity-60`} data-testid={`account-${row.id}`}>
+  } else if (row.toggle) {
+    main = (
+      <button onClick={onToggle} role="switch" aria-checked={on} className={`${rowClass} active:opacity-60`} data-testid={testId}>
         {body}
         <Switch on={on} />
       </button>
     );
-  }
-  if (row.editor) {
-    return (
-      <button onClick={onOpen} className={`${rowClass} active:opacity-60`} data-testid={`account-${row.id}`}>
+  } else if (row.editor) {
+    main = (
+      <button onClick={onOpen} className={`${rowClass} active:opacity-60`} data-testid={testId}>
         {body}
         <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
       </button>
     );
   }
+  const note = row.note?.(data);
   return (
-    <div className={rowClass} data-testid={`account-${row.id}`}>
-      {body}
+    <div>
+      {main}
+      {note && (
+        <div className="px-4 pb-3 -mt-2 text-xs text-muted-foreground" data-testid={`${testId}-note`}>
+          {note}
+        </div>
+      )}
     </div>
   );
 }
@@ -228,6 +234,7 @@ export function AccountClient({ data, showActivityToFriends: initialActivityPriv
 
         {SECTIONS.map((section) => {
           const rows = section.rows.filter(visible);
+          if (rows.length === 0) return null;
           return (
             <div key={section.id} id={section.id} className="scroll-mt-20">
               <SectionLabel>{section.title}</SectionLabel>

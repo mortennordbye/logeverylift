@@ -18,6 +18,8 @@ import {
   type ProtocolInput,
   type ProtocolSpec,
 } from "@/lib/utils/thresholds";
+import { sourceLine } from "@/lib/utils/field-sources";
+import { shortDay } from "@/lib/utils/seasons";
 import { METERS_PER_MILE, type Units } from "@/lib/utils/units";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -221,19 +223,11 @@ export function ThresholdEditor({
   );
 }
 
-/** Under a threshold row: where the current value came from, its age, and the Garmin estimate. */
-export function ThresholdNote({ current, suggestion, units, today }: { current: ThresholdView | undefined; suggestion: SuggestionView | undefined; units: Units; today: string }) {
-  return (
-    <>
-      {current && (
-        <p className="mt-1 text-xs text-muted-foreground">
-          {SOURCE_TEXT[current.source]} · {current.measuredOn}
-          {isStale(current.measuredOn, today) && ` · Last tested ${weeksSince(current.measuredOn, today)} weeks ago. Retest after a recovery week.`}
-        </p>
-      )}
-      {suggestion && <p className="mt-1 text-xs text-primary">Garmin estimate: {formatThreshold(suggestion.kind, suggestion.value, units)}</p>}
-    </>
-  );
+/** Under a threshold row: who set the current value and when, and its age. Only Premium users see Garmin named. */
+export function thresholdSourceLine(current: ThresholdView, today: string, premium: boolean): string {
+  const fromGarmin = current.source === "garmin";
+  const line = fromGarmin && !premium ? shortDay(current.measuredOn) : sourceLine({ by: fromGarmin ? "garmin" : "you", on: current.measuredOn });
+  return isStale(current.measuredOn, today) ? `${line} · Last tested ${weeksSince(current.measuredOn, today)} weeks ago. Retest after a recovery week.` : line;
 }
 
 /** The values entered for one kind, each with Delete. */
