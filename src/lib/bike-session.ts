@@ -35,12 +35,12 @@ export async function lastRideAutoLapKm(userId: string): Promise<number | null> 
 }
 
 /** The session's template day and the last day of its block, for Move and Skip. */
-export async function sessionActionContext(userId: string, plannedSessionId: number): Promise<{ templateDate: string | null; lastDay: string | null }> {
+export async function sessionActionContext(userId: string, plannedSessionId: number): Promise<{ templateDate: string | null; lastDay: string | null; fromLibrary: boolean }> {
   const [row] = await db
-    .select({ templateDate: plannedSessions.templateDate, startDate: trainingCycles.startDate, durationWeeks: trainingCycles.durationWeeks, durationDays: trainingCycles.durationDays })
+    .select({ templateDate: plannedSessions.templateDate, workoutId: plannedSessions.workoutId, startDate: trainingCycles.startDate, durationWeeks: trainingCycles.durationWeeks, durationDays: trainingCycles.durationDays })
     .from(plannedSessions)
     .innerJoin(trainingCycles, and(eq(trainingCycles.id, plannedSessions.cycleId), eq(trainingCycles.userId, userId), liveCycles))
     .where(and(eq(plannedSessions.id, plannedSessionId), eq(plannedSessions.userId, userId), livePlannedSessions));
-  if (!row) return { templateDate: null, lastDay: null };
-  return { templateDate: row.templateDate, lastDay: row.startDate ? addDaysStr(row.startDate, cycleLengthDays(row) - 1) : null };
+  if (!row) return { templateDate: null, lastDay: null, fromLibrary: false };
+  return { templateDate: row.templateDate, lastDay: row.startDate ? addDaysStr(row.startDate, cycleLengthDays(row) - 1) : null, fromLibrary: row.workoutId != null };
 }

@@ -6,9 +6,10 @@ import { StepCards } from "@/components/features/bike/StepCards";
 import { YourNumbers } from "@/components/features/bike/YourNumbers";
 import { SavedRunLink } from "@/components/features/guided/SavedRunLink";
 import { STEP_WORD } from "@/components/features/guided/types";
-import { PlannedSessionActions } from "@/components/features/PlannedSessionActions";
+import { SessionPageActions } from "@/components/features/PlannedSessionActions";
 import { getBikeNumbers } from "@/lib/bike-numbers";
 import { lastRideAutoLapKm, sessionActionContext } from "@/lib/bike-session";
+import { ftpTestHref } from "@/lib/utils/workout-templates";
 import { enduranceEnabledFor } from "@/lib/endurance";
 import { distanceLabel, plannedSessionView, type PlannedSessionView } from "@/lib/planned-view";
 import { thresholdValues } from "@/lib/session-compliance";
@@ -172,7 +173,7 @@ async function BikeSession({ userId, id, v }: { userId: string; id: number; v: P
           <ProfileChart blocks={profileBlocks(workout, anchors, numbers.zones)} ftp={anchors.ftp ?? null} />
         </div>
         <MissingAnchors kinds={v.missingAnchors} />
-        <FtpLine numbers={numbers} />
+        <FtpLine numbers={numbers} planFtpTestHref={ftpTestHref()} />
 
         {workout.description && (
           <section className="mt-3 rounded-[18px] bg-widget px-3.5 py-3 text-sm" aria-label="Coach note" data-testid="coach-note">
@@ -189,11 +190,10 @@ async function BikeSession({ userId, id, v }: { userId: string; id: number; v: P
 
         {!done && ctx.lastDay && (
           <div className="-mx-4 mt-3">
-            <PlannedSessionActions
-              session={{ id, date: session.date, status: session.status, touched: session.touched, templateDate: ctx.templateDate }}
+            <SessionPageActions
+              session={{ id, date: session.date, status: session.status, priority: session.storedPriority, fromLibrary: ctx.fromLibrary, started: session.loggedSessionId != null }}
               today={today}
               lastDay={ctx.lastDay}
-              name={workout.name}
             />
           </div>
         )}
