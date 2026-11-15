@@ -7,8 +7,8 @@
  * threshold, injury), so each change can be seen and undone, and assistant
  * writes join the rest of the assistant's review.
  *
- * Gates: thresholds are for every user (D15, owner 2026-11-12). The profile,
- * injuries and the interview need the endurance switch (D18); the write
+ * Gates: thresholds are for every user (D15, owner 2026-11-12). The profile
+ * and injuries need the endurance switch (D18); the write
  * functions here check it, so no caller can skip it.
  */
 
@@ -62,8 +62,6 @@ export type InjuryRow = typeof athleteInjuries.$inferSelect;
 export const INJURY_TEXT_MAX = 500;
 export const INJURY_AVOID_MAX = 300;
 export const THRESHOLD_NOTES_MAX = 500;
-/** The reason on a coach memory entry the interview moved to the profile. */
-
 
 async function requireEndurance(userId: string) {
   if (!(await enduranceEnabledFor(userId))) throw new PlanStateError(ENDURANCE_OFF);
@@ -267,7 +265,12 @@ export type ProfileChange = {
  * Set any profile fields. Creates the profile on the first write. Throws
  * PlanConflictError on a stale version, PlanStateError with the switch off.
  */
-export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileChange, expectedVersion?: number, takeGarmin = false) {
+export async function saveAthleteProfile(
+  ctx: PlanWriteContext,
+  change: ProfileChange,
+  expectedVersion?: number,
+  garmin?: { on: string; take: boolean },
+) {
   await requireEndurance(ctx.userId);
   const set: Partial<typeof athleteProfiles.$inferInsert> = {};
   for (const k of ["enduranceLevel", "availableDays", "hoursPerWeek", "longestDayMinutes", "longDay", "strengthGoal"] as const) {
@@ -276,9 +279,11 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
   if (set.availableDays) set.availableDays = [...new Set(set.availableDays)].sort((a, b) => a - b);
   if (change.completeInterview) set.interviewCompletedAt = new Date();
   // Days or the long day changed by anyone but the sync lock availability against Garmin; the sync skips it
-  // when locked. takeGarmin ("Use") stores Garmin's days and clears the lock in this same transaction.
+  // when locked. `garmin` comes from the sync with its run's date; `take` ("Use") stores Garmin's days and clears
+  // the lock in this same transaction.
+  const takeGarmin = garmin?.take ?? false;
   const sourceBy = ctx.writer === "sync" || takeGarmin ? "garmin" : "you";
-  const availabilityOn = change.availableDays !== undefined || change.longDay !== undefined ? toDateStr(await userToday(ctx.userId)) : null;
+  const availabilityOn = change.availableDays !== undefined || change.longDay !== undefined ? (garmin?.on ?? toDateStr(await userToday(ctx.userId))) : null;
   const { result, versions } = await planWrite(ctx, async (w) => {
     // One profile per user: two first writes must not both insert.
     await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_profile:${ctx.userId}`}))`);
@@ -426,9 +431,9 @@ export async function syncGarminThreshold(userId: string, kind: ThresholdKind, v
       .orderBy(desc(athleteThresholds.deletedAt))
       .limit(1);
     if (deleted && sameThresholdValue(kind, deleted.value, value)) return;
-    // Today's Garmin row takes the new value; a kind at its row limit reuses its oldest Garmin row.
+    // The current Garmin row, when dated today or later, takes the new value; a kind at its row limit reuses its oldest Garmin row.
     const oldestGarmin = live.filter((t) => t.source === "garmin").sort((a, b) => a.measuredOn.localeCompare(b.measuredOn) || a.id - b.id)[0];
-    const reuse = current?.measuredOn === today ? current : live.length >= THRESHOLDS_PER_KIND_MAX ? oldestGarmin : undefined;
+    const reuse = current && current.measuredOn >= today ? current : live.length >= THRESHOLDS_PER_KIND_MAX ? oldestGarmin : undefined;
     if (reuse) {
       await w.touch({ type: "threshold", id: reuse.id });
       await w.tx

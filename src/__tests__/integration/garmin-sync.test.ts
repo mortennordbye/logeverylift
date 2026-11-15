@@ -1,6 +1,6 @@
 import { db } from "@/db";
 import { athleteProfiles, athleteThresholds, garminConnections, garminDays, planRevisions, users } from "@/db/schema";
-import { saveProfile } from "@/lib/actions/athlete-profile";
+import { addThresholdValue, saveProfile } from "@/lib/actions/athlete-profile";
 import { takeGarminField } from "@/lib/actions/garmin";
 import { undoPlanChangeSet } from "@/lib/actions/plan-revisions";
 import { setTimeZone } from "@/lib/actions/user-settings";
@@ -130,6 +130,28 @@ describe("syncFromGarmin", () => {
     garmin.ftp = 270;
     await syncFromGarmin(user.id);
     expect((await thresholds(user.id)).filter((t) => t.kind === "ftp")).toEqual([{ kind: "ftp", value: 270, source: "garmin" }]);
+  });
+
+  it("updates a current Garmin row dated after today instead of adding one", async () => {
+    const user = await garminUser();
+    // A zone change can leave the newest Garmin row a day ahead of today.
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
+    await db.insert(athleteThresholds).values({ userId: user.id, kind: "ftp", value: 250, measuredOn: tomorrow, source: "garmin" });
+    await syncFromGarmin(user.id);
+    expect((await thresholds(user.id)).filter((t) => t.kind === "ftp")).toEqual([{ kind: "ftp", value: 262, source: "garmin" }]);
+  });
+
+  it("takes a Garmin value from Premium users only; typed values stay open", async () => {
+    const user = await garminUser();
+    asUser(user.id, "user");
+    expect(await addThresholdValue({ kind: "ftp", value: 262, source: "garmin" })).toEqual({ success: false, error: "Garmin values are for Premium accounts" });
+    expect((await addThresholdValue({ kind: "ftp", value: 240, source: "manual" })).success).toBe(true);
+    asUser(user.id, "admin");
+    expect((await addThresholdValue({ kind: "max_hr", value: 191, source: "garmin" })).success).toBe(true);
+    expect((await thresholds(user.id)).map((t) => [t.kind, t.source])).toEqual([
+      ["ftp", "manual"],
+      ["max_hr", "garmin"],
+    ]);
   });
 
   it("a kind at its row limit reuses its oldest Garmin row instead of failing", async () => {

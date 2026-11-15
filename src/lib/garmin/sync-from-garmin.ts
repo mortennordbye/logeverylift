@@ -69,7 +69,7 @@ async function syncAvailability(userId: string, run: Run, take = false) {
       { userId, writer: "sync", reason: "Garmin sync" },
       { availableDays: v.availableDays, ...(v.longDay !== null && { longDay: v.longDay }) },
       undefined,
-      take,
+      { on: run.on, take },
     );
   } catch (e) {
     if (!(e instanceof FieldLockedError)) throw e;

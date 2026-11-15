@@ -131,12 +131,13 @@ function thresholdRow(kind: ThresholdKind): Row {
       const c = current[kind];
       const s = d.suggestions.find((x) => x.kind === kind);
       const warnings = thresholdWarnings({ max_hr: current.max_hr, [kind]: current[kind] });
-      if (!c && warnings.length === 0) return null;
+      const says = s && showGarminSays(d.garminSync === true, c) ? formatThreshold(kind, s.value, d.units) : null;
+      if (!c && !says && warnings.length === 0) return null;
       return (
         <>
           <SyncNote
             note={c ? thresholdSourceLine(c, d.today, d.premium) : null}
-            says={s && showGarminSays(d.garminSync === true, c) ? formatThreshold(kind, s.value, d.units) : null}
+            says={says}
             onUse={() => addThresholdValue({ kind, value: s!.value, source: "garmin" })}
           />
           {warnings.map((w) => (

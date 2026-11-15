@@ -1809,6 +1809,8 @@ async function restoreInSession(w: PlanWriteSession, rev: typeof planRevisions.$
   const snap = rev.snapshot as PlanSnapshot;
   if (isMemorySnapshot(snap)) return restoreMemoryTo(w, rev.objectId, snap, rev.id);
   if (isAthleteSnapshot(snap)) {
+    // Profile first, then user: the same lock order as saveAthleteProfile.
+    await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_profile:${w.ctx.userId}`}))`);
     // A snapshot from before sources were kept: days the user had count as set by them.
     const days = snap.athlete.availableDays as number[] | null;
     const { userToday } = await import("@/lib/user-settings");
