@@ -458,7 +458,7 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
   if (isWorkoutSnapshot(after)) {
     const prev = before && isWorkoutSnapshot(before) ? before.workout : null;
     const a = after.workout;
-    if (!prev) return [`Added workout "${a.name}"`];
+    if (!prev) return [`Added workout “${a.name}”`];
     const out: string[] = [];
     if (!sameValue(prev.name, a.name)) out.push(`Name ${prev.name} → ${a.name}`);
     if (canonical(prev.workout) !== canonical(a.workout)) out.push("Steps changed");
@@ -492,7 +492,7 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
   }
   if (isSeasonSnapshot(after)) {
     const prev = before && isSeasonSnapshot(before) ? before : null;
-    if (!prev) return [`Created season "${after.season.name}"`];
+    if (!prev) return [`Created season “${after.season.name}”`];
     const out = planFieldLines("", SEASON_FIELDS, prev.season, after.season);
     if (!sameValue(prev.season.replanFlaggedAt ?? null, after.season.replanFlaggedAt ?? null)) {
       out.push(after.season.replanFlaggedAt ? after.season.replanReason ? `Flagged for a re-plan (${after.season.replanReason})` : "Flagged for a re-plan" : "Marked as re-planned");
@@ -501,28 +501,28 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     const nextIds = new Set(after.races.map((r) => r.id));
     for (const r of after.races) {
       const old = prevRaces.get(r.id);
-      if (!old) out.push(`Added ${r.priority} race "${r.name}" on ${dayLabel(String(r.raceDate))}`);
-      else out.push(...planFieldLines(`Race "${old.name}" `, RACE_FIELDS, old, r));
+      if (!old) out.push(`Added ${r.priority} race “${r.name}” on ${dayLabel(String(r.raceDate))}`);
+      else out.push(...planFieldLines(`Race “${old.name}” `, RACE_FIELDS, old, r));
     }
-    for (const r of prev.races) if (!nextIds.has(r.id)) out.push(`Removed race "${r.name}"`);
+    for (const r of prev.races) if (!nextIds.has(r.id)) out.push(`Removed race “${r.name}”`);
     const prevPhases = new Map(prev.phases.map((p) => [p.cycleId, p]));
     const nextPhaseIds = new Set(after.phases.map((p) => p.cycleId));
     for (const p of after.phases) {
       const old = prevPhases.get(p.cycleId);
-      if (!old) out.push(`Phase "${p.name}" added`);
+      if (!old) out.push(`Phase “${p.name}” added`);
       else {
-        if (old.phaseOrder !== p.phaseOrder) out.push(`Phase "${p.name}" moved from position ${old.phaseOrder} to ${p.phaseOrder}`);
-        if (old.phaseType !== p.phaseType) out.push(changeLine(`Phase "${p.name}" type`, phaseTypeText(old.phaseType), phaseTypeText(p.phaseType)));
+        if (old.phaseOrder !== p.phaseOrder) out.push(`Phase “${p.name}” moved from position ${old.phaseOrder} to ${p.phaseOrder}`);
+        if (old.phaseType !== p.phaseType) out.push(changeLine(`Phase “${p.name}” type`, phaseTypeText(old.phaseType), phaseTypeText(p.phaseType)));
       }
     }
-    for (const p of prev.phases) if (!nextPhaseIds.has(p.cycleId)) out.push(`Phase "${p.name}" removed`);
+    for (const p of prev.phases) if (!nextPhaseIds.has(p.cycleId)) out.push(`Phase “${p.name}” removed`);
     return out;
   }
   if (isMemorySnapshot(after)) {
     const prev = before && isMemorySnapshot(before) ? before : null;
-    if (!prev) return [`Added ${after.memory.kind} "${snapshotName(after)}"`];
+    if (!prev) return [`Added ${after.memory.kind} “${snapshotName(after)}”`];
     const out = fieldLines("", MEMORY_FIELDS, prev.memory, after.memory);
-    if (!sameValue(prev.memory.text, after.memory.text)) out.push(`Text "${snapshotName(prev)}" → "${snapshotName(after)}"`);
+    if (!sameValue(prev.memory.text, after.memory.text)) out.push(`Text “${snapshotName(prev)}” → “${snapshotName(after)}”`);
     if (!sameValue(prev.memory.deletedAt ?? null, after.memory.deletedAt ?? null)) {
       out.push(after.memory.deletedAt ? "Deleted" : "Restored");
     }
@@ -530,10 +530,10 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
   }
   if (isProgramSnapshot(after)) {
     const prev = before && isProgramSnapshot(before) ? before : null;
-    if (!prev) return [`Created "${after.program.name}"`];
+    if (!prev) return [`Created “${after.program.name}”`];
     const out: string[] = [];
     if (!sameValue(prev.program.name, after.program.name)) {
-      out.push(`Renamed "${prev.program.name}" → "${after.program.name}"`);
+      out.push(`Renamed “${prev.program.name}” → “${after.program.name}”`);
     }
     const prevEx = new Map(prev.exercises.map((e) => [e.id, e]));
     const nextEx = new Map(after.exercises.map((e) => [e.id, e]));
@@ -558,7 +558,7 @@ export function diffSnapshots(before: PlanSnapshot | null, after: PlanSnapshot):
     return out;
   }
   const prev = before && isCycleSnapshot(before) ? before : null;
-  if (!prev) return [`Created "${after.cycle.name}"`];
+  if (!prev) return [`Created “${after.cycle.name}”`];
   const out = planFieldLines("", CYCLE_FIELDS, prev.cycle, after.cycle);
   if (!sameValue(prev.cycle.seasonId, after.cycle.seasonId)) {
     out.push(prev.cycle.seasonId == null ? "Added to a season" : after.cycle.seasonId == null ? "Taken out of its season" : "Moved to another season");

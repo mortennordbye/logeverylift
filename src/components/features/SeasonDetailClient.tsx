@@ -25,6 +25,7 @@ import { callAction } from "@/lib/utils/stale-bundle";
 import {
   PHASE_TYPE_LABELS,
   addDaysStr,
+  curlyQuotes,
   dayLabel,
   daysBetweenStr,
   lengthField,
@@ -334,7 +335,7 @@ export function SeasonDetailClient(p: Props) {
         {showBanner && (
           <section data-testid="replan-banner" className="flex flex-col gap-2.5 rounded-2xl border border-[color-mix(in_oklab,var(--home-fg)_16%,transparent)] bg-widget-2 px-4 py-3.5">
             <span className="text-[15px] font-semibold">{bannerTitle}</span>
-            {p.replan?.reason && <span className="text-[13px] text-muted-foreground">{keepDates(`${p.replan.reason}.`)}</span>}
+            {p.replan?.reason && <span className="text-[13px] text-muted-foreground">{keepDates(`${curlyQuotes(p.replan.reason)}.`)}</span>}
             <div className="flex items-center gap-2">
               {misfit && (
                 <button type="button" disabled={busy} onClick={fitTaper} className="min-h-11 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground active:opacity-80 disabled:opacity-50">

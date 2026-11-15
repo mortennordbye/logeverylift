@@ -325,6 +325,14 @@ describe("season detail text (fix round 2)", () => {
     expect(screen.getByRole("button", { name: "Start" })).toBeTruthy();
   });
 
+  it("shows the stored re-plan reason with curly quotes, as every other name in the Plan UI (round 9)", () => {
+    render(<SeasonDetailClient {...base} replan={{ reason: 'The A race "Jevnaker" moved from 3 Apr 2027 to 17 Apr 2027; "Tune-up" changed from A priority to B priority' }} />);
+    const banner = screen.getByTestId("replan-banner");
+    expect(banner.textContent).toContain("The A race “Jevnaker” moved");
+    expect(banner.textContent).toContain("“Tune-up” changed");
+    expect(banner.textContent).not.toContain('"');
+  });
+
   it("does not call a B race change an A race change", () => {
     render(<SeasonDetailClient {...base} replan={{ reason: 'B race "Tune-up" moved from 29 Aug 2027 to 12 Sep 2027' }} />);
     const banner = screen.getByTestId("replan-banner");
