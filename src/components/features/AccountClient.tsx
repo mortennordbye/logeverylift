@@ -43,7 +43,7 @@ function Switch({ on }: { on: boolean }) {
   );
 }
 
-/** One row: an editor on the page, a link, a switch, a button that opens the sheet, or a plain value; its note sits under it, outside the control. */
+/** One row: a link, a switch, a button that opens the sheet, or a plain value; its note sits under it, outside the control. */
 function AccountRow({
   row,
   data,
@@ -51,7 +51,6 @@ function AccountRow({
   error,
   onOpen,
   onToggle,
-  onDone,
 }: {
   row: Row;
   data: AccountData;
@@ -59,7 +58,6 @@ function AccountRow({
   error: string | null;
   onOpen: () => void;
   onToggle: () => void;
-  onDone: () => void;
 }) {
   const body = (
     <div className="flex-1 min-w-0 flex items-center justify-between gap-3">
@@ -74,14 +72,7 @@ function AccountRow({
       {body}
     </div>
   );
-  if (row.inline && row.editor) {
-    main = (
-      <div className="px-4 py-3 space-y-2" data-testid={testId}>
-        <p className="text-sm text-muted-foreground">{text(row.label, data)}</p>
-        {row.editor(data, onDone)}
-      </div>
-    );
-  } else if (row.href) {
+  if (row.href) {
     main = (
       <Link href={row.href} className={`${rowClass} active:opacity-60`} data-testid={testId}>
         {body}
@@ -240,7 +231,6 @@ export function AccountClient({ data, page }: AccountClientProps) {
                   error={toggleError?.id === r.id ? toggleError.message : null}
                   onOpen={() => setOpen(r.id)}
                   onToggle={() => flip(r)}
-                  onDone={done}
                 />
               ))}
             </div>

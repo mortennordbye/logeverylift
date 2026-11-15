@@ -106,8 +106,6 @@ export type Row = {
   show?: (d: AccountData) => boolean;
   /** What the row's sheet shows; `done` closes it and reloads the data. */
   editor?: (d: AccountData, done: () => void) => ReactNode;
-  /** Show the editor on the page instead of in the sheet. */
-  inline?: boolean;
   href?: string;
   /** A switch in the row instead of a sheet. */
   toggle?: { on: (d: AccountData) => boolean; set: (on: boolean) => Promise<ActionResult<unknown>> };
@@ -198,7 +196,6 @@ export const SECTIONS: Section[] = [
           return others.length ? others.map((g) => GOAL_LABELS[g]).join(", ") : notSet;
         },
         editor: (d, done) => <GoalsStep initial={d.goals} onSaved={done} />,
-        inline: true,
       },
       {
         id: "main-focus",

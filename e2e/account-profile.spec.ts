@@ -73,6 +73,7 @@ test("the goal chips and the main focus save into one goals list", async ({ page
   await testDb().update(users).set({ goals: null }).where(eq(users.id, uid));
 
   await page.goto("/more/account/goals-and-training");
+  await page.getByRole("button", { name: /^Goals/ }).click();
   await expect(page.getByRole("button", { name: "Endurance", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Muscle Gain", exact: true }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
