@@ -278,6 +278,24 @@ describe("changing one session", () => {
     expect((await rows(id)).find((x) => x.id === mon.id)!.label).toBe("Long Run");
   });
 
+  it("a label and note change that changes nothing leaves the session untouched", async () => {
+    const id = await cycle();
+    await db.update(trainingCycleSlots).set({ label: "Long Run" }).where(and(eq(trainingCycleSlots.trainingCycleId, id), eq(trainingCycleSlots.dayOfWeek, 1)));
+    await active();
+    const mon = (await rows(id)).find((x) => x.date === "2026-11-09")!;
+    expect(mon).toMatchObject({ label: "Long Run", notes: null, touchedAt: null });
+    // The same label and note, a label of only spaces, and an empty label all keep the template's day.
+    for (const change of [{ label: "Long Run", notes: null }, { label: "   ", notes: null }, { label: null }]) {
+      const r = await updatePlannedSession({ op: "change", id: mon.id, ...change });
+      expect(r.success).toBe(true);
+    }
+    const after = (await rows(id)).find((x) => x.id === mon.id)!;
+    expect(after).toMatchObject({ label: "Long Run", notes: null, touchedAt: null, version: mon.version });
+    // So a template edit still reaches it.
+    expect((await upsertCycleSlot({ trainingCycleId: id, dayOfWeek: 1, programId: strength })).success).toBe(true);
+    expect((await rows(id)).find((x) => x.id === mon.id)!.programId).toBe(strength);
+  });
+
   it("the cycle's history names the session and the day on every session change (J8-04)", async () => {
     const id = await cycle();
     await active();

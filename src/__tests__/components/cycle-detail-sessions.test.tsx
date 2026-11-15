@@ -268,6 +268,22 @@ describe("weekday week", () => {
     expect(updatePlannedSession).toHaveBeenCalledWith({ op: "change", id: 3, label: "Hills", notes: "Keep it steady" });
   });
 
+  it("keeps Save off while the label and note are unchanged, spaces included", () => {
+    renderWeek();
+    fireEvent.click(screen.getByRole("button", { name: /^Thu 19 Nov: Bike tempo/ }));
+    const sheet = screen.getByTestId("session-sheet");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Label and note" }));
+    const save = () => within(sheet).getByRole("button", { name: "Save" }) as HTMLButtonElement;
+    expect(save().disabled).toBe(true);
+    fireEvent.change(within(sheet).getByLabelText("Label"), { target: { value: "   " } });
+    fireEvent.change(within(sheet).getByLabelText("Note"), { target: { value: " " } });
+    expect(save().disabled).toBe(true);
+    fireEvent.click(save());
+    expect(updatePlannedSession).not.toHaveBeenCalled();
+    fireEvent.change(within(sheet).getByLabelText("Label"), { target: { value: "Hills" } });
+    expect(save().disabled).toBe(false);
+  });
+
   it("shows a failed change in the sheet and keeps it open", async () => {
     updatePlannedSession.mockResolvedValue({ success: false, error: "Pick a day in the block." });
     renderWeek();
