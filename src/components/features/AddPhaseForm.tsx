@@ -5,6 +5,7 @@ import { BottomSheet } from "@/components/ui/BottomSheet";
 import { PlanSheetPanel, SHEET_CANCEL } from "@/components/features/PlanSheetPanel";
 import { ButtonReason, Chip, ErrorLine, FIELD, FormHeader, LABEL, PRIMARY_BUTTON, PinnedBar, RadioCard, Segmented, StepProgress } from "@/components/features/season-ui";
 import { TakeStartSheet } from "@/components/features/TakeStartSheet";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
 import { addPhaseAction } from "@/lib/actions/seasons";
 import { deleteTrainingCycle } from "@/lib/actions/training-cycles";
 import type { ScheduledDraft } from "@/lib/utils/cycle-start";
@@ -62,7 +63,8 @@ export function AddPhaseForm(p: Props) {
   const [confirmStart, setConfirmStart] = useState(false);
   const [lengthTouched, setLengthTouched] = useState(false);
   const [scheduleType, setScheduleType] = useState<"day_of_week" | "rotation">("day_of_week");
-  const [busy, setBusy] = useState(false);
+  // Busy from the first tap until the next page is on screen (useSubmitLock).
+  const { busy, lock, unlock } = useSubmitLock();
   const [error, setError] = useState<string | null>(null);
 
   function pickType(t: PhaseType) {
@@ -131,7 +133,7 @@ export function AddPhaseForm(p: Props) {
   }
 
   async function save(takeStart: boolean) {
-    setBusy(true);
+    if (!lock()) return;
     setError(null);
     const len = length === "" ? {} : unit === "days" ? { durationDays: n } : { durationWeeks: n };
     const type = p.enduranceEnabled && phaseType ? { phaseType } : {};
@@ -141,8 +143,10 @@ export function AddPhaseForm(p: Props) {
         ? { seasonId: p.seasonId, name: name.trim(), scheduleType, ...type, ...len, ...take }
         : { seasonId: p.seasonId, cycleId: cycleId!, ...type, ...len, ...take };
     const result = await callAction(addPhaseAction(input));
-    setBusy(false);
-    if (!result.success) return setError(result.error);
+    if (!result.success) {
+      unlock();
+      return setError(result.error);
+    }
     // Step 2: the week of the new cycle. Replaces this form, so Back goes to the season.
     if (source === "new") router.replace(`/seasons/${p.seasonId}/phases/${result.data.cycleId}/week`);
     else returnTo(`/seasons/${p.seasonId}`);
@@ -301,15 +305,16 @@ export function AddPhaseForm(p: Props) {
 export function AddPhaseCancel({ seasonId, cycleId, name }: { seasonId: number; cycleId: number; name: string }) {
   const returnTo = useReturnTo();
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
+  // Busy from the first tap until the next page is on screen (useSubmitLock).
+  const { busy, lock, unlock } = useSubmitLock();
   const [error, setError] = useState<string | null>(null);
 
   async function remove() {
-    setBusy(true);
+    if (!lock()) return;
     setError(null);
     const result = await callAction(deleteTrainingCycle(cycleId));
     if (!result.success) {
-      setBusy(false);
+      unlock();
       return setError(result.error);
     }
     returnTo(`/seasons/${seasonId}`);

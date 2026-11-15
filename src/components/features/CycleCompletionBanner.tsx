@@ -14,6 +14,7 @@ import { startTrainingCycle } from "@/lib/actions/training-cycles";
 import type { RunningCycle } from "@/lib/utils/cycle-start";
 import { keepDates } from "@/lib/utils/keep-dates";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
 import type { TrainingCycle } from "@/types/workout";
 import { Check } from "lucide-react";
 import Link from "next/link";
@@ -45,18 +46,18 @@ export function CycleCompletionBanner({
 }) {
   const router = useRouter();
   const [dismissed, setDismissed] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // Busy from the first tap until the next page is on screen (useSubmitLock).
+  const { busy: loading, lock, unlock } = useSubmitLock();
   const [error, setError] = useState<string | null>(null);
 
   if (dismissed) return null;
 
   async function startNext() {
-    if (!next) return;
-    setLoading(true);
+    if (!next || !lock()) return;
     setError(null);
     const result = await callAction(startTrainingCycle(next.id));
-    setLoading(false);
     if (!result.success) {
+      unlock();
       setError(result.error);
       return;
     }

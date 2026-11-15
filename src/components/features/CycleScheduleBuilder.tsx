@@ -23,6 +23,7 @@ import {
 } from "@/lib/actions/training-cycles";
 import { dayLabels } from "@/lib/utils/cycle-detail";
 import { callAction } from "@/lib/utils/stale-bundle";
+import { useSubmitLock } from "@/components/features/use-submit-lock";
 import type { Program, TrainingCycleWithSlots } from "@/types/workout";
 import {
   DndContext,
@@ -129,15 +130,15 @@ export function ProgramPickerSheet({
   const [naming, setNaming] = useState(false);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Two taps before the button re-renders off make one program (useSubmitLock).
+  const { busy, lock, unlock } = useSubmitLock();
   const q = query.trim().toLowerCase();
   const shown = q ? programs.filter((p) => p.name.toLowerCase().includes(q)) : programs;
 
   async function create() {
-    if (!newName.trim()) return;
-    setBusy(true);
+    if (!newName.trim() || !lock()) return;
     const result = await callAction(createProgram({ name: newName.trim() }));
-    setBusy(false);
+    unlock();
     if (!result.success) {
       setError(result.error);
       return;
