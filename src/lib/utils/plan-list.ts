@@ -120,10 +120,12 @@ export function pastEnd(c: CycleLike, completedOn: string | null): string | null
   return earlyLastDay(c.startDate, planned, completedOn) ?? planned;
 }
 
-/** A "Past cycles" row: "8 weeks · ended 8 Nov". */
+/** A "Past cycles" row: "8 weeks · ended 8 Nov", or "ended early on 14 Nov" as the cycle detail says it (endedLine). */
 export function pastRow(c: CycleLike, completedOn: string | null): CycleRow {
   const end = pastEnd(c, completedOn);
-  return { id: c.id, name: c.name, sub: `${plural(c.durationWeeks, "week")}${end ? ` · ended ${dayMonth(end)}` : ""}`, starts: null, startsAccent: false };
+  const early = c.startDate ? earlyLastDay(c.startDate, blockEnd(c.startDate, c), completedOn) : null;
+  const ended = end ? ` · ended ${early ? "early on " : ""}${dayMonth(end)}` : "";
+  return { id: c.id, name: c.name, sub: `${plural(c.durationWeeks, "week")}${ended}`, starts: null, startsAccent: false };
 }
 
 // ── Hero ─────────────────────────────────────────────────────────────────────
