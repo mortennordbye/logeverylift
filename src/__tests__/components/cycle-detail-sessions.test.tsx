@@ -156,6 +156,20 @@ describe("weekday week", () => {
     expect(within(sheet).getByText("Fri 20 Nov")).toBeTruthy();
   });
 
+  it("a labelled day keeps its label when a session is moved onto it (round 10)", () => {
+    const label = "Mobility, stretching and the long drive home";
+    const moved = session({ id: 7, date: "2026-11-20", name: "Swim CSS", programId: null, touched: true, templateDate: "2026-11-19" });
+    renderWeek({ sessions: [...sessions, moved], dayLabels: { 5: label } });
+    const row = screen.getByRole("button", { name: `Fri 20 Nov: ${label}` });
+    expect(row.textContent).toContain("Fri20 Nov");
+    const swim = screen.getByRole("button", { name: /^Fri 20 Nov: Swim CSS/ });
+    expect(swim.textContent).toContain("Moved from Thu");
+    // The label comes first and holds the day column; the swim follows it.
+    const rows = screen.getAllByTestId("week-row");
+    expect(rows.indexOf(swim)).toBe(rows.indexOf(row) + 1);
+    expect(swim.textContent).not.toContain("20 Nov");
+  });
+
   it("a plain rest day does not open", () => {
     renderWeek();
     expect(screen.queryByRole("button", { name: /^Wed 18 Nov/ })).toBeNull();
