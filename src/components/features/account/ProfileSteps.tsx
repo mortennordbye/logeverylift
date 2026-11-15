@@ -23,6 +23,32 @@ export const GOAL_LABELS: Record<Goal, string> = {
   general_fitness: "General Fitness",
 };
 
+// Strength and endurance are stored in the goals list but chosen as the main focus, never as chips.
+const FOCUS_GOALS: Goal[] = ["strength", "endurance"];
+export const OTHER_GOALS = GOAL_VALUES.filter((g) => !FOCUS_GOALS.includes(g));
+
+export type Focus = "strength" | "endurance" | "both";
+
+export const FOCUS_LABELS: Record<Focus, string> = {
+  strength: "Strength",
+  endurance: "Endurance",
+  both: "Both equally",
+};
+
+export const FOCUS_HINTS: Record<Focus, string> = {
+  strength: "Lifting leads the plan",
+  endurance: "Swim, bike or run leads, strength supports it",
+  both: "Lifting and endurance get the same weight",
+};
+
+export function focusOf(goals: Goal[]): Focus | null {
+  const s = goals.includes("strength");
+  const e = goals.includes("endurance");
+  return s && e ? "both" : s ? "strength" : e ? "endurance" : null;
+}
+
+const FOCUS_GOALS_FOR: Record<Focus, Goal[]> = { strength: ["strength"], endurance: ["endurance"], both: ["strength", "endurance"] };
+
 export const EXPERIENCE_LABELS: Record<ExperienceLevel, string> = {
   beginner: "Beginner",
   intermediate: "Intermediate",
@@ -89,20 +115,48 @@ export function NameStep({ initial, onSaved }: SaveProps & { initial: string }) 
 }
 
 export function GoalsStep({ initial, onSaved }: SaveProps & { initial: Goal[] }) {
-  const [goals, setGoals] = useState(initial);
+  const focus = initial.filter((g) => FOCUS_GOALS.includes(g));
+  const [goals, setGoals] = useState(initial.filter((g) => !FOCUS_GOALS.includes(g)));
   const { saving, error, run } = useProfileSave(onSaved);
   const toggle = (g: Goal) => setGoals((prev) => (prev.includes(g) ? prev.filter((v) => v !== g) : [...prev, g]));
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap gap-2">
-        {GOAL_VALUES.map((g) => (
+        {OTHER_GOALS.map((g) => (
           <button key={g} aria-pressed={goals.includes(g)} onClick={() => toggle(g)} className={`${chip(goals.includes(g))} px-4`}>
             {GOAL_LABELS[g]}
           </button>
         ))}
       </div>
       <p className="text-xs text-muted-foreground">Select all that apply</p>
-      <SaveButton saving={saving} error={error} onClick={() => run({ goals: goals.length > 0 ? goals : null })} />
+      <SaveButton saving={saving} error={error} onClick={() => run({ goals: focus.length + goals.length > 0 ? [...focus, ...goals] : null })} />
+    </div>
+  );
+}
+
+/** The main focus, stored as the strength and endurance entries of the goals list. */
+export function FocusStep({ initial, onSaved }: SaveProps & { initial: Goal[] }) {
+  const [focus, setFocus] = useState<Focus | null>(focusOf(initial));
+  const { saving, error, run } = useProfileSave(onSaved);
+  const others = initial.filter((g) => !FOCUS_GOALS.includes(g));
+  return (
+    <div className="space-y-4">
+      <div className="space-y-2">
+        {(Object.keys(FOCUS_LABELS) as Focus[]).map((f) => (
+          <button key={f} aria-pressed={focus === f} onClick={() => setFocus(f)} className={`${chip(focus === f)} w-full px-4 py-3 text-left`}>
+            <span className="block">{FOCUS_LABELS[f]}</span>
+            <span className={`block text-xs font-normal ${focus === f ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{FOCUS_HINTS[f]}</span>
+          </button>
+        ))}
+      </div>
+      <SaveButton
+        saving={saving}
+        error={error}
+        onClick={() => {
+          const goals = [...(focus ? FOCUS_GOALS_FOR[focus] : []), ...others];
+          run({ goals: goals.length > 0 ? goals : null });
+        }}
+      />
     </div>
   );
 }

@@ -67,16 +67,22 @@ test("injuries and sick periods open their list and editor from Account", async 
   expect(sick.endedOn).toBeNull();
 });
 
-test("the goal chips sit on the Goals and training page and save", async ({ page }, testInfo) => {
+test("the goal chips and the main focus save into one goals list", async ({ page }, testInfo) => {
   const settle = trackActions(page);
   const uid = await userId(testInfo.parallelIndex);
   await testDb().update(users).set({ goals: null }).where(eq(users.id, uid));
 
   await page.goto("/more/account/goals-and-training");
-  await page.getByRole("button", { name: "Endurance", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Endurance", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Muscle Gain", exact: true }).click();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await settle();
 
+  await page.getByRole("button", { name: /Main focus/ }).click();
+  await page.getByRole("button", { name: /Both equally/ }).click();
+  await page.getByRole("button", { name: "Save", exact: true }).last().click();
+  await settle();
+
   const [row] = await testDb().select({ goals: users.goals }).from(users).where(eq(users.id, uid));
-  expect(row.goals).toBe(JSON.stringify(["endurance"]));
+  expect(JSON.parse(row.goals ?? "[]")).toEqual(["strength", "endurance", "muscle_gain"]);
 });

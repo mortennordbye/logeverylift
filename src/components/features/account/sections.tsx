@@ -34,8 +34,12 @@ import {
   EXPERIENCE_HINTS,
   EXPERIENCE_LABELS,
   GENDER_LABELS,
+  FOCUS_LABELS,
+  FocusStep,
   GOAL_LABELS,
   GoalsStep,
+  OTHER_GOALS,
+  focusOf,
   NameStep,
   NumberStep,
   PickerStep,
@@ -189,15 +193,28 @@ export const SECTIONS: Section[] = [
       {
         id: "goals",
         label: "Goals",
-        value: (d) => (d.goals.length ? d.goals.map((g) => GOAL_LABELS[g]).join(", ") : notSet),
+        value: (d) => {
+          const others = d.goals.filter((g) => OTHER_GOALS.includes(g));
+          return others.length ? others.map((g) => GOAL_LABELS[g]).join(", ") : notSet;
+        },
         editor: (d, done) => <GoalsStep initial={d.goals} onSaved={done} />,
         inline: true,
       },
       {
+        id: "main-focus",
+        label: "Main focus",
+        value: (d) => {
+          const f = focusOf(d.goals);
+          return f ? FOCUS_LABELS[f] : notSet;
+        },
+        editor: (d, done) => <FocusStep initial={d.goals} onSaved={done} />,
+      },
+      {
         id: "strength-goal",
-        label: "Strength goal",
+        label: "Strength on the side",
         value: (d) => (d.athlete?.strengthGoal ? STRENGTH_GOAL_LABEL[d.athlete.strengthGoal] : notSet),
-        show: endurance,
+        // Only the triathlon plan and the strength limit read it, so only an endurance focus needs it.
+        show: (d) => d.endurance && (focusOf(d.goals) === "endurance" || focusOf(d.goals) === "both"),
         editor: (d, done) => <StrengthStep initial={d.athlete?.strengthGoal ?? null} onSaved={done} />,
       },
       {

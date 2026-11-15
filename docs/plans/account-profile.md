@@ -157,3 +157,7 @@ This replaces decision 2.1 ("one page, no sub-pages"). The design is
    which are what the plan reads, and links to Goals and training when one is missing. The
    assistant's `intake_interview` prompt stays. The `interview_completed_at` column is no longer
    read; a later migration removes it.
+5. Goals and training asks for a main focus (Strength, Endurance, Both equally). It is stored as the
+   `strength` and `endurance` entries of `users.goals`, so the goal chips show only the other goals.
+   "Strength goal" is renamed "Strength on the side" and shows only with an endurance or equal
+   focus. "Endurance on the side" for lifters waits for the plan builder (BACKLOG.md).

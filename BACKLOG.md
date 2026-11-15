@@ -10,6 +10,12 @@ When you finish an item, delete it. When you add an item, write enough that some
 
 ## New features — additive
 
+### Endurance on the side for lifters
+- **What:** On Account, Goals and training: when the main focus is Strength, a row "Endurance on the side" with None, A little (1 to 2 easy sessions a week) and Some (2 to 3 sessions, one longer). The mirror of "Strength on the side", which an endurance focus already has.
+- **Why deferred:** Nothing would read the answer yet: "Build a plan" makes strength programs only, and only the triathlon plan schedules endurance sessions. A stored answer with no reader is a dead field.
+- **Unblocked by:** The plan builder adding easy run or ride sessions for "A little" and "Some". Build the row and that in one change.
+- **Touchpoints:** `src/components/features/account/sections.tsx` (Goals and training rows), `src/components/features/account/ProfileSteps.tsx` (`FocusStep`), `src/lib/utils/plan-templates.ts`, `src/components/features/AiSetupClient.tsx`.
+
 ### Drop the unused interview column
 - **What:** Remove `athlete_profiles.interview_completed_at` and the `completeInterview` field of the MCP `manage_athlete_profile` tool. The in-app interview is gone and no page reads the column.
 - **Why deferred:** `feat/account-profile` already adds two migrations; a third for a column nothing reads can wait.
