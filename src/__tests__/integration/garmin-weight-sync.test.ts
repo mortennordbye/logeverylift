@@ -20,7 +20,8 @@ const T1 = Date.UTC(2026, 10, 11, 6, 0);
 const T2 = Date.UTC(2026, 10, 12, 6, 0);
 
 async function garminUser() {
-  const user = await createUser();
+  // The sync runs for Premium users only.
+  const user = await createUser({ role: "admin" });
   await db.insert(garminConnections).values({ userId: user.id, encryptedKey: "v1.x.y.z" });
   await db.insert(garminDays).values([
     { userId: user.id, calendarDate: "2026-11-11", kind: "weight_entries", data: { items: [{ timestampGMT: T1, weight: 91500 }] } },
@@ -38,7 +39,8 @@ describe("setGarminSync", () => {
     asUser(user.id, "admin");
 
     const on = await setGarminSync({ enabled: true });
-    expect(on).toEqual({ success: true, data: { weightKg: 89.7 } });
+    expect(on).toEqual({ success: true, data: undefined });
+    expect((await db.select({ weightKg: users.weightKg }).from(users).where(eq(users.id, user.id)))[0].weightKg).toBe(89.7);
     expect(await entries(user.id)).toEqual([
       { kg: 91.5, at: new Date(T1) },
       { kg: 89.7, at: new Date(T2) },
@@ -91,7 +93,7 @@ describe("setGarminSync", () => {
     const user = await garminUser();
     expect(await syncGarminWeight(user.id)).toBe(0);
     asUser(user.id, "admin");
-    expect(await setGarminSync({ enabled: false })).toEqual({ success: true, data: { weightKg: null } });
+    expect(await setGarminSync({ enabled: false })).toEqual({ success: true, data: undefined });
     expect(await entries(user.id)).toHaveLength(0);
 
     asUser((await createUser()).id, "admin");

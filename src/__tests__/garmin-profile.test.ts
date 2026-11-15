@@ -1,5 +1,5 @@
 import { sourceLine } from "@/lib/utils/field-sources";
-import { garminAvailability, garminTimeZone, garminUnits } from "@/lib/utils/garmin-profile";
+import { fieldSyncLines, garminAvailability, garminTimeZone, garminUnits } from "@/lib/utils/garmin-profile";
 import { describe, expect, it } from "vitest";
 
 describe("the Garmin profile fields the sync reads", () => {
@@ -37,5 +37,21 @@ describe("sourceLine", () => {
   it("names who set the value and the day", () => {
     expect(sourceLine({ by: "garmin", on: "2026-11-15" })).toBe("From Garmin · Sun 15 Nov");
     expect(sourceLine({ by: "you", on: "2026-11-15" })).toBe("Set by you · Sun 15 Nov");
+  });
+});
+
+describe("fieldSyncLines", () => {
+  const profile = { timeZone: "America/New_York", measurementSystem: "metric", availableTrainingDays: ["MONDAY"] };
+  const stored = { timeZone: "Europe/Oslo", units: { distance: "km" as const, swim: "m" as const }, availability: { availableDays: [2], longDay: null } };
+
+  it("shows Garmin's value only on a locked field that differs", () => {
+    const locked = fieldSyncLines(profile, { ...stored, sources: { timeZone: { by: "you", on: "2026-11-15" }, availability: { by: "garmin", on: "2026-11-15" } } });
+    expect(locked.timeZone).toEqual({ note: "Set by you · Sun 15 Nov", says: "America/New York" });
+    expect(locked.availability).toEqual({ note: "From Garmin · Sun 15 Nov", says: null });
+    expect(locked.units).toEqual({ note: null, says: null });
+  });
+
+  it("leaves availability out when it is not open to the user", () => {
+    expect(fieldSyncLines(profile, { ...stored, availability: null, sources: {} }).availability).toBeUndefined();
   });
 });

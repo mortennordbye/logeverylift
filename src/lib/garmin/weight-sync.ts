@@ -10,7 +10,7 @@ import { db } from "@/db";
 import { garminConnections, garminDays } from "@/db/schema";
 import { users } from "@/db/schema/users";
 import { userWeightEntries } from "@/db/schema/weight-history";
-import { toDateStr } from "@/lib/utils/cycle-position";
+import { localDateStr } from "@/lib/utils/user-date";
 import type { FieldSource } from "@/lib/utils/field-sources";
 import { and, desc, eq } from "drizzle-orm";
 import { garminWeighIns } from "./weigh-ins";
@@ -61,6 +61,9 @@ export async function weightSource(userId: string): Promise<FieldSource | null> 
     .orderBy(desc(userWeightEntries.recordedAt))
     .limit(1);
   if (!newest) return null;
-  const [conn] = await db.select({ copied: garminConnections.weightCopied }).from(garminConnections).where(eq(garminConnections.userId, userId));
-  return { by: conn?.copied.includes(newest.at.getTime()) ? "garmin" : "you", on: toDateStr(newest.at) };
+  const [[conn], [user]] = await Promise.all([
+    db.select({ copied: garminConnections.weightCopied }).from(garminConnections).where(eq(garminConnections.userId, userId)),
+    db.select({ timeZone: users.timeZone }).from(users).where(eq(users.id, userId)),
+  ]);
+  return { by: conn?.copied.includes(newest.at.getTime()) ? "garmin" : "you", on: localDateStr(newest.at, user?.timeZone) };
 }

@@ -7,6 +7,7 @@
 
 import type { ThresholdKind } from "@/db/schema/athlete-profile";
 import type { PlanWriter } from "@/db/schema/plan-revisions";
+import type { FieldSource } from "@/lib/utils/field-sources";
 import { PHASE_TYPE_LABELS, dayLabel, shortDay } from "@/lib/utils/seasons";
 import { THRESHOLD_LABEL, formatThreshold } from "@/lib/utils/thresholds";
 
@@ -18,7 +19,8 @@ export type CycleSnapshot = { v: 1; cycle: Row; slots: SlotSnap[] };
 /** A coach memory entry (docs/plans/ai-coach.md, 2.5). */
 export type MemorySnapshot = { v: 1; memory: Row };
 /** The athlete profile, one threshold value, one injury (docs/plans/athlete-profile.md, 2.2). */
-export type AthleteSnapshot = { v: 1; athlete: Row };
+/** `availabilitySource`: who set the days then, so an undo restores it with them; absent in older snapshots. */
+export type AthleteSnapshot = { v: 1; athlete: Row; availabilitySource?: FieldSource | null };
 export type ThresholdSnapshot = { v: 1; threshold: Row };
 export type InjurySnapshot = { v: 1; injury: Row };
 /** A library workout and a sick period (docs/plans/workouts-and-compliance.md, 4.5). */

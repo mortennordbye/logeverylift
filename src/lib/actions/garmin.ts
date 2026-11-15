@@ -67,7 +67,7 @@ const syncSchema = z.object({ enabled: z.boolean() });
  * Turn "Sync from Garmin" on or off. Turning it on runs the sync at once
  * (src/lib/garmin/sync-from-garmin.ts); the import keeps it current.
  */
-export async function setGarminSync(data: unknown): Promise<ActionResult<{ weightKg: number | null }>> {
+export async function setGarminSync(data: unknown): Promise<ActionResult<undefined>> {
   const auth = await requireSession();
   if (!garminAllowed(auth.user.role)) return { success: false, error: DISABLED };
   const parsed = syncSchema.safeParse(data);
@@ -80,11 +80,10 @@ export async function setGarminSync(data: unknown): Promise<ActionResult<{ weigh
       .returning({ id: garminConnections.id });
     if (!conn) return { success: false, error: "Garmin is not connected" };
     if (parsed.data.enabled) await syncFromGarmin(auth.user.id);
-    const [me] = await db.select({ weightKg: users.weightKg }).from(users).where(eq(users.id, auth.user.id));
     revalidatePath("/more/account");
     revalidatePath("/more/metrics");
     revalidatePath("/settings");
-    return { success: true, data: { weightKg: me?.weightKg ?? null } };
+    return { success: true, data: undefined };
   } catch (e) {
     console.error("[setGarminSync] failed", { userId: auth.user.id }, e instanceof Error ? e.message : "unknown");
     return { success: false, error: "Failed to change the Garmin sync" };

@@ -95,7 +95,6 @@ export async function getAthleteData() {
       getUserSettings(userId),
       userToday(userId),
     ]);
-    const suggestions = await garminSuggestions(userId, thresholds);
     return {
       success: true as const,
       data: {
@@ -106,7 +105,6 @@ export async function getAthleteData() {
         memory,
         thresholds,
         units: settings.units,
-        suggestions,
         today: toDateStr(today),
         missing: missingSteps(profile, thresholds, race),
       },

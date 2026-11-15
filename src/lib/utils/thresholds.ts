@@ -315,6 +315,11 @@ export function agreesWithTest(given: number, fromTest: number): boolean {
  * Checks that warn but never block (docs/plans/athlete-profile.md, 2.3):
  * threshold heart rate sits below max heart rate.
  */
+/** Two values of one kind that read the same: paces within 0.005 m/s, the rest to the whole number. */
+export function sameThresholdValue(kind: ThresholdKind, a: number, b: number): boolean {
+  return kind === "run_threshold_pace" ? Math.abs(a - b) < 0.005 : Math.round(a) === Math.round(b);
+}
+
 export function thresholdWarnings(current: Partial<Record<ThresholdKind, { value: number }>>): string[] {
   const max = current.max_hr?.value;
   if (max == null) return [];

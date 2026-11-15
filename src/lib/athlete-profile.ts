@@ -22,6 +22,7 @@ import {
   coachMemory,
   planRevisions,
   trainingCycles,
+  users,
   type EnduranceLevel,
   type InjuryArea,
   type InjurySide,
@@ -34,7 +35,7 @@ import {
 } from "@/db/schema";
 import { changeCoachMemory } from "@/lib/coach-memory";
 import { enduranceEnabledFor } from "@/lib/endurance";
-import { markField } from "@/lib/field-sources";
+import { FieldLockedError, notLocked, withSource } from "@/lib/field-sources";
 import { garminAllowedFor } from "@/lib/garmin/access";
 import {
   ENDURANCE_OFF,
@@ -52,7 +53,7 @@ import { userToday } from "@/lib/user-settings";
 import { cycleWeek, parseDateStr, toDateStr } from "@/lib/utils/cycle-position";
 import { cycleLoad, type TrainingPhase } from "@/lib/utils/periodization";
 import { DELETED_PLAN_RETENTION_DAYS } from "@/lib/utils/plan-revisions";
-import { agreesWithTest, currentThresholds, testInputs, thresholdRangeError, valueFromTest } from "@/lib/utils/thresholds";
+import { agreesWithTest, currentThresholds, sameThresholdValue, testInputs, thresholdRangeError, valueFromTest } from "@/lib/utils/thresholds";
 import { and, desc, eq, gt, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 export type AthleteProfile = typeof athleteProfiles.$inferSelect;
@@ -246,8 +247,7 @@ export async function garminSuggestions(userId: string, stored?: ThresholdRow[])
   return out.filter((s) => {
     const c = current[s.kind];
     if (!c) return true;
-    const same = s.kind === "run_threshold_pace" ? Math.abs(c.value - s.value) < 0.005 : Math.round(c.value) === Math.round(s.value);
-    if (same) return false;
+    if (sameThresholdValue(s.kind, c.value, s.value)) return false;
     // A field test from the estimate's week or later beats the estimate.
     return !(c.source === "test" && c.measuredOn >= s.weekStart);
   });
@@ -277,6 +277,9 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
   }
   if (set.availableDays) set.availableDays = [...new Set(set.availableDays)].sort((a, b) => a - b);
   if (change.completeInterview) set.interviewCompletedAt = new Date();
+  // Days or the long day set by anyone but the sync lock availability against Garmin; the sync skips it when locked.
+  const sourceBy = ctx.writer === "sync" ? "garmin" : "you";
+  const availabilityOn = change.availableDays !== undefined || change.longDay !== undefined ? toDateStr(await userToday(ctx.userId)) : null;
   const { result, versions } = await planWrite(ctx, async (w) => {
     // One profile per user: two first writes must not both insert.
     await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_profile:${ctx.userId}`}))`);
@@ -285,21 +288,20 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
       .select()
       .from(athleteProfiles)
       .where(eq(athleteProfiles.userId, ctx.userId));
+    let row: AthleteProfile;
     if (!existing) {
       if (expectedVersion !== undefined && expectedVersion !== 1) {
         throw new PlanStateError("No athlete profile yet: leave out expectedVersion for the first write");
       }
-      const [row] = await w.tx
+      [row] = await w.tx
         .insert(athleteProfiles)
         .values({ userId: ctx.userId, ...set })
         .returning();
       w.create({ type: "athlete", id: row.id });
-      return row;
-    }
-    if (existing.deletedAt) {
+    } else if (existing.deletedAt) {
       // Cleared by an undo of its creation: it starts again empty.
       await w.touch({ type: "athlete", id: existing.id }, { allowDeleted: true });
-      const [row] = await w.tx
+      [row] = await w.tx
         .update(athleteProfiles)
         .set({
           enduranceLevel: null,
@@ -315,18 +317,25 @@ export async function saveAthleteProfile(ctx: PlanWriteContext, change: ProfileC
         })
         .where(eq(athleteProfiles.id, existing.id))
         .returning();
-      return row;
+    } else {
+      await w.touch({ type: "athlete", id: existing.id }, { expectedVersion });
+      [row] = await w.tx
+        .update(athleteProfiles)
+        .set({ ...set, updatedAt: new Date() })
+        .where(eq(athleteProfiles.id, existing.id))
+        .returning();
     }
-    await w.touch({ type: "athlete", id: existing.id }, { expectedVersion });
-    const [row] = await w.tx
-      .update(athleteProfiles)
-      .set({ ...set, updatedAt: new Date() })
-      .where(eq(athleteProfiles.id, existing.id))
-      .returning();
+    // After the touch, so the revision's before-snapshot keeps the earlier source.
+    if (availabilityOn) {
+      const marked = await w.tx
+        .update(users)
+        .set({ fieldSources: withSource("availability", { by: sourceBy, on: availabilityOn }) })
+        .where(and(eq(users.id, ctx.userId), sourceBy === "garmin" ? notLocked("availability") : undefined))
+        .returning({ id: users.id });
+      if (marked.length === 0) throw new FieldLockedError("availability");
+    }
     return row;
   });
-  // Days or the long day set by anyone but the sync lock availability against Garmin.
-  if (ctx.writer !== "sync" && (change.availableDays !== undefined || change.longDay !== undefined)) await markField(ctx.userId, "availability", "you");
   return { profile: result, version: versions.get(versionKey({ type: "athlete", id: result.id })) ?? result.version };
 }
 
@@ -391,6 +400,39 @@ export async function addThreshold(ctx: PlanWriteContext, input: ThresholdInput)
     return row;
   });
   return { threshold: result, version: versions.get(versionKey({ type: "threshold", id: result.id })) ?? 1 };
+}
+
+/**
+ * One Garmin estimate as a threshold (docs/plans/account-profile.md, 6 and 7).
+ * Under the same lock as every threshold write, the current row is read again:
+ * a typed or tested value wins, a deleted Garmin value stays deleted, and a
+ * Garmin row from today is updated instead of adding another.
+ */
+export async function syncGarminThreshold(userId: string, kind: ThresholdKind, value: number, today: string) {
+  await planWrite({ userId, writer: "sync", reason: "Garmin sync" }, async (w) => {
+    await w.tx.execute(sql`SELECT pg_advisory_xact_lock(hashtext(${`athlete_threshold:${userId}`}))`);
+    const live = await w.tx
+      .select()
+      .from(athleteThresholds)
+      .where(and(eq(athleteThresholds.userId, userId), eq(athleteThresholds.kind, kind), isNull(athleteThresholds.deletedAt)));
+    const current = currentThresholds(live)[kind];
+    if (current && (current.source !== "garmin" || sameThresholdValue(kind, current.value, value))) return;
+    const [deleted] = await w.tx
+      .select({ value: athleteThresholds.value })
+      .from(athleteThresholds)
+      .where(and(eq(athleteThresholds.userId, userId), eq(athleteThresholds.kind, kind), eq(athleteThresholds.source, "garmin"), isNotNull(athleteThresholds.deletedAt)))
+      .orderBy(desc(athleteThresholds.deletedAt))
+      .limit(1);
+    if (deleted && sameThresholdValue(kind, deleted.value, value)) return;
+    if (current?.measuredOn === today) {
+      await w.touch({ type: "threshold", id: current.id });
+      await w.tx.update(athleteThresholds).set({ value, updatedAt: new Date() }).where(eq(athleteThresholds.id, current.id));
+      return;
+    }
+    await assertAthleteRoom(w.tx, userId, "threshold", kind);
+    const [row] = await w.tx.insert(athleteThresholds).values({ userId, kind, value, measuredOn: today, source: "garmin" }).returning();
+    w.create({ type: "threshold", id: row.id });
+  });
 }
 
 export type ThresholdChange = Partial<Omit<ThresholdInput, "kind">>;
