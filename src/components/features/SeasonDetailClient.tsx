@@ -416,7 +416,8 @@ export function SeasonDetailClient(p: Props) {
           <Link href={`/seasons/${p.season.id}/phases/new`} className="flex min-h-11 items-center self-start px-1 text-[15px] font-medium text-primary active:opacity-70">
             + Add phase
           </Link>
-          <span className="mx-1 text-[13px] text-muted-foreground">Each phase starts the day after the one before.</span>
+          {/* Paused, the later phases keep their dates from a resume, with a gap before them (round 9 F8). */}
+          <span className="mx-1 text-[13px] text-muted-foreground">{paused ? "The later phases start when you resume." : "Each phase starts the day after the one before."}</span>
           {p.next && !p.next.scheduled && (
             <div className="mx-1 flex items-center justify-between gap-3">
               <p className="text-[13px] text-muted-foreground">

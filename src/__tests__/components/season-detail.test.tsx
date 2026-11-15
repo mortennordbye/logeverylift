@@ -318,6 +318,14 @@ describe("season detail text (fix round 2)", () => {
     expect(within(screen.getAllByTestId("phase-row")[1]).getByText("Paused").className).toContain("text-muted-foreground");
     expect(screen.getByText("Paused. The next phase is not scheduled.")).toBeTruthy();
     expect(screen.getByRole("button", { name: "Resume" })).toBeTruthy();
+    // While paused the chain has a gap, so the helper says when the later phases start (round 9 F8).
+    expect(screen.queryByText("Each phase starts the day after the one before.")).toBeNull();
+    expect(screen.getByText("The later phases start when you resume.")).toBeTruthy();
+  });
+
+  it("a season that is not paused says each phase starts the day after the one before", () => {
+    render(<SeasonDetailClient {...base} />);
+    expect(screen.getByText("Each phase starts the day after the one before.")).toBeTruthy();
   });
 
   it("a season whose first phase is due today or earlier offers Start", () => {
